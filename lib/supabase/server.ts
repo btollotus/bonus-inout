@@ -2,8 +2,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-export function createClient() {
-  const cookieStore = cookies();
+export async function createClient() {
+  const cookieStore = await cookies();
 
   const url =
     process.env.SUPABASE_URL ??
@@ -30,7 +30,7 @@ export function createClient() {
             cookieStore.set(name, value, options);
           });
         } catch {
-          // 서버 컴포넌트에서 setAll이 막히는 경우가 있어 무시(미들웨어 없으면 보통 문제 없음)
+          // Server Components에서 set이 막히는 경우가 있어 무시
         }
       },
     },
