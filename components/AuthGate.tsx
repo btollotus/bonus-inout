@@ -13,6 +13,14 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true;
 
+    // ✅ 1) 로그인 페이지는 가드 제외 (루프 차단)
+    if (pathname === "/login") {
+      setOk(true);
+      return () => {
+        active = false;
+      };
+    }
+
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
 
@@ -20,6 +28,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         router.replace(`/login?next=${encodeURIComponent(pathname || "/")}`);
         return;
       }
+
       setOk(true);
     });
 
