@@ -1,14 +1,25 @@
 // app/login/page.tsx
 "use client";
 
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
+
+function safeNext(input: string | null) {
+  // 외부로 튀는 next 방지
+  if (!input) return "/";
+  if (!input.startsWith("/")) return "/";
+  if (input.startsWith("//")) return "/";
+  return input;
+}
 
 function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/channels";
+  const supabase = useMemo(() => createClient(), []);
+
+  // ✅ 기본값을 /channels가 아닌 / 로 (원하면 "/scan"으로 바꿔도 됨)
+  const next = safeNext(searchParams.get("next"));
 
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
@@ -17,18 +28,23 @@ function LoginInner() {
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    const supabase = createClient();
+    let alive = true;
+
     supabase.auth.getSession().then(({ data }) => {
+      if (!alive) return;
       if (data.session) router.replace(next);
     });
-  }, [router, next]);
+
+    return () => {
+      alive = false;
+    };
+  }, [supabase, router, next]);
 
   const submit = async () => {
     setLoading(true);
     setMsg(null);
-    try {
-      const supabase = createClient();
 
+    try {
       if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -57,7 +73,9 @@ function LoginInner() {
         <div className="text-xl font-semibold mb-1">
           {mode === "login" ? "로그인" : "회원가입"}
         </div>
-        <div className="text-sm text-white/60 mb-5">계속하려면 인증이 필요합니다.</div>
+        <div className="text-sm text-white/60 mb-5">
+          계속하려면 인증이 필요합니다.
+        </div>
 
         <label className="text-sm text-white/70">이메일</label>
         <input
@@ -98,7 +116,6 @@ function LoginInner() {
 }
 
 export default function LoginPage() {
-  // ✅ 핵심: useSearchParams를 쓰는 컴포넌트를 Suspense로 감싼다
   return (
     <Suspense
       fallback={
