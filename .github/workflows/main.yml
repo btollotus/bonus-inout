@@ -3,31 +3,54 @@ name: Supabase Backup to Google Drive
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * *" # 매일 03:00 (UTC)
+    # 매일 03:00 KST = 전날 18:00 UTC
+    - cron: "0 18 * * *"
 
 jobs:
   backup:
     runs-on: ubuntu-latest
+    env:
+      PGHOST: ${{ secrets.SUPABASE_DB_HOST }}
+      PGPORT: ${{ secrets.SUPABASE_DB_PORT }}
+      PGDATABASE: ${{ secrets.SUPABASE_DB_NAME }}
+      PGUSER: ${{ secrets.SUPABASE_DB_USER }}
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PGSSLMODE: require
+
+      GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
 
     steps:
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-
-      - name: Dump Supabase database
-        env:
-          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Install tools (pg_dump, rclone)
         run: |
-          pg_dump \
-            -h ${{ secrets.SUPABASE_DB_HOST }} \
-            -U ${{ secrets.SUPABASE_DB_USER }} \
-            -d ${{ secrets.SUPABASE_DB_NAME }} \
-            -p ${{ secrets.SUPABASE_DB_PORT }} \
-            | gzip > backup.sql.gz
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client rclone
 
-      - name: Upload to Google Drive
-        uses: googleapis/upload-cloud-storage@v1
-        with:
-          path: backup.sql.gz
-          destination: ${{ secrets.GDRIVE_FOLDER_ID }}/backup_$(date +%F).sql.gz
+      - name: Prepare filenames
+        id: vars
+        run: |
+          TS="$(date -u +'%Y-%m-%dT%H%M%SZ')"
+          echo "ts=$TS" >> $GITHUB_OUTPUT
+          echo "gz=supabase_${TS}.dump.gz" >> $GITHUB_OUTPUT
+
+      - name: Dump database (pg_dump) and compress
+        run: |
+          pg_dump -F c --no-owner --no-acl -f supabase.dump
+          gzip -9 supabase.dump
+          mv supabase.dump.gz "${{ steps.vars.outputs.gz }}"
+
+      - name: Configure rclone for Google Drive (Service Account)
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GDRIVE_SA_JSON }}
+          GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf <<EOF
+          [gdrive]
+          type = drive
+          scope = drive
+          service_account_credentials = ${GDRIVE_SA_JSON}
+          EOF
+
+      - name: Upload to Google Drive folder
+        run: |
+          rclone copy "${{ steps.vars.outputs.gz }}" "gdrive:" \
+            --drive-root-folder-id "${GDRIVE_FOLDER_ID}" -v
