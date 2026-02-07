@@ -17,7 +17,12 @@ jobs:
       PGUSER: ${{ secrets.SUPABASE_DB_USER }}
       PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       PGSSLMODE: require
-      GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+
+      # ✅ 공유 드라이브 ID (Shared Drive ID)
+      GDRIVE_SHARED_DRIVE_ID: ${{ secrets.GDRIVE_SHARED_DRIVE_ID }}
+
+      # (선택) 공유 드라이브 안에 저장할 폴더명 (없으면 루트에 저장)
+      GDRIVE_SUBFOLDER: "bonus-inout"
 
     steps:
       - name: Checkout repository
@@ -35,19 +40,35 @@ jobs:
       - name: Dump database (pg_dump) and compress
         run: |
           pg_dump -F c --no-owner --no-acl -f supabase.dump
-          gzip supabase.dump
+          gzip -f supabase.dump
 
       - name: Configure rclone for Google Drive (Service Account)
         run: |
           mkdir -p ~/.config/rclone
-          echo '${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}' > ~/.config/rclone/sa.json
-          cat <<EOF > ~/.config/rclone/rclone.conf
+
+          # ✅ JSON이 깨지는 문제 방지(heredoc)
+          cat > ~/.config/rclone/sa.json <<'EOF'
+          ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+          EOF
+
+          cat > ~/.config/rclone/rclone.conf <<'EOF'
           [gdrive]
           type = drive
           scope = drive
           service_account_file = ~/.config/rclone/sa.json
           EOF
 
-      - name: Upload to Google Drive folder
+          # (디버그용) JSON이 정상 파일인지 1줄만 확인(내용은 출력 안 함)
+          python3 - <<'PY'
+          import json
+          json.load(open("/home/runner/.config/rclone/sa.json","r",encoding="utf-8"))
+          print("sa.json OK")
+          PY
+
+      - name: Upload to Google Shared Drive
         run: |
-          rclone copy supabase.dump.gz gdrive:${GDRIVE_FOLDER_ID}
+          # ✅ 공유 드라이브 루트(=Shared Drive ID)를 루트로 잡고,
+          # 그 안의 subfolder로 업로드
+          rclone copy supabase.dump.gz gdrive:"${GDRIVE_SUBFOLDER}" \
+            --drive-root-folder-id="${GDRIVE_SHARED_DRIVE_ID}" \
+            --progress
