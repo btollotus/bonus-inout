@@ -9,6 +9,7 @@ on:
 jobs:
   backup:
     runs-on: ubuntu-latest
+
     env:
       PGHOST: ${{ secrets.SUPABASE_DB_HOST }}
       PGPORT: ${{ secrets.SUPABASE_DB_PORT }}
@@ -16,48 +17,37 @@ jobs:
       PGUSER: ${{ secrets.SUPABASE_DB_USER }}
       PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       PGSSLMODE: require
-
       GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
 
     steps:
-- name: Install tools (pg_dump 17, rclone)
-  run: |
-    sudo apt-get update
-    sudo apt-get install -y wget gnupg lsb-release rclone
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    # PostgreSQL 공식 저장소 추가
-    wget -qO- https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
-    echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
-
-    sudo apt-get update
-    sudo apt-get install -y postgresql-client-17
-
-      - name: Prepare filenames
-        id: vars
+      - name: Install tools (pg_dump 17, rclone)
         run: |
-          TS="$(date -u +'%Y-%m-%dT%H%M%SZ')"
-          echo "ts=$TS" >> $GITHUB_OUTPUT
-          echo "gz=supabase_${TS}.dump.gz" >> $GITHUB_OUTPUT
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg lsb-release rclone
+          wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
 
       - name: Dump database (pg_dump) and compress
         run: |
           pg_dump -F c --no-owner --no-acl -f supabase.dump
-          gzip -9 supabase.dump
-          mv supabase.dump.gz "${{ steps.vars.outputs.gz }}"
+          gzip supabase.dump
 
       - name: Configure rclone for Google Drive (Service Account)
-        env:
-          GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
         run: |
           mkdir -p ~/.config/rclone
-          cat > ~/.config/rclone/rclone.conf <<EOF
+          echo '${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}' > ~/.config/rclone/sa.json
+          cat <<EOF > ~/.config/rclone/rclone.conf
           [gdrive]
           type = drive
           scope = drive
-          service_account_credentials = ${GDRIVE_SA_JSON}
+          service_account_file = ~/.config/rclone/sa.json
           EOF
 
       - name: Upload to Google Drive folder
         run: |
-          rclone copy "${{ steps.vars.outputs.gz }}" "gdrive:" \
-            --drive-root-folder-id "${GDRIVE_FOLDER_ID}" -v
+          rclone copy supabase.dump.gz gdrive:${GDRIVE_FOLDER_ID}
