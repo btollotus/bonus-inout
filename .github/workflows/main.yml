@@ -1,0 +1,33 @@
+name: Supabase Backup to Google Drive
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *" # 매일 03:00 (UTC)
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Dump Supabase database
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          pg_dump \
+            -h ${{ secrets.SUPABASE_DB_HOST }} \
+            -U ${{ secrets.SUPABASE_DB_USER }} \
+            -d ${{ secrets.SUPABASE_DB_NAME }} \
+            -p ${{ secrets.SUPABASE_DB_PORT }} \
+            | gzip > backup.sql.gz
+
+      - name: Upload to Google Drive
+        uses: googleapis/upload-cloud-storage@v1
+        with:
+          path: backup.sql.gz
+          destination: ${{ secrets.GDRIVE_FOLDER_ID }}/backup_$(date +%F).sql.gz
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GDRIVE_SA_JSON }}
