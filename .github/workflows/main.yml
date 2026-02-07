@@ -20,10 +20,17 @@ jobs:
       GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
 
     steps:
-      - name: Install tools (pg_dump, rclone)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client rclone
+- name: Install tools (pg_dump 17, rclone)
+  run: |
+    sudo apt-get update
+    sudo apt-get install -y wget gnupg lsb-release rclone
+
+    # PostgreSQL 공식 저장소 추가
+    wget -qO- https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+    echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+
+    sudo apt-get update
+    sudo apt-get install -y postgresql-client-17
 
       - name: Prepare filenames
         id: vars
