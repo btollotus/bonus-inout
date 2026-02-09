@@ -11,10 +11,10 @@ export default function HomePage() {
         </div>
 
         <p className="text-white/60 mt-2">
-          로그인 성공. 다음 단계로 스캔 화면을 붙입니다.
+          로그인 성공. 아래 메뉴에서 원하는 기능을 선택하세요.
         </p>
 
-        {/* ✅ 버튼 영역: 줄바꿈/간격 깨짐 방지 */}
+        {/* ✅ 버튼 영역 */}
         <div className="mt-6 flex flex-wrap gap-3">
           <a
             href="/scan"
@@ -30,12 +30,34 @@ export default function HomePage() {
             품목/바코드 등록
           </a>
 
-          {/* ✅ 추가: 재고대장(리포트) */}
           <a
             href="/report"
             className="inline-flex rounded-xl border border-white/15 px-4 py-2"
           >
             재고대장(리포트)
+          </a>
+
+          {/* ✅ 새 구조: 주문/출고 */}
+          <a
+            href="/orders"
+            className="inline-flex rounded-xl border border-white/15 px-4 py-2"
+          >
+            주문/출고
+          </a>
+
+          {/* ✅ 새 구조: 경리장부(통합장부) */}
+          <a
+            href="/ledger"
+            className="inline-flex rounded-xl border border-white/15 px-4 py-2"
+          >
+            경리장부(통합장부)
+          </a>
+
+          <a
+            href="/calendar"
+            className="inline-flex rounded-xl border border-white/15 px-4 py-2"
+          >
+            출고 캘린더
           </a>
         </div>
       </main>

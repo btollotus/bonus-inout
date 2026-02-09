@@ -1,0 +1,29 @@
+*커밋 후 push 기본 명령어 (가장 일반적인 경우)
+
+git status
+git add -A
+git commit -m "fix: server supabase env fallback"
+git push
+
+*git push -u origin main 는 처음에만 1번.
+
+
+git status  <-현재 변경사항 확인(수정된 파일이 뭔지 확인용)
+git add -A <- 변경된 파일 전부 스테이징(수정/추가/삭제 전부 포함)
+git commit -m "fix: server supabase env fallback" <-커밋
+git push -u origin main <- GitHub로 push
+
+*위 명령어 실행결과 아래 내용 진행됨.
+GitHub에 커밋 반영
+Vercel이 자동으로 새 Deployment 생성
+Deployments 탭에 새로운 Ready/Building 항목 등장
+
+
+export default function ChannelsPage() {
+    return (
+      <div style={{ padding: 16 }}>
+        <h1>/channels</h1>
+        <p>배포 로그인 루프 점검용 임시 페이지</p>
+      </div>
+    );
+  }
