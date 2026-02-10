@@ -416,14 +416,21 @@ export default function TradeClient() {
           ? "메모 있음"
           : "";
 
-      items.push({
-        kind: "ORDER",
-        date: o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : ""),
-        amount: -Number(o.total_amount ?? 0),
-        title,
-        sub: `${o.ship_method ?? ""}${linesText ? " · " + linesText : ""}`.trim(),
-        raw: o,
-      });
+          items.push({
+            kind: "ORDER",
+            date: o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : ""),
+            amount: -Number(o.total_amount ?? 0),
+          
+            // 제목에는 출고방법 포함
+            title: memo?.title
+              ? `주문/출고 · ${memo.title}`
+              : `주문/출고 · ${o.ship_method ?? ""}`.trim(),
+          
+            // sub에서는 출고방법 제거, "내용만"
+            sub: linesText || (o.memo ? "메모 있음" : ""),
+          
+            raw: o,
+          });
     }
 
     for (const l of ledgers) {
