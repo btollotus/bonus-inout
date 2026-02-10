@@ -24,3 +24,14 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ✅ 다크 테마에서 date 달력 아이콘(역삼각형)이 안 보이는 문제 해결 */
+.date-input::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.9;
+  cursor: pointer;
+  transform: scale(1.25);
+}
+.date-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
