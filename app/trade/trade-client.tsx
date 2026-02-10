@@ -58,7 +58,7 @@ type LedgerRow = {
 type Mode = "ORDERS" | "LEDGER" | "UNIFIED";
 
 type Line = {
-  food_type: string; // ✅ 복원
+  food_type: string;
   name: string;
   qty: number;
   unit: number;
@@ -91,11 +91,6 @@ function todayYMD() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function ymdToDisplay(ymd: string | null | undefined) {
-  if (!ymd) return "";
-  return ymd;
-}
-
 function addDays(ymd: string, delta: number) {
   const d = new Date(ymd + "T00:00:00");
   d.setDate(d.getDate() + delta);
@@ -116,7 +111,6 @@ export default function TradeClient() {
 
   const [mode, setMode] = useState<Mode>("UNIFIED");
 
-  // ✅ 식품유형 마스터(자동완성용)
   const [foodTypes, setFoodTypes] = useState<FoodTypeRow[]>([]);
 
   const [showPartnerForm, setShowPartnerForm] = useState(false);
@@ -164,9 +158,7 @@ export default function TradeClient() {
       .limit(200);
 
     const f = partnerFilter.trim();
-    if (f) {
-      q = q.or(`name.ilike.%${f}%,business_no.ilike.%${f}%`);
-    }
+    if (f) q = q.or(`name.ilike.%${f}%,business_no.ilike.%${f}%`);
 
     const { data, error } = await q;
     if (error) return setMsg(error.message);
@@ -174,7 +166,6 @@ export default function TradeClient() {
   }
 
   async function loadFoodTypes() {
-    // ✅ food_types 마스터 로드 (자동완성)
     const { data, error } = await supabase
       .from("food_types")
       .select("id,name,is_active,sort_order")
@@ -231,11 +222,7 @@ export default function TradeClient() {
     const { data: lData, error: lErr } = await lq;
     if (lErr) return setMsg(lErr.message);
 
-    const mapped = (lData ?? []).map((r: any) => ({
-      ...r,
-      amount: Number(r.amount ?? 0),
-    })) as LedgerRow[];
-
+    const mapped = (lData ?? []).map((r: any) => ({ ...r, amount: Number(r.amount ?? 0) })) as LedgerRow[];
     setLedgers(mapped);
   }
 
@@ -299,11 +286,9 @@ export default function TradeClient() {
   function updateLine(i: number, patch: Partial<Line>) {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
-
   function addLine() {
     setLines((prev) => [...prev, { food_type: "", name: "", qty: 0, unit: 0 }]);
   }
-
   function removeLine(i: number) {
     setLines((prev) => prev.filter((_, idx) => idx !== i));
   }
@@ -383,15 +368,24 @@ export default function TradeClient() {
 
     setAmountStr("");
     setLedgerMemo("");
-
     await loadTrades();
   }
 
-  const unified = useMemo(() => {
-    const items: Array<
-      | { kind: "ORDER"; date: string; amount: number; title: string; sub: string; raw: OrderRow }
-      | { kind: "LEDGER"; date: string; amount: number; title: string; sub: string; raw: LedgerRow }
-    > = [];
+  // ✅ 자동완성 옵션
+  const foodTypeOptions = useMemo(() => {
+    return (foodTypes ?? []).map((x) => x.name).filter(Boolean).slice(0, 500);
+  }, [foodTypes]);
+
+  // ✅ 통합(잔액 포함)
+  const unifiedWithBalance = useMemo(() => {
+    const items: Array<{
+      kind: "ORDER" | "LEDGER";
+      date: string;
+      amount: number; // 입금 +, 출금 -
+      title: string;
+      sub: string;
+      rawId: string;
+    }> = [];
 
     for (const o of orders) {
       const memo = safeJsonParse<{ title: string | null; lines: any[] }>(o.memo);
@@ -410,14 +404,13 @@ export default function TradeClient() {
           ? "메모 있음"
           : "";
 
-      // ✅ 중복 방지: sub에서 ship_method는 빼고 "내용만"
       items.push({
         kind: "ORDER",
         date: o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : ""),
         amount: -Number(o.total_amount ?? 0),
         title,
         sub: linesText,
-        raw: o,
+        rawId: o.id,
       });
     }
 
@@ -432,24 +425,41 @@ export default function TradeClient() {
         amount: sign * Number(l.amount ?? 0),
         title,
         sub,
-        raw: l,
+        rawId: l.id,
       });
     }
 
-    items.sort((a, b) => String(b.date).localeCompare(String(a.date)));
-    return items;
+    // 1) 잔액 계산은 오래된 것부터
+    const asc = [...items].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+    let bal = 0;
+    const ascWithBal = asc.map((x) => {
+      bal += x.amount;
+      return { ...x, balance: bal };
+    });
+
+    // 2) 화면 표시(최신이 위): 역순
+    const descWithBal = [...ascWithBal].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+
+    return descWithBal;
   }, [orders, ledgers]);
 
   const unifiedTotals = useMemo(() => {
-    const plus = unified.filter((x) => x.amount > 0).reduce((a, x) => a + x.amount, 0);
-    const minus = unified.filter((x) => x.amount < 0).reduce((a, x) => a + x.amount, 0);
+    const plus = unifiedWithBalance.filter((x) => x.amount > 0).reduce((a, x) => a + x.amount, 0);
+    const minus = unifiedWithBalance.filter((x) => x.amount < 0).reduce((a, x) => a + x.amount, 0);
     return { plus, minus, net: plus + minus };
-  }, [unified]);
+  }, [unifiedWithBalance]);
 
-  // ✅ datalist 렌더용(너무 많으면 120개만)
-  const foodTypeOptions = useMemo(() => {
-    return (foodTypes ?? []).map((x) => x.name).filter(Boolean).slice(0, 500);
-  }, [foodTypes]);
+  // ✅ 기간 끝(최신 시점) 잔액
+  const currentBalance = useMemo(() => {
+    if (unifiedWithBalance.length === 0) return 0;
+    // 화면은 최신이 위라서, "가장 오래된"의 balance가 아니라
+    // 최신 시점 잔액은 asc 마지막이지만 우리는 desc만 들고 있음.
+    // 방법: desc 중 가장 작은 날짜를 찾는 대신, balance 최대가 최신이 아닐 수도 있어서
+    // 여기서는 asc 기준으로 계산한 마지막 값을 다시 구한다.
+    const asc = [...unifiedWithBalance].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    return asc.length ? asc[asc.length - 1].balance : 0;
+  }, [unifiedWithBalance]);
 
   return (
     <div className="mx-auto w-full max-w-[1600px] overflow-x-hidden px-4 py-6 text-white">
@@ -458,6 +468,7 @@ export default function TradeClient() {
       ) : null}
 
       <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+        {/* LEFT: 거래처 */}
         <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="text-lg font-semibold">거래처</div>
@@ -606,6 +617,7 @@ export default function TradeClient() {
           </div>
         </div>
 
+        {/* RIGHT */}
         <div className="min-w-0 space-y-6">
           <div className="flex gap-2">
             <button
@@ -634,7 +646,7 @@ export default function TradeClient() {
             </button>
           </div>
 
-          {/* ✅ 주문/출고 입력 */}
+          {/* 주문/출고 입력 */}
           {mode !== "LEDGER" ? (
             <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
               <div className="mb-3 text-lg font-semibold">주문/출고 입력</div>
@@ -644,12 +656,11 @@ export default function TradeClient() {
                   <div className="mb-1 text-xs text-white/70">출고일(주문일)</div>
                   <input
                     type="date"
-                    className="date-input w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm"
                     value={shipDate}
                     onChange={(e) => setShipDate(e.target.value)}
                   />
                 </div>
-
                 <div>
                   <div className="mb-1 text-xs text-white/70">출고방법</div>
                   <select
@@ -663,7 +674,6 @@ export default function TradeClient() {
                     <option value="기타">기타</option>
                   </select>
                 </div>
-
                 <div>
                   <div className="mb-1 text-xs text-white/70">메모(title)</div>
                   <input
@@ -685,7 +695,6 @@ export default function TradeClient() {
                 </button>
               </div>
 
-              {/* ✅ 헤더: 식품유형 컬럼 복원 */}
               <div className="mt-3 grid grid-cols-[1.3fr_2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 px-1 text-xs text-white/60">
                 <div>식품유형</div>
                 <div>품목명</div>
@@ -702,12 +711,10 @@ export default function TradeClient() {
                   const supply = toInt(l.qty) * toInt(l.unit);
                   const vat = Math.round(supply * 0.1);
                   const total = supply + vat;
-
                   const dlId = `foodtypes-${i}`;
 
                   return (
                     <div key={i} className="grid grid-cols-[1.3fr_2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2">
-                      {/* ✅ 식품유형 자동완성 */}
                       <div>
                         <input
                           className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm"
@@ -775,7 +782,7 @@ export default function TradeClient() {
             </div>
           ) : null}
 
-          {/* ✅ 금전출납 입력 */}
+          {/* 금전출납 입력 */}
           {mode !== "ORDERS" ? (
             <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
               <div className="mb-3 text-lg font-semibold">금전출납 입력</div>
@@ -785,7 +792,7 @@ export default function TradeClient() {
                   <div className="mb-1 text-xs text-white/70">일자</div>
                   <input
                     type="date"
-                    className="date-input w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm"
                     value={entryDate}
                     onChange={(e) => setEntryDate(e.target.value)}
                   />
@@ -866,9 +873,9 @@ export default function TradeClient() {
             </div>
           ) : null}
 
-          {/* ✅ 거래내역 */}
+          {/* ✅ 거래내역 (1줄 + 잔액) */}
           <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex items-end justify-between gap-4">
               <div>
                 <div className="text-lg font-semibold">거래내역</div>
                 <div className="text-xs text-white/60">
@@ -878,10 +885,8 @@ export default function TradeClient() {
               </div>
 
               <div className="text-right text-sm">
-                <div>
-                  + {formatMoney(unifiedTotals.plus)} &nbsp; {formatMoney(unifiedTotals.minus)} &nbsp; ={" "}
-                  <span className="font-semibold">{formatMoney(unifiedTotals.net)}</span>
-                </div>
+                <div className="text-xs text-white/60">기간 잔액</div>
+                <div className="font-semibold">{formatMoney(currentBalance)}</div>
               </div>
             </div>
 
@@ -890,22 +895,20 @@ export default function TradeClient() {
                 <div className="mb-1 text-xs text-white/70">From</div>
                 <input
                   type="date"
-                  className="date-input w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm"
                   value={fromYMD}
                   onChange={(e) => setFromYMD(e.target.value)}
                 />
               </div>
-
               <div>
                 <div className="mb-1 text-xs text-white/70">To</div>
                 <input
                   type="date"
-                  className="date-input w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm"
                   value={toYMD}
                   onChange={(e) => setToYMD(e.target.value)}
                 />
               </div>
-
               <div className="flex gap-2">
                 <button
                   className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm hover:bg-white/10"
@@ -925,33 +928,54 @@ export default function TradeClient() {
               </div>
             </div>
 
+            {/* 헤더(금액/잔액) */}
+            <div className="mb-2 grid grid-cols-[1fr_140px_160px] gap-2 px-2 text-xs text-white/60">
+              <div>내용</div>
+              <div className="text-right">금액</div>
+              <div className="text-right">잔액</div>
+            </div>
+
             <div className="space-y-2">
-              {unified
+              {unifiedWithBalance
                 .filter((x) => {
                   if (mode === "ORDERS") return x.kind === "ORDER";
                   if (mode === "LEDGER") return x.kind === "LEDGER";
                   return true;
                 })
-                .map((x) => (
-                  <div key={`${x.kind}-${x.raw.id}`} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold">
-                          {ymdToDisplay(x.date)} · {x.title}
+                .map((x) => {
+                  // ✅ 한 줄 텍스트로 합치기
+                  const oneLine = `${x.date} · ${x.title}${x.sub ? ` · ${x.sub}` : ""}`;
+
+                  return (
+                    <div key={`${x.kind}-${x.rawId}`} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <div className="grid grid-cols-[1fr_140px_160px] items-center gap-2">
+                        <div className="min-w-0 truncate text-sm font-semibold">{oneLine}</div>
+
+                        <div className="text-right text-sm font-semibold">
+                          {x.amount >= 0 ? "+" : ""}
+                          {formatMoney(x.amount)}
                         </div>
-                        {x.sub ? <div className="mt-1 truncate text-xs text-white/70">{x.sub}</div> : null}
-                      </div>
-                      <div className="shrink-0 text-right text-sm font-semibold">
-                        {x.amount >= 0 ? "+" : ""}
-                        {formatMoney(x.amount)}
+
+                        <div className="text-right text-sm text-white/85">{formatMoney(x.balance)}</div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
-              {unified.length === 0 ? (
+              {unifiedWithBalance.length === 0 ? (
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/70">
                   거래내역이 없습니다. (기간/거래처/모드 필터를 확인하세요)
+                </div>
+              ) : null}
+
+              {/* 합계(원하면 제거 가능) */}
+              {unifiedWithBalance.length > 0 ? (
+                <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-3 text-sm">
+                  <div className="flex flex-wrap justify-end gap-4">
+                    <div>입금합 {formatMoney(unifiedTotals.plus)}</div>
+                    <div>출금합 {formatMoney(unifiedTotals.minus)}</div>
+                    <div className="font-semibold">순합 {formatMoney(unifiedTotals.net)}</div>
+                  </div>
                 </div>
               ) : null}
             </div>
