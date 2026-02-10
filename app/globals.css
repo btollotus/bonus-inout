@@ -35,3 +35,13 @@ body {
 .date-input::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
 }
+
+/* 날짜 선택 아이콘(달력/역삼각형)이 어둡게 묻히는 문제 개선 */
+.date-input {
+  color-scheme: dark; /* 크롬/엣지에서 아이콘/달력 UI를 다크톤으로 */
+}
+
+.date-input::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.9;
+}
