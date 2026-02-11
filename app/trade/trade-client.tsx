@@ -230,8 +230,7 @@ export default function TradeClient() {
     setFoodTypes((data ?? []) as FoodTypeRow[]);
   }
 
-  // ✅ From 이전 누적합(기초잔액)을 구한다.
-  // 주의: 데이터가 아주 많으면(수만건) 서버측 RPC(sum)로 바꾸는 게 정석.
+  // ✅ From 이전 누적합(기초잔액)
   async function loadOpeningBalance(fromDate: string) {
     const selectedBusinessNo = selectedPartner?.business_no ?? null;
     const selectedPartnerId = selectedPartner?.id ?? null;
@@ -255,7 +254,7 @@ export default function TradeClient() {
 
     const ordersOut = (oBefore ?? []).reduce((acc: number, r: any) => acc + Number(r.total_amount ?? 0), 0);
 
-    // 2) From 이전 금전출납(IN/OUT) 합계
+    // 2) From 이전 금전출납 합계
     let lq = supabase
       .from("ledger_entries")
       .select("id,entry_date,direction,amount,partner_id,business_no,counterparty_name")
@@ -301,7 +300,6 @@ export default function TradeClient() {
       const ob = await loadOpeningBalance(f);
       setOpeningBalance(ob);
     } catch (e: any) {
-      // 기초잔액 실패해도 본문은 보여야 하니 0으로 fallback
       setOpeningBalance(0);
       setMsg(e?.message ?? "기초잔액 계산 중 오류");
     }
@@ -548,25 +546,41 @@ export default function TradeClient() {
       outAmt: number;
 
       note: string;
+
+      // ✅ 주문/출고 자동 불러오기용
+      order_title: string;
+      order_lines: Line[];
+
       balance: number;
     }> = [];
 
     for (const o of orders) {
       const memo = safeJsonParse<{ title: string | null; lines: any[] }>(o.memo);
+      const memoTitle = memo?.title ?? "";
 
-      // ✅ 택배 중복표기 방지: ship_method는 방법 컬럼에만 표시
-      const note =
+      const parsedLines: Line[] =
         memo?.lines?.length
-          ? memo.lines
+          ? memo.lines.map((l: any) => ({
+              food_type: String(l.food_type ?? ""),
+              name: String(l.name ?? ""),
+              weight_g: toInt(l.weight_g),
+              qty: toInt(l.qty),
+              unit: toInt(l.unit),
+            }))
+          : [];
+
+      const note =
+        parsedLines.length
+          ? parsedLines
               .slice(0, 3)
               .map((l) => {
                 const ft = l.food_type ? `[${l.food_type}] ` : "";
                 const w = l.weight_g ? ` ${formatMoney(l.weight_g)}g` : "";
                 return `${ft}${l.name}${w} ${formatMoney(l.qty)}×${formatMoney(l.unit)}`;
               })
-              .join(", ") + (memo.lines.length > 3 ? ` 외 ${memo.lines.length - 3}건` : "")
-          : memo?.title
-          ? memo.title
+              .join(", ") + (parsedLines.length > 3 ? ` 외 ${parsedLines.length - 3}건` : "")
+          : memoTitle
+          ? memoTitle
           : o.memo
           ? "메모 있음"
           : "";
@@ -590,6 +604,10 @@ export default function TradeClient() {
         outAmt: total,
 
         note,
+
+        order_title: memoTitle,
+        order_lines: parsedLines,
+
         balance: 0,
       });
     }
@@ -612,11 +630,15 @@ export default function TradeClient() {
         outAmt: isOut ? amt : 0,
 
         note: l.memo ?? "",
+
+        order_title: "",
+        order_lines: [],
+
         balance: 0,
       });
     }
 
-    // 오름차순으로 러닝 계산(기초잔액부터 시작)
+    // 오름차순 러닝 계산(기초잔액부터)
     items.sort((a, b) => String(a.tsKey || a.date).localeCompare(String(b.tsKey || b.date)));
 
     let running = Number(openingBalance ?? 0);
@@ -625,7 +647,7 @@ export default function TradeClient() {
       return { ...x, balance: running };
     });
 
-    // 화면 표시는 최신이 위로
+    // 최신이 위로
     withBalance.sort((a, b) => String(b.tsKey || b.date).localeCompare(String(a.tsKey || a.date)));
     return withBalance;
   }, [orders, ledgers, openingBalance]);
@@ -633,41 +655,19 @@ export default function TradeClient() {
   const unifiedTotals = useMemo(() => {
     const plus = unifiedRows.reduce((a, x) => a + (x.inAmt ?? 0), 0);
     const minus = unifiedRows.reduce((a, x) => a + (x.outAmt ?? 0), 0);
-    const net = plus - minus;
     const endBalance = unifiedRows.length ? unifiedRows[0].balance : Number(openingBalance ?? 0);
-    return { plus, minus, net, endBalance };
+    return { plus, minus, endBalance };
   }, [unifiedRows, openingBalance]);
 
-  // ✅ 복사: clipboard + fallback(execCommand) + 버튼 반응
-  async function copyTradeRow(row: (typeof unifiedRows)[number], key: string) {
-    const text = [
-      `날짜: ${row.date}`,
-      `거래처: ${row.counterparty}`,
-      `카테고리: ${row.category}`,
-      `방법: ${row.method}`,
-      `입금: ${formatMoney(row.inAmt)}`,
-      `출금: ${formatMoney(row.outAmt)}`,
-      `잔액: ${formatMoney(row.balance)}`,
-      row.note ? `메모: ${row.note}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    const setCopied = () => {
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey(null), 900);
-    };
-
+  // ✅ 클립보드 복사(기존 기능 유지)
+  async function copyToClipboard(text: string) {
     try {
       if (typeof navigator !== "undefined" && navigator.clipboard && (window as any).isSecureContext) {
         await navigator.clipboard.writeText(text);
-        setCopied();
-        setMsg("복사 완료");
-        setTimeout(() => setMsg(null), 1200);
-        return;
+        return true;
       }
     } catch {
-      // fallback로 이어감
+      // fallback
     }
 
     try {
@@ -681,17 +681,46 @@ export default function TradeClient() {
       ta.select();
       const ok = document.execCommand("copy");
       document.body.removeChild(ta);
-
-      if (ok) {
-        setCopied();
-        setMsg("복사 완료");
-        setTimeout(() => setMsg(null), 1200);
-      } else {
-        setMsg("복사에 실패했습니다(브라우저 권한 확인).");
-      }
+      return ok;
     } catch {
-      setMsg("복사에 실패했습니다(브라우저 권한 확인).");
+      return false;
     }
+  }
+
+  // ✅ (2) 복사 버튼 = 주문/출고 입력으로 불러오기 + 클립보드 복사도 같이
+  async function importOrderFromUnified(row: (typeof unifiedRows)[number], rowKey: string) {
+    if (row.kind !== "ORDER") {
+      setMsg("금전출납 행은 품목 라인이 없어 주문/출고로 불러올 수 없습니다.");
+      setTimeout(() => setMsg(null), 1500);
+      return;
+    }
+
+    // 주문/출고 탭으로 이동 + 값 채우기
+    setMode("ORDERS");
+    setShipDate(row.date || todayYMD());
+    setShipMethod(row.method || "택배");
+    setOrderTitle(row.order_title || "");
+    setLines(row.order_lines?.length ? row.order_lines : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
+
+    // “반응” 표시
+    setCopiedKey(rowKey);
+    setTimeout(() => setCopiedKey(null), 900);
+
+    // 클립보드도 같이(기존 기능 유지)
+    const clipText = [
+      `출고일: ${row.date}`,
+      `출고방법: ${row.method}`,
+      row.order_title ? `메모: ${row.order_title}` : "",
+      `품목: ${row.order_lines
+        .map((l) => `${l.food_type ? `[${l.food_type}] ` : ""}${l.name} ${l.weight_g ? `${l.weight_g}g ` : ""}${l.qty}×${l.unit}`)
+        .join(" / ")}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const ok = await copyToClipboard(clipText);
+    setMsg(ok ? "주문/출고 입력으로 불러왔습니다. (클립보드도 복사됨)" : "주문/출고 입력으로 불러왔습니다. (클립보드는 권한 문제)");
+    setTimeout(() => setMsg(null), 1800);
   }
 
   // ====== UI (라이트 + 블루 포인트) ======
@@ -714,10 +743,10 @@ export default function TradeClient() {
 
   const dateStyle = { colorScheme: "light" as any };
 
-  const tableCols = "grid grid-cols-[110px_220px_140px_110px_110px_110px_120px_90px] gap-2";
-
+  const tableCols = "grid grid-cols-[110px_220px_140px_110px_110px_110px_120px_110px] gap-2";
   const targetLabel = selectedPartner ? selectedPartner.name : "전체";
 
+  // ====== UI ======
   return (
     <div className={`${pageBg} min-h-screen`}>
       <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
@@ -765,14 +794,14 @@ export default function TradeClient() {
                 <div className="mb-2 text-sm font-semibold">거래처 등록</div>
 
                 <div className="space-y-2">
-                  <input className={input} value={p_name} onChange={(e) => setP_name(e.target.value)} />
-                  <input className={input} value={p_businessNo} onChange={(e) => setP_businessNo(e.target.value)} />
-                  <input className={input} value={p_ceo} onChange={(e) => setP_ceo(e.target.value)} />
-                  <input className={input} value={p_phone} onChange={(e) => setP_phone(e.target.value)} />
-                  <input className={input} value={p_address1} onChange={(e) => setP_address1(e.target.value)} />
+                  <input className={input} placeholder="업체명(필수)" value={p_name} onChange={(e) => setP_name(e.target.value)} />
+                  <input className={input} placeholder="사업자등록번호" value={p_businessNo} onChange={(e) => setP_businessNo(e.target.value)} />
+                  <input className={input} placeholder="대표자" value={p_ceo} onChange={(e) => setP_ceo(e.target.value)} />
+                  <input className={input} placeholder="연락처" value={p_phone} onChange={(e) => setP_phone(e.target.value)} />
+                  <input className={input} placeholder="주소" value={p_address1} onChange={(e) => setP_address1(e.target.value)} />
                   <div className="grid grid-cols-2 gap-2">
-                    <input className={input} value={p_bizType} onChange={(e) => setP_bizType(e.target.value)} />
-                    <input className={input} value={p_bizItem} onChange={(e) => setP_bizItem(e.target.value)} />
+                    <input className={input} placeholder="업태" value={p_bizType} onChange={(e) => setP_bizType(e.target.value)} />
+                    <input className={input} placeholder="종목" value={p_bizItem} onChange={(e) => setP_bizItem(e.target.value)} />
                   </div>
 
                   <div className="flex gap-2 pt-2">
@@ -790,8 +819,6 @@ export default function TradeClient() {
                     </button>
                   </div>
                 </div>
-
-                <div className="mt-2 text-xs text-slate-500">※ 업체명은 필수입니다.</div>
               </div>
             ) : null}
 
@@ -883,13 +910,7 @@ export default function TradeClient() {
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div>
                     <div className={`mb-1 ${label}`}>출고일(주문일)</div>
-                    <input
-                      type="date"
-                      style={dateStyle}
-                      className={input}
-                      value={shipDate}
-                      onChange={(e) => setShipDate(e.target.value)}
-                    />
+                    <input type="date" style={dateStyle} className={input} value={shipDate} onChange={(e) => setShipDate(e.target.value)} />
                   </div>
 
                   <div>
@@ -915,9 +936,10 @@ export default function TradeClient() {
                   </button>
                 </div>
 
-                {/* ✅ 헤더/입력칸 좌측정렬: 동일 grid + 동일 padding */}
-                <div className="mt-3">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-2 py-2">
+                {/* ✅ (1) 헤더/입력줄 동일한 좌측 시작점: 헤더와 행에 동일 px 래퍼 적용 */}
+                <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 py-2">
+                  {/* 헤더 */}
+                  <div className="px-2">
                     <div className="grid grid-cols-[180px_1fr_120px_110px_110px_120px_120px_120px_auto] gap-2 text-xs text-slate-600">
                       <div className="px-3">식품유형</div>
                       <div className="px-3">품목명</div>
@@ -931,6 +953,7 @@ export default function TradeClient() {
                     </div>
                   </div>
 
+                  {/* 입력행들 */}
                   <div className="mt-2 space-y-2">
                     {lines.map((l, i) => {
                       const supply = toInt(l.qty) * toInt(l.unit);
@@ -938,61 +961,33 @@ export default function TradeClient() {
                       const total = supply + vat;
 
                       return (
-                        <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_110px_120px_120px_120px_auto] gap-2">
-                          <input
-                            className={input}
-                            list="food-types-list"
-                            value={l.food_type}
-                            onChange={(e) => updateLine(i, { food_type: e.target.value })}
-                          />
+                        <div key={i} className="px-2">
+                          <div className="grid grid-cols-[180px_1fr_120px_110px_110px_120px_120px_120px_auto] gap-2">
+                            <input className={input} list="food-types-list" value={l.food_type} onChange={(e) => updateLine(i, { food_type: e.target.value })} />
+                            <input className={input} value={l.name} onChange={(e) => updateLine(i, { name: e.target.value })} />
+                            <input className={inputRight} inputMode="numeric" value={String(l.weight_g)} onChange={(e) => updateLine(i, { weight_g: toInt(e.target.value) })} />
+                            <input className={inputRight} inputMode="numeric" value={String(l.qty)} onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} />
+                            <input className={inputRight} inputMode="numeric" value={String(l.unit)} onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })} />
 
-                          <input className={input} value={l.name} onChange={(e) => updateLine(i, { name: e.target.value })} />
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-right tabular-nums">{formatMoney(supply)}</div>
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-right tabular-nums">{formatMoney(vat)}</div>
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-right tabular-nums font-semibold">{formatMoney(total)}</div>
 
-                          <input
-                            className={inputRight}
-                            inputMode="numeric"
-                            value={String(l.weight_g)}
-                            onChange={(e) => updateLine(i, { weight_g: toInt(e.target.value) })}
-                          />
-
-                          <input
-                            className={inputRight}
-                            inputMode="numeric"
-                            value={String(l.qty)}
-                            onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })}
-                          />
-
-                          <input
-                            className={inputRight}
-                            inputMode="numeric"
-                            value={String(l.unit)}
-                            onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })}
-                          />
-
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
-                            {formatMoney(supply)}
+                            <button className={btn} onClick={() => removeLine(i)} title="삭제">
+                              ✕
+                            </button>
                           </div>
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
-                            {formatMoney(vat)}
-                          </div>
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums font-semibold">
-                            {formatMoney(total)}
-                          </div>
-
-                          <button className={btn} onClick={() => removeLine(i)} title="삭제">
-                            ✕
-                          </button>
                         </div>
                       );
                     })}
                   </div>
-
-                  <datalist id="food-types-list">
-                    {foodTypes.map((ft) => (
-                      <option key={ft.id} value={ft.name} />
-                    ))}
-                  </datalist>
                 </div>
+
+                <datalist id="food-types-list">
+                  {foodTypes.map((ft) => (
+                    <option key={ft.id} value={ft.name} />
+                  ))}
+                </datalist>
 
                 <div className="mt-4 flex items-center justify-end gap-4 text-sm">
                   <div>공급가 {formatMoney(orderTotals.supply)}</div>
@@ -1017,13 +1012,7 @@ export default function TradeClient() {
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div>
                     <div className={`mb-1 ${label}`}>일자</div>
-                    <input
-                      type="date"
-                      style={dateStyle}
-                      className={input}
-                      value={entryDate}
-                      onChange={(e) => setEntryDate(e.target.value)}
-                    />
+                    <input type="date" style={dateStyle} className={input} value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
                   </div>
 
                   <div>
@@ -1088,7 +1077,6 @@ export default function TradeClient() {
 
             {/* 거래내역 */}
             <div className={`${card} p-4`}>
-              {/* ✅ (5) 조회대상 박스를 왼쪽으로 이동 */}
               <div className="mb-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -1117,7 +1105,8 @@ export default function TradeClient() {
                   </div>
 
                   <div className="mt-1 text-xs text-slate-600">
-                    잔액(최신) <span className="font-semibold text-slate-900">{formatMoney(unifiedTotals.endBalance)}</span>
+                    잔액(최신){" "}
+                    <span className="font-semibold text-slate-900">{formatMoney(unifiedTotals.endBalance)}</span>
                   </div>
                 </div>
               </div>
@@ -1125,23 +1114,11 @@ export default function TradeClient() {
               <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
                 <div>
                   <div className={`mb-1 ${label}`}>From</div>
-                  <input
-                    type="date"
-                    style={dateStyle}
-                    className={input}
-                    value={fromYMD}
-                    onChange={(e) => setFromYMD(e.target.value)}
-                  />
+                  <input type="date" style={dateStyle} className={input} value={fromYMD} onChange={(e) => setFromYMD(e.target.value)} />
                 </div>
                 <div>
                   <div className={`mb-1 ${label}`}>To</div>
-                  <input
-                    type="date"
-                    style={dateStyle}
-                    className={input}
-                    value={toYMD}
-                    onChange={(e) => setToYMD(e.target.value)}
-                  />
+                  <input type="date" style={dateStyle} className={input} value={toYMD} onChange={(e) => setToYMD(e.target.value)} />
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -1159,7 +1136,6 @@ export default function TradeClient() {
                 </div>
               </div>
 
-              {/* 장부목록형 표 */}
               <div className="overflow-x-auto">
                 <div className="min-w-[980px]">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -1187,10 +1163,7 @@ export default function TradeClient() {
                         const copied = copiedKey === rowKey;
 
                         return (
-                          <div
-                            key={rowKey}
-                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50"
-                          >
+                          <div key={rowKey} className="rounded-2xl border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50">
                             <div className={`${tableCols} items-center text-sm`}>
                               <div className="px-2 font-semibold">{ymdToDisplay(x.date)}</div>
 
@@ -1216,12 +1189,8 @@ export default function TradeClient() {
                               <div className="px-2 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</div>
 
                               <div className="px-2 text-center">
-                                <button
-                                  className={copied ? btnOn : btnSoft}
-                                  onClick={() => copyTradeRow(x, rowKey)}
-                                  title="반복 주문/입력용 복사"
-                                >
-                                  {copied ? "복사됨" : "복사"}
+                                <button className={copied ? btnOn : btnSoft} onClick={() => importOrderFromUnified(x, rowKey)}>
+                                  {copied ? "불러옴" : "복사"}
                                 </button>
                               </div>
                             </div>
