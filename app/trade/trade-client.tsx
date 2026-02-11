@@ -320,7 +320,6 @@ export default function TradeClient() {
     setLedgers(mapped);
 
     // ---- ✅ 기초잔액(기간 시작 전 누적) 계산
-    // MVP 방식: 기간 시작 전 데이터를 가져와서 클라에서 합산 (많으면 limit 조정)
     let opening = 0;
 
     // Orders before f
@@ -657,7 +656,6 @@ export default function TradeClient() {
     setMsg(null);
     setMode("ORDERS");
 
-    // 반복 주문이 대부분이니: 날짜는 오늘로 자동
     setShipDate(todayYMD());
     setShipMethod(r.ship_method ?? "택배");
     setOrderTitle(r.order_title ?? "");
@@ -890,12 +888,7 @@ export default function TradeClient() {
                   </div>
                   <div>
                     <div className="mb-1 text-xs text-slate-600">메모(title)</div>
-                    <input
-                      className={input}
-                      placeholder=""
-                      value={orderTitle}
-                      onChange={(e) => setOrderTitle(e.target.value)}
-                    />
+                    <input className={input} placeholder="" value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} />
                   </div>
                 </div>
 
@@ -906,88 +899,126 @@ export default function TradeClient() {
                   </button>
                 </div>
 
-                {/* ✅ 헤더/입력칸 “왼쪽 맞춤” 핵심:
-                    - 헤더: 각 칸을 pl-3
-                    - 입력: input 자체가 px-3 (왼쪽 3)
-                    - 그래서 시작점이 동일해짐 */}
-                <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_120px_auto] gap-2 text-xs text-slate-600">
-                  <div className="pl-3">식품유형</div>
-                  <div className="pl-3">품목명</div>
-                  <div className="pl-3">무게(g)</div>
-                  <div className="pl-3 text-right">수량</div>
-                  <div className="pl-3 text-right">단가</div>
-                  <div className="pl-3 text-right">공급가</div>
-                  <div className="pl-3 text-right">부가세</div>
-                  <div className="pl-3 text-right">총액</div>
-                  <div />
-                </div>
+                {/* ✅ 여기부터 “table + colgroup”로 고정정렬 */}
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full table-fixed border-separate border-spacing-x-2 border-spacing-y-2">
+                    <colgroup>
+                      <col style={{ width: 180 }} />
+                      <col />
+                      <col style={{ width: 120 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 130 }} />
+                      <col style={{ width: 120 }} />
+                      <col style={{ width: 120 }} />
+                      <col style={{ width: 120 }} />
+                      <col style={{ width: 56 }} />
+                    </colgroup>
 
-                <div className="mt-2 space-y-2">
-                  {lines.map((l, i) => {
-                    const supply = toInt(l.qty) * toInt(l.unit);
-                    const vat = Math.round(supply * 0.1);
-                    const total = supply + vat;
+                    <thead>
+                      <tr className="text-xs text-slate-600">
+                        <th className="px-3 text-left font-normal">식품유형</th>
+                        <th className="px-3 text-left font-normal">품목명</th>
+                        <th className="px-3 text-left font-normal">무게(g)</th>
+                        <th className="px-3 text-right font-normal">수량</th>
+                        <th className="px-3 text-right font-normal">단가</th>
+                        <th className="px-3 text-right font-normal">공급가</th>
+                        <th className="px-3 text-right font-normal">부가세</th>
+                        <th className="px-3 text-right font-normal">총액</th>
+                        <th />
+                      </tr>
+                    </thead>
 
-                    return (
-                      <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_120px_auto] gap-2">
-                        {/* 식품유형 */}
-                        <input
-                          className={input}
-                          list="food-types-list"
-                          placeholder=""
-                          value={l.food_type}
-                          onChange={(e) => updateLine(i, { food_type: e.target.value })}
-                        />
+                    <tbody>
+                      {lines.map((l, i) => {
+                        const supply = toInt(l.qty) * toInt(l.unit);
+                        const vat = Math.round(supply * 0.1);
+                        const total = supply + vat;
 
-                        {/* 품목명 */}
-                        <input
-                          className={input}
-                          placeholder=""
-                          value={l.name}
-                          onChange={(e) => updateLine(i, { name: e.target.value })}
-                        />
+                        return (
+                          <tr key={i}>
+                            {/* 식품유형 */}
+                            <td>
+                              <input
+                                className={input}
+                                list="food-types-list"
+                                placeholder=""
+                                value={l.food_type}
+                                onChange={(e) => updateLine(i, { food_type: e.target.value })}
+                              />
+                            </td>
 
-                        {/* 무게(g) */}
-                        <input
-                          className={inputRight}
-                          inputMode="numeric"
-                          value={formatMoney(l.weight_g)}
-                          onChange={(e) => updateLine(i, { weight_g: toInt(e.target.value) })}
-                        />
+                            {/* 품목명 */}
+                            <td>
+                              <input
+                                className={input}
+                                placeholder=""
+                                value={l.name}
+                                onChange={(e) => updateLine(i, { name: e.target.value })}
+                              />
+                            </td>
 
-                        {/* ✅ 수량(콤마) */}
-                        <input
-                          className={inputRight}
-                          inputMode="numeric"
-                          value={formatMoney(l.qty)}
-                          onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })}
-                        />
+                            {/* 무게(g) */}
+                            <td>
+                              <input
+                                className={inputRight}
+                                inputMode="numeric"
+                                value={formatMoney(l.weight_g)}
+                                onChange={(e) => updateLine(i, { weight_g: toInt(e.target.value) })}
+                              />
+                            </td>
 
-                        {/* ✅ 단가(콤마) */}
-                        <input
-                          className={inputRight}
-                          inputMode="numeric"
-                          value={formatMoney(l.unit)}
-                          onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })}
-                        />
+                            {/* 수량(콤마) */}
+                            <td>
+                              <input
+                                className={inputRight}
+                                inputMode="numeric"
+                                value={formatMoney(l.qty)}
+                                onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })}
+                              />
+                            </td>
 
-                        {/* 공급가/부가세/총액 */}
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
-                          {formatMoney(supply)}
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
-                          {formatMoney(vat)}
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums font-semibold">
-                          {formatMoney(total)}
-                        </div>
+                            {/* 단가(콤마) */}
+                            <td>
+                              <input
+                                className={inputRight}
+                                inputMode="numeric"
+                                value={formatMoney(l.unit)}
+                                onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })}
+                              />
+                            </td>
 
-                        <button className={btn} onClick={() => removeLine(i)} title="삭제">
-                          ✕
-                        </button>
-                      </div>
-                    );
-                  })}
+                            {/* 공급가 */}
+                            <td>
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
+                                {formatMoney(supply)}
+                              </div>
+                            </td>
+
+                            {/* 부가세 */}
+                            <td>
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
+                                {formatMoney(vat)}
+                              </div>
+                            </td>
+
+                            {/* 총액 */}
+                            <td>
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums font-semibold">
+                                {formatMoney(total)}
+                              </div>
+                            </td>
+
+                            {/* 삭제 */}
+                            <td className="align-middle">
+                              <button type="button" className={btn} onClick={() => removeLine(i)} title="삭제">
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
 
                 <datalist id="food-types-list">
@@ -1017,9 +1048,7 @@ export default function TradeClient() {
                     <span className={pill}>조회대상: {targetLabel}</span>
                     <div className="text-sm text-slate-600">
                       방향:{" "}
-                      <span className="font-semibold">
-                        {categoryToDirection(category) === "IN" ? "입금(+)" : "출금(-)"}
-                      </span>
+                      <span className="font-semibold">{categoryToDirection(category) === "IN" ? "입금(+)" : "출금(-)"}</span>
                       <span className="ml-2 text-xs text-slate-500">(카테고리로 자동)</span>
                     </div>
                   </div>
@@ -1106,9 +1135,7 @@ export default function TradeClient() {
                     <div className="text-xs text-slate-600">
                       입금 {formatMoney(unifiedTotals.plus)} · 출금 {formatMoney(unifiedTotals.minus)}
                     </div>
-                    <div className="text-sm font-semibold tabular-nums">
-                      잔액(최신) {formatMoney(unifiedTotals.endBalance)}
-                    </div>
+                    <div className="text-sm font-semibold tabular-nums">잔액(최신) {formatMoney(unifiedTotals.endBalance)}</div>
                   </div>
                 </div>
               </div>
