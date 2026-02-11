@@ -189,7 +189,10 @@ export default function TradeClient() {
   const [includeOpening, setIncludeOpening] = useState(true);
   const [openingBalance, setOpeningBalance] = useState(0);
 
-  // ✅ (현재 기간) 주문/출고 합계
+  // ✅ 거래내역: 메모 보기(행 펼치기)
+  const [openMemoKey, setOpenMemoKey] = useState<string | null>(null);
+
+  // ✅ (현재 입력) 주문/출고 합계
   const orderTotals = useMemo(() => {
     const supply = lines.reduce((acc, l) => acc + toInt(l.qty) * toInt(l.unit), 0);
     const vat = Math.round(supply * 0.1);
@@ -587,7 +590,7 @@ export default function TradeClient() {
       });
     }
 
-    // Ledgers -> category 기반 direction 그대로 사용
+    // Ledgers
     for (const l of ledgers) {
       const sign = String(l.direction) === "OUT" ? -1 : 1;
       const amt = Number(l.amount ?? 0);
@@ -610,7 +613,7 @@ export default function TradeClient() {
       });
     }
 
-    // ✅ 러닝잔액은 “오래된 → 최신”으로 계산
+    // 러닝잔액 계산
     items.sort((a, b) => String(a.tsKey || a.date).localeCompare(String(b.tsKey || b.date)));
 
     let running = includeOpening ? openingBalance : 0;
@@ -638,7 +641,7 @@ export default function TradeClient() {
       };
     });
 
-    // 화면 표시는 “최신 → 오래된”
+    // 화면 표시는 최신 → 오래된
     withBal.sort((a, b) => String(b.tsKey || b.date).localeCompare(String(a.tsKey || a.date)));
     return withBal;
   }, [orders, ledgers, includeOpening, openingBalance]);
@@ -690,6 +693,30 @@ export default function TradeClient() {
   function onCopyClick(r: UnifiedRow) {
     if (r.kind === "ORDER") fillFromOrderRow(r);
     else fillFromLedgerRow(r);
+  }
+
+  function renderMemoText(r: UnifiedRow) {
+    if (r.kind === "LEDGER") {
+      const memo = (r.ledger_memo ?? "").trim();
+      return memo ? memo : "(메모 없음)";
+    }
+
+    // ORDER
+    const title = (r.order_title ?? "").trim();
+    const linesArr = r.order_lines ?? [];
+    const linesText =
+      linesArr.length === 0
+        ? "(품목 없음)"
+        : linesArr
+            .map((l) => {
+              const qty = Number(l.qty ?? 0);
+              const unit = Number(l.unit ?? 0);
+              return `${l.name} / ${formatMoney(qty)} × ${formatMoney(unit)} = ${formatMoney(qty * unit)}`;
+            })
+            .join("\n");
+
+    if (title) return `[제목] ${title}\n\n[품목]\n${linesText}`;
+    return `[품목]\n${linesText}`;
   }
 
   // ====== UI (KB 느낌 라이트) ======
@@ -899,32 +926,31 @@ export default function TradeClient() {
                   </button>
                 </div>
 
-                {/* ✅ 여기부터 “table + colgroup”로 고정정렬 */}
+                {/* ✅ 방법1: table + colgroup (헤더/입력칸 100% 고정 정렬) */}
                 <div className="mt-3 overflow-x-auto">
-                  <table className="w-full table-fixed border-separate border-spacing-x-2 border-spacing-y-2">
+                  <table className="w-full min-w-[980px] table-fixed border-separate border-spacing-y-2">
                     <colgroup>
                       <col style={{ width: 180 }} />
-                      <col />
+                      <col style={{ width: "auto" }} />
                       <col style={{ width: 120 }} />
                       <col style={{ width: 110 }} />
                       <col style={{ width: 130 }} />
                       <col style={{ width: 120 }} />
                       <col style={{ width: 120 }} />
                       <col style={{ width: 120 }} />
-                      <col style={{ width: 56 }} />
+                      <col style={{ width: 64 }} />
                     </colgroup>
-
                     <thead>
                       <tr className="text-xs text-slate-600">
-                        <th className="px-3 text-left font-normal">식품유형</th>
-                        <th className="px-3 text-left font-normal">품목명</th>
-                        <th className="px-3 text-left font-normal">무게(g)</th>
-                        <th className="px-3 text-right font-normal">수량</th>
-                        <th className="px-3 text-right font-normal">단가</th>
-                        <th className="px-3 text-right font-normal">공급가</th>
-                        <th className="px-3 text-right font-normal">부가세</th>
-                        <th className="px-3 text-right font-normal">총액</th>
-                        <th />
+                        <th className="px-3 text-left font-semibold">식품유형</th>
+                        <th className="px-3 text-left font-semibold">품목명</th>
+                        <th className="px-3 text-right font-semibold">무게(g)</th>
+                        <th className="px-3 text-right font-semibold">수량</th>
+                        <th className="px-3 text-right font-semibold">단가</th>
+                        <th className="px-3 text-right font-semibold">공급가</th>
+                        <th className="px-3 text-right font-semibold">부가세</th>
+                        <th className="px-3 text-right font-semibold">총액</th>
+                        <th className="px-3 text-center font-semibold"></th>
                       </tr>
                     </thead>
 
@@ -936,8 +962,7 @@ export default function TradeClient() {
 
                         return (
                           <tr key={i}>
-                            {/* 식품유형 */}
-                            <td>
+                            <td className="px-1">
                               <input
                                 className={input}
                                 list="food-types-list"
@@ -947,8 +972,7 @@ export default function TradeClient() {
                               />
                             </td>
 
-                            {/* 품목명 */}
-                            <td>
+                            <td className="px-1">
                               <input
                                 className={input}
                                 placeholder=""
@@ -957,8 +981,7 @@ export default function TradeClient() {
                               />
                             </td>
 
-                            {/* 무게(g) */}
-                            <td>
+                            <td className="px-1">
                               <input
                                 className={inputRight}
                                 inputMode="numeric"
@@ -967,8 +990,7 @@ export default function TradeClient() {
                               />
                             </td>
 
-                            {/* 수량(콤마) */}
-                            <td>
+                            <td className="px-1">
                               <input
                                 className={inputRight}
                                 inputMode="numeric"
@@ -977,8 +999,7 @@ export default function TradeClient() {
                               />
                             </td>
 
-                            {/* 단가(콤마) */}
-                            <td>
+                            <td className="px-1">
                               <input
                                 className={inputRight}
                                 inputMode="numeric"
@@ -987,30 +1008,26 @@ export default function TradeClient() {
                               />
                             </td>
 
-                            {/* 공급가 */}
-                            <td>
+                            <td className="px-1">
                               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
                                 {formatMoney(supply)}
                               </div>
                             </td>
 
-                            {/* 부가세 */}
-                            <td>
+                            <td className="px-1">
                               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
                                 {formatMoney(vat)}
                               </div>
                             </td>
 
-                            {/* 총액 */}
-                            <td>
+                            <td className="px-1">
                               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums font-semibold">
                                 {formatMoney(total)}
                               </div>
                             </td>
 
-                            {/* 삭제 */}
-                            <td className="align-middle">
-                              <button type="button" className={btn} onClick={() => removeLine(i)} title="삭제">
+                            <td className="px-1 text-center">
+                              <button className={btn} onClick={() => removeLine(i)} title="삭제">
                                 ✕
                               </button>
                             </td>
@@ -1063,9 +1080,10 @@ export default function TradeClient() {
                   <div>
                     <div className="mb-1 text-xs text-slate-600">결제수단</div>
                     <select className={input} value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
-                      <option value="BANK">BANK(계좌)</option>
-                      <option value="CARD">CARD</option>
-                      <option value="CASH">CASH</option>
+                      {/* ✅ 요청 문구로 변경 (저장값은 기존 유지) */}
+                      <option value="BANK">계좌입금</option>
+                      <option value="CASH">현금</option>
+                      <option value="CARD">카드</option>
                       <option value="ETC">기타</option>
                     </select>
                   </div>
@@ -1081,7 +1099,7 @@ export default function TradeClient() {
                     </div>
                   </div>
 
-                  {/* ✅ 요청: 메모/금액 좌우 위치 변경 => 금액 먼저, 메모가 넓게 */}
+                  {/* 메모/금액 좌우 위치 변경 => 금액 먼저, 메모가 넓게 */}
                   <div>
                     <div className="mb-1 text-xs text-slate-600">금액(원)</div>
                     <input
@@ -1183,7 +1201,7 @@ export default function TradeClient() {
                     <div className="pl-3 text-right">입금</div>
                     <div className="pl-3 text-right">출금</div>
                     <div className="pl-3 text-right">잔액</div>
-                    <div className="pl-3 text-center">복사</div>
+                    <div className="pl-3 text-center">복사/메모</div>
                   </div>
 
                   {unifiedRows
@@ -1192,35 +1210,52 @@ export default function TradeClient() {
                       if (mode === "LEDGER") return x.kind === "LEDGER";
                       return true;
                     })
-                    .map((x) => (
-                      <div
-                        key={`${x.kind}-${x.rawId}`}
-                        className="grid grid-cols-[120px_200px_160px_140px_140px_140px_140px_120px] border-t border-slate-200 bg-white px-3 py-2 text-sm"
-                      >
-                        <div className="pl-3 font-semibold tabular-nums">{x.date}</div>
+                    .map((x) => {
+                      const key = `${x.kind}-${x.rawId}`;
+                      const memoOpen = openMemoKey === key;
 
-                        {/* ✅ 요청: 전체 조회에서 사업자번호 행 표시는 없어도 됨 => 이름만 */}
-                        <div className="pl-3 font-semibold">{x.partnerName}</div>
+                      return (
+                        <React.Fragment key={key}>
+                          <div className="grid grid-cols-[120px_200px_160px_140px_140px_140px_140px_120px] border-t border-slate-200 bg-white px-3 py-2 text-sm">
+                            <div className="pl-3 font-semibold tabular-nums">{x.date}</div>
+                            <div className="pl-3 font-semibold">{x.partnerName}</div>
+                            <div className="pl-3 font-semibold">{x.category}</div>
+                            <div className="pl-3 font-semibold">{x.method}</div>
 
-                        <div className="pl-3 font-semibold">{x.category}</div>
-                        <div className="pl-3 font-semibold">{x.method}</div>
+                            <div className="pl-3 text-right tabular-nums font-semibold text-blue-700">
+                              {x.inAmt ? formatMoney(x.inAmt) : ""}
+                            </div>
+                            <div className="pl-3 text-right tabular-nums font-semibold text-red-600">
+                              {x.outAmt ? formatMoney(x.outAmt) : ""}
+                            </div>
 
-                        <div className="pl-3 text-right tabular-nums font-semibold text-blue-700">
-                          {x.inAmt ? formatMoney(x.inAmt) : ""}
-                        </div>
-                        <div className="pl-3 text-right tabular-nums font-semibold text-red-600">
-                          {x.outAmt ? formatMoney(x.outAmt) : ""}
-                        </div>
+                            <div className="pl-3 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</div>
 
-                        <div className="pl-3 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</div>
+                            <div className="pl-3 flex items-center justify-center gap-2">
+                              <button className={btn} onClick={() => onCopyClick(x)}>
+                                복사
+                              </button>
+                              <button
+                                className={btn}
+                                onClick={() => setOpenMemoKey((prev) => (prev === key ? null : key))}
+                                title="메모 보기"
+                              >
+                                메모
+                              </button>
+                            </div>
+                          </div>
 
-                        <div className="pl-3 text-center">
-                          <button className={btn} onClick={() => onCopyClick(x)}>
-                            복사
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                          {memoOpen ? (
+                            <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                              <div className="mb-2 text-xs font-semibold text-slate-600">메모 상세</div>
+                              <pre className="whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800">
+                                {renderMemoText(x)}
+                              </pre>
+                            </div>
+                          ) : null}
+                        </React.Fragment>
+                      );
+                    })}
 
                   {unifiedRows.length === 0 ? (
                     <div className="bg-white px-4 py-4 text-sm text-slate-500">
