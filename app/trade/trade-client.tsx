@@ -150,20 +150,25 @@ function buildMemoText(r: UnifiedRow) {
         const ft = String(l.food_type ?? "").trim();
         const name = String(l.name ?? "").trim();
         const w = Number(l.weight_g ?? 0);
-        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${w}g, ` : ""}수량 ${formatMoney(qty)} / 단가 ${formatMoney(
-          unit
-        )} / 공급가 ${formatMoney(supply)} / 부가세 ${formatMoney(vat)} / 총액 ${formatMoney(total)}`;
+        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${w}g, ` : ""}수량 ${formatMoney(
+          qty
+        )} / 단가 ${formatMoney(unit)} / 공급가 ${formatMoney(supply)} / 부가세 ${formatMoney(vat)} / 총액 ${formatMoney(
+          total
+        )}`;
       })
       .join("\n");
-    return `주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 제목: ${title || "(없음)"}\n\n품목:\n${rows || "(품목 없음)"}`;
+    return `주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 제목: ${title || "(없음)"}\n\n품목:\n${
+      rows || "(품목 없음)"
+    }`;
   }
 
-  // LEDGER
   const memo = (r.ledger_memo ?? "").trim();
   const cat = r.ledger_category ?? r.category ?? "";
   const method = r.ledger_method ?? r.method ?? "";
   const amt = Number(r.ledger_amount ?? 0);
-  return `금전출납 메모\n- 카테고리: ${cat}\n- 결제수단: ${method}\n- 금액: ${formatMoney(amt)}\n\n메모:\n${memo || "(없음)"}`;
+  return `금전출납 메모\n- 카테고리: ${cat}\n- 결제수단: ${method}\n- 금액: ${formatMoney(amt)}\n\n메모:\n${
+    memo || "(없음)"
+  }`;
 }
 
 export default function TradeClient() {
@@ -202,7 +207,7 @@ export default function TradeClient() {
   const [orderTitle, setOrderTitle] = useState("");
   const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
 
-  // 금전출납 입력 (구분 삭제: 카테고리로 자동 결정)
+  // 금전출납 입력
   const [entryDate, setEntryDate] = useState(todayYMD());
   const [payMethod, setPayMethod] = useState<"BANK" | "CASH" | "CARD" | "ETC">("BANK");
   const [category, setCategory] = useState<Category>("매출입금");
@@ -224,13 +229,38 @@ export default function TradeClient() {
   const [memoTitle, setMemoTitle] = useState("");
   const [memoBody, setMemoBody] = useState("");
 
-  // ✅ (현재 기간) 주문/출고 합계
+  // ✅ 수정(팝업)
+  const [editOpen, setEditOpen] = useState(false);
+  const [editRow, setEditRow] = useState<UnifiedRow | null>(null);
+
+  // 주문 수정용
+  const [eShipDate, setEShipDate] = useState(todayYMD());
+  const [eShipMethod, setEShipMethod] = useState("택배");
+  const [eOrderTitle, setEOrderTitle] = useState("");
+  const [eLines, setELines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
+
+  // 금전출납 수정용
+  const [eEntryDate, setEEntryDate] = useState(todayYMD());
+  const [ePayMethod, setEPayMethod] = useState<"BANK" | "CASH" | "CARD" | "ETC">("BANK");
+  const [eCategory, setECategory] = useState<Category>("매출입금");
+  const [eAmountStr, setEAmountStr] = useState("");
+  const [eLedgerMemo, setELedgerMemo] = useState("");
+
+  // ✅ (현재 입력폼) 주문/출고 합계
   const orderTotals = useMemo(() => {
     const supply = lines.reduce((acc, l) => acc + toInt(l.qty) * toInt(l.unit), 0);
     const vat = Math.round(supply * 0.1);
     const total = supply + vat;
     return { supply, vat, total };
   }, [lines]);
+
+  // ✅ (수정 모달) 주문/출고 합계
+  const editOrderTotals = useMemo(() => {
+    const supply = eLines.reduce((acc, l) => acc + toInt(l.qty) * toInt(l.unit), 0);
+    const vat = Math.round(supply * 0.1);
+    const total = supply + vat;
+    return { supply, vat, total };
+  }, [eLines]);
 
   // ====== Helpers: 최근 거래처 ======
   function loadRecentFromLS() {
@@ -349,7 +379,7 @@ export default function TradeClient() {
     const mapped = (lData ?? []).map((r: any) => ({ ...r, amount: Number(r.amount ?? 0) })) as LedgerRow[];
     setLedgers(mapped);
 
-    // ---- ✅ 기초잔액(기간 시작 전 누적) 계산 (MVP 방식)
+    // ---- ✅ 기초잔액(기간 시작 전 누적) 계산
     let opening = 0;
 
     // Orders before f
@@ -488,6 +518,17 @@ export default function TradeClient() {
     setLines((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  // ====== 수정 모달용 라인 업데이트 ======
+  function updateEditLine(i: number, patch: Partial<Line>) {
+    setELines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  }
+  function addEditLine() {
+    setELines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
+  }
+  function removeEditLine(i: number) {
+    setELines((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
   async function createOrder() {
     setMsg(null);
     if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
@@ -573,9 +614,8 @@ export default function TradeClient() {
   const partnersToShow = useMemo(() => {
     let list = partners;
 
-    if (partnerView === "PINNED") {
-      list = list.filter((p) => !!p.is_pinned);
-    } else if (partnerView === "RECENT") {
+    if (partnerView === "PINNED") list = list.filter((p) => !!p.is_pinned);
+    else if (partnerView === "RECENT") {
       const map = new Map(list.map((p) => [p.id, p]));
       list = recentPartnerIds.map((id) => map.get(id)).filter(Boolean) as PartnerRow[];
     }
@@ -640,7 +680,6 @@ export default function TradeClient() {
       });
     }
 
-    // ✅ 러닝잔액은 “오래된 → 최신”
     items.sort((a, b) => String(a.tsKey || a.date).localeCompare(String(b.tsKey || b.date)));
 
     let running = includeOpening ? openingBalance : 0;
@@ -668,7 +707,6 @@ export default function TradeClient() {
       };
     });
 
-    // 화면 표시는 “최신 → 오래된”
     withBal.sort((a, b) => String(b.tsKey || b.date).localeCompare(String(a.tsKey || a.date)));
     return withBal;
   }, [orders, ledgers, includeOpening, openingBalance]);
@@ -681,7 +719,7 @@ export default function TradeClient() {
     return { plus, minus, net, endBalance };
   }, [unifiedRows, includeOpening, openingBalance]);
 
-  // ====== Copy Fill (여러 번 반복 가능) ======
+  // ====== Copy Fill ======
   function fillFromOrderRow(r: UnifiedRow) {
     setMsg(null);
     setMode("ORDERS");
@@ -729,7 +767,107 @@ export default function TradeClient() {
     setMemoOpen(true);
   }
 
-  // ====== UI (KB 느낌 라이트) ======
+  // ====== ✅ 수정 시작 ======
+  function openEdit(r: UnifiedRow) {
+    setMsg(null);
+    setEditRow(r);
+
+    if (r.kind === "ORDER") {
+      setEShipDate(r.date || todayYMD());
+      setEShipMethod(r.ship_method ?? r.method ?? "택배");
+      setEOrderTitle(r.order_title ?? "");
+
+      const nextLines: Line[] =
+        r.order_lines?.length
+          ? r.order_lines.map((l) => ({
+              food_type: String(l.food_type ?? ""),
+              name: String(l.name ?? ""),
+              weight_g: toInt(l.weight_g ?? 0),
+              qty: toInt(l.qty ?? 0),
+              unit: toInt(l.unit ?? 0),
+            }))
+          : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }];
+
+      setELines(nextLines);
+    } else {
+      setEEntryDate(r.date || todayYMD());
+      const m = (r.ledger_method ?? r.method ?? "BANK") as any;
+      setEPayMethod(m === "BANK" || m === "CASH" || m === "CARD" || m === "ETC" ? m : "BANK");
+
+      const c = (r.ledger_category as Category) ?? (r.category as Category) ?? "기타";
+      setECategory(CATEGORIES.includes(c) ? c : "기타");
+
+      const amt = Number(r.ledger_amount ?? (r.inAmt || r.outAmt || 0));
+      setEAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
+      setELedgerMemo(r.ledger_memo ?? "");
+    }
+
+    setEditOpen(true);
+  }
+
+  async function saveEdit() {
+    if (!editRow) return;
+    setMsg(null);
+
+    if (editRow.kind === "ORDER") {
+      const cleanLines = eLines
+        .map((l) => ({
+          food_type: (l.food_type || "").trim(),
+          name: (l.name || "").trim(),
+          weight_g: toInt(l.weight_g),
+          qty: toInt(l.qty),
+          unit: toInt(l.unit),
+        }))
+        .filter((l) => l.name && l.qty > 0 && l.unit >= 0);
+
+      if (cleanLines.length === 0) return setMsg("품목명/수량/단가를 올바르게 입력하세요.");
+
+      const memoObj = {
+        title: eOrderTitle.trim() || null,
+        lines: cleanLines.map((l) => {
+          const supply = l.qty * l.unit;
+          const vat = Math.round(supply * 0.1);
+          const total = supply + vat;
+          return { ...l, supply, vat, total };
+        }),
+      };
+
+      const payload: any = {
+        ship_date: eShipDate,
+        ship_method: eShipMethod,
+        memo: JSON.stringify(memoObj),
+        supply_amount: editOrderTotals.supply,
+        vat_amount: editOrderTotals.vat,
+        total_amount: editOrderTotals.total,
+      };
+
+      const { error } = await supabase.from("orders").update(payload).eq("id", editRow.rawId);
+      if (error) return setMsg(error.message);
+    } else {
+      const amount = Number((eAmountStr || "0").replaceAll(",", ""));
+      if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
+
+      const dir = categoryToDirection(eCategory);
+
+      const payload: any = {
+        entry_date: eEntryDate,
+        direction: dir,
+        amount,
+        category: eCategory,
+        method: ePayMethod,
+        memo: eLedgerMemo.trim() || null,
+      };
+
+      const { error } = await supabase.from("ledger_entries").update(payload).eq("id", editRow.rawId);
+      if (error) return setMsg(error.message);
+    }
+
+    setEditOpen(false);
+    setEditRow(null);
+    await loadTrades();
+  }
+
+  // ====== UI ======
   const pageBg = "bg-slate-50 text-slate-900";
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const input =
@@ -742,7 +880,6 @@ export default function TradeClient() {
   const pill =
     "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700";
 
-  // 조회대상 텍스트
   const targetLabel = selectedPartner ? selectedPartner.name : "전체";
 
   return (
@@ -754,18 +891,12 @@ export default function TradeClient() {
 
         {/* ✅ 메모 팝업 */}
         {memoOpen ? (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-            onClick={() => setMemoOpen(false)}
-          >
-            <div
-              className="w-full max-w-[860px] rounded-2xl border border-slate-200 bg-white shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setMemoOpen(false)}>
+            <div className="w-full max-w-[860px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">{memoTitle}</div>
-                  <div className="mt-1 text-xs text-slate-500">Esc / 바깥 클릭으로 닫기</div>
+                  <div className="mt-1 text-xs text-slate-500">바깥 클릭으로 닫기</div>
                 </div>
                 <button className={btn} onClick={() => setMemoOpen(false)}>
                   닫기
@@ -776,6 +907,169 @@ export default function TradeClient() {
                   {memoBody}
                 </pre>
               </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ✅ 수정 팝업 */}
+        {editOpen && editRow ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setEditOpen(false)}>
+            <div className="w-full max-w-[1100px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div>
+                  <div className="text-base font-semibold">
+                    거래내역 수정 · {editRow.kind === "ORDER" ? "주문/출고" : "금전출납"} · {editRow.partnerName}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">저장하면 즉시 DB에 반영됩니다.</div>
+                </div>
+                <div className="flex gap-2">
+                  <button className={btn} onClick={() => setEditOpen(false)}>
+                    취소
+                  </button>
+                  <button className={btnOn} onClick={saveEdit}>
+                    저장
+                  </button>
+                </div>
+              </div>
+
+              <div className="px-5 py-4">
+                {editRow.kind === "ORDER" ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">출고일(주문일)</div>
+                        <input type="date" className={input} value={eShipDate} onChange={(e) => setEShipDate(e.target.value)} />
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">출고방법</div>
+                        <select className={input} value={eShipMethod} onChange={(e) => setEShipMethod(e.target.value)}>
+                          <option value="택배">택배</option>
+                          <option value="퀵">퀵</option>
+                          <option value="직접">직접</option>
+                          <option value="기타">기타</option>
+                        </select>
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">메모(title)</div>
+                        <input className={input} value={eOrderTitle} onChange={(e) => setEOrderTitle(e.target.value)} />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="text-sm font-semibold">품목</div>
+                      <button className={btn} onClick={addEditLine}>
+                        + 품목 추가
+                      </button>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_120px_auto] gap-2 text-xs text-slate-600">
+                      <div className="pl-3">식품유형</div>
+                      <div className="pl-3">품목명</div>
+                      <div className="pl-3">무게(g)</div>
+                      <div className="pl-3 text-right">수량</div>
+                      <div className="pl-3 text-right">단가</div>
+                      <div className="pl-3 text-right">공급가</div>
+                      <div className="pl-3 text-right">부가세</div>
+                      <div className="pl-3 text-right">총액</div>
+                      <div />
+                    </div>
+
+                    <div className="mt-2 space-y-2">
+                      {eLines.map((l, i) => {
+                        const supply = toInt(l.qty) * toInt(l.unit);
+                        const vat = Math.round(supply * 0.1);
+                        const total = supply + vat;
+
+                        return (
+                          <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_120px_auto] gap-2">
+                            <input className={input} list="food-types-list" value={l.food_type} onChange={(e) => updateEditLine(i, { food_type: e.target.value })} />
+                            <input className={input} value={l.name} onChange={(e) => updateEditLine(i, { name: e.target.value })} />
+                            <input className={inputRight} inputMode="numeric" value={formatMoney(l.weight_g)} onChange={(e) => updateEditLine(i, { weight_g: toInt(e.target.value) })} />
+                            <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })} />
+                            <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateEditLine(i, { unit: toInt(e.target.value) })} />
+
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(supply)}</div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(vat)}</div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums font-semibold">{formatMoney(total)}</div>
+
+                            <button className={btn} onClick={() => removeEditLine(i)} title="삭제">
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-end gap-4 text-sm">
+                      <div>공급가 {formatMoney(editOrderTotals.supply)}</div>
+                      <div>부가세 {formatMoney(editOrderTotals.vat)}</div>
+                      <div className="font-semibold">총액 {formatMoney(editOrderTotals.total)}</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">일자</div>
+                        <input type="date" className={input} value={eEntryDate} onChange={(e) => setEEntryDate(e.target.value)} />
+                      </div>
+
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">결제수단</div>
+                        <select className={input} value={ePayMethod} onChange={(e) => setEPayMethod(e.target.value as any)}>
+                          <option value="BANK">계좌입금</option>
+                          <option value="CASH">현금</option>
+                          <option value="CARD">카드</option>
+                          <option value="ETC">기타</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">카테고리</div>
+                        <div className="flex flex-wrap gap-2">
+                          {CATEGORIES.map((c) => (
+                            <button key={c} type="button" className={eCategory === c ? btnOn : btn} onClick={() => setECategory(c)}>
+                              {c}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">금액(원)</div>
+                        <input
+                          className={inputRight}
+                          inputMode="numeric"
+                          value={eAmountStr}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/[^\d,]/g, "");
+                            setEAmountStr(v);
+                          }}
+                          onBlur={() => {
+                            const n = Number((eAmountStr || "0").replaceAll(",", ""));
+                            if (Number.isFinite(n) && n > 0) setEAmountStr(n.toLocaleString("ko-KR"));
+                          }}
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <div className="mb-1 text-xs text-slate-600">메모</div>
+                        <input className={input} value={eLedgerMemo} onChange={(e) => setELedgerMemo(e.target.value)} />
+                      </div>
+                    </div>
+
+                    <div className="mt-2 text-xs text-slate-500">
+                      ※ 방향(IN/OUT)은 카테고리로 자동 결정됩니다.
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <datalist id="food-types-list">
+                {foodTypes.map((ft) => (
+                  <option key={ft.id} value={ft.name} />
+                ))}
+              </datalist>
             </div>
           </div>
         ) : null}
@@ -846,18 +1140,11 @@ export default function TradeClient() {
               </div>
             ) : null}
 
-            <input
-              className={`${input} mb-3`}
-              placeholder="목록 필터(이름/사업자번호)"
-              value={partnerFilter}
-              onChange={(e) => setPartnerFilter(e.target.value)}
-            />
+            <input className={`${input} mb-3`} placeholder="목록 필터(이름/사업자번호)" value={partnerFilter} onChange={(e) => setPartnerFilter(e.target.value)} />
 
             <div className="mb-2 text-xs text-slate-600">
               선택된 거래처:{" "}
-              {selectedPartner
-                ? `${selectedPartner.name}${selectedPartner.business_no ? ` · ${selectedPartner.business_no}` : ""}`
-                : "없음"}
+              {selectedPartner ? `${selectedPartner.name}${selectedPartner.business_no ? ` · ${selectedPartner.business_no}` : ""}` : "없음"}
             </div>
 
             <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
@@ -869,12 +1156,7 @@ export default function TradeClient() {
                   const pinned = !!p.is_pinned;
 
                   return (
-                    <div
-                      key={p.id}
-                      className={`flex items-stretch gap-2 rounded-2xl border ${
-                        active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
-                      }`}
-                    >
+                    <div key={p.id} className={`flex items-stretch gap-2 rounded-2xl border ${active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
                       <button className="flex-1 rounded-2xl px-3 py-3 text-left" onClick={() => selectPartner(p)}>
                         <div className="font-semibold">{p.name}</div>
                         <div className="text-xs text-slate-500">{p.business_no ?? ""}</div>
@@ -1024,8 +1306,7 @@ export default function TradeClient() {
                   <div className="mt-2 flex items-center justify-between gap-3">
                     <span className={pill}>조회대상: {targetLabel}</span>
                     <div className="text-sm text-slate-600">
-                      방향:{" "}
-                      <span className="font-semibold">{categoryToDirection(category) === "IN" ? "입금(+)" : "출금(-)"}</span>
+                      방향: <span className="font-semibold">{categoryToDirection(category) === "IN" ? "입금(+)" : "출금(-)"}</span>
                       <span className="ml-2 text-xs text-slate-500">(카테고리로 자동)</span>
                     </div>
                   </div>
@@ -1137,17 +1418,13 @@ export default function TradeClient() {
                   <button className={btnOn} onClick={() => loadTrades()}>
                     조회
                   </button>
-                  <button
-                    className={includeOpening ? btnOn : btn}
-                    onClick={() => setIncludeOpening((v) => !v)}
-                    title="기간 시작 전 기초잔액을 러닝잔액에 포함"
-                  >
+                  <button className={includeOpening ? btnOn : btn} onClick={() => setIncludeOpening((v) => !v)} title="기간 시작 전 기초잔액을 러닝잔액에 포함">
                     기초잔액 포함 러닝잔액
                   </button>
                 </div>
               </div>
 
-              {/* ✅ table + colgroup + table-fixed : 버튼 잘림/가림 해결 */}
+              {/* ✅ table + colgroup */}
               <div className="overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="w-full table-fixed text-sm">
                   <colgroup>
@@ -1158,7 +1435,7 @@ export default function TradeClient() {
                     <col style={{ width: "110px" }} />
                     <col style={{ width: "110px" }} />
                     <col style={{ width: "130px" }} />
-                    <col style={{ width: "170px" }} /> {/* ✅ 복사/메모 넓힘 */}
+                    <col style={{ width: "240px" }} /> {/* ✅ 버튼 3개 공간 확보 */}
                   </colgroup>
 
                   <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
@@ -1170,7 +1447,7 @@ export default function TradeClient() {
                       <th className="px-3 py-2 text-right">입금</th>
                       <th className="px-3 py-2 text-right">출금</th>
                       <th className="px-3 py-2 text-right">잔액</th>
-                      <th className="px-3 py-2 text-center">복사/메모</th>
+                      <th className="px-3 py-2 text-center">복사/메모/수정</th>
                     </tr>
                   </thead>
 
@@ -1205,6 +1482,9 @@ export default function TradeClient() {
                               <button className={`${btn} whitespace-nowrap`} onClick={() => onMemoClick(x)}>
                                 메모
                               </button>
+                              <button className={`${btn} whitespace-nowrap`} onClick={() => openEdit(x)}>
+                                수정
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1221,9 +1501,7 @@ export default function TradeClient() {
                 </table>
               </div>
 
-              <div className="mt-2 text-xs text-slate-500">
-                ※ 주문/출고는 출금으로 표시됩니다. (입금/출금은 모두 양수 입력, 계산에서만 차감 처리)
-              </div>
+              <div className="mt-2 text-xs text-slate-500">※ 주문/출고는 출금으로 표시됩니다. (입금/출금은 모두 양수 입력, 계산에서만 차감 처리)</div>
             </div>
           </div>
         </div>
