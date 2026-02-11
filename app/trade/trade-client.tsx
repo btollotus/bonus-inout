@@ -910,7 +910,7 @@ export default function TradeClient() {
                     - 헤더: 각 칸을 pl-3
                     - 입력: input 자체가 px-3 (왼쪽 3)
                     - 그래서 시작점이 동일해짐 */}
-                <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_120px_auto] gap-2 text-xs text-slate-600">
+                <div className="mt-3 grid grid-cols-[180px_1fr_20px_110px_130px_120px_120px_120px_auto] gap-2 text-xs text-slate-600">
                   <div className="pl-3">식품유형</div>
                   <div className="pl-3">품목명</div>
                   <div className="pl-3">무게(g)</div>
