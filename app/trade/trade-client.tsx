@@ -56,10 +56,7 @@ type FoodTypeRow = { id: string; name: string };
 type Line = {
   food_type: string;
   name: string;
-
-  // ✅ 품목명과 수량 사이 무게(g)
   weight_g: number;
-
   qty: number;
   unit: number;
 };
@@ -141,10 +138,8 @@ export default function TradeClient() {
   const [shipMethod, setShipMethod] = useState("택배");
   const [orderTitle, setOrderTitle] = useState("");
 
-  // ✅ 라인 기본값에 weight_g 추가
   const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
 
-  // ✅ 금액 계산은 (수량 × 단가) 그대로 유지 (무게는 저장/표기용)
   const orderTotals = useMemo(() => {
     const supply = lines.reduce((acc, l) => acc + toInt(l.qty) * toInt(l.unit), 0);
     const vat = Math.round(supply * 0.1);
@@ -165,6 +160,13 @@ export default function TradeClient() {
   const [toYMD, setToYMD] = useState(todayYMD());
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [ledgers, setLedgers] = useState<LedgerRow[]>([]);
+
+  // ====== 스타일 (기존 화면 톤 유지: 라이트 기본) ======
+  const card = "rounded-2xl border border-slate-200 bg-white";
+  const input =
+    "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200";
+  const btn = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50";
+  const btnOn = "rounded-xl border border-blue-600 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700";
 
   // ====== Helpers: 최근 거래처 ======
   function loadRecentFromLS() {
@@ -540,17 +542,10 @@ export default function TradeClient() {
     return { plus, minus, net, endBalance };
   }, [unifiedRows]);
 
-  // ====== UI ======
-  const card = "rounded-2xl border border-zinc-700/50 bg-zinc-900/40";
-  const input =
-    "w-full rounded-xl border border-zinc-700/60 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-400/60 focus:outline-none focus:ring-2 focus:ring-zinc-500/30";
-  const btn = "rounded-xl border border-zinc-700/60 bg-zinc-800/30 px-3 py-2 text-sm hover:bg-zinc-800/50";
-  const btnOn = "rounded-xl border border-zinc-500/70 bg-zinc-700/40 px-3 py-2 text-sm";
-
   return (
-    <div className="mx-auto w-full max-w-[1600px] overflow-x-hidden px-4 py-6 text-zinc-100">
+    <div className="mx-auto w-full max-w-[1600px] overflow-x-hidden px-4 py-6 text-slate-900">
       {msg ? (
-        <div className="mb-4 rounded-xl border border-red-500/40 bg-red-950/30 px-4 py-3 text-sm">{msg}</div>
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{msg}</div>
       ) : null}
 
       <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
@@ -587,7 +582,7 @@ export default function TradeClient() {
           </div>
 
           {showPartnerForm ? (
-            <div className="mb-4 rounded-2xl border border-zinc-700/50 bg-zinc-800/20 p-3">
+            <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <div className="mb-2 text-sm font-semibold">거래처 등록</div>
 
               <div className="space-y-2">
@@ -626,7 +621,7 @@ export default function TradeClient() {
             onChange={(e) => setPartnerFilter(e.target.value)}
           />
 
-          <div className="mb-2 text-xs text-zinc-300/70">
+          <div className="mb-2 text-xs text-slate-500">
             선택된 거래처:{" "}
             {selectedPartner
               ? `${selectedPartner.name}${selectedPartner.business_no ? ` · ${selectedPartner.business_no}` : ""}`
@@ -635,7 +630,7 @@ export default function TradeClient() {
 
           <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
             {partnersToShow.length === 0 ? (
-              <div className="rounded-xl border border-zinc-700/50 bg-zinc-800/20 p-3 text-sm text-zinc-300/70">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
                 표시할 거래처가 없습니다.
               </div>
             ) : (
@@ -647,19 +642,17 @@ export default function TradeClient() {
                   <div
                     key={p.id}
                     className={`flex items-stretch gap-2 rounded-2xl border ${
-                      active
-                        ? "border-zinc-500/70 bg-zinc-800/40"
-                        : "border-zinc-700/50 bg-zinc-900/30 hover:bg-zinc-800/30"
+                      active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
                     }`}
                   >
                     <button className="flex-1 rounded-2xl px-3 py-3 text-left" onClick={() => selectPartner(p)}>
                       <div className="font-semibold">{p.name}</div>
-                      <div className="text-xs text-zinc-300/70">{p.business_no ?? ""}</div>
+                      <div className="text-xs text-slate-500">{p.business_no ?? ""}</div>
                     </button>
 
                     <button
                       type="button"
-                      className="mr-2 my-2 w-10 rounded-xl border border-zinc-700/60 bg-zinc-950/20 text-lg hover:bg-zinc-800/40"
+                      className="mr-2 my-2 w-10 rounded-xl border border-slate-200 bg-white text-lg hover:bg-slate-50"
                       title={pinned ? "즐겨찾기 해제" : "즐겨찾기 등록"}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -705,16 +698,11 @@ export default function TradeClient() {
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">출고일(주문일)</div>
-                  <input
-                    type="date"
-                    className={`${input} date-input`}
-                    value={shipDate}
-                    onChange={(e) => setShipDate(e.target.value)}
-                  />
+                  <div className="mb-1 text-xs text-slate-500">출고일(주문일)</div>
+                  <input type="date" className={`${input} date-input`} value={shipDate} onChange={(e) => setShipDate(e.target.value)} />
                 </div>
                 <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">출고방법</div>
+                  <div className="mb-1 text-xs text-slate-500">출고방법</div>
                   <select className={input} value={shipMethod} onChange={(e) => setShipMethod(e.target.value)}>
                     <option value="택배">택배</option>
                     <option value="퀵">퀵</option>
@@ -723,13 +711,8 @@ export default function TradeClient() {
                   </select>
                 </div>
                 <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">메모(title)</div>
-                  <input
-                    className={input}
-                    placeholder='예: "2월 정기 주문"'
-                    value={orderTitle}
-                    onChange={(e) => setOrderTitle(e.target.value)}
-                  />
+                  <div className="mb-1 text-xs text-slate-500">메모(title)</div>
+                  <input className={input} placeholder='예: "2월 정기 주문"' value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} />
                 </div>
               </div>
 
@@ -740,9 +723,9 @@ export default function TradeClient() {
                 </button>
               </div>
 
-              {/* ✅✅✅ 여기부터: grid → table + colgroup (정렬 스트레스 0) */}
+              {/* ✅ 테이블(colgroup) + ✅ 헤더/입력 패딩 완전 동일(px-3) */}
               <div className="mt-3 overflow-x-auto">
-                <table className="w-full table-fixed border-separate border-spacing-y-2">
+                <table className="w-full table-fixed border-collapse">
                   <colgroup>
                     <col style={{ width: 180 }} />
                     <col />
@@ -756,16 +739,16 @@ export default function TradeClient() {
                   </colgroup>
 
                   <thead>
-                    <tr className="text-xs text-zinc-300/70">
-                      <th className="px-3 py-1 text-left font-medium">식품유형</th>
-                      <th className="px-3 py-1 text-left font-medium">품목명</th>
-                      <th className="px-3 py-1 text-left font-medium">무게(g)</th>
-                      <th className="px-3 py-1 text-right font-medium">수량</th>
-                      <th className="px-3 py-1 text-right font-medium">단가</th>
-                      <th className="px-3 py-1 text-right font-medium">공급가</th>
-                      <th className="px-3 py-1 text-right font-medium">부가세</th>
-                      <th className="px-3 py-1 text-right font-medium">총액</th>
-                      <th className="px-1 py-1" />
+                    <tr className="text-xs text-slate-500">
+                      <th className="px-3 py-2 text-left font-medium">식품유형</th>
+                      <th className="px-3 py-2 text-left font-medium">품목명</th>
+                      <th className="px-3 py-2 text-left font-medium">무게(g)</th>
+                      <th className="px-3 py-2 text-right font-medium">수량</th>
+                      <th className="px-3 py-2 text-right font-medium">단가</th>
+                      <th className="px-3 py-2 text-right font-medium">공급가</th>
+                      <th className="px-3 py-2 text-right font-medium">부가세</th>
+                      <th className="px-3 py-2 text-right font-medium">총액</th>
+                      <th className="px-2 py-2" />
                     </tr>
                   </thead>
 
@@ -776,9 +759,8 @@ export default function TradeClient() {
                       const total = supply + vat;
 
                       return (
-                        <tr key={i}>
-                          {/* 식품유형 */}
-                          <td className="px-1 align-middle">
+                        <tr key={i} className="align-middle">
+                          <td className="px-3 py-2">
                             <input
                               className={input}
                               list="food-types-list"
@@ -788,18 +770,11 @@ export default function TradeClient() {
                             />
                           </td>
 
-                          {/* 품목명 */}
-                          <td className="px-1 align-middle">
-                            <input
-                              className={input}
-                              placeholder="품목명"
-                              value={l.name}
-                              onChange={(e) => updateLine(i, { name: e.target.value })}
-                            />
+                          <td className="px-3 py-2">
+                            <input className={input} placeholder="품목명" value={l.name} onChange={(e) => updateLine(i, { name: e.target.value })} />
                           </td>
 
-                          {/* 무게(g) */}
-                          <td className="px-1 align-middle">
+                          <td className="px-3 py-2">
                             <input
                               className={`${input} text-right`}
                               inputMode="numeric"
@@ -809,49 +784,33 @@ export default function TradeClient() {
                             />
                           </td>
 
-                          {/* 수량 */}
-                          <td className="px-1 align-middle">
-                            <input
-                              className={`${input} text-right`}
-                              inputMode="numeric"
-                              value={String(l.qty)}
-                              onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })}
-                            />
+                          <td className="px-3 py-2">
+                            <input className={`${input} text-right`} inputMode="numeric" value={String(l.qty)} onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} />
                           </td>
 
-                          {/* 단가 */}
-                          <td className="px-1 align-middle">
-                            <input
-                              className={`${input} text-right`}
-                              inputMode="numeric"
-                              value={String(l.unit)}
-                              onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })}
-                            />
+                          <td className="px-3 py-2">
+                            <input className={`${input} text-right`} inputMode="numeric" value={String(l.unit)} onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })} />
                           </td>
 
-                          {/* 공급가 */}
-                          <td className="px-1 align-middle">
-                            <div className="rounded-xl border border-zinc-700/50 bg-zinc-950/20 px-3 py-2 text-sm text-right tabular-nums">
+                          <td className="px-3 py-2">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
                               {formatMoney(supply)}
                             </div>
                           </td>
 
-                          {/* 부가세 */}
-                          <td className="px-1 align-middle">
-                            <div className="rounded-xl border border-zinc-700/50 bg-zinc-950/20 px-3 py-2 text-sm text-right tabular-nums">
+                          <td className="px-3 py-2">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
                               {formatMoney(vat)}
                             </div>
                           </td>
 
-                          {/* 총액 */}
-                          <td className="px-1 align-middle">
-                            <div className="rounded-xl border border-zinc-700/50 bg-zinc-950/20 px-3 py-2 text-sm text-right tabular-nums">
+                          <td className="px-3 py-2">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
                               {formatMoney(total)}
                             </div>
                           </td>
 
-                          {/* 삭제 */}
-                          <td className="px-1 align-middle">
+                          <td className="px-2 py-2">
                             <button className={btn} onClick={() => removeLine(i)} title="삭제">
                               ✕
                             </button>
@@ -868,7 +827,6 @@ export default function TradeClient() {
                   ))}
                 </datalist>
               </div>
-              {/* ✅✅✅ 여기까지: table + colgroup */}
 
               <div className="mt-4 flex items-center justify-end gap-4 text-sm">
                 <div>공급가 {formatMoney(orderTotals.supply)}</div>
@@ -889,17 +847,12 @@ export default function TradeClient() {
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">일자</div>
-                  <input
-                    type="date"
-                    className={`${input} date-input`}
-                    value={entryDate}
-                    onChange={(e) => setEntryDate(e.target.value)}
-                  />
+                  <div className="mb-1 text-xs text-slate-500">일자</div>
+                  <input type="date" className={`${input} date-input`} value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
                 </div>
 
                 <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">구분</div>
+                  <div className="mb-1 text-xs text-slate-500">구분</div>
                   <select className={input} value={direction} onChange={(e) => setDirection(e.target.value as any)}>
                     <option value="IN">입금(+)</option>
                     <option value="OUT">출금(-)</option>
@@ -907,7 +860,7 @@ export default function TradeClient() {
                 </div>
 
                 <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">결제수단</div>
+                  <div className="mb-1 text-xs text-slate-500">결제수단</div>
                   <select className={input} value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
                     <option value="BANK">BANK(계좌)</option>
                     <option value="CARD">CARD</option>
@@ -917,7 +870,7 @@ export default function TradeClient() {
                 </div>
 
                 <div className="md:col-span-3">
-                  <div className="mb-1 text-xs text-zinc-300/70">카테고리</div>
+                  <div className="mb-1 text-xs text-slate-500">카테고리</div>
                   <div className="flex flex-wrap gap-2">
                     {(["매출입금", "급여", "세금", "기타"] as const).map((c) => (
                       <button key={c} type="button" className={category === c ? btnOn : btn} onClick={() => setCategory(c)}>
@@ -928,17 +881,12 @@ export default function TradeClient() {
                 </div>
 
                 <div className="md:col-span-2">
-                  <div className="mb-1 text-xs text-zinc-300/70">메모</div>
-                  <input
-                    className={input}
-                    placeholder="예: 세금계산서 2/10 발행"
-                    value={ledgerMemo}
-                    onChange={(e) => setLedgerMemo(e.target.value)}
-                  />
+                  <div className="mb-1 text-xs text-slate-500">메모</div>
+                  <input className={input} placeholder="예: 세금계산서 2/10 발행" value={ledgerMemo} onChange={(e) => setLedgerMemo(e.target.value)} />
                 </div>
 
                 <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">금액(원)</div>
+                  <div className="mb-1 text-xs text-slate-500">금액(원)</div>
                   <input
                     className={`${input} text-right`}
                     inputMode="numeric"
@@ -969,7 +917,7 @@ export default function TradeClient() {
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <div className="text-lg font-semibold">거래내역</div>
-                <div className="text-xs text-zinc-300/70">
+                <div className="text-xs text-slate-500">
                   표시: {mode === "ORDERS" ? "주문/출고" : mode === "LEDGER" ? "금전출납" : "통합"}{" "}
                   {selectedPartner ? `· 거래처: ${selectedPartner.name}` : "· 거래처: 전체"}
                 </div>
@@ -980,28 +928,18 @@ export default function TradeClient() {
                   + {formatMoney(unifiedTotals.plus)} &nbsp; {formatMoney(unifiedTotals.minus)} &nbsp; ={" "}
                   <span className="font-semibold">{formatMoney(unifiedTotals.net)}</span>
                 </div>
-                <div className="text-xs text-zinc-300/70">잔액(최신) {formatMoney(unifiedTotals.endBalance)}</div>
+                <div className="text-xs text-slate-500">잔액(최신) {formatMoney(unifiedTotals.endBalance)}</div>
               </div>
             </div>
 
             <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
               <div>
-                <div className="mb-1 text-xs text-zinc-300/70">From</div>
-                <input
-                  type="date"
-                  className={`${input} date-input`}
-                  value={fromYMD}
-                  onChange={(e) => setFromYMD(e.target.value)}
-                />
+                <div className="mb-1 text-xs text-slate-500">From</div>
+                <input type="date" className={`${input} date-input`} value={fromYMD} onChange={(e) => setFromYMD(e.target.value)} />
               </div>
               <div>
-                <div className="mb-1 text-xs text-zinc-300/70">To</div>
-                <input
-                  type="date"
-                  className={`${input} date-input`}
-                  value={toYMD}
-                  onChange={(e) => setToYMD(e.target.value)}
-                />
+                <div className="mb-1 text-xs text-slate-500">To</div>
+                <input type="date" className={`${input} date-input`} value={toYMD} onChange={(e) => setToYMD(e.target.value)} />
               </div>
               <div className="flex gap-2">
                 <button
@@ -1027,14 +965,14 @@ export default function TradeClient() {
                   return true;
                 })
                 .map((x: any) => (
-                  <div key={`${x.kind}-${x.rawId}`} className="rounded-2xl border border-zinc-700/50 bg-zinc-900/20 px-3 py-3">
+                  <div key={`${x.kind}-${x.rawId}`} className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
                     <div className="flex items-center gap-3">
                       <div className="w-[110px] shrink-0 text-sm font-semibold">{ymdToDisplay(x.date)}</div>
 
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold">
                           {x.title}
-                          {x.sub ? <span className="ml-2 text-xs font-normal text-zinc-300/70">· {x.sub}</span> : null}
+                          {x.sub ? <span className="ml-2 text-xs font-normal text-slate-500">· {x.sub}</span> : null}
                         </div>
                       </div>
 
@@ -1043,7 +981,7 @@ export default function TradeClient() {
                         {formatMoney(x.amount)}
                       </div>
 
-                      <div className="w-[130px] shrink-0 text-right text-sm tabular-nums text-zinc-300/80">
+                      <div className="w-[130px] shrink-0 text-right text-sm tabular-nums text-slate-600">
                         {formatMoney(x.balance)}
                       </div>
                     </div>
@@ -1051,13 +989,13 @@ export default function TradeClient() {
                 ))}
 
               {unifiedRows.length === 0 ? (
-                <div className="rounded-2xl border border-zinc-700/50 bg-zinc-800/20 p-3 text-sm text-zinc-300/70">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
                   거래내역이 없습니다. (기간/거래처/모드 필터를 확인하세요)
                 </div>
               ) : null}
             </div>
 
-            <div className="mt-3 flex justify-end text-xs text-zinc-300/60">
+            <div className="mt-3 flex justify-end text-xs text-slate-500">
               <div className="w-[110px] text-right">금액</div>
               <div className="w-[130px] text-right">잔액</div>
             </div>
