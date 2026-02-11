@@ -50,16 +50,12 @@ type LedgerRow = {
 
 type Mode = "ORDERS" | "LEDGER" | "UNIFIED";
 type PartnerView = "PINNED" | "RECENT" | "ALL";
-
 type FoodTypeRow = { id: string; name: string };
 
 type Line = {
   food_type: string;
   name: string;
-
-  // ✅ 다시 복구: 품목명과 수량 사이 무게(g)
-  weight_g: number;
-
+  weight_g: number; // ✅ 품목명과 수량 사이 무게(g)
   qty: number;
   unit: number;
 };
@@ -141,10 +137,9 @@ export default function TradeClient() {
   const [shipMethod, setShipMethod] = useState("택배");
   const [orderTitle, setOrderTitle] = useState("");
 
-  // ✅ 라인 기본값에 weight_g 추가
   const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
 
-  // ✅ 금액 계산은 (수량 × 단가) 그대로 유지 (무게는 저장/표기용)
+  // 금액 계산: (수량 × 단가) 유지
   const orderTotals = useMemo(() => {
     const supply = lines.reduce((acc, l) => acc + toInt(l.qty) * toInt(l.unit), 0);
     const vat = Math.round(supply * 0.1);
@@ -422,7 +417,6 @@ export default function TradeClient() {
 
     setOrderTitle("");
     setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
-
     await loadTrades();
   }
 
@@ -452,7 +446,6 @@ export default function TradeClient() {
 
     setAmountStr("");
     setLedgerMemo("");
-
     await loadTrades();
   }
 
@@ -469,22 +462,30 @@ export default function TradeClient() {
     return list;
   }, [partners, partnerView, recentPartnerIds]);
 
+  // ====== 통합행(러닝잔액 포함) + 거래내역 표용 필드 생성 ======
   const unifiedRows = useMemo(() => {
     const items: Array<{
       kind: "ORDER" | "LEDGER";
       date: string;
       tsKey: string;
-      amount: number;
-      title: string;
-      sub: string;
       rawId: string;
+
+      counterparty: string;
+      category: string;
+      method: string;
+
+      inAmt: number;
+      outAmt: number;
+
+      note: string; // (표에서는 카테고리 아래 작은 글씨로 표시)
+      balance: number;
     }> = [];
 
     for (const o of orders) {
       const memo = safeJsonParse<{ title: string | null; lines: any[] }>(o.memo);
-      const title = memo?.title ? `주문/출고 · ${memo.title}` : `주문/출고 · ${o.ship_method ?? ""}`.trim();
 
-      const linesText =
+      // ✅ 택배 중복표기 방지: ship_method는 "방법" 컬럼에만, title/요약에는 넣지 않음
+      const note =
         memo?.lines?.length
           ? memo.lines
               .slice(0, 3)
@@ -494,6 +495,8 @@ export default function TradeClient() {
                 return `${ft}${l.name}${w} ${formatMoney(l.qty)}×${formatMoney(l.unit)}`;
               })
               .join(", ") + (memo.lines.length > 3 ? ` 외 ${memo.lines.length - 3}건` : "")
+          : memo?.title
+          ? memo.title
           : o.memo
           ? "메모 있음"
           : "";
@@ -501,536 +504,636 @@ export default function TradeClient() {
       const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
       const tsKey = `${date}T12:00:00.000Z`;
 
+      const total = Number(o.total_amount ?? 0);
+
       items.push({
         kind: "ORDER",
         date,
         tsKey,
-        amount: -Number(o.total_amount ?? 0),
-        title,
-        sub: linesText,
         rawId: o.id,
+
+        counterparty: o.customer_name ?? "",
+        category: "주문/출고",
+        method: o.ship_method ?? "",
+
+        inAmt: 0,
+        outAmt: total,
+
+        note,
+        balance: 0,
       });
     }
 
     for (const l of ledgers) {
-      const sign = String(l.direction) === "OUT" ? -1 : 1;
-      const title = `${l.category ?? "금전출납"} · ${l.method ?? ""}`.trim();
-      const sub = `${l.counterparty_name ?? ""}${l.memo ? " · " + l.memo : ""}`.trim();
+      const isOut = String(l.direction) === "OUT";
+      const amt = Number(l.amount ?? 0);
 
       items.push({
         kind: "LEDGER",
         date: l.entry_date,
         tsKey: l.entry_ts || `${l.entry_date}T12:00:00.000Z`,
-        amount: sign * Number(l.amount ?? 0),
-        title,
-        sub,
         rawId: l.id,
+
+        counterparty: l.counterparty_name ?? "",
+        category: l.category ?? "금전출납",
+        method: l.method ?? "",
+
+        inAmt: isOut ? 0 : amt,
+        outAmt: isOut ? amt : 0,
+
+        note: l.memo ?? "",
+        balance: 0,
       });
     }
 
+    // 오름차순으로 러닝 계산
     items.sort((a, b) => String(a.tsKey || a.date).localeCompare(String(b.tsKey || b.date)));
 
     let running = 0;
     const withBalance = items.map((x) => {
-      running += x.amount;
+      // OUT은 차감, IN은 더함
+      running += Number(x.inAmt ?? 0) - Number(x.outAmt ?? 0);
       return { ...x, balance: running };
     });
 
+    // 화면 표시는 최신이 위로
     withBalance.sort((a, b) => String(b.tsKey || b.date).localeCompare(String(a.tsKey || a.date)));
     return withBalance;
   }, [orders, ledgers]);
 
   const unifiedTotals = useMemo(() => {
-    const plus = unifiedRows.filter((x) => x.amount > 0).reduce((a, x) => a + x.amount, 0);
-    const minus = unifiedRows.filter((x) => x.amount < 0).reduce((a, x) => a + x.amount, 0);
-    const net = plus + minus;
+    const plus = unifiedRows.reduce((a, x) => a + (x.inAmt ?? 0), 0);
+    const minus = unifiedRows.reduce((a, x) => a + (x.outAmt ?? 0), 0);
+    const net = plus - minus;
     const endBalance = unifiedRows.length ? unifiedRows[0].balance : 0;
     return { plus, minus, net, endBalance };
   }, [unifiedRows]);
 
-  // ====== UI ======
-  const card = "rounded-2xl border border-zinc-700/50 bg-zinc-900/40";
+  async function copyTradeRow(row: (typeof unifiedRows)[number]) {
+    try {
+      const text = [
+        `날짜: ${row.date}`,
+        `거래처: ${row.counterparty}`,
+        `카테고리: ${row.category}`,
+        `방법: ${row.method}`,
+        `입금: ${formatMoney(row.inAmt)}`,
+        `출금: ${formatMoney(row.outAmt)}`,
+        `잔액: ${formatMoney(row.balance)}`,
+        row.note ? `메모: ${row.note}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      await navigator.clipboard.writeText(text);
+      setMsg("복사 완료");
+      setTimeout(() => setMsg(null), 1200);
+    } catch {
+      setMsg("복사에 실패했습니다(브라우저 권한 확인).");
+    }
+  }
+
+  // ====== UI (국민은행 느낌: 라이트 + 블루 포인트) ======
+  const pageBg = "bg-slate-50 text-slate-900";
+  const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
+  const muted = "text-slate-500";
+  const label = "text-xs text-slate-600";
   const input =
-    "w-full rounded-xl border border-zinc-700/60 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-400/60 focus:outline-none focus:ring-2 focus:ring-zinc-500/30";
-  const btn = "rounded-xl border border-zinc-700/60 bg-zinc-800/30 px-3 py-2 text-sm hover:bg-zinc-800/50";
-  const btnOn = "rounded-xl border border-zinc-500/70 bg-zinc-700/40 px-3 py-2 text-sm";
+    "w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400";
+  const inputRight = `${input} text-right tabular-nums`;
+  const btn =
+    "rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
+  const btnOn =
+    "rounded-xl border border-blue-600 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
+  const btnSoft =
+    "rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700 hover:bg-blue-100 active:bg-blue-200";
+
+  const pill =
+    "inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700";
+
+  const dateStyle = { colorScheme: "light" as any }; // ✅ date 아이콘/표시가 어둡게 묻히는 문제 방지
+
+  // 표 컬럼
+  const tableCols =
+    "grid grid-cols-[110px_220px_140px_110px_110px_110px_120px_84px] gap-2";
+
+  const targetLabel = selectedPartner ? selectedPartner.name : "전체";
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] overflow-x-hidden px-4 py-6 text-zinc-100">
-      {msg ? (
-        <div className="mb-4 rounded-xl border border-red-500/40 bg-red-950/30 px-4 py-3 text-sm">{msg}</div>
-      ) : null}
-
-      <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
-        {/* LEFT */}
-        <div className={`${card} p-4`}>
-          <div className="mb-3 flex items-center justify-between">
-            <div className="text-lg font-semibold">거래처</div>
-            <div className="flex gap-2">
-              <button
-                className={btn}
-                onClick={() => {
-                  setShowPartnerForm((v) => !v);
-                  setMsg(null);
-                }}
-              >
-                + 등록
-              </button>
-              <button className={btn} onClick={() => loadPartners()}>
-                새로고침
-              </button>
-            </div>
+    <div className={`${pageBg} min-h-screen`}>
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
+        {msg ? (
+          <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            {msg}
           </div>
+        ) : null}
 
-          <div className="mb-3 flex gap-2">
-            <button className={partnerView === "PINNED" ? btnOn : btn} onClick={() => setPartnerView("PINNED")}>
-              즐겨찾기
-            </button>
-            <button className={partnerView === "RECENT" ? btnOn : btn} onClick={() => setPartnerView("RECENT")}>
-              최근
-            </button>
-            <button className={partnerView === "ALL" ? btnOn : btn} onClick={() => setPartnerView("ALL")}>
-              전체
-            </button>
-          </div>
-
-          {showPartnerForm ? (
-            <div className="mb-4 rounded-2xl border border-zinc-700/50 bg-zinc-800/20 p-3">
-              <div className="mb-2 text-sm font-semibold">거래처 등록</div>
-
-              <div className="space-y-2">
-                <input className={input} placeholder="업체명(필수)" value={p_name} onChange={(e) => setP_name(e.target.value)} />
-                <input className={input} placeholder="사업자등록번호" value={p_businessNo} onChange={(e) => setP_businessNo(e.target.value)} />
-                <input className={input} placeholder="대표자" value={p_ceo} onChange={(e) => setP_ceo(e.target.value)} />
-                <input className={input} placeholder="연락처" value={p_phone} onChange={(e) => setP_phone(e.target.value)} />
-                <input className={input} placeholder="주소" value={p_address1} onChange={(e) => setP_address1(e.target.value)} />
-                <div className="grid grid-cols-2 gap-2">
-                  <input className={input} placeholder="업태" value={p_bizType} onChange={(e) => setP_bizType(e.target.value)} />
-                  <input className={input} placeholder="종목" value={p_bizItem} onChange={(e) => setP_bizItem(e.target.value)} />
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <button
-                    className={`${btn} flex-1`}
-                    onClick={() => {
-                      setShowPartnerForm(false);
-                      resetPartnerForm();
-                    }}
-                  >
-                    취소
-                  </button>
-                  <button className={`${btnOn} flex-1`} onClick={createPartner}>
-                    저장
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          <input
-            className={`${input} mb-3`}
-            placeholder="목록 필터(이름/사업자번호)"
-            value={partnerFilter}
-            onChange={(e) => setPartnerFilter(e.target.value)}
-          />
-
-          <div className="mb-2 text-xs text-zinc-300/70">
-            선택된 거래처:{" "}
-            {selectedPartner
-              ? `${selectedPartner.name}${selectedPartner.business_no ? ` · ${selectedPartner.business_no}` : ""}`
-              : "없음"}
-          </div>
-
-          <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
-            {partnersToShow.length === 0 ? (
-              <div className="rounded-xl border border-zinc-700/50 bg-zinc-800/20 p-3 text-sm text-zinc-300/70">
-                표시할 거래처가 없습니다.
-              </div>
-            ) : (
-              partnersToShow.map((p) => {
-                const active = selectedPartner?.id === p.id;
-                const pinned = !!p.is_pinned;
-
-                return (
-                  <div
-                    key={p.id}
-                    className={`flex items-stretch gap-2 rounded-2xl border ${
-                      active
-                        ? "border-zinc-500/70 bg-zinc-800/40"
-                        : "border-zinc-700/50 bg-zinc-900/30 hover:bg-zinc-800/30"
-                    }`}
-                  >
-                    <button className="flex-1 rounded-2xl px-3 py-3 text-left" onClick={() => selectPartner(p)}>
-                      <div className="font-semibold">{p.name}</div>
-                      <div className="text-xs text-zinc-300/70">{p.business_no ?? ""}</div>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="mr-2 my-2 w-10 rounded-xl border border-zinc-700/60 bg-zinc-950/20 text-lg hover:bg-zinc-800/40"
-                      title={pinned ? "즐겨찾기 해제" : "즐겨찾기 등록"}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        togglePinned(p);
-                      }}
-                    >
-                      {pinned ? "★" : "☆"}
-                    </button>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          <div className="mt-3 flex gap-2">
-            <button className={`${btn} flex-1`} onClick={() => setSelectedPartner(null)}>
-              선택 해제
-            </button>
-            <button className={`${btn} flex-1`} onClick={() => loadTrades()}>
-              조회 갱신
-            </button>
-          </div>
-        </div>
-
-        {/* RIGHT */}
-        <div className="min-w-0 space-y-6">
-          <div className="flex gap-2">
-            <button className={mode === "ORDERS" ? btnOn : btn} onClick={() => setMode("ORDERS")}>
-              주문/출고
-            </button>
-            <button className={mode === "LEDGER" ? btnOn : btn} onClick={() => setMode("LEDGER")}>
-              금전출납
-            </button>
-            <button className={mode === "UNIFIED" ? btnOn : btn} onClick={() => setMode("UNIFIED")}>
-              통합
-            </button>
-          </div>
-
-          {/* 주문/출고 */}
-          {mode !== "LEDGER" ? (
-            <div className={`${card} p-4`}>
-              <div className="mb-3 text-lg font-semibold">주문/출고 입력</div>
-
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">출고일(주문일)</div>
-                  <input
-                    type="date"
-                    className={`${input} date-input`}
-                    value={shipDate}
-                    onChange={(e) => setShipDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">출고방법</div>
-                  <select className={input} value={shipMethod} onChange={(e) => setShipMethod(e.target.value)}>
-                    <option value="택배">택배</option>
-                    <option value="퀵">퀵</option>
-                    <option value="직접">직접</option>
-                    <option value="기타">기타</option>
-                  </select>
-                </div>
-                <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">메모(title)</div>
-                  <input
-                    className={input}
-                    placeholder='예: "2월 정기 주문"'
-                    value={orderTitle}
-                    onChange={(e) => setOrderTitle(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between">
-                <div className="text-sm font-semibold">품목(식품유형 자동완성 포함)</div>
-                <button className={btn} onClick={addLine}>
-                  + 품목 추가
-                </button>
-              </div>
-
-              {/* ✅ 헤더: 입력칸의 px-3 시작점과 완전 동일 정렬 */}
-              <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_110px_120px_120px_120px_auto] gap-2 px-1 text-xs text-zinc-300/70">
-                <div className="px-3">식품유형</div>
-                <div className="px-3">품목명</div>
-                <div className="px-3">무게(g)</div>
-                <div className="px-3 text-right">수량</div>
-                <div className="px-3 text-right">단가</div>
-                <div className="px-3 text-right">공급가</div>
-                <div className="px-3 text-right">부가세</div>
-                <div className="px-3 text-right">총액</div>
-                <div />
-              </div>
-
-              <div className="mt-2 space-y-2">
-                {lines.map((l, i) => {
-                  const supply = toInt(l.qty) * toInt(l.unit);
-                  const vat = Math.round(supply * 0.1);
-                  const total = supply + vat;
-
-                  return (
-                    <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_110px_120px_120px_120px_auto] gap-2">
-                      {/* 식품유형 자동완성 */}
-                      <input
-                        className={input}
-                        list="food-types-list"
-                        placeholder="예: 당류가공품"
-                        value={l.food_type}
-                        onChange={(e) => updateLine(i, { food_type: e.target.value })}
-                      />
-
-                      {/* 품목명 */}
-                      <input
-                        className={input}
-                        placeholder="품목명"
-                        value={l.name}
-                        onChange={(e) => updateLine(i, { name: e.target.value })}
-                      />
-
-                      {/* ✅ 무게(g) */}
-                      <input
-                        className={`${input} text-right`}
-                        inputMode="numeric"
-                        placeholder="g"
-                        value={String(l.weight_g)}
-                        onChange={(e) => updateLine(i, { weight_g: toInt(e.target.value) })}
-                      />
-
-                      {/* 수량 */}
-                      <input
-                        className={`${input} text-right`}
-                        inputMode="numeric"
-                        value={String(l.qty)}
-                        onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })}
-                      />
-
-                      {/* 단가 */}
-                      <input
-                        className={`${input} text-right`}
-                        inputMode="numeric"
-                        value={String(l.unit)}
-                        onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })}
-                      />
-
-                      {/* 공급가/부가세/총액 */}
-                      <div className="rounded-xl border border-zinc-700/50 bg-zinc-950/20 px-3 py-2 text-sm text-right">
-                        {formatMoney(supply)}
-                      </div>
-                      <div className="rounded-xl border border-zinc-700/50 bg-zinc-950/20 px-3 py-2 text-sm text-right">
-                        {formatMoney(vat)}
-                      </div>
-                      <div className="rounded-xl border border-zinc-700/50 bg-zinc-950/20 px-3 py-2 text-sm text-right">
-                        {formatMoney(total)}
-                      </div>
-
-                      <button className={btn} onClick={() => removeLine(i)} title="삭제">
-                        ✕
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <datalist id="food-types-list">
-                {foodTypes.map((ft) => (
-                  <option key={ft.id} value={ft.name} />
-                ))}
-              </datalist>
-
-              <div className="mt-4 flex items-center justify-end gap-4 text-sm">
-                <div>공급가 {formatMoney(orderTotals.supply)}</div>
-                <div>부가세 {formatMoney(orderTotals.vat)}</div>
-                <div className="font-semibold">총액 {formatMoney(orderTotals.total)}</div>
-
-                <button className={btnOn} onClick={createOrder}>
-                  주문/출고 생성
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {/* 금전출납 */}
-          {mode !== "ORDERS" ? (
-            <div className={`${card} p-4`}>
-              <div className="mb-3 text-lg font-semibold">금전출납 입력</div>
-
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">일자</div>
-                  <input
-                    type="date"
-                    className={`${input} date-input`}
-                    value={entryDate}
-                    onChange={(e) => setEntryDate(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">구분</div>
-                  <select className={input} value={direction} onChange={(e) => setDirection(e.target.value as any)}>
-                    <option value="IN">입금(+)</option>
-                    <option value="OUT">출금(-)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">결제수단</div>
-                  <select className={input} value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
-                    <option value="BANK">BANK(계좌)</option>
-                    <option value="CARD">CARD</option>
-                    <option value="CASH">CASH</option>
-                    <option value="ETC">기타</option>
-                  </select>
-                </div>
-
-                <div className="md:col-span-3">
-                  <div className="mb-1 text-xs text-zinc-300/70">카테고리</div>
-                  <div className="flex flex-wrap gap-2">
-                    {(["매출입금", "급여", "세금", "기타"] as const).map((c) => (
-                      <button key={c} type="button" className={category === c ? btnOn : btn} onClick={() => setCategory(c)}>
-                        {c}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="md:col-span-2">
-                  <div className="mb-1 text-xs text-zinc-300/70">메모</div>
-                  <input
-                    className={input}
-                    placeholder="예: 세금계산서 2/10 발행"
-                    value={ledgerMemo}
-                    onChange={(e) => setLedgerMemo(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <div className="mb-1 text-xs text-zinc-300/70">금액(원)</div>
-                  <input
-                    className={`${input} text-right`}
-                    inputMode="numeric"
-                    placeholder="예: 100,000"
-                    value={amountStr}
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/[^\d,]/g, "");
-                      setAmountStr(v);
-                    }}
-                    onBlur={() => {
-                      const n = Number((amountStr || "0").replaceAll(",", ""));
-                      if (Number.isFinite(n) && n > 0) setAmountStr(n.toLocaleString("ko-KR"));
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 flex justify-end">
-                <button className={btnOn} onClick={createLedger}>
-                  금전출납 기록
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {/* 거래내역 */}
+        <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+          {/* LEFT */}
           <div className={`${card} p-4`}>
             <div className="mb-3 flex items-center justify-between">
-              <div>
-                <div className="text-lg font-semibold">거래내역</div>
-                <div className="text-xs text-zinc-300/70">
-                  표시: {mode === "ORDERS" ? "주문/출고" : mode === "LEDGER" ? "금전출납" : "통합"}{" "}
-                  {selectedPartner ? `· 거래처: ${selectedPartner.name}` : "· 거래처: 전체"}
-                </div>
-              </div>
-
-              <div className="text-right text-sm">
-                <div>
-                  + {formatMoney(unifiedTotals.plus)} &nbsp; {formatMoney(unifiedTotals.minus)} &nbsp; ={" "}
-                  <span className="font-semibold">{formatMoney(unifiedTotals.net)}</span>
-                </div>
-                <div className="text-xs text-zinc-300/70">잔액(최신) {formatMoney(unifiedTotals.endBalance)}</div>
-              </div>
-            </div>
-
-            <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
-              <div>
-                <div className="mb-1 text-xs text-zinc-300/70">From</div>
-                <input
-                  type="date"
-                  className={`${input} date-input`}
-                  value={fromYMD}
-                  onChange={(e) => setFromYMD(e.target.value)}
-                />
-              </div>
-              <div>
-                <div className="mb-1 text-xs text-zinc-300/70">To</div>
-                <input
-                  type="date"
-                  className={`${input} date-input`}
-                  value={toYMD}
-                  onChange={(e) => setToYMD(e.target.value)}
-                />
-              </div>
+              <div className="text-lg font-semibold">거래처</div>
               <div className="flex gap-2">
                 <button
                   className={btn}
                   onClick={() => {
-                    setFromYMD(addDays(todayYMD(), -30));
-                    setToYMD(todayYMD());
+                    setShowPartnerForm((v) => !v);
+                    setMsg(null);
                   }}
                 >
-                  기간 초기화
+                  + 등록
                 </button>
-                <button className={btnOn} onClick={() => loadTrades()}>
-                  조회
+                <button className={btn} onClick={() => loadPartners()}>
+                  새로고침
                 </button>
               </div>
             </div>
 
-            <div className="space-y-2">
-              {unifiedRows
-                .filter((x) => {
-                  if (mode === "ORDERS") return x.kind === "ORDER";
-                  if (mode === "LEDGER") return x.kind === "LEDGER";
-                  return true;
-                })
-                .map((x: any) => (
-                  <div
-                    key={`${x.kind}-${x.rawId}`}
-                    className="rounded-2xl border border-zinc-700/50 bg-zinc-900/20 px-3 py-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-[110px] shrink-0 text-sm font-semibold">{ymdToDisplay(x.date)}</div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold">
-                          {x.title}
-                          {x.sub ? (
-                            <span className="ml-2 text-xs font-normal text-zinc-300/70">· {x.sub}</span>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="w-[110px] shrink-0 text-right text-sm font-semibold tabular-nums">
-                        {x.amount >= 0 ? "+" : ""}
-                        {formatMoney(x.amount)}
-                      </div>
-
-                      <div className="w-[130px] shrink-0 text-right text-sm tabular-nums text-zinc-300/80">
-                        {formatMoney(x.balance)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-              {unifiedRows.length === 0 ? (
-                <div className="rounded-2xl border border-zinc-700/50 bg-zinc-800/20 p-3 text-sm text-zinc-300/70">
-                  거래내역이 없습니다. (기간/거래처/모드 필터를 확인하세요)
-                </div>
-              ) : null}
+            <div className="mb-3 flex gap-2">
+              <button className={partnerView === "PINNED" ? btnOn : btn} onClick={() => setPartnerView("PINNED")}>
+                즐겨찾기
+              </button>
+              <button className={partnerView === "RECENT" ? btnOn : btn} onClick={() => setPartnerView("RECENT")}>
+                최근
+              </button>
+              <button className={partnerView === "ALL" ? btnOn : btn} onClick={() => setPartnerView("ALL")}>
+                전체
+              </button>
             </div>
 
-            <div className="mt-3 flex justify-end text-xs text-zinc-300/60">
-              <div className="w-[110px] text-right">금액</div>
-              <div className="w-[130px] text-right">잔액</div>
+            {showPartnerForm ? (
+              <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-2 text-sm font-semibold">거래처 등록</div>
+
+                <div className="space-y-2">
+                  <input className={input} value={p_name} onChange={(e) => setP_name(e.target.value)} />
+                  <input className={input} value={p_businessNo} onChange={(e) => setP_businessNo(e.target.value)} />
+                  <input className={input} value={p_ceo} onChange={(e) => setP_ceo(e.target.value)} />
+                  <input className={input} value={p_phone} onChange={(e) => setP_phone(e.target.value)} />
+                  <input className={input} value={p_address1} onChange={(e) => setP_address1(e.target.value)} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input className={input} value={p_bizType} onChange={(e) => setP_bizType(e.target.value)} />
+                    <input className={input} value={p_bizItem} onChange={(e) => setP_bizItem(e.target.value)} />
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      className={`${btn} flex-1`}
+                      onClick={() => {
+                        setShowPartnerForm(false);
+                        resetPartnerForm();
+                      }}
+                    >
+                      취소
+                    </button>
+                    <button className={`${btnOn} flex-1`} onClick={createPartner}>
+                      저장
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-2 text-xs text-slate-500">
+                  ※ 업체명은 필수입니다.
+                </div>
+              </div>
+            ) : null}
+
+            <input
+              className={`${input} mb-3`}
+              placeholder="목록 필터(이름/사업자번호)"
+              value={partnerFilter}
+              onChange={(e) => setPartnerFilter(e.target.value)}
+            />
+
+            <div className={`mb-2 text-xs ${muted}`}>
+              선택된 거래처:{" "}
+              {selectedPartner
+                ? `${selectedPartner.name}${selectedPartner.business_no ? ` · ${selectedPartner.business_no}` : ""}`
+                : "없음"}
+            </div>
+
+            <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
+              {partnersToShow.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                  표시할 거래처가 없습니다.
+                </div>
+              ) : (
+                partnersToShow.map((p) => {
+                  const active = selectedPartner?.id === p.id;
+                  const pinned = !!p.is_pinned;
+
+                  return (
+                    <div
+                      key={p.id}
+                      className={`flex items-stretch gap-2 rounded-2xl border ${
+                        active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <button className="flex-1 rounded-2xl px-3 py-3 text-left" onClick={() => selectPartner(p)}>
+                        <div className="font-semibold">{p.name}</div>
+                        <div className="text-xs text-slate-500">{p.business_no ?? ""}</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="mr-2 my-2 w-10 rounded-xl border border-slate-200 bg-white text-lg hover:bg-slate-50"
+                        title={pinned ? "즐겨찾기 해제" : "즐겨찾기 등록"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          togglePinned(p);
+                        }}
+                      >
+                        {pinned ? "★" : "☆"}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="mt-3 flex gap-2">
+              <button className={`${btn} flex-1`} onClick={() => setSelectedPartner(null)}>
+                선택 해제
+              </button>
+              <button className={`${btn} flex-1`} onClick={() => loadTrades()}>
+                조회 갱신
+              </button>
+            </div>
+          </div>
+
+          {/* RIGHT */}
+          <div className="min-w-0 space-y-6">
+            <div className="flex gap-2">
+              <button className={mode === "ORDERS" ? btnOn : btn} onClick={() => setMode("ORDERS")}>
+                주문/출고
+              </button>
+              <button className={mode === "LEDGER" ? btnOn : btn} onClick={() => setMode("LEDGER")}>
+                금전출납
+              </button>
+              <button className={mode === "UNIFIED" ? btnOn : btn} onClick={() => setMode("UNIFIED")}>
+                통합
+              </button>
+            </div>
+
+            {/* 주문/출고 */}
+            {mode !== "LEDGER" ? (
+              <div className={`${card} p-4`}>
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="text-lg font-semibold">주문/출고 입력</div>
+                  <span className={pill}>조회대상: {targetLabel}</span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div>
+                    <div className={`mb-1 ${label}`}>출고일(주문일)</div>
+                    <input
+                      type="date"
+                      style={dateStyle}
+                      className={input}
+                      value={shipDate}
+                      onChange={(e) => setShipDate(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <div className={`mb-1 ${label}`}>출고방법</div>
+                    <select className={input} value={shipMethod} onChange={(e) => setShipMethod(e.target.value)}>
+                      <option value="택배">택배</option>
+                      <option value="퀵">퀵</option>
+                      <option value="직접">직접</option>
+                      <option value="기타">기타</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className={`mb-1 ${label}`}>메모(title)</div>
+                    {/* ✅ 요청: 예시 placeholder 제거 */}
+                    <input className={input} value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="text-sm font-semibold">품목(식품유형 자동완성 포함)</div>
+                  <button className={btn} onClick={addLine}>
+                    + 품목 추가
+                  </button>
+                </div>
+
+                {/* ✅ 1) 헤더와 입력칸 좌측 정렬: 헤더/행 모두 동일한 grid + 같은 padding */}
+                <div className="mt-3">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-2 py-2">
+                    <div className="grid grid-cols-[180px_1fr_120px_110px_110px_120px_120px_120px_auto] gap-2 text-xs text-slate-600">
+                      <div className="px-3">식품유형</div>
+                      <div className="px-3">품목명</div>
+                      <div className="px-3">무게(g)</div>
+                      <div className="px-3 text-right">수량</div>
+                      <div className="px-3 text-right">단가</div>
+                      <div className="px-3 text-right">공급가</div>
+                      <div className="px-3 text-right">부가세</div>
+                      <div className="px-3 text-right">총액</div>
+                      <div />
+                    </div>
+                  </div>
+
+                  <div className="mt-2 space-y-2">
+                    {lines.map((l, i) => {
+                      const supply = toInt(l.qty) * toInt(l.unit);
+                      const vat = Math.round(supply * 0.1);
+                      const total = supply + vat;
+
+                      return (
+                        <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_110px_120px_120px_120px_auto] gap-2">
+                          <input
+                            className={input}
+                            list="food-types-list"
+                            value={l.food_type}
+                            onChange={(e) => updateLine(i, { food_type: e.target.value })}
+                          />
+
+                          <input className={input} value={l.name} onChange={(e) => updateLine(i, { name: e.target.value })} />
+
+                          <input
+                            className={inputRight}
+                            inputMode="numeric"
+                            value={String(l.weight_g)}
+                            onChange={(e) => updateLine(i, { weight_g: toInt(e.target.value) })}
+                          />
+
+                          <input
+                            className={inputRight}
+                            inputMode="numeric"
+                            value={String(l.qty)}
+                            onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })}
+                          />
+
+                          <input
+                            className={inputRight}
+                            inputMode="numeric"
+                            value={String(l.unit)}
+                            onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })}
+                          />
+
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
+                            {formatMoney(supply)}
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">
+                            {formatMoney(vat)}
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums font-semibold">
+                            {formatMoney(total)}
+                          </div>
+
+                          <button className={btn} onClick={() => removeLine(i)} title="삭제">
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <datalist id="food-types-list">
+                    {foodTypes.map((ft) => (
+                      <option key={ft.id} value={ft.name} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div className="mt-4 flex items-center justify-end gap-4 text-sm">
+                  <div>공급가 {formatMoney(orderTotals.supply)}</div>
+                  <div>부가세 {formatMoney(orderTotals.vat)}</div>
+                  <div className="font-semibold">총액 {formatMoney(orderTotals.total)}</div>
+
+                  <button className={btnOn} onClick={createOrder}>
+                    주문/출고 생성
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {/* 금전출납 */}
+            {mode !== "ORDERS" ? (
+              <div className={`${card} p-4`}>
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="text-lg font-semibold">금전출납 입력</div>
+                  <span className={pill}>조회대상: {targetLabel}</span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div>
+                    <div className={`mb-1 ${label}`}>일자</div>
+                    <input
+                      type="date"
+                      style={dateStyle}
+                      className={input}
+                      value={entryDate}
+                      onChange={(e) => setEntryDate(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <div className={`mb-1 ${label}`}>구분</div>
+                    <select className={input} value={direction} onChange={(e) => setDirection(e.target.value as any)}>
+                      <option value="IN">입금(+)</option>
+                      <option value="OUT">출금(-)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className={`mb-1 ${label}`}>결제수단</div>
+                    <select className={input} value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
+                      <option value="BANK">BANK(계좌)</option>
+                      <option value="CARD">CARD</option>
+                      <option value="CASH">CASH</option>
+                      <option value="ETC">기타</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-3">
+                    <div className={`mb-1 ${label}`}>카테고리</div>
+                    <div className="flex flex-wrap gap-2">
+                      {(["매출입금", "급여", "세금", "기타"] as const).map((c) => (
+                        <button key={c} type="button" className={category === c ? btnOn : btnSoft} onClick={() => setCategory(c)}>
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <div className={`mb-1 ${label}`}>메모</div>
+                    {/* ✅ 요청: 예시 placeholder 제거 */}
+                    <input className={input} value={ledgerMemo} onChange={(e) => setLedgerMemo(e.target.value)} />
+                  </div>
+
+                  <div>
+                    <div className={`mb-1 ${label}`}>금액(원)</div>
+                    {/* ✅ 요청: 예시 placeholder 제거 */}
+                    <input
+                      className={inputRight}
+                      inputMode="numeric"
+                      value={amountStr}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/[^\d,]/g, "");
+                        setAmountStr(v);
+                      }}
+                      onBlur={() => {
+                        const n = Number((amountStr || "0").replaceAll(",", ""));
+                        if (Number.isFinite(n) && n > 0) setAmountStr(n.toLocaleString("ko-KR"));
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 flex justify-end">
+                  <button className={btnOn} onClick={createLedger}>
+                    금전출납 기록
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {/* 거래내역 */}
+            <div className={`${card} p-4`}>
+              <div className="mb-3 flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-lg font-semibold">거래내역</div>
+                  <div className={`mt-1 text-xs ${muted}`}>
+                    표시: {mode === "ORDERS" ? "주문/출고" : mode === "LEDGER" ? "금전출납" : "통합"}
+                  </div>
+                </div>
+
+                {/* ✅ 3) 우측 박스에 “전체/업체명” 명확히 */}
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-right">
+                  <div className="text-xs text-blue-700">조회대상</div>
+                  <div className="text-base font-bold text-blue-900">{targetLabel}</div>
+
+                  <div className="mt-2 text-sm text-slate-800">
+                    <span className="text-slate-500">입금</span>{" "}
+                    <span className="font-semibold">+ {formatMoney(unifiedTotals.plus)}</span>
+                    <span className="mx-2 text-slate-300">|</span>
+                    <span className="text-slate-500">출금</span>{" "}
+                    <span className="font-semibold">- {formatMoney(unifiedTotals.minus)}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-600">
+                    잔액(최신) <span className="font-semibold text-slate-900">{formatMoney(unifiedTotals.endBalance)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                <div>
+                  <div className={`mb-1 ${label}`}>From</div>
+                  <input
+                    type="date"
+                    style={dateStyle}
+                    className={input}
+                    value={fromYMD}
+                    onChange={(e) => setFromYMD(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <div className={`mb-1 ${label}`}>To</div>
+                  <input
+                    type="date"
+                    style={dateStyle}
+                    className={input}
+                    value={toYMD}
+                    onChange={(e) => setToYMD(e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className={btn}
+                    onClick={() => {
+                      setFromYMD(addDays(todayYMD(), -30));
+                      setToYMD(todayYMD());
+                    }}
+                  >
+                    기간 초기화
+                  </button>
+                  <button className={btnOn} onClick={() => loadTrades()}>
+                    조회
+                  </button>
+                </div>
+              </div>
+
+              {/* ✅ 4) 장부목록형 표 */}
+              <div className="overflow-x-auto">
+                <div className="min-w-[980px]">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className={`${tableCols} text-xs text-slate-600`}>
+                      <div className="px-2">날짜</div>
+                      <div className="px-2">거래처</div>
+                      <div className="px-2">카테고리</div>
+                      <div className="px-2">방법</div>
+                      <div className="px-2 text-right">입금</div>
+                      <div className="px-2 text-right">출금</div>
+                      <div className="px-2 text-right">잔액</div>
+                      <div className="px-2 text-center">복사</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 space-y-2">
+                    {unifiedRows
+                      .filter((x) => {
+                        if (mode === "ORDERS") return x.kind === "ORDER";
+                        if (mode === "LEDGER") return x.kind === "LEDGER";
+                        return true;
+                      })
+                      .map((x) => (
+                        <div
+                          key={`${x.kind}-${x.rawId}`}
+                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50"
+                        >
+                          <div className={`${tableCols} items-center text-sm`}>
+                            <div className="px-2 font-semibold">{ymdToDisplay(x.date)}</div>
+
+                            <div className="px-2">
+                              <div className="font-semibold">{x.counterparty || "-"}</div>
+                              {selectedPartner?.business_no ? (
+                                <div className="text-xs text-slate-500">{selectedPartner.business_no}</div>
+                              ) : null}
+                            </div>
+
+                            <div className="px-2">
+                              <div className="font-semibold">{x.category || "-"}</div>
+                              {x.note ? <div className="text-xs text-slate-500 truncate">{x.note}</div> : null}
+                            </div>
+
+                            <div className="px-2 font-semibold">{x.method || "-"}</div>
+
+                            <div className="px-2 text-right tabular-nums font-semibold text-blue-700">
+                              {x.inAmt ? formatMoney(x.inAmt) : ""}
+                            </div>
+
+                            <div className="px-2 text-right tabular-nums font-semibold text-rose-700">
+                              {x.outAmt ? formatMoney(x.outAmt) : ""}
+                            </div>
+
+                            <div className="px-2 text-right tabular-nums font-semibold">
+                              {formatMoney(x.balance)}
+                            </div>
+
+                            <div className="px-2 text-center">
+                              <button className={btnSoft} onClick={() => copyTradeRow(x)}>
+                                복사
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                    {unifiedRows.length === 0 ? (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                        거래내역이 없습니다. (기간/거래처/모드 필터를 확인하세요)
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 text-xs text-slate-500">
+                ※ 주문/출고는 출금으로 표시됩니다. (입금/출금은 모두 양수 입력, 계산에서만 차감 처리)
+              </div>
             </div>
           </div>
         </div>
