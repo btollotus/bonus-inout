@@ -136,7 +136,6 @@ export default function TradeClient() {
   const [shipDate, setShipDate] = useState(todayYMD());
   const [shipMethod, setShipMethod] = useState("택배");
   const [orderTitle, setOrderTitle] = useState("");
-
   const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
 
   const orderTotals = useMemo(() => {
@@ -162,9 +161,6 @@ export default function TradeClient() {
 
   // ✅ 기초잔액(기간 시작 전 누적)
   const [openingBalance, setOpeningBalance] = useState<number>(0);
-
-  // ✅ 복사 반응 표시
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // ====== Helpers: 최근 거래처 ======
   function loadRecentFromLS() {
@@ -551,6 +547,13 @@ export default function TradeClient() {
       order_title: string;
       order_lines: Line[];
 
+      // ✅ 금전출납 자동 불러오기용
+      ledger_direction: "IN" | "OUT";
+      ledger_amount: number;
+      ledger_category: "매출입금" | "급여" | "세금" | "기타";
+      ledger_method: string;
+      ledger_memo: string;
+
       balance: number;
     }> = [];
 
@@ -608,6 +611,12 @@ export default function TradeClient() {
         order_title: memoTitle,
         order_lines: parsedLines,
 
+        ledger_direction: "IN",
+        ledger_amount: 0,
+        ledger_category: "매출입금",
+        ledger_method: "",
+        ledger_memo: "",
+
         balance: 0,
       });
     }
@@ -615,6 +624,10 @@ export default function TradeClient() {
     for (const l of ledgers) {
       const isOut = String(l.direction) === "OUT";
       const amt = Number(l.amount ?? 0);
+
+      const cat = (l.category ?? "기타") as any;
+      const safeCat: "매출입금" | "급여" | "세금" | "기타" =
+        cat === "매출입금" || cat === "급여" || cat === "세금" || cat === "기타" ? cat : "기타";
 
       items.push({
         kind: "LEDGER",
@@ -633,6 +646,12 @@ export default function TradeClient() {
 
         order_title: "",
         order_lines: [],
+
+        ledger_direction: isOut ? "OUT" : "IN",
+        ledger_amount: amt,
+        ledger_category: safeCat,
+        ledger_method: l.method ?? "BANK",
+        ledger_memo: l.memo ?? "",
 
         balance: 0,
       });
@@ -659,16 +678,14 @@ export default function TradeClient() {
     return { plus, minus, endBalance };
   }, [unifiedRows, openingBalance]);
 
-  // ✅ 클립보드 복사(기존 기능 유지)
+  // ✅ 클립보드 복사(유지)
   async function copyToClipboard(text: string) {
     try {
       if (typeof navigator !== "undefined" && navigator.clipboard && (window as any).isSecureContext) {
         await navigator.clipboard.writeText(text);
         return true;
       }
-    } catch {
-      // fallback
-    }
+    } catch {}
 
     try {
       const ta = document.createElement("textarea");
@@ -687,40 +704,65 @@ export default function TradeClient() {
     }
   }
 
-  // ✅ (2) 복사 버튼 = 주문/출고 입력으로 불러오기 + 클립보드 복사도 같이
-  async function importOrderFromUnified(row: (typeof unifiedRows)[number], rowKey: string) {
-    if (row.kind !== "ORDER") {
-      setMsg("금전출납 행은 품목 라인이 없어 주문/출고로 불러올 수 없습니다.");
-      setTimeout(() => setMsg(null), 1500);
+  // ✅ 복사 버튼: ORDER면 주문/출고로, LEDGER면 금전출납으로 “오늘 날짜”로 불러오기
+  async function handleCopyRow(row: (typeof unifiedRows)[number]) {
+    const today = todayYMD();
+
+    if (row.kind === "ORDER") {
+      setMode("ORDERS");
+      setShipDate(today); // ✅ 반복주문 고려: 원 거래일 말고 오늘로
+      setShipMethod(row.method || "택배");
+      setOrderTitle(row.order_title || "");
+      setLines(
+        row.order_lines?.length ? row.order_lines : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]
+      );
+
+      const clipText = [
+        `출고일: ${today}`,
+        `출고방법: ${row.method || ""}`,
+        row.order_title ? `메모: ${row.order_title}` : "",
+        `품목: ${
+          row.order_lines
+            .map(
+              (l) =>
+                `${l.food_type ? `[${l.food_type}] ` : ""}${l.name} ${l.weight_g ? `${l.weight_g}g ` : ""}${l.qty}×${l.unit}`
+            )
+            .join(" / ") || "-"
+        }`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const ok = await copyToClipboard(clipText);
+      setMsg(ok ? "주문/출고 입력으로 불러왔습니다. (클립보드 복사됨)" : "주문/출고 입력으로 불러왔습니다.");
+      setTimeout(() => setMsg(null), 1600);
       return;
     }
 
-    // 주문/출고 탭으로 이동 + 값 채우기
-    setMode("ORDERS");
-    setShipDate(row.date || todayYMD());
-    setShipMethod(row.method || "택배");
-    setOrderTitle(row.order_title || "");
-    setLines(row.order_lines?.length ? row.order_lines : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
+    // LEDGER
+    setMode("LEDGER");
+    setEntryDate(today); // ✅ 반복입금/반복출금 고려: 오늘로
+    setDirection(row.ledger_direction);
+    setPayMethod(row.ledger_method || "BANK");
+    setCategory(row.ledger_category || "기타");
+    setLedgerMemo(row.ledger_memo || "");
+    const amt = Number(row.ledger_amount ?? 0);
+    setAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
 
-    // “반응” 표시
-    setCopiedKey(rowKey);
-    setTimeout(() => setCopiedKey(null), 900);
-
-    // 클립보드도 같이(기존 기능 유지)
     const clipText = [
-      `출고일: ${row.date}`,
-      `출고방법: ${row.method}`,
-      row.order_title ? `메모: ${row.order_title}` : "",
-      `품목: ${row.order_lines
-        .map((l) => `${l.food_type ? `[${l.food_type}] ` : ""}${l.name} ${l.weight_g ? `${l.weight_g}g ` : ""}${l.qty}×${l.unit}`)
-        .join(" / ")}`,
+      `일자: ${today}`,
+      `구분: ${row.ledger_direction === "OUT" ? "출금" : "입금"}`,
+      `결제수단: ${row.ledger_method || ""}`,
+      `카테고리: ${row.ledger_category || ""}`,
+      row.ledger_memo ? `메모: ${row.ledger_memo}` : "",
+      `금액: ${amt.toLocaleString("ko-KR")}원`,
     ]
       .filter(Boolean)
       .join("\n");
 
     const ok = await copyToClipboard(clipText);
-    setMsg(ok ? "주문/출고 입력으로 불러왔습니다. (클립보드도 복사됨)" : "주문/출고 입력으로 불러왔습니다. (클립보드는 권한 문제)");
-    setTimeout(() => setMsg(null), 1800);
+    setMsg(ok ? "금전출납 입력으로 불러왔습니다. (클립보드 복사됨)" : "금전출납 입력으로 불러왔습니다.");
+    setTimeout(() => setMsg(null), 1600);
   }
 
   // ====== UI (라이트 + 블루 포인트) ======
@@ -746,7 +788,6 @@ export default function TradeClient() {
   const tableCols = "grid grid-cols-[110px_220px_140px_110px_110px_110px_120px_110px] gap-2";
   const targetLabel = selectedPartner ? selectedPartner.name : "전체";
 
-  // ====== UI ======
   return (
     <div className={`${pageBg} min-h-screen`}>
       <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
@@ -902,9 +943,12 @@ export default function TradeClient() {
             {/* 주문/출고 */}
             {mode !== "LEDGER" ? (
               <div className={`${card} p-4`}>
-                <div className="mb-3 flex items-center justify-between">
+                {/* ✅ 조회대상: 오른쪽 → 왼쪽 */}
+                <div className="mb-3">
                   <div className="text-lg font-semibold">주문/출고 입력</div>
-                  <span className={pill}>조회대상: {targetLabel}</span>
+                  <div className="mt-1">
+                    <span className={pill}>조회대상: {targetLabel}</span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -936,9 +980,8 @@ export default function TradeClient() {
                   </button>
                 </div>
 
-                {/* ✅ (1) 헤더/입력줄 동일한 좌측 시작점: 헤더와 행에 동일 px 래퍼 적용 */}
+                {/* 헤더/입력줄 정렬 유지 */}
                 <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 py-2">
-                  {/* 헤더 */}
                   <div className="px-2">
                     <div className="grid grid-cols-[180px_1fr_120px_110px_110px_120px_120px_120px_auto] gap-2 text-xs text-slate-600">
                       <div className="px-3">식품유형</div>
@@ -953,7 +996,6 @@ export default function TradeClient() {
                     </div>
                   </div>
 
-                  {/* 입력행들 */}
                   <div className="mt-2 space-y-2">
                     {lines.map((l, i) => {
                       const supply = toInt(l.qty) * toInt(l.unit);
@@ -1004,9 +1046,12 @@ export default function TradeClient() {
             {/* 금전출납 */}
             {mode !== "ORDERS" ? (
               <div className={`${card} p-4`}>
-                <div className="mb-3 flex items-center justify-between">
+                {/* ✅ 조회대상: 오른쪽 → 왼쪽 */}
+                <div className="mb-3">
                   <div className="text-lg font-semibold">금전출납 입력</div>
-                  <span className={pill}>조회대상: {targetLabel}</span>
+                  <div className="mt-1">
+                    <span className={pill}>조회대상: {targetLabel}</span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -1160,7 +1205,6 @@ export default function TradeClient() {
                       })
                       .map((x) => {
                         const rowKey = `${x.kind}-${x.rawId}`;
-                        const copied = copiedKey === rowKey;
 
                         return (
                           <div key={rowKey} className="rounded-2xl border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50">
@@ -1189,8 +1233,8 @@ export default function TradeClient() {
                               <div className="px-2 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</div>
 
                               <div className="px-2 text-center">
-                                <button className={copied ? btnOn : btnSoft} onClick={() => importOrderFromUnified(x, rowKey)}>
-                                  {copied ? "불러옴" : "복사"}
+                                <button className={btnSoft} onClick={() => handleCopyRow(x)}>
+                                  복사
                                 </button>
                               </div>
                             </div>
