@@ -2182,7 +2182,7 @@ export default function TradeClient() {
                     <col style={{ width: "110px" }} />
                     <col style={{ width: "110px" }} />
                     <col style={{ width: "130px" }} />
-                    <col style={{ width: "240px" }} />
+                    <col style={{ width: "300px" }} />
                   </colgroup>
 
                   <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
@@ -2220,14 +2220,14 @@ export default function TradeClient() {
                           <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</td>
 
                           <td className="px-3 py-2">
-                            <div className="flex items-center justify-center gap-2">
-                              <button className={`${btn} whitespace-nowrap`} onClick={() => onCopyClick(x)}>
+                            <div className="flex items-center justify-center gap-1">
+                              <button className={`${btn} whitespace-nowrap text-xs px-2 py-1`} onClick={() => onCopyClick(x)}>
                                 복사
                               </button>
-                              <button className={`${btn} whitespace-nowrap`} onClick={() => onMemoClick(x)}>
+                              <button className={`${btn} whitespace-nowrap text-xs px-2 py-1`} onClick={() => onMemoClick(x)}>
                                 메모
                               </button>
-                              <button className={`${btn} whitespace-nowrap`} onClick={() => openEdit(x)}>
+                              <button className={`${btn} whitespace-nowrap text-xs px-2 py-1`} onClick={() => openEdit(x)}>
                                 수정
                               </button>
                             </div>
