@@ -81,7 +81,7 @@ type PresetProductRow = {
 type Line = {
   food_type: string;
   name: string;
-  weight_g: number;
+  weight_g: number; // ✅ 소수점 허용
   qty: number;
   unit: number;
 };
@@ -121,21 +121,161 @@ function formatMoney(n: number | null | undefined) {
   return v.toLocaleString("ko-KR");
 }
 
+// ✅ 소수점(무게) 표시: 0이면 "", 정수면 정수로, 소수면 최대 2자리로
+function formatWeight(n: number | null | undefined) {
+  const v = Number(n ?? 0);
+  if (!Number.isFinite(v) || v === 0) return "";
+  // 소수부가 0이면 정수로
+  if (Math.abs(v - Math.round(v)) < 1e-9) return Math.round(v).toLocaleString("ko-KR");
+  // 최대 2자리로 표시 (불필요한 0 제거)
+  return v
+    .toLocaleString("ko-KR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    .replace(/(\.\d*?[1-9])0+$/g, "$1")
+    .replace(/\.0+$/g, "");
+}
+
 function toInt(n: any) {
   const v = Number(String(n ?? "").replaceAll(",", ""));
   return Number.isFinite(v) ? Math.trunc(v) : 0;
 }
 
-// ✅ 무게용(소수 허용)
-function toFloat2(n: any) {
-  const v = Number(String(n ?? "").replaceAll(",", ""));
-  if (!Number.isFinite(v)) return 0;
-  return Math.round(v * 100) / 100; // 소수점 2자리
+// ✅ 소수점 숫자 파싱 (무게용) : "2.8", "1,234.56" 지원
+function toNum(n: any) {
+  const s = String(n ?? "").replaceAll(",", "").trim();
+  if (!s) return 0;
+  const v = Number(s);
+  return Number.isFinite(v) ? v : 0;
 }
 
-function formatWeight(n: number | null | undefined) {
-  const v = Number(n ?? 0);
-  return Number.isFinite(v) ? v.toLocaleString("ko-KR", { maximumFractionDigits: 2 }) : "0";
+// ✅ 안전한 4칙연산 파서 (+ - * / 괄호)
+// - eval() 미사용
+// - 숫자, 공백, . + - * / ( ) 만 허용
+function calcExpression(exprRaw: string): { ok: true; value: number } | { ok: false; error: string } {
+  const expr = (exprRaw ?? "").trim();
+  if (!expr) return { ok: true, value: 0 };
+
+  // 허용 문자 체크
+  if (!/^[0-9+\-*/().\s]+$/.test(expr)) {
+    return { ok: false, error: "숫자와 + - * / ( ) 만 사용 가능합니다." };
+  }
+
+  // 토큰화
+  type Tok = { t: "num"; v: number } | { t: "op"; v: string } | { t: "lp" } | { t: "rp" };
+  const tokens: Tok[] = [];
+  let i = 0;
+
+  const isDigit = (c: string) => c >= "0" && c <= "9";
+
+  while (i < expr.length) {
+    const c = expr[i];
+    if (c === " " || c === "\t" || c === "\n") {
+      i++;
+      continue;
+    }
+    if (c === "(") {
+      tokens.push({ t: "lp" });
+      i++;
+      continue;
+    }
+    if (c === ")") {
+      tokens.push({ t: "rp" });
+      i++;
+      continue;
+    }
+    if (c === "+" || c === "-" || c === "*" || c === "/") {
+      tokens.push({ t: "op", v: c });
+      i++;
+      continue;
+    }
+    if (isDigit(c) || c === ".") {
+      let j = i + 1;
+      while (j < expr.length && (isDigit(expr[j]) || expr[j] === ".")) j++;
+      const numStr = expr.slice(i, j);
+      const num = Number(numStr);
+      if (!Number.isFinite(num)) return { ok: false, error: "숫자 형식이 올바르지 않습니다." };
+      tokens.push({ t: "num", v: num });
+      i = j;
+      continue;
+    }
+    return { ok: false, error: "허용되지 않는 문자가 포함되어 있습니다." };
+  }
+
+  // 단항 - 처리:  -3, (-3), 2*-3 같은 케이스를 (0-3) 형태로 변환
+  const norm: Tok[] = [];
+  for (let k = 0; k < tokens.length; k++) {
+    const cur = tokens[k];
+    const prev = norm[norm.length - 1];
+
+    if (cur.t === "op" && cur.v === "-") {
+      const isUnary = !prev || prev.t === "op" || prev.t === "lp";
+      if (isUnary) {
+        norm.push({ t: "num", v: 0 });
+        norm.push({ t: "op", v: "-" });
+        continue;
+      }
+    }
+    norm.push(cur);
+  }
+
+  // Shunting-yard -> RPN
+  const prec: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2 };
+  const ops: Tok[] = [];
+  const out: Tok[] = [];
+
+  for (const tok of norm) {
+    if (tok.t === "num") out.push(tok);
+    else if (tok.t === "op") {
+      while (ops.length) {
+        const top = ops[ops.length - 1];
+        if (top.t === "op" && prec[top.v] >= prec[tok.v]) out.push(ops.pop() as Tok);
+        else break;
+      }
+      ops.push(tok);
+    } else if (tok.t === "lp") ops.push(tok);
+    else if (tok.t === "rp") {
+      let found = false;
+      while (ops.length) {
+        const top = ops.pop() as Tok;
+        if (top.t === "lp") {
+          found = true;
+          break;
+        }
+        out.push(top);
+      }
+      if (!found) return { ok: false, error: "괄호 짝이 맞지 않습니다." };
+    }
+  }
+
+  while (ops.length) {
+    const top = ops.pop() as Tok;
+    if (top.t === "lp" || top.t === "rp") return { ok: false, error: "괄호 짝이 맞지 않습니다." };
+    out.push(top);
+  }
+
+  // RPN 계산
+  const st: number[] = [];
+  for (const tok of out) {
+    if (tok.t === "num") st.push(tok.v);
+    else if (tok.t === "op") {
+      const b = st.pop();
+      const a = st.pop();
+      if (a === undefined || b === undefined) return { ok: false, error: "수식이 올바르지 않습니다." };
+      let v = 0;
+      if (tok.v === "+") v = a + b;
+      if (tok.v === "-") v = a - b;
+      if (tok.v === "*") v = a * b;
+      if (tok.v === "/") {
+        if (b === 0) return { ok: false, error: "0으로 나눌 수 없습니다." };
+        v = a / b;
+      }
+      st.push(v);
+    }
+  }
+
+  if (st.length !== 1) return { ok: false, error: "수식이 올바르지 않습니다." };
+  const value = st[0];
+  if (!Number.isFinite(value)) return { ok: false, error: "계산 결과가 올바르지 않습니다." };
+  return { ok: true, value };
 }
 
 function safeJsonParse<T>(s: string | null): T | null {
@@ -187,11 +327,11 @@ function buildMemoText(r: UnifiedRow) {
         const ft = String(l.food_type ?? "").trim();
         const name = String(l.name ?? "").trim();
         const w = Number(l.weight_g ?? 0);
-        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${w}g, ` : ""}수량 ${formatMoney(
-          qty
-        )} / 단가 ${formatMoney(unit)} / 공급가 ${formatMoney(supply)} / 부가세 ${formatMoney(
-          vat
-        )} / 총액 ${formatMoney(total)}`;
+        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${
+          w ? `${formatWeight(w)}g, ` : ""
+        }수량 ${formatMoney(qty)} / 단가 ${formatMoney(unit)} / 공급가 ${formatMoney(
+          supply
+        )} / 부가세 ${formatMoney(vat)} / 총액 ${formatMoney(total)}`;
       })
       .join("\n");
     return `주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 제목: ${title || "(없음)"}\n\n품목:\n${
@@ -214,7 +354,6 @@ function normText(s: any) {
 }
 
 function fmtKST(iso: string) {
-  // 표준 Date 렌더(브라우저 로컬 기준). “YYYY-MM-DD HH:MM”
   const d = new Date(iso);
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -283,6 +422,16 @@ export default function TradeClient() {
   const [shipMethod, setShipMethod] = useState("택배");
   const [orderTitle, setOrderTitle] = useState("");
   const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
+
+  // ✅ 주문/출고 미니 계산기
+  const [calcExpr, setCalcExpr] = useState("");
+  const [calcResult, setCalcResult] = useState<number | null>(null);
+  const [calcErr, setCalcErr] = useState<string | null>(null);
+
+  // ✅ 총액(부가세 포함) -> 공급가/부가세 분리
+  const [totalInclVatStr, setTotalInclVatStr] = useState("");
+  const [splitSupply, setSplitSupply] = useState<number | null>(null);
+  const [splitVat, setSplitVat] = useState<number | null>(null);
 
   // 금전출납 입력
   const [entryDate, setEntryDate] = useState(todayYMD());
@@ -420,7 +569,6 @@ export default function TradeClient() {
   }
 
   async function loadLatestShippingForPartner(partnerId: string) {
-    // ✅ 이력 테이블에서 최신 1건 조회. 없으면 partners의 현재값을 사용.
     const { data, error } = await supabase
       .from("partner_shipping_history")
       .select("id,partner_id,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone,created_at")
@@ -433,7 +581,6 @@ export default function TradeClient() {
     return row;
   }
 
-  // ✅ 최근 5건 이력 로드
   async function loadShippingHistory5(partnerId: string) {
     setShipHistLoading(true);
     try {
@@ -638,12 +785,10 @@ export default function TradeClient() {
     setPartners((prev) => prev.map((x) => (x.id === p.id ? { ...x, is_pinned: next } : x)));
   }
 
-  // ✅ 거래처 수정 모달 열기
   async function openPartnerEdit() {
     setMsg(null);
     if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
 
-    // 기본정보
     setEP_name(selectedPartner.name ?? "");
     setEP_businessNo(selectedPartner.business_no ?? "");
     setEP_ceo(selectedPartner.ceo_name ?? "");
@@ -652,7 +797,6 @@ export default function TradeClient() {
     setEP_bizType(selectedPartner.biz_type ?? "");
     setEP_bizItem(selectedPartner.biz_item ?? "");
 
-    // 배송정보: 최신 이력 우선, 없으면 partners 컬럼 사용
     const latest = await loadLatestShippingForPartner(selectedPartner.id);
     const cur = selectedPartner;
 
@@ -661,7 +805,6 @@ export default function TradeClient() {
     setShipToMobile((latest?.ship_to_mobile ?? cur.ship_to_mobile ?? "") || "");
     setShipToPhone((latest?.ship_to_phone ?? cur.ship_to_phone ?? "") || "");
 
-    // ✅ 이력 UI 초기화
     setShipHistOpen(false);
     setShipHist([]);
     setShipHistLoading(false);
@@ -674,7 +817,6 @@ export default function TradeClient() {
     setShipHistOpen(false);
   }
 
-  // ✅ 거래처 수정 저장 + 배송정보 변경 이력 남기기
   async function savePartnerEdit() {
     setMsg(null);
     if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
@@ -690,14 +832,12 @@ export default function TradeClient() {
       address1: normText(ep_address1),
       biz_type: normText(ep_bizType),
       biz_item: normText(ep_bizItem),
-      // ✅ partners에 '현재 배송정보'도 같이 저장(최근값)
       ship_to_name: normText(ship_to_name),
       ship_to_address1: normText(ship_to_address1),
       ship_to_mobile: normText(ship_to_mobile),
       ship_to_phone: normText(ship_to_phone),
     };
 
-    // 기존 배송정보(현재값)과 비교해서, 변화가 있으면 history에 insert
     const prev = {
       ship_to_name: normText(selectedPartner.ship_to_name),
       ship_to_address1: normText(selectedPartner.ship_to_address1),
@@ -718,7 +858,6 @@ export default function TradeClient() {
       prev.ship_to_mobile !== next.ship_to_mobile ||
       prev.ship_to_phone !== next.ship_to_phone;
 
-    // 1) partners 업데이트
     const { data: updated, error: uErr } = await supabase
       .from("partners")
       .update(nextPartnerPayload)
@@ -730,7 +869,6 @@ export default function TradeClient() {
 
     if (uErr) return setMsg(uErr.message);
 
-    // 2) 배송정보 변경 시 history insert (변경 이력 보존)
     if (shippingChanged) {
       const histPayload: any = {
         partner_id: selectedPartner.id,
@@ -744,13 +882,11 @@ export default function TradeClient() {
       if (hErr) return setMsg(hErr.message);
     }
 
-    // 3) 화면 반영
     const updatedPartner = updated as PartnerRow;
 
     setPartners((prevList) => prevList.map((p) => (p.id === updatedPartner.id ? updatedPartner : p)));
     setSelectedPartner(updatedPartner);
 
-    // ✅ 이력 보기 상태면, 저장 후 바로 최신 5건 리프레시
     if (shipHistOpen) {
       await loadShippingHistory5(updatedPartner.id);
     }
@@ -790,7 +926,7 @@ export default function TradeClient() {
       .map((l) => ({
         food_type: (l.food_type || "").trim(),
         name: l.name.trim(),
-        weight_g: toFloat2(l.weight_g),
+        weight_g: toNum(l.weight_g), // ✅ 소수점 유지
         qty: toInt(l.qty),
         unit: toInt(l.unit),
       }))
@@ -985,7 +1121,7 @@ export default function TradeClient() {
         ? r.order_lines.map((l) => ({
             food_type: String(l.food_type ?? ""),
             name: String(l.name ?? ""),
-            weight_g: toFloat2(l.weight_g ?? 0),
+            weight_g: Number(l.weight_g ?? 0), // ✅ 소수점 유지
             qty: toInt(l.qty ?? 0),
             unit: toInt(l.unit ?? 0),
           }))
@@ -1034,7 +1170,7 @@ export default function TradeClient() {
           ? r.order_lines.map((l) => ({
               food_type: String(l.food_type ?? ""),
               name: String(l.name ?? ""),
-              weight_g: toFloat2(l.weight_g ?? 0),
+              weight_g: Number(l.weight_g ?? 0), // ✅ 소수점 유지
               qty: toInt(l.qty ?? 0),
               unit: toInt(l.unit ?? 0),
             }))
@@ -1066,7 +1202,7 @@ export default function TradeClient() {
         .map((l) => ({
           food_type: (l.food_type || "").trim(),
           name: (l.name || "").trim(),
-          weight_g: toFloat2(l.weight_g),
+          weight_g: toNum(l.weight_g), // ✅ 소수점 유지
           qty: toInt(l.qty),
           unit: toInt(l.unit),
         }))
@@ -1125,8 +1261,7 @@ export default function TradeClient() {
   const input =
     "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
   const inputRight = `${input} text-right tabular-nums`;
-  const btn =
-    "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
+  const btn = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
   const btnOn =
     "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
   const pill =
@@ -1143,10 +1278,7 @@ export default function TradeClient() {
 
         {/* ✅ 거래처 수정 팝업 (신규 + 최근 5건 이력 버튼) */}
         {partnerEditOpen ? (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-            onClick={closePartnerEdit}
-          >
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={closePartnerEdit}>
             <div
               className="w-full max-w-[860px] rounded-2xl border border-slate-200 bg-white shadow-xl"
               onClick={(e) => e.stopPropagation()}
@@ -1170,7 +1302,12 @@ export default function TradeClient() {
                 <div className="mb-2 text-sm font-semibold">업체 기본정보</div>
                 <div className="space-y-2">
                   <input className={input} placeholder="업체명(필수)" value={ep_name} onChange={(e) => setEP_name(e.target.value)} />
-                  <input className={input} placeholder="사업자등록번호" value={ep_businessNo} onChange={(e) => setEP_businessNo(e.target.value)} />
+                  <input
+                    className={input}
+                    placeholder="사업자등록번호"
+                    value={ep_businessNo}
+                    onChange={(e) => setEP_businessNo(e.target.value)}
+                  />
                   <input className={input} placeholder="대표자" value={ep_ceo} onChange={(e) => setEP_ceo(e.target.value)} />
                   <input className={input} placeholder="연락처" value={ep_phone} onChange={(e) => setEP_phone(e.target.value)} />
                   <input className={input} placeholder="주소" value={ep_address1} onChange={(e) => setEP_address1(e.target.value)} />
@@ -1183,7 +1320,6 @@ export default function TradeClient() {
                 <div className="mt-5 mb-2 flex items-center justify-between gap-2">
                   <div className="text-sm font-semibold">배송정보 (변경 이력 저장 / 최근 자료 자동 사용)</div>
 
-                  {/* ✅ “최근 5건” 버튼 */}
                   <button
                     type="button"
                     className={btn}
@@ -1202,7 +1338,12 @@ export default function TradeClient() {
 
                 <div className="space-y-2">
                   <input className={input} placeholder="수화주명" value={ship_to_name} onChange={(e) => setShipToName(e.target.value)} />
-                  <input className={input} placeholder="주소1" value={ship_to_address1} onChange={(e) => setShipToAddress1(e.target.value)} />
+                  <input
+                    className={input}
+                    placeholder="주소1"
+                    value={ship_to_address1}
+                    onChange={(e) => setShipToAddress1(e.target.value)}
+                  />
                   <div className="grid grid-cols-2 gap-2">
                     <input className={input} placeholder="휴대폰" value={ship_to_mobile} onChange={(e) => setShipToMobile(e.target.value)} />
                     <input className={input} placeholder="전화" value={ship_to_phone} onChange={(e) => setShipToPhone(e.target.value)} />
@@ -1212,7 +1353,6 @@ export default function TradeClient() {
                   </div>
                 </div>
 
-                {/* ✅ 최근 5건 이력 목록 (토글) */}
                 {shipHistOpen ? (
                   <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     <div className="mb-2 flex items-center justify-between gap-2">
@@ -1230,13 +1370,9 @@ export default function TradeClient() {
                     </div>
 
                     {shipHistLoading ? (
-                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600">
-                        불러오는 중...
-                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600">불러오는 중...</div>
                     ) : shipHist.length === 0 ? (
-                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-500">
-                        이력이 없습니다.
-                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-500">이력이 없습니다.</div>
                     ) : (
                       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
                         <table className="w-full table-fixed text-sm">
@@ -1387,7 +1523,7 @@ export default function TradeClient() {
                                 if (hit) {
                                   updateEditLine(i, {
                                     food_type: hit.food_type ?? "",
-                                    weight_g: toFloat2(numFromPresetWeight(hit.weight_g)),
+                                    weight_g: numFromPresetWeight(hit.weight_g), // ✅ 소수점 유지
                                   });
                                 }
                               }}
@@ -1396,7 +1532,7 @@ export default function TradeClient() {
                               className={inputRight}
                               inputMode="decimal"
                               value={formatWeight(l.weight_g)}
-                              onChange={(e) => updateEditLine(i, { weight_g: toFloat2(e.target.value) })}
+                              onChange={(e) => updateEditLine(i, { weight_g: toNum(e.target.value) })}
                             />
                             <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })} />
                             <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateEditLine(i, { unit: toInt(e.target.value) })} />
@@ -1471,9 +1607,7 @@ export default function TradeClient() {
                       </div>
                     </div>
 
-                    <div className="mt-2 text-xs text-slate-500">
-                      ※ 방향(IN/OUT)은 카테고리로 자동 결정됩니다.
-                    </div>
+                    <div className="mt-2 text-xs text-slate-500">※ 방향(IN/OUT)은 카테고리로 자동 결정됩니다.</div>
                   </>
                 )}
               </div>
@@ -1484,7 +1618,6 @@ export default function TradeClient() {
                 ))}
               </datalist>
 
-              {/* ✅ 기성 품목 자동완성 목록 */}
               <datalist id="preset-products-list">
                 {presetProducts.map((p) => (
                   <option key={p.id} value={p.product_name} />
@@ -1510,12 +1643,7 @@ export default function TradeClient() {
                   + 등록
                 </button>
 
-                {/* ✅ 수정 버튼 */}
-                <button
-                  className={btn}
-                  onClick={openPartnerEdit}
-                  title={selectedPartner ? "선택된 거래처 수정" : "거래처를 먼저 선택하세요"}
-                >
+                <button className={btn} onClick={openPartnerEdit} title={selectedPartner ? "선택된 거래처 수정" : "거래처를 먼저 선택하세요"}>
                   수정
                 </button>
 
@@ -1586,7 +1714,12 @@ export default function TradeClient() {
                   const pinned = !!p.is_pinned;
 
                   return (
-                    <div key={p.id} className={`flex items-stretch gap-2 rounded-2xl border ${active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+                    <div
+                      key={p.id}
+                      className={`flex items-stretch gap-2 rounded-2xl border ${
+                        active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                      }`}
+                    >
                       <button className="flex-1 rounded-2xl px-3 py-3 text-left" onClick={() => selectPartner(p)}>
                         <div className="font-semibold">{p.name}</div>
                         <div className="text-xs text-slate-500">{p.business_no ?? ""}</div>
@@ -1705,7 +1838,7 @@ export default function TradeClient() {
                             if (hit) {
                               updateLine(i, {
                                 food_type: hit.food_type ?? "",
-                                weight_g: toFloat2(numFromPresetWeight(hit.weight_g)),
+                                weight_g: numFromPresetWeight(hit.weight_g), // ✅ 소수점 유지
                               });
                             }
                           }}
@@ -1714,7 +1847,7 @@ export default function TradeClient() {
                           className={inputRight}
                           inputMode="decimal"
                           value={formatWeight(l.weight_g)}
-                          onChange={(e) => updateLine(i, { weight_g: toFloat2(e.target.value) })}
+                          onChange={(e) => updateLine(i, { weight_g: toNum(e.target.value) })}
                         />
                         <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} />
                         <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })} />
@@ -1737,7 +1870,6 @@ export default function TradeClient() {
                   ))}
                 </datalist>
 
-                {/* ✅ 기성 품목 자동완성 목록 */}
                 <datalist id="preset-products-list">
                   {presetProducts.map((p) => (
                     <option key={p.id} value={p.product_name} />
@@ -1752,6 +1884,159 @@ export default function TradeClient() {
                   <button className={btnOn} onClick={createOrder}>
                     주문/출고 생성
                   </button>
+                </div>
+
+                {/* ✅ 미니 계산기 + 총액 분리 */}
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-2 text-sm font-semibold">미니 계산기</div>
+
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {/* 4칙연산 */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <div className="mb-2 text-xs text-slate-600">4칙연산 (+ - * /, 괄호 가능)</div>
+                      <div className="flex gap-2">
+                        <input
+                          className={input}
+                          placeholder="예) 12000*3 + 5500"
+                          value={calcExpr}
+                          onChange={(e) => {
+                            setCalcExpr(e.target.value);
+                            setCalcErr(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const r = calcExpression(calcExpr);
+                              if (!r.ok) {
+                                setCalcErr(r.error);
+                                setCalcResult(null);
+                              } else {
+                                setCalcErr(null);
+                                setCalcResult(r.value);
+                              }
+                            }
+                          }}
+                        />
+                        <button
+                          className={btn}
+                          type="button"
+                          onClick={() => {
+                            const r = calcExpression(calcExpr);
+                            if (!r.ok) {
+                              setCalcErr(r.error);
+                              setCalcResult(null);
+                            } else {
+                              setCalcErr(null);
+                              setCalcResult(r.value);
+                            }
+                          }}
+                        >
+                          계산
+                        </button>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm tabular-nums">
+                          결과:{" "}
+                          <span className="font-semibold">
+                            {calcResult === null
+                              ? "-"
+                              : Number.isInteger(calcResult)
+                              ? formatMoney(calcResult)
+                              : calcResult.toLocaleString("ko-KR")}
+                          </span>
+                        </div>
+
+                        <button
+                          className={btn}
+                          type="button"
+                          onClick={async () => {
+                            if (calcResult === null) return;
+                            try {
+                              await navigator.clipboard.writeText(String(calcResult));
+                              setMsg("계산 결과를 클립보드에 복사했습니다.");
+                            } catch {
+                              setMsg("클립보드 복사에 실패했습니다.");
+                            }
+                          }}
+                          title="결과 복사"
+                        >
+                          결과 복사
+                        </button>
+
+                        <button
+                          className={btn}
+                          type="button"
+                          onClick={() => {
+                            setCalcExpr("");
+                            setCalcResult(null);
+                            setCalcErr(null);
+                          }}
+                        >
+                          초기화
+                        </button>
+                      </div>
+
+                      {calcErr ? (
+                        <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{calcErr}</div>
+                      ) : null}
+                    </div>
+
+                    {/* 총액 -> 공급가/부가세 */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <div className="mb-2 text-xs text-slate-600">총액(부가세 포함) 입력 시 공급가/부가세 자동 분리</div>
+
+                      <div className="flex gap-2">
+                        <input
+                          className={inputRight}
+                          inputMode="numeric"
+                          placeholder="총액(원) 예) 110,000"
+                          value={totalInclVatStr}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/[^\d,]/g, "");
+                            setTotalInclVatStr(v);
+                          }}
+                          onBlur={() => {
+                            const n = Number((totalInclVatStr || "0").replaceAll(",", ""));
+                            if (Number.isFinite(n) && n > 0) setTotalInclVatStr(n.toLocaleString("ko-KR"));
+                          }}
+                        />
+                        <button
+                          className={btn}
+                          type="button"
+                          onClick={() => {
+                            const total = Number((totalInclVatStr || "0").replaceAll(",", ""));
+                            if (!Number.isFinite(total) || total <= 0) {
+                              setSplitSupply(null);
+                              setSplitVat(null);
+                              setMsg("총액(원)을 올바르게 입력하세요.");
+                              return;
+                            }
+
+                            const supply = Math.round(total / 1.1);
+                            const vat = total - supply;
+
+                            setSplitSupply(supply);
+                            setSplitVat(vat);
+                          }}
+                        >
+                          분리
+                        </button>
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                          공급가: <span className="font-semibold tabular-nums">{splitSupply === null ? "-" : formatMoney(splitSupply)}</span>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                          부가세: <span className="font-semibold tabular-nums">{splitVat === null ? "-" : formatMoney(splitVat)}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 text-xs text-slate-500">
+                        ※ 공급가는 “총액/1.1”을 원단위 반올림, 부가세는 “총액-공급가”로 맞춰서 합계가 정확히 떨어지게 했습니다.
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -1876,7 +2161,11 @@ export default function TradeClient() {
                   <button className={btnOn} onClick={() => loadTrades()}>
                     조회
                   </button>
-                  <button className={includeOpening ? btnOn : btn} onClick={() => setIncludeOpening((v) => !v)} title="기간 시작 전 기초잔액을 러닝잔액에 포함">
+                  <button
+                    className={includeOpening ? btnOn : btn}
+                    onClick={() => setIncludeOpening((v) => !v)}
+                    title="기간 시작 전 기초잔액을 러닝잔액에 포함"
+                  >
                     기초잔액 포함 러닝잔액
                   </button>
                 </div>
@@ -1922,12 +2211,8 @@ export default function TradeClient() {
                           <td className="px-3 py-2 font-semibold">{x.category}</td>
                           <td className="px-3 py-2 font-semibold">{x.method}</td>
 
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">
-                            {x.inAmt ? formatMoney(x.inAmt) : ""}
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">
-                            {x.outAmt ? formatMoney(x.outAmt) : ""}
-                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? formatMoney(x.inAmt) : ""}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? formatMoney(x.outAmt) : ""}</td>
 
                           <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</td>
 
