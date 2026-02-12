@@ -69,10 +69,19 @@ type PartnerView = "PINNED" | "RECENT" | "ALL";
 
 type FoodTypeRow = { id: string; name: string };
 
+// ✅ preset_products(기성 품목 자동완성/자동입력)
+type PresetProductRow = {
+  id: string;
+  product_name: string;
+  food_type: string | null;
+  weight_g: number | string | null; // numeric(10,2) 대응
+  barcode: string | null;
+};
+
 type Line = {
   food_type: string;
   name: string;
-  weight_g: number; // ✅ decimal 허용(예: 2.8)
+  weight_g: number;
   qty: number;
   unit: number;
 };
@@ -95,7 +104,7 @@ type UnifiedRow = {
   order_lines?: Array<{
     food_type?: string;
     name: string;
-    weight_g?: number; // ✅ decimal 허용
+    weight_g?: number;
     qty: number;
     unit: number;
   }>;
@@ -115,31 +124,6 @@ function formatMoney(n: number | null | undefined) {
 function toInt(n: any) {
   const v = Number(String(n ?? "").replaceAll(",", ""));
   return Number.isFinite(v) ? Math.trunc(v) : 0;
-}
-
-// ✅ 무게 전용(소수 허용). "2.8g" 같은 입력도 처리
-function toWeight(n: any) {
-  if (n === null || n === undefined) return 0;
-  if (typeof n === "number") return Number.isFinite(n) ? n : 0;
-
-  const s = String(n).trim();
-  if (!s) return 0;
-
-  // 숫자/소수점/부호만 남김 (g, 공백, 콤마 등 제거)
-  const cleaned = s.replaceAll(",", "").replace(/[^\d.+-]/g, "");
-  const v = Number.parseFloat(cleaned);
-  if (!Number.isFinite(v)) return 0;
-
-  // 과도한 소수 자릿수는 DB/표시 안정성을 위해 3자리로 제한
-  return Math.round(v * 1000) / 1000;
-}
-
-// ✅ 무게 표시: 2, 2.8, 2.75 처럼 콤마 없이 자연스럽게
-function formatWeight(n: number | null | undefined) {
-  const v = Number(n ?? 0);
-  if (!Number.isFinite(v) || v === 0) return "0";
-  // 정수면 소수점 제거, 아니면 그대로
-  return Number.isInteger(v) ? String(v) : String(v);
 }
 
 function safeJsonParse<T>(s: string | null): T | null {
@@ -191,10 +175,11 @@ function buildMemoText(r: UnifiedRow) {
         const ft = String(l.food_type ?? "").trim();
         const name = String(l.name ?? "").trim();
         const w = Number(l.weight_g ?? 0);
-        const wText = w ? `${formatWeight(w)}g, ` : "";
-        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${wText}수량 ${formatMoney(qty)} / 단가 ${formatMoney(
-          unit
-        )} / 공급가 ${formatMoney(supply)} / 부가세 ${formatMoney(vat)} / 총액 ${formatMoney(total)}`;
+        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${w}g, ` : ""}수량 ${formatMoney(
+          qty
+        )} / 단가 ${formatMoney(unit)} / 공급가 ${formatMoney(supply)} / 부가세 ${formatMoney(
+          vat
+        )} / 총액 ${formatMoney(total)}`;
       })
       .join("\n");
     return `주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 제목: ${title || "(없음)"}\n\n품목:\n${
@@ -277,6 +262,9 @@ export default function TradeClient() {
 
   // 식품유형(자동완성)
   const [foodTypes, setFoodTypes] = useState<FoodTypeRow[]>([]);
+
+  // ✅ 기성 품목(자동완성/자동 입력)
+  const [presetProducts, setPresetProducts] = useState<PresetProductRow[]>([]);
 
   // 주문/출고 입력
   const [shipDate, setShipDate] = useState(todayYMD());
@@ -366,6 +354,11 @@ export default function TradeClient() {
     });
   }
 
+  function numFromPresetWeight(w: any) {
+    const n = Number(w ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  }
+
   // ====== Loaders ======
   async function loadPartners() {
     setMsg(null);
@@ -399,6 +392,19 @@ export default function TradeClient() {
 
     if (error) return;
     setFoodTypes((data ?? []) as FoodTypeRow[]);
+  }
+
+  // ✅ preset_products 로드
+  async function loadPresetProducts() {
+    const { data, error } = await supabase
+      .from("preset_products")
+      .select("id,product_name,food_type,weight_g,barcode")
+      .eq("is_active", true)
+      .order("product_name", { ascending: true })
+      .limit(5000);
+
+    if (error) return;
+    setPresetProducts((data ?? []) as PresetProductRow[]);
   }
 
   async function loadLatestShippingForPartner(partnerId: string) {
@@ -548,6 +554,7 @@ export default function TradeClient() {
     setRecentPartnerIds(loadRecentFromLS());
     loadPartners();
     loadFoodTypes();
+    loadPresetProducts(); // ✅ 기성 품목 자동완성 데이터 로드
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -771,7 +778,7 @@ export default function TradeClient() {
       .map((l) => ({
         food_type: (l.food_type || "").trim(),
         name: l.name.trim(),
-        weight_g: toWeight(l.weight_g), // ✅ 소수 허용
+        weight_g: toInt(l.weight_g),
         qty: toInt(l.qty),
         unit: toInt(l.unit),
       }))
@@ -883,7 +890,7 @@ export default function TradeClient() {
         order_lines: (memo?.lines ?? []).map((l) => ({
           food_type: l.food_type ?? "",
           name: l.name ?? "",
-          weight_g: Number(l.weight_g ?? 0), // ✅ decimal 유지
+          weight_g: Number(l.weight_g ?? 0),
           qty: Number(l.qty ?? 0),
           unit: Number(l.unit ?? 0),
         })),
@@ -966,7 +973,7 @@ export default function TradeClient() {
         ? r.order_lines.map((l) => ({
             food_type: String(l.food_type ?? ""),
             name: String(l.name ?? ""),
-            weight_g: toWeight(l.weight_g ?? 0), // ✅ decimal 유지
+            weight_g: toInt(l.weight_g ?? 0),
             qty: toInt(l.qty ?? 0),
             unit: toInt(l.unit ?? 0),
           }))
@@ -1015,7 +1022,7 @@ export default function TradeClient() {
           ? r.order_lines.map((l) => ({
               food_type: String(l.food_type ?? ""),
               name: String(l.name ?? ""),
-              weight_g: toWeight(l.weight_g ?? 0), // ✅ decimal 유지
+              weight_g: toInt(l.weight_g ?? 0),
               qty: toInt(l.qty ?? 0),
               unit: toInt(l.unit ?? 0),
             }))
@@ -1047,7 +1054,7 @@ export default function TradeClient() {
         .map((l) => ({
           food_type: (l.food_type || "").trim(),
           name: (l.name || "").trim(),
-          weight_g: toWeight(l.weight_g), // ✅ 소수 허용
+          weight_g: toInt(l.weight_g),
           qty: toInt(l.qty),
           unit: toInt(l.unit),
         }))
@@ -1356,14 +1363,24 @@ export default function TradeClient() {
                         return (
                           <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_120px_auto] gap-2">
                             <input className={input} list="food-types-list" value={l.food_type} onChange={(e) => updateEditLine(i, { food_type: e.target.value })} />
-                            <input className={input} value={l.name} onChange={(e) => updateEditLine(i, { name: e.target.value })} />
-                            {/* ✅ 무게는 소수 허용/표시도 콤마 없이 */}
                             <input
-                              className={inputRight}
-                              inputMode="decimal"
-                              value={formatWeight(l.weight_g)}
-                              onChange={(e) => updateEditLine(i, { weight_g: toWeight(e.target.value) })}
+                              className={input}
+                              list="preset-products-list"
+                              value={l.name}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                updateEditLine(i, { name: v });
+
+                                const hit = presetProducts.find((p) => p.product_name === v);
+                                if (hit) {
+                                  updateEditLine(i, {
+                                    food_type: hit.food_type ?? "",
+                                    weight_g: toInt(numFromPresetWeight(hit.weight_g)),
+                                  });
+                                }
+                              }}
                             />
+                            <input className={inputRight} inputMode="numeric" value={formatMoney(l.weight_g)} onChange={(e) => updateEditLine(i, { weight_g: toInt(e.target.value) })} />
                             <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })} />
                             <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateEditLine(i, { unit: toInt(e.target.value) })} />
 
@@ -1447,6 +1464,13 @@ export default function TradeClient() {
               <datalist id="food-types-list">
                 {foodTypes.map((ft) => (
                   <option key={ft.id} value={ft.name} />
+                ))}
+              </datalist>
+
+              {/* ✅ 기성 품목 자동완성 목록 */}
+              <datalist id="preset-products-list">
+                {presetProducts.map((p) => (
+                  <option key={p.id} value={p.product_name} />
                 ))}
               </datalist>
             </div>
@@ -1652,14 +1676,24 @@ export default function TradeClient() {
                     return (
                       <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_120px_auto] gap-2">
                         <input className={input} list="food-types-list" value={l.food_type} onChange={(e) => updateLine(i, { food_type: e.target.value })} />
-                        <input className={input} value={l.name} onChange={(e) => updateLine(i, { name: e.target.value })} />
-                        {/* ✅ 무게는 소수 허용/표시도 콤마 없이 */}
                         <input
-                          className={inputRight}
-                          inputMode="decimal"
-                          value={formatWeight(l.weight_g)}
-                          onChange={(e) => updateLine(i, { weight_g: toWeight(e.target.value) })}
+                          className={input}
+                          list="preset-products-list"
+                          value={l.name}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            updateLine(i, { name: v });
+
+                            const hit = presetProducts.find((p) => p.product_name === v);
+                            if (hit) {
+                              updateLine(i, {
+                                food_type: hit.food_type ?? "",
+                                weight_g: toInt(numFromPresetWeight(hit.weight_g)),
+                              });
+                            }
+                          }}
                         />
+                        <input className={inputRight} inputMode="numeric" value={formatMoney(l.weight_g)} onChange={(e) => updateLine(i, { weight_g: toInt(e.target.value) })} />
                         <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} />
                         <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })} />
 
@@ -1678,6 +1712,13 @@ export default function TradeClient() {
                 <datalist id="food-types-list">
                   {foodTypes.map((ft) => (
                     <option key={ft.id} value={ft.name} />
+                  ))}
+                </datalist>
+
+                {/* ✅ 기성 품목 자동완성 목록 */}
+                <datalist id="preset-products-list">
+                  {presetProducts.map((p) => (
+                    <option key={p.id} value={p.product_name} />
                   ))}
                 </datalist>
 
