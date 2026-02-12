@@ -1536,7 +1536,7 @@ export default function TradeClient() {
                               onChange={(e) => updateEditLine(i, { weight_g: toNum(e.target.value) })}
                             />
                             <input className={inputNumLeft} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })} />
-                            <input className={inputNumLeft} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateEditLine(i, { unit: toInt(e.target.value) })} />
+                            <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateEditLine(i, { unit: toInt(e.target.value) })} />
 
                             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(supply)}</div>
                             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(vat)}</div>
@@ -1851,7 +1851,7 @@ export default function TradeClient() {
                           onChange={(e) => updateLine(i, { weight_g: toNum(e.target.value) })}
                         />
                         <input className={inputNumLeft} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} />
-                        <input className={inputNumLeft} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })} />
+                        <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })} />
 
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(supply)}</div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(vat)}</div>
