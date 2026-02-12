@@ -1261,6 +1261,7 @@ export default function TradeClient() {
   const input =
     "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
   const inputRight = `${input} text-right tabular-nums`;
+  const inputNumLeft = `${input} tabular-nums`; // 숫자 인풋이지만 왼쪽 정렬
   const btn = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
   const btnOn =
     "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
@@ -1494,11 +1495,11 @@ export default function TradeClient() {
                       <div className="pl-3">식품유형</div>
                       <div className="pl-3">품목명</div>
                       <div className="pl-3">무게(g)</div>
-                      <div className="pl-3 text-right">수량</div>
-                      <div className="pl-3 text-right">단가</div>
-                      <div className="pl-3 text-right">공급가</div>
-                      <div className="pl-3 text-right">부가세</div>
-                      <div className="pl-3 text-right">총액</div>
+                      <div className="pl-3">수량</div>
+                      <div className="pl-3">단가</div>
+                      <div className="pl-3">공급가</div>
+                      <div className="pl-3">부가세</div>
+                      <div className="pl-3">총액</div>
                       <div />
                     </div>
 
@@ -1529,13 +1530,13 @@ export default function TradeClient() {
                               }}
                             />
                             <input
-                              className={inputRight}
+                              className={inputNumLeft}
                               inputMode="decimal"
                               value={formatWeight(l.weight_g)}
                               onChange={(e) => updateEditLine(i, { weight_g: toNum(e.target.value) })}
                             />
-                            <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })} />
-                            <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateEditLine(i, { unit: toInt(e.target.value) })} />
+                            <input className={inputNumLeft} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })} />
+                            <input className={inputNumLeft} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateEditLine(i, { unit: toInt(e.target.value) })} />
 
                             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(supply)}</div>
                             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(vat)}</div>
@@ -1809,11 +1810,11 @@ export default function TradeClient() {
                   <div className="pl-3">식품유형</div>
                   <div className="pl-3">품목명</div>
                   <div className="pl-3">무게(g)</div>
-                  <div className="pl-3 text-right">수량</div>
-                  <div className="pl-3 text-right">단가</div>
-                  <div className="pl-3 text-right">공급가</div>
-                  <div className="pl-3 text-right">부가세</div>
-                  <div className="pl-3 text-right">총액</div>
+                  <div className="pl-3">수량</div>
+                  <div className="pl-3">단가</div>
+                  <div className="pl-3">공급가</div>
+                  <div className="pl-3">부가세</div>
+                  <div className="pl-3">총액</div>
                   <div />
                 </div>
 
@@ -1844,13 +1845,13 @@ export default function TradeClient() {
                           }}
                         />
                         <input
-                          className={inputRight}
+                          className={inputNumLeft}
                           inputMode="decimal"
                           value={formatWeight(l.weight_g)}
                           onChange={(e) => updateLine(i, { weight_g: toNum(e.target.value) })}
                         />
-                        <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} />
-                        <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })} />
+                        <input className={inputNumLeft} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} />
+                        <input className={inputNumLeft} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })} />
 
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(supply)}</div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(vat)}</div>
