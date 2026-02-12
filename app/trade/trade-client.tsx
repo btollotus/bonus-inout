@@ -16,6 +16,22 @@ type PartnerRow = {
   pin_order: number | null;
   partner_type: string | null;
   group_name: string | null;
+
+  // ✅ 배송정보(최근값, partners에 저장)
+  ship_to_name: string | null;
+  ship_to_address1: string | null;
+  ship_to_mobile: string | null;
+  ship_to_phone: string | null;
+};
+
+type PartnerShippingHistoryRow = {
+  id: string;
+  partner_id: string;
+  ship_to_name: string | null;
+  ship_to_address1: string | null;
+  ship_to_mobile: string | null;
+  ship_to_phone: string | null;
+  created_at: string;
 };
 
 type OrderRow = {
@@ -152,9 +168,9 @@ function buildMemoText(r: UnifiedRow) {
         const w = Number(l.weight_g ?? 0);
         return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${w}g, ` : ""}수량 ${formatMoney(
           qty
-        )} / 단가 ${formatMoney(unit)} / 공급가 ${formatMoney(supply)} / 부가세 ${formatMoney(vat)} / 총액 ${formatMoney(
-          total
-        )}`;
+        )} / 단가 ${formatMoney(unit)} / 공급가 ${formatMoney(supply)} / 부가세 ${formatMoney(
+          vat
+        )} / 총액 ${formatMoney(total)}`;
       })
       .join("\n");
     return `주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 제목: ${title || "(없음)"}\n\n품목:\n${
@@ -169,6 +185,11 @@ function buildMemoText(r: UnifiedRow) {
   return `금전출납 메모\n- 카테고리: ${cat}\n- 결제수단: ${method}\n- 금액: ${formatMoney(amt)}\n\n메모:\n${
     memo || "(없음)"
   }`;
+}
+
+function normText(s: any) {
+  const v = String(s ?? "").trim();
+  return v === "" ? null : v;
 }
 
 export default function TradeClient() {
@@ -197,6 +218,22 @@ export default function TradeClient() {
   const [p_address1, setP_address1] = useState("");
   const [p_bizType, setP_bizType] = useState("");
   const [p_bizItem, setP_bizItem] = useState("");
+
+  // ✅ 거래처 수정(모달)
+  const [partnerEditOpen, setPartnerEditOpen] = useState(false);
+  const [ep_name, setEP_name] = useState("");
+  const [ep_businessNo, setEP_businessNo] = useState("");
+  const [ep_ceo, setEP_ceo] = useState("");
+  const [ep_phone, setEP_phone] = useState("");
+  const [ep_address1, setEP_address1] = useState("");
+  const [ep_bizType, setEP_bizType] = useState("");
+  const [ep_bizItem, setEP_bizItem] = useState("");
+
+  // ✅ 배송정보(최근값) 편집
+  const [ship_to_name, setShipToName] = useState("");
+  const [ship_to_address1, setShipToAddress1] = useState("");
+  const [ship_to_mobile, setShipToMobile] = useState("");
+  const [ship_to_phone, setShipToPhone] = useState("");
 
   // 식품유형(자동완성)
   const [foodTypes, setFoodTypes] = useState<FoodTypeRow[]>([]);
@@ -296,7 +333,7 @@ export default function TradeClient() {
     let q = supabase
       .from("partners")
       .select(
-        "id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name"
+        "id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone"
       )
       .order("is_pinned", { ascending: false })
       .order("pin_order", { ascending: true })
@@ -322,6 +359,20 @@ export default function TradeClient() {
 
     if (error) return;
     setFoodTypes((data ?? []) as FoodTypeRow[]);
+  }
+
+  async function loadLatestShippingForPartner(partnerId: string) {
+    // ✅ 이력 테이블에서 최신 1건 조회. 없으면 partners의 현재값을 사용.
+    const { data, error } = await supabase
+      .from("partner_shipping_history")
+      .select("id,partner_id,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone,created_at")
+      .eq("partner_id", partnerId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (error) return null;
+    const row = (data?.[0] ?? null) as PartnerShippingHistoryRow | null;
+    return row;
   }
 
   async function loadTrades() {
@@ -504,6 +555,115 @@ export default function TradeClient() {
     if (error) return setMsg(error.message);
 
     setPartners((prev) => prev.map((x) => (x.id === p.id ? { ...x, is_pinned: next } : x)));
+  }
+
+  // ✅ 거래처 수정 모달 열기
+  async function openPartnerEdit() {
+    setMsg(null);
+    if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
+
+    // 기본정보
+    setEP_name(selectedPartner.name ?? "");
+    setEP_businessNo(selectedPartner.business_no ?? "");
+    setEP_ceo(selectedPartner.ceo_name ?? "");
+    setEP_phone(selectedPartner.phone ?? "");
+    setEP_address1(selectedPartner.address1 ?? "");
+    setEP_bizType(selectedPartner.biz_type ?? "");
+    setEP_bizItem(selectedPartner.biz_item ?? "");
+
+    // 배송정보: 최신 이력 우선, 없으면 partners 컬럼 사용
+    const latest = await loadLatestShippingForPartner(selectedPartner.id);
+    const cur = selectedPartner;
+
+    setShipToName((latest?.ship_to_name ?? cur.ship_to_name ?? "") || "");
+    setShipToAddress1((latest?.ship_to_address1 ?? cur.ship_to_address1 ?? "") || "");
+    setShipToMobile((latest?.ship_to_mobile ?? cur.ship_to_mobile ?? "") || "");
+    setShipToPhone((latest?.ship_to_phone ?? cur.ship_to_phone ?? "") || "");
+
+    setPartnerEditOpen(true);
+  }
+
+  function closePartnerEdit() {
+    setPartnerEditOpen(false);
+  }
+
+  // ✅ 거래처 수정 저장 + 배송정보 변경 이력 남기기
+  async function savePartnerEdit() {
+    setMsg(null);
+    if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
+
+    const name = ep_name.trim();
+    if (!name) return setMsg("업체명(필수)을 입력하세요.");
+
+    const nextPartnerPayload: any = {
+      name: name,
+      business_no: normText(ep_businessNo),
+      ceo_name: normText(ep_ceo),
+      phone: normText(ep_phone),
+      address1: normText(ep_address1),
+      biz_type: normText(ep_bizType),
+      biz_item: normText(ep_bizItem),
+      // ✅ partners에 '현재 배송정보'도 같이 저장(최근값)
+      ship_to_name: normText(ship_to_name),
+      ship_to_address1: normText(ship_to_address1),
+      ship_to_mobile: normText(ship_to_mobile),
+      ship_to_phone: normText(ship_to_phone),
+    };
+
+    // 기존 배송정보(현재값)과 비교해서, 변화가 있으면 history에 insert
+    const prev = {
+      ship_to_name: normText(selectedPartner.ship_to_name),
+      ship_to_address1: normText(selectedPartner.ship_to_address1),
+      ship_to_mobile: normText(selectedPartner.ship_to_mobile),
+      ship_to_phone: normText(selectedPartner.ship_to_phone),
+    };
+
+    const next = {
+      ship_to_name: normText(ship_to_name),
+      ship_to_address1: normText(ship_to_address1),
+      ship_to_mobile: normText(ship_to_mobile),
+      ship_to_phone: normText(ship_to_phone),
+    };
+
+    const shippingChanged =
+      prev.ship_to_name !== next.ship_to_name ||
+      prev.ship_to_address1 !== next.ship_to_address1 ||
+      prev.ship_to_mobile !== next.ship_to_mobile ||
+      prev.ship_to_phone !== next.ship_to_phone;
+
+    // 1) partners 업데이트
+    const { data: updated, error: uErr } = await supabase
+      .from("partners")
+      .update(nextPartnerPayload)
+      .eq("id", selectedPartner.id)
+      .select(
+        "id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone"
+      )
+      .single();
+
+    if (uErr) return setMsg(uErr.message);
+
+    // 2) 배송정보 변경 시 history insert (변경 이력 보존)
+    if (shippingChanged) {
+      const histPayload: any = {
+        partner_id: selectedPartner.id,
+        ship_to_name: next.ship_to_name,
+        ship_to_address1: next.ship_to_address1,
+        ship_to_mobile: next.ship_to_mobile,
+        ship_to_phone: next.ship_to_phone,
+      };
+
+      const { error: hErr } = await supabase.from("partner_shipping_history").insert(histPayload);
+      if (hErr) return setMsg(hErr.message);
+    }
+
+    // 3) 화면 반영
+    const updatedPartner = updated as PartnerRow;
+
+    setPartners((prevList) => prevList.map((p) => (p.id === updatedPartner.id ? updatedPartner : p)));
+    setSelectedPartner(updatedPartner);
+
+    setPartnerEditOpen(false);
   }
 
   function updateLine(i: number, patch: Partial<Line>) {
@@ -889,6 +1049,62 @@ export default function TradeClient() {
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{msg}</div>
         ) : null}
 
+        {/* ✅ 거래처 수정 팝업 (신규) */}
+        {partnerEditOpen ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+            onClick={closePartnerEdit}
+          >
+            <div
+              className="w-full max-w-[860px] rounded-2xl border border-slate-200 bg-white shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div>
+                  <div className="text-base font-semibold">거래처 수정 · {selectedPartner?.name ?? ""}</div>
+                  <div className="mt-1 text-xs text-slate-500">저장하면 즉시 DB에 반영됩니다.</div>
+                </div>
+                <div className="flex gap-2">
+                  <button className={btn} onClick={closePartnerEdit}>
+                    취소
+                  </button>
+                  <button className={btnOn} onClick={savePartnerEdit}>
+                    저장
+                  </button>
+                </div>
+              </div>
+
+              <div className="px-5 py-4">
+                <div className="mb-2 text-sm font-semibold">업체 기본정보</div>
+                <div className="space-y-2">
+                  <input className={input} placeholder="업체명(필수)" value={ep_name} onChange={(e) => setEP_name(e.target.value)} />
+                  <input className={input} placeholder="사업자등록번호" value={ep_businessNo} onChange={(e) => setEP_businessNo(e.target.value)} />
+                  <input className={input} placeholder="대표자" value={ep_ceo} onChange={(e) => setEP_ceo(e.target.value)} />
+                  <input className={input} placeholder="연락처" value={ep_phone} onChange={(e) => setEP_phone(e.target.value)} />
+                  <input className={input} placeholder="주소" value={ep_address1} onChange={(e) => setEP_address1(e.target.value)} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input className={input} placeholder="업태" value={ep_bizType} onChange={(e) => setEP_bizType(e.target.value)} />
+                    <input className={input} placeholder="종목" value={ep_bizItem} onChange={(e) => setEP_bizItem(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="mt-5 mb-2 text-sm font-semibold">배송정보 (변경 이력 저장 / 최근 자료 자동 사용)</div>
+                <div className="space-y-2">
+                  <input className={input} placeholder="수화주명" value={ship_to_name} onChange={(e) => setShipToName(e.target.value)} />
+                  <input className={input} placeholder="주소1" value={ship_to_address1} onChange={(e) => setShipToAddress1(e.target.value)} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input className={input} placeholder="휴대폰" value={ship_to_mobile} onChange={(e) => setShipToMobile(e.target.value)} />
+                    <input className={input} placeholder="전화" value={ship_to_phone} onChange={(e) => setShipToPhone(e.target.value)} />
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    ※ 배송정보가 변경되면 history 테이블에 기록으로 남고, 다음부터는 최근값이 자동으로 사용됩니다.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {/* ✅ 메모 팝업 */}
         {memoOpen ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setMemoOpen(false)}>
@@ -1015,7 +1231,7 @@ export default function TradeClient() {
                       </div>
 
                       <div>
-                        <div className="mb-1 text-xs text-slate-600">결제수단</div>
+                        <div className="mb-1 text-slate-600 text-xs">결제수단</div>
                         <select className={input} value={ePayMethod} onChange={(e) => setEPayMethod(e.target.value as any)}>
                           <option value="BANK">계좌입금</option>
                           <option value="CASH">현금</option>
@@ -1089,6 +1305,16 @@ export default function TradeClient() {
                 >
                   + 등록
                 </button>
+
+                {/* ✅ 수정 버튼 추가 (선택된 거래처 있을 때만 동작) */}
+                <button
+                  className={btn}
+                  onClick={openPartnerEdit}
+                  title={selectedPartner ? "선택된 거래처 수정" : "거래처를 먼저 선택하세요"}
+                >
+                  수정
+                </button>
+
                 <button className={btn} onClick={() => loadPartners()}>
                   새로고침
                 </button>
@@ -1435,7 +1661,7 @@ export default function TradeClient() {
                     <col style={{ width: "110px" }} />
                     <col style={{ width: "110px" }} />
                     <col style={{ width: "130px" }} />
-                    <col style={{ width: "240px" }} /> {/* ✅ 버튼 3개 공간 확보 */}
+                    <col style={{ width: "240px" }} />
                   </colgroup>
 
                   <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
