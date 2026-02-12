@@ -91,6 +91,7 @@ type UnifiedRow = {
   date: string;
   tsKey: string;
   partnerName: string;
+  ordererName: string; // ✅ 표의 "주문자"
   category: string; // 표의 "카테고리"
   method: string; // 표의 "방법"
   inAmt: number;
@@ -101,6 +102,7 @@ type UnifiedRow = {
   // 복사용(주문)
   ship_method?: string;
   order_title?: string | null;
+  orderer_name?: string | null; // ✅ 주문자(저장/복사용)
   order_lines?: Array<{
     food_type?: string;
     name: string;
@@ -316,6 +318,7 @@ function categoryToDirection(c: Category): "IN" | "OUT" {
 function buildMemoText(r: UnifiedRow) {
   if (r.kind === "ORDER") {
     const title = r.order_title ?? "";
+    const orderer = r.orderer_name ?? "";
     const lines = r.order_lines ?? [];
     const rows = lines
       .map((l, idx) => {
@@ -327,14 +330,14 @@ function buildMemoText(r: UnifiedRow) {
         const ft = String(l.food_type ?? "").trim();
         const name = String(l.name ?? "").trim();
         const w = Number(l.weight_g ?? 0);
-        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${
-          w ? `${formatWeight(w)}g, ` : ""
-        }수량 ${formatMoney(qty)} / 단가 ${formatMoney(unit)} / 공급가 ${formatMoney(
-          supply
-        )} / 부가세 ${formatMoney(vat)} / 총액 ${formatMoney(total)}`;
+        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${formatWeight(w)}g, ` : ""}수량 ${formatMoney(
+          qty
+        )} / 단가 ${formatMoney(unit)} / 공급가 ${formatMoney(supply)} / 부가세 ${formatMoney(
+          vat
+        )} / 총액 ${formatMoney(total)}`;
       })
       .join("\n");
-    return `주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 제목: ${title || "(없음)"}\n\n품목:\n${
+    return `주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 주문자: ${orderer || "(없음)"}\n- 제목: ${title || "(없음)"}\n\n품목:\n${
       rows || "(품목 없음)"
     }`;
   }
@@ -343,9 +346,7 @@ function buildMemoText(r: UnifiedRow) {
   const cat = r.ledger_category ?? r.category ?? "";
   const method = r.ledger_method ?? r.method ?? "";
   const amt = Number(r.ledger_amount ?? 0);
-  return `금전출납 메모\n- 카테고리: ${cat}\n- 결제수단: ${method}\n- 금액: ${formatMoney(amt)}\n\n메모:\n${
-    memo || "(없음)"
-  }`;
+  return `금전출납 메모\n- 카테고리: ${cat}\n- 결제수단: ${method}\n- 금액: ${formatMoney(amt)}\n\n메모:\n${memo || "(없음)"}`;
 }
 
 function normText(s: any) {
@@ -419,6 +420,7 @@ export default function TradeClient() {
 
   // 주문/출고 입력
   const [shipDate, setShipDate] = useState(todayYMD());
+  const [ordererName, setOrdererName] = useState(""); // ✅ 주문자
   const [shipMethod, setShipMethod] = useState("택배");
   const [orderTitle, setOrderTitle] = useState("");
   const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
@@ -461,6 +463,7 @@ export default function TradeClient() {
 
   // 주문 수정용
   const [eShipDate, setEShipDate] = useState(todayYMD());
+  const [eOrdererName, setEOrdererName] = useState(""); // ✅ 주문자(수정)
   const [eShipMethod, setEShipMethod] = useState("택배");
   const [eOrderTitle, setEOrderTitle] = useState("");
   const [eLines, setELines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
@@ -614,18 +617,14 @@ export default function TradeClient() {
     // ---- 현재 기간 Orders
     let oq = supabase
       .from("orders")
-      .select(
-        "id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at"
-      )
+      .select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at")
       .gte("ship_date", f)
       .lte("ship_date", t)
       .order("ship_date", { ascending: false })
       .limit(500);
 
     if (selectedPartnerId) {
-      oq = oq.or(
-        `customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`
-      );
+      oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
     }
 
     const { data: oData, error: oErr } = await oq;
@@ -635,9 +634,7 @@ export default function TradeClient() {
     // ---- 현재 기간 Ledgers
     let lq = supabase
       .from("ledger_entries")
-      .select(
-        "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,status,partner_id,created_at"
-      )
+      .select("id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,status,partner_id,created_at")
       .gte("entry_date", f)
       .lte("entry_date", t)
       .order("entry_date", { ascending: false })
@@ -669,9 +666,7 @@ export default function TradeClient() {
       .limit(5000);
 
     if (selectedPartnerId) {
-      oq2 = oq2.or(
-        `customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`
-      );
+      oq2 = oq2.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
     }
 
     const { data: oPrev, error: oPrevErr } = await oq2;
@@ -936,6 +931,7 @@ export default function TradeClient() {
 
     const memoObj = {
       title: orderTitle.trim() || null,
+      orderer_name: ordererName.trim() || null, // ✅ 주문자 저장
       lines: cleanLines.map((l) => {
         const supply = l.qty * l.unit;
         const vat = Math.round(supply * 0.1);
@@ -962,6 +958,7 @@ export default function TradeClient() {
     if (error) return setMsg(error.message);
 
     setOrderTitle("");
+    setOrdererName(""); // ✅ 초기화
     setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
 
     await loadTrades();
@@ -1017,16 +1014,19 @@ export default function TradeClient() {
 
     // Orders -> 출금
     for (const o of orders) {
-      const memo = safeJsonParse<{ title: string | null; lines: any[] }>(o.memo);
+      const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null; lines: any[] }>(o.memo);
       const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
       const tsKey = `${date}T12:00:00.000Z`;
       const total = Number(o.total_amount ?? 0);
+
+      const orderer = (memo?.orderer_name ?? null) as string | null;
 
       items.push({
         kind: "ORDER",
         date,
         tsKey,
         partnerName: o.customer_name ?? "",
+        ordererName: orderer ?? "",
         category: "주문/출고",
         method: o.ship_method ?? "",
         inAmt: 0,
@@ -1035,6 +1035,7 @@ export default function TradeClient() {
         rawId: o.id,
         ship_method: o.ship_method ?? "택배",
         order_title: memo?.title ?? null,
+        orderer_name: orderer,
         order_lines: (memo?.lines ?? []).map((l) => ({
           food_type: l.food_type ?? "",
           name: l.name ?? "",
@@ -1055,6 +1056,7 @@ export default function TradeClient() {
         date: l.entry_date,
         tsKey: l.entry_ts || `${l.entry_date}T12:00:00.000Z`,
         partnerName: l.counterparty_name ?? "",
+        ordererName: "", // ✅ 금전출납은 주문자 없음
         category: l.category ?? "금전출납",
         method: l.method ?? "",
         inAmt: sign > 0 ? amt : 0,
@@ -1079,6 +1081,7 @@ export default function TradeClient() {
         date: x.date,
         tsKey: x.tsKey,
         partnerName: x.partnerName,
+        ordererName: x.ordererName,
         category: x.category,
         method: x.method,
         inAmt: x.inAmt,
@@ -1087,6 +1090,7 @@ export default function TradeClient() {
         rawId: x.rawId,
         ship_method: x.ship_method,
         order_title: x.order_title,
+        orderer_name: x.orderer_name,
         order_lines: x.order_lines,
         ledger_category: x.ledger_category,
         ledger_method: x.ledger_method,
@@ -1113,6 +1117,7 @@ export default function TradeClient() {
     setMode("ORDERS");
 
     setShipDate(todayYMD());
+    setOrdererName(r.orderer_name ?? r.ordererName ?? ""); // ✅ 주문자 복사
     setShipMethod(r.ship_method ?? "택배");
     setOrderTitle(r.order_title ?? "");
 
@@ -1162,6 +1167,7 @@ export default function TradeClient() {
 
     if (r.kind === "ORDER") {
       setEShipDate(r.date || todayYMD());
+      setEOrdererName(r.orderer_name ?? r.ordererName ?? ""); // ✅ 주문자(수정)
       setEShipMethod(r.ship_method ?? r.method ?? "택배");
       setEOrderTitle(r.order_title ?? "");
 
@@ -1212,6 +1218,7 @@ export default function TradeClient() {
 
       const memoObj = {
         title: eOrderTitle.trim() || null,
+        orderer_name: eOrdererName.trim() || null, // ✅ 주문자 저장(수정)
         lines: cleanLines.map((l) => {
           const supply = l.qty * l.unit;
           const vat = Math.round(supply * 0.1);
@@ -1261,7 +1268,6 @@ export default function TradeClient() {
   const input =
     "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
   const inputRight = `${input} text-right tabular-nums`;
-  const inputNumLeft = `${input} tabular-nums`; // 숫자 인풋이지만 왼쪽 정렬
   const btn = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
   const btnOn =
     "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
@@ -1303,12 +1309,7 @@ export default function TradeClient() {
                 <div className="mb-2 text-sm font-semibold">업체 기본정보</div>
                 <div className="space-y-2">
                   <input className={input} placeholder="업체명(필수)" value={ep_name} onChange={(e) => setEP_name(e.target.value)} />
-                  <input
-                    className={input}
-                    placeholder="사업자등록번호"
-                    value={ep_businessNo}
-                    onChange={(e) => setEP_businessNo(e.target.value)}
-                  />
+                  <input className={input} placeholder="사업자등록번호" value={ep_businessNo} onChange={(e) => setEP_businessNo(e.target.value)} />
                   <input className={input} placeholder="대표자" value={ep_ceo} onChange={(e) => setEP_ceo(e.target.value)} />
                   <input className={input} placeholder="연락처" value={ep_phone} onChange={(e) => setEP_phone(e.target.value)} />
                   <input className={input} placeholder="주소" value={ep_address1} onChange={(e) => setEP_address1(e.target.value)} />
@@ -1339,12 +1340,7 @@ export default function TradeClient() {
 
                 <div className="space-y-2">
                   <input className={input} placeholder="수화주명" value={ship_to_name} onChange={(e) => setShipToName(e.target.value)} />
-                  <input
-                    className={input}
-                    placeholder="주소1"
-                    value={ship_to_address1}
-                    onChange={(e) => setShipToAddress1(e.target.value)}
-                  />
+                  <input className={input} placeholder="주소1" value={ship_to_address1} onChange={(e) => setShipToAddress1(e.target.value)} />
                   <div className="grid grid-cols-2 gap-2">
                     <input className={input} placeholder="휴대폰" value={ship_to_mobile} onChange={(e) => setShipToMobile(e.target.value)} />
                     <input className={input} placeholder="전화" value={ship_to_phone} onChange={(e) => setShipToPhone(e.target.value)} />
@@ -1464,11 +1460,17 @@ export default function TradeClient() {
               <div className="px-5 py-4">
                 {editRow.kind === "ORDER" ? (
                   <>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                       <div>
                         <div className="mb-1 text-xs text-slate-600">출고일(주문일)</div>
                         <input type="date" className={input} value={eShipDate} onChange={(e) => setEShipDate(e.target.value)} />
                       </div>
+
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">주문자</div>
+                        <input className={input} value={eOrdererName} onChange={(e) => setEOrdererName(e.target.value)} />
+                      </div>
+
                       <div>
                         <div className="mb-1 text-xs text-slate-600">출고방법</div>
                         <select className={input} value={eShipMethod} onChange={(e) => setEShipMethod(e.target.value)}>
@@ -1478,6 +1480,7 @@ export default function TradeClient() {
                           <option value="기타">기타</option>
                         </select>
                       </div>
+
                       <div>
                         <div className="mb-1 text-xs text-slate-600">메모(title)</div>
                         <input className={input} value={eOrderTitle} onChange={(e) => setEOrderTitle(e.target.value)} />
@@ -1779,11 +1782,18 @@ export default function TradeClient() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                {/* ✅ 1) 출고일-주문자-출고방법-메모 순서 */}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                   <div>
                     <div className="mb-1 text-xs text-slate-600">출고일(주문일)</div>
                     <input type="date" className={input} value={shipDate} onChange={(e) => setShipDate(e.target.value)} />
                   </div>
+
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">주문자</div>
+                    <input className={input} value={ordererName} onChange={(e) => setOrdererName(e.target.value)} />
+                  </div>
+
                   <div>
                     <div className="mb-1 text-xs text-slate-600">출고방법</div>
                     <select className={input} value={shipMethod} onChange={(e) => setShipMethod(e.target.value)}>
@@ -1793,6 +1803,7 @@ export default function TradeClient() {
                       <option value="기타">기타</option>
                     </select>
                   </div>
+
                   <div>
                     <div className="mb-1 text-xs text-slate-600">메모(title)</div>
                     <input className={input} value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} />
@@ -1844,12 +1855,7 @@ export default function TradeClient() {
                             }
                           }}
                         />
-                        <input
-                          className={inputRight}
-                          inputMode="decimal"
-                          value={formatWeight(l.weight_g)}
-                          onChange={(e) => updateLine(i, { weight_g: toNum(e.target.value) })}
-                        />
+                        <input className={inputRight} inputMode="decimal" value={formatWeight(l.weight_g)} onChange={(e) => updateLine(i, { weight_g: toNum(e.target.value) })} />
                         <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} />
                         <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })} />
 
@@ -1939,11 +1945,7 @@ export default function TradeClient() {
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm tabular-nums">
                           결과:{" "}
                           <span className="font-semibold">
-                            {calcResult === null
-                              ? "-"
-                              : Number.isInteger(calcResult)
-                              ? formatMoney(calcResult)
-                              : calcResult.toLocaleString("ko-KR")}
+                            {calcResult === null ? "-" : Number.isInteger(calcResult) ? formatMoney(calcResult) : calcResult.toLocaleString("ko-KR")}
                           </span>
                         </div>
 
@@ -2162,21 +2164,19 @@ export default function TradeClient() {
                   <button className={btnOn} onClick={() => loadTrades()}>
                     조회
                   </button>
-                  <button
-                    className={includeOpening ? btnOn : btn}
-                    onClick={() => setIncludeOpening((v) => !v)}
-                    title="기간 시작 전 기초잔액을 러닝잔액에 포함"
-                  >
+                  <button className={includeOpening ? btnOn : btn} onClick={() => setIncludeOpening((v) => !v)} title="기간 시작 전 기초잔액을 러닝잔액에 포함">
                     기초잔액 포함 러닝잔액
                   </button>
                 </div>
               </div>
 
+              {/* ✅ 2) 거래내역: 거래처-주문자-카테고리 사이에 주문자 컬럼 추가 */}
               <div className="overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="w-full table-fixed text-sm">
                   <colgroup>
                     <col style={{ width: "110px" }} />
                     <col style={{ width: "180px" }} />
+                    <col style={{ width: "140px" }} /> {/* 주문자 */}
                     <col style={{ width: "120px" }} />
                     <col style={{ width: "90px" }} />
                     <col style={{ width: "110px" }} />
@@ -2189,6 +2189,7 @@ export default function TradeClient() {
                     <tr>
                       <th className="px-3 py-2 text-left">날짜</th>
                       <th className="px-3 py-2 text-left">거래처</th>
+                      <th className="px-3 py-2 text-left">주문자</th>
                       <th className="px-3 py-2 text-left">카테고리</th>
                       <th className="px-3 py-2 text-left">방법</th>
                       <th className="px-3 py-2 text-right">입금</th>
@@ -2209,6 +2210,7 @@ export default function TradeClient() {
                         <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
                           <td className="px-3 py-2 font-semibold tabular-nums">{x.date}</td>
                           <td className="px-3 py-2 font-semibold">{x.partnerName}</td>
+                          <td className="px-3 py-2 font-semibold">{x.ordererName}</td>
                           <td className="px-3 py-2 font-semibold">{x.category}</td>
                           <td className="px-3 py-2 font-semibold">{x.method}</td>
 
@@ -2235,7 +2237,7 @@ export default function TradeClient() {
 
                     {unifiedRows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="bg-white px-4 py-4 text-sm text-slate-500">
+                        <td colSpan={9} className="bg-white px-4 py-4 text-sm text-slate-500">
                           거래내역이 없습니다. (기간/거래처/모드 필터를 확인하세요)
                         </td>
                       </tr>
