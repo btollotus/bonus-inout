@@ -192,6 +192,17 @@ function normText(s: any) {
   return v === "" ? null : v;
 }
 
+function fmtKST(iso: string) {
+  // 표준 Date 렌더(브라우저 로컬 기준). “YYYY-MM-DD HH:MM”
+  const d = new Date(iso);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
 export default function TradeClient() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -234,6 +245,11 @@ export default function TradeClient() {
   const [ship_to_address1, setShipToAddress1] = useState("");
   const [ship_to_mobile, setShipToMobile] = useState("");
   const [ship_to_phone, setShipToPhone] = useState("");
+
+  // ✅ 배송정보 이력(최근 5건) 보기
+  const [shipHistOpen, setShipHistOpen] = useState(false);
+  const [shipHistLoading, setShipHistLoading] = useState(false);
+  const [shipHist, setShipHist] = useState<PartnerShippingHistoryRow[]>([]);
 
   // 식품유형(자동완성)
   const [foodTypes, setFoodTypes] = useState<FoodTypeRow[]>([]);
@@ -373,6 +389,28 @@ export default function TradeClient() {
     if (error) return null;
     const row = (data?.[0] ?? null) as PartnerShippingHistoryRow | null;
     return row;
+  }
+
+  // ✅ 최근 5건 이력 로드
+  async function loadShippingHistory5(partnerId: string) {
+    setShipHistLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("partner_shipping_history")
+        .select("id,partner_id,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone,created_at")
+        .eq("partner_id", partnerId)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (error) {
+        setMsg(error.message);
+        setShipHist([]);
+        return;
+      }
+      setShipHist((data ?? []) as PartnerShippingHistoryRow[]);
+    } finally {
+      setShipHistLoading(false);
+    }
   }
 
   async function loadTrades() {
@@ -580,11 +618,17 @@ export default function TradeClient() {
     setShipToMobile((latest?.ship_to_mobile ?? cur.ship_to_mobile ?? "") || "");
     setShipToPhone((latest?.ship_to_phone ?? cur.ship_to_phone ?? "") || "");
 
+    // ✅ 이력 UI 초기화
+    setShipHistOpen(false);
+    setShipHist([]);
+    setShipHistLoading(false);
+
     setPartnerEditOpen(true);
   }
 
   function closePartnerEdit() {
     setPartnerEditOpen(false);
+    setShipHistOpen(false);
   }
 
   // ✅ 거래처 수정 저장 + 배송정보 변경 이력 남기기
@@ -662,6 +706,11 @@ export default function TradeClient() {
 
     setPartners((prevList) => prevList.map((p) => (p.id === updatedPartner.id ? updatedPartner : p)));
     setSelectedPartner(updatedPartner);
+
+    // ✅ 이력 보기 상태면, 저장 후 바로 최신 5건 리프레시
+    if (shipHistOpen) {
+      await loadShippingHistory5(updatedPartner.id);
+    }
 
     setPartnerEditOpen(false);
   }
@@ -1049,7 +1098,7 @@ export default function TradeClient() {
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{msg}</div>
         ) : null}
 
-        {/* ✅ 거래처 수정 팝업 (신규) */}
+        {/* ✅ 거래처 수정 팝업 (신규 + 최근 5건 이력 버튼) */}
         {partnerEditOpen ? (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
@@ -1088,7 +1137,26 @@ export default function TradeClient() {
                   </div>
                 </div>
 
-                <div className="mt-5 mb-2 text-sm font-semibold">배송정보 (변경 이력 저장 / 최근 자료 자동 사용)</div>
+                <div className="mt-5 mb-2 flex items-center justify-between gap-2">
+                  <div className="text-sm font-semibold">배송정보 (변경 이력 저장 / 최근 자료 자동 사용)</div>
+
+                  {/* ✅ “최근 5건” 버튼 */}
+                  <button
+                    type="button"
+                    className={btn}
+                    onClick={async () => {
+                      if (!selectedPartner) return;
+                      const nextOpen = !shipHistOpen;
+                      setShipHistOpen(nextOpen);
+                      if (nextOpen) {
+                        await loadShippingHistory5(selectedPartner.id);
+                      }
+                    }}
+                  >
+                    배송정보 이력(최근 5건)
+                  </button>
+                </div>
+
                 <div className="space-y-2">
                   <input className={input} placeholder="수화주명" value={ship_to_name} onChange={(e) => setShipToName(e.target.value)} />
                   <input className={input} placeholder="주소1" value={ship_to_address1} onChange={(e) => setShipToAddress1(e.target.value)} />
@@ -1100,6 +1168,71 @@ export default function TradeClient() {
                     ※ 배송정보가 변경되면 history 테이블에 기록으로 남고, 다음부터는 최근값이 자동으로 사용됩니다.
                   </div>
                 </div>
+
+                {/* ✅ 최근 5건 이력 목록 (토글) */}
+                {shipHistOpen ? (
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="text-sm font-semibold">배송정보 이력(최근 5건)</div>
+                      <button
+                        type="button"
+                        className={btn}
+                        onClick={async () => {
+                          if (!selectedPartner) return;
+                          await loadShippingHistory5(selectedPartner.id);
+                        }}
+                      >
+                        새로고침
+                      </button>
+                    </div>
+
+                    {shipHistLoading ? (
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600">
+                        불러오는 중...
+                      </div>
+                    ) : shipHist.length === 0 ? (
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-500">
+                        이력이 없습니다.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                        <table className="w-full table-fixed text-sm">
+                          <colgroup>
+                            <col style={{ width: "160px" }} />
+                            <col style={{ width: "140px" }} />
+                            <col style={{ width: "auto" }} />
+                            <col style={{ width: "140px" }} />
+                            <col style={{ width: "140px" }} />
+                          </colgroup>
+                          <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                            <tr>
+                              <th className="px-3 py-2 text-left">변경시각</th>
+                              <th className="px-3 py-2 text-left">수화주명</th>
+                              <th className="px-3 py-2 text-left">주소1</th>
+                              <th className="px-3 py-2 text-left">휴대폰</th>
+                              <th className="px-3 py-2 text-left">전화</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {shipHist.map((h) => (
+                              <tr key={h.id} className="border-t border-slate-200">
+                                <td className="px-3 py-2 tabular-nums">{fmtKST(h.created_at)}</td>
+                                <td className="px-3 py-2">{h.ship_to_name ?? ""}</td>
+                                <td className="px-3 py-2">{h.ship_to_address1 ?? ""}</td>
+                                <td className="px-3 py-2">{h.ship_to_mobile ?? ""}</td>
+                                <td className="px-3 py-2">{h.ship_to_phone ?? ""}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <div className="mt-2 text-xs text-slate-500">
+                      ※ “저장”은 현재 입력값을 partners에 저장하고, 값이 바뀌었을 때만 history에 1건 추가됩니다.
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -1306,7 +1439,7 @@ export default function TradeClient() {
                   + 등록
                 </button>
 
-                {/* ✅ 수정 버튼 추가 (선택된 거래처 있을 때만 동작) */}
+                {/* ✅ 수정 버튼 */}
                 <button
                   className={btn}
                   onClick={openPartnerEdit}
@@ -1650,7 +1783,6 @@ export default function TradeClient() {
                 </div>
               </div>
 
-              {/* ✅ table + colgroup */}
               <div className="overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="w-full table-fixed text-sm">
                   <colgroup>
