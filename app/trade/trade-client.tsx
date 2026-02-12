@@ -126,6 +126,18 @@ function toInt(n: any) {
   return Number.isFinite(v) ? Math.trunc(v) : 0;
 }
 
+// ✅ 무게용(소수 허용)
+function toFloat2(n: any) {
+  const v = Number(String(n ?? "").replaceAll(",", ""));
+  if (!Number.isFinite(v)) return 0;
+  return Math.round(v * 100) / 100; // 소수점 2자리
+}
+
+function formatWeight(n: number | null | undefined) {
+  const v = Number(n ?? 0);
+  return Number.isFinite(v) ? v.toLocaleString("ko-KR", { maximumFractionDigits: 2 }) : "0";
+}
+
 function safeJsonParse<T>(s: string | null): T | null {
   if (!s) return null;
   try {
@@ -778,7 +790,7 @@ export default function TradeClient() {
       .map((l) => ({
         food_type: (l.food_type || "").trim(),
         name: l.name.trim(),
-        weight_g: toInt(l.weight_g),
+        weight_g: toFloat2(l.weight_g),
         qty: toInt(l.qty),
         unit: toInt(l.unit),
       }))
@@ -973,7 +985,7 @@ export default function TradeClient() {
         ? r.order_lines.map((l) => ({
             food_type: String(l.food_type ?? ""),
             name: String(l.name ?? ""),
-            weight_g: toInt(l.weight_g ?? 0),
+            weight_g: toFloat2(l.weight_g ?? 0),
             qty: toInt(l.qty ?? 0),
             unit: toInt(l.unit ?? 0),
           }))
@@ -1022,7 +1034,7 @@ export default function TradeClient() {
           ? r.order_lines.map((l) => ({
               food_type: String(l.food_type ?? ""),
               name: String(l.name ?? ""),
-              weight_g: toInt(l.weight_g ?? 0),
+              weight_g: toFloat2(l.weight_g ?? 0),
               qty: toInt(l.qty ?? 0),
               unit: toInt(l.unit ?? 0),
             }))
@@ -1054,7 +1066,7 @@ export default function TradeClient() {
         .map((l) => ({
           food_type: (l.food_type || "").trim(),
           name: (l.name || "").trim(),
-          weight_g: toInt(l.weight_g),
+          weight_g: toFloat2(l.weight_g),
           qty: toInt(l.qty),
           unit: toInt(l.unit),
         }))
@@ -1375,12 +1387,17 @@ export default function TradeClient() {
                                 if (hit) {
                                   updateEditLine(i, {
                                     food_type: hit.food_type ?? "",
-                                    weight_g: toInt(numFromPresetWeight(hit.weight_g)),
+                                    weight_g: toFloat2(numFromPresetWeight(hit.weight_g)),
                                   });
                                 }
                               }}
                             />
-                            <input className={inputRight} inputMode="numeric" value={formatMoney(l.weight_g)} onChange={(e) => updateEditLine(i, { weight_g: toInt(e.target.value) })} />
+                            <input
+                              className={inputRight}
+                              inputMode="decimal"
+                              value={formatWeight(l.weight_g)}
+                              onChange={(e) => updateEditLine(i, { weight_g: toFloat2(e.target.value) })}
+                            />
                             <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })} />
                             <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateEditLine(i, { unit: toInt(e.target.value) })} />
 
@@ -1688,12 +1705,17 @@ export default function TradeClient() {
                             if (hit) {
                               updateLine(i, {
                                 food_type: hit.food_type ?? "",
-                                weight_g: toInt(numFromPresetWeight(hit.weight_g)),
+                                weight_g: toFloat2(numFromPresetWeight(hit.weight_g)),
                               });
                             }
                           }}
                         />
-                        <input className={inputRight} inputMode="numeric" value={formatMoney(l.weight_g)} onChange={(e) => updateLine(i, { weight_g: toInt(e.target.value) })} />
+                        <input
+                          className={inputRight}
+                          inputMode="decimal"
+                          value={formatWeight(l.weight_g)}
+                          onChange={(e) => updateLine(i, { weight_g: toFloat2(e.target.value) })}
+                        />
                         <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} />
                         <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })} />
 
