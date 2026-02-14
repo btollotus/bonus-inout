@@ -34,6 +34,29 @@ type PartnerShippingHistoryRow = {
   created_at: string;
 };
 
+type OrderLineRow = {
+  id: string;
+  order_id: string;
+  line_no: number | null;
+
+  food_type: string | null;
+  name: string;
+  weight_g: number | string | null;
+
+  qty: number;
+  unit: number;
+
+  unit_type: "EA" | "BOX" | string;
+  pack_ea: number;
+  actual_ea: number;
+
+  supply_amount: number | null;
+  vat_amount: number | null;
+  total_amount: number | null;
+
+  created_at: string;
+};
+
 type OrderRow = {
   id: string;
   customer_id: string | null;
@@ -46,6 +69,9 @@ type OrderRow = {
   vat_amount: number | null;
   total_amount: number | null;
   created_at: string;
+
+  // ✅ order_lines 테이블 분리 (정석 구조)
+  order_lines?: OrderLineRow[];
 };
 
 type LedgerRow = {
@@ -109,6 +135,11 @@ type UnifiedRow = {
     weight_g?: number;
     qty: number;
     unit: number;
+
+    // ✅ order_lines 분리 구조용(쇼핑몰 BOX 지원)
+    unit_type?: "EA" | "BOX" | string;
+    pack_ea?: number;
+    actual_ea?: number;
   }>;
 
   // 복사용(금전출납)
@@ -330,11 +361,16 @@ function buildMemoText(r: UnifiedRow) {
         const ft = String(l.food_type ?? "").trim();
         const name = String(l.name ?? "").trim();
         const w = Number(l.weight_g ?? 0);
-        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${formatWeight(w)}g, ` : ""}수량 ${formatMoney(
-          qty
-        )} / 단가 ${formatMoney(unit)} / 공급가 ${formatMoney(supply)} / 부가세 ${formatMoney(
-          vat
-        )} / 총액 ${formatMoney(total)}`;
+
+        const unitType = String(l.unit_type ?? "EA");
+        const packEa = Number(l.pack_ea ?? 1);
+        const actualEa = Number(l.actual_ea ?? (unitType === "BOX" ? qty * packEa : qty));
+
+        const qtyText = unitType === "BOX" ? `박스 ${formatMoney(qty)} (입수 ${formatMoney(packEa)} / 실제 ${formatMoney(actualEa)}ea)` : `수량 ${formatMoney(qty)}`;
+
+        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${formatWeight(w)}g, ` : ""}${qtyText} / 단가 ${formatMoney(
+          unit
+        )} / 공급가 ${formatMoney(supply)} / 부가세 ${formatMoney(vat)} / 총액 ${formatMoney(total)}`;
       })
       .join("\n");
     return `주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 주문자: ${orderer || "(없음)"}\n- 제목: ${title || "(없음)"}\n\n품목:\n${
@@ -523,6 +559,21 @@ export default function TradeClient() {
     return Number.isFinite(n) ? n : 0;
   }
 
+  // ✅ 쇼핑몰 거래처 판별 (DB 컬럼 추가 전 임시: 이름 기준)
+  function isMallPartner(p: PartnerRow | null) {
+    const name = String(p?.name ?? "");
+    return name.includes("네이버") || name.includes("쿠팡") || name.includes("카카오");
+  }
+
+  // ✅ 품목명에서 "(100개)" 같은 박스입수 추출
+  function inferPackEaFromName(name: string) {
+    const s = String(name ?? "");
+    const m = s.match(/(\d+)\s*개/);
+    if (!m) return 1;
+    const n = Number(m[1]);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 1;
+  }
+
   // ====== Loaders ======
   async function loadPartners() {
     setMsg(null);
@@ -614,10 +665,12 @@ export default function TradeClient() {
     const selectedBusinessNo = selectedPartner?.business_no ?? null;
     const selectedPartnerId = selectedPartner?.id ?? null;
 
-    // ---- 현재 기간 Orders
+    // ---- 현재 기간 Orders (✅ order_lines 포함)
     let oq = supabase
       .from("orders")
-      .select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at")
+      .select(
+        "id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,created_at)"
+      )
       .gte("ship_date", f)
       .lte("ship_date", t)
       .order("ship_date", { ascending: false })
@@ -917,27 +970,46 @@ export default function TradeClient() {
     if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
     if (lines.length === 0) return setMsg("품목을 1개 이상 입력하세요.");
 
+    const isMall = isMallPartner(selectedPartner);
+
     const cleanLines = lines
-      .map((l) => ({
-        food_type: (l.food_type || "").trim(),
-        name: l.name.trim(),
-        weight_g: toNum(l.weight_g), // ✅ 소수점 유지
-        qty: toInt(l.qty),
-        unit: toInt(l.unit),
-      }))
+      .map((l) => {
+        const name = l.name.trim();
+        const qty = toInt(l.qty);
+        const unit = toInt(l.unit);
+        const weight_g = toNum(l.weight_g);
+        const food_type = (l.food_type || "").trim();
+
+        const unit_type = isMall ? "BOX" : "EA";
+        const pack_ea = isMall ? inferPackEaFromName(name) : 1;
+        const actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
+
+        const supply_amount = qty * unit;
+        const vat_amount = Math.round(supply_amount * 0.1);
+        const total_amount = supply_amount + vat_amount;
+
+        return {
+          food_type,
+          name,
+          weight_g,
+          qty,
+          unit,
+          unit_type,
+          pack_ea,
+          actual_ea,
+          supply_amount,
+          vat_amount,
+          total_amount,
+        };
+      })
       .filter((l) => l.name && l.qty > 0 && l.unit >= 0);
 
     if (cleanLines.length === 0) return setMsg("품목명/수량/단가를 올바르게 입력하세요.");
 
+    // ✅ orders.memo에는 헤더만 저장 (lines는 order_lines로 분리)
     const memoObj = {
       title: orderTitle.trim() || null,
       orderer_name: ordererName.trim() || null, // ✅ 주문자 저장
-      lines: cleanLines.map((l) => {
-        const supply = l.qty * l.unit;
-        const vat = Math.round(supply * 0.1);
-        const total = supply + vat;
-        return { ...l, supply, vat, total };
-      }),
     };
 
     const payload: any = {
@@ -954,8 +1026,31 @@ export default function TradeClient() {
       created_by: null,
     };
 
-    const { error } = await supabase.from("orders").insert(payload);
-    if (error) return setMsg(error.message);
+    const { data: createdOrder, error: oErr } = await supabase.from("orders").insert(payload).select("id").single();
+    if (oErr) return setMsg(oErr.message);
+
+    const orderId = (createdOrder as any)?.id as string;
+    if (!orderId) return setMsg("주문 생성 후 ID를 가져오지 못했습니다.");
+
+    // ✅ order_lines insert
+    const linePayloads = cleanLines.map((l, idx) => ({
+      order_id: orderId,
+      line_no: idx + 1,
+      food_type: l.food_type || null,
+      name: l.name,
+      weight_g: l.weight_g || null,
+      qty: l.qty,
+      unit: l.unit,
+      unit_type: l.unit_type,
+      pack_ea: l.pack_ea,
+      actual_ea: l.actual_ea,
+      supply_amount: l.supply_amount,
+      vat_amount: l.vat_amount,
+      total_amount: l.total_amount,
+    }));
+
+    const { error: lErr } = await supabase.from("order_lines").insert(linePayloads);
+    if (lErr) return setMsg(lErr.message);
 
     setOrderTitle("");
     setOrdererName(""); // ✅ 초기화
@@ -1014,7 +1109,7 @@ export default function TradeClient() {
 
     // Orders -> 출금
     for (const o of orders) {
-      const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null; lines: any[] }>(o.memo);
+      const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(o.memo);
       const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
       const tsKey = `${date}T12:00:00.000Z`;
       const total = Number(o.total_amount ?? 0);
@@ -1036,12 +1131,15 @@ export default function TradeClient() {
         ship_method: o.ship_method ?? "택배",
         order_title: memo?.title ?? null,
         orderer_name: orderer,
-        order_lines: (memo?.lines ?? []).map((l) => ({
+        order_lines: (o.order_lines ?? []).map((l) => ({
           food_type: l.food_type ?? "",
           name: l.name ?? "",
           weight_g: Number(l.weight_g ?? 0),
           qty: Number(l.qty ?? 0),
           unit: Number(l.unit ?? 0),
+          unit_type: (l.unit_type ?? "EA") as any,
+          pack_ea: Number(l.pack_ea ?? 1),
+          actual_ea: Number(l.actual_ea ?? 0),
         })),
       });
     }
@@ -1204,14 +1302,37 @@ export default function TradeClient() {
     setMsg(null);
 
     if (editRow.kind === "ORDER") {
+      const isMall = isMallPartner(selectedPartner); // 선택된 거래처 기준(현재 화면 사용 패턴상 동일)
       const cleanLines = eLines
-        .map((l) => ({
-          food_type: (l.food_type || "").trim(),
-          name: (l.name || "").trim(),
-          weight_g: toNum(l.weight_g), // ✅ 소수점 유지
-          qty: toInt(l.qty),
-          unit: toInt(l.unit),
-        }))
+        .map((l) => {
+          const name = (l.name || "").trim();
+          const qty = toInt(l.qty);
+          const unit = toInt(l.unit);
+          const weight_g = toNum(l.weight_g);
+          const food_type = (l.food_type || "").trim();
+
+          const unit_type = isMall ? "BOX" : "EA";
+          const pack_ea = isMall ? inferPackEaFromName(name) : 1;
+          const actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
+
+          const supply_amount = qty * unit;
+          const vat_amount = Math.round(supply_amount * 0.1);
+          const total_amount = supply_amount + vat_amount;
+
+          return {
+            food_type,
+            name,
+            weight_g,
+            qty,
+            unit,
+            unit_type,
+            pack_ea,
+            actual_ea,
+            supply_amount,
+            vat_amount,
+            total_amount,
+          };
+        })
         .filter((l) => l.name && l.qty > 0 && l.unit >= 0);
 
       if (cleanLines.length === 0) return setMsg("품목명/수량/단가를 올바르게 입력하세요.");
@@ -1219,12 +1340,6 @@ export default function TradeClient() {
       const memoObj = {
         title: eOrderTitle.trim() || null,
         orderer_name: eOrdererName.trim() || null, // ✅ 주문자 저장(수정)
-        lines: cleanLines.map((l) => {
-          const supply = l.qty * l.unit;
-          const vat = Math.round(supply * 0.1);
-          const total = supply + vat;
-          return { ...l, supply, vat, total };
-        }),
       };
 
       const payload: any = {
@@ -1238,6 +1353,29 @@ export default function TradeClient() {
 
       const { error } = await supabase.from("orders").update(payload).eq("id", editRow.rawId);
       if (error) return setMsg(error.message);
+
+      // ✅ 라인 교체: 기존 order_lines 삭제 후 재삽입
+      const { error: dErr } = await supabase.from("order_lines").delete().eq("order_id", editRow.rawId);
+      if (dErr) return setMsg(dErr.message);
+
+      const linePayloads = cleanLines.map((l, idx) => ({
+        order_id: editRow.rawId,
+        line_no: idx + 1,
+        food_type: l.food_type || null,
+        name: l.name,
+        weight_g: l.weight_g || null,
+        qty: l.qty,
+        unit: l.unit,
+        unit_type: l.unit_type,
+        pack_ea: l.pack_ea,
+        actual_ea: l.actual_ea,
+        supply_amount: l.supply_amount,
+        vat_amount: l.vat_amount,
+        total_amount: l.total_amount,
+      }));
+
+      const { error: iErr } = await supabase.from("order_lines").insert(linePayloads);
+      if (iErr) return setMsg(iErr.message);
     } else {
       const amount = Number((eAmountStr || "0").replaceAll(",", ""));
       if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
