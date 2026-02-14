@@ -1485,7 +1485,9 @@ export default function TradeClient() {
     "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
   const pill =
     "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700";
-
+  // ✅ 추가: BOX/EA 배지 (눈에 띄게)
+  const qtyBadge =
+    "shrink-0 inline-flex items-center justify-center rounded-lg border border-slate-300 bg-slate-900 px-2 py-1 text-[11px] font-extrabold text-white";
   const targetLabel = selectedPartner ? selectedPartner.name : "전체";
 
   return (
@@ -1748,7 +1750,19 @@ export default function TradeClient() {
                               value={formatWeight(l.weight_g)}
                               onChange={(e) => updateEditLine(i, { weight_g: toNum(e.target.value) })}
                             />
-                            <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })} />
+ <div className="flex items-center gap-1">
+  <input
+    className={inputRight}
+    inputMode="numeric"
+    value={formatMoney(l.qty)}
+    onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })}
+  />
+  {(() => {
+    const pack = inferPackEaFromName(l.name);
+    const isBox = pack > 1;
+    return <span className={qtyBadge}>{isBox ? `BOX` : `EA`}</span>;
+  })()}
+</div>
                             <input
                               className={inputRight}
                               inputMode="numeric"
@@ -2080,7 +2094,19 @@ export default function TradeClient() {
                           }}
                         />
                         <input className={inputRight} inputMode="decimal" value={formatWeight(l.weight_g)} onChange={(e) => updateLine(i, { weight_g: toNum(e.target.value) })} />
-                        <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} />
+                        <div className="flex items-center gap-1">
+  <input
+    className={inputRight}
+    inputMode="numeric"
+    value={formatMoney(l.qty)}
+    onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })}
+  />
+  {(() => {
+    const pack = inferPackEaFromName(l.name);
+    const isBox = pack > 1;
+    return <span className={qtyBadge}>{isBox ? `BOX` : `EA`}</span>;
+  })()}
+</div>
                         <input
                           className={inputRight}
                           inputMode="numeric"
