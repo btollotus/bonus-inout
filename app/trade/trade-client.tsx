@@ -110,6 +110,7 @@ type Line = {
   weight_g: number; // ✅ 소수점 허용
   qty: number;
   unit: number;
+  total_incl_vat: number; // ✅ 품목별 총액(부가세 포함) 입력용
 };
 
 type UnifiedRow = {
@@ -135,6 +136,7 @@ type UnifiedRow = {
     weight_g?: number;
     qty: number;
     unit: number;
+    total_amount?: number; // ✅ DB의 품목 총액(부가세 포함)
 
     // ✅ order_lines 분리 구조용(쇼핑몰 BOX 지원)
     unit_type?: "EA" | "BOX" | string;
@@ -346,6 +348,33 @@ function categoryToDirection(c: Category): "IN" | "OUT" {
   return c === "매출입금" ? "IN" : "OUT";
 }
 
+// ✅ 품목 1줄 계산 (단가 방식 or 총액(부가세포함) 방식)
+function calcLineAmounts(qtyRaw: any, unitRaw: any, totalInclVatRaw: any) {
+  const qty = toInt(qtyRaw);
+  const unit = toInt(unitRaw);
+  const totalInclVat = toInt(totalInclVatRaw);
+
+  if (qty <= 0) return { supply: 0, vat: 0, total: 0 };
+
+  // 단가 방식 우선 (unit > 0)
+  if (unit > 0) {
+    const supply = qty * unit;
+    const vat = Math.round(supply * 0.1);
+    const total = supply + vat;
+    return { supply, vat, total };
+  }
+
+  // 총액(부가세 포함) 입력 방식
+  if (totalInclVat > 0) {
+    const supply = Math.round(totalInclVat / 1.1);
+    const vat = totalInclVat - supply;
+    const total = totalInclVat;
+    return { supply, vat, total };
+  }
+
+  return { supply: 0, vat: 0, total: 0 };
+}
+
 function buildMemoText(r: UnifiedRow) {
   if (r.kind === "ORDER") {
     const title = r.order_title ?? "";
@@ -355,9 +384,22 @@ function buildMemoText(r: UnifiedRow) {
       .map((l, idx) => {
         const qty = Number(l.qty ?? 0);
         const unit = Number(l.unit ?? 0);
-        const supply = qty * unit;
-        const vat = Math.round(supply * 0.1);
-        const total = supply + vat;
+        const totalAmount = Number(l.total_amount ?? 0);
+
+        let supply = 0;
+        let vat = 0;
+        let total = 0;
+
+        if (unit > 0) {
+          supply = qty * unit;
+          vat = Math.round(supply * 0.1);
+          total = supply + vat;
+        } else if (totalAmount > 0) {
+          total = totalAmount;
+          supply = Math.round(total / 1.1);
+          vat = total - supply;
+        }
+
         const ft = String(l.food_type ?? "").trim();
         const name = String(l.name ?? "").trim();
         const w = Number(l.weight_g ?? 0);
@@ -371,9 +413,11 @@ function buildMemoText(r: UnifiedRow) {
             ? `박스 ${formatMoney(qty)} (입수 ${formatMoney(packEa)} / 실제 ${formatMoney(actualEa)}ea)`
             : `수량 ${formatMoney(qty)}`;
 
-        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${formatWeight(w)}g, ` : ""}${qtyText} / 단가 ${formatMoney(
-          unit
-        )} / 공급가 ${formatMoney(supply)} / 부가세 ${formatMoney(vat)} / 총액 ${formatMoney(total)}`;
+        const unitText = unit > 0 ? `단가 ${formatMoney(unit)}` : `총액입력 ${formatMoney(total)}`;
+
+        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${formatWeight(w)}g, ` : ""}${qtyText} / ${unitText} / 공급가 ${formatMoney(
+          supply
+        )} / 부가세 ${formatMoney(vat)} / 총액 ${formatMoney(total)}`;
       })
       .join("\n");
     return `주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 주문자: ${orderer || "(없음)"}\n- 제목: ${title || "(없음)"}\n\n품목:\n${
@@ -462,7 +506,7 @@ export default function TradeClient() {
   const [ordererName, setOrdererName] = useState(""); // ✅ 주문자
   const [shipMethod, setShipMethod] = useState("택배");
   const [orderTitle, setOrderTitle] = useState("");
-  const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
+  const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
 
   // ✅ 주문/출고 미니 계산기
   const [calcExpr, setCalcExpr] = useState("");
@@ -505,7 +549,7 @@ export default function TradeClient() {
   const [eOrdererName, setEOrdererName] = useState(""); // ✅ 주문자(수정)
   const [eShipMethod, setEShipMethod] = useState("택배");
   const [eOrderTitle, setEOrderTitle] = useState("");
-  const [eLines, setELines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
+  const [eLines, setELines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
 
   // 금전출납 수정용
   const [eEntryDate, setEEntryDate] = useState(todayYMD());
@@ -516,18 +560,32 @@ export default function TradeClient() {
 
   // ✅ (현재 입력폼) 주문/출고 합계
   const orderTotals = useMemo(() => {
-    const supply = lines.reduce((acc, l) => acc + toInt(l.qty) * toInt(l.unit), 0);
-    const vat = Math.round(supply * 0.1);
-    const total = supply + vat;
-    return { supply, vat, total };
+    const summed = lines.reduce(
+      (acc, l) => {
+        const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
+        acc.supply += r.supply;
+        acc.vat += r.vat;
+        acc.total += r.total;
+        return acc;
+      },
+      { supply: 0, vat: 0, total: 0 }
+    );
+    return summed;
   }, [lines]);
 
   // ✅ (수정 모달) 주문/출고 합계
   const editOrderTotals = useMemo(() => {
-    const supply = eLines.reduce((acc, l) => acc + toInt(l.qty) * toInt(l.unit), 0);
-    const vat = Math.round(supply * 0.1);
-    const total = supply + vat;
-    return { supply, vat, total };
+    const summed = eLines.reduce(
+      (acc, l) => {
+        const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
+        acc.supply += r.supply;
+        acc.vat += r.vat;
+        acc.total += r.total;
+        return acc;
+      },
+      { supply: 0, vat: 0, total: 0 }
+    );
+    return summed;
   }, [eLines]);
 
   // ====== Helpers: 최근 거래처 ======
@@ -964,7 +1022,7 @@ export default function TradeClient() {
   }
 
   function addLine() {
-    setLines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
+    setLines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
   }
 
   function removeLine(i: number) {
@@ -976,7 +1034,7 @@ export default function TradeClient() {
     setELines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
   function addEditLine() {
-    setELines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
+    setELines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
   }
   function removeEditLine(i: number) {
     setELines((prev) => prev.filter((_, idx) => idx !== i));
@@ -1001,9 +1059,7 @@ export default function TradeClient() {
         const pack_ea = isMall ? inferPackEaFromName(name) : 1;
         const actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
 
-        const supply_amount = qty * unit;
-        const vat_amount = Math.round(supply_amount * 0.1);
-        const total_amount = supply_amount + vat_amount;
+        const r = calcLineAmounts(qty, unit, l.total_incl_vat);
 
         return {
           food_type,
@@ -1014,14 +1070,14 @@ export default function TradeClient() {
           unit_type,
           pack_ea,
           actual_ea,
-          supply_amount,
-          vat_amount,
-          total_amount,
+          supply_amount: r.supply,
+          vat_amount: r.vat,
+          total_amount: r.total,
         };
       })
-      .filter((l) => l.name && l.qty > 0 && l.unit >= 0);
+      .filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) > 0);
 
-    if (cleanLines.length === 0) return setMsg("품목명/수량/단가를 올바르게 입력하세요.");
+    if (cleanLines.length === 0) return setMsg("품목명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
 
     // ✅ orders.memo에는 헤더만 저장 (lines는 order_lines로 분리)
     const memoObj = {
@@ -1071,7 +1127,7 @@ export default function TradeClient() {
 
     setOrderTitle("");
     setOrdererName(""); // ✅ 초기화
-    setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }]);
+    setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
 
     await loadTrades();
   }
@@ -1154,6 +1210,7 @@ export default function TradeClient() {
           weight_g: Number(l.weight_g ?? 0),
           qty: Number(l.qty ?? 0),
           unit: Number(l.unit ?? 0),
+          total_amount: Number(l.total_amount ?? 0),
           unit_type: (l.unit_type ?? "EA") as any,
           pack_ea: Number(l.pack_ea ?? 1),
           actual_ea: Number(l.actual_ea ?? 0),
@@ -1244,8 +1301,9 @@ export default function TradeClient() {
             weight_g: Number(l.weight_g ?? 0), // ✅ 소수점 유지
             qty: toInt(l.qty ?? 0),
             unit: toInt(l.unit ?? 0),
+            total_incl_vat: toInt(l.total_amount ?? 0),
           }))
-        : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }];
+        : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }];
 
     setLines(nextLines);
   }
@@ -1294,8 +1352,9 @@ export default function TradeClient() {
               weight_g: Number(l.weight_g ?? 0), // ✅ 소수점 유지
               qty: toInt(l.qty ?? 0),
               unit: toInt(l.unit ?? 0),
+              total_incl_vat: toInt(l.total_amount ?? 0),
             }))
-          : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0 }];
+          : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }];
 
       setELines(nextLines);
     } else {
@@ -1332,9 +1391,7 @@ export default function TradeClient() {
           const pack_ea = isMall ? inferPackEaFromName(name) : 1;
           const actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
 
-          const supply_amount = qty * unit;
-          const vat_amount = Math.round(supply_amount * 0.1);
-          const total_amount = supply_amount + vat_amount;
+          const r = calcLineAmounts(qty, unit, l.total_incl_vat);
 
           return {
             food_type,
@@ -1345,14 +1402,14 @@ export default function TradeClient() {
             unit_type,
             pack_ea,
             actual_ea,
-            supply_amount,
-            vat_amount,
-            total_amount,
+            supply_amount: r.supply,
+            vat_amount: r.vat,
+            total_amount: r.total,
           };
         })
-        .filter((l) => l.name && l.qty > 0 && l.unit >= 0);
+        .filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) > 0);
 
-      if (cleanLines.length === 0) return setMsg("품목명/수량/단가를 올바르게 입력하세요.");
+      if (cleanLines.length === 0) return setMsg("품목명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
 
       const memoObj = {
         title: eOrderTitle.trim() || null,
@@ -1649,7 +1706,7 @@ export default function TradeClient() {
                       </button>
                     </div>
 
-                    <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_120px_auto] gap-2 text-xs text-slate-600">
+                    <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2 text-xs text-slate-600">
                       <div className="pl-3">식품유형</div>
                       <div className="pl-3">품목명</div>
                       <div className="pl-3">무게(g)</div>
@@ -1657,18 +1714,16 @@ export default function TradeClient() {
                       <div className="pl-3">단가</div>
                       <div className="pl-3">공급가</div>
                       <div className="pl-3">부가세</div>
-                      <div className="pl-3">총액</div>
+                      <div className="pl-3">총액(입력)</div>
                       <div />
                     </div>
 
                     <div className="mt-2 space-y-2">
                       {eLines.map((l, i) => {
-                        const supply = toInt(l.qty) * toInt(l.unit);
-                        const vat = Math.round(supply * 0.1);
-                        const total = supply + vat;
+                        const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
 
                         return (
-                          <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_120px_auto] gap-2">
+                          <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2">
                             <input className={input} list="food-types-list" value={l.food_type} onChange={(e) => updateEditLine(i, { food_type: e.target.value })} />
                             <input
                               className={input}
@@ -1694,11 +1749,27 @@ export default function TradeClient() {
                               onChange={(e) => updateEditLine(i, { weight_g: toNum(e.target.value) })}
                             />
                             <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })} />
-                            <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateEditLine(i, { unit: toInt(e.target.value) })} />
+                            <input
+                              className={inputRight}
+                              inputMode="numeric"
+                              value={formatMoney(l.unit)}
+                              onChange={(e) => {
+                                const v = toInt(e.target.value);
+                                updateEditLine(i, { unit: v, ...(v > 0 ? { total_incl_vat: 0 } : {}) });
+                              }}
+                            />
 
-                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(supply)}</div>
-                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(vat)}</div>
-                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums font-semibold">{formatMoney(total)}</div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(r.supply)}</div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(r.vat)}</div>
+
+                            <input
+                              className={inputRight}
+                              inputMode="numeric"
+                              placeholder="총액"
+                              disabled={toInt(l.unit) > 0}
+                              value={toInt(l.unit) > 0 ? formatMoney(r.total) : l.total_incl_vat ? formatMoney(l.total_incl_vat) : ""}
+                              onChange={(e) => updateEditLine(i, { total_incl_vat: toInt(e.target.value) })}
+                            />
 
                             <button className={btn} onClick={() => removeEditLine(i)} title="삭제">
                               ✕
@@ -1972,7 +2043,7 @@ export default function TradeClient() {
                   </button>
                 </div>
 
-                <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_120px_auto] gap-2 text-xs text-slate-600">
+                <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2 text-xs text-slate-600">
                   <div className="pl-3">식품유형</div>
                   <div className="pl-3">품목명</div>
                   <div className="pl-3">무게(g)</div>
@@ -1980,18 +2051,16 @@ export default function TradeClient() {
                   <div className="pl-3">단가</div>
                   <div className="pl-3">공급가</div>
                   <div className="pl-3">부가세</div>
-                  <div className="pl-3">총액</div>
+                  <div className="pl-3">총액(입력)</div>
                   <div />
                 </div>
 
                 <div className="mt-2 space-y-2">
                   {lines.map((l, i) => {
-                    const supply = toInt(l.qty) * toInt(l.unit);
-                    const vat = Math.round(supply * 0.1);
-                    const total = supply + vat;
+                    const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
 
                     return (
-                      <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_120px_auto] gap-2">
+                      <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2">
                         <input className={input} list="food-types-list" value={l.food_type} onChange={(e) => updateLine(i, { food_type: e.target.value })} />
                         <input
                           className={input}
@@ -2012,11 +2081,27 @@ export default function TradeClient() {
                         />
                         <input className={inputRight} inputMode="decimal" value={formatWeight(l.weight_g)} onChange={(e) => updateLine(i, { weight_g: toNum(e.target.value) })} />
                         <input className={inputRight} inputMode="numeric" value={formatMoney(l.qty)} onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} />
-                        <input className={inputRight} inputMode="numeric" value={formatMoney(l.unit)} onChange={(e) => updateLine(i, { unit: toInt(e.target.value) })} />
+                        <input
+                          className={inputRight}
+                          inputMode="numeric"
+                          value={formatMoney(l.unit)}
+                          onChange={(e) => {
+                            const v = toInt(e.target.value);
+                            updateLine(i, { unit: v, ...(v > 0 ? { total_incl_vat: 0 } : {}) });
+                          }}
+                        />
 
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(supply)}</div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(vat)}</div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums font-semibold">{formatMoney(total)}</div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(r.supply)}</div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(r.vat)}</div>
+
+                        <input
+                          className={inputRight}
+                          inputMode="numeric"
+                          placeholder="총액"
+                          disabled={toInt(l.unit) > 0}
+                          value={toInt(l.unit) > 0 ? formatMoney(r.total) : l.total_incl_vat ? formatMoney(l.total_incl_vat) : ""}
+                          onChange={(e) => updateLine(i, { total_incl_vat: toInt(e.target.value) })}
+                        />
 
                         <button className={btn} onClick={() => removeLine(i)} title="삭제">
                           ✕
