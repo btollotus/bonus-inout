@@ -366,7 +366,10 @@ function buildMemoText(r: UnifiedRow) {
         const packEa = Number(l.pack_ea ?? 1);
         const actualEa = Number(l.actual_ea ?? (unitType === "BOX" ? qty * packEa : qty));
 
-        const qtyText = unitType === "BOX" ? `박스 ${formatMoney(qty)} (입수 ${formatMoney(packEa)} / 실제 ${formatMoney(actualEa)}ea)` : `수량 ${formatMoney(qty)}`;
+        const qtyText =
+          unitType === "BOX"
+            ? `박스 ${formatMoney(qty)} (입수 ${formatMoney(packEa)} / 실제 ${formatMoney(actualEa)}ea)`
+            : `수량 ${formatMoney(qty)}`;
 
         return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${formatWeight(w)}g, ` : ""}${qtyText} / 단가 ${formatMoney(
           unit
@@ -774,6 +777,20 @@ export default function TradeClient() {
     loadTrades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id, fromYMD, toYMD]);
+
+  // ✅ 총액 입력 즉시 공급가/부가세 자동 분리
+  useEffect(() => {
+    const total = Number((totalInclVatStr || "0").replaceAll(",", ""));
+    if (!Number.isFinite(total) || total <= 0) {
+      setSplitSupply(null);
+      setSplitVat(null);
+      return;
+    }
+    const supply = Math.round(total / 1.1);
+    const vat = total - supply;
+    setSplitSupply(supply);
+    setSplitVat(vat);
+  }, [totalInclVatStr]);
 
   function resetPartnerForm() {
     setP_name("");
