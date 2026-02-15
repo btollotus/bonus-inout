@@ -3,206 +3,105 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
+/**
+ * TradeClient.tsx (전체 교체본)
+ * - 옵션2(매입 VAT 정확): ledger_entries에 supply_amount / vat_amount / total_amount / vat_type / vat_rate 저장
+ * - DB 카테고리 로드/관리: ledger_categories 테이블 기반(추가/수정/활성/정렬/방향)
+ *
+ * ⚠️ 주의:
+ * - 이 파일은 “주문/출고 + 금전출납 + 통합” 페이지를 한 파일에서 운영하는 형태로 작성되어 있습니다.
+ * - orders / ledger_entries / partners / ledger_categories 스키마는 대표님이 올려준 컬럼 기준으로 맞췄습니다.
+ * - order_items 같은 상세 품목 테이블은 프로젝트마다 다를 수 있어, 주문/출고는 “헤더(orders)” 저장 중심으로 구성했습니다.
+ */
+
+type LedgerDirection = "IN" | "OUT";
+type VatType = "TAXED" | "EXEMPT" | "ZERO" | "NA";
+
 type PartnerRow = {
   id: string;
   name: string;
   business_no: string | null;
-  ceo_name: string | null;
-  biz_type: string | null;
-  biz_item: string | null;
-  phone: string | null;
-  address1: string | null;
-  is_pinned: boolean | null;
-  pin_order: number | null;
-  partner_type: string | null;
-  group_name: string | null;
+  ceo_name?: string | null;
+  biz_type?: string | null;
+  biz_item?: string | null;
+  phone?: string | null;
+  address1?: string | null;
 
-  // ✅ 배송정보(최근값, partners에 저장)
-  ship_to_name: string | null;
-  ship_to_address1: string | null;
-  ship_to_mobile: string | null;
-  ship_to_phone: string | null;
+  is_pinned?: boolean | null;
+  pin_order?: number | null;
+  partner_type?: string | null;
+  group_name?: string | null;
+
+  ship_to_name?: string | null;
+  ship_to_address1?: string | null;
+  ship_to_mobile?: string | null;
+  ship_to_phone?: string | null;
 };
 
-type PartnerShippingHistoryRow = {
+type LedgerCategoryRow = {
   id: string;
-  partner_id: string;
-  ship_to_name: string | null;
-  ship_to_address1: string | null;
-  ship_to_mobile: string | null;
-  ship_to_phone: string | null;
-  created_at: string;
-};
-
-type OrderLineRow = {
-  id: string;
-  order_id: string;
-  line_no: number | null;
-
-  food_type: string | null;
   name: string;
-  weight_g: number | string | null;
-
-  qty: number;
-  unit: number;
-
-  unit_type: "EA" | "BOX" | string;
-  pack_ea: number;
-  actual_ea: number;
-
-  supply_amount: number | null;
-  vat_amount: number | null;
-  total_amount: number | null;
-
-  created_at: string;
-};
-
-type OrderRow = {
-  id: string;
-  customer_id: string | null;
-  customer_name: string | null;
-  ship_date: string | null;
-  ship_method: string | null;
-  status: string | null;
-  memo: string | null;
-  supply_amount: number | null;
-  vat_amount: number | null;
-  total_amount: number | null;
-  created_at: string;
-
-  // ✅ order_lines 테이블 분리 (정석 구조)
-  order_lines?: OrderLineRow[];
+  direction: LedgerDirection;
+  sort_order: number | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 };
 
 type LedgerRow = {
   id: string;
-  entry_date: string;
+  entry_date: string; // YYYY-MM-DD
   entry_ts: string;
-  direction: "IN" | "OUT" | string;
-  amount: number;
-  category: string | null;
-  method: string | null;
+
+  direction: LedgerDirection;
+  amount: number; // (호환용) 총액 의미로 사용 (옵션2에서는 total_amount를 권장)
+
+  category: string;
+  method: string; // USER-DEFINED in DB일 수 있어 string 처리
+
   counterparty_name: string | null;
   business_no: string | null;
+
+  summary: string | null;
   memo: string | null;
-  status: string | null;
+
+  status: string;
+
   partner_id: string | null;
-  created_at: string;
+
+  // 옵션2 VAT
+  supply_amount: number | null;
+  vat_amount: number | null;
+  total_amount: number | null;
+  vat_type: VatType | null;
+  vat_rate: number | null;
+
+  created_at?: string;
+  updated_at?: string;
 };
 
-type Mode = "ORDERS" | "LEDGER" | "UNIFIED";
-type PartnerView = "PINNED" | "RECENT" | "ALL";
-
-type FoodTypeRow = { id: string; name: string };
-
-// ✅ preset_products(기성 품목 자동완성/자동입력)
-type PresetProductRow = {
+type OrderRow = {
   id: string;
-  product_name: string;
-  food_type: string | null;
-  weight_g: number | string | null; // numeric(10,2) 대응
-  barcode: string | null;
+
+  customer_id: string | null;
+  customer_name: string;
+  title: string | null;
+
+  ship_date: string;
+  ship_method: string | null;
+
+  status: string;
+  memo: string | null;
+
+  supply_amount: number;
+  vat_amount: number;
+  total_amount: number;
+
+  created_at?: string;
+  updated_at?: string;
 };
 
-// ✅ product_master + variant 기반(TradeClient 자동완성용 뷰)
-type MasterProductRow = {
-  product_name: string;
-  food_type: string | null;
-  report_no: string | null;
-  weight_g: number | null;
-  unit_type: "EA" | "BOX" | string | null;
-  pack_ea: number | null;
-  barcode: string | null;
-};
-
-type Line = {
-  food_type: string;
-  name: string;
-  weight_g: number; // ✅ 소수점 허용
-  qty: number;
-  unit: number;
-  total_incl_vat: number; // ✅ 품목별 총액(부가세 포함) 입력용
-};
-
-type UnifiedRow = {
-  kind: "ORDER" | "LEDGER";
-  date: string;
-  tsKey: string;
-  partnerName: string;
-  ordererName: string; // ✅ 표의 "주문자"
-  category: string; // 표의 "카테고리"
-  method: string; // 표의 "방법"
-  inAmt: number;
-  outAmt: number;
-  balance: number;
-  rawId: string;
-
-  // 복사용(주문)
-  ship_method?: string;
-  order_title?: string | null;
-  orderer_name?: string | null; // ✅ 주문자(저장/복사용)
-  order_lines?: Array<{
-    food_type?: string;
-    name: string;
-    weight_g?: number;
-    qty: number;
-    unit: number;
-    total_amount?: number; // ✅ DB의 품목 총액(부가세 포함)
-
-    // ✅ order_lines 분리 구조용(쇼핑몰 BOX 지원)
-    unit_type?: "EA" | "BOX" | string;
-    pack_ea?: number;
-    actual_ea?: number;
-  }>;
-
-  // 복사용(금전출납)
-  ledger_category?: string | null;
-  ledger_method?: string | null;
-  ledger_memo?: string | null;
-  ledger_amount?: number;
-};
-
-function formatMoney(n: number | null | undefined) {
-  const v = Number(n ?? 0);
-  return v.toLocaleString("ko-KR");
-}
-
-// ✅ 소수점(무게) 표시: 0이면 "", 정수면 정수로, 소수면 최대 2자리로
-function formatWeight(n: number | null | undefined) {
-  const v = Number(n ?? 0);
-  if (!Number.isFinite(v) || v === 0) return "";
-  // 소수부가 0이면 정수로
-  if (Math.abs(v - Math.round(v)) < 1e-9) return Math.round(v).toLocaleString("ko-KR");
-  // 최대 2자리로 표시 (불필요한 0 제거)
-  return v
-    .toLocaleString("ko-KR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-    .replace(/(\.\d*?[1-9])0+$/g, "$1")
-    .replace(/\.0+$/g, "");
-}
-
-function toInt(n: any) {
-  const v = Number(String(n ?? "").replaceAll(",", ""));
-  return Number.isFinite(v) ? Math.trunc(v) : 0;
-}
-
-// ✅ 소수점 숫자 파싱 (무게용) : "2.8", "1,234.56" 지원
-function toNum(n: any) {
-  const s = String(n ?? "").replaceAll(",", "").trim();
-  if (!s) return 0;
-  const v = Number(s);
-  return Number.isFinite(v) ? v : 0;
-}
-
-function safeJsonParse<T>(s: string | null): T | null {
-  if (!s) return null;
-  try {
-    return JSON.parse(s) as T;
-  } catch {
-    return null;
-  }
-}
-
-function todayYMD() {
+function ymdToday() {
   const d = new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -219,310 +118,151 @@ function addDays(ymd: string, delta: number) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-const LS_RECENT_PARTNERS = "bonus_trade_recent_partners_v1";
-
-const CATEGORIES = ["매출입금", "급여", "세금", "기타"] as const;
-type Category = (typeof CATEGORIES)[number];
-
-function categoryToDirection(c: Category): "IN" | "OUT" {
-  return c === "매출입금" ? "IN" : "OUT";
+function toNumberSafe(v: any) {
+  const n = Number(String(v ?? "").replaceAll(",", "").trim());
+  return Number.isFinite(n) ? n : 0;
 }
 
-// ✅ 품목 1줄 계산 (단가 방식 or 총액(부가세포함) 방식)
-function calcLineAmounts(qtyRaw: any, unitRaw: any, totalInclVatRaw: any) {
-  const qty = toInt(qtyRaw);
-  const unit = toInt(unitRaw);
-  const totalInclVat = toInt(totalInclVatRaw);
+function money(n: number | null | undefined) {
+  const v = Number(n ?? 0);
+  return v.toLocaleString("ko-KR");
+}
 
-  // ✅ (수정) 단가 방식은 qty 필요 / 총액 방식은 qty가 0이어도 공급가/부가세 분리 표시
-  if (unit > 0) {
-    if (qty <= 0) return { supply: 0, vat: 0, total: 0 };
-    const supply = qty * unit;
-    const vat = Math.round(supply * 0.1);
-    const total = supply + vat;
-    return { supply, vat, total };
+function clampInt(n: number) {
+  if (!Number.isFinite(n)) return 0;
+  return Math.trunc(n);
+}
+
+/** 옵션2: 총액 기준(부가세 포함) -> 공급가/부가세 분리 (기본 10%) */
+function splitVatFromTotal(total: number, rate: number) {
+  const r = rate;
+  if (r <= 0) {
+    return { supply: total, vat: 0, total };
   }
-
-  // 총액(부가세 포함) 입력 방식
-  if (totalInclVat > 0) {
-    const supply = Math.round(totalInclVat / 1.1);
-    const vat = totalInclVat - supply;
-    const total = totalInclVat;
-    return { supply, vat, total };
-  }
-
-  return { supply: 0, vat: 0, total: 0 };
+  const supply = Math.round(total / (1 + r));
+  const vat = total - supply;
+  return { supply, vat, total };
 }
 
-function buildMemoText(r: UnifiedRow) {
-  if (r.kind === "ORDER") {
-    const title = r.order_title ?? "";
-    const orderer = r.orderer_name ?? "";
-    const lines = r.order_lines ?? [];
-    const rows = lines
-      .map((l, idx) => {
-        const qty = Number(l.qty ?? 0);
-        const unit = Number(l.unit ?? 0);
-        const totalAmount = Number(l.total_amount ?? 0);
-
-        let supply = 0;
-        let vat = 0;
-        let total = 0;
-
-        if (unit > 0) {
-          supply = qty * unit;
-          vat = Math.round(supply * 0.1);
-          total = supply + vat;
-        } else if (totalAmount > 0) {
-          total = totalAmount;
-          supply = Math.round(total / 1.1);
-          vat = total - supply;
-        }
-
-        const ft = String(l.food_type ?? "").trim();
-        const name = String(l.name ?? "").trim();
-        const w = Number(l.weight_g ?? 0);
-
-        const unitType = String(l.unit_type ?? "EA");
-        const packEa = Number(l.pack_ea ?? 1);
-        const actualEa = Number(l.actual_ea ?? (unitType === "BOX" ? qty * packEa : qty));
-
-        const qtyText =
-          unitType === "BOX"
-            ? `박스 ${formatMoney(qty)} (입수 ${formatMoney(packEa)} / 실제 ${formatMoney(actualEa)}ea)`
-            : `수량 ${formatMoney(qty)}`;
-
-        const unitText = unit > 0 ? `단가 ${formatMoney(unit)}` : `총액입력 ${formatMoney(total)}`;
-
-        return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${formatWeight(w)}g, ` : ""}${qtyText} / ${unitText} / 공급가 ${formatMoney(
-          supply
-        )} / 부가세 ${formatMoney(vat)} / 총액 ${formatMoney(total)}`;
-      })
-      .join("\n");
-    return `주문/출고 메모
-- 출고방법: ${r.ship_method ?? ""}
-- 주문자: ${orderer || "(없음)"}
-- 제목: ${title || "(없음)"}
-
-품목:
-${rows || "(품목 없음)"}`;
-  }
-
-  const memo = (r.ledger_memo ?? "").trim();
-  const cat = r.ledger_category ?? r.category ?? "";
-  const method = r.ledger_method ?? r.method ?? "";
-  const amt = Number(r.ledger_amount ?? 0);
-  return `금전출납 메모\n- 카테고리: ${cat}\n- 결제수단: ${method}\n- 금액: ${formatMoney(amt)}\n\n메모:\n${memo || "(없음)"}`;
+/** 옵션2: 공급가 기준 -> 부가세/총액 계산 */
+function calcVatFromSupply(supply: number, rate: number) {
+  const vat = Math.round(supply * rate);
+  const total = supply + vat;
+  return { supply, vat, total };
 }
-
-function normText(s: any) {
-  const v = String(s ?? "").trim();
-  return v === "" ? null : v;
-}
-
-function fmtKST(iso: string) {
-  const d = new Date(iso);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
-}
-
-// ✅ (추가) partner_type 옵션
-const PARTNER_TYPES = ["CUSTOMER", "VENDOR", "BOTH"] as const;
-type PartnerType = (typeof PARTNER_TYPES)[number];
 
 export default function TradeClient() {
   const supabase = useMemo(() => createClient(), []);
 
+  // =========================
+  // UI 상태
+  // =========================
+  const [tab, setTab] = useState<"ORDER" | "LEDGER" | "UNION">("UNION");
   const [msg, setMsg] = useState<string | null>(null);
 
+  // 기간
+  const [fromYMD, setFromYMD] = useState(addDays(ymdToday(), -30));
+  const [toYMD, setToYMD] = useState(ymdToday());
+
   // 거래처
-  const [partnerView, setPartnerView] = useState<PartnerView>("ALL");
-  const [partnerFilter, setPartnerFilter] = useState("");
   const [partners, setPartners] = useState<PartnerRow[]>([]);
-  const [selectedPartner, setSelectedPartner] = useState<PartnerRow | null>(null);
+  const [partnerFilter, setPartnerFilter] = useState("");
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
 
-  // 최근 거래처
-  const [recentPartnerIds, setRecentPartnerIds] = useState<string[]>([]);
+  const selectedPartner = useMemo(
+    () => partners.find((p) => p.id === selectedPartnerId) ?? null,
+    [partners, selectedPartnerId]
+  );
 
-  // 모드
-  const [mode, setMode] = useState<Mode>("UNIFIED");
+  // 카테고리(DB)
+  const [cats, setCats] = useState<LedgerCategoryRow[]>([]);
+  const [catManageOpen, setCatManageOpen] = useState(false);
 
-  // 거래처 등록 폼
-  const [showPartnerForm, setShowPartnerForm] = useState(false);
-  const [p_name, setP_name] = useState("");
-  const [p_businessNo, setP_businessNo] = useState("");
-  const [p_ceo, setP_ceo] = useState("");
-  const [p_phone, setP_phone] = useState("");
-  const [p_address1, setP_address1] = useState("");
-  const [p_bizType, setP_bizType] = useState("");
-  const [p_bizItem, setP_bizItem] = useState("");
-  const [p_partnerType, setP_partnerType] = useState<PartnerType>("CUSTOMER"); // ✅ 추가
-
-  // ✅ 거래처 수정(모달)
-  const [partnerEditOpen, setPartnerEditOpen] = useState(false);
-  const [ep_name, setEP_name] = useState("");
-  const [ep_businessNo, setEP_businessNo] = useState("");
-  const [ep_ceo, setEP_ceo] = useState("");
-  const [ep_phone, setEP_phone] = useState("");
-  const [ep_address1, setEP_address1] = useState("");
-  const [ep_bizType, setEP_bizType] = useState("");
-  const [ep_bizItem, setEP_bizItem] = useState("");
-  const [ep_partnerType, setEP_partnerType] = useState<PartnerType>("CUSTOMER"); // ✅ 추가
-
-  // ✅ 배송정보(최근값) 편집
-  const [ship_to_name, setShipToName] = useState("");
-  const [ship_to_address1, setShipToAddress1] = useState("");
-  const [ship_to_mobile, setShipToMobile] = useState("");
-  const [ship_to_phone, setShipToPhone] = useState("");
-
-  // ✅ 배송정보 이력(최근 5건) 보기
-  const [shipHistOpen, setShipHistOpen] = useState(false);
-  const [shipHistLoading, setShipHistLoading] = useState(false);
-  const [shipHist, setShipHist] = useState<PartnerShippingHistoryRow[]>([]);
-
-  // 식품유형(자동완성)
-  const [foodTypes, setFoodTypes] = useState<FoodTypeRow[]>([]);
-
-  // ✅ 기성 품목(자동완성/자동 입력)
-  const [presetProducts, setPresetProducts] = useState<PresetProductRow[]>([]);
-
-  // ✅ 마스터 품목(TradeClient 자동완성: v_tradeclient_products)
-  const [masterProducts, setMasterProducts] = useState<MasterProductRow[]>([]);
-
-  const masterByName = useMemo(() => {
-    const map = new Map<string, MasterProductRow>();
-    for (const p of masterProducts) map.set(p.product_name, p);
-    return map;
-  }, [masterProducts]);
-
-  // 주문/출고 입력
-  const [shipDate, setShipDate] = useState(todayYMD());
-  const [ordererName, setOrdererName] = useState(""); // ✅ 주문자
-  const [shipMethod, setShipMethod] = useState("택배");
-  const [orderTitle, setOrderTitle] = useState("");
-  const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
-
-  // 금전출납 입력
-  const [entryDate, setEntryDate] = useState(todayYMD());
-  const [payMethod, setPayMethod] = useState<"BANK" | "CASH" | "CARD" | "ETC">("BANK");
-  const [category, setCategory] = useState<Category>("매출입금");
-  const [amountStr, setAmountStr] = useState("");
-  const [ledgerMemo, setLedgerMemo] = useState("");
-
-  // 조회기간/데이터
-  const [fromYMD, setFromYMD] = useState(addDays(todayYMD(), -30));
-  const [toYMD, setToYMD] = useState(todayYMD());
+  // 주문/출고 (orders)
   const [orders, setOrders] = useState<OrderRow[]>([]);
+
+  const [orderShipDate, setOrderShipDate] = useState(ymdToday());
+  const [orderCustomerName, setOrderCustomerName] = useState("");
+  const [orderShipMethod, setOrderShipMethod] = useState<string>("택배");
+  const [orderTitle, setOrderTitle] = useState("");
+  const [orderMemo, setOrderMemo] = useState("");
+  const [orderSupply, setOrderSupply] = useState<number>(0);
+  const [orderVat, setOrderVat] = useState<number>(0);
+  const [orderTotal, setOrderTotal] = useState<number>(0);
+
+  // 금전출납 (ledger_entries)
   const [ledgers, setLedgers] = useState<LedgerRow[]>([]);
 
-  // ✅ 기초잔액 포함 러닝잔액
-  const [includeOpening, setIncludeOpening] = useState(true);
-  const [openingBalance, setOpeningBalance] = useState(0);
+  // 입력 폼(금전출납)
+  const [ledgerDate, setLedgerDate] = useState(ymdToday());
+  const [ledgerMethod, setLedgerMethod] = useState<string>("계좌입금");
+  const [ledgerCategory, setLedgerCategory] = useState<string>(""); // name
+  const [ledgerDirection, setLedgerDirection] = useState<LedgerDirection>("IN");
 
-  // ✅ 메모 보기(팝업)
-  const [memoOpen, setMemoOpen] = useState(false);
-  const [memoTitle, setMemoTitle] = useState("");
-  const [memoBody, setMemoBody] = useState("");
+  const [ledgerCounterpartyName, setLedgerCounterpartyName] = useState<string>("");
+  const [ledgerBusinessNo, setLedgerBusinessNo] = useState<string>("");
 
-  // ✅ 수정(팝업)
-  const [editOpen, setEditOpen] = useState(false);
-  const [editRow, setEditRow] = useState<UnifiedRow | null>(null);
+  const [ledgerMemo, setLedgerMemo] = useState<string>("");
 
-  // 주문 수정용
-  const [eShipDate, setEShipDate] = useState(todayYMD());
-  const [eOrdererName, setEOrdererName] = useState(""); // ✅ 주문자(수정)
-  const [eShipMethod, setEShipMethod] = useState("택배");
-  const [eOrderTitle, setEOrderTitle] = useState("");
-  const [eLines, setELines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
+  // 옵션2 VAT 입력 방식
+  const [vatType, setVatType] = useState<VatType>("TAXED");
+  const [vatRate, setVatRate] = useState<number>(0.1);
 
-  // 금전출납 수정용
-  const [eEntryDate, setEEntryDate] = useState(todayYMD());
-  const [ePayMethod, setEPayMethod] = useState<"BANK" | "CASH" | "CARD" | "ETC">("BANK");
-  const [eCategory, setECategory] = useState<Category>("매출입금");
-  const [eAmountStr, setEAmountStr] = useState("");
-  const [eLedgerMemo, setELedgerMemo] = useState("");
+  const [ledgerTotalAmount, setLedgerTotalAmount] = useState<number>(0); // 총액(부가세 포함)
+  const [ledgerSupplyAmount, setLedgerSupplyAmount] = useState<number>(0); // 공급가
+  const [ledgerVatAmount, setLedgerVatAmount] = useState<number>(0); // 부가세
 
-  // ✅ (현재 입력폼) 주문/출고 합계
-  const orderTotals = useMemo(() => {
-    const summed = lines.reduce(
-      (acc, l) => {
-        const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
-        acc.supply += r.supply;
-        acc.vat += r.vat;
-        acc.total += r.total;
-        return acc;
-      },
-      { supply: 0, vat: 0, total: 0 }
-    );
-    return summed;
-  }, [lines]);
+  const [vatBaseMode, setVatBaseMode] = useState<"TOTAL" | "SUPPLY">("TOTAL"); // 총액 기준 vs 공급가 기준
 
-  // ✅ (수정 모달) 주문/출고 합계
-  const editOrderTotals = useMemo(() => {
-    const summed = eLines.reduce(
-      (acc, l) => {
-        const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
-        acc.supply += r.supply;
-        acc.vat += r.vat;
-        acc.total += r.total;
-        return acc;
-      },
-      { supply: 0, vat: 0, total: 0 }
-    );
-    return summed;
-  }, [eLines]);
+  // =========================
+  // 스타일(기존 톤 유지: 흰바탕 + 파란 버튼)
+  // =========================
+  const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
+  const input =
+    "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
+  const btn = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
+  const btnBlue = "rounded-xl bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
+  const pill = "rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700";
+  const pillOn = "rounded-full border border-blue-600/20 bg-blue-600 px-3 py-1 text-xs text-white";
 
-  // ====== Helpers: 최근 거래처 ======
-  function loadRecentFromLS() {
-    try {
-      const raw = localStorage.getItem(LS_RECENT_PARTNERS);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed.filter((x) => typeof x === "string") as string[];
-      return [];
-    } catch {
-      return [];
+  // =========================
+  // 카테고리 로드/기본값
+  // =========================
+  async function loadCategories() {
+    const { data, error } = await supabase
+      .from("ledger_categories")
+      .select("id,name,direction,sort_order,is_active")
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true })
+      .limit(500);
+
+    if (error) {
+      setMsg(error.message);
+      return;
+    }
+    const rows = (data ?? []) as LedgerCategoryRow[];
+    setCats(rows);
+
+    // 입력폼 기본 카테고리(없으면 기존값 유지)
+    if (!ledgerCategory) {
+      const firstActive = rows.find((c) => c.is_active);
+      if (firstActive) {
+        setLedgerCategory(firstActive.name);
+        setLedgerDirection(firstActive.direction);
+      }
     }
   }
 
-  function saveRecentToLS(ids: string[]) {
-    try {
-      localStorage.setItem(LS_RECENT_PARTNERS, JSON.stringify(ids));
-    } catch {}
+  function findCatByName(name: string) {
+    return cats.find((c) => c.name === name) ?? null;
   }
 
-  function pushRecentPartner(id: string) {
-    setRecentPartnerIds((prev) => {
-      const next = [id, ...prev.filter((x) => x !== id)].slice(0, 20);
-      saveRecentToLS(next);
-      return next;
-    });
-  }
-
-  // ✅ 쇼핑몰 거래처 판별 (DB 컬럼 추가 전 임시: 이름 기준)
-  function isMallPartner(p: PartnerRow | null) {
-    const name = String(p?.name ?? "");
-    return name.includes("네이버") || name.includes("쿠팡") || name.includes("카카오");
-  }
-
-  // ✅ 품목명에서 "(100개)" 같은 박스입수 추출
-  function inferPackEaFromName(name: string) {
-    const s = String(name ?? "");
-    const m = s.match(/(\d+)\s*개/);
-    if (!m) return 1;
-    const n = Number(m[1]);
-    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 1;
-  }
-
-  // ====== Loaders ======
+  // =========================
+  // 거래처 로드
+  // =========================
   async function loadPartners() {
-    setMsg(null);
-
-    let q = supabase
+    // 즐겨찾기(pin_order 우선) + 이름 정렬
+    const { data, error } = await supabase
       .from("partners")
       .select(
         "id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone"
@@ -530,1766 +270,1180 @@ export default function TradeClient() {
       .order("is_pinned", { ascending: false })
       .order("pin_order", { ascending: true })
       .order("name", { ascending: true })
-      .limit(500);
+      .limit(2000);
 
-    const f = partnerFilter.trim();
-    if (f) q = q.or(`name.ilike.%${f}%,business_no.ilike.%${f}%`);
-
-    const { data, error } = await q;
-    if (error) return setMsg(error.message);
+    if (error) {
+      setMsg(error.message);
+      return;
+    }
     setPartners((data ?? []) as PartnerRow[]);
   }
 
-  async function loadFoodTypes() {
-    const { data, error } = await supabase
-      .from("food_types")
-      .select("id,name")
-      .eq("is_active", true)
-      .order("sort_order", { ascending: true })
-      .order("name", { ascending: true })
-      .limit(200);
+  async function togglePin(partner: PartnerRow) {
+    const nextPinned = !Boolean(partner.is_pinned);
+    const patch: any = { is_pinned: nextPinned };
 
-    if (error) return;
-    setFoodTypes((data ?? []) as FoodTypeRow[]);
+    // pin_order는 pinned 될 때만 맨 뒤로(간단)
+    if (nextPinned) patch.pin_order = partner.pin_order ?? 9999;
+    else patch.pin_order = null;
+
+    const { error } = await supabase.from("partners").update(patch).eq("id", partner.id);
+    if (error) {
+      setMsg(error.message);
+      return;
+    }
+    await loadPartners();
   }
 
-  // ✅ preset_products 로드
-  async function loadPresetProducts() {
+  // =========================
+  // 주문/출고(헤더 orders) 로드
+  // =========================
+  async function loadOrders() {
     const { data, error } = await supabase
-      .from("preset_products")
-      .select("id,product_name,food_type,weight_g,barcode")
-      .eq("is_active", true)
-      .order("product_name", { ascending: true })
+      .from("orders")
+      .select("id,customer_id,customer_name,title,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,updated_at")
+      .gte("ship_date", fromYMD)
+      .lte("ship_date", toYMD)
+      .order("ship_date", { ascending: false })
       .limit(5000);
 
-    if (error) return;
-    setPresetProducts((data ?? []) as PresetProductRow[]);
-  }
-
-  // ✅ v_tradeclient_products 로드 (product_master/variant 기반)
-  async function loadMasterProducts() {
-    const { data, error } = await supabase
-      .from("v_tradeclient_products")
-      .select("product_name,food_type,report_no,weight_g,unit_type,pack_ea,barcode")
-      .order("product_name", { ascending: true })
-      .limit(10000);
-
-    if (error) return;
-    setMasterProducts((data ?? []) as MasterProductRow[]);
-  }
-
-  async function loadLatestShippingForPartner(partnerId: string) {
-    const { data, error } = await supabase
-      .from("partner_shipping_history")
-      .select("id,partner_id,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone,created_at")
-      .eq("partner_id", partnerId)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (error) return null;
-    const row = (data?.[0] ?? null) as PartnerShippingHistoryRow | null;
-    return row;
-  }
-
-  async function loadShippingHistory5(partnerId: string) {
-    setShipHistLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("partner_shipping_history")
-        .select("id,partner_id,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone,created_at")
-        .eq("partner_id", partnerId)
-        .order("created_at", { ascending: false })
-        .limit(5);
-
-      if (error) {
-        setMsg(error.message);
-        setShipHist([]);
-        return;
-      }
-      setShipHist((data ?? []) as PartnerShippingHistoryRow[]);
-    } finally {
-      setShipHistLoading(false);
+    if (error) {
+      setMsg(error.message);
+      return;
     }
+    const rows = (data ?? []).map((r: any) => ({
+      ...r,
+      supply_amount: toNumberSafe(r.supply_amount),
+      vat_amount: toNumberSafe(r.vat_amount),
+      total_amount: toNumberSafe(r.total_amount),
+    })) as OrderRow[];
+    setOrders(rows);
   }
 
-  async function loadTrades() {
-    setMsg(null);
-
-    const f = fromYMD || addDays(todayYMD(), -30);
-    const t = toYMD || todayYMD();
-
-    const selectedBusinessNo = selectedPartner?.business_no ?? null;
-    const selectedPartnerId = selectedPartner?.id ?? null;
-
-    // ---- 현재 기간 Orders (✅ order_lines 포함)
-    let oq = supabase
-      .from("orders")
+  // =========================
+  // 금전출납(ledger_entries) 로드
+  // =========================
+  async function loadLedgers() {
+    const { data, error } = await supabase
+      .from("ledger_entries")
       .select(
-        "id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,created_at)"
+        "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,summary,memo,status,partner_id,supply_amount,vat_amount,total_amount,vat_type,vat_rate,created_at,updated_at"
       )
-      .gte("ship_date", f)
-      .lte("ship_date", t)
-      .order("ship_date", { ascending: false })
-      .limit(500);
-
-    if (selectedPartnerId) {
-      oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
-    }
-
-    const { data: oData, error: oErr } = await oq;
-    if (oErr) return setMsg(oErr.message);
-    setOrders((oData ?? []) as OrderRow[]);
-
-    // ---- 현재 기간 Ledgers
-    let lq = supabase
-      .from("ledger_entries")
-      .select("id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,status,partner_id,created_at")
-      .gte("entry_date", f)
-      .lte("entry_date", t)
+      .gte("entry_date", fromYMD)
+      .lte("entry_date", toYMD)
       .order("entry_date", { ascending: false })
-      .limit(1000);
+      .order("entry_ts", { ascending: false })
+      .limit(20000);
 
-    if (selectedPartnerId || selectedBusinessNo) {
-      const ors: string[] = [];
-      if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
-      if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
-      if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
-      lq = lq.or(ors.join(","));
+    if (error) {
+      setMsg(error.message);
+      return;
     }
-
-    const { data: lData, error: lErr } = await lq;
-    if (lErr) return setMsg(lErr.message);
-
-    const mapped = (lData ?? []).map((r: any) => ({ ...r, amount: Number(r.amount ?? 0) })) as LedgerRow[];
-    setLedgers(mapped);
-
-    // ---- ✅ 기초잔액(기간 시작 전 누적) 계산
-    let opening = 0;
-
-    // Orders before f
-    let oq2 = supabase
-      .from("orders")
-      .select("id,ship_date,total_amount,customer_id,customer_name")
-      .lt("ship_date", f)
-      .order("ship_date", { ascending: false })
-      .limit(5000);
-
-    if (selectedPartnerId) {
-      oq2 = oq2.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
-    }
-
-    const { data: oPrev, error: oPrevErr } = await oq2;
-    if (!oPrevErr && oPrev) {
-      const sum = oPrev.reduce((acc: number, r: any) => acc + Number(r.total_amount ?? 0), 0);
-      opening += -sum; // 주문/출고는 출금
-    }
-
-    // Ledgers before f
-    let lq2 = supabase
-      .from("ledger_entries")
-      .select("id,entry_date,direction,amount,partner_id,business_no,counterparty_name")
-      .lt("entry_date", f)
-      .order("entry_date", { ascending: false })
-      .limit(10000);
-
-    if (selectedPartnerId || selectedBusinessNo) {
-      const ors: string[] = [];
-      if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
-      if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
-      if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
-      lq2 = lq2.or(ors.join(","));
-    }
-
-    const { data: lPrev, error: lPrevErr } = await lq2;
-    if (!lPrevErr && lPrev) {
-      const sum = lPrev.reduce((acc: number, r: any) => {
-        const sign = String(r.direction) === "OUT" ? -1 : 1;
-        return acc + sign * Number(r.amount ?? 0);
-      }, 0);
-      opening += sum;
-    }
-
-    setOpeningBalance(opening);
+    const rows = (data ?? []).map((r: any) => ({
+      ...r,
+      amount: toNumberSafe(r.amount),
+      supply_amount: r.supply_amount == null ? null : toNumberSafe(r.supply_amount),
+      vat_amount: r.vat_amount == null ? null : toNumberSafe(r.vat_amount),
+      total_amount: r.total_amount == null ? null : toNumberSafe(r.total_amount),
+      vat_rate: r.vat_rate == null ? null : Number(r.vat_rate),
+    })) as LedgerRow[];
+    setLedgers(rows);
   }
 
-  // ====== 초기 로드 ======
+  async function reloadAll() {
+    setMsg(null);
+    await Promise.all([loadPartners(), loadCategories(), loadOrders(), loadLedgers()]);
+  }
+
+  // 최초 로드
   useEffect(() => {
-    setRecentPartnerIds(loadRecentFromLS());
-    loadPartners();
-    loadFoodTypes();
-    loadPresetProducts(); // ✅ 기성 품목 자동완성 데이터 로드
-    loadMasterProducts(); // ✅ v_tradeclient_products 로드
+    reloadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 기간 바뀌면 리로드(주문/출고, 금전출납)
   useEffect(() => {
-    loadPartners();
+    loadOrders();
+    loadLedgers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partnerFilter]);
+  }, [fromYMD, toYMD]);
 
+  // 거래처 선택 시 입력 폼에 반영(편의)
   useEffect(() => {
-    loadTrades();
+    if (!selectedPartner) return;
+
+    // 금전출납: 거래처명/사업자번호 자동 세팅(비어 있을 때만)
+    if (!ledgerCounterpartyName) setLedgerCounterpartyName(selectedPartner.name ?? "");
+    if (!ledgerBusinessNo) setLedgerBusinessNo(selectedPartner.business_no ?? "");
+
+    // 주문/출고: 고객명/ID 세팅(비어 있을 때만)
+    if (!orderCustomerName) setOrderCustomerName(selectedPartner.name ?? "");
+  }, [
+    selectedPartnerId,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPartner?.id, fromYMD, toYMD]);
+    selectedPartner?.id,
+  ]);
 
-  function resetPartnerForm() {
-    setP_name("");
-    setP_businessNo("");
-    setP_ceo("");
-    setP_phone("");
-    setP_address1("");
-    setP_bizType("");
-    setP_bizItem("");
-    setP_partnerType("CUSTOMER"); // ✅ 추가
-  }
+  // 카테고리 변경 시 direction 자동
+  useEffect(() => {
+    const c = findCatByName(ledgerCategory);
+    if (c) setLedgerDirection(c.direction);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ledgerCategory, cats.map((x) => x.id).join("|")]);
 
-  async function createPartner() {
-    setMsg(null);
-
-    const name = p_name.trim();
-    if (!name) return setMsg("업체명(필수)을 입력하세요.");
-
-    const business_no = p_businessNo.trim() || null;
-
-    const payload: any = {
-      name,
-      business_no,
-      ceo_name: p_ceo.trim() || null,
-      phone: p_phone.trim() || null,
-      address1: p_address1.trim() || null,
-      biz_type: p_bizType.trim() || null,
-      biz_item: p_bizItem.trim() || null,
-      partner_type: p_partnerType, // ✅ 변경(하드코딩 제거)
-      is_pinned: false,
-      pin_order: 9999,
-    };
-
-    const { data, error } = await supabase.from("partners").insert(payload).select("*").single();
-    if (error) return setMsg(error.message);
-
-    setShowPartnerForm(false);
-    resetPartnerForm();
-
-    await loadPartners();
-    setSelectedPartner(data as PartnerRow);
-    pushRecentPartner((data as PartnerRow).id);
-  }
-
-  function selectPartner(p: PartnerRow) {
-    setSelectedPartner(p);
-    setMsg(null);
-    pushRecentPartner(p.id);
-  }
-
-  async function togglePinned(p: PartnerRow) {
-    setMsg(null);
-    const next = !(p.is_pinned ?? false);
-
-    const { error } = await supabase.from("partners").update({ is_pinned: next }).eq("id", p.id);
-    if (error) return setMsg(error.message);
-
-    setPartners((prev) => prev.map((x) => (x.id === p.id ? { ...x, is_pinned: next } : x)));
-  }
-
-  async function openPartnerEdit() {
-    setMsg(null);
-    if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
-
-    setEP_name(selectedPartner.name ?? "");
-    setEP_businessNo(selectedPartner.business_no ?? "");
-    setEP_ceo(selectedPartner.ceo_name ?? "");
-    setEP_phone(selectedPartner.phone ?? "");
-    setEP_address1(selectedPartner.address1 ?? "");
-    setEP_bizType(selectedPartner.biz_type ?? "");
-    setEP_bizItem(selectedPartner.biz_item ?? "");
-    // ✅ 추가
-    const pt = String(selectedPartner.partner_type ?? "CUSTOMER") as any;
-    setEP_partnerType(pt === "CUSTOMER" || pt === "VENDOR" || pt === "BOTH" ? pt : "CUSTOMER");
-
-    const latest = await loadLatestShippingForPartner(selectedPartner.id);
-    const cur = selectedPartner;
-
-    setShipToName((latest?.ship_to_name ?? cur.ship_to_name ?? "") || "");
-    setShipToAddress1((latest?.ship_to_address1 ?? cur.ship_to_address1 ?? "") || "");
-    setShipToMobile((latest?.ship_to_mobile ?? cur.ship_to_mobile ?? "") || "");
-    setShipToPhone((latest?.ship_to_phone ?? cur.ship_to_phone ?? "") || "");
-
-    setShipHistOpen(false);
-    setShipHist([]);
-    setShipHistLoading(false);
-
-    setPartnerEditOpen(true);
-  }
-
-  function closePartnerEdit() {
-    setPartnerEditOpen(false);
-    setShipHistOpen(false);
-  }
-
-  async function savePartnerEdit() {
-    setMsg(null);
-    if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
-
-    const name = ep_name.trim();
-    if (!name) return setMsg("업체명(필수)을 입력하세요.");
-
-    const nextPartnerPayload: any = {
-      name: name,
-      business_no: normText(ep_businessNo),
-      ceo_name: normText(ep_ceo),
-      phone: normText(ep_phone),
-      address1: normText(ep_address1),
-      biz_type: normText(ep_bizType),
-      biz_item: normText(ep_bizItem),
-      partner_type: ep_partnerType, // ✅ 추가
-      ship_to_name: normText(ship_to_name),
-      ship_to_address1: normText(ship_to_address1),
-      ship_to_mobile: normText(ship_to_mobile),
-      ship_to_phone: normText(ship_to_phone),
-    };
-
-    const prev = {
-      ship_to_name: normText(selectedPartner.ship_to_name),
-      ship_to_address1: normText(selectedPartner.ship_to_address1),
-      ship_to_mobile: normText(selectedPartner.ship_to_mobile),
-      ship_to_phone: normText(selectedPartner.ship_to_phone),
-    };
-
-    const next = {
-      ship_to_name: normText(ship_to_name),
-      ship_to_address1: normText(ship_to_address1),
-      ship_to_mobile: normText(ship_to_mobile),
-      ship_to_phone: normText(ship_to_phone),
-    };
-
-    const shippingChanged =
-      prev.ship_to_name !== next.ship_to_name ||
-      prev.ship_to_address1 !== next.ship_to_address1 ||
-      prev.ship_to_mobile !== next.ship_to_mobile ||
-      prev.ship_to_phone !== next.ship_to_phone;
-
-    const { data: updated, error: uErr } = await supabase
-      .from("partners")
-      .update(nextPartnerPayload)
-      .eq("id", selectedPartner.id)
-      .select(
-        "id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone"
-      )
-      .single();
-
-    if (uErr) return setMsg(uErr.message);
-
-    if (shippingChanged) {
-      const histPayload: any = {
-        partner_id: selectedPartner.id,
-        ship_to_name: next.ship_to_name,
-        ship_to_address1: next.ship_to_address1,
-        ship_to_mobile: next.ship_to_mobile,
-        ship_to_phone: next.ship_to_phone,
-      };
-
-      const { error: hErr } = await supabase.from("partner_shipping_history").insert(histPayload);
-      if (hErr) return setMsg(hErr.message);
+  // =========================
+  // 옵션2 VAT 계산(입력 즉시 반영)
+  // =========================
+  useEffect(() => {
+    if (vatType !== "TAXED") {
+      // 면세/영세/해당없음: VAT 0
+      if (vatBaseMode === "TOTAL") {
+        const t = clampInt(ledgerTotalAmount);
+        setLedgerSupplyAmount(t);
+        setLedgerVatAmount(0);
+      } else {
+        const s = clampInt(ledgerSupplyAmount);
+        setLedgerTotalAmount(s);
+        setLedgerVatAmount(0);
+      }
+      return;
     }
 
-    const updatedPartner = updated as PartnerRow;
-
-    setPartners((prevList) => prevList.map((p) => (p.id === updatedPartner.id ? updatedPartner : p)));
-    setSelectedPartner(updatedPartner);
-
-    if (shipHistOpen) {
-      await loadShippingHistory5(updatedPartner.id);
+    const r = Number(vatRate ?? 0);
+    if (vatBaseMode === "TOTAL") {
+      const t = clampInt(ledgerTotalAmount);
+      const { supply, vat, total } = splitVatFromTotal(t, r);
+      setLedgerSupplyAmount(supply);
+      setLedgerVatAmount(vat);
+      setLedgerTotalAmount(total);
+    } else {
+      const s = clampInt(ledgerSupplyAmount);
+      const { supply, vat, total } = calcVatFromSupply(s, r);
+      setLedgerSupplyAmount(supply);
+      setLedgerVatAmount(vat);
+      setLedgerTotalAmount(total);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ledgerTotalAmount, ledgerSupplyAmount, vatType, vatRate, vatBaseMode]);
 
-    setPartnerEditOpen(false);
-  }
-
-  function updateLine(i: number, patch: Partial<Line>) {
-    setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
-  }
-
-  function addLine() {
-    setLines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
-  }
-
-  function removeLine(i: number) {
-    setLines((prev) => prev.filter((_, idx) => idx !== i));
-  }
-
-  // ====== 수정 모달용 라인 업데이트 ======
-  function updateEditLine(i: number, patch: Partial<Line>) {
-    setELines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
-  }
-  function addEditLine() {
-    setELines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
-  }
-  function removeEditLine(i: number) {
-    setELines((prev) => prev.filter((_, idx) => idx !== i));
-  }
-
+  // =========================
+  // 주문/출고 생성(헤더 저장)
+  // =========================
   async function createOrder() {
     setMsg(null);
-    if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
-    if (lines.length === 0) return setMsg("품목을 1개 이상 입력하세요.");
 
-    const isMall = isMallPartner(selectedPartner);
+    const ship_date = orderShipDate || ymdToday();
+    const customer_name = (orderCustomerName || "").trim();
+    if (!customer_name) return setMsg("주문자(거래처명)를 입력하세요.");
 
-    const cleanLines = lines
-      .map((l) => {
-        const name = l.name.trim();
-        const qty = toInt(l.qty);
-        const unit = toInt(l.unit);
-        const weight_g = toNum(l.weight_g);
-        const food_type = (l.food_type || "").trim();
-
-        const unit_type = isMall ? "BOX" : "EA";
-        const pack_ea = isMall ? inferPackEaFromName(name) : 1;
-        const actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
-
-        const r = calcLineAmounts(qty, unit, l.total_incl_vat);
-
-        return {
-          food_type,
-          name,
-          weight_g,
-          qty,
-          unit,
-          unit_type,
-          pack_ea,
-          actual_ea,
-          supply_amount: r.supply,
-          vat_amount: r.vat,
-          total_amount: r.total,
-        };
-      })
-      .filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) > 0);
-
-    if (cleanLines.length === 0) return setMsg("품목명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
-
-    // ✅ orders.memo에는 헤더만 저장 (lines는 order_lines로 분리)
-    const memoObj = {
-      title: orderTitle.trim() || null,
-      orderer_name: ordererName.trim() || null, // ✅ 주문자 저장
-    };
+    const supply_amount = clampInt(orderSupply);
+    const vat_amount = clampInt(orderVat);
+    const total_amount = clampInt(orderTotal);
 
     const payload: any = {
-      customer_id: selectedPartner.id,
-      customer_name: selectedPartner.name,
-      title: null,
-      ship_date: shipDate,
-      ship_method: shipMethod,
-      status: "DRAFT",
-      memo: JSON.stringify(memoObj),
-      supply_amount: orderTotals.supply,
-      vat_amount: orderTotals.vat,
-      total_amount: orderTotals.total,
-      created_by: null,
+      customer_id: selectedPartnerId ?? null,
+      customer_name,
+      title: orderTitle ? orderTitle.trim() : null,
+      ship_date,
+      ship_method: orderShipMethod ? String(orderShipMethod) : null,
+      status: "OK",
+      memo: orderMemo ? orderMemo.trim() : null,
+      supply_amount,
+      vat_amount,
+      total_amount,
     };
 
-    const { data: createdOrder, error: oErr } = await supabase.from("orders").insert(payload).select("id").single();
-    if (oErr) return setMsg(oErr.message);
+    const { error } = await supabase.from("orders").insert(payload);
+    if (error) return setMsg(error.message);
 
-    const orderId = (createdOrder as any)?.id as string;
-    if (!orderId) return setMsg("주문 생성 후 ID를 가져오지 못했습니다.");
-
-    // ✅ order_lines insert
-    const linePayloads = cleanLines.map((l, idx) => ({
-      order_id: orderId,
-      line_no: idx + 1,
-      food_type: l.food_type || null,
-      name: l.name,
-      weight_g: l.weight_g || null,
-      qty: l.qty,
-      unit: l.unit,
-      unit_type: l.unit_type,
-      pack_ea: l.pack_ea,
-      actual_ea: l.actual_ea,
-      supply_amount: l.supply_amount,
-      vat_amount: l.vat_amount,
-      total_amount: l.total_amount,
-    }));
-
-    const { error: lErr } = await supabase.from("order_lines").insert(linePayloads);
-    if (lErr) return setMsg(lErr.message);
-
+    // 입력값 일부 초기화(대표님 편의)
     setOrderTitle("");
-    setOrdererName(""); // ✅ 초기화
-    setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
+    setOrderMemo("");
+    setOrderSupply(0);
+    setOrderVat(0);
+    setOrderTotal(0);
 
-    await loadTrades();
+    await loadOrders();
   }
 
-  async function createLedger() {
+  // 주문 VAT 자동 계산(공급가 기준 10%)
+  function calcOrderVatFromSupply() {
+    const s = clampInt(orderSupply);
+    const v = Math.round(s * 0.1);
+    setOrderVat(v);
+    setOrderTotal(s + v);
+  }
+  // 주문 VAT 자동 계산(총액 기준 10%)
+  function splitOrderVatFromTotal() {
+    const t = clampInt(orderTotal);
+    const supply = Math.round(t / 1.1);
+    const vat = t - supply;
+    setOrderSupply(supply);
+    setOrderVat(vat);
+  }
+
+  // =========================
+  // 금전출납 기록(옵션2 VAT 저장)
+  // =========================
+  async function createLedgerEntry() {
     setMsg(null);
-    if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
 
-    const amount = Number((amountStr || "0").replaceAll(",", ""));
-    if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
+    const entry_date = ledgerDate || ymdToday();
+    const category = (ledgerCategory || "").trim();
+    if (!category) return setMsg("카테고리를 선택하세요.");
 
-    const dir = categoryToDirection(category);
+    const method = (ledgerMethod || "").trim() || "ETC";
 
+    const cpName = ledgerCounterpartyName.trim() || null;
+    const bizNo = ledgerBusinessNo.trim() || null;
+
+    const t = clampInt(ledgerTotalAmount);
+    const s = clampInt(ledgerSupplyAmount);
+    const v = clampInt(ledgerVatAmount);
+
+    // amount(호환용) = total_amount
     const payload: any = {
-      entry_date: entryDate,
-      entry_ts: new Date().toISOString(),
-      direction: dir,
-      amount,
+      entry_date,
+      direction: ledgerDirection,
+      amount: t,
       category,
-      method: payMethod,
-      counterparty_name: selectedPartner.name,
-      business_no: selectedPartner.business_no,
+      method,
+      counterparty_name: cpName,
+      business_no: bizNo,
+      summary: null,
       memo: ledgerMemo.trim() || null,
-      status: "POSTED",
-      partner_id: selectedPartner.id,
+      status: "OK",
+      partner_id: selectedPartnerId ?? null,
+
+      // 옵션2 VAT
+      total_amount: t,
+      supply_amount: s,
+      vat_amount: v,
+      vat_type: vatType,
+      vat_rate: vatType === "TAXED" ? Number(vatRate ?? 0.1) : 0,
     };
 
     const { error } = await supabase.from("ledger_entries").insert(payload);
     if (error) return setMsg(error.message);
 
-    setAmountStr("");
+    // 입력 초기화(대표님 편의)
     setLedgerMemo("");
+    setLedgerTotalAmount(0);
+    setLedgerSupplyAmount(0);
+    setLedgerVatAmount(0);
+    setVatType("TAXED");
+    setVatRate(0.1);
+    setVatBaseMode("TOTAL");
 
-    await loadTrades();
+    await loadLedgers();
   }
 
-  const partnersToShow = useMemo(() => {
-    let list = partners;
+  // =========================
+  // 카테고리 관리(CRUD)
+  // =========================
+  const [catDraftId, setCatDraftId] = useState<string | null>(null);
+  const [catName, setCatName] = useState("");
+  const [catDir, setCatDir] = useState<LedgerDirection>("IN");
+  const [catSort, setCatSort] = useState<number>(0);
+  const [catActive, setCatActive] = useState<boolean>(true);
 
-    if (partnerView === "PINNED") list = list.filter((p) => !!p.is_pinned);
-    else if (partnerView === "RECENT") {
-      const map = new Map(list.map((p) => [p.id, p]));
-      list = recentPartnerIds.map((id) => map.get(id)).filter(Boolean) as PartnerRow[];
+  function openCatNew() {
+    setCatDraftId(null);
+    setCatName("");
+    setCatDir("IN");
+    setCatSort(0);
+    setCatActive(true);
+    setCatManageOpen(true);
+  }
+
+  function openCatEdit(row: LedgerCategoryRow) {
+    setCatDraftId(row.id);
+    setCatName(row.name);
+    setCatDir(row.direction);
+    setCatSort(row.sort_order ?? 0);
+    setCatActive(Boolean(row.is_active));
+    setCatManageOpen(true);
+  }
+
+  async function saveCategory() {
+    setMsg(null);
+    const name = catName.trim();
+    if (!name) return setMsg("카테고리명을 입력하세요.");
+
+    const payload: any = {
+      name,
+      direction: catDir,
+      sort_order: clampInt(catSort),
+      is_active: Boolean(catActive),
+    };
+
+    if (catDraftId) {
+      const { error } = await supabase.from("ledger_categories").update(payload).eq("id", catDraftId);
+      if (error) return setMsg(error.message);
+    } else {
+      const { error } = await supabase.from("ledger_categories").insert(payload);
+      if (error) return setMsg(error.message);
     }
 
-    return list;
-  }, [partners, partnerView, recentPartnerIds]);
+    await loadCategories();
+    setCatManageOpen(false);
+  }
 
-  // ✅ 통합표(장부 스타일)
-  const unifiedRows = useMemo<UnifiedRow[]>(() => {
-    const items: Array<Omit<UnifiedRow, "balance"> & { signed: number }> = [];
+  async function toggleCategoryActive(row: LedgerCategoryRow) {
+    const { error } = await supabase
+      .from("ledger_categories")
+      .update({ is_active: !row.is_active })
+      .eq("id", row.id);
+    if (error) return setMsg(error.message);
+    await loadCategories();
+  }
 
-    // Orders -> 출금
-    for (const o of orders) {
-      const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(o.memo);
-      const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
-      const tsKey = `${date}T12:00:00.000Z`;
-      const total = Number(o.total_amount ?? 0);
+  // =========================
+  // 통합 집계(기간)
+  // =========================
+  const sumOrders = useMemo(() => {
+    const supply = orders.reduce((a, x) => a + toNumberSafe(x.supply_amount), 0);
+    const vat = orders.reduce((a, x) => a + toNumberSafe(x.vat_amount), 0);
+    const total = orders.reduce((a, x) => a + toNumberSafe(x.total_amount), 0);
+    return { supply, vat, total };
+  }, [orders]);
 
-      const orderer = (memo?.orderer_name ?? null) as string | null;
+  // 매입 VAT 정확(옵션2): ledger_entries OUT + vat_type=TAXED 기준 vat_amount만 집계
+  const sumPurchase = useMemo(() => {
+    let supply = 0;
+    let vat = 0;
+    let total = 0;
 
-      items.push({
-        kind: "ORDER",
-        date,
-        tsKey,
-        partnerName: o.customer_name ?? "",
-        ordererName: orderer ?? "",
-        category: "주문/출고",
-        method: o.ship_method ?? "",
-        inAmt: 0,
-        outAmt: total,
-        signed: -total,
-        rawId: o.id,
-        ship_method: o.ship_method ?? "택배",
-        order_title: memo?.title ?? null,
-        orderer_name: orderer,
-        order_lines: (o.order_lines ?? []).map((l) => ({
-          food_type: l.food_type ?? "",
-          name: l.name ?? "",
-          weight_g: Number(l.weight_g ?? 0),
-          qty: Number(l.qty ?? 0),
-          unit: Number(l.unit ?? 0),
-          total_amount: Number(l.total_amount ?? 0),
-          unit_type: (l.unit_type ?? "EA") as any,
-          pack_ea: Number(l.pack_ea ?? 1),
-          actual_ea: Number(l.actual_ea ?? 0),
-        })),
-      });
-    }
-
-    // Ledgers
     for (const l of ledgers) {
-      const sign = String(l.direction) === "OUT" ? -1 : 1;
-      const amt = Number(l.amount ?? 0);
+      if (l.direction !== "OUT") continue;
 
-      items.push({
-        kind: "LEDGER",
-        date: l.entry_date,
-        tsKey: l.entry_ts || `${l.entry_date}T12:00:00.000Z`,
-        partnerName: l.counterparty_name ?? "",
-        ordererName: "", // ✅ 금전출납은 주문자 없음
-        category: l.category ?? "금전출납",
-        method: l.method ?? "",
-        inAmt: sign > 0 ? amt : 0,
-        outAmt: sign < 0 ? amt : 0,
-        signed: sign * amt,
-        rawId: l.id,
-        ledger_category: l.category ?? null,
-        ledger_method: l.method ?? null,
-        ledger_memo: l.memo ?? null,
-        ledger_amount: amt,
-      });
+      const t = toNumberSafe(l.total_amount ?? l.amount);
+      const s = toNumberSafe(l.supply_amount ?? 0);
+      const v = toNumberSafe(l.vat_amount ?? 0);
+
+      total += t;
+
+      // 옵션2 채워진 건만 공급가/부가세 반영(정확성 우선)
+      const hasVatCols = l.total_amount != null && l.supply_amount != null && l.vat_amount != null;
+      if (!hasVatCols) continue;
+
+      supply += s;
+
+      const vt = String(l.vat_type ?? "TAXED").toUpperCase() as VatType;
+      if (vt === "TAXED") vat += v;
     }
 
-    items.sort((a, b) => String(a.tsKey || a.date).localeCompare(String(b.tsKey || b.date)));
+    return { supply, vat, total };
+  }, [ledgers]);
 
-    let running = includeOpening ? openingBalance : 0;
+  const expectedVatPayable = useMemo(() => sumOrders.vat - sumPurchase.vat, [sumOrders.vat, sumPurchase.vat]);
 
-    const withBal: UnifiedRow[] = items.map((x) => {
-      running += x.signed;
-      return {
-        kind: x.kind,
-        date: x.date,
-        tsKey: x.tsKey,
-        partnerName: x.partnerName,
-        ordererName: x.ordererName,
-        category: x.category,
-        method: x.method,
-        inAmt: x.inAmt,
-        outAmt: x.outAmt,
-        balance: running,
-        rawId: x.rawId,
-        ship_method: x.ship_method,
-        order_title: x.order_title,
-        orderer_name: x.orderer_name,
-        order_lines: x.order_lines,
-        ledger_category: x.ledger_category,
-        ledger_method: x.ledger_method,
-        ledger_memo: x.ledger_memo,
-        ledger_amount: x.ledger_amount,
-      };
-    });
+  // 매입처별(사업자번호 기준) 집계
+  const purchaseByVendor = useMemo(() => {
+    const map = new Map<
+      string,
+      { business_no: string; name: string; supply: number; vat: number; total: number; count: number }
+    >();
 
-    withBal.sort((a, b) => String(b.tsKey || b.date).localeCompare(String(a.tsKey || a.date)));
-    return withBal;
-  }, [orders, ledgers, includeOpening, openingBalance]);
+    for (const l of ledgers) {
+      if (l.direction !== "OUT") continue;
 
-  const unifiedTotals = useMemo(() => {
-    const plus = unifiedRows.reduce((a, x) => a + x.inAmt, 0);
-    const minus = unifiedRows.reduce((a, x) => a + x.outAmt, 0);
-    const net = plus - minus;
-    const endBalance = unifiedRows.length ? unifiedRows[0].balance : includeOpening ? openingBalance : 0;
-    return { plus, minus, net, endBalance };
-  }, [unifiedRows, includeOpening, openingBalance]);
+      const bn = (l.business_no ?? "").trim() || "(미입력)";
+      const nm = (l.counterparty_name ?? "").trim() || "(거래처명 없음)";
 
-  // ====== Copy Fill ======
-  function fillFromOrderRow(r: UnifiedRow) {
-    setMsg(null);
-    setMode("ORDERS");
+      if (!map.has(bn)) map.set(bn, { business_no: bn, name: nm, supply: 0, vat: 0, total: 0, count: 0 });
 
-    setShipDate(todayYMD());
-    setOrdererName(r.orderer_name ?? r.ordererName ?? ""); // ✅ 주문자 복사
-    setShipMethod(r.ship_method ?? "택배");
-    setOrderTitle(r.order_title ?? "");
+      const row = map.get(bn)!;
 
-    const nextLines =
-      r.order_lines?.length
-        ? r.order_lines.map((l) => ({
-            food_type: String(l.food_type ?? ""),
-            name: String(l.name ?? ""),
-            weight_g: Number(l.weight_g ?? 0), // ✅ 소수점 유지
-            qty: toInt(l.qty ?? 0),
-            unit: toInt(l.unit ?? 0),
-            total_incl_vat: toInt(l.total_amount ?? 0),
-          }))
-        : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }];
+      const t = toNumberSafe(l.total_amount ?? l.amount);
+      row.total += t;
+      row.count += 1;
 
-    setLines(nextLines);
-  }
+      const hasVatCols = l.total_amount != null && l.supply_amount != null && l.vat_amount != null;
+      if (hasVatCols) {
+        row.supply += toNumberSafe(l.supply_amount);
+        const vt = String(l.vat_type ?? "TAXED").toUpperCase() as VatType;
+        if (vt === "TAXED") row.vat += toNumberSafe(l.vat_amount);
+      }
 
-  function fillFromLedgerRow(r: UnifiedRow) {
-    setMsg(null);
-    setMode("LEDGER");
-
-    setEntryDate(todayYMD());
-    const c = (r.ledger_category as Category) ?? "기타";
-    setCategory(CATEGORIES.includes(c) ? c : "기타");
-    setPayMethod((r.ledger_method as any) ?? "BANK");
-    setLedgerMemo(r.ledger_memo ?? "");
-    const amt = Number(r.ledger_amount ?? 0);
-    setAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
-  }
-
-  function onCopyClick(r: UnifiedRow) {
-    if (r.kind === "ORDER") fillFromOrderRow(r);
-    else fillFromLedgerRow(r);
-  }
-
-  function onMemoClick(r: UnifiedRow) {
-    const title = r.kind === "ORDER" ? `주문/출고 메모 - ${r.partnerName}` : `금전출납 메모 - ${r.partnerName}`;
-    setMemoTitle(title);
-    setMemoBody(buildMemoText(r));
-    setMemoOpen(true);
-  }
-
-  // ====== ✅ 수정 시작 ======
-  function openEdit(r: UnifiedRow) {
-    setMsg(null);
-    setEditRow(r);
-
-    if (r.kind === "ORDER") {
-      setEShipDate(r.date || todayYMD());
-      setEOrdererName(r.orderer_name ?? r.ordererName ?? ""); // ✅ 주문자(수정)
-      setEShipMethod(r.ship_method ?? r.method ?? "택배");
-      setEOrderTitle(r.order_title ?? "");
-
-      const nextLines: Line[] =
-        r.order_lines?.length
-          ? r.order_lines.map((l) => ({
-              food_type: String(l.food_type ?? ""),
-              name: String(l.name ?? ""),
-              weight_g: Number(l.weight_g ?? 0), // ✅ 소수점 유지
-              qty: toInt(l.qty ?? 0),
-              unit: toInt(l.unit ?? 0),
-              total_incl_vat: toInt(l.total_amount ?? 0),
-            }))
-          : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }];
-
-      setELines(nextLines);
-    } else {
-      setEEntryDate(r.date || todayYMD());
-      const m = (r.ledger_method ?? r.method ?? "BANK") as any;
-      setEPayMethod(m === "BANK" || m === "CASH" || m === "CARD" || m === "ETC" ? m : "BANK");
-
-      const c = (r.ledger_category as Category) ?? (r.category as Category) ?? "기타";
-      setECategory(CATEGORIES.includes(c) ? c : "기타");
-
-      const amt = Number(r.ledger_amount ?? (r.inAmt || r.outAmt || 0));
-      setEAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
-      setELedgerMemo(r.ledger_memo ?? "");
+      if (row.name === "(거래처명 없음)" && nm !== "(거래처명 없음)") row.name = nm;
     }
 
-    setEditOpen(true);
-  }
+    const arr = Array.from(map.values());
+    arr.sort((a, b) => String(a.business_no).localeCompare(String(b.business_no)));
+    return arr;
+  }, [ledgers]);
 
-  async function saveEdit() {
-    if (!editRow) return;
-    setMsg(null);
+  // 매출처 거래원장(orders 기반) - 선택 고객
+  const [customerLedgerId, setCustomerLedgerId] = useState<string>("ALL");
+  const [customerSearch, setCustomerSearch] = useState<string>("");
 
-    if (editRow.kind === "ORDER") {
-      // ✅ (오류 가능성 보완) selectedPartner가 null인 상태에서도 저장 시 에러 방지
-      const isMall = selectedPartner ? isMallPartner(selectedPartner) : false;
-
-      const cleanLines = eLines
-        .map((l) => {
-          const name = (l.name || "").trim();
-          const qty = toInt(l.qty);
-          const unit = toInt(l.unit);
-          const weight_g = toNum(l.weight_g);
-          const food_type = (l.food_type || "").trim();
-
-          const unit_type = isMall ? "BOX" : "EA";
-          const pack_ea = isMall ? inferPackEaFromName(name) : 1;
-          const actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
-
-          const r = calcLineAmounts(qty, unit, l.total_incl_vat);
-
-          return {
-            food_type,
-            name,
-            weight_g,
-            qty,
-            unit,
-            unit_type,
-            pack_ea,
-            actual_ea,
-            supply_amount: r.supply,
-            vat_amount: r.vat,
-            total_amount: r.total,
-          };
-        })
-        .filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) > 0);
-
-      if (cleanLines.length === 0) return setMsg("품목명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
-
-      const memoObj = {
-        title: eOrderTitle.trim() || null,
-        orderer_name: eOrdererName.trim() || null, // ✅ 주문자 저장(수정)
-      };
-
-      const payload: any = {
-        ship_date: eShipDate,
-        ship_method: eShipMethod,
-        memo: JSON.stringify(memoObj),
-        supply_amount: editOrderTotals.supply,
-        vat_amount: editOrderTotals.vat,
-        total_amount: editOrderTotals.total,
-      };
-
-      const { error } = await supabase.from("orders").update(payload).eq("id", editRow.rawId);
-      if (error) return setMsg(error.message);
-
-      // ✅ 라인 교체: 기존 order_lines 삭제 후 재삽입
-      const { error: dErr } = await supabase.from("order_lines").delete().eq("order_id", editRow.rawId);
-      if (dErr) return setMsg(dErr.message);
-
-      const linePayloads = cleanLines.map((l, idx) => ({
-        order_id: editRow.rawId,
-        line_no: idx + 1,
-        food_type: l.food_type || null,
-        name: l.name,
-        weight_g: l.weight_g || null,
-        qty: l.qty,
-        unit: l.unit,
-        unit_type: l.unit_type,
-        pack_ea: l.pack_ea,
-        actual_ea: l.actual_ea,
-        supply_amount: l.supply_amount,
-        vat_amount: l.vat_amount,
-        total_amount: l.total_amount,
-      }));
-
-      const { error: iErr } = await supabase.from("order_lines").insert(linePayloads);
-      if (iErr) return setMsg(iErr.message);
-    } else {
-      const amount = Number((eAmountStr || "0").replaceAll(",", ""));
-      if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
-
-      const dir = categoryToDirection(eCategory);
-
-      const payload: any = {
-        entry_date: eEntryDate,
-        direction: dir,
-        amount,
-        category: eCategory,
-        method: ePayMethod,
-        memo: eLedgerMemo.trim() || null,
-      };
-
-      const { error } = await supabase.from("ledger_entries").update(payload).eq("id", editRow.rawId);
-      if (error) return setMsg(error.message);
+  const customers = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; business_no: string | null }>();
+    for (const o of orders) {
+      if (!o.customer_id) continue;
+      const p = partners.find((x) => x.id === o.customer_id);
+      const name = o.customer_name ?? p?.name ?? "(이름없음)";
+      const business_no = p?.business_no ?? null;
+      if (!map.has(o.customer_id)) map.set(o.customer_id, { id: o.customer_id, name, business_no });
     }
+    let arr = Array.from(map.values());
+    const q = customerSearch.trim();
+    if (q) arr = arr.filter((x) => (x.name || "").includes(q) || (x.business_no || "").includes(q));
+    arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    return arr;
+  }, [orders, partners, customerSearch]);
 
-    setEditOpen(false);
-    setEditRow(null);
-    await loadTrades();
+  const ordersForCustomer = useMemo(() => {
+    if (customerLedgerId === "ALL") return [];
+    return orders
+      .filter((o) => o.customer_id === customerLedgerId)
+      .slice()
+      .sort((a, b) => String(a.ship_date).localeCompare(String(b.ship_date)));
+  }, [orders, customerLedgerId]);
+
+  function printNow() {
+    window.print();
   }
 
-  // ====== UI ======
-  const pageBg = "bg-slate-50 text-slate-900";
-  const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
-  const input =
-    "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
-  const inputRight = `${input} text-right tabular-nums`;
-  const btn = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
-  const btnOn =
-    "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
-  const pill =
-    "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700";
-  // ✅ 추가: BOX/EA 배지 (눈에 띄게)
-  const qtyBadge =
-    "shrink-0 inline-flex items-center justify-center rounded-lg border border-slate-300 bg-slate-900 px-2 py-1 text-[11px] font-extrabold text-white";
-  const targetLabel = selectedPartner ? selectedPartner.name : "전체";
+  // 거래처 필터
+  const filteredPartners = useMemo(() => {
+    const q = partnerFilter.trim();
+    const rows = partners.slice();
+    if (!q) return rows;
+    return rows.filter((p) => (p.name || "").includes(q) || (p.business_no || "").includes(q));
+  }, [partners, partnerFilter]);
 
+  // =========================
+  // 렌더
+  // =========================
   return (
-    <div className={`${pageBg} min-h-screen`}>
-      <div className="mx-auto w-full max-w-[1600px] overflow-x-hidden px-4 py-6">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
         {msg ? (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{msg}</div>
         ) : null}
 
-        {/* ✅ 거래처 수정 팝업 (신규 + 최근 5건 이력 버튼) */}
-        {partnerEditOpen ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={closePartnerEdit}>
-            <div
-              className="w-full max-w-[860px] rounded-2xl border border-slate-200 bg-white shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-                <div>
-                  <div className="text-base font-semibold">거래처 수정 · {selectedPartner?.name ?? ""}</div>
-                  <div className="mt-1 text-xs text-slate-500">저장하면 즉시 DB에 반영됩니다.</div>
-                </div>
-                <div className="flex gap-2">
-                  <button className={btn} onClick={closePartnerEdit}>
-                    취소
-                  </button>
-                  <button className={btnOn} onClick={savePartnerEdit}>
-                    저장
-                  </button>
-                </div>
-              </div>
-
-              <div className="px-5 py-4">
-                <div className="mb-2 text-sm font-semibold">업체 기본정보</div>
-                <div className="space-y-2">
-                  <input className={input} placeholder="업체명(필수)" value={ep_name} onChange={(e) => setEP_name(e.target.value)} />
-                  <input className={input} placeholder="사업자등록번호" value={ep_businessNo} onChange={(e) => setEP_businessNo(e.target.value)} />
-
-                  {/* ✅ 추가: 거래처 구분 */}
-                  <select className={input} value={ep_partnerType} onChange={(e) => setEP_partnerType(e.target.value as any)}>
-                    <option value="CUSTOMER">매출처(CUSTOMER)</option>
-                    <option value="VENDOR">매입처(VENDOR)</option>
-                    <option value="BOTH">둘다(BOTH)</option>
-                  </select>
-
-                  <input className={input} placeholder="대표자" value={ep_ceo} onChange={(e) => setEP_ceo(e.target.value)} />
-                  <input className={input} placeholder="연락처" value={ep_phone} onChange={(e) => setEP_phone(e.target.value)} />
-                  <input className={input} placeholder="주소" value={ep_address1} onChange={(e) => setEP_address1(e.target.value)} />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input className={input} placeholder="업태" value={ep_bizType} onChange={(e) => setEP_bizType(e.target.value)} />
-                    <input className={input} placeholder="종목" value={ep_bizItem} onChange={(e) => setEP_bizItem(e.target.value)} />
-                  </div>
-                </div>
-
-                <div className="mt-5 mb-2 flex items-center justify-between gap-2">
-                  <div className="text-sm font-semibold">배송정보 (변경 이력 저장 / 최근 자료 자동 사용)</div>
-
-                  <button
-                    type="button"
-                    className={btn}
-                    onClick={async () => {
-                      if (!selectedPartner) return;
-                      const nextOpen = !shipHistOpen;
-                      setShipHistOpen(nextOpen);
-                      if (nextOpen) {
-                        await loadShippingHistory5(selectedPartner.id);
-                      }
-                    }}
-                  >
-                    배송정보 이력(최근 5건)
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  <input className={input} placeholder="수화주명" value={ship_to_name} onChange={(e) => setShipToName(e.target.value)} />
-                  <input className={input} placeholder="주소1" value={ship_to_address1} onChange={(e) => setShipToAddress1(e.target.value)} />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input className={input} placeholder="휴대폰" value={ship_to_mobile} onChange={(e) => setShipToMobile(e.target.value)} />
-                    <input className={input} placeholder="전화" value={ship_to_phone} onChange={(e) => setShipToPhone(e.target.value)} />
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    ※ 배송정보가 변경되면 history 테이블에 기록으로 남고, 다음부터는 최근값이 자동으로 사용됩니다.
-                  </div>
-                </div>
-
-                {shipHistOpen ? (
-                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <div className="text-sm font-semibold">배송정보 이력(최근 5건)</div>
-                      <button
-                        type="button"
-                        className={btn}
-                        onClick={async () => {
-                          if (!selectedPartner) return;
-                          await loadShippingHistory5(selectedPartner.id);
-                        }}
-                      >
-                        새로고침
-                      </button>
-                    </div>
-
-                    {shipHistLoading ? (
-                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600">불러오는 중...</div>
-                    ) : shipHist.length === 0 ? (
-                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-500">이력이 없습니다.</div>
-                    ) : (
-                      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                        <table className="w-full table-fixed text-sm">
-                          <colgroup>
-                            <col style={{ width: "160px" }} />
-                            <col style={{ width: "140px" }} />
-                            <col style={{ width: "auto" }} />
-                            <col style={{ width: "140px" }} />
-                            <col style={{ width: "140px" }} />
-                          </colgroup>
-                          <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                            <tr>
-                              <th className="px-3 py-2 text-left">변경시각</th>
-                              <th className="px-3 py-2 text-left">수화주명</th>
-                              <th className="px-3 py-2 text-left">주소1</th>
-                              <th className="px-3 py-2 text-left">휴대폰</th>
-                              <th className="px-3 py-2 text-left">전화</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {shipHist.map((h) => (
-                              <tr key={h.id} className="border-t border-slate-200">
-                                <td className="px-3 py-2 tabular-nums">{fmtKST(h.created_at)}</td>
-                                <td className="px-3 py-2">{h.ship_to_name ?? ""}</td>
-                                <td className="px-3 py-2">{h.ship_to_address1 ?? ""}</td>
-                                <td className="px-3 py-2">{h.ship_to_mobile ?? ""}</td>
-                                <td className="px-3 py-2">{h.ship_to_phone ?? ""}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-
-                    <div className="mt-2 text-xs text-slate-500">
-                      ※ “저장”은 현재 입력값을 partners에 저장하고, 값이 바뀌었을 때만 history에 1건 추가됩니다.
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {/* ✅ 메모 팝업 */}
-        {memoOpen ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setMemoOpen(false)}>
-            <div className="w-full max-w-[860px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-                <div>
-                  <div className="text-base font-semibold">{memoTitle}</div>
-                  <div className="mt-1 text-xs text-slate-500">바깥 클릭으로 닫기</div>
-                </div>
-                <button className={btn} onClick={() => setMemoOpen(false)}>
-                  닫기
-                </button>
-              </div>
-              <div className="px-5 py-4">
-                <pre className="whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">
-                  {memoBody}
-                </pre>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {/* ✅ 수정 팝업 */}
-        {editOpen && editRow ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setEditOpen(false)}>
-            <div className="w-full max-w-[1100px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-                <div>
-                  <div className="text-base font-semibold">
-                    거래내역 수정 · {editRow.kind === "ORDER" ? "주문/출고" : "금전출납"} · {editRow.partnerName}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">저장하면 즉시 DB에 반영됩니다.</div>
-                </div>
-                <div className="flex gap-2">
-                  <button className={btn} onClick={() => setEditOpen(false)}>
-                    취소
-                  </button>
-                  <button className={btnOn} onClick={saveEdit}>
-                    저장
-                  </button>
-                </div>
-              </div>
-
-              <div className="px-5 py-4">
-                {editRow.kind === "ORDER" ? (
-                  <>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                      <div>
-                        <div className="mb-1 text-xs text-slate-600">출고일(주문일)</div>
-                        <input type="date" className={input} value={eShipDate} onChange={(e) => setEShipDate(e.target.value)} />
-                      </div>
-
-                      <div>
-                        <div className="mb-1 text-xs text-slate-600">주문자</div>
-                        <input className={input} value={eOrdererName} onChange={(e) => setEOrdererName(e.target.value)} />
-                      </div>
-
-                      <div>
-                        <div className="mb-1 text-xs text-slate-600">출고방법</div>
-                        <select className={input} value={eShipMethod} onChange={(e) => setEShipMethod(e.target.value)}>
-                          <option value="택배">택배</option>
-                          <option value="퀵">퀵</option>
-                          <option value="직접">직접</option>
-                          <option value="기타">기타</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <div className="mb-1 text-xs text-slate-600">메모(title)</div>
-                        <input className={input} value={eOrderTitle} onChange={(e) => setEOrderTitle(e.target.value)} />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between">
-                      <div className="text-sm font-semibold">품목</div>
-                      <button className={btn} onClick={addEditLine}>
-                        + 품목 추가
-                      </button>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2 text-xs text-slate-600">
-                      <div className="pl-3">식품유형</div>
-                      <div className="pl-3">품목명</div>
-                      <div className="pl-3">무게(g)</div>
-                      <div className="pl-3">수량</div>
-                      <div className="pl-3">단가</div>
-                      <div className="pl-3">공급가</div>
-                      <div className="pl-3">부가세</div>
-                      <div className="pl-3">총액(입력)</div>
-                      <div />
-                    </div>
-
-                    <div className="mt-2 space-y-2">
-                      {eLines.map((l, i) => {
-                        const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
-
-                        return (
-                          <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2">
-                            <input className={input} list="food-types-list" value={l.food_type} onChange={(e) => updateEditLine(i, { food_type: e.target.value })} />
-                            <input
-                              className={input}
-                              list="master-product-list"
-                              value={l.name}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                updateEditLine(i, { name: v });
-
-                                const hit = masterByName.get(v);
-                                if (hit) {
-                                  updateEditLine(i, {
-                                    food_type: hit.food_type ?? "",
-                                    weight_g: Number(hit.weight_g ?? 0),
-                                  });
-                                }
-                              }}
-                            />
-                            <input
-                              className={inputRight}
-                              inputMode="decimal"
-                              value={formatWeight(l.weight_g)}
-                              onChange={(e) => updateEditLine(i, { weight_g: toNum(e.target.value) })}
-                            />
-                            <div className="flex items-center gap-1">
-                              <input
-                                className={inputRight}
-                                inputMode="numeric"
-                                value={l.qty ? formatMoney(l.qty) : ""} // ✅ (수정) 0일 때 빈칸 표시(삭제/입력 가능)
-                                onChange={(e) => {
-                                  const raw = e.target.value.replace(/[^\d,]/g, "");
-                                  updateEditLine(i, { qty: raw === "" ? 0 : toInt(raw) });
-                                }} // ✅ (수정) edit는 updateEditLine
-                              />
-                              {(() => {
-                                const pack = inferPackEaFromName(l.name);
-                                const isBox = pack > 1;
-                                return <span className={qtyBadge}>{isBox ? `BOX` : `EA`}</span>;
-                              })()}
-                            </div>
-                            <input
-                              className={inputRight}
-                              inputMode="numeric"
-                              value={formatMoney(l.unit)}
-                              onChange={(e) => {
-                                const v = toInt(e.target.value);
-                                updateEditLine(i, { unit: v, ...(v > 0 ? { total_incl_vat: 0 } : {}) });
-                              }}
-                            />
-
-                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(r.supply)}</div>
-                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(r.vat)}</div>
-
-                            <input
-                              className={inputRight}
-                              inputMode="numeric"
-                              placeholder="총액"
-                              disabled={toInt(l.unit) > 0}
-                              value={toInt(l.unit) > 0 ? formatMoney(r.total) : l.total_incl_vat ? formatMoney(l.total_incl_vat) : ""}
-                              onChange={(e) => updateEditLine(i, { total_incl_vat: toInt(e.target.value) })}
-                            />
-
-                            <button className={btn} onClick={() => removeEditLine(i)} title="삭제">
-                              ✕
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-end gap-4 text-sm">
-                      <div>공급가 {formatMoney(editOrderTotals.supply)}</div>
-                      <div>부가세 {formatMoney(editOrderTotals.vat)}</div>
-                      <div className="font-semibold">총액 {formatMoney(editOrderTotals.total)}</div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <div>
-                        <div className="mb-1 text-xs text-slate-600">일자</div>
-                        <input type="date" className={input} value={eEntryDate} onChange={(e) => setEEntryDate(e.target.value)} />
-                      </div>
-
-                      <div>
-                        <div className="mb-1 text-slate-600 text-xs">결제수단</div>
-                        <select className={input} value={ePayMethod} onChange={(e) => setEPayMethod(e.target.value as any)}>
-                          <option value="BANK">계좌입금</option>
-                          <option value="CASH">현금</option>
-                          <option value="CARD">카드</option>
-                          <option value="ETC">기타</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <div className="mb-1 text-xs text-slate-600">카테고리</div>
-                        <div className="flex flex-wrap gap-2">
-                          {CATEGORIES.map((c) => (
-                            <button key={c} type="button" className={eCategory === c ? btnOn : btn} onClick={() => setECategory(c)}>
-                              {c}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="mb-1 text-xs text-slate-600">금액(원)</div>
-                        <input
-                          className={inputRight}
-                          inputMode="numeric"
-                          value={eAmountStr}
-                          onChange={(e) => {
-                            const v = e.target.value.replace(/[^\d,]/g, "");
-                            setEAmountStr(v);
-                          }}
-                          onBlur={() => {
-                            const n = Number((eAmountStr || "0").replaceAll(",", ""));
-                            if (Number.isFinite(n) && n > 0) setEAmountStr(n.toLocaleString("ko-KR"));
-                          }}
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <div className="mb-1 text-xs text-slate-600">메모</div>
-                        <input className={input} value={eLedgerMemo} onChange={(e) => setELedgerMemo(e.target.value)} />
-                      </div>
-                    </div>
-
-                    <div className="mt-2 text-xs text-slate-500">※ 방향(IN/OUT)은 카테고리로 자동 결정됩니다.</div>
-                  </>
-                )}
-              </div>
-
-              <datalist id="food-types-list">
-                {foodTypes.map((ft) => (
-                  <option key={ft.id} value={ft.name} />
-                ))}
-              </datalist>
-
-              <datalist id="preset-products-list">
-                {presetProducts.map((p) => (
-                  <option key={p.id} value={p.product_name} />
-                ))}
-              </datalist>
-
-              <datalist id="master-product-list">
-                {masterProducts.map((p) => (
-                  <option key={p.product_name} value={p.product_name} />
-                ))}
-              </datalist>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
-          {/* LEFT */}
-          <div className={`${card} p-4`}>
-            <div className="mb-3 flex items-center justify-between">
-              <div className="text-lg font-semibold">거래처</div>
-              <div className="flex gap-2">
-                <button
-                  className={btn}
-                  onClick={() => {
-                    setShowPartnerForm((v) => !v);
-                    setMsg(null);
-                  }}
-                >
-                  + 등록
-                </button>
-
-                <button className={btn} onClick={openPartnerEdit} title={selectedPartner ? "선택된 거래처 수정" : "거래처를 먼저 선택하세요"}>
-                  수정
-                </button>
-
-                <button className={btn} onClick={() => loadPartners()}>
-                  새로고침
-                </button>
-              </div>
-            </div>
-
-            <div className="mb-3 flex gap-2">
-              <button className={partnerView === "PINNED" ? btnOn : btn} onClick={() => setPartnerView("PINNED")}>
-                즐겨찾기
-              </button>
-              <button className={partnerView === "RECENT" ? btnOn : btn} onClick={() => setPartnerView("RECENT")}>
-                최근
-              </button>
-              <button className={partnerView === "ALL" ? btnOn : btn} onClick={() => setPartnerView("ALL")}>
-                전체
-              </button>
-            </div>
-
-            {showPartnerForm ? (
-              <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <div className="mb-2 text-sm font-semibold">거래처 등록</div>
-
-                <div className="space-y-2">
-                  <input className={input} placeholder="업체명(필수)" value={p_name} onChange={(e) => setP_name(e.target.value)} />
-                  <input className={input} placeholder="사업자등록번호" value={p_businessNo} onChange={(e) => setP_businessNo(e.target.value)} />
-
-                  {/* ✅ 추가: 거래처 구분 */}
-                  <select className={input} value={p_partnerType} onChange={(e) => setP_partnerType(e.target.value as any)}>
-                    <option value="CUSTOMER">매출처(CUSTOMER)</option>
-                    <option value="VENDOR">매입처(VENDOR)</option>
-                    <option value="BOTH">둘다(BOTH)</option>
-                  </select>
-
-                  <input className={input} placeholder="대표자" value={p_ceo} onChange={(e) => setP_ceo(e.target.value)} />
-                  <input className={input} placeholder="연락처" value={p_phone} onChange={(e) => setP_phone(e.target.value)} />
-                  <input className={input} placeholder="주소" value={p_address1} onChange={(e) => setP_address1(e.target.value)} />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input className={input} placeholder="업태" value={p_bizType} onChange={(e) => setP_bizType(e.target.value)} />
-                    <input className={input} placeholder="종목" value={p_bizItem} onChange={(e) => setP_bizItem(e.target.value)} />
-                  </div>
-
-                  <div className="flex gap-2 pt-2">
-                    <button
-                      className={`${btn} flex-1`}
-                      onClick={() => {
-                        setShowPartnerForm(false);
-                        resetPartnerForm();
-                      }}
-                    >
-                      취소
-                    </button>
-                    <button className={`${btnOn} flex-1`} onClick={createPartner}>
-                      저장
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            <input className={`${input} mb-3`} placeholder="목록 필터(이름/사업자번호)" value={partnerFilter} onChange={(e) => setPartnerFilter(e.target.value)} />
-
-            <div className="mb-2 text-xs text-slate-600">
-              선택된 거래처:{" "}
-              {selectedPartner ? `${selectedPartner.name}${selectedPartner.business_no ? ` · ${selectedPartner.business_no}` : ""}` : "없음"}
-            </div>
-
-            <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
-              {partnersToShow.length === 0 ? (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">표시할 거래처가 없습니다.</div>
-              ) : (
-                partnersToShow.map((p) => {
-                  const active = selectedPartner?.id === p.id;
-                  const pinned = !!p.is_pinned;
-
-                  return (
-                    <div
-                      key={p.id}
-                      className={`flex items-stretch gap-2 rounded-2xl border ${
-                        active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
-                      }`}
-                    >
-                      <button className="flex-1 rounded-2xl px-3 py-3 text-left" onClick={() => selectPartner(p)}>
-                        <div className="font-semibold">{p.name}</div>
-                        <div className="text-xs text-slate-500">{p.business_no ?? ""}</div>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="mr-2 my-2 w-10 rounded-xl border border-slate-200 bg-white text-lg hover:bg-slate-50"
-                        title={pinned ? "즐겨찾기 해제" : "즐겨찾기 등록"}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          togglePinned(p);
-                        }}
-                      >
-                        {pinned ? "★" : "☆"}
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="mt-3 flex gap-2">
-              <button className={`${btn} flex-1`} onClick={() => setSelectedPartner(null)}>
-                선택 해제
-              </button>
-              <button className={`${btn} flex-1`} onClick={() => loadTrades()}>
-                조회 갱신
-              </button>
-            </div>
+        {/* 상단: 기간/탭 */}
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between print:hidden">
+          <div>
+            <div className="text-xl font-semibold">거래(주문/출고 · 금전출납 · 통합)</div>
+            <div className="mt-1 text-sm text-slate-600">기간 기준으로 조회/집계됩니다.</div>
           </div>
 
-          {/* RIGHT */}
-          <div className="min-w-0 space-y-6">
+          <div className="flex flex-col gap-2 md:flex-row md:items-end">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <div className="mb-1 text-xs text-slate-600">From</div>
+                <input type="date" className={input} value={fromYMD} onChange={(e) => setFromYMD(e.target.value)} />
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-slate-600">To</div>
+                <input type="date" className={input} value={toYMD} onChange={(e) => setToYMD(e.target.value)} />
+              </div>
+            </div>
             <div className="flex gap-2">
-              <button className={mode === "ORDERS" ? btnOn : btn} onClick={() => setMode("ORDERS")}>
-                주문/출고
+              <button className={btn} onClick={() => { setFromYMD(addDays(ymdToday(), -30)); setToYMD(ymdToday()); }}>
+                최근 30일
               </button>
-              <button className={mode === "LEDGER" ? btnOn : btn} onClick={() => setMode("LEDGER")}>
-                금전출납
-              </button>
-              <button className={mode === "UNIFIED" ? btnOn : btn} onClick={() => setMode("UNIFIED")}>
-                통합
-              </button>
+              <button className={btn} onClick={reloadAll}>조회 갱신</button>
+              <button className={btn} onClick={printNow}>인쇄</button>
+            </div>
+          </div>
+        </div>
+
+        {/* 본문: 좌(거래처) / 우(탭 컨텐츠) */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[360px_1fr]">
+          {/* 좌측 거래처 */}
+          <div className={`${card} p-4 print:hidden`}>
+            <div className="flex items-center justify-between">
+              <div className="text-base font-semibold">거래처</div>
+              <div className="flex gap-2">
+                <button className={btn} onClick={() => setSelectedPartnerId(null)}>선택 해제</button>
+                <button className={btn} onClick={loadPartners}>새로고침</button>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <input
+                className={input}
+                placeholder="목록 필터(이름/사업자번호)"
+                value={partnerFilter}
+                onChange={(e) => setPartnerFilter(e.target.value)}
+              />
+            </div>
+
+            <div className="mt-3 text-xs text-slate-600">
+              선택된 거래처:{" "}
+              <span className="font-semibold text-slate-900">{selectedPartner ? selectedPartner.name : "없음"}</span>
+            </div>
+
+            <div className="mt-3 max-h-[640px] overflow-auto pr-1">
+              {filteredPartners.map((p) => {
+                const active = selectedPartnerId === p.id;
+                return (
+                  <div
+                    key={p.id}
+                    className={[
+                      "mb-2 rounded-2xl border p-3",
+                      active ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <button
+                        className="flex-1 text-left"
+                        onClick={() => setSelectedPartnerId(p.id)}
+                        type="button"
+                      >
+                        <div className="text-sm font-semibold">{p.name}</div>
+                        <div className="mt-1 text-xs text-slate-600">{p.business_no ?? ""}</div>
+                      </button>
+
+                      <button
+                        className={[
+                          "h-9 w-9 rounded-xl border text-sm",
+                          p.is_pinned ? "border-slate-300 bg-white" : "border-slate-200 bg-white",
+                        ].join(" ")}
+                        title="즐겨찾기"
+                        onClick={() => togglePin(p)}
+                        type="button"
+                      >
+                        {p.is_pinned ? "★" : "☆"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {filteredPartners.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-4 text-sm text-slate-500">
+                  거래처가 없습니다.
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* 우측 컨텐츠 */}
+          <div className="min-w-0">
+            {/* 탭 */}
+            <div className="mb-3 flex flex-wrap gap-2 print:hidden">
+              <button className={tab === "ORDER" ? pillOn : pill} onClick={() => setTab("ORDER")}>주문/출고</button>
+              <button className={tab === "LEDGER" ? pillOn : pill} onClick={() => setTab("LEDGER")}>금전출납</button>
+              <button className={tab === "UNION" ? pillOn : pill} onClick={() => setTab("UNION")}>통합</button>
             </div>
 
             {/* 주문/출고 */}
-            {mode !== "LEDGER" ? (
+            {tab === "ORDER" ? (
               <div className={`${card} p-4`}>
-                <div className="mb-2 flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-lg font-semibold">주문/출고 입력</div>
-                    <div className="mt-2">
-                      <span className={pill}>조회대상: {targetLabel}</span>
-                    </div>
+                    <div className="mt-1 text-xs text-slate-600">현재는 orders(헤더) 기준 저장입니다.</div>
                   </div>
                 </div>
 
-                {/* ✅ 1) 출고일-주문자-출고방법-메모 순서 */}
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
                   <div>
                     <div className="mb-1 text-xs text-slate-600">출고일(주문일)</div>
-                    <input type="date" className={input} value={shipDate} onChange={(e) => setShipDate(e.target.value)} />
+                    <input type="date" className={input} value={orderShipDate} onChange={(e) => setOrderShipDate(e.target.value)} />
                   </div>
 
-                  <div>
+                  <div className="md:col-span-2">
                     <div className="mb-1 text-xs text-slate-600">주문자</div>
-                    <input className={input} value={ordererName} onChange={(e) => setOrdererName(e.target.value)} />
+                    <input className={input} value={orderCustomerName} onChange={(e) => setOrderCustomerName(e.target.value)} placeholder="거래처명" />
+                    <div className="mt-1 text-xs text-slate-500">거래처를 선택하면 자동 입력됩니다.</div>
                   </div>
 
                   <div>
                     <div className="mb-1 text-xs text-slate-600">출고방법</div>
-                    <select className={input} value={shipMethod} onChange={(e) => setShipMethod(e.target.value)}>
+                    <select className={input} value={orderShipMethod} onChange={(e) => setOrderShipMethod(e.target.value)}>
                       <option value="택배">택배</option>
                       <option value="퀵">퀵</option>
-                      <option value="직접">직접</option>
+                      <option value="방문수령">방문수령</option>
                       <option value="기타">기타</option>
                     </select>
                   </div>
 
-                  <div>
+                  <div className="md:col-span-2">
                     <div className="mb-1 text-xs text-slate-600">메모(title)</div>
-                    <input className={input} value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} />
+                    <input className={input} value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} placeholder="예: 네이버 주문 / 샘플 동봉" />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <div className="mb-1 text-xs text-slate-600">추가 메모</div>
+                    <input className={input} value={orderMemo} onChange={(e) => setOrderMemo(e.target.value)} placeholder="비고" />
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="text-sm font-semibold">품목(식품유형 자동완성 포함)</div>
-                  <button className={btn} onClick={addLine}>
-                    + 품목 추가
-                  </button>
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-6">
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">공급가</div>
+                    <input className={input} inputMode="numeric" value={String(orderSupply)} onChange={(e) => setOrderSupply(toNumberSafe(e.target.value))} />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">부가세</div>
+                    <input className={input} inputMode="numeric" value={String(orderVat)} onChange={(e) => setOrderVat(toNumberSafe(e.target.value))} />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">총액(입력)</div>
+                    <input className={input} inputMode="numeric" value={String(orderTotal)} onChange={(e) => setOrderTotal(toNumberSafe(e.target.value))} />
+                  </div>
+                  <div className="md:col-span-3 flex flex-wrap items-end gap-2">
+                    <button className={btn} type="button" onClick={calcOrderVatFromSupply}>공급가→VAT(10%)</button>
+                    <button className={btn} type="button" onClick={splitOrderVatFromTotal}>총액→공급/VAT</button>
+                    <button className={btnBlue} type="button" onClick={createOrder}>주문/출고 생성</button>
+                  </div>
                 </div>
 
-                <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2 text-xs text-slate-600">
-                  <div className="pl-3">식품유형</div>
-                  <div className="pl-3">품목명</div>
-                  <div className="pl-3">무게(g)</div>
-                  <div className="pl-3">수량</div>
-                  <div className="pl-3">단가</div>
-                  <div className="pl-3">공급가</div>
-                  <div className="pl-3">부가세</div>
-                  <div className="pl-3">총액(입력)</div>
-                  <div />
-                </div>
-
-                <div className="mt-2 space-y-2">
-                  {lines.map((l, i) => {
-                    const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
-
-                    return (
-                      <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2">
-                        <input className={input} list="food-types-list" value={l.food_type} onChange={(e) => updateLine(i, { food_type: e.target.value })} />
-                        <input
-                          className={input}
-                          list="master-product-list"
-                          value={l.name}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            updateLine(i, { name: v });
-
-                            const hit = masterByName.get(v);
-                            if (hit) {
-                              updateLine(i, {
-                                food_type: hit.food_type ?? "",
-                                weight_g: Number(hit.weight_g ?? 0),
-                              });
-                            }
-                          }}
-                        />
-                        <input className={inputRight} inputMode="decimal" value={formatWeight(l.weight_g)} onChange={(e) => updateLine(i, { weight_g: toNum(e.target.value) })} />
-                        <div className="flex items-center gap-1">
-                          <input
-                            className={inputRight}
-                            inputMode="numeric"
-                            value={l.qty ? formatMoney(l.qty) : ""} // ✅ (수정) 0일 때 빈칸 표시(삭제/입력 가능)
-                            onChange={(e) => {
-                              const raw = e.target.value.replace(/[^\d,]/g, "");
-                              updateLine(i, { qty: raw === "" ? 0 : toInt(raw) });
-                            }} // ✅ (수정) create는 updateLine
-                          />
-                          {(() => {
-                            const pack = inferPackEaFromName(l.name);
-                            const isBox = pack > 1;
-                            return <span className={qtyBadge}>{isBox ? `BOX` : `EA`}</span>;
-                          })()}
-                        </div>
-                        <input
-                          className={inputRight}
-                          inputMode="numeric"
-                          value={formatMoney(l.unit)}
-                          onChange={(e) => {
-                            const v = toInt(e.target.value);
-                            updateLine(i, { unit: v, ...(v > 0 ? { total_incl_vat: 0 } : {}) });
-                          }}
-                        />
-
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(r.supply)}</div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{formatMoney(r.vat)}</div>
-
-                        <input
-                          className={inputRight}
-                          inputMode="numeric"
-                          placeholder="총액"
-                          disabled={toInt(l.unit) > 0}
-                          value={toInt(l.unit) > 0 ? formatMoney(r.total) : l.total_incl_vat ? formatMoney(l.total_incl_vat) : ""}
-                          onChange={(e) => updateLine(i, { total_incl_vat: toInt(e.target.value) })}
-                        />
-
-                        <button className={btn} onClick={() => removeLine(i)} title="삭제">
-                          ✕
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <datalist id="food-types-list">
-                  {foodTypes.map((ft) => (
-                    <option key={ft.id} value={ft.name} />
-                  ))}
-                </datalist>
-
-                <datalist id="preset-products-list">
-                  {presetProducts.map((p) => (
-                    <option key={p.id} value={p.product_name} />
-                  ))}
-                </datalist>
-
-                <datalist id="master-product-list">
-                  {masterProducts.map((p) => (
-                    <option key={p.product_name} value={p.product_name} />
-                  ))}
-                </datalist>
-
-                <div className="mt-4 flex items-center justify-end gap-4 text-sm">
-                  <div>공급가 {formatMoney(orderTotals.supply)}</div>
-                  <div>부가세 {formatMoney(orderTotals.vat)}</div>
-                  <div className="font-semibold">총액 {formatMoney(orderTotals.total)}</div>
-
-                  <button className={btnOn} onClick={createOrder}>
-                    주문/출고 생성
-                  </button>
+                <div className="mt-6">
+                  <div className="text-sm font-semibold">기간 내 주문/출고</div>
+                  <div className="mt-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                    <table className="w-full table-fixed text-sm">
+                      <colgroup>
+                        <col style={{ width: "110px" }} />
+                        <col style={{ width: "260px" }} />
+                        <col style={{ width: "160px" }} />
+                        <col style={{ width: "120px" }} />
+                        <col style={{ width: "130px" }} />
+                        <col style={{ width: "130px" }} />
+                        <col style={{ width: "130px" }} />
+                      </colgroup>
+                      <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                        <tr>
+                          <th className="px-3 py-2 text-left">출고일</th>
+                          <th className="px-3 py-2 text-left">거래처</th>
+                          <th className="px-3 py-2 text-left">메모</th>
+                          <th className="px-3 py-2 text-left">방법</th>
+                          <th className="px-3 py-2 text-right">공급가</th>
+                          <th className="px-3 py-2 text-right">부가세</th>
+                          <th className="px-3 py-2 text-right">총액</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {orders.map((o) => (
+                          <tr key={o.id} className="border-t border-slate-200">
+                            <td className="px-3 py-2 font-semibold tabular-nums">{o.ship_date}</td>
+                            <td className="px-3 py-2">{o.customer_name}</td>
+                            <td className="px-3 py-2 text-slate-700">{o.title ?? ""}</td>
+                            <td className="px-3 py-2">{o.ship_method ?? ""}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{money(o.supply_amount)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{money(o.vat_amount)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold">{money(o.total_amount)}</td>
+                          </tr>
+                        ))}
+                        {orders.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-4 text-sm text-slate-500">
+                              기간 내 주문/출고 데이터가 없습니다.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             ) : null}
 
             {/* 금전출납 */}
-            {mode !== "ORDERS" ? (
+            {tab === "LEDGER" ? (
               <div className={`${card} p-4`}>
-                <div className="mb-2">
-                  <div className="text-lg font-semibold">금전출납 입력</div>
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <span className={pill}>조회대상: {targetLabel}</span>
-                    <div className="text-sm text-slate-600">
-                      방향: <span className="font-semibold">{categoryToDirection(category) === "IN" ? "입금(+)" : "출금(-)"}</span>
-                      <span className="ml-2 text-xs text-slate-500">(카테고리로 자동)</span>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-semibold">금전출납 입력 (옵션2: VAT 정확)</div>
+                    <div className="mt-1 text-xs text-slate-600">
+                      VAT는 ledger_entries의 supply_amount/vat_amount/total_amount/vat_type/vat_rate에 저장합니다.
                     </div>
+                  </div>
+                  <div className="flex gap-2 print:hidden">
+                    <button className={btn} onClick={openCatNew} type="button">카테고리 추가</button>
+                    <button className={btn} onClick={() => setCatManageOpen(true)} type="button">카테고리 관리</button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
                   <div>
                     <div className="mb-1 text-xs text-slate-600">일자</div>
-                    <input type="date" className={input} value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
+                    <input type="date" className={input} value={ledgerDate} onChange={(e) => setLedgerDate(e.target.value)} />
                   </div>
 
                   <div>
                     <div className="mb-1 text-xs text-slate-600">결제수단</div>
-                    <select className={input} value={payMethod} onChange={(e) => setPayMethod(e.target.value as any)}>
-                      <option value="BANK">계좌입금</option>
-                      <option value="CASH">현금</option>
-                      <option value="CARD">카드</option>
-                      <option value="ETC">기타</option>
+                    <select className={input} value={ledgerMethod} onChange={(e) => setLedgerMethod(e.target.value)}>
+                      <option value="계좌입금">계좌입금</option>
+                      <option value="카드">카드</option>
+                      <option value="현금">현금</option>
+                      <option value="기타">기타</option>
                     </select>
                   </div>
 
                   <div>
                     <div className="mb-1 text-xs text-slate-600">카테고리</div>
-                    <div className="flex flex-wrap gap-2">
-                      {CATEGORIES.map((c) => (
-                        <button key={c} type="button" className={category === c ? btnOn : btn} onClick={() => setCategory(c)}>
-                          {c}
-                        </button>
+                    <select
+                      className={input}
+                      value={ledgerCategory}
+                      onChange={(e) => setLedgerCategory(e.target.value)}
+                    >
+                      {cats.filter((c) => c.is_active).map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
                       ))}
+                    </select>
+                    <div className="mt-1 text-xs text-slate-500">
+                      방향: <span className="font-semibold">{ledgerDirection === "IN" ? "입금(+)" : "출금(-)"}</span> (카테고리로 자동)
                     </div>
                   </div>
 
                   <div>
-                    <div className="mb-1 text-xs text-slate-600">금액(원)</div>
+                    <div className="mb-1 text-xs text-slate-600">VAT 유형</div>
+                    <select className={input} value={vatType} onChange={(e) => setVatType(e.target.value as VatType)}>
+                      <option value="TAXED">과세(부가세 포함/공제)</option>
+                      <option value="EXEMPT">면세</option>
+                      <option value="ZERO">영세</option>
+                      <option value="NA">해당없음</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <div className="mb-1 text-xs text-slate-600">거래처명(매입처/상대방)</div>
                     <input
-                      className={inputRight}
-                      inputMode="numeric"
-                      value={amountStr}
-                      onChange={(e) => {
-                        const v = e.target.value.replace(/[^\d,]/g, "");
-                        setAmountStr(v);
-                      }}
-                      onBlur={() => {
-                        const n = Number((amountStr || "0").replaceAll(",", ""));
-                        if (Number.isFinite(n) && n > 0) setAmountStr(n.toLocaleString("ko-KR"));
-                      }}
+                      className={input}
+                      value={ledgerCounterpartyName}
+                      onChange={(e) => setLedgerCounterpartyName(e.target.value)}
+                      placeholder="거래처 선택 시 자동 입력"
                     />
                   </div>
 
                   <div className="md:col-span-2">
-                    <div className="mb-1 text-xs text-slate-600">메모</div>
-                    <input className={input} value={ledgerMemo} onChange={(e) => setLedgerMemo(e.target.value)} />
+                    <div className="mb-1 text-xs text-slate-600">사업자등록번호</div>
+                    <input
+                      className={input}
+                      value={ledgerBusinessNo}
+                      onChange={(e) => setLedgerBusinessNo(e.target.value)}
+                      placeholder="예: 123-45-67890 (거래처 선택 시 자동 입력)"
+                    />
                   </div>
                 </div>
 
-                <div className="mt-4 flex justify-end">
-                  <button className={btnOn} onClick={createLedger}>
-                    금전출납 기록
-                  </button>
+                {/* VAT 입력 영역 */}
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-6">
+                  <div className="md:col-span-2">
+                    <div className="mb-1 text-xs text-slate-600">VAT 계산 기준</div>
+                    <div className="flex gap-2">
+                      <button className={vatBaseMode === "TOTAL" ? pillOn : pill} type="button" onClick={() => setVatBaseMode("TOTAL")}>
+                        총액 기준
+                      </button>
+                      <button className={vatBaseMode === "SUPPLY" ? pillOn : pill} type="button" onClick={() => setVatBaseMode("SUPPLY")}>
+                        공급가 기준
+                      </button>
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">
+                      과세일 때만 VAT 분리됩니다. (면세/영세/해당없음은 VAT 0)
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">VAT율</div>
+                    <input
+                      className={input}
+                      inputMode="decimal"
+                      value={String(vatRate)}
+                      onChange={(e) => setVatRate(toNumberSafe(e.target.value))}
+                      disabled={vatType !== "TAXED"}
+                    />
+                    <div className="mt-1 text-xs text-slate-500">기본 0.1 (10%)</div>
+                  </div>
+
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">총액(부가세 포함)</div>
+                    <input
+                      className={input}
+                      inputMode="numeric"
+                      value={String(ledgerTotalAmount)}
+                      onChange={(e) => setLedgerTotalAmount(toNumberSafe(e.target.value))}
+                      disabled={vatBaseMode !== "TOTAL"}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">공급가</div>
+                    <input
+                      className={input}
+                      inputMode="numeric"
+                      value={String(ledgerSupplyAmount)}
+                      onChange={(e) => setLedgerSupplyAmount(toNumberSafe(e.target.value))}
+                      disabled={vatBaseMode !== "SUPPLY"}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">부가세(자동)</div>
+                    <input className={input} inputMode="numeric" value={String(ledgerVatAmount)} readOnly />
+                  </div>
                 </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-6">
+                  <div className="md:col-span-4">
+                    <div className="mb-1 text-xs text-slate-600">메모</div>
+                    <input className={input} value={ledgerMemo} onChange={(e) => setLedgerMemo(e.target.value)} placeholder="예: 원재료 매입 / 택배비 / 급여" />
+                  </div>
+                  <div className="md:col-span-2 flex items-end justify-end gap-2">
+                    <button className={btnBlue} type="button" onClick={createLedgerEntry}>
+                      금전출납 기록
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <div className="text-sm font-semibold">기간 내 금전출납</div>
+                  <div className="mt-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                    <table className="w-full table-fixed text-sm">
+                      <colgroup>
+                        <col style={{ width: "110px" }} />
+                        <col style={{ width: "70px" }} />
+                        <col style={{ width: "150px" }} />
+                        <col style={{ width: "160px" }} />
+                        <col style={{ width: "160px" }} />
+                        <col style={{ width: "120px" }} />
+                        <col style={{ width: "120px" }} />
+                        <col style={{ width: "120px" }} />
+                        <col style={{ width: "220px" }} />
+                      </colgroup>
+                      <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                        <tr>
+                          <th className="px-3 py-2 text-left">일자</th>
+                          <th className="px-3 py-2 text-left">방향</th>
+                          <th className="px-3 py-2 text-left">카테고리</th>
+                          <th className="px-3 py-2 text-left">거래처</th>
+                          <th className="px-3 py-2 text-left">사업자번호</th>
+                          <th className="px-3 py-2 text-right">공급가</th>
+                          <th className="px-3 py-2 text-right">부가세</th>
+                          <th className="px-3 py-2 text-right">총액</th>
+                          <th className="px-3 py-2 text-left">메모</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ledgers.map((l) => (
+                          <tr key={l.id} className="border-t border-slate-200">
+                            <td className="px-3 py-2 font-semibold tabular-nums">{l.entry_date}</td>
+                            <td className="px-3 py-2">{l.direction === "IN" ? "입금" : "출금"}</td>
+                            <td className="px-3 py-2">{l.category}</td>
+                            <td className="px-3 py-2">{l.counterparty_name ?? ""}</td>
+                            <td className="px-3 py-2 tabular-nums">{l.business_no ?? ""}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{money(l.supply_amount ?? 0)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {String(l.vat_type ?? "TAXED").toUpperCase() === "TAXED" ? money(l.vat_amount ?? 0) : "0"}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold">{money(l.total_amount ?? l.amount)}</td>
+                            <td className="px-3 py-2 text-slate-700">{l.memo ?? ""}</td>
+                          </tr>
+                        ))}
+                        {ledgers.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="px-4 py-4 text-sm text-slate-500">
+                              기간 내 금전출납 데이터가 없습니다.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* 카테고리 관리 모달 */}
+                {catManageOpen ? (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="w-full max-w-3xl rounded-2xl bg-white p-4 shadow-xl">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-lg font-semibold">카테고리 관리</div>
+                          <div className="mt-1 text-xs text-slate-600">추가/수정/활성/정렬/방향 설정</div>
+                        </div>
+                        <button className={btn} onClick={() => setCatManageOpen(false)} type="button">
+                          닫기
+                        </button>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-6">
+                        <div className="md:col-span-2">
+                          <div className="mb-1 text-xs text-slate-600">카테고리명</div>
+                          <input className={input} value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="예: 매출입금 / 급여 / 세금 / 기타" />
+                        </div>
+                        <div>
+                          <div className="mb-1 text-xs text-slate-600">방향</div>
+                          <select className={input} value={catDir} onChange={(e) => setCatDir(e.target.value as LedgerDirection)}>
+                            <option value="IN">IN(입금)</option>
+                            <option value="OUT">OUT(출금)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <div className="mb-1 text-xs text-slate-600">정렬값</div>
+                          <input className={input} inputMode="numeric" value={String(catSort)} onChange={(e) => setCatSort(toNumberSafe(e.target.value))} />
+                        </div>
+                        <div>
+                          <div className="mb-1 text-xs text-slate-600">활성</div>
+                          <select className={input} value={catActive ? "Y" : "N"} onChange={(e) => setCatActive(e.target.value === "Y")}>
+                            <option value="Y">Y</option>
+                            <option value="N">N</option>
+                          </select>
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <button className={btn} type="button" onClick={openCatNew}>신규</button>
+                          <button className={btnBlue} type="button" onClick={saveCategory}>저장</button>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
+                        <table className="w-full table-fixed text-sm">
+                          <colgroup>
+                            <col style={{ width: "220px" }} />
+                            <col style={{ width: "90px" }} />
+                            <col style={{ width: "110px" }} />
+                            <col style={{ width: "90px" }} />
+                            <col style={{ width: "180px" }} />
+                          </colgroup>
+                          <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                            <tr>
+                              <th className="px-3 py-2 text-left">이름</th>
+                              <th className="px-3 py-2 text-left">방향</th>
+                              <th className="px-3 py-2 text-right">정렬</th>
+                              <th className="px-3 py-2 text-left">활성</th>
+                              <th className="px-3 py-2 text-left">작업</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cats.map((c) => (
+                              <tr key={c.id} className="border-t border-slate-200 bg-white">
+                                <td className="px-3 py-2 font-semibold">{c.name}</td>
+                                <td className="px-3 py-2">{c.direction}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{money(c.sort_order ?? 0)}</td>
+                                <td className="px-3 py-2">{c.is_active ? "Y" : "N"}</td>
+                                <td className="px-3 py-2">
+                                  <div className="flex gap-2">
+                                    <button className={btn} type="button" onClick={() => openCatEdit(c)}>수정</button>
+                                    <button className={btn} type="button" onClick={() => toggleCategoryActive(c)}>
+                                      {c.is_active ? "비활성" : "활성"}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                            {cats.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-4 py-4 text-sm text-slate-500">카테고리가 없습니다.</td>
+                              </tr>
+                            ) : null}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="mt-3 text-xs text-slate-500">
+                        ※ 카테고리를 단순하게(급여/세금/기타) 유지하되, 필요 시 여기서 추가/수정 가능합니다.
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
-            {/* 거래내역 */}
-            <div className={`${card} p-4`}>
-              <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <div className="text-lg font-semibold">거래내역</div>
-                  <div className="mt-2">
-                    <span className={pill}>조회대상: {targetLabel}</span>
-                  </div>
-                  <div className="mt-2 text-xs text-slate-600">
-                    표시: {mode === "ORDERS" ? "주문/출고" : mode === "LEDGER" ? "금전출납" : "통합"}
-                    {includeOpening ? " · 기초잔액 포함" : ""}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right text-sm">
-                  <div className="text-xs text-slate-600">기간 시작 전 기초잔액</div>
-                  <div className="font-semibold tabular-nums">{formatMoney(openingBalance)}</div>
-                  <div className="mt-2">
-                    <div className="text-xs text-slate-600">
-                      입금 {formatMoney(unifiedTotals.plus)} · 출금 {formatMoney(unifiedTotals.minus)}
+            {/* 통합 */}
+            {tab === "UNION" ? (
+              <div className="space-y-4">
+                <div className={`${card} p-4`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-lg font-semibold">통합 요약(기간)</div>
+                      <div className="mt-1 text-xs text-slate-600">매출(orders) / 매입(ledger OUT, 옵션2 VAT) / 예상 부가세</div>
                     </div>
-                    <div className="text-sm font-semibold tabular-nums">잔액(최신) {formatMoney(unifiedTotals.endBalance)}</div>
+                    <div className="flex gap-2 print:hidden">
+                      <button className={btn} type="button" onClick={printNow}>인쇄</button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-sm font-semibold">매출(orders)</div>
+                      <div className="mt-2 text-sm text-slate-600">공급가 {money(sumOrders.supply)}</div>
+                      <div className="text-sm text-slate-600">부가세 {money(sumOrders.vat)}</div>
+                      <div className="mt-1 text-base font-semibold">총액 {money(sumOrders.total)}</div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-sm font-semibold">매입(ledger OUT)</div>
+                      <div className="mt-2 text-sm text-slate-600">공급가 {money(sumPurchase.supply)}</div>
+                      <div className="text-sm text-slate-600">부가세 {money(sumPurchase.vat)}</div>
+                      <div className="mt-1 text-base font-semibold">총액 {money(sumPurchase.total)}</div>
+                      <div className="mt-2 text-xs text-slate-500">
+                        ※ VAT는 옵션2 컬럼이 채워진 건만 집계(정확성 우선)
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-sm font-semibold">예상 부가세 납부(= 매출VAT - 매입VAT)</div>
+                      <div className="mt-3 text-2xl font-extrabold tabular-nums">{money(expectedVatPayable)}</div>
+                      <div className="mt-2 text-xs text-slate-500">※ 실제 신고/공제는 세무사에서 최종 조정</div>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
-                <div>
-                  <div className="mb-1 text-xs text-slate-600">From</div>
-                  <input type="date" className={input} value={fromYMD} onChange={(e) => setFromYMD(e.target.value)} />
-                </div>
-                <div>
-                  <div className="mb-1 text-xs text-slate-600">To</div>
-                  <input type="date" className={input} value={toYMD} onChange={(e) => setToYMD(e.target.value)} />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    className={btn}
-                    onClick={() => {
-                      setFromYMD(addDays(todayYMD(), -30));
-                      setToYMD(todayYMD());
-                    }}
-                  >
-                    기간 초기화
-                  </button>
-                  <button className={btnOn} onClick={() => loadTrades()}>
-                    조회
-                  </button>
-                  <button className={includeOpening ? btnOn : btn} onClick={() => setIncludeOpening((v) => !v)} title="기간 시작 전 기초잔액을 러닝잔액에 포함">
-                    기초잔액 포함 러닝잔액
-                  </button>
-                </div>
-              </div>
+                {/* 매입처별 */}
+                <div className={`${card} p-4`}>
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <div className="text-lg font-semibold">매입처별 집계(사업자등록번호 기준 정렬)</div>
+                      <div className="mt-1 text-xs text-slate-600">ledger_entries OUT 기준</div>
+                    </div>
+                    <div className="text-xs text-slate-500">건수 {purchaseByVendor.reduce((a, x) => a + x.count, 0)}건</div>
+                  </div>
 
-              {/* ✅ 2) 거래내역: 거래처-주문자-카테고리 사이에 주문자 컬럼 추가 */}
-              <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="w-full table-fixed text-sm">
-                  <colgroup>
-                    <col style={{ width: "110px" }} />
-                    <col style={{ width: "180px" }} />
-                    <col style={{ width: "140px" }} /> {/* 주문자 */}
-                    <col style={{ width: "120px" }} />
-                    <col style={{ width: "90px" }} />
-                    <col style={{ width: "110px" }} />
-                    <col style={{ width: "110px" }} />
-                    <col style={{ width: "130px" }} />
-                    <col style={{ width: "300px" }} />
-                  </colgroup>
-
-                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                    <tr>
-                      <th className="px-3 py-2 text-left">날짜</th>
-                      <th className="px-3 py-2 text-left">거래처</th>
-                      <th className="px-3 py-2 text-left">주문자</th>
-                      <th className="px-3 py-2 text-left">카테고리</th>
-                      <th className="px-3 py-2 text-left">방법</th>
-                      <th className="px-3 py-2 text-right">입금</th>
-                      <th className="px-3 py-2 text-right">출금</th>
-                      <th className="px-3 py-2 text-right">잔액</th>
-                      <th className="px-3 py-2 text-center">복사/메모/수정</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {unifiedRows
-                      .filter((x) => {
-                        if (mode === "ORDERS") return x.kind === "ORDER";
-                        if (mode === "LEDGER") return x.kind === "LEDGER";
-                        return true;
-                      })
-                      .map((x) => (
-                        <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
-                          <td className="px-3 py-2 font-semibold tabular-nums">{x.date}</td>
-                          <td className="px-3 py-2 font-semibold">{x.partnerName}</td>
-                          <td className="px-3 py-2 font-semibold">{x.ordererName}</td>
-                          <td className="px-3 py-2 font-semibold">{x.category}</td>
-                          <td className="px-3 py-2 font-semibold">{x.method}</td>
-
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? formatMoney(x.inAmt) : ""}</td>
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? formatMoney(x.outAmt) : ""}</td>
-
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</td>
-
-                          <td className="px-3 py-2">
-                            <div className="flex items-center justify-center gap-1">
-                              <button className={`${btn} whitespace-nowrap text-xs px-2 py-1`} onClick={() => onCopyClick(x)}>
-                                복사
-                              </button>
-                              <button className={`${btn} whitespace-nowrap text-xs px-2 py-1`} onClick={() => onMemoClick(x)}>
-                                메모
-                              </button>
-                              <button className={`${btn} whitespace-nowrap text-xs px-2 py-1`} onClick={() => openEdit(x)}>
-                                수정
-                              </button>
-                            </div>
-                          </td>
+                  <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                    <table className="w-full table-fixed text-sm">
+                      <colgroup>
+                        <col style={{ width: "160px" }} />
+                        <col style={{ width: "260px" }} />
+                        <col style={{ width: "140px" }} />
+                        <col style={{ width: "140px" }} />
+                        <col style={{ width: "140px" }} />
+                        <col style={{ width: "90px" }} />
+                      </colgroup>
+                      <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                        <tr>
+                          <th className="px-3 py-2 text-left">사업자번호</th>
+                          <th className="px-3 py-2 text-left">매입처</th>
+                          <th className="px-3 py-2 text-right">공급가</th>
+                          <th className="px-3 py-2 text-right">부가세</th>
+                          <th className="px-3 py-2 text-right">총액</th>
+                          <th className="px-3 py-2 text-right">건수</th>
                         </tr>
-                      ))}
+                      </thead>
+                      <tbody>
+                        {purchaseByVendor.map((v) => (
+                          <tr key={v.business_no} className="border-t border-slate-200">
+                            <td className="px-3 py-2 font-semibold tabular-nums">{v.business_no}</td>
+                            <td className="px-3 py-2">{v.name}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{money(v.supply)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{money(v.vat)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold">{money(v.total)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{money(v.count)}</td>
+                          </tr>
+                        ))}
+                        {purchaseByVendor.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-4 text-sm text-slate-500">
+                              매입 집계 데이터가 없습니다.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
 
-                    {unifiedRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="bg-white px-4 py-4 text-sm text-slate-500">
-                          거래내역이 없습니다. (기간/거래처/모드 필터를 확인하세요)
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+                {/* 매출처 거래원장 */}
+                <div className={`${card} p-4`}>
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between print:hidden">
+                    <div>
+                      <div className="text-lg font-semibold">매출처 거래원장(기간 내)</div>
+                      <div className="mt-1 text-xs text-slate-600">매출처별 기간 거래내역 출력(orders 기반)</div>
+                    </div>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-end">
+                      <div className="w-full md:w-[280px]">
+                        <div className="mb-1 text-xs text-slate-600">검색(상호/사업자번호)</div>
+                        <input className={input} value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} placeholder="예: 네이버 / 220-81-..." />
+                      </div>
+                      <div className="w-full md:w-[360px]">
+                        <div className="mb-1 text-xs text-slate-600">매출처 선택</div>
+                        <select className={input} value={customerLedgerId} onChange={(e) => setCustomerLedgerId(e.target.value)}>
+                          <option value="ALL">전체(선택 안함)</option>
+                          {customers.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}{c.business_no ? ` · ${c.business_no}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button className={btn} onClick={printNow} disabled={customerLedgerId === "ALL"} type="button">
+                        선택 거래원장 인쇄
+                      </button>
+                    </div>
+                  </div>
+
+                  {customerLedgerId !== "ALL" ? (
+                    <div className="mt-4">
+                      <div className="mb-3">
+                        <div className="text-base font-semibold">
+                          거래원장: {customers.find((x) => x.id === customerLedgerId)?.name ?? ""}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-600">
+                          기간: {fromYMD} ~ {toYMD}
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                        <table className="w-full table-fixed text-sm">
+                          <colgroup>
+                            <col style={{ width: "120px" }} />
+                            <col style={{ width: "110px" }} />
+                            <col style={{ width: "140px" }} />
+                            <col style={{ width: "140px" }} />
+                            <col style={{ width: "140px" }} />
+                            <col style={{ width: "260px" }} />
+                          </colgroup>
+                          <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                            <tr>
+                              <th className="px-3 py-2 text-left">출고일</th>
+                              <th className="px-3 py-2 text-left">방법</th>
+                              <th className="px-3 py-2 text-right">공급가</th>
+                              <th className="px-3 py-2 text-right">부가세</th>
+                              <th className="px-3 py-2 text-right">총액</th>
+                              <th className="px-3 py-2 text-left">메모</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ordersForCustomer.map((o) => (
+                              <tr key={o.id} className="border-t border-slate-200">
+                                <td className="px-3 py-2 font-semibold tabular-nums">{o.ship_date}</td>
+                                <td className="px-3 py-2">{o.ship_method ?? ""}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{money(o.supply_amount)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{money(o.vat_amount)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-semibold">{money(o.total_amount)}</td>
+                                <td className="px-3 py-2">{o.title ?? ""}</td>
+                              </tr>
+                            ))}
+                            {ordersForCustomer.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className="px-4 py-4 text-sm text-slate-500">
+                                  선택한 매출처의 기간 내 거래가 없습니다.
+                                </td>
+                              </tr>
+                            ) : null}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="mt-3 text-sm font-semibold">
+                        합계: 공급가 {money(ordersForCustomer.reduce((a, x) => a + x.supply_amount, 0))} ·
+                        부가세 {money(ordersForCustomer.reduce((a, x) => a + x.vat_amount, 0))} ·
+                        총액 {money(ordersForCustomer.reduce((a, x) => a + x.total_amount, 0))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3 text-sm text-slate-500">매출처를 선택하면 해당 거래원장이 표시됩니다.</div>
+                  )}
+                </div>
               </div>
-
-              <div className="mt-2 text-xs text-slate-500">※ 주문/출고는 출금으로 표시됩니다. (입금/출금은 모두 양수 입력, 계산에서만 차감 처리)</div>
-            </div>
+            ) : null}
           </div>
         </div>
+
+        {/* 인쇄용 간단 CSS */}
+        <style jsx global>{`
+          @media print {
+            .print\\:hidden { display: none !important; }
+            body { background: white !important; }
+          }
+        `}</style>
       </div>
     </div>
   );
