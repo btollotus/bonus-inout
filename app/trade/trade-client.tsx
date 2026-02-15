@@ -220,8 +220,10 @@ export default function TradeClient() {
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const input =
     "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
-  const btn = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
-  const btnBlue = "rounded-xl bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
+  const btn =
+    "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
+  const btnBlue =
+    "rounded-xl bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
   const pill = "rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700";
   const pillOn = "rounded-full border border-blue-600/20 bg-blue-600 px-3 py-1 text-xs text-white";
 
@@ -301,7 +303,9 @@ export default function TradeClient() {
   async function loadOrders() {
     const { data, error } = await supabase
       .from("orders")
-      .select("id,customer_id,customer_name,title,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,updated_at")
+      .select(
+        "id,customer_id,customer_name,title,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,updated_at"
+      )
       .gte("ship_date", fromYMD)
       .lte("ship_date", toYMD)
       .order("ship_date", { ascending: false })
@@ -734,7 +738,6 @@ export default function TradeClient() {
     }
   }
 
-
   // 거래처 필터
   const filteredPartners = useMemo(() => {
     const q = partnerFilter.trim();
@@ -772,12 +775,25 @@ export default function TradeClient() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button className={btn} onClick={() => { setFromYMD(addDays(ymdToday(), -30)); setToYMD(ymdToday()); }}>
+              <button
+                className={btn}
+                onClick={() => {
+                  setFromYMD(addDays(ymdToday(), -30));
+                  setToYMD(ymdToday());
+                }}
+                type="button"
+              >
                 최근 30일
               </button>
-              <button className={btn} onClick={reloadAll}>조회 갱신</button>
-              <button className={btn} onClick={downloadTaxExcel} type="button">세무사용 엑셀</button>
-              <button className={btn} onClick={printNow}>인쇄</button>
+              <button className={btn} onClick={reloadAll} type="button">
+                조회 갱신
+              </button>
+              <button className={btn} onClick={downloadTaxExcel} type="button">
+                세무사용 엑셀
+              </button>
+              <button className={btn} onClick={printNow} type="button">
+                인쇄
+              </button>
             </div>
           </div>
         </div>
@@ -789,8 +805,12 @@ export default function TradeClient() {
             <div className="flex items-center justify-between">
               <div className="text-base font-semibold">거래처</div>
               <div className="flex gap-2">
-                <button className={btn} onClick={() => setSelectedPartnerId(null)}>선택 해제</button>
-                <button className={btn} onClick={loadPartners}>새로고침</button>
+                <button className={btn} onClick={() => setSelectedPartnerId(null)} type="button">
+                  선택 해제
+                </button>
+                <button className={btn} onClick={loadPartners} type="button">
+                  새로고침
+                </button>
               </div>
             </div>
 
@@ -820,11 +840,7 @@ export default function TradeClient() {
                     ].join(" ")}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <button
-                        className="flex-1 text-left"
-                        onClick={() => setSelectedPartnerId(p.id)}
-                        type="button"
-                      >
+                      <button className="flex-1 text-left" onClick={() => setSelectedPartnerId(p.id)} type="button">
                         <div className="text-sm font-semibold">{p.name}</div>
                         <div className="mt-1 text-xs text-slate-600">{p.business_no ?? ""}</div>
                       </button>
@@ -857,9 +873,15 @@ export default function TradeClient() {
           <div className="min-w-0">
             {/* 탭 */}
             <div className="mb-3 flex flex-wrap gap-2 print:hidden">
-              <button className={tab === "ORDER" ? pillOn : pill} onClick={() => setTab("ORDER")}>주문/출고</button>
-              <button className={tab === "LEDGER" ? pillOn : pill} onClick={() => setTab("LEDGER")}>금전출납</button>
-              <button className={tab === "UNION" ? pillOn : pill} onClick={() => setTab("UNION")}>통합</button>
+              <button className={tab === "ORDER" ? pillOn : pill} onClick={() => setTab("ORDER")} type="button">
+                주문/출고
+              </button>
+              <button className={tab === "LEDGER" ? pillOn : pill} onClick={() => setTab("LEDGER")} type="button">
+                금전출납
+              </button>
+              <button className={tab === "UNION" ? pillOn : pill} onClick={() => setTab("UNION")} type="button">
+                통합
+              </button>
             </div>
 
             {/* 주문/출고 */}
@@ -919,9 +941,15 @@ export default function TradeClient() {
                     <input className={input} inputMode="numeric" value={String(orderTotal)} onChange={(e) => setOrderTotal(toNumberSafe(e.target.value))} />
                   </div>
                   <div className="md:col-span-3 flex flex-wrap items-end gap-2">
-                    <button className={btn} type="button" onClick={calcOrderVatFromSupply}>공급가→VAT(10%)</button>
-                    <button className={btn} type="button" onClick={splitOrderVatFromTotal}>총액→공급/VAT</button>
-                    <button className={btnBlue} type="button" onClick={createOrder}>주문/출고 생성</button>
+                    <button className={btn} type="button" onClick={calcOrderVatFromSupply}>
+                      공급가→VAT(10%)
+                    </button>
+                    <button className={btn} type="button" onClick={splitOrderVatFromTotal}>
+                      총액→공급/VAT
+                    </button>
+                    <button className={btnBlue} type="button" onClick={createOrder}>
+                      주문/출고 생성
+                    </button>
                   </div>
                 </div>
 
@@ -986,8 +1014,12 @@ export default function TradeClient() {
                     </div>
                   </div>
                   <div className="flex gap-2 print:hidden">
-                    <button className={btn} onClick={openCatNew} type="button">카테고리 추가</button>
-                    <button className={btn} onClick={() => setCatManageOpen(true)} type="button">카테고리 관리</button>
+                    <button className={btn} onClick={openCatNew} type="button">
+                      카테고리 추가
+                    </button>
+                    <button className={btn} onClick={() => setCatManageOpen(true)} type="button">
+                      카테고리 관리
+                    </button>
                   </div>
                 </div>
 
@@ -1009,16 +1041,14 @@ export default function TradeClient() {
 
                   <div>
                     <div className="mb-1 text-xs text-slate-600">카테고리</div>
-                    <select
-                      className={input}
-                      value={ledgerCategory}
-                      onChange={(e) => setLedgerCategory(e.target.value)}
-                    >
-                      {cats.filter((c) => c.is_active).map((c) => (
-                        <option key={c.id} value={c.name}>
-                          {c.name}
-                        </option>
-                      ))}
+                    <select className={input} value={ledgerCategory} onChange={(e) => setLedgerCategory(e.target.value)}>
+                      {cats
+                        .filter((c) => c.is_active)
+                        .map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
                     </select>
                     <div className="mt-1 text-xs text-slate-500">
                       방향: <span className="font-semibold">{ledgerDirection === "IN" ? "입금(+)" : "출금(-)"}</span> (카테고리로 자동)
@@ -1219,8 +1249,12 @@ export default function TradeClient() {
                           </select>
                         </div>
                         <div className="flex items-end gap-2">
-                          <button className={btn} type="button" onClick={openCatNew}>신규</button>
-                          <button className={btnBlue} type="button" onClick={saveCategory}>저장</button>
+                          <button className={btn} type="button" onClick={openCatNew}>
+                            신규
+                          </button>
+                          <button className={btnBlue} type="button" onClick={saveCategory}>
+                            저장
+                          </button>
                         </div>
                       </div>
 
@@ -1251,7 +1285,9 @@ export default function TradeClient() {
                                 <td className="px-3 py-2">{c.is_active ? "Y" : "N"}</td>
                                 <td className="px-3 py-2">
                                   <div className="flex gap-2">
-                                    <button className={btn} type="button" onClick={() => openCatEdit(c)}>수정</button>
+                                    <button className={btn} type="button" onClick={() => openCatEdit(c)}>
+                                      수정
+                                    </button>
                                     <button className={btn} type="button" onClick={() => toggleCategoryActive(c)}>
                                       {c.is_active ? "비활성" : "활성"}
                                     </button>
@@ -1261,7 +1297,9 @@ export default function TradeClient() {
                             ))}
                             {cats.length === 0 ? (
                               <tr>
-                                <td colSpan={5} className="px-4 py-4 text-sm text-slate-500">카테고리가 없습니다.</td>
+                                <td colSpan={5} className="px-4 py-4 text-sm text-slate-500">
+                                  카테고리가 없습니다.
+                                </td>
                               </tr>
                             ) : null}
                           </tbody>
@@ -1287,7 +1325,9 @@ export default function TradeClient() {
                       <div className="mt-1 text-xs text-slate-600">매출(orders) / 매입(ledger OUT, 옵션2 VAT) / 예상 부가세</div>
                     </div>
                     <div className="flex gap-2 print:hidden">
-                      <button className={btn} type="button" onClick={printNow}>인쇄</button>
+                      <button className={btn} type="button" onClick={printNow}>
+                        인쇄
+                      </button>
                     </div>
                   </div>
 
@@ -1304,9 +1344,7 @@ export default function TradeClient() {
                       <div className="mt-2 text-sm text-slate-600">공급가 {money(sumPurchase.supply)}</div>
                       <div className="text-sm text-slate-600">부가세 {money(sumPurchase.vat)}</div>
                       <div className="mt-1 text-base font-semibold">총액 {money(sumPurchase.total)}</div>
-                      <div className="mt-2 text-xs text-slate-500">
-                        ※ VAT는 옵션2 컬럼이 채워진 건만 집계(정확성 우선)
-                      </div>
+                      <div className="mt-2 text-xs text-slate-500">※ VAT는 옵션2 컬럼이 채워진 건만 집계(정확성 우선)</div>
                     </div>
 
                     <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -1372,7 +1410,7 @@ export default function TradeClient() {
 
                 {/* 매출처 거래원장 */}
                 <div className={`${card} p-4`}>
-                 <div className="no-print flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div className="no-print flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                     <div>
                       <div className="text-lg font-semibold">매출처 거래원장(기간 내)</div>
                       <div className="mt-1 text-xs text-slate-600">매출처별 기간 거래내역 출력(orders 기반)</div>
@@ -1388,7 +1426,8 @@ export default function TradeClient() {
                           <option value="ALL">전체(선택 안함)</option>
                           {customers.map((c) => (
                             <option key={c.id} value={c.id}>
-                              {c.name}{c.business_no ? ` · ${c.business_no}` : ""}
+                              {c.name}
+                              {c.business_no ? ` · ${c.business_no}` : ""}
                             </option>
                           ))}
                         </select>
@@ -1397,18 +1436,18 @@ export default function TradeClient() {
                         선택 거래원장 인쇄
                       </button>
                       <button
-  className={externalLedgerMode ? pillOn : pill}
-  type="button"
-  onClick={() => setExternalLedgerMode((v) => !v)}
-  disabled={customerLedgerId === "ALL"}
->
-  {externalLedgerMode ? "외부전달용 ON" : "외부전달용 OFF"}
-</button>
+                        className={externalLedgerMode ? pillOn : pill}
+                        type="button"
+                        onClick={() => setExternalLedgerMode((v) => !v)}
+                        disabled={customerLedgerId === "ALL"}
+                      >
+                        {externalLedgerMode ? "외부전달용 ON" : "외부전달용 OFF"}
+                      </button>
                     </div>
                   </div>
 
                   {customerLedgerId !== "ALL" ? (
-  <div className="print-area mt-4">
+                    <div className="print-area mt-4">
                       <div className="mb-3">
                         <div className="text-base font-semibold">
                           거래원장: {customers.find((x) => x.id === customerLedgerId)?.name ?? ""}
@@ -1420,58 +1459,58 @@ export default function TradeClient() {
 
                       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
                         <table className="w-full table-fixed text-sm">
-                        <colgroup>
-  <col style={{ width: "120px" }} />
-  {externalLedgerMode ? (
-    <col style={{ width: "320px" }} />
-  ) : (
-    <>
-      <col style={{ width: "110px" }} />
-      <col style={{ width: "260px" }} />
-    </>
-  )}
-  <col style={{ width: "140px" }} />
-  <col style={{ width: "140px" }} />
-  <col style={{ width: "140px" }} />
-  {!externalLedgerMode ? <col style={{ width: "260px" }} /> : null}
-</colgroup>
+                          <colgroup>
+                            <col style={{ width: "120px" }} />
+                            {externalLedgerMode ? (
+                              <col style={{ width: "320px" }} />
+                            ) : (
+                              <>
+                                <col style={{ width: "110px" }} />
+                                <col style={{ width: "260px" }} />
+                              </>
+                            )}
+                            <col style={{ width: "140px" }} />
+                            <col style={{ width: "140px" }} />
+                            <col style={{ width: "140px" }} />
+                            {!externalLedgerMode ? <col style={{ width: "260px" }} /> : null}
+                          </colgroup>
                           <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                          <tr>
-  <th className="px-3 py-2 text-left">출고일</th>
-  {externalLedgerMode ? (
-    <th className="px-3 py-2 text-left">품목/적요</th>
-  ) : (
-    <>
-      <th className="px-3 py-2 text-left">방법</th>
-      <th className="px-3 py-2 text-left">품목/적요</th>
-    </>
-  )}
-  <th className="px-3 py-2 text-right">공급가</th>
-  <th className="px-3 py-2 text-right">부가세</th>
-  <th className="px-3 py-2 text-right">총액</th>
-  {!externalLedgerMode ? <th className="px-3 py-2 text-left">메모(내부)</th> : null}
-</tr>
+                            <tr>
+                              <th className="px-3 py-2 text-left">출고일</th>
+                              {externalLedgerMode ? (
+                                <th className="px-3 py-2 text-left">품목/적요</th>
+                              ) : (
+                                <>
+                                  <th className="px-3 py-2 text-left">방법</th>
+                                  <th className="px-3 py-2 text-left">품목/적요</th>
+                                </>
+                              )}
+                              <th className="px-3 py-2 text-right">공급가</th>
+                              <th className="px-3 py-2 text-right">부가세</th>
+                              <th className="px-3 py-2 text-right">총액</th>
+                              {!externalLedgerMode ? <th className="px-3 py-2 text-left">메모(내부)</th> : null}
+                            </tr>
                           </thead>
                           <tbody>
                             {ordersForCustomer.map((o) => (
-                         <tr key={o.id} className="border-t border-slate-200">
-                         <td className="px-3 py-2 font-semibold tabular-nums">{o.ship_date}</td>
-                       
-                         {externalLedgerMode ? (
-                           <td className="px-3 py-2">{o.title ?? ""}</td>
-                         ) : (
-                           <>
-                             <td className="px-3 py-2">{o.ship_method ?? ""}</td>
-                             <td className="px-3 py-2">{o.title ?? ""}</td>
-                           </>
-                         )}
-                       
-                         <td className="px-3 py-2 text-right tabular-nums">{money(o.supply_amount)}</td>
-                         <td className="px-3 py-2 text-right tabular-nums">{money(o.vat_amount)}</td>
-                         <td className="px-3 py-2 text-right tabular-nums font-semibold">{money(o.total_amount)}</td>
-                       
-                         {!externalLedgerMode ? <td className="px-3 py-2">{/* 내부 메모가 있으면 여기 */}</td> : null}
-                       </tr>
+                              <tr key={o.id} className="border-t border-slate-200">
+                                <td className="px-3 py-2 font-semibold tabular-nums">{o.ship_date}</td>
+
+                                {externalLedgerMode ? (
+                                  <td className="px-3 py-2">{o.title ?? ""}</td>
+                                ) : (
+                                  <>
+                                    <td className="px-3 py-2">{o.ship_method ?? ""}</td>
+                                    <td className="px-3 py-2">{o.title ?? ""}</td>
+                                  </>
+                                )}
+
+                                <td className="px-3 py-2 text-right tabular-nums">{money(o.supply_amount)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{money(o.vat_amount)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-semibold">{money(o.total_amount)}</td>
+
+                                {!externalLedgerMode ? <td className="px-3 py-2">{/* 내부 메모가 있으면 여기 */}</td> : null}
+                              </tr>
                             ))}
                             {ordersForCustomer.length === 0 ? (
                               <tr>
@@ -1485,9 +1524,9 @@ export default function TradeClient() {
                       </div>
 
                       <div className="mt-3 text-sm font-semibold">
-                        합계: 공급가 {money(ordersForCustomer.reduce((a, x) => a + x.supply_amount, 0))} ·
-                        부가세 {money(ordersForCustomer.reduce((a, x) => a + x.vat_amount, 0))} ·
-                        총액 {money(ordersForCustomer.reduce((a, x) => a + x.total_amount, 0))}
+                        합계: 공급가 {money(ordersForCustomer.reduce((a, x) => a + x.supply_amount, 0))} · 부가세{" "}
+                        {money(ordersForCustomer.reduce((a, x) => a + x.vat_amount, 0))} · 총액{" "}
+                        {money(ordersForCustomer.reduce((a, x) => a + x.total_amount, 0))}
                       </div>
                     </div>
                   ) : (
@@ -1502,8 +1541,12 @@ export default function TradeClient() {
         {/* 인쇄용 간단 CSS */}
         <style jsx global>{`
           @media print {
-            .print\\:hidden { display: none !important; }
-            body { background: white !important; }
+            .print\\:hidden {
+              display: none !important;
+            }
+            body {
+              background: white !important;
+            }
           }
         `}</style>
       </div>
