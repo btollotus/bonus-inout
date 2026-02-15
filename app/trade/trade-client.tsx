@@ -1781,8 +1781,11 @@ export default function TradeClient() {
                               <input
                                 className={inputRight}
                                 inputMode="numeric"
-                                value={formatMoney(l.qty)}
-                                onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })} // ✅ (수정) edit는 updateEditLine
+                                value={l.qty ? formatMoney(l.qty) : ""} // ✅ (수정) 0일 때 빈칸 표시(삭제/입력 가능)
+                                onChange={(e) => {
+                                  const raw = e.target.value.replace(/[^\d,]/g, "");
+                                  updateEditLine(i, { qty: raw === "" ? 0 : toInt(raw) });
+                                }} // ✅ (수정) edit는 updateEditLine
                               />
                               {(() => {
                                 const pack = inferPackEaFromName(l.name);
@@ -2131,8 +2134,11 @@ export default function TradeClient() {
                           <input
                             className={inputRight}
                             inputMode="numeric"
-                            value={formatMoney(l.qty)}
-                            onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} // ✅ (수정) create는 updateLine
+                            value={l.qty ? formatMoney(l.qty) : ""} // ✅ (수정) 0일 때 빈칸 표시(삭제/입력 가능)
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/[^\d,]/g, "");
+                              updateLine(i, { qty: raw === "" ? 0 : toInt(raw) });
+                            }} // ✅ (수정) create는 updateLine
                           />
                           {(() => {
                             const pack = inferPackEaFromName(l.name);
