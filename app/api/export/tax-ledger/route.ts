@@ -16,7 +16,7 @@ export async function GET(req: Request) {
     return new NextResponse("from/to 파라미터가 필요합니다. 예: ?from=2026-02-01&to=2026-02-16", { status: 400 });
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // 1) 매출(orders)
   const { data: orders, error: e1 } = await supabase
