@@ -61,3 +61,60 @@ body {
 .date-input::-webkit-calendar-picker-indicator {
   opacity: 0;
 }
+
+/* =========================
+   Print optimization (A4)
+   - 화면 스타일은 유지
+   - 인쇄 시만 폰트/행간/패딩/여백 축소
+   ========================= */
+
+   @media print {
+    html,
+    body {
+      font-size: 10.5pt;
+      line-height: 1.2;
+      color: #000 !important;
+      background: #fff !important;
+    }
+  
+    /* 인쇄 불필요 UI 숨김 (필요한 곳에 className="no-print"만 추가하면 됨) */
+    .no-print {
+      display: none !important;
+    }
+  
+    /* 인쇄 영역(필요한 곳에 className="print-area" 적용) */
+    .print-area {
+      display: block !important;
+      width: 100% !important;
+      max-width: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+  
+    table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+    }
+  
+    th,
+    td {
+      padding: 3px 6px !important; /* 행간/행높이 핵심 */
+      line-height: 1.15 !important;
+      vertical-align: top !important;
+      word-break: break-word;
+      white-space: normal;
+    }
+  
+    tr {
+      page-break-inside: avoid;
+    }
+  
+    thead {
+      display: table-header-group;
+    }
+  }
+  
+  @page {
+    size: A4;
+    margin: 8mm;
+  }

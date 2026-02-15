@@ -678,6 +678,8 @@ export default function TradeClient() {
   const [customerLedgerId, setCustomerLedgerId] = useState<string>("ALL");
   const [customerSearch, setCustomerSearch] = useState<string>("");
 
+  const [externalLedgerMode, setExternalLedgerMode] = useState<boolean>(true); // 외부전달용(불필요 컬럼 제거)
+
   const customers = useMemo(() => {
     const map = new Map<string, { id: string; name: string; business_no: string | null }>();
     for (const o of orders) {
@@ -705,6 +707,33 @@ export default function TradeClient() {
   function printNow() {
     window.print();
   }
+
+  async function downloadTaxExcel() {
+    setMsg(null);
+    try {
+      const qs = new URLSearchParams({ from: fromYMD, to: toYMD });
+      const res = await fetch(`/api/export/tax-ledger?${qs.toString()}`);
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || `엑셀 다운로드 실패 (${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `세무사용_통합장부_${fromYMD}~${toYMD}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setMsg(e?.message ?? "엑셀 다운로드 중 오류");
+    }
+  }
+
 
   // 거래처 필터
   const filteredPartners = useMemo(() => {
@@ -747,6 +776,7 @@ export default function TradeClient() {
                 최근 30일
               </button>
               <button className={btn} onClick={reloadAll}>조회 갱신</button>
+              <button className={btn} onClick={downloadTaxExcel} type="button">세무사용 엑셀</button>
               <button className={btn} onClick={printNow}>인쇄</button>
             </div>
           </div>
@@ -1342,7 +1372,7 @@ export default function TradeClient() {
 
                 {/* 매출처 거래원장 */}
                 <div className={`${card} p-4`}>
-                  <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between print:hidden">
+                 <div className="no-print flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                     <div>
                       <div className="text-lg font-semibold">매출처 거래원장(기간 내)</div>
                       <div className="mt-1 text-xs text-slate-600">매출처별 기간 거래내역 출력(orders 기반)</div>
@@ -1366,11 +1396,19 @@ export default function TradeClient() {
                       <button className={btn} onClick={printNow} disabled={customerLedgerId === "ALL"} type="button">
                         선택 거래원장 인쇄
                       </button>
+                      <button
+  className={externalLedgerMode ? pillOn : pill}
+  type="button"
+  onClick={() => setExternalLedgerMode((v) => !v)}
+  disabled={customerLedgerId === "ALL"}
+>
+  {externalLedgerMode ? "외부전달용 ON" : "외부전달용 OFF"}
+</button>
                     </div>
                   </div>
 
                   {customerLedgerId !== "ALL" ? (
-                    <div className="mt-4">
+  <div className="print-area mt-4">
                       <div className="mb-3">
                         <div className="text-base font-semibold">
                           거래원장: {customers.find((x) => x.id === customerLedgerId)?.name ?? ""}
@@ -1382,34 +1420,58 @@ export default function TradeClient() {
 
                       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
                         <table className="w-full table-fixed text-sm">
-                          <colgroup>
-                            <col style={{ width: "120px" }} />
-                            <col style={{ width: "110px" }} />
-                            <col style={{ width: "140px" }} />
-                            <col style={{ width: "140px" }} />
-                            <col style={{ width: "140px" }} />
-                            <col style={{ width: "260px" }} />
-                          </colgroup>
+                        <colgroup>
+  <col style={{ width: "120px" }} />
+  {externalLedgerMode ? (
+    <col style={{ width: "320px" }} />
+  ) : (
+    <>
+      <col style={{ width: "110px" }} />
+      <col style={{ width: "260px" }} />
+    </>
+  )}
+  <col style={{ width: "140px" }} />
+  <col style={{ width: "140px" }} />
+  <col style={{ width: "140px" }} />
+  {!externalLedgerMode ? <col style={{ width: "260px" }} /> : null}
+</colgroup>
                           <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                            <tr>
-                              <th className="px-3 py-2 text-left">출고일</th>
-                              <th className="px-3 py-2 text-left">방법</th>
-                              <th className="px-3 py-2 text-right">공급가</th>
-                              <th className="px-3 py-2 text-right">부가세</th>
-                              <th className="px-3 py-2 text-right">총액</th>
-                              <th className="px-3 py-2 text-left">메모</th>
-                            </tr>
+                          <tr>
+  <th className="px-3 py-2 text-left">출고일</th>
+  {externalLedgerMode ? (
+    <th className="px-3 py-2 text-left">품목/적요</th>
+  ) : (
+    <>
+      <th className="px-3 py-2 text-left">방법</th>
+      <th className="px-3 py-2 text-left">품목/적요</th>
+    </>
+  )}
+  <th className="px-3 py-2 text-right">공급가</th>
+  <th className="px-3 py-2 text-right">부가세</th>
+  <th className="px-3 py-2 text-right">총액</th>
+  {!externalLedgerMode ? <th className="px-3 py-2 text-left">메모(내부)</th> : null}
+</tr>
                           </thead>
                           <tbody>
                             {ordersForCustomer.map((o) => (
-                              <tr key={o.id} className="border-t border-slate-200">
-                                <td className="px-3 py-2 font-semibold tabular-nums">{o.ship_date}</td>
-                                <td className="px-3 py-2">{o.ship_method ?? ""}</td>
-                                <td className="px-3 py-2 text-right tabular-nums">{money(o.supply_amount)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums">{money(o.vat_amount)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-semibold">{money(o.total_amount)}</td>
-                                <td className="px-3 py-2">{o.title ?? ""}</td>
-                              </tr>
+                         <tr key={o.id} className="border-t border-slate-200">
+                         <td className="px-3 py-2 font-semibold tabular-nums">{o.ship_date}</td>
+                       
+                         {externalLedgerMode ? (
+                           <td className="px-3 py-2">{o.title ?? ""}</td>
+                         ) : (
+                           <>
+                             <td className="px-3 py-2">{o.ship_method ?? ""}</td>
+                             <td className="px-3 py-2">{o.title ?? ""}</td>
+                           </>
+                         )}
+                       
+                         <td className="px-3 py-2 text-right tabular-nums">{money(o.supply_amount)}</td>
+                         <td className="px-3 py-2 text-right tabular-nums">{money(o.vat_amount)}</td>
+                         <td className="px-3 py-2 text-right tabular-nums font-semibold">{money(o.total_amount)}</td>
+                       
+                         {!externalLedgerMode ? <td className="px-3 py-2">{/* 내부 메모가 있으면 여기 */}</td> : null}
+                       </tr>
                             ))}
                             {ordersForCustomer.length === 0 ? (
                               <tr>
