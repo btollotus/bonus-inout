@@ -330,12 +330,6 @@ function fmtKST(iso: string) {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
-// ✅ (추가) UUID 판별
-function isUuidLike(s: string) {
-  const v = String(s ?? "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
-}
-
 // ✅ (추가) partner_type 옵션
 const PARTNER_TYPES = ["CUSTOMER", "VENDOR", "BOTH"] as const;
 type PartnerType = (typeof PARTNER_TYPES)[number];
@@ -389,10 +383,6 @@ export default function TradeClient() {
   const [shipHistOpen, setShipHistOpen] = useState(false);
   const [shipHistLoading, setShipHistLoading] = useState(false);
   const [shipHist, setShipHist] = useState<PartnerShippingHistoryRow[]>([]);
-
-  // ✅ (추가) partner_type 일괄 정리(엑셀처럼 빠르게)
-  const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkText, setBulkText] = useState("");
 
   // 식품유형(자동완성)
   const [foodTypes, setFoodTypes] = useState<FoodTypeRow[]>([]);
@@ -914,34 +904,6 @@ export default function TradeClient() {
     setPartnerEditOpen(false);
   }
 
-  // ✅ (추가) partner_type 일괄 정리 적용
-  async function applyBulkPartnerType() {
-    setMsg(null);
-
-    const lines = String(bulkText ?? "")
-      .split(/\r?\n/)
-      .map((x) => x.trim())
-      .filter((x) => x);
-
-    if (lines.length === 0) return setMsg("일괄정리 입력값이 비어있습니다.");
-
-    const byId = new Map(partners.map((p) => [p.id, p]));
-    const byName = new Map<string, PartnerRow[]>();
-    for (const p of partners) {
-      const k = String(p.name ?? "").trim();
-      if (!byName.has(k)) byName.set(k, []);
-      byName.get(k)!.push(p);
-    }
-
-    const updates: Array<{ id: string; partner_type: string }> = [];
-    const skipped: string[] = [];
-
-    for (const row of lines) {
-      const cols = row.split("\t").map((c) => c.trim()).filter((c) => c !== "");
-      if (cols.length < 2) {
-        skipped.push(row);
-        continue;
-      }
 
       // 허용 partner_type
       const tRaw = cols[cols.length - 1].toUpperCase();
@@ -1885,17 +1847,6 @@ export default function TradeClient() {
                   수정
                 </button>
 
-                {/* ✅ 추가: 일괄 정리 */}
-                <button
-                  className={btn}
-                  onClick={() => {
-                    setBulkOpen((v) => !v);
-                    setMsg(null);
-                  }}
-                >
-                  일괄정리
-                </button>
-
                 <button className={btn} onClick={() => loadPartners()}>
                   새로고침
                 </button>
@@ -1913,26 +1864,6 @@ export default function TradeClient() {
                 전체
               </button>
             </div>
-
-            {/* ✅ 추가: 일괄 정리 패널 */}
-            {bulkOpen ? (
-              <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <div className="mb-2 text-sm font-semibold">partner_type 일괄 정리</div>
-                <div className="text-xs text-slate-600">
-                  - 탭으로 구분해서 붙여넣기 하시면 됩니다.
-                  <br />
-                  - 형식:{" "}
-                  <span className="font-semibold tabular-nums">
-                    id [TAB] partner_type
-                  </span>{" "}
-                  (권장) 또는{" "}
-                  <span className="font-semibold">
-                    업체명 [TAB] partner_type
-                  </span>{" "}
-                  (업체명이 유일할 때만)
-                  <br />
-                  - partner_type 값: <span className="font-semibold">CUSTOMER / VENDOR / BOTH</span>
-                </div>
 
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
