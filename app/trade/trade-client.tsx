@@ -1,6 +1,7 @@
+```tsx
 "use client";
 
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
 type PartnerRow = {
@@ -457,6 +458,16 @@ function fmtKST(iso: string) {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
+// ✅ (추가) UUID 판별
+function isUuidLike(s: string) {
+  const v = String(s ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
+// ✅ (추가) partner_type 옵션
+const PARTNER_TYPES = ["CUSTOMER", "VENDOR", "BOTH"] as const;
+type PartnerType = (typeof PARTNER_TYPES)[number];
+
 export default function TradeClient() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -467,14 +478,6 @@ export default function TradeClient() {
   const [partnerFilter, setPartnerFilter] = useState("");
   const [partners, setPartners] = useState<PartnerRow[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<PartnerRow | null>(null);
-
-  // ✅ 매입처만 보기
-  const [vendorOnly, setVendorOnly] = useState(false);
-
-  // ✅ 통합 검색(거래처/품목)
-  const [globalSearch, setGlobalSearch] = useState("");
-  const [globalOpen, setGlobalOpen] = useState(false);
-  const globalWrapRef = useRef<HTMLDivElement | null>(null);
 
   // 최근 거래처
   const [recentPartnerIds, setRecentPartnerIds] = useState<string[]>([]);
@@ -491,6 +494,7 @@ export default function TradeClient() {
   const [p_address1, setP_address1] = useState("");
   const [p_bizType, setP_bizType] = useState("");
   const [p_bizItem, setP_bizItem] = useState("");
+  const [p_partnerType, setP_partnerType] = useState<PartnerType>("CUSTOMER"); // ✅ 추가
 
   // ✅ 거래처 수정(모달)
   const [partnerEditOpen, setPartnerEditOpen] = useState(false);
@@ -501,6 +505,7 @@ export default function TradeClient() {
   const [ep_address1, setEP_address1] = useState("");
   const [ep_bizType, setEP_bizType] = useState("");
   const [ep_bizItem, setEP_bizItem] = useState("");
+  const [ep_partnerType, setEP_partnerType] = useState<PartnerType>("CUSTOMER"); // ✅ 추가
 
   // ✅ 배송정보(최근값) 편집
   const [ship_to_name, setShipToName] = useState("");
@@ -512,6 +517,10 @@ export default function TradeClient() {
   const [shipHistOpen, setShipHistOpen] = useState(false);
   const [shipHistLoading, setShipHistLoading] = useState(false);
   const [shipHist, setShipHist] = useState<PartnerShippingHistoryRow[]>([]);
+
+  // ✅ (추가) partner_type 일괄 정리(엑셀처럼 빠르게)
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
 
   // 식품유형(자동완성)
   const [foodTypes, setFoodTypes] = useState<FoodTypeRow[]>([]);
@@ -648,15 +657,6 @@ export default function TradeClient() {
     return name.includes("네이버") || name.includes("쿠팡") || name.includes("카카오");
   }
 
-  // ✅ 매입처 판별 (partner_type 우선, 없으면 group_name 보조)
-  function isVendorPartner(p: PartnerRow | null) {
-    const t = String(p?.partner_type ?? "").toUpperCase();
-    const g = String(p?.group_name ?? "");
-    if (t.includes("VENDOR") || t.includes("BOTH")) return true;
-    if (g.includes("매입")) return true;
-    return false;
-  }
-
   // ✅ 품목명에서 "(100개)" 같은 박스입수 추출
   function inferPackEaFromName(name: string) {
     const s = String(name ?? "");
@@ -664,34 +664,6 @@ export default function TradeClient() {
     if (!m) return 1;
     const n = Number(m[1]);
     return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 1;
-  }
-
-  // ✅ 통합검색에서 "품목 선택" 시 주문 라인에 반영
-  function addProductToOrder(productName: string) {
-    setMsg(null);
-    setMode("ORDERS");
-
-    const hit = masterByName.get(productName);
-    const nextPatch: Partial<Line> = {
-      name: productName,
-      food_type: hit?.food_type ?? "",
-      weight_g: Number(hit?.weight_g ?? 0),
-    };
-
-    setLines((prev) => {
-      if (prev.length === 0) return [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0, ...nextPatch } as Line];
-
-      // 첫 줄이 비어있으면 그 줄에 채우기
-      const first = prev[0];
-      const firstEmpty = String(first.name ?? "").trim() === "" && toInt(first.qty) === 0 && toInt(first.unit) === 0 && toInt(first.total_incl_vat) === 0;
-
-      if (firstEmpty) {
-        return prev.map((l, idx) => (idx === 0 ? ({ ...l, ...nextPatch } as Line) : l));
-      }
-
-      // 아니면 새 줄 추가
-      return [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0, ...nextPatch } as Line];
-    });
   }
 
   // ====== Loaders ======
@@ -922,17 +894,6 @@ export default function TradeClient() {
     setSplitVat(vat);
   }, [totalInclVatStr]);
 
-  // ✅ 통합검색 드롭다운: 바깥 클릭 시 닫기
-  useEffect(() => {
-    function onDown(e: MouseEvent) {
-      const el = globalWrapRef.current;
-      if (!el) return;
-      if (!el.contains(e.target as any)) setGlobalOpen(false);
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, []);
-
   function resetPartnerForm() {
     setP_name("");
     setP_businessNo("");
@@ -941,6 +902,7 @@ export default function TradeClient() {
     setP_address1("");
     setP_bizType("");
     setP_bizItem("");
+    setP_partnerType("CUSTOMER"); // ✅ 추가
   }
 
   async function createPartner() {
@@ -959,7 +921,7 @@ export default function TradeClient() {
       address1: p_address1.trim() || null,
       biz_type: p_bizType.trim() || null,
       biz_item: p_bizItem.trim() || null,
-      partner_type: "CUSTOMER",
+      partner_type: p_partnerType, // ✅ 변경(하드코딩 제거)
       is_pinned: false,
       pin_order: 9999,
     };
@@ -1002,6 +964,9 @@ export default function TradeClient() {
     setEP_address1(selectedPartner.address1 ?? "");
     setEP_bizType(selectedPartner.biz_type ?? "");
     setEP_bizItem(selectedPartner.biz_item ?? "");
+    // ✅ 추가
+    const pt = String(selectedPartner.partner_type ?? "CUSTOMER") as any;
+    setEP_partnerType(pt === "CUSTOMER" || pt === "VENDOR" || pt === "BOTH" ? pt : "CUSTOMER");
 
     const latest = await loadLatestShippingForPartner(selectedPartner.id);
     const cur = selectedPartner;
@@ -1038,6 +1003,7 @@ export default function TradeClient() {
       address1: normText(ep_address1),
       biz_type: normText(ep_bizType),
       biz_item: normText(ep_bizItem),
+      partner_type: ep_partnerType, // ✅ 추가
       ship_to_name: normText(ship_to_name),
       ship_to_address1: normText(ship_to_address1),
       ship_to_mobile: normText(ship_to_mobile),
@@ -1098,6 +1064,84 @@ export default function TradeClient() {
     }
 
     setPartnerEditOpen(false);
+  }
+
+  // ✅ (추가) partner_type 일괄 정리 적용
+  async function applyBulkPartnerType() {
+    setMsg(null);
+
+    const lines = String(bulkText ?? "")
+      .split(/\r?\n/)
+      .map((x) => x.trim())
+      .filter((x) => x);
+
+    if (lines.length === 0) return setMsg("일괄정리 입력값이 비어있습니다.");
+
+    const byId = new Map(partners.map((p) => [p.id, p]));
+    const byName = new Map<string, PartnerRow[]>();
+    for (const p of partners) {
+      const k = String(p.name ?? "").trim();
+      if (!byName.has(k)) byName.set(k, []);
+      byName.get(k)!.push(p);
+    }
+
+    const updates: Array<{ id: string; partner_type: string }> = [];
+    const skipped: string[] = [];
+
+    for (const row of lines) {
+      const cols = row.split("\t").map((c) => c.trim()).filter((c) => c !== "");
+      if (cols.length < 2) {
+        skipped.push(row);
+        continue;
+      }
+
+      // 허용 partner_type
+      const tRaw = cols[cols.length - 1].toUpperCase();
+      const pt = tRaw === "CUSTOMER" || tRaw === "VENDOR" || tRaw === "BOTH" ? tRaw : null;
+      if (!pt) {
+        skipped.push(row);
+        continue;
+      }
+
+      // 포맷 지원:
+      // 1) id \t partner_type
+      // 2) id \t name \t partner_type
+      // 3) name \t partner_type  (단, name이 유일할 때만)
+      const first = cols[0];
+      if (isUuidLike(first)) {
+        const p = byId.get(first);
+        if (!p) {
+          skipped.push(row);
+          continue;
+        }
+        updates.push({ id: first, partner_type: pt });
+        continue;
+      }
+
+      // name 기반
+      const name = first;
+      const hits = byName.get(name) ?? [];
+      if (hits.length !== 1) {
+        skipped.push(row);
+        continue;
+      }
+      updates.push({ id: hits[0].id, partner_type: pt });
+    }
+
+    if (updates.length === 0) {
+      return setMsg("적용할 데이터가 없습니다. (형식/값을 확인하세요)");
+    }
+
+    const { error } = await supabase.from("partners").upsert(updates, { onConflict: "id" });
+    if (error) return setMsg(error.message);
+
+    await loadPartners();
+
+    if (skipped.length) {
+      setMsg(`일괄정리 적용 완료. (적용 ${updates.length}건, 제외 ${skipped.length}건)`);
+    } else {
+      setMsg(`일괄정리 적용 완료. (적용 ${updates.length}건)`);
+    }
   }
 
   function updateLine(i: number, patch: Partial<Line>) {
@@ -1256,31 +1300,8 @@ export default function TradeClient() {
       list = recentPartnerIds.map((id) => map.get(id)).filter(Boolean) as PartnerRow[];
     }
 
-    // ✅ 매입처만 보기 필터(요청)
-    if (vendorOnly) list = list.filter((p) => isVendorPartner(p));
-
     return list;
-  }, [partners, partnerView, recentPartnerIds, vendorOnly]);
-
-  // ✅ 통합검색 결과
-  const globalMatches = useMemo(() => {
-    const q = globalSearch.trim().toLowerCase();
-    if (!q) return { partners: [] as PartnerRow[], products: [] as MasterProductRow[] };
-
-    const pList = partners
-      .filter((p) => {
-        const name = String(p.name ?? "").toLowerCase();
-        const bn = String(p.business_no ?? "").toLowerCase();
-        return name.includes(q) || bn.includes(q);
-      })
-      .slice(0, 8);
-
-    const prodList = masterProducts
-      .filter((p) => String(p.product_name ?? "").toLowerCase().includes(q))
-      .slice(0, 8);
-
-    return { partners: pList, products: prodList };
-  }, [globalSearch, partners, masterProducts]);
+  }, [partners, partnerView, recentPartnerIds]);
 
   // ✅ 통합표(장부 스타일)
   const unifiedRows = useMemo<UnifiedRow[]>(() => {
@@ -1632,6 +1653,14 @@ export default function TradeClient() {
                 <div className="space-y-2">
                   <input className={input} placeholder="업체명(필수)" value={ep_name} onChange={(e) => setEP_name(e.target.value)} />
                   <input className={input} placeholder="사업자등록번호" value={ep_businessNo} onChange={(e) => setEP_businessNo(e.target.value)} />
+
+                  {/* ✅ 추가: 거래처 구분 */}
+                  <select className={input} value={ep_partnerType} onChange={(e) => setEP_partnerType(e.target.value as any)}>
+                    <option value="CUSTOMER">매출처(CUSTOMER)</option>
+                    <option value="VENDOR">매입처(VENDOR)</option>
+                    <option value="BOTH">둘다(BOTH)</option>
+                  </select>
+
                   <input className={input} placeholder="대표자" value={ep_ceo} onChange={(e) => setEP_ceo(e.target.value)} />
                   <input className={input} placeholder="연락처" value={ep_phone} onChange={(e) => setEP_phone(e.target.value)} />
                   <input className={input} placeholder="주소" value={ep_address1} onChange={(e) => setEP_address1(e.target.value)} />
@@ -2008,13 +2037,24 @@ export default function TradeClient() {
                   수정
                 </button>
 
+                {/* ✅ 추가: 일괄 정리 */}
+                <button
+                  className={btn}
+                  onClick={() => {
+                    setBulkOpen((v) => !v);
+                    setMsg(null);
+                  }}
+                >
+                  일괄정리
+                </button>
+
                 <button className={btn} onClick={() => loadPartners()}>
                   새로고침
                 </button>
               </div>
             </div>
 
-            <div className="mb-3 flex flex-wrap gap-2">
+            <div className="mb-3 flex gap-2">
               <button className={partnerView === "PINNED" ? btnOn : btn} onClick={() => setPartnerView("PINNED")}>
                 즐겨찾기
               </button>
@@ -2024,12 +2064,68 @@ export default function TradeClient() {
               <button className={partnerView === "ALL" ? btnOn : btn} onClick={() => setPartnerView("ALL")}>
                 전체
               </button>
-
-              {/* ✅ 매입처만 보기 탭(요청) */}
-              <button className={vendorOnly ? btnOn : btn} onClick={() => setVendorOnly((v) => !v)} title="매입처(VENDOR/BOTH 또는 그룹명 '매입')만 표시">
-                매입처만 보기
-              </button>
             </div>
+
+            {/* ✅ 추가: 일괄 정리 패널 */}
+            {bulkOpen ? (
+              <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-2 text-sm font-semibold">partner_type 일괄 정리</div>
+                <div className="text-xs text-slate-600">
+                  - 탭으로 구분해서 붙여넣기 하시면 됩니다.
+                  <br />
+                  - 형식:{" "}
+                  <span className="font-semibold tabular-nums">
+                    id [TAB] partner_type
+                  </span>{" "}
+                  (권장) 또는{" "}
+                  <span className="font-semibold">
+                    업체명 [TAB] partner_type
+                  </span>{" "}
+                  (업체명이 유일할 때만)
+                  <br />
+                  - partner_type 값:{" "}
+                  <span className="font-semibold">CUSTOMER / VENDOR / BOTH</span>
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    className={btn}
+                    type="button"
+                    onClick={() => {
+                      const rows = partners
+                        .map((p) => `${p.id}\t${p.name}\t${String(p.partner_type ?? "CUSTOMER")}`)
+                        .join("\n");
+                      setBulkText(rows);
+                      setMsg("현재 거래처 목록을 일괄정리 입력칸에 채웠습니다. (id\t업체명\tpartner_type)");
+                    }}
+                  >
+                    현재목록 불러오기
+                  </button>
+
+                  <button className={btnOn} type="button" onClick={applyBulkPartnerType}>
+                    적용
+                  </button>
+
+                  <button
+                    className={btn}
+                    type="button"
+                    onClick={() => {
+                      setBulkText("");
+                      setMsg(null);
+                    }}
+                  >
+                    입력 초기화
+                  </button>
+                </div>
+
+                <textarea
+                  className={`${input} mt-2 h-40 font-mono text-xs`}
+                  placeholder={`예)\n1b2c...-uuid...\tVENDOR\n2c3d...-uuid...\tCUSTOMER`}
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                />
+              </div>
+            ) : null}
 
             {showPartnerForm ? (
               <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -2038,6 +2134,14 @@ export default function TradeClient() {
                 <div className="space-y-2">
                   <input className={input} placeholder="업체명(필수)" value={p_name} onChange={(e) => setP_name(e.target.value)} />
                   <input className={input} placeholder="사업자등록번호" value={p_businessNo} onChange={(e) => setP_businessNo(e.target.value)} />
+
+                  {/* ✅ 추가: 거래처 구분 */}
+                  <select className={input} value={p_partnerType} onChange={(e) => setP_partnerType(e.target.value as any)}>
+                    <option value="CUSTOMER">매출처(CUSTOMER)</option>
+                    <option value="VENDOR">매입처(VENDOR)</option>
+                    <option value="BOTH">둘다(BOTH)</option>
+                  </select>
+
                   <input className={input} placeholder="대표자" value={p_ceo} onChange={(e) => setP_ceo(e.target.value)} />
                   <input className={input} placeholder="연락처" value={p_phone} onChange={(e) => setP_phone(e.target.value)} />
                   <input className={input} placeholder="주소" value={p_address1} onChange={(e) => setP_address1(e.target.value)} />
@@ -2120,106 +2224,6 @@ export default function TradeClient() {
 
           {/* RIGHT */}
           <div className="min-w-0 space-y-6">
-            {/* ✅ 통합 검색창(A안) */}
-            <div ref={globalWrapRef} className="relative">
-              <input
-                className={input}
-                placeholder="통합 검색(거래처/품목) 예) 포장나라 / 별-다크 / 000-00-00000"
-                value={globalSearch}
-                onChange={(e) => {
-                  setGlobalSearch(e.target.value);
-                  setGlobalOpen(true);
-                }}
-                onFocus={() => setGlobalOpen(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") setGlobalOpen(false);
-                }}
-              />
-
-              {globalOpen && globalSearch.trim() ? (
-                <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
-                  <div className="max-h-[360px] overflow-auto">
-                    <div className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-50 border-b border-slate-200">
-                      거래처
-                    </div>
-                    {globalMatches.partners.length === 0 ? (
-                      <div className="px-4 py-3 text-sm text-slate-500">일치하는 거래처가 없습니다.</div>
-                    ) : (
-                      globalMatches.partners.map((p) => (
-                        <button
-                          key={p.id}
-                          className="w-full px-4 py-3 text-left hover:bg-slate-50 border-b border-slate-100"
-                          onClick={() => {
-                            selectPartner(p);
-                            setGlobalOpen(false);
-                            setGlobalSearch("");
-                          }}
-                        >
-                          <div className="font-semibold text-sm">{p.name}</div>
-                          <div className="text-xs text-slate-500">{p.business_no ?? ""}</div>
-                        </button>
-                      ))
-                    )}
-
-                    <div className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-50 border-b border-slate-200">
-                      품목
-                    </div>
-                    {globalMatches.products.length === 0 ? (
-                      <div className="px-4 py-3 text-sm text-slate-500">일치하는 품목이 없습니다.</div>
-                    ) : (
-                      globalMatches.products.map((p) => (
-                        <button
-                          key={p.product_name}
-                          className="w-full px-4 py-3 text-left hover:bg-slate-50 border-b border-slate-100"
-                          onClick={() => {
-                            addProductToOrder(p.product_name);
-                            setGlobalOpen(false);
-                            setGlobalSearch("");
-                          }}
-                        >
-                          <div className="font-semibold text-sm">{p.product_name}</div>
-                          <div className="text-xs text-slate-500">{p.food_type ?? ""}</div>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            {/* ✅ 거래처 선택 시 연락처/주소 패널 표시 */}
-            {selectedPartner ? (
-              <div className={`${card} p-4`}>
-                <div className="mb-2 flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-semibold">{selectedPartner.name}</div>
-                    <div className="mt-1 text-xs text-slate-500">{selectedPartner.business_no ?? ""}</div>
-                  </div>
-                  <div className="flex gap-2">
-                    {selectedPartner.phone ? (
-                      <a className={btn} href={`tel:${String(selectedPartner.phone).replaceAll(" ", "")}`} title="전화걸기">
-                        전화
-                      </a>
-                    ) : null}
-                    <button className={btn} onClick={openPartnerEdit} title="선택된 거래처 수정">
-                      수정
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    <div className="text-xs text-slate-600">연락처</div>
-                    <div className="mt-1 font-semibold">{selectedPartner.phone ?? "-"}</div>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    <div className="text-xs text-slate-600">주소</div>
-                    <div className="mt-1 font-semibold">{selectedPartner.address1 ?? "-"}</div>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
             <div className="flex gap-2">
               <button className={mode === "ORDERS" ? btnOn : btn} onClick={() => setMode("ORDERS")}>
                 주문/출고
@@ -2751,3 +2755,4 @@ export default function TradeClient() {
     </div>
   );
 }
+```
