@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
 type PartnerRow = {
@@ -468,6 +468,14 @@ export default function TradeClient() {
   const [partners, setPartners] = useState<PartnerRow[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<PartnerRow | null>(null);
 
+  // ✅ 매입처만 보기
+  const [vendorOnly, setVendorOnly] = useState(false);
+
+  // ✅ 통합 검색(거래처/품목)
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [globalOpen, setGlobalOpen] = useState(false);
+  const globalWrapRef = useRef<HTMLDivElement | null>(null);
+
   // 최근 거래처
   const [recentPartnerIds, setRecentPartnerIds] = useState<string[]>([]);
 
@@ -543,10 +551,6 @@ export default function TradeClient() {
   const [category, setCategory] = useState<Category>("매출입금");
   const [amountStr, setAmountStr] = useState("");
   const [ledgerMemo, setLedgerMemo] = useState("");
-
-  // ✅ (추가) 금전출납: 거래처명/사업자번호 직접 입력
-  const [ledgerCounterpartyName, setLedgerCounterpartyName] = useState("");
-  const [ledgerBusinessNo, setLedgerBusinessNo] = useState("");
 
   // 조회기간/데이터
   const [fromYMD, setFromYMD] = useState(addDays(todayYMD(), -30));
@@ -644,6 +648,15 @@ export default function TradeClient() {
     return name.includes("네이버") || name.includes("쿠팡") || name.includes("카카오");
   }
 
+  // ✅ 매입처 판별 (partner_type 우선, 없으면 group_name 보조)
+  function isVendorPartner(p: PartnerRow | null) {
+    const t = String(p?.partner_type ?? "").toUpperCase();
+    const g = String(p?.group_name ?? "");
+    if (t.includes("VENDOR") || t.includes("BOTH")) return true;
+    if (g.includes("매입")) return true;
+    return false;
+  }
+
   // ✅ 품목명에서 "(100개)" 같은 박스입수 추출
   function inferPackEaFromName(name: string) {
     const s = String(name ?? "");
@@ -651,6 +664,34 @@ export default function TradeClient() {
     if (!m) return 1;
     const n = Number(m[1]);
     return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 1;
+  }
+
+  // ✅ 통합검색에서 "품목 선택" 시 주문 라인에 반영
+  function addProductToOrder(productName: string) {
+    setMsg(null);
+    setMode("ORDERS");
+
+    const hit = masterByName.get(productName);
+    const nextPatch: Partial<Line> = {
+      name: productName,
+      food_type: hit?.food_type ?? "",
+      weight_g: Number(hit?.weight_g ?? 0),
+    };
+
+    setLines((prev) => {
+      if (prev.length === 0) return [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0, ...nextPatch } as Line];
+
+      // 첫 줄이 비어있으면 그 줄에 채우기
+      const first = prev[0];
+      const firstEmpty = String(first.name ?? "").trim() === "" && toInt(first.qty) === 0 && toInt(first.unit) === 0 && toInt(first.total_incl_vat) === 0;
+
+      if (firstEmpty) {
+        return prev.map((l, idx) => (idx === 0 ? ({ ...l, ...nextPatch } as Line) : l));
+      }
+
+      // 아니면 새 줄 추가
+      return [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0, ...nextPatch } as Line];
+    });
   }
 
   // ====== Loaders ======
@@ -880,6 +921,17 @@ export default function TradeClient() {
     setSplitSupply(supply);
     setSplitVat(vat);
   }, [totalInclVatStr]);
+
+  // ✅ 통합검색 드롭다운: 바깥 클릭 시 닫기
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      const el = globalWrapRef.current;
+      if (!el) return;
+      if (!el.contains(e.target as any)) setGlobalOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
 
   function resetPartnerForm() {
     setP_name("");
@@ -1165,15 +1217,12 @@ export default function TradeClient() {
 
   async function createLedger() {
     setMsg(null);
+    if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
 
     const amount = Number((amountStr || "0").replaceAll(",", ""));
     if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
 
     const dir = categoryToDirection(category);
-
-    // ✅ 거래처 선택 없이도 입력 가능 (partner_id nullable)
-    const cp = ledgerCounterpartyName.trim() || (selectedPartner?.name ?? "");
-    const biz = ledgerBusinessNo.trim() || (selectedPartner?.business_no ?? "");
 
     const payload: any = {
       entry_date: entryDate,
@@ -1182,11 +1231,11 @@ export default function TradeClient() {
       amount,
       category,
       method: payMethod,
-      counterparty_name: cp || null,
-      business_no: biz || null,
+      counterparty_name: selectedPartner.name,
+      business_no: selectedPartner.business_no,
       memo: ledgerMemo.trim() || null,
       status: "POSTED",
-      partner_id: selectedPartner?.id ?? null, // ✅ 핵심: nullable
+      partner_id: selectedPartner.id,
     };
 
     const { error } = await supabase.from("ledger_entries").insert(payload);
@@ -1207,8 +1256,31 @@ export default function TradeClient() {
       list = recentPartnerIds.map((id) => map.get(id)).filter(Boolean) as PartnerRow[];
     }
 
+    // ✅ 매입처만 보기 필터(요청)
+    if (vendorOnly) list = list.filter((p) => isVendorPartner(p));
+
     return list;
-  }, [partners, partnerView, recentPartnerIds]);
+  }, [partners, partnerView, recentPartnerIds, vendorOnly]);
+
+  // ✅ 통합검색 결과
+  const globalMatches = useMemo(() => {
+    const q = globalSearch.trim().toLowerCase();
+    if (!q) return { partners: [] as PartnerRow[], products: [] as MasterProductRow[] };
+
+    const pList = partners
+      .filter((p) => {
+        const name = String(p.name ?? "").toLowerCase();
+        const bn = String(p.business_no ?? "").toLowerCase();
+        return name.includes(q) || bn.includes(q);
+      })
+      .slice(0, 8);
+
+    const prodList = masterProducts
+      .filter((p) => String(p.product_name ?? "").toLowerCase().includes(q))
+      .slice(0, 8);
+
+    return { partners: pList, products: prodList };
+  }, [globalSearch, partners, masterProducts]);
 
   // ✅ 통합표(장부 스타일)
   const unifiedRows = useMemo<UnifiedRow[]>(() => {
@@ -1525,9 +1597,6 @@ export default function TradeClient() {
   const qtyBadge =
     "shrink-0 inline-flex items-center justify-center rounded-lg border border-slate-300 bg-slate-900 px-2 py-1 text-[11px] font-extrabold text-white";
   const targetLabel = selectedPartner ? selectedPartner.name : "전체";
-
-  // ✅ 급여/세금일 때 거래처 입력 숨김
-  const hideLedgerCounterparty = category === "급여" || category === "세금";
 
   return (
     <div className={`${pageBg} min-h-screen`}>
@@ -1945,7 +2014,7 @@ export default function TradeClient() {
               </div>
             </div>
 
-            <div className="mb-3 flex gap-2">
+            <div className="mb-3 flex flex-wrap gap-2">
               <button className={partnerView === "PINNED" ? btnOn : btn} onClick={() => setPartnerView("PINNED")}>
                 즐겨찾기
               </button>
@@ -1954,6 +2023,11 @@ export default function TradeClient() {
               </button>
               <button className={partnerView === "ALL" ? btnOn : btn} onClick={() => setPartnerView("ALL")}>
                 전체
+              </button>
+
+              {/* ✅ 매입처만 보기 탭(요청) */}
+              <button className={vendorOnly ? btnOn : btn} onClick={() => setVendorOnly((v) => !v)} title="매입처(VENDOR/BOTH 또는 그룹명 '매입')만 표시">
+                매입처만 보기
               </button>
             </div>
 
@@ -2046,6 +2120,106 @@ export default function TradeClient() {
 
           {/* RIGHT */}
           <div className="min-w-0 space-y-6">
+            {/* ✅ 통합 검색창(A안) */}
+            <div ref={globalWrapRef} className="relative">
+              <input
+                className={input}
+                placeholder="통합 검색(거래처/품목) 예) 포장나라 / 별-다크 / 000-00-00000"
+                value={globalSearch}
+                onChange={(e) => {
+                  setGlobalSearch(e.target.value);
+                  setGlobalOpen(true);
+                }}
+                onFocus={() => setGlobalOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setGlobalOpen(false);
+                }}
+              />
+
+              {globalOpen && globalSearch.trim() ? (
+                <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+                  <div className="max-h-[360px] overflow-auto">
+                    <div className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-50 border-b border-slate-200">
+                      거래처
+                    </div>
+                    {globalMatches.partners.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-slate-500">일치하는 거래처가 없습니다.</div>
+                    ) : (
+                      globalMatches.partners.map((p) => (
+                        <button
+                          key={p.id}
+                          className="w-full px-4 py-3 text-left hover:bg-slate-50 border-b border-slate-100"
+                          onClick={() => {
+                            selectPartner(p);
+                            setGlobalOpen(false);
+                            setGlobalSearch("");
+                          }}
+                        >
+                          <div className="font-semibold text-sm">{p.name}</div>
+                          <div className="text-xs text-slate-500">{p.business_no ?? ""}</div>
+                        </button>
+                      ))
+                    )}
+
+                    <div className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-50 border-b border-slate-200">
+                      품목
+                    </div>
+                    {globalMatches.products.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-slate-500">일치하는 품목이 없습니다.</div>
+                    ) : (
+                      globalMatches.products.map((p) => (
+                        <button
+                          key={p.product_name}
+                          className="w-full px-4 py-3 text-left hover:bg-slate-50 border-b border-slate-100"
+                          onClick={() => {
+                            addProductToOrder(p.product_name);
+                            setGlobalOpen(false);
+                            setGlobalSearch("");
+                          }}
+                        >
+                          <div className="font-semibold text-sm">{p.product_name}</div>
+                          <div className="text-xs text-slate-500">{p.food_type ?? ""}</div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* ✅ 거래처 선택 시 연락처/주소 패널 표시 */}
+            {selectedPartner ? (
+              <div className={`${card} p-4`}>
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-semibold">{selectedPartner.name}</div>
+                    <div className="mt-1 text-xs text-slate-500">{selectedPartner.business_no ?? ""}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    {selectedPartner.phone ? (
+                      <a className={btn} href={`tel:${String(selectedPartner.phone).replaceAll(" ", "")}`} title="전화걸기">
+                        전화
+                      </a>
+                    ) : null}
+                    <button className={btn} onClick={openPartnerEdit} title="선택된 거래처 수정">
+                      수정
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <div className="text-xs text-slate-600">연락처</div>
+                    <div className="mt-1 font-semibold">{selectedPartner.phone ?? "-"}</div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <div className="text-xs text-slate-600">주소</div>
+                    <div className="mt-1 font-semibold">{selectedPartner.address1 ?? "-"}</div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <div className="flex gap-2">
               <button className={mode === "ORDERS" ? btnOn : btn} onClick={() => setMode("ORDERS")}>
                 주문/출고
@@ -2407,31 +2581,6 @@ export default function TradeClient() {
                       ))}
                     </div>
                   </div>
-
-                  {/* ✅ 급여/세금일 때 거래처명/사업자번호 입력칸 숨김 */}
-                  {!hideLedgerCounterparty ? (
-                    <>
-                      <div className="md:col-span-2">
-                        <div className="mb-1 text-xs text-slate-600">거래처명</div>
-                        <input
-                          className={input}
-                          placeholder="예: 다이소 / 쿠팡 / 포장나라"
-                          value={ledgerCounterpartyName}
-                          onChange={(e) => setLedgerCounterpartyName(e.target.value)}
-                        />
-                      </div>
-
-                      <div>
-                        <div className="mb-1 text-xs text-slate-600">사업자번호</div>
-                        <input
-                          className={input}
-                          placeholder="000-00-00000"
-                          value={ledgerBusinessNo}
-                          onChange={(e) => setLedgerBusinessNo(e.target.value)}
-                        />
-                      </div>
-                    </>
-                  ) : null}
 
                   <div>
                     <div className="mb-1 text-xs text-slate-600">금액(원)</div>
