@@ -365,10 +365,9 @@ function calcLineAmounts(qtyRaw: any, unitRaw: any, totalInclVatRaw: any) {
   const unit = toInt(unitRaw);
   const totalInclVat = toInt(totalInclVatRaw);
 
-  if (qty <= 0) return { supply: 0, vat: 0, total: 0 };
-
-  // 단가 방식 우선 (unit > 0)
+  // ✅ (수정) 단가 방식은 qty 필요 / 총액 방식은 qty가 0이어도 공급가/부가세 분리 표시
   if (unit > 0) {
+    if (qty <= 0) return { supply: 0, vat: 0, total: 0 };
     const supply = qty * unit;
     const vat = Math.round(supply * 0.1);
     const total = supply + vat;
@@ -633,11 +632,6 @@ export default function TradeClient() {
       saveRecentToLS(next);
       return next;
     });
-  }
-
-  function numFromPresetWeight(w: any) {
-    const n = Number(w ?? 0);
-    return Number.isFinite(n) ? n : 0;
   }
 
   // ✅ 쇼핑몰 거래처 판별 (DB 컬럼 추가 전 임시: 이름 기준)
@@ -1788,7 +1782,7 @@ export default function TradeClient() {
                                 className={inputRight}
                                 inputMode="numeric"
                                 value={formatMoney(l.qty)}
-                                onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })}
+                                onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })} // ✅ (수정) edit는 updateEditLine
                               />
                               {(() => {
                                 const pack = inferPackEaFromName(l.name);
@@ -2138,7 +2132,7 @@ export default function TradeClient() {
                             className={inputRight}
                             inputMode="numeric"
                             value={formatMoney(l.qty)}
-                            onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })}
+                            onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })} // ✅ (수정) create는 updateLine
                           />
                           {(() => {
                             const pack = inferPackEaFromName(l.name);
