@@ -421,19 +421,19 @@ function buildMemoText(r: UnifiedRow) {
 
         const qtyText =
           unitType === "BOX"
-            ? `박스 ${formatMoney(qty)} (입수 ${formatMoney(packEa)} / 실제 ${formatMoney(actualEa)}ea)`
-            : `수량 ${formatMoney(qty)}`;
+            ? '박스 ${formatMoney(qty)} (입수 ${formatMoney(packEa)} / 실제 ${formatMoney(actualEa)}ea)'
+            : '수량 ${formatMoney(qty)}';
 
-        const unitText = unit > 0 ? `단가 ${formatMoney(unit)}` : `총액입력 ${formatMoney(total)}`;
+        const unitText = unit > 0 ? '단가 ${formatMoney(unit)}` : '총액입력 ${formatMoney(total)}`;
 
         return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${formatWeight(w)}g, ` : ""}${qtyText} / ${unitText} / 공급가 ${formatMoney(
           supply
         )} / 부가세 ${formatMoney(vat)} / 총액 ${formatMoney(total)}`;
       })
       .join("\n");
-    return `주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 주문자: ${orderer || "(없음)"}\n- 제목: ${title || "(없음)"}\n\n품목:\n${
+    return '주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 주문자: ${orderer || "(없음)"}\n- 제목: ${title || "(없음)"}\n\n품목:\n${
       rows || "(품목 없음)"
-    }`;
+    }';
   }
 
   const memo = (r.ledger_memo ?? "").trim();
