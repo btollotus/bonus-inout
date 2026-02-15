@@ -160,6 +160,10 @@ type UnifiedRow = {
   ledger_method?: string | null;
   ledger_memo?: string | null;
   ledger_amount?: number;
+
+  // ✅ 추가: 금전출납 거래처/사업자번호(복사/수정용)
+  ledger_counterparty_name?: string | null;
+  ledger_business_no?: string | null;
 };
 
 function formatMoney(n: number | null | undefined) {
@@ -439,7 +443,11 @@ function buildMemoText(r: UnifiedRow) {
   const cat = r.ledger_category ?? r.category ?? "";
   const method = r.ledger_method ?? r.method ?? "";
   const amt = Number(r.ledger_amount ?? 0);
-  return `금전출납 메모\n- 카테고리: ${cat}\n- 결제수단: ${method}\n- 금액: ${formatMoney(amt)}\n\n메모:\n${memo || "(없음)"}`;
+
+  const cp = (r.ledger_counterparty_name ?? r.partnerName ?? "").trim();
+  const bn = (r.ledger_business_no ?? "").trim();
+
+  return `금전출납 메모\n- 카테고리: ${cat}\n- 결제수단: ${method}\n- 금액: ${formatMoney(amt)}\n- 거래처명: ${cp || "(없음)"}\n- 사업자번호: ${bn || "(없음)"}\n\n메모:\n${memo || "(없음)"}`;
 }
 
 function normText(s: any) {
@@ -544,6 +552,10 @@ export default function TradeClient() {
   const [amountStr, setAmountStr] = useState("");
   const [ledgerMemo, setLedgerMemo] = useState("");
 
+  // ✅ 추가: 금전출납 거래처명/사업자번호(입력)
+  const [ledgerCounterpartyName, setLedgerCounterpartyName] = useState("");
+  const [ledgerBusinessNo, setLedgerBusinessNo] = useState("");
+
   // 조회기간/데이터
   const [fromYMD, setFromYMD] = useState(addDays(todayYMD(), -30));
   const [toYMD, setToYMD] = useState(todayYMD());
@@ -576,6 +588,10 @@ export default function TradeClient() {
   const [eCategory, setECategory] = useState<Category>("매출입금");
   const [eAmountStr, setEAmountStr] = useState("");
   const [eLedgerMemo, setELedgerMemo] = useState("");
+
+  // ✅ 추가: 금전출납 거래처명/사업자번호(수정)
+  const [eLedgerCounterpartyName, setELedgerCounterpartyName] = useState("");
+  const [eLedgerBusinessNo, setELedgerBusinessNo] = useState("");
 
   // ✅ (현재 입력폼) 주문/출고 합계
   const orderTotals = useMemo(() => {
@@ -862,6 +878,13 @@ export default function TradeClient() {
     loadTrades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id, fromYMD, toYMD]);
+
+  // ✅ 추가: 선택 거래처가 바뀌면 금전출납의 거래처명/사업자번호 기본값도 동기화
+  useEffect(() => {
+    setLedgerCounterpartyName(selectedPartner?.name ?? "");
+    setLedgerBusinessNo(selectedPartner?.business_no ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPartner?.id]);
 
   // ✅ 총액 입력 즉시 공급가/부가세 자동 분리
   useEffect(() => {
@@ -1168,6 +1191,10 @@ export default function TradeClient() {
 
     const dir = categoryToDirection(category);
 
+    // ✅ 추가: 입력값 우선(비어있으면 선택 거래처 값 fallback)
+    const cpName = (ledgerCounterpartyName || "").trim() || (selectedPartner.name ?? "");
+    const bizNo = (ledgerBusinessNo || "").trim() || (selectedPartner.business_no ?? "");
+
     const payload: any = {
       entry_date: entryDate,
       entry_ts: new Date().toISOString(),
@@ -1175,8 +1202,8 @@ export default function TradeClient() {
       amount,
       category,
       method: payMethod,
-      counterparty_name: selectedPartner.name,
-      business_no: selectedPartner.business_no,
+      counterparty_name: cpName || null,
+      business_no: bizNo || null,
       memo: ledgerMemo.trim() || null,
       status: "POSTED",
       partner_id: selectedPartner.id,
@@ -1187,6 +1214,7 @@ export default function TradeClient() {
 
     setAmountStr("");
     setLedgerMemo("");
+    // 거래처명/사업자번호는 기본값으로 계속 쓰는 경우가 많아서 초기화하지 않음
 
     await loadTrades();
   }
@@ -1266,6 +1294,10 @@ export default function TradeClient() {
         ledger_method: l.method ?? null,
         ledger_memo: l.memo ?? null,
         ledger_amount: amt,
+
+        // ✅ 추가
+        ledger_counterparty_name: l.counterparty_name ?? null,
+        ledger_business_no: l.business_no ?? null,
       });
     }
 
@@ -1295,6 +1327,10 @@ export default function TradeClient() {
         ledger_method: x.ledger_method,
         ledger_memo: x.ledger_memo,
         ledger_amount: x.ledger_amount,
+
+        // ✅ 추가
+        ledger_counterparty_name: x.ledger_counterparty_name,
+        ledger_business_no: x.ledger_business_no,
       };
     });
 
@@ -1346,6 +1382,10 @@ export default function TradeClient() {
     setLedgerMemo(r.ledger_memo ?? "");
     const amt = Number(r.ledger_amount ?? 0);
     setAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
+
+    // ✅ 추가: 거래처명/사업자번호도 복사
+    setLedgerCounterpartyName((r.ledger_counterparty_name ?? r.partnerName ?? "").trim());
+    setLedgerBusinessNo((r.ledger_business_no ?? "").trim());
   }
 
   function onCopyClick(r: UnifiedRow) {
@@ -1395,6 +1435,10 @@ export default function TradeClient() {
       const amt = Number(r.ledger_amount ?? (r.inAmt || r.outAmt || 0));
       setEAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
       setELedgerMemo(r.ledger_memo ?? "");
+
+      // ✅ 추가: 금전출납 거래처명/사업자번호(수정)
+      setELedgerCounterpartyName((r.ledger_counterparty_name ?? r.partnerName ?? "").trim());
+      setELedgerBusinessNo((r.ledger_business_no ?? "").trim());
     }
 
     setEditOpen(true);
@@ -1405,7 +1449,9 @@ export default function TradeClient() {
     setMsg(null);
 
     if (editRow.kind === "ORDER") {
-      const isMall = isMallPartner(selectedPartner); // 선택된 거래처 기준(현재 화면 사용 패턴상 동일)
+      // ✅ (오류 가능성 보완) selectedPartner가 null인 상태에서도 저장 시 에러 방지
+      const isMall = selectedPartner ? isMallPartner(selectedPartner) : false;
+
       const cleanLines = eLines
         .map((l) => {
           const name = (l.name || "").trim();
@@ -1483,12 +1529,18 @@ export default function TradeClient() {
 
       const dir = categoryToDirection(eCategory);
 
+      // ✅ 추가: 거래처명/사업자번호 저장
+      const cpName = (eLedgerCounterpartyName || "").trim();
+      const bizNo = (eLedgerBusinessNo || "").trim();
+
       const payload: any = {
         entry_date: eEntryDate,
         direction: dir,
         amount,
         category: eCategory,
         method: ePayMethod,
+        counterparty_name: cpName || null,
+        business_no: bizNo || null,
         memo: eLedgerMemo.trim() || null,
       };
 
@@ -1781,11 +1833,11 @@ export default function TradeClient() {
                               <input
                                 className={inputRight}
                                 inputMode="numeric"
-                                value={l.qty ? formatMoney(l.qty) : ""} // ✅ (수정) 0일 때 빈칸 표시(삭제/입력 가능)
+                                value={l.qty ? formatMoney(l.qty) : ""}
                                 onChange={(e) => {
                                   const raw = e.target.value.replace(/[^\d,]/g, "");
                                   updateEditLine(i, { qty: raw === "" ? 0 : toInt(raw) });
-                                }} // ✅ (수정) edit는 updateEditLine
+                                }}
                               />
                               {(() => {
                                 const pack = inferPackEaFromName(l.name);
@@ -1856,6 +1908,16 @@ export default function TradeClient() {
                             </button>
                           ))}
                         </div>
+                      </div>
+
+                      {/* ✅ 추가: 거래처명/사업자번호 */}
+                      <div className="md:col-span-2">
+                        <div className="mb-1 text-xs text-slate-600">거래처명</div>
+                        <input className={input} value={eLedgerCounterpartyName} onChange={(e) => setELedgerCounterpartyName(e.target.value)} />
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">사업자번호</div>
+                        <input className={input} value={eLedgerBusinessNo} onChange={(e) => setELedgerBusinessNo(e.target.value)} placeholder="000-00-00000" />
                       </div>
 
                       <div>
@@ -2394,6 +2456,16 @@ export default function TradeClient() {
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  {/* ✅ 추가: 거래처명/사업자번호 입력 */}
+                  <div className="md:col-span-2">
+                    <div className="mb-1 text-xs text-slate-600">거래처명</div>
+                    <input className={input} value={ledgerCounterpartyName} onChange={(e) => setLedgerCounterpartyName(e.target.value)} placeholder="예: 다이소 / 쿠팡 / 포장나라" />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">사업자번호</div>
+                    <input className={input} value={ledgerBusinessNo} onChange={(e) => setLedgerBusinessNo(e.target.value)} placeholder="000-00-00000" />
                   </div>
 
                   <div>
