@@ -104,6 +104,17 @@ type PresetProductRow = {
   barcode: string | null;
 };
 
+// ✅ product_master + variant 기반(TradeClient 자동완성용 뷰)
+type MasterProductRow = {
+  product_name: string;
+  food_type: string | null;
+  report_no: string | null;
+  weight_g: number | null;
+  unit_type: "EA" | "BOX" | string | null;
+  pack_ea: number | null;
+  barcode: string | null;
+};
+
 type Line = {
   food_type: string;
   name: string;
@@ -501,6 +512,15 @@ export default function TradeClient() {
   // ✅ 기성 품목(자동완성/자동 입력)
   const [presetProducts, setPresetProducts] = useState<PresetProductRow[]>([]);
 
+  // ✅ 마스터 품목(TradeClient 자동완성: v_tradeclient_products)
+  const [masterProducts, setMasterProducts] = useState<MasterProductRow[]>([]);
+
+  const masterByName = useMemo(() => {
+    const map = new Map<string, MasterProductRow>();
+    for (const p of masterProducts) map.set(p.product_name, p);
+    return map;
+  }, [masterProducts]);
+
   // 주문/출고 입력
   const [shipDate, setShipDate] = useState(todayYMD());
   const [ordererName, setOrdererName] = useState(""); // ✅ 주문자
@@ -683,6 +703,18 @@ export default function TradeClient() {
     setPresetProducts((data ?? []) as PresetProductRow[]);
   }
 
+  // ✅ v_tradeclient_products 로드 (product_master/variant 기반)
+  async function loadMasterProducts() {
+    const { data, error } = await supabase
+      .from("v_tradeclient_products")
+      .select("product_name,food_type,report_no,weight_g,unit_type,pack_ea,barcode")
+      .order("product_name", { ascending: true })
+      .limit(10000);
+
+    if (error) return;
+    setMasterProducts((data ?? []) as MasterProductRow[]);
+  }
+
   async function loadLatestShippingForPartner(partnerId: string) {
     const { data, error } = await supabase
       .from("partner_shipping_history")
@@ -823,6 +855,7 @@ export default function TradeClient() {
     loadPartners();
     loadFoodTypes();
     loadPresetProducts(); // ✅ 기성 품목 자동완성 데이터 로드
+    loadMasterProducts(); // ✅ v_tradeclient_products 로드
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1729,17 +1762,17 @@ export default function TradeClient() {
                             <input className={input} list="food-types-list" value={l.food_type} onChange={(e) => updateEditLine(i, { food_type: e.target.value })} />
                             <input
                               className={input}
-                              list="preset-products-list"
+                              list="master-product-list"
                               value={l.name}
                               onChange={(e) => {
                                 const v = e.target.value;
                                 updateEditLine(i, { name: v });
 
-                                const hit = presetProducts.find((p) => p.product_name === v);
+                                const hit = masterByName.get(v);
                                 if (hit) {
                                   updateEditLine(i, {
                                     food_type: hit.food_type ?? "",
-                                    weight_g: numFromPresetWeight(hit.weight_g), // ✅ 소수점 유지
+                                    weight_g: Number(hit.weight_g ?? 0),
                                   });
                                 }
                               }}
@@ -1750,19 +1783,19 @@ export default function TradeClient() {
                               value={formatWeight(l.weight_g)}
                               onChange={(e) => updateEditLine(i, { weight_g: toNum(e.target.value) })}
                             />
- <div className="flex items-center gap-1">
-  <input
-    className={inputRight}
-    inputMode="numeric"
-    value={formatMoney(l.qty)}
-    onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })}
-  />
-  {(() => {
-    const pack = inferPackEaFromName(l.name);
-    const isBox = pack > 1;
-    return <span className={qtyBadge}>{isBox ? `BOX` : `EA`}</span>;
-  })()}
-</div>
+                            <div className="flex items-center gap-1">
+                              <input
+                                className={inputRight}
+                                inputMode="numeric"
+                                value={formatMoney(l.qty)}
+                                onChange={(e) => updateLine(i, { qty: toInt(e.target.value) })}
+                              />
+                              {(() => {
+                                const pack = inferPackEaFromName(l.name);
+                                const isBox = pack > 1;
+                                return <span className={qtyBadge}>{isBox ? `BOX` : `EA`}</span>;
+                              })()}
+                            </div>
                             <input
                               className={inputRight}
                               inputMode="numeric"
@@ -1865,6 +1898,12 @@ export default function TradeClient() {
               <datalist id="preset-products-list">
                 {presetProducts.map((p) => (
                   <option key={p.id} value={p.product_name} />
+                ))}
+              </datalist>
+
+              <datalist id="master-product-list">
+                {masterProducts.map((p) => (
+                  <option key={p.product_name} value={p.product_name} />
                 ))}
               </datalist>
             </div>
@@ -2078,35 +2117,35 @@ export default function TradeClient() {
                         <input className={input} list="food-types-list" value={l.food_type} onChange={(e) => updateLine(i, { food_type: e.target.value })} />
                         <input
                           className={input}
-                          list="preset-products-list"
+                          list="master-product-list"
                           value={l.name}
                           onChange={(e) => {
                             const v = e.target.value;
                             updateLine(i, { name: v });
 
-                            const hit = presetProducts.find((p) => p.product_name === v);
+                            const hit = masterByName.get(v);
                             if (hit) {
                               updateLine(i, {
                                 food_type: hit.food_type ?? "",
-                                weight_g: numFromPresetWeight(hit.weight_g), // ✅ 소수점 유지
+                                weight_g: Number(hit.weight_g ?? 0),
                               });
                             }
                           }}
                         />
                         <input className={inputRight} inputMode="decimal" value={formatWeight(l.weight_g)} onChange={(e) => updateLine(i, { weight_g: toNum(e.target.value) })} />
                         <div className="flex items-center gap-1">
-  <input
-    className={inputRight}
-    inputMode="numeric"
-    value={formatMoney(l.qty)}
-    onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })}
-  />
-  {(() => {
-    const pack = inferPackEaFromName(l.name);
-    const isBox = pack > 1;
-    return <span className={qtyBadge}>{isBox ? `BOX` : `EA`}</span>;
-  })()}
-</div>
+                          <input
+                            className={inputRight}
+                            inputMode="numeric"
+                            value={formatMoney(l.qty)}
+                            onChange={(e) => updateEditLine(i, { qty: toInt(e.target.value) })}
+                          />
+                          {(() => {
+                            const pack = inferPackEaFromName(l.name);
+                            const isBox = pack > 1;
+                            return <span className={qtyBadge}>{isBox ? `BOX` : `EA`}</span>;
+                          })()}
+                        </div>
                         <input
                           className={inputRight}
                           inputMode="numeric"
@@ -2146,6 +2185,12 @@ export default function TradeClient() {
                 <datalist id="preset-products-list">
                   {presetProducts.map((p) => (
                     <option key={p.id} value={p.product_name} />
+                  ))}
+                </datalist>
+
+                <datalist id="master-product-list">
+                  {masterProducts.map((p) => (
+                    <option key={p.product_name} value={p.product_name} />
                   ))}
                 </datalist>
 
