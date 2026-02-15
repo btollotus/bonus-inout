@@ -904,56 +904,6 @@ export default function TradeClient() {
     setPartnerEditOpen(false);
   }
 
-
-      // 허용 partner_type
-      const tRaw = cols[cols.length - 1].toUpperCase();
-      const pt = tRaw === "CUSTOMER" || tRaw === "VENDOR" || tRaw === "BOTH" ? tRaw : null;
-      if (!pt) {
-        skipped.push(row);
-        continue;
-      }
-
-      // 포맷 지원:
-      // 1) id \t partner_type
-      // 2) id \t name \t partner_type
-      // 3) name \t partner_type  (단, name이 유일할 때만)
-      const first = cols[0];
-      if (isUuidLike(first)) {
-        const p = byId.get(first);
-        if (!p) {
-          skipped.push(row);
-          continue;
-        }
-        updates.push({ id: first, partner_type: pt });
-        continue;
-      }
-
-      // name 기반
-      const name = first;
-      const hits = byName.get(name) ?? [];
-      if (hits.length !== 1) {
-        skipped.push(row);
-        continue;
-      }
-      updates.push({ id: hits[0].id, partner_type: pt });
-    }
-
-    if (updates.length === 0) {
-      return setMsg("적용할 데이터가 없습니다. (형식/값을 확인하세요)");
-    }
-
-    const { error } = await supabase.from("partners").upsert(updates, { onConflict: "id" });
-    if (error) return setMsg(error.message);
-
-    await loadPartners();
-
-    if (skipped.length) {
-      setMsg(`일괄정리 적용 완료. (적용 ${updates.length}건, 제외 ${skipped.length}건)`);
-    } else {
-      setMsg(`일괄정리 적용 완료. (적용 ${updates.length}건)`);
-    }
-  }
-
   function updateLine(i: number, patch: Partial<Line>) {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
@@ -1864,46 +1814,6 @@ export default function TradeClient() {
                 전체
               </button>
             </div>
-
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    className={btn}
-                    type="button"
-                    onClick={() => {
-                      const rows = partners
-                        .map((p) => `${p.id}\t${p.name}\t${String(p.partner_type ?? "CUSTOMER")}`)
-                        .join("\n");
-                      setBulkText(rows);
-                      setMsg("현재 거래처 목록을 일괄정리 입력칸에 채웠습니다. (id\t업체명\tpartner_type)");
-                    }}
-                  >
-                    현재목록 불러오기
-                  </button>
-
-                  <button className={btnOn} type="button" onClick={applyBulkPartnerType}>
-                    적용
-                  </button>
-
-                  <button
-                    className={btn}
-                    type="button"
-                    onClick={() => {
-                      setBulkText("");
-                      setMsg(null);
-                    }}
-                  >
-                    입력 초기화
-                  </button>
-                </div>
-
-                <textarea
-                  className={`${input} mt-2 h-40 font-mono text-xs`}
-                  placeholder={`예)\n1b2c...-uuid...\tVENDOR\n2c3d...-uuid...\tCUSTOMER`}
-                  value={bulkText}
-                  onChange={(e) => setBulkText(e.target.value)}
-                />
-              </div>
-            ) : null}
 
             {showPartnerForm ? (
               <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
