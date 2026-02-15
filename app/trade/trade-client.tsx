@@ -193,137 +193,6 @@ function toNum(n: any) {
   return Number.isFinite(v) ? v : 0;
 }
 
-// ✅ 안전한 4칙연산 파서 (+ - * / 괄호)
-// - eval() 미사용
-// - 숫자, 공백, . + - * / ( ) 만 허용
-function calcExpression(exprRaw: string): { ok: true; value: number } | { ok: false; error: string } {
-  const expr = (exprRaw ?? "").trim();
-  if (!expr) return { ok: true, value: 0 };
-
-  // 허용 문자 체크
-  if (!/^[0-9+\-*/().\s]+$/.test(expr)) {
-    return { ok: false, error: "숫자와 + - * / ( ) 만 사용 가능합니다." };
-  }
-
-  // 토큰화
-  type Tok = { t: "num"; v: number } | { t: "op"; v: string } | { t: "lp" } | { t: "rp" };
-  const tokens: Tok[] = [];
-  let i = 0;
-
-  const isDigit = (c: string) => c >= "0" && c <= "9";
-
-  while (i < expr.length) {
-    const c = expr[i];
-    if (c === " " || c === "\t" || c === "\n") {
-      i++;
-      continue;
-    }
-    if (c === "(") {
-      tokens.push({ t: "lp" });
-      i++;
-      continue;
-    }
-    if (c === ")") {
-      tokens.push({ t: "rp" });
-      i++;
-      continue;
-    }
-    if (c === "+" || c === "-" || c === "*" || c === "/") {
-      tokens.push({ t: "op", v: c });
-      i++;
-      continue;
-    }
-    if (isDigit(c) || c === ".") {
-      let j = i + 1;
-      while (j < expr.length && (isDigit(expr[j]) || expr[j] === ".")) j++;
-      const numStr = expr.slice(i, j);
-      const num = Number(numStr);
-      if (!Number.isFinite(num)) return { ok: false, error: "숫자 형식이 올바르지 않습니다." };
-      tokens.push({ t: "num", v: num });
-      i = j;
-      continue;
-    }
-    return { ok: false, error: "허용되지 않는 문자가 포함되어 있습니다." };
-  }
-
-  // 단항 - 처리:  -3, (-3), 2*-3 같은 케이스를 (0-3) 형태로 변환
-  const norm: Tok[] = [];
-  for (let k = 0; k < tokens.length; k++) {
-    const cur = tokens[k];
-    const prev = norm[norm.length - 1];
-
-    if (cur.t === "op" && cur.v === "-") {
-      const isUnary = !prev || prev.t === "op" || prev.t === "lp";
-      if (isUnary) {
-        norm.push({ t: "num", v: 0 });
-        norm.push({ t: "op", v: "-" });
-        continue;
-      }
-    }
-    norm.push(cur);
-  }
-
-  // Shunting-yard -> RPN
-  const prec: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2 };
-  const ops: Tok[] = [];
-  const out: Tok[] = [];
-
-  for (const tok of norm) {
-    if (tok.t === "num") out.push(tok);
-    else if (tok.t === "op") {
-      while (ops.length) {
-        const top = ops[ops.length - 1];
-        if (top.t === "op" && prec[top.v] >= prec[tok.v]) out.push(ops.pop() as Tok);
-        else break;
-      }
-      ops.push(tok);
-    } else if (tok.t === "lp") ops.push(tok);
-    else if (tok.t === "rp") {
-      let found = false;
-      while (ops.length) {
-        const top = ops.pop() as Tok;
-        if (top.t === "lp") {
-          found = true;
-          break;
-        }
-        out.push(top);
-      }
-      if (!found) return { ok: false, error: "괄호 짝이 맞지 않습니다." };
-    }
-  }
-
-  while (ops.length) {
-    const top = ops.pop() as Tok;
-    if (top.t === "lp" || top.t === "rp") return { ok: false, error: "괄호 짝이 맞지 않습니다." };
-    out.push(top);
-  }
-
-  // RPN 계산
-  const st: number[] = [];
-  for (const tok of out) {
-    if (tok.t === "num") st.push(tok.v);
-    else if (tok.t === "op") {
-      const b = st.pop();
-      const a = st.pop();
-      if (a === undefined || b === undefined) return { ok: false, error: "수식이 올바르지 않습니다." };
-      let v = 0;
-      if (tok.v === "+") v = a + b;
-      if (tok.v === "-") v = a - b;
-      if (tok.v === "*") v = a * b;
-      if (tok.v === "/") {
-        if (b === 0) return { ok: false, error: "0으로 나눌 수 없습니다." };
-        v = a / b;
-      }
-      st.push(v);
-    }
-  }
-
-  if (st.length !== 1) return { ok: false, error: "수식이 올바르지 않습니다." };
-  const value = st[0];
-  if (!Number.isFinite(value)) return { ok: false, error: "계산 결과가 올바르지 않습니다." };
-  return { ok: true, value };
-}
-
 function safeJsonParse<T>(s: string | null): T | null {
   if (!s) return null;
   try {
@@ -546,16 +415,6 @@ export default function TradeClient() {
   const [shipMethod, setShipMethod] = useState("택배");
   const [orderTitle, setOrderTitle] = useState("");
   const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
-
-  // ✅ 주문/출고 미니 계산기
-  const [calcExpr, setCalcExpr] = useState("");
-  const [calcResult, setCalcResult] = useState<number | null>(null);
-  const [calcErr, setCalcErr] = useState<string | null>(null);
-
-  // ✅ 총액(부가세 포함) -> 공급가/부가세 분리
-  const [totalInclVatStr, setTotalInclVatStr] = useState("");
-  const [splitSupply, setSplitSupply] = useState<number | null>(null);
-  const [splitVat, setSplitVat] = useState<number | null>(null);
 
   // 금전출납 입력
   const [entryDate, setEntryDate] = useState(todayYMD());
@@ -882,20 +741,6 @@ export default function TradeClient() {
     loadTrades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id, fromYMD, toYMD]);
-
-  // ✅ 총액 입력 즉시 공급가/부가세 자동 분리
-  useEffect(() => {
-    const total = Number((totalInclVatStr || "0").replaceAll(",", ""));
-    if (!Number.isFinite(total) || total <= 0) {
-      setSplitSupply(null);
-      setSplitVat(null);
-      return;
-    }
-    const supply = Math.round(total / 1.1);
-    const vat = total - supply;
-    setSplitSupply(supply);
-    setSplitVat(vat);
-  }, [totalInclVatStr]);
 
   function resetPartnerForm() {
     setP_name("");
@@ -2086,8 +1931,7 @@ export default function TradeClient() {
                   </span>{" "}
                   (업체명이 유일할 때만)
                   <br />
-                  - partner_type 값:{" "}
-                  <span className="font-semibold">CUSTOMER / VENDOR / BOTH</span>
+                  - partner_type 값: <span className="font-semibold">CUSTOMER / VENDOR / BOTH</span>
                 </div>
 
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -2395,155 +2239,6 @@ export default function TradeClient() {
                   <button className={btnOn} onClick={createOrder}>
                     주문/출고 생성
                   </button>
-                </div>
-
-                {/* ✅ 미니 계산기 + 총액 분리 */}
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="mb-2 text-sm font-semibold">미니 계산기</div>
-
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    {/* 4칙연산 */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                      <div className="mb-2 text-xs text-slate-600">4칙연산 (+ - * /, 괄호 가능)</div>
-                      <div className="flex gap-2">
-                        <input
-                          className={input}
-                          placeholder="예) 12000*3 + 5500"
-                          value={calcExpr}
-                          onChange={(e) => {
-                            setCalcExpr(e.target.value);
-                            setCalcErr(null);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              const r = calcExpression(calcExpr);
-                              if (!r.ok) {
-                                setCalcErr(r.error);
-                                setCalcResult(null);
-                              } else {
-                                setCalcErr(null);
-                                setCalcResult(r.value);
-                              }
-                            }
-                          }}
-                        />
-                        <button
-                          className={btn}
-                          type="button"
-                          onClick={() => {
-                            const r = calcExpression(calcExpr);
-                            if (!r.ok) {
-                              setCalcErr(r.error);
-                              setCalcResult(null);
-                            } else {
-                              setCalcErr(null);
-                              setCalcResult(r.value);
-                            }
-                          }}
-                        >
-                          계산
-                        </button>
-                      </div>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm tabular-nums">
-                          결과:{" "}
-                          <span className="font-semibold">
-                            {calcResult === null ? "-" : Number.isInteger(calcResult) ? formatMoney(calcResult) : calcResult.toLocaleString("ko-KR")}
-                          </span>
-                        </div>
-
-                        <button
-                          className={btn}
-                          type="button"
-                          onClick={async () => {
-                            if (calcResult === null) return;
-                            try {
-                              await navigator.clipboard.writeText(String(calcResult));
-                              setMsg("계산 결과를 클립보드에 복사했습니다.");
-                            } catch {
-                              setMsg("클립보드 복사에 실패했습니다.");
-                            }
-                          }}
-                          title="결과 복사"
-                        >
-                          결과 복사
-                        </button>
-
-                        <button
-                          className={btn}
-                          type="button"
-                          onClick={() => {
-                            setCalcExpr("");
-                            setCalcResult(null);
-                            setCalcErr(null);
-                          }}
-                        >
-                          초기화
-                        </button>
-                      </div>
-
-                      {calcErr ? (
-                        <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{calcErr}</div>
-                      ) : null}
-                    </div>
-
-                    {/* 총액 -> 공급가/부가세 */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                      <div className="mb-2 text-xs text-slate-600">총액(부가세 포함) 입력 시 공급가/부가세 자동 분리</div>
-
-                      <div className="flex gap-2">
-                        <input
-                          className={inputRight}
-                          inputMode="numeric"
-                          placeholder="총액(원) 예) 110,000"
-                          value={totalInclVatStr}
-                          onChange={(e) => {
-                            const v = e.target.value.replace(/[^\d,]/g, "");
-                            setTotalInclVatStr(v);
-                          }}
-                          onBlur={() => {
-                            const n = Number((totalInclVatStr || "0").replaceAll(",", ""));
-                            if (Number.isFinite(n) && n > 0) setTotalInclVatStr(n.toLocaleString("ko-KR"));
-                          }}
-                        />
-                        <button
-                          className={btn}
-                          type="button"
-                          onClick={() => {
-                            const total = Number((totalInclVatStr || "0").replaceAll(",", ""));
-                            if (!Number.isFinite(total) || total <= 0) {
-                              setSplitSupply(null);
-                              setSplitVat(null);
-                              setMsg("총액(원)을 올바르게 입력하세요.");
-                              return;
-                            }
-
-                            const supply = Math.round(total / 1.1);
-                            const vat = total - supply;
-
-                            setSplitSupply(supply);
-                            setSplitVat(vat);
-                          }}
-                        >
-                          분리
-                        </button>
-                      </div>
-
-                      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                          공급가: <span className="font-semibold tabular-nums">{splitSupply === null ? "-" : formatMoney(splitSupply)}</span>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                          부가세: <span className="font-semibold tabular-nums">{splitVat === null ? "-" : formatMoney(splitVat)}</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-2 text-xs text-slate-500">
-                        ※ 공급가는 “총액/1.1”을 원단위 반올림, 부가세는 “총액-공급가”로 맞춰서 합계가 정확히 떨어지게 했습니다.
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </div>
             ) : null}
