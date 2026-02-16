@@ -1661,10 +1661,11 @@ export default function TradeClient() {
 
                       <div>
                         <div className="mb-1 text-xs text-slate-600">출고방법</div>
+                        {/* ✅ 여기 옵션만 변경 */}
                         <select className={input} value={eShipMethod} onChange={(e) => setEShipMethod(e.target.value)}>
                           <option value="택배">택배</option>
-                          <option value="퀵">퀵</option>
-                          <option value="직접">직접</option>
+                          <option value="퀵-신용">퀵-신용</option>
+                          <option value="퀵-착불">퀵-착불</option>
                           <option value="기타">기타</option>
                         </select>
                       </div>
@@ -1728,11 +1729,11 @@ export default function TradeClient() {
                               <input
                                 className={inputRight}
                                 inputMode="numeric"
-                                value={l.qty ? formatMoney(l.qty) : ""} // ✅ (수정) 0일 때 빈칸 표시(삭제/입력 가능)
+                                value={l.qty ? formatMoney(l.qty) : ""}
                                 onChange={(e) => {
                                   const raw = e.target.value.replace(/[^\d,]/g, "");
                                   updateEditLine(i, { qty: raw === "" ? 0 : toInt(raw) });
-                                }} // ✅ (수정) edit는 updateEditLine
+                                }}
                               />
                               {(() => {
                                 const pack = inferPackEaFromName(l.name);
@@ -2044,10 +2045,11 @@ export default function TradeClient() {
 
                   <div>
                     <div className="mb-1 text-xs text-slate-600">출고방법</div>
+                    {/* ✅ 여기 옵션만 변경 */}
                     <select className={input} value={shipMethod} onChange={(e) => setShipMethod(e.target.value)}>
                       <option value="택배">택배</option>
-                      <option value="퀵">퀵</option>
-                      <option value="직접">직접</option>
+                      <option value="퀵-신용">퀵-신용</option>
+                      <option value="퀵-착불">퀵-착불</option>
                       <option value="기타">기타</option>
                     </select>
                   </div>
@@ -2106,11 +2108,11 @@ export default function TradeClient() {
                           <input
                             className={inputRight}
                             inputMode="numeric"
-                            value={l.qty ? formatMoney(l.qty) : ""} // ✅ (수정) 0일 때 빈칸 표시(삭제/입력 가능)
+                            value={l.qty ? formatMoney(l.qty) : ""}
                             onChange={(e) => {
                               const raw = e.target.value.replace(/[^\d,]/g, "");
                               updateLine(i, { qty: raw === "" ? 0 : toInt(raw) });
-                            }} // ✅ (수정) create는 updateLine
+                            }}
                           />
                           {(() => {
                             const pack = inferPackEaFromName(l.name);
