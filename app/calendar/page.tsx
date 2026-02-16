@@ -282,6 +282,7 @@ export default function CalendarPage() {
   }
 
   // ✅ “출고 n건” 클릭 → 해당 날짜 출고 목록(거래처 + 출고방식) 로드 후 모달 오픈
+  // ✅ 조인(orders -> partners) 없이 2번 조회 방식으로 변경
   async function openShipModal(date: string) {
     setMsg(null);
     setSelShipDate(date);
@@ -292,16 +293,44 @@ export default function CalendarPage() {
     setOpenShip(true);
 
     try {
-      // ⚠️ 전제: orders.partner_id -> partners.id FK가 설정되어 있어서 partners(name) 조인이 가능
-      const { data, error } = await supabase
+      // 1) 해당 날짜 orders 조회 (조인 없이)
+      const { data: ordersData, error: ordersErr } = await supabase
         .from("orders")
-        .select("ship_method, partner_id, partners(name)")
+        .select("partner_id, ship_method")
         .eq("ship_date", date);
 
-      if (error) throw error;
+      if (ordersErr) throw ordersErr;
 
-      const rows: ShipRow[] = ((data ?? []) as any[]).map((r) => {
-        const partnerName = r?.partners?.name ?? "(거래처 미지정)";
+      const orders = (ordersData ?? []) as any[];
+
+      // partner_id 수집
+      const partnerIds = Array.from(
+        new Set(
+          orders
+            .map((r) => r?.partner_id)
+            .filter((v) => typeof v === "string" && v.length > 0)
+        )
+      ) as string[];
+
+      // 2) partners 조회 (in)
+      const partnerNameMap = new Map<string, string>();
+      if (partnerIds.length > 0) {
+        const { data: partnersData, error: partnersErr } = await supabase
+          .from("partners")
+          .select("id,name")
+          .in("id", partnerIds);
+
+        if (partnersErr) throw partnersErr;
+
+        for (const p of (partnersData ?? []) as any[]) {
+          if (p?.id) partnerNameMap.set(String(p.id), String(p.name ?? ""));
+        }
+      }
+
+      // 최종 rows 구성
+      const rows: ShipRow[] = orders.map((r) => {
+        const pid = String(r?.partner_id ?? "");
+        const partnerName = pid && partnerNameMap.get(pid) ? partnerNameMap.get(pid)! : "(거래처 미지정)";
         const method = normalizeShipMethod(r?.ship_method);
         return { partner_name: partnerName, ship_method: method };
       });
@@ -480,9 +509,7 @@ export default function CalendarPage() {
 
                 // ✅ 다른 달(전/다음달)은 "완전 빈칸"으로(혼란 제거)
                 if (!inMonth) {
-                  return (
-                    <div key={ds} className="min-h-[108px] border-t border-slate-200 bg-slate-50" />
-                  );
+                  return <div key={ds} className="min-h-[108px] border-t border-slate-200 bg-slate-50" />;
                 }
 
                 const dayNum = d.getDate();
@@ -531,9 +558,7 @@ export default function CalendarPage() {
                         }}
                         title="클릭해서 출고 목록(거래처/출고방식) 확인"
                       >
-                        출고{" "}
-                        <span className="font-semibold tabular-nums">{shipCnt}</span>
-                        건
+                        출고 <span className="font-semibold tabular-nums">{shipCnt}</span>건
                       </button>
                     ) : null}
 
@@ -556,17 +581,14 @@ export default function CalendarPage() {
           </div>
 
           <div className="mt-2 text-xs text-slate-500">
-            ※ 메모가 비어 있으면 표시하지 않습니다. · 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다. ·
-            출고 건수는 <span className="font-semibold">orders.ship_date</span> 기준입니다.
+            ※ 메모가 비어 있으면 표시하지 않습니다. · 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다. · 출고 건수는{" "}
+            <span className="font-semibold">orders.ship_date</span> 기준입니다.
           </div>
         </div>
 
         {/* 모달: 메모 */}
         {open ? (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-            onClick={() => setOpen(false)}
-          >
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setOpen(false)}>
             <div
               className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
               onClick={(e) => e.stopPropagation()}
@@ -605,9 +627,7 @@ export default function CalendarPage() {
                     onChange={(e) => setAdminText(e.target.value)}
                     placeholder="예: 내부 생산/인원 배치/특이사항"
                   />
-                  <div className="mt-2 text-xs text-slate-500">
-                    ※ 권한이 없으면 RLS로 인해 ADMIN 메모는 저장/조회되지 않습니다.
-                  </div>
+                  <div className="mt-2 text-xs text-slate-500">※ 권한이 없으면 RLS로 인해 ADMIN 메모는 저장/조회되지 않습니다.</div>
                 </div>
 
                 <div className="text-xs text-slate-500">
@@ -620,10 +640,7 @@ export default function CalendarPage() {
 
         {/* ✅ 모달: 출고 목록(거래처 + 출고방식) */}
         {openShip ? (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-            onClick={() => setOpenShip(false)}
-          >
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setOpenShip(false)}>
             <div
               className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
               onClick={(e) => e.stopPropagation()}
@@ -631,9 +648,7 @@ export default function CalendarPage() {
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">출고 목록 · {selShipDate}</div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    거래처별로 묶어서 출고방식(택배/퀵/기타) 건수를 표시합니다.
-                  </div>
+                  <div className="mt-1 text-xs text-slate-500">거래처별로 묶어서 출고방식(택배/퀵/기타) 건수를 표시합니다.</div>
                 </div>
                 <button className={btn} onClick={() => setOpenShip(false)}>
                   닫기
@@ -691,7 +706,8 @@ export default function CalendarPage() {
                   <div className="mt-3 text-xs text-slate-500">
                     ※ 집계/표시는 <span className="font-semibold">orders.ship_date</span> +{" "}
                     <span className="font-semibold">orders.ship_method</span> 기준이며, 거래처명은{" "}
-                    <span className="font-semibold">orders.partner_id → partners.name</span> 조인으로 가져옵니다.
+                    <span className="font-semibold">orders.partner_id</span>를 이용해{" "}
+                    <span className="font-semibold">partners(id,name)</span>를 별도 조회하여 매핑합니다.
                   </div>
                 </div>
               </div>
