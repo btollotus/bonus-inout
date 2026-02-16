@@ -1,67 +1,52 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
-
-type PartyInfo = {
-  name: string;
-  business_no: string | null;
-  ceo_name: string | null;
-  address1: string | null;
-  biz_type: string | null;
-  biz_item: string | null;
-};
 
 type PartnerRow = {
   id: string;
   name: string;
   business_no: string | null;
+  ceo_name: string | null;
+  biz_type: string | null;
+  biz_item: string | null;
+  phone: string | null;
+  address1: string | null;
 };
 
-type Row = {
-  date: string; // YYYY-MM-DD
-  kind: "IN" | "OUT";
-  label: "입금" | "출고" | "출금";
-  amount: number; // 항상 양수 저장, 표시만 OUT은 -로
+type OrderRow = {
+  id: string;
+  customer_id: string | null;
+  customer_name: string | null;
+  ship_date: string | null;
+  ship_method: string | null;
   memo: string | null;
+  total_amount: number | null;
+  created_at: string;
 };
 
-function formatMoney(n: number | null | undefined) {
-  const v = Number(n ?? 0);
-  return v.toLocaleString("ko-KR");
-}
+type LedgerRow = {
+  id: string;
+  entry_date: string;
+  entry_ts: string | null;
+  direction: "IN" | "OUT" | string;
+  amount: number;
+  category: string | null;
+  method: string | null;
+  memo: string | null;
+  partner_id: string | null;
+  counterparty_name: string | null;
+  business_no: string | null;
+  created_at: string;
+};
 
-function safeJsonParse<T>(s: string | null): T | null {
-  if (!s) return null;
-  try {
-    return JSON.parse(s) as T;
-  } catch {
-    return null;
-  }
-}
-
-// ✅ {"title":null,"orderer_name":null} 같은 “의미 없는 JSON”은 빈 문자열로 처리
-function normalizeMemo(raw: string | null) {
-  const s = String(raw ?? "").trim();
-  if (!s) return "";
-
-  const j = safeJsonParse<any>(s);
-  if (j && typeof j === "object") {
-    const values = Object.values(j);
-    const allEmpty = values.every((v) => v === null || v === "" || typeof v === "undefined");
-    if (allEmpty) return "";
-
-    const title = j.title ?? "";
-    const orderer = j.orderer_name ?? "";
-    const parts: string[] = [];
-    if (title) parts.push(`제목: ${title}`);
-    if (orderer) parts.push(`주문자: ${orderer}`);
-    return parts.join(" / ");
-  }
-
-  return s;
-}
+type StatementRow = {
+  date: string;
+  kind: "입금" | "출고" | "출금";
+  amountSigned: number; // ✅ 음수면 - 표시
+  remark: string; // ✅ 의미없는 JSON은 "" 처리
+};
 
 function todayYMD() {
   const d = new Date();
@@ -80,119 +65,121 @@ function addDays(ymd: string, delta: number) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export default function StatementClient({
-  partnerId,
-  from,
-  to,
-}: {
-  partnerId: string;
-  from: string;
-  to: string;
-}) {
+function formatMoney(n: number | null | undefined) {
+  const v = Number(n ?? 0);
+  return v.toLocaleString("ko-KR");
+}
+
+function safeJsonParse<T>(s: string | null) {
+  if (!s) return null;
+  try {
+    return JSON.parse(s) as T;
+  } catch {
+    return null;
+  }
+}
+
+// ✅ {"title":null,"orderer_name":null} 같은 “의미없는 JSON 메모”는 표시 안함
+function normalizeRemark(raw: string | null) {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+
+  const obj = safeJsonParse<{ title?: string | null; orderer_name?: string | null }>(s);
+  if (obj && typeof obj === "object") {
+    const title = String(obj.title ?? "").trim();
+    const orderer = String(obj.orderer_name ?? "").trim();
+    // 둘 다 비었으면 숨김
+    if (!title && !orderer) return "";
+    // 하나라도 있으면 보기좋게 합치기
+    const parts = [];
+    if (title) parts.push(title);
+    if (orderer) parts.push(`주문자:${orderer}`);
+    return parts.join(" / ");
+  }
+
+  return s;
+}
+
+export default function StatementClient() {
   const supabase = useMemo(() => createClient(), []);
+  const sp = useSearchParams();
   const router = useRouter();
+
+  // ✅ URL 파라미터: partner_id / partnerId 둘 다 지원
+  const qpPartnerId = sp.get("partner_id") || sp.get("partnerId") || "";
+  const qpFrom = sp.get("from") || "";
+  const qpTo = sp.get("to") || "";
 
   const [msg, setMsg] = useState<string | null>(null);
 
-  // ✅ 쿼리가 없을 때 선택 UI용 상태
   const [partners, setPartners] = useState<PartnerRow[]>([]);
-  const [pickPartnerId, setPickPartnerId] = useState(partnerId || "");
-  const [pickFrom, setPickFrom] = useState(from || addDays(todayYMD(), -30));
-  const [pickTo, setPickTo] = useState(to || todayYMD());
+  const [partnerId, setPartnerId] = useState<string>(qpPartnerId);
+  const [fromYMD, setFromYMD] = useState<string>(qpFrom || addDays(todayYMD(), -30));
+  const [toYMD, setToYMD] = useState<string>(qpTo || todayYMD());
 
-  const [company, setCompany] = useState<PartyInfo>({
+  const selectedPartner = useMemo(() => partners.find((p) => p.id === partnerId) ?? null, [partners, partnerId]);
+
+  const [rows, setRows] = useState<StatementRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // ✅ “회사정보” (오른쪽) : 제목에 "우리회사" 쓰지 않음 (요청사항)
+  const OUR = {
     name: "주식회사 보누스메이트",
-    business_no: null,
-    ceo_name: "조대성",
+    ceo: "조대성",
     address1: "경기도 파주시 광탄면 장지산로 250-90 1층",
-    biz_type: "제조업",
-    biz_item: "식품제조가공업",
-  });
+    biz: "제조업 / 업태: 식품제조가공업",
+  };
 
-  const [counterparty, setCounterparty] = useState<PartyInfo>({
-    name: "",
-    business_no: null,
-    ceo_name: null,
-    address1: null,
-    biz_type: null,
-    biz_item: null,
-  });
-
-  const [rows, setRows] = useState<Row[]>([]);
-
-  // ✅ theme (products-client.tsx 계열)
+  // ====== Theme (products-client.tsx와 동일한 톤) ======
   const pageBg = "bg-slate-50 text-slate-900";
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
-  const btn =
-    "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
-  const btnOn =
-    "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
   const input =
     "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
+  const btn = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
+  const btnOn =
+    "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
   const pill =
     "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700";
 
-  // ✅ partner 목록 로드 (쿼리 없을 때도 선택 가능하게)
-  useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase
-        .from("partners")
-        .select("id,name,business_no")
-        .order("name", { ascending: true })
-        .limit(2000);
-      if (!error) setPartners((data ?? []) as PartnerRow[]);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  async function loadPartners() {
+    const { data, error } = await supabase
+      .from("partners")
+      .select("id,name,business_no,ceo_name,biz_type,biz_item,phone,address1")
+      .order("name", { ascending: true })
+      .limit(2000);
 
-  // ✅ 쿼리 파라미터가 바뀌면 pick 상태도 동기화
-  useEffect(() => {
-    if (partnerId) setPickPartnerId(partnerId);
-    if (from) setPickFrom(from);
-    if (to) setPickTo(to);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partnerId, from, to]);
+    if (error) {
+      setMsg(error.message);
+      return;
+    }
+    setPartners((data ?? []) as PartnerRow[]);
+  }
 
-  // ✅ 데이터 로드: partnerId/from/to 있을 때만 실행
-  useEffect(() => {
-    (async () => {
-      setMsg(null);
-      setRows([]);
+  function pushUrl(nextPartnerId: string, f: string, t: string) {
+    const qs = new URLSearchParams();
+    if (nextPartnerId) qs.set("partnerId", nextPartnerId); // ✅ 앞으로는 partnerId로 통일해도 되고
+    if (f) qs.set("from", f);
+    if (t) qs.set("to", t);
+    router.replace(`/tax/statement?${qs.toString()}`);
+  }
 
-      if (!partnerId || !from || !to) {
-        // 쿼리 없으면 안내만 하고 로드 중단
-        if (!partnerId) setMsg("partner_id가 없습니다. (상단에서 거래처/기간 선택 후 조회를 누르세요)");
+  async function loadStatement(pId: string, f: string, t: string) {
+    setMsg(null);
+    setLoading(true);
+    try {
+      if (!pId) {
+        setRows([]);
+        setMsg("partner_id가 없습니다. (상단에서 거래처/기간 선택 후 조회를 누르세요)");
         return;
       }
 
-      // 1) 거래처 정보
-      const { data: p, error: pErr } = await supabase
-        .from("partners")
-        .select("name,business_no,ceo_name,address1,biz_type,biz_item")
-        .eq("id", partnerId)
-        .single();
-
-      if (pErr) {
-        setMsg(pErr.message);
-        return;
-      }
-
-      setCounterparty({
-        name: p?.name ?? "",
-        business_no: p?.business_no ?? null,
-        ceo_name: p?.ceo_name ?? null,
-        address1: p?.address1 ?? null,
-        biz_type: p?.biz_type ?? null,
-        biz_item: p?.biz_item ?? null,
-      });
-
-      // 2) 주문/출고(orders) => 출고(OUT)
+      // Orders: 주문/출고 = 출고(음수)
       const { data: oData, error: oErr } = await supabase
         .from("orders")
-        .select("id,ship_date,total_amount,memo,created_at")
-        .eq("customer_id", partnerId)
-        .gte("ship_date", from)
-        .lte("ship_date", to)
+        .select("id,customer_id,customer_name,ship_date,ship_method,memo,total_amount,created_at")
+        .eq("customer_id", pId)
+        .gte("ship_date", f)
+        .lte("ship_date", t)
         .order("ship_date", { ascending: true })
         .limit(5000);
 
@@ -201,21 +188,13 @@ export default function StatementClient({
         return;
       }
 
-      const orderRows: Row[] = (oData ?? []).map((o: any) => ({
-        date: String(o.ship_date ?? (o.created_at ? String(o.created_at).slice(0, 10) : "")),
-        kind: "OUT",
-        label: "출고",
-        amount: Number(o.total_amount ?? 0),
-        memo: normalizeMemo(o.memo ?? null) || null,
-      }));
-
-      // 3) 금전출납(ledger_entries) => IN/OUT
+      // Ledger: IN/OUT
       const { data: lData, error: lErr } = await supabase
         .from("ledger_entries")
-        .select("id,entry_date,direction,amount,memo")
-        .eq("partner_id", partnerId)
-        .gte("entry_date", from)
-        .lte("entry_date", to)
+        .select("id,entry_date,entry_ts,direction,amount,category,method,memo,partner_id,counterparty_name,business_no,created_at")
+        .eq("partner_id", pId)
+        .gte("entry_date", f)
+        .lte("entry_date", t)
         .order("entry_date", { ascending: true })
         .limit(10000);
 
@@ -224,163 +203,206 @@ export default function StatementClient({
         return;
       }
 
-      const ledgerRows: Row[] = (lData ?? []).map((l: any) => {
-        const dir = String(l.direction) === "OUT" ? "OUT" : "IN";
-        return {
-          date: String(l.entry_date ?? ""),
-          kind: dir,
-          label: dir === "IN" ? "입금" : "출금",
-          amount: Number(l.amount ?? 0),
-          memo: normalizeMemo(l.memo ?? null) || null,
-        };
-      });
+      const list: StatementRow[] = [];
 
-      // 4) 합치기 + 정렬
-      const merged = [...orderRows, ...ledgerRows].filter((r) => r.date);
-      merged.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      for (const o of (oData ?? []) as any as OrderRow[]) {
+        const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
+        const amt = Number(o.total_amount ?? 0);
+        list.push({
+          date,
+          kind: "출고",
+          amountSigned: -amt, // ✅ 출고는 마이너스
+          remark: normalizeRemark(o.memo),
+        });
+      }
 
-      setRows(merged);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partnerId, from, to]);
+      for (const l of (lData ?? []) as any as LedgerRow[]) {
+        const date = l.entry_date;
+        const amt = Number(l.amount ?? 0);
+        const sign = String(l.direction) === "OUT" ? -1 : 1;
+        list.push({
+          date,
+          kind: sign > 0 ? "입금" : "출금",
+          amountSigned: sign * amt,
+          remark: normalizeRemark(l.memo),
+        });
+      }
+
+      // 날짜 정렬
+      list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      setRows(list);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const totals = useMemo(() => {
-    const inSum = rows.filter((r) => r.kind === "IN").reduce((a, r) => a + r.amount, 0);
-    const outSum = rows.filter((r) => r.kind === "OUT").reduce((a, r) => a + r.amount, 0);
-    const receivable = Math.max(0, outSum - inSum);
-    return { inSum, outSum, receivable };
+    let inSum = 0;
+    let outSum = 0;
+    for (const r of rows) {
+      if (r.amountSigned >= 0) inSum += r.amountSigned;
+      else outSum += Math.abs(r.amountSigned);
+    }
+    const net = inSum - outSum;
+    return { inSum, outSum, net };
   }, [rows]);
 
-  function onApply() {
-    setMsg(null);
+  useEffect(() => {
+    loadPartners();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    if (!pickPartnerId) return setMsg("거래처를 선택하세요.");
-    if (!pickFrom || !pickTo) return setMsg("기간(from/to)을 입력하세요.");
+  // ✅ 초기: URL에 partnerId/from/to가 있으면 자동 조회
+  useEffect(() => {
+    if (qpPartnerId && qpFrom && qpTo) {
+      setPartnerId(qpPartnerId);
+      setFromYMD(qpFrom);
+      setToYMD(qpTo);
+      // partners 로딩 전이라도 조회는 가능
+      loadStatement(qpPartnerId, qpFrom, qpTo);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    const qs = new URLSearchParams();
-    qs.set("partner_id", pickPartnerId);
-    qs.set("from", pickFrom);
-    qs.set("to", pickTo);
-
-    router.push(`/tax/statement?${qs.toString()}`);
-  }
+  const canPrint = !!partnerId;
 
   return (
     <div className={`${pageBg} min-h-screen`}>
+      {/* ✅ print 전용 스타일(TopNav 이미 숨김, 조회/버튼도 숨김) */}
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-card { box-shadow: none !important; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      `}</style>
+
       <div className="mx-auto w-full max-w-[1200px] px-4 py-6">
         {msg ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {msg}
-          </div>
+          <div className="no-print mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{msg}</div>
         ) : null}
 
-        {/* 헤더 */}
-        <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <div className="text-lg font-semibold">거래원장</div>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="text-xl font-semibold">거래원장</div>
+            <div className="mt-2">
               <span className={pill}>
-                기간: {(from || pickFrom) ?? "-"} ~ {(to || pickTo) ?? "-"}
+                기간: {fromYMD} ~ {toYMD}
               </span>
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <button className={btn} onClick={() => window.print()}>
+          <div className="no-print flex gap-2">
+            <button className={btn} onClick={() => window.print()} disabled={!canPrint} title={!canPrint ? "거래처를 먼저 선택하세요" : ""}>
               인쇄 / PDF 저장
             </button>
           </div>
         </div>
 
-        {/* ✅ 쿼리 없을 때도 진입 가능하도록: 거래처/기간 선택 */}
-        {!partnerId || !from || !to ? (
-          <div className={`${card} mb-4 p-4`}>
-            <div className="mb-3 text-sm font-semibold">조회 조건</div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px_220px_auto] md:items-end">
-              <div>
-                <div className="mb-1 text-xs text-slate-600">거래처</div>
-                <select className={input} value={pickPartnerId} onChange={(e) => setPickPartnerId(e.target.value)}>
-                  <option value="">선택하세요</option>
-                  {partners.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}{p.business_no ? ` (${p.business_no})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        {/* 조회 조건 */}
+        <div className={`${card} no-print p-4`}>
+          <div className="mb-3 text-sm font-semibold">조회 조건</div>
 
-              <div>
-                <div className="mb-1 text-xs text-slate-600">From</div>
-                <input type="date" className={input} value={pickFrom} onChange={(e) => setPickFrom(e.target.value)} />
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs text-slate-600">To</div>
-                <input type="date" className={input} value={pickTo} onChange={(e) => setPickTo(e.target.value)} />
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  className={btn}
-                  onClick={() => {
-                    setPickFrom(addDays(todayYMD(), -30));
-                    setPickTo(todayYMD());
-                  }}
-                >
-                  최근 30일
-                </button>
-                <button className={btnOn} onClick={onApply}>
-                  조회
-                </button>
-              </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_180px_auto] md:items-end">
+            <div>
+              <div className="mb-1 text-xs text-slate-600">거래처</div>
+              <select className={input} value={partnerId} onChange={(e) => setPartnerId(e.target.value)}>
+                <option value="">선택하세요</option>
+                {partners.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.business_no ? `(${p.business_no})` : ""}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-2 text-xs text-slate-500">※ 상단 메뉴에서 들어와도 여기서 거래처/기간 선택 후 조회를 누르면 URL에 반영됩니다.</div>
             </div>
 
-            <div className="mt-2 text-xs text-slate-500">
-              ※ 상단 메뉴로 들어와도 여기서 거래처/기간을 선택하면 자동으로 URL에 반영되어 조회됩니다.
+            <div>
+              <div className="mb-1 text-xs text-slate-600">From</div>
+              <input type="date" className={input} value={fromYMD} onChange={(e) => setFromYMD(e.target.value)} />
+            </div>
+
+            <div>
+              <div className="mb-1 text-xs text-slate-600">To</div>
+              <input type="date" className={input} value={toYMD} onChange={(e) => setToYMD(e.target.value)} />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                className={btn}
+                onClick={() => {
+                  const f = addDays(todayYMD(), -30);
+                  const t = todayYMD();
+                  setFromYMD(f);
+                  setToYMD(t);
+                }}
+              >
+                최근 30일
+              </button>
+              <button
+                className={btnOn}
+                onClick={() => {
+                  pushUrl(partnerId, fromYMD, toYMD);
+                  loadStatement(partnerId, fromYMD, toYMD);
+                }}
+              >
+                조회
+              </button>
             </div>
           </div>
-        ) : null}
+        </div>
 
-        {/* 상단 정보: 거래처(왼쪽) / 회사정보(오른쪽), “우리회사” 문구 없음 */}
-        <div className={`${card} p-4`}>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {/* LEFT: 거래처 */}
-            <div>
-              <div className="mb-2 text-sm font-semibold">거래처</div>
-              <div className="text-sm leading-6">
+        {/* 거래처(좌) / 회사정보(우) */}
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* LEFT: 거래처 */}
+          <div className={`${card} print-card p-4`}>
+            <div className="mb-2 text-sm font-semibold">거래처</div>
+            {selectedPartner ? (
+              <div className="space-y-1 text-sm">
                 <div className="font-semibold">
-                  {counterparty.name}
-                  {counterparty.business_no ? ` (${counterparty.business_no})` : ""}
+                  {selectedPartner.name} {selectedPartner.business_no ? `(${selectedPartner.business_no})` : ""}
                 </div>
-              </div>
-            </div>
-
-            {/* RIGHT: 회사정보 */}
-            <div className="text-right">
-              <div className="mb-2 text-sm font-semibold">&nbsp;</div>
-              <div className="text-sm leading-6">
-                <div className="font-semibold">{company.name}</div>
-                {company.ceo_name ? <div>대표: {company.ceo_name}</div> : null}
-                {company.address1 ? <div>주소: {company.address1}</div> : null}
-                {(company.biz_type || company.biz_item) ? (
+                {selectedPartner.ceo_name ? <div>대표: {selectedPartner.ceo_name}</div> : null}
+                {selectedPartner.address1 ? <div>주소: {selectedPartner.address1}</div> : null}
+                {(selectedPartner.biz_type || selectedPartner.biz_item) ? (
                   <div>
-                    업종: {company.biz_type ?? ""}
-                    {company.biz_item ? ` / 업태: ${company.biz_item}` : ""}
+                    업종: {selectedPartner.biz_type ?? ""} {selectedPartner.biz_item ? `/ 업태: ${selectedPartner.biz_item}` : ""}
                   </div>
                 ) : null}
               </div>
+            ) : (
+              <div className="text-sm text-slate-500">거래처를 선택하세요.</div>
+            )}
+          </div>
+
+          {/* RIGHT: 회사정보 (요청사항: 오른쪽 배치, "우리회사" 단어 없음) */}
+          <div className={`${card} print-card p-4`}>
+            <div className="space-y-1 text-sm text-right">
+              <div className="font-semibold">{OUR.name}</div>
+              <div>대표: {OUR.ceo}</div>
+              <div>주소: {OUR.address1}</div>
+              <div>업종: {OUR.biz}</div>
             </div>
           </div>
         </div>
 
         {/* 표 */}
-        <div className={`${card} mt-4 p-4`}>
+        <div className={`${card} print-card mt-4 p-4`}>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold">내역</div>
+            <div className="text-sm text-slate-600">
+              입금 합계(매출입금) <span className="font-semibold tabular-nums">{formatMoney(totals.inSum)}</span> ·{" "}
+              출고/출금 합계 <span className="font-semibold tabular-nums">{formatMoney(totals.outSum)}</span> ·{" "}
+              미수(출고-입금) <span className="font-semibold tabular-nums">{formatMoney(Math.max(0, totals.outSum - totals.inSum))}</span>
+            </div>
+          </div>
+
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <table className="w-full table-fixed text-sm">
               <colgroup>
                 <col style={{ width: "120px" }} />
                 <col style={{ width: "120px" }} />
-                <col style={{ width: "160px" }} />
+                <col style={{ width: "140px" }} />
                 <col style={{ width: "auto" }} />
               </colgroup>
 
@@ -394,74 +416,40 @@ export default function StatementClient({
               </thead>
 
               <tbody>
-                {rows.map((r, idx) => {
-                  const isOut = r.kind === "OUT";
-                  const memo = normalizeMemo(r.memo ?? null);
-
-                  return (
-                    <tr key={idx} className="border-t border-slate-200 bg-white">
-                      <td className="px-3 py-2 font-semibold tabular-nums">{r.date}</td>
-                      <td className="px-3 py-2 font-semibold">{r.label}</td>
-
-                      {/* ✅ OUT(출고/출금)은 마이너스로 표시 */}
-                      <td
-                        className={`px-3 py-2 text-right tabular-nums font-semibold ${
-                          isOut ? "text-red-600" : "text-blue-700"
-                        }`}
-                      >
-                        {isOut ? `-${formatMoney(r.amount)}` : formatMoney(r.amount)}
-                      </td>
-
-                      <td className="px-3 py-2 text-slate-700">{memo}</td>
-                    </tr>
-                  );
-                })}
-
-                {rows.length === 0 ? (
+                {loading ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-4 text-sm text-slate-500 bg-white">
+                    <td colSpan={4} className="px-4 py-4 text-sm text-slate-500">
+                      불러오는 중...
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-4 text-sm text-slate-500">
                       표시할 내역이 없습니다. (partner_id / 기간 / 데이터 확인)
                     </td>
                   </tr>
-                ) : null}
-
-                {/* 합계 */}
-                {rows.length ? (
-                  <>
-                    <tr className="border-t border-slate-200 bg-slate-50">
-                      <td className="px-3 py-2" />
-                      <td className="px-3 py-2 font-semibold text-right">출고 합계</td>
-                      <td className="px-3 py-2 text-right font-semibold tabular-nums text-red-600">
-                        -{formatMoney(totals.outSum)}
-                      </td>
-                      <td className="px-3 py-2" />
-                    </tr>
-
-                    <tr className="border-t border-slate-200 bg-slate-50">
-                      <td className="px-3 py-2" />
-                      <td className="px-3 py-2 font-semibold text-right">입금 합계(매출입금)</td>
-                      <td className="px-3 py-2 text-right font-semibold tabular-nums text-blue-700">
-                        {formatMoney(totals.inSum)}
-                      </td>
-                      <td className="px-3 py-2" />
-                    </tr>
-
-                    <tr className="border-t border-slate-200 bg-slate-50">
-                      <td className="px-3 py-2" />
-                      <td className="px-3 py-2 font-semibold text-right">미수(출고-입금)</td>
-                      <td className="px-3 py-2 text-right font-semibold tabular-nums">
-                        {formatMoney(totals.receivable)}
-                      </td>
-                      <td className="px-3 py-2" />
-                    </tr>
-                  </>
-                ) : null}
+                ) : (
+                  rows.map((r, idx) => {
+                    const isMinus = r.amountSigned < 0;
+                    const moneyText = isMinus ? `-${formatMoney(Math.abs(r.amountSigned))}` : formatMoney(r.amountSigned);
+                    return (
+                      <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
+                        <td className="px-3 py-2 font-semibold tabular-nums">{r.date}</td>
+                        <td className="px-3 py-2 font-semibold">{r.kind}</td>
+                        <td className={`px-3 py-2 text-right tabular-nums font-semibold ${isMinus ? "text-red-600" : "text-blue-700"}`}>
+                          {moneyText}
+                        </td>
+                        <td className="px-3 py-2">{r.remark ? r.remark : ""}</td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
 
           <div className="mt-2 text-xs text-slate-500">
-            ※ 출고/출금은 음수로 표시됩니다. / 비고의 의미 없는 JSON 메모는 자동으로 숨깁니다.
+            ※ 출고/출금은 <span className="font-semibold">음수</span>로 표시됩니다. / 비고의 의미 없는 JSON 메모는 자동으로 숨깁니다.
           </div>
         </div>
       </div>

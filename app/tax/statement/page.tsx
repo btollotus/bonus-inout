@@ -1,17 +1,9 @@
 import StatementClient from "./statement-client";
 
-export default function Page({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
-  const partnerId = String(searchParams?.partner_id ?? "");
-  const from = String(searchParams?.from ?? "");
-  const to = String(searchParams?.to ?? "");
+// ✅ Vercel 빌드 프리렌더(SSG) 단계에서 /tax/statement가 터지는 것 방지
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <StatementClient partnerId={partnerId} from={from} to={to} />
-    </div>
-  );
+export default function Page() {
+  return <StatementClient />;
 }

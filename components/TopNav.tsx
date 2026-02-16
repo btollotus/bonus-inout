@@ -17,11 +17,12 @@ const nav = [
 export default function TopNav() {
   const pathname = usePathname();
 
-  // ✅ /tax/statement 에서는 상단 검은 영역(TopNav) 완전 숨김
+  // ✅ /tax/statement 화면에서는 상단 검은 메뉴 자체를 숨김(요청사항)
   if (pathname?.startsWith("/tax/statement")) return null;
 
   return (
     <div
+      className="app-topnav"
       style={{
         position: "sticky",
         top: 0,
