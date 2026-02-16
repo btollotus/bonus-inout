@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 
 type PartyInfo = {
@@ -12,9 +13,15 @@ type PartyInfo = {
   biz_item: string | null;
 };
 
+type PartnerRow = {
+  id: string;
+  name: string;
+  business_no: string | null;
+};
+
 type Row = {
   date: string; // YYYY-MM-DD
-  kind: "IN" | "OUT"; // IN=입금, OUT=출고/출금
+  kind: "IN" | "OUT";
   label: "입금" | "출고" | "출금";
   amount: number; // 항상 양수 저장, 표시만 OUT은 -로
   memo: string | null;
@@ -56,6 +63,23 @@ function normalizeMemo(raw: string | null) {
   return s;
 }
 
+function todayYMD() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function addDays(ymd: string, delta: number) {
+  const d = new Date(ymd + "T00:00:00");
+  d.setDate(d.getDate() + delta);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export default function StatementClient({
   partnerId,
   from,
@@ -66,7 +90,15 @@ export default function StatementClient({
   to: string;
 }) {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
+
   const [msg, setMsg] = useState<string | null>(null);
+
+  // ✅ 쿼리가 없을 때 선택 UI용 상태
+  const [partners, setPartners] = useState<PartnerRow[]>([]);
+  const [pickPartnerId, setPickPartnerId] = useState(partnerId || "");
+  const [pickFrom, setPickFrom] = useState(from || addDays(todayYMD(), -30));
+  const [pickTo, setPickTo] = useState(to || todayYMD());
 
   const [company, setCompany] = useState<PartyInfo>({
     name: "주식회사 보누스메이트",
@@ -93,21 +125,43 @@ export default function StatementClient({
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const btn =
     "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
+  const btnOn =
+    "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
+  const input =
+    "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
   const pill =
     "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700";
 
+  // ✅ partner 목록 로드 (쿼리 없을 때도 선택 가능하게)
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
+        .from("partners")
+        .select("id,name,business_no")
+        .order("name", { ascending: true })
+        .limit(2000);
+      if (!error) setPartners((data ?? []) as PartnerRow[]);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ✅ 쿼리 파라미터가 바뀌면 pick 상태도 동기화
+  useEffect(() => {
+    if (partnerId) setPickPartnerId(partnerId);
+    if (from) setPickFrom(from);
+    if (to) setPickTo(to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partnerId, from, to]);
+
+  // ✅ 데이터 로드: partnerId/from/to 있을 때만 실행
   useEffect(() => {
     (async () => {
       setMsg(null);
+      setRows([]);
 
-      if (!partnerId) {
-        setMsg("partner_id가 없습니다. (예: /tax/statement?partner_id=...&from=YYYY-MM-DD&to=YYYY-MM-DD)");
-        setRows([]);
-        return;
-      }
-      if (!from || !to) {
-        setMsg("from/to 기간이 없습니다. (예: from=2026-01-17&to=2026-02-16)");
-        setRows([]);
+      if (!partnerId || !from || !to) {
+        // 쿼리 없으면 안내만 하고 로드 중단
+        if (!partnerId) setMsg("partner_id가 없습니다. (상단에서 거래처/기간 선택 후 조회를 누르세요)");
         return;
       }
 
@@ -120,7 +174,6 @@ export default function StatementClient({
 
       if (pErr) {
         setMsg(pErr.message);
-        setRows([]);
         return;
       }
 
@@ -145,7 +198,6 @@ export default function StatementClient({
 
       if (oErr) {
         setMsg(oErr.message);
-        setRows([]);
         return;
       }
 
@@ -160,7 +212,7 @@ export default function StatementClient({
       // 3) 금전출납(ledger_entries) => IN/OUT
       const { data: lData, error: lErr } = await supabase
         .from("ledger_entries")
-        .select("id,entry_date,direction,amount,memo,category,method")
+        .select("id,entry_date,direction,amount,memo")
         .eq("partner_id", partnerId)
         .gte("entry_date", from)
         .lte("entry_date", to)
@@ -169,7 +221,6 @@ export default function StatementClient({
 
       if (lErr) {
         setMsg(lErr.message);
-        setRows([]);
         return;
       }
 
@@ -196,9 +247,23 @@ export default function StatementClient({
   const totals = useMemo(() => {
     const inSum = rows.filter((r) => r.kind === "IN").reduce((a, r) => a + r.amount, 0);
     const outSum = rows.filter((r) => r.kind === "OUT").reduce((a, r) => a + r.amount, 0);
-    const receivable = Math.max(0, outSum - inSum); // 미수(출고-입금)
+    const receivable = Math.max(0, outSum - inSum);
     return { inSum, outSum, receivable };
   }, [rows]);
+
+  function onApply() {
+    setMsg(null);
+
+    if (!pickPartnerId) return setMsg("거래처를 선택하세요.");
+    if (!pickFrom || !pickTo) return setMsg("기간(from/to)을 입력하세요.");
+
+    const qs = new URLSearchParams();
+    qs.set("partner_id", pickPartnerId);
+    qs.set("from", pickFrom);
+    qs.set("to", pickTo);
+
+    router.push(`/tax/statement?${qs.toString()}`);
+  }
 
   return (
     <div className={`${pageBg} min-h-screen`}>
@@ -215,7 +280,7 @@ export default function StatementClient({
             <div className="text-lg font-semibold">거래원장</div>
             <div className="mt-2 flex flex-wrap gap-2">
               <span className={pill}>
-                기간: {from || "-"} ~ {to || "-"}
+                기간: {(from || pickFrom) ?? "-"} ~ {(to || pickTo) ?? "-"}
               </span>
             </div>
           </div>
@@ -226,6 +291,55 @@ export default function StatementClient({
             </button>
           </div>
         </div>
+
+        {/* ✅ 쿼리 없을 때도 진입 가능하도록: 거래처/기간 선택 */}
+        {!partnerId || !from || !to ? (
+          <div className={`${card} mb-4 p-4`}>
+            <div className="mb-3 text-sm font-semibold">조회 조건</div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px_220px_auto] md:items-end">
+              <div>
+                <div className="mb-1 text-xs text-slate-600">거래처</div>
+                <select className={input} value={pickPartnerId} onChange={(e) => setPickPartnerId(e.target.value)}>
+                  <option value="">선택하세요</option>
+                  {partners.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}{p.business_no ? ` (${p.business_no})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="mb-1 text-xs text-slate-600">From</div>
+                <input type="date" className={input} value={pickFrom} onChange={(e) => setPickFrom(e.target.value)} />
+              </div>
+
+              <div>
+                <div className="mb-1 text-xs text-slate-600">To</div>
+                <input type="date" className={input} value={pickTo} onChange={(e) => setPickTo(e.target.value)} />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  className={btn}
+                  onClick={() => {
+                    setPickFrom(addDays(todayYMD(), -30));
+                    setPickTo(todayYMD());
+                  }}
+                >
+                  최근 30일
+                </button>
+                <button className={btnOn} onClick={onApply}>
+                  조회
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-2 text-xs text-slate-500">
+              ※ 상단 메뉴로 들어와도 여기서 거래처/기간을 선택하면 자동으로 URL에 반영되어 조회됩니다.
+            </div>
+          </div>
+        ) : null}
 
         {/* 상단 정보: 거래처(왼쪽) / 회사정보(오른쪽), “우리회사” 문구 없음 */}
         <div className={`${card} p-4`}>
@@ -241,7 +355,7 @@ export default function StatementClient({
               </div>
             </div>
 
-            {/* RIGHT: 회사정보 (오른쪽 정렬) */}
+            {/* RIGHT: 회사정보 */}
             <div className="text-right">
               <div className="mb-2 text-sm font-semibold">&nbsp;</div>
               <div className="text-sm leading-6">
@@ -298,7 +412,6 @@ export default function StatementClient({
                         {isOut ? `-${formatMoney(r.amount)}` : formatMoney(r.amount)}
                       </td>
 
-                      {/* ✅ {"title":null,"orderer_name":null} 같은 건 공란 */}
                       <td className="px-3 py-2 text-slate-700">{memo}</td>
                     </tr>
                   );
