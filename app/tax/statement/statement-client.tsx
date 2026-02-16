@@ -10,7 +10,7 @@ type OrderRow = {
   customer_id: string | null;
   customer_name: string | null;
   total_amount: number | null;
-  memo: string | null;
+  memo: string | null; // orders.memo (JSON 문자열 가능)
 };
 
 type LedgerRow = {
@@ -42,6 +42,36 @@ function ymd(s: string | null | undefined) {
 
 function nf(n: number) {
   return n.toLocaleString("ko-KR");
+}
+
+// ✅ orders.memo JSON 처리: {"title":null,"orderer_name":null} 같은 값은 숨김
+function formatOrderMemo(memo: string | null | undefined) {
+  const raw = (memo ?? "").toString().trim();
+  if (!raw) return "";
+
+  // JSON 형태면 파싱 시도
+  if (raw.startsWith("{") && raw.endsWith("}")) {
+    try {
+      const obj = JSON.parse(raw);
+      const title = obj?.title ?? null;
+      const orderer = obj?.orderer_name ?? null;
+
+      // 둘 다 null/빈값이면 표시 안함
+      const t = String(title ?? "").trim();
+      const o = String(orderer ?? "").trim();
+      if (!t && !o) return "";
+
+      // 있는 것만 조합
+      if (t && o) return `${t} / ${o}`;
+      if (t) return t;
+      return o;
+    } catch {
+      // JSON 파싱 실패면 원문 노출(최소 변경)
+      return raw;
+    }
+  }
+
+  return raw;
 }
 
 export default function StatementClient() {
@@ -128,7 +158,7 @@ export default function StatementClient() {
         date: ymd(o.ship_date),
         kind: "출고",
         amount: o.total_amount ?? 0,
-        memo: (o.memo ?? "").toString(),
+        memo: formatOrderMemo(o.memo),
       });
     }
 
@@ -141,122 +171,143 @@ export default function StatementClient() {
       });
     }
 
-    // 날짜 오름차순, 같은날은 출고 먼저(원하시면 반대로)
+    // 날짜 오름차순, 같은날은 입금 먼저(원하시면 출고 먼저로 바꿀 수 있음)
     r.sort((a, b) => {
-      if (a.date === b.date) return a.kind === b.kind ? 0 : a.kind === "출고" ? -1 : 1;
+      if (a.date === b.date) return a.kind === b.kind ? 0 : a.kind === "입금" ? -1 : 1;
       return a.date < b.date ? -1 : 1;
     });
 
     return r;
   }, [orders, deposits]);
 
-  const sumShip = useMemo(() => rows.filter(x => x.kind === "출고").reduce((s, x) => s + x.amount, 0), [rows]);
-  const sumIn = useMemo(() => rows.filter(x => x.kind === "입금").reduce((s, x) => s + x.amount, 0), [rows]);
-  const balance = useMemo(() => sumShip - sumIn, [sumShip, sumIn]); // 출고-입금 = 미수(+) 개념
+  const sumShip = useMemo(() => rows.filter((x) => x.kind === "출고").reduce((s, x) => s + x.amount, 0), [rows]);
+  const sumIn = useMemo(() => rows.filter((x) => x.kind === "입금").reduce((s, x) => s + x.amount, 0), [rows]);
+  const balance = useMemo(() => sumShip - sumIn, [sumShip, sumIn]); // 미수(출고-입금)
+
+  // ✅ products-client.tsx와 맞추는 “다크 배색” (statement 전용)
+  const pageBg = "min-h-screen bg-black text-white";
+  const card = "rounded-2xl border border-white/10 bg-black";
 
   return (
-    <div className="bm-wrap">
-      {/* 인쇄 전용 초압축 CSS (statement 페이지에만 적용) */}
+    <div className={pageBg}>
+      {/* ✅ 인쇄 전용 초압축 CSS + 상단 메뉴(TopNav) 숨김 강화 */}
       <style jsx global>{`
         @media print {
           @page { size: A4; margin: 6mm; }
-          html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          /* 상단 메뉴/네비가 딸려오면 숨김(프로젝트마다 다를 수 있어 안전하게 처리) */
+          html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fff !important; color: #000 !important; }
+
+          /* ✅ TopNav가 어떤 태그로 렌더되어도 1차로 숨김 (layout에서 TopNav가 body 첫 자식인 구조를 가정) */
+          body > :first-child { display: none !important; }
+
+          /* 혹시 남는 경우 대비 */
           nav, header, .topnav, .no-print { display: none !important; }
 
           /* 행간/여백 최대 압축 */
           .bm-wrap { font-size: 11px !important; line-height: 1.05 !important; }
-          .bm-box { padding: 6px !important; margin: 0 0 6px 0 !important; }
+          .bm-box { padding: 6px !important; margin: 0 0 6px 0 !important; border: 1px solid #ddd !important; }
           .bm-title { font-size: 14px !important; margin: 0 0 4px 0 !important; }
           .bm-sub { margin: 0 !important; }
           table { border-collapse: collapse !important; }
-          th, td { padding: 2px 4px !important; line-height: 1.05 !important; }
-          .bm-tfoot td { padding-top: 4px !important; }
+          th, td { padding: 2px 4px !important; line-height: 1.05 !important; border-color: #ddd !important; color: #000 !important; }
+          thead tr { background: #f3f4f6 !important; }
         }
       `}</style>
 
-      <div className="bm-box">
-        <div className="bm-title">거래원장</div>
+      <div className="bm-wrap mx-auto w-full max-w-[1100px] px-4 py-6">
+        {/* ✅ 헤더: 거래처(왼쪽) / 우리회사정보(오른쪽) */}
+        <div className={`${card} bm-box p-4`}>
+          <div className="bm-title text-lg font-semibold">거래원장</div>
 
-        <div className="bm-sub">
-          <div>업체명: 주식회사 보누스메이트</div>
-          <div>대표: 조대성</div>
-          <div>주소: 경기도 파주시 광탄면 장지산로 250-90 1층</div>
-          <div>업종: 제조업 / 업태: 식품제조가공업</div>
-        </div>
+          <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            {/* 왼쪽: 거래처 */}
+            <div className="bm-sub text-sm">
+              <div className="font-semibold">거래처</div>
+              <div className="mt-1">
+                {partner?.name ?? "(불러오는 중)"}{partner?.business_no ? ` (${partner.business_no})` : ""}
+              </div>
+              <div className="mt-1">기간: {from} ~ {to}</div>
+            </div>
 
-        <hr style={{ margin: "6px 0" }} />
+            {/* 오른쪽: 우리 회사 */}
+            <div className="bm-sub text-sm md:text-right">
+              <div className="font-semibold">우리 회사</div>
+              <div className="mt-1">업체명: 주식회사 보누스메이트</div>
+              <div>대표: 조대성</div>
+              <div>주소: 경기도 파주시 광탄면 장지산로 250-90 1층</div>
+              <div>업종: 제조업 / 업태: 식품제조가공업</div>
+            </div>
+          </div>
 
-        <div className="bm-sub">
-          <div>거래처: {partner?.name ?? "(불러오는 중)"}{partner?.business_no ? ` (${partner.business_no})` : ""}</div>
-          <div>기간: {from} ~ {to}</div>
-        </div>
-
-        <div className="no-print" style={{ marginTop: 8, display: "flex", gap: 8 }}>
-          <button
-            onClick={() => window.print()}
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-          >
-            인쇄 / PDF 저장
-          </button>
-          <div style={{ color: "#666", fontSize: 12, alignSelf: "center" }}>
-            ※ 인쇄 시 행간/여백은 자동으로 최대 축소됩니다.
+          <div className="no-print mt-4 flex items-center gap-2">
+            <button
+              onClick={() => window.print()}
+              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm hover:bg-white/15"
+            >
+              인쇄 / PDF 저장
+            </button>
+            <div className="text-xs text-white/60">※ 인쇄 시 행간/여백은 자동으로 최대 축소됩니다.</div>
           </div>
         </div>
-      </div>
 
-      <div className="bm-box">
-        {msg && <div style={{ color: "crimson", marginBottom: 8 }}>{msg}</div>}
-        {loading ? (
-          <div>불러오는 중...</div>
-        ) : (
-          <table style={{ width: "100%", border: "1px solid #ddd" }}>
-            <thead>
-              <tr style={{ background: "#f6f7f9" }}>
-                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>일자</th>
-                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>구분</th>
-                <th style={{ textAlign: "right", borderBottom: "1px solid #ddd" }}>금액</th>
-                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>비고</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, idx) => (
-                <tr key={`${r.date}-${r.kind}-${idx}`}>
-                  <td style={{ borderBottom: "1px solid #eee", whiteSpace: "nowrap" }}>{r.date}</td>
-                  <td style={{ borderBottom: "1px solid #eee", whiteSpace: "nowrap" }}>{r.kind}</td>
-                  <td style={{ borderBottom: "1px solid #eee", textAlign: "right", whiteSpace: "nowrap" }}>
-                    {nf(r.amount)}
-                  </td>
-                  <td style={{ borderBottom: "1px solid #eee" }}>{r.memo}</td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={4} style={{ padding: 12, textAlign: "center", color: "#666" }}>
-                    기간 내 거래내역이 없습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-            <tfoot className="bm-tfoot">
-              <tr>
-                <td colSpan={2} style={{ textAlign: "right", fontWeight: 700, paddingTop: 8 }}>출고 합계</td>
-                <td style={{ textAlign: "right", fontWeight: 700, paddingTop: 8 }}>{nf(sumShip)}</td>
-                <td />
-              </tr>
-              <tr>
-                <td colSpan={2} style={{ textAlign: "right", fontWeight: 700 }}>입금 합계(매출입금)</td>
-                <td style={{ textAlign: "right", fontWeight: 700 }}>{nf(sumIn)}</td>
-                <td />
-              </tr>
-              <tr>
-                <td colSpan={2} style={{ textAlign: "right", fontWeight: 800 }}>미수(출고-입금)</td>
-                <td style={{ textAlign: "right", fontWeight: 800 }}>{nf(balance)}</td>
-                <td />
-              </tr>
-            </tfoot>
-          </table>
-        )}
+        <div className={`${card} bm-box mt-4 p-4`}>
+          {msg && <div className="mb-2 text-sm text-red-300">{msg}</div>}
+          {loading ? (
+            <div className="text-sm text-white/70">불러오는 중...</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/15 bg-white/5 text-left">
+                    <th className="px-3 py-2">일자</th>
+                    <th className="px-3 py-2">구분</th>
+                    <th className="px-3 py-2 text-right">금액</th>
+                    <th className="px-3 py-2">비고</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, idx) => {
+                    // ✅ 출고는 마이너스 표시 (표시만 - 로, 계산은 기존대로)
+                    const displayAmount = r.kind === "출고" ? `-${nf(r.amount)}` : nf(r.amount);
+                    return (
+                      <tr key={`${r.date}-${r.kind}-${idx}`} className="border-b border-white/10">
+                        <td className="px-3 py-2 whitespace-nowrap">{r.date}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.kind}</td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">{displayAmount}</td>
+                        <td className="px-3 py-2">{r.memo}</td>
+                      </tr>
+                    );
+                  })}
+
+                  {rows.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-3 py-6 text-center text-sm text-white/60">
+                        기간 내 거래내역이 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+
+                <tfoot>
+                  <tr>
+                    <td colSpan={2} className="px-3 py-2 text-right font-semibold">출고 합계</td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums">{`-${nf(sumShip)}`}</td>
+                    <td />
+                  </tr>
+                  <tr>
+                    <td colSpan={2} className="px-3 py-2 text-right font-semibold">입금 합계(매출입금)</td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums">{nf(sumIn)}</td>
+                    <td />
+                  </tr>
+                  <tr>
+                    <td colSpan={2} className="px-3 py-2 text-right font-extrabold">미수(출고-입금)</td>
+                    <td className="px-3 py-2 text-right font-extrabold tabular-nums">{nf(balance)}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
