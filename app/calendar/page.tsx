@@ -15,7 +15,7 @@ type CalendarMemoRow = {
   updated_at: string;
 };
 
-// ✅ 출고 방법(택배/퀵) 집계용 (orders 테이블에 ship_method 컬럼이 있다고 가정)
+// ✅ 출고 방법(택배/퀵) 집계용 (orders.ship_method 기준)
 type ShipMethod = "택배" | "퀵" | "기타";
 
 function ymd(d: Date) {
@@ -64,7 +64,6 @@ function build42Days(monthDate: Date) {
 function getKoreaHolidaysMap(year: number): Record<string, string> {
   const map: Record<string, string> = {};
 
-  // 고정 공휴일
   const fixed = [
     [`${year}-01-01`, "신정"],
     [`${year}-03-01`, "삼일절"],
@@ -77,7 +76,6 @@ function getKoreaHolidaysMap(year: number): Record<string, string> {
   ];
   for (const [d, name] of fixed) map[d] = name;
 
-  // 2026 음력 기반 공휴일 (정확 표시용)
   if (year === 2026) {
     map["2026-02-16"] = "설날(연휴)";
     map["2026-02-17"] = "설날";
@@ -88,7 +86,6 @@ function getKoreaHolidaysMap(year: number): Record<string, string> {
     map["2026-09-25"] = "추석";
     map["2026-09-26"] = "추석(연휴)";
 
-    // 2026 대체공휴일(주요)
     map["2026-03-02"] = "삼일절 대체";
     map["2026-05-25"] = "부처님오신날 대체";
     map["2026-08-17"] = "광복절 대체";
@@ -118,7 +115,8 @@ export default function CalendarPage() {
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const input =
     "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
-  const btn = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
+  const btn =
+    "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
   const btnOn =
     "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
   const pill =
@@ -135,7 +133,6 @@ export default function CalendarPage() {
     "inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700";
 
   const [msg, setMsg] = useState<string | null>(null);
-
   const [curMonth, setCurMonth] = useState(() => monthKey(new Date())); // ✅ 기본: 오늘이 속한 월
 
   const curMonthDate = useMemo(() => firstOfMonth(curMonth), [curMonth]);
@@ -162,7 +159,7 @@ export default function CalendarPage() {
   const [adminText, setAdminText] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // ✅ 모달(출고 클릭 - 출고 목록: 거래처 + 출고방식)
+  // ✅ 모달(출고 n건 클릭 - 출고 목록: 거래처 + 출고방식)
   const [openShip, setOpenShip] = useState(false);
   const [selShipDate, setSelShipDate] = useState<string>("");
 
@@ -208,8 +205,6 @@ export default function CalendarPage() {
 
     // 2) orders 출고 집계 (ship_date + ship_method 기준)
     {
-      // ⚠️ orders 테이블에 ship_method 컬럼이 있어야 합니다.
-      // (만약 컬럼명이 다르면, 여기 select 컬럼명만 맞춰주면 됩니다)
       const { data, error } = await supabase
         .from("orders")
         .select("ship_date,ship_method")
@@ -252,11 +247,9 @@ export default function CalendarPage() {
   useEffect(() => {
     if (didFocusRef.current) return;
 
-    // 현재 보고 있는 달이 오늘이 속한 달일 때만 포커싱
     const isSameMonth = curMonth === monthKey(new Date());
     if (!isSameMonth) return;
 
-    // 렌더 후 DOM에서 해당 셀 버튼을 찾아 포커스
     const t = window.setTimeout(() => {
       const el = document.querySelector<HTMLButtonElement>(`button[data-date="${todayStr}"]`);
       if (el) {
@@ -281,8 +274,8 @@ export default function CalendarPage() {
     setOpen(true);
   }
 
-  // ✅ “출고 n건” 클릭 → 해당 날짜 출고 목록(거래처 + 출고방식) 로드 후 모달 오픈
-  // ✅ 조인(orders -> partners) 없이 2번 조회 방식으로 변경
+  // ✅ “출고 n건” 클릭 → 해당 날짜 출고 목록(거래처 + 출고방식)
+  // ✅ 현재 스키마 기준: orders.customer_name 을 거래처명으로 사용 (FK 없음)
   async function openShipModal(date: string) {
     setMsg(null);
     setSelShipDate(date);
@@ -293,46 +286,17 @@ export default function CalendarPage() {
     setOpenShip(true);
 
     try {
-      // 1) 해당 날짜 orders 조회 (조인 없이)
-      const { data: ordersData, error: ordersErr } = await supabase
+      const { data, error } = await supabase
         .from("orders")
-        .select("partner_id, ship_method")
+        .select("customer_name, ship_method")
         .eq("ship_date", date);
 
-      if (ordersErr) throw ordersErr;
+      if (error) throw error;
 
-      const orders = (ordersData ?? []) as any[];
-
-      // partner_id 수집
-      const partnerIds = Array.from(
-        new Set(
-          orders
-            .map((r) => r?.partner_id)
-            .filter((v) => typeof v === "string" && v.length > 0)
-        )
-      ) as string[];
-
-      // 2) partners 조회 (in)
-      const partnerNameMap = new Map<string, string>();
-      if (partnerIds.length > 0) {
-        const { data: partnersData, error: partnersErr } = await supabase
-          .from("partners")
-          .select("id,name")
-          .in("id", partnerIds);
-
-        if (partnersErr) throw partnersErr;
-
-        for (const p of (partnersData ?? []) as any[]) {
-          if (p?.id) partnerNameMap.set(String(p.id), String(p.name ?? ""));
-        }
-      }
-
-      // 최종 rows 구성
-      const rows: ShipRow[] = orders.map((r) => {
-        const pid = String(r?.partner_id ?? "");
-        const partnerName = pid && partnerNameMap.get(pid) ? partnerNameMap.get(pid)! : "(거래처 미지정)";
+      const rows: ShipRow[] = ((data ?? []) as any[]).map((r) => {
+        const customerName = String(r?.customer_name ?? "").trim() || "(거래처 미지정)";
         const method = normalizeShipMethod(r?.ship_method);
-        return { partner_name: partnerName, ship_method: method };
+        return { partner_name: customerName, ship_method: method };
       });
 
       setShipRows(rows);
@@ -351,7 +315,6 @@ export default function CalendarPage() {
   }, [shipRows]);
 
   const shipGrouped = useMemo(() => {
-    // 거래처 -> (출고방식 -> count)
     const m = new Map<string, Map<ShipMethod, number>>();
     for (const r of shipRows) {
       if (!m.has(r.partner_name)) m.set(r.partner_name, new Map());
@@ -359,7 +322,6 @@ export default function CalendarPage() {
       inner.set(r.ship_method, (inner.get(r.ship_method) ?? 0) + 1);
     }
 
-    // 보기 좋게 정렬(거래처명 오름차순)
     return Array.from(m.entries())
       .sort((a, b) => a[0].localeCompare(b[0], "ko"))
       .map(([partner, inner]) => ({
@@ -394,7 +356,11 @@ export default function CalendarPage() {
       return;
     }
 
-    const { error } = await supabase.from("calendar_memos").update({ content: trimmed }).eq("id", existing.id);
+    const { error } = await supabase
+      .from("calendar_memos")
+      .update({ content: trimmed })
+      .eq("id", existing.id);
+
     if (error) throw new Error(error.message);
   }
 
@@ -419,15 +385,13 @@ export default function CalendarPage() {
     const dateStr = ymd(dateObj);
     const isHoliday = !!holidays[dateStr];
 
-    // 공휴일은 빨강(관공서 기준)
     if (isHoliday) return "text-red-600";
-    if (dow === 0) return "text-red-600"; // 일
-    if (dow === 6) return "text-blue-600"; // 토
+    if (dow === 0) return "text-red-600";
+    if (dow === 6) return "text-blue-600";
     return "text-slate-900";
   }
 
   function weekdayHeaderColor(idx: number) {
-    // 0=일, 6=토
     if (idx === 0) return "text-red-600";
     if (idx === 6) return "text-blue-600";
     return "text-slate-600";
@@ -468,12 +432,7 @@ export default function CalendarPage() {
               >
                 ◀ 이전달
               </button>
-              <button
-                className={btn}
-                onClick={() => {
-                  setCurMonth(monthKey(new Date()));
-                }}
-              >
+              <button className={btn} onClick={() => setCurMonth(monthKey(new Date()))}>
                 오늘
               </button>
               <button
@@ -507,7 +466,7 @@ export default function CalendarPage() {
                 const ds = ymd(d);
                 const inMonth = d.getMonth() === curMonthDate.getMonth();
 
-                // ✅ 다른 달(전/다음달)은 "완전 빈칸"으로(혼란 제거)
+                // ✅ 다른 달(전/다음달)은 "완전 빈칸"
                 if (!inMonth) {
                   return <div key={ds} className="min-h-[108px] border-t border-slate-200 bg-slate-50" />;
                 }
@@ -527,9 +486,9 @@ export default function CalendarPage() {
                   <button
                     key={ds}
                     data-date={ds}
-                    className={`min-h-[108px] border-t border-slate-200 p-3 text-left hover:bg-slate-50 bg-white
-                      ${isToday ? "ring-2 ring-blue-500/30 bg-blue-50/40" : ""}
-                    `}
+                    className={`min-h-[108px] border-t border-slate-200 p-3 text-left hover:bg-slate-50 bg-white ${
+                      isToday ? "ring-2 ring-blue-500/30 bg-blue-50/40" : ""
+                    }`}
                     onClick={() => openDayModal(ds)}
                     title="클릭해서 메모 추가/수정"
                   >
@@ -547,7 +506,7 @@ export default function CalendarPage() {
                       </div>
                     </div>
 
-                    {/* ✅ 출고 표시 (orders) - 클릭하면 "거래처+출고방식" 목록 모달 */}
+                    {/* ✅ 출고 표시: 클릭하면 출고 목록(거래처+출고방식) 모달 */}
                     {shipCnt > 0 ? (
                       <button
                         type="button"
@@ -562,7 +521,7 @@ export default function CalendarPage() {
                       </button>
                     ) : null}
 
-                    {/* 메모 표시: 없으면 아무것도 안 보이게(요청사항) */}
+                    {/* 메모 표시: 없으면 아무것도 안 보이게 */}
                     {pub ? (
                       <div className="mt-2 line-clamp-2 text-xs text-slate-700">
                         <span className="font-semibold text-slate-900">공개</span>: {pub}
@@ -685,12 +644,7 @@ export default function CalendarPage() {
                           <div className="text-sm font-semibold text-slate-900">{g.partner}</div>
                           <div className="mt-2 flex flex-wrap gap-2">
                             {g.methods.map((m) => {
-                              const cls =
-                                m.ship_method === "택배"
-                                  ? badgeShip
-                                  : m.ship_method === "퀵"
-                                  ? badgeQuick
-                                  : badgeEtc;
+                              const cls = m.ship_method === "택배" ? badgeShip : m.ship_method === "퀵" ? badgeQuick : badgeEtc;
                               return (
                                 <span key={m.ship_method} className={cls}>
                                   {m.ship_method} <span className="tabular-nums">{m.cnt}</span>
@@ -706,8 +660,7 @@ export default function CalendarPage() {
                   <div className="mt-3 text-xs text-slate-500">
                     ※ 집계/표시는 <span className="font-semibold">orders.ship_date</span> +{" "}
                     <span className="font-semibold">orders.ship_method</span> 기준이며, 거래처명은{" "}
-                    <span className="font-semibold">orders.partner_id</span>를 이용해{" "}
-                    <span className="font-semibold">partners(id,name)</span>를 별도 조회하여 매핑합니다.
+                    <span className="font-semibold">orders.customer_name</span>을 그대로 사용합니다. (FK 없음)
                   </div>
                 </div>
               </div>
