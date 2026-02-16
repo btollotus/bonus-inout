@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import Holidays from "date-holidays";
 
 type Visibility = "PUBLIC" | "ADMIN";
 
@@ -55,6 +56,8 @@ function endOfCalendarGrid(month: Date) {
 
 export default function CalendarClient() {
   const supabase = useMemo(() => createClient(), []);
+
+  const hd = useMemo(() => new Holidays("KR"), []);
 
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -289,11 +292,18 @@ export default function CalendarClient() {
 
           <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
             <div className="grid min-w-[980px] grid-cols-7">
-              {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
-                <div key={d} className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
-                  {d}
-                </div>
-              ))}
+{["일", "월", "화", "수", "목", "금", "토"].map((d, i) => {
+  const color =
+    i === 0 ? "text-red-600" : i === 6 ? "text-blue-600" : "text-slate-600";
+  return (
+    <div
+      key={d}
+      className={`border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold ${color}`}
+    >
+      {d}
+    </div>
+  );
+})}
 
               {days.map((d) => {
                 const dayYmd = ymd(d);
@@ -307,6 +317,15 @@ export default function CalendarClient() {
 
                 const isToday = dayYmd === today;
 
+                const dow = d.getDay(); // 0=일 ... 6=토
+const holiday = hd.isHoliday(parseYMD(dayYmd));
+const holidayName = Array.isArray(holiday)
+  ? holiday[0]?.name
+  : (holiday as any)?.name;
+
+const isSun = dow === 0;
+const isSat = dow === 6;
+
                 return (
                   <button
                     key={dayYmd}
@@ -317,9 +336,19 @@ export default function CalendarClient() {
                     type="button"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className={`font-semibold tabular-nums ${isToday ? "text-blue-700" : "text-slate-900"}`}>
-                        {d.getDate()}
-                      </div>
+                    <div
+  className={`font-semibold tabular-nums ${
+    isToday
+      ? "text-blue-700"
+      : holidayName || isSun
+      ? "text-red-600"
+      : isSat
+      ? "text-blue-600"
+      : "text-slate-900"
+  }`}
+>
+  {d.getDate()}
+</div>
                       <div className="flex gap-1">
                         {hasPub ? (
                           <span className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-extrabold text-blue-700">
@@ -335,21 +364,17 @@ export default function CalendarClient() {
                     </div>
 
                     <div className="mt-2 space-y-2">
-                      {hasPub ? (
-                        <div className="line-clamp-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                          {pub}
-                        </div>
-                      ) : (
-                        <div className="text-xs text-slate-400">공개 메모 없음</div>
-                      )}
+                    {hasPub ? (
+  <div className="line-clamp-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+    {pub}
+  </div>
+) : null}
 
-                      {hasAdm ? (
-                        <div className="line-clamp-2 rounded-xl border border-slate-200 bg-rose-50/50 px-3 py-2 text-xs text-rose-700">
-                          {adm}
-                        </div>
-                      ) : isAdmin ? (
-                        <div className="text-xs text-slate-400">관리자 메모 없음</div>
-                      ) : null}
+{hasAdm ? (
+  <div className="line-clamp-2 rounded-xl border border-slate-200 bg-rose-50/50 px-3 py-2 text-xs text-rose-700">
+    {adm}
+  </div>
+) : null}
                     </div>
                   </button>
                 );
