@@ -103,6 +103,9 @@ function normalizeShipMethod(v: any): ShipMethod {
   return "기타";
 }
 
+// ✅ 모달 출고목록에서 숨길 “판매 채널”
+const HIDE_CUSTOMERS = new Set(["카카오플러스-판매", "네이버-판매", "쿠팡-판매"]);
+
 export default function CalendarPage() {
   const supabase = useMemo(() => createClient(), []);
   const todayStr = useMemo(() => ymd(new Date()), []);
@@ -159,7 +162,7 @@ export default function CalendarPage() {
   const [adminText, setAdminText] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // ✅ 모달(출고 n건 클릭 - 출고 목록: 거래처 + 출고방식)
+  // ✅ 모달(출고 n건 클릭 - 출고 목록: 업체명-택배 형태)
   const [openShip, setOpenShip] = useState(false);
   const [selShipDate, setSelShipDate] = useState<string>("");
 
@@ -203,7 +206,7 @@ export default function CalendarPage() {
       setMemos((data ?? []) as CalendarMemoRow[]);
     }
 
-    // 2) orders 출고 집계 (ship_date + ship_method 기준)
+    // 2) orders 출고 집계 (ship_date + ship_method 기준)  ※ 달력 표시는 전체 주문 기준(변경 없음)
     {
       const { data, error } = await supabase
         .from("orders")
@@ -274,8 +277,9 @@ export default function CalendarPage() {
     setOpen(true);
   }
 
-  // ✅ “출고 n건” 클릭 → 해당 날짜 출고 목록(거래처 + 출고방식)
+  // ✅ “출고 n건” 클릭 → 해당 날짜 출고 목록(업체명-택배 형태)
   // ✅ 현재 스키마 기준: orders.customer_name 을 거래처명으로 사용 (FK 없음)
+  // ✅ 네이버/쿠팡/카카오플러스 판매 채널은 숨김(목록/집계에서 제외)
   async function openShipModal(date: string) {
     setMsg(null);
     setSelShipDate(date);
@@ -293,12 +297,13 @@ export default function CalendarPage() {
 
       if (error) throw error;
 
-      const rows: ShipRow[] = ((data ?? []) as any[]).map((r) => {
+      const rowsAll: ShipRow[] = ((data ?? []) as any[]).map((r) => {
         const customerName = String(r?.customer_name ?? "").trim() || "(거래처 미지정)";
         const method = normalizeShipMethod(r?.ship_method);
         return { partner_name: customerName, ship_method: method };
       });
 
+      const rows = rowsAll.filter((r) => !HIDE_CUSTOMERS.has(r.partner_name));
       setShipRows(rows);
     } catch (e: any) {
       setShipListErr(e?.message ?? "출고 목록 조회 중 오류");
@@ -307,6 +312,7 @@ export default function CalendarPage() {
     }
   }
 
+  // 모달 내 요약(숨김 적용 후 기준)
   const shipSummary = useMemo(() => {
     const total = shipRows.length;
     const byMethod: Record<ShipMethod, number> = { 택배: 0, 퀵: 0, 기타: 0 };
@@ -314,29 +320,35 @@ export default function CalendarPage() {
     return { total, byMethod };
   }, [shipRows]);
 
-  const shipGrouped = useMemo(() => {
-    const m = new Map<string, Map<ShipMethod, number>>();
+  // ✅ 표시 형태: "업체명 - 택배" 라인 단위(업체+방법별 건수)
+  const shipLines = useMemo(() => {
+    const m = new Map<string, number>(); // key: "업체명__방법" -> cnt
     for (const r of shipRows) {
-      if (!m.has(r.partner_name)) m.set(r.partner_name, new Map());
-      const inner = m.get(r.partner_name)!;
-      inner.set(r.ship_method, (inner.get(r.ship_method) ?? 0) + 1);
+      const key = `${r.partner_name}__${r.ship_method}`;
+      m.set(key, (m.get(key) ?? 0) + 1);
     }
 
-    return Array.from(m.entries())
-      .sort((a, b) => a[0].localeCompare(b[0], "ko"))
-      .map(([partner, inner]) => ({
-        partner,
-        methods: (["택배", "퀵", "기타"] as ShipMethod[])
-          .map((k) => ({ ship_method: k, cnt: inner.get(k) ?? 0 }))
-          .filter((x) => x.cnt > 0),
-      }));
+    const lines = Array.from(m.entries()).map(([key, cnt]) => {
+      const [partner, method] = key.split("__") as [string, ShipMethod];
+      return { partner, method, cnt };
+    });
+
+    // 정렬: 업체명 → 방법(택배/퀵/기타)
+    const order: Record<ShipMethod, number> = { 택배: 0, 퀵: 1, 기타: 2 };
+    lines.sort((a, b) => {
+      const nameCmp = a.partner.localeCompare(b.partner, "ko");
+      if (nameCmp !== 0) return nameCmp;
+      return (order[a.method] ?? 9) - (order[b.method] ?? 9);
+    });
+
+    return lines;
   }, [shipRows]);
 
   async function upsertMemo(date: string, vis: Visibility, content: string) {
     const existing = memoMap.get(memoKey(date, vis));
     const trimmed = content.trim();
 
-    // 빈 값이면 "삭제"로 취급(요청: 일정 없으면 빈칸)
+    // 빈 값이면 "삭제"
     if (!trimmed) {
       if (!existing) return;
       const { error } = await supabase.from("calendar_memos").delete().eq("id", existing.id);
@@ -506,7 +518,7 @@ export default function CalendarPage() {
                       </div>
                     </div>
 
-                    {/* ✅ 출고 표시: 클릭하면 출고 목록(거래처+출고방식) 모달 */}
+                    {/* ✅ 출고 표시: 클릭하면 출고 목록(업체명-택배) 모달 */}
                     {shipCnt > 0 ? (
                       <button
                         type="button"
@@ -515,7 +527,7 @@ export default function CalendarPage() {
                           e.stopPropagation();
                           openShipModal(ds);
                         }}
-                        title="클릭해서 출고 목록(거래처/출고방식) 확인"
+                        title="클릭해서 출고 목록(업체명-출고방식) 확인"
                       >
                         출고 <span className="font-semibold tabular-nums">{shipCnt}</span>건
                       </button>
@@ -547,7 +559,10 @@ export default function CalendarPage() {
 
         {/* 모달: 메모 */}
         {open ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setOpen(false)}>
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+            onClick={() => setOpen(false)}
+          >
             <div
               className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
               onClick={(e) => e.stopPropagation()}
@@ -586,7 +601,9 @@ export default function CalendarPage() {
                     onChange={(e) => setAdminText(e.target.value)}
                     placeholder="예: 내부 생산/인원 배치/특이사항"
                   />
-                  <div className="mt-2 text-xs text-slate-500">※ 권한이 없으면 RLS로 인해 ADMIN 메모는 저장/조회되지 않습니다.</div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    ※ 권한이 없으면 RLS로 인해 ADMIN 메모는 저장/조회되지 않습니다.
+                  </div>
                 </div>
 
                 <div className="text-xs text-slate-500">
@@ -597,9 +614,12 @@ export default function CalendarPage() {
           </div>
         ) : null}
 
-        {/* ✅ 모달: 출고 목록(거래처 + 출고방식) */}
+        {/* ✅ 모달: 출고 목록(업체명-택배 형태) */}
         {openShip ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setOpenShip(false)}>
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+            onClick={() => setOpenShip(false)}
+          >
             <div
               className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
               onClick={(e) => e.stopPropagation()}
@@ -607,7 +627,9 @@ export default function CalendarPage() {
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">출고 목록 · {selShipDate}</div>
-                  <div className="mt-1 text-xs text-slate-500">거래처별로 묶어서 출고방식(택배/퀵/기타) 건수를 표시합니다.</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    업체명-출고방식(택배/퀵/기타) 형태로 표시합니다.
+                  </div>
                 </div>
                 <button className={btn} onClick={() => setOpenShip(false)}>
                   닫기
@@ -635,32 +657,37 @@ export default function CalendarPage() {
                     <div className="text-sm text-slate-600">불러오는 중...</div>
                   ) : shipListErr ? (
                     <div className="text-sm text-red-700">{shipListErr}</div>
-                  ) : shipGrouped.length === 0 ? (
+                  ) : shipLines.length === 0 ? (
                     <div className="text-sm text-slate-600">출고 건이 없습니다.</div>
                   ) : (
                     <div className="space-y-2">
-                      {shipGrouped.map((g) => (
-                        <div key={g.partner} className="rounded-2xl border border-slate-200 bg-white p-3">
-                          <div className="text-sm font-semibold text-slate-900">{g.partner}</div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {g.methods.map((m) => {
-                              const cls = m.ship_method === "택배" ? badgeShip : m.ship_method === "퀵" ? badgeQuick : badgeEtc;
-                              return (
-                                <span key={m.ship_method} className={cls}>
-                                  {m.ship_method} <span className="tabular-nums">{m.cnt}</span>
-                                </span>
-                              );
-                            })}
+                      {shipLines.map((x) => {
+                        const cls =
+                          x.method === "택배" ? badgeShip : x.method === "퀵" ? badgeQuick : badgeEtc;
+
+                        return (
+                          <div
+                            key={`${x.partner}__${x.method}`}
+                            className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                          >
+                            <div className="text-sm font-semibold text-slate-900">
+                              {x.partner} - {x.method}
+                            </div>
+                            <span className={cls}>
+                              <span className="tabular-nums">{x.cnt}</span>
+                            </span>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
                   <div className="mt-3 text-xs text-slate-500">
                     ※ 집계/표시는 <span className="font-semibold">orders.ship_date</span> +{" "}
                     <span className="font-semibold">orders.ship_method</span> 기준이며, 거래처명은{" "}
-                    <span className="font-semibold">orders.customer_name</span>을 그대로 사용합니다. (FK 없음)
+                    <span className="font-semibold">orders.customer_name</span>을 그대로 사용합니다. (FK 없음) ·
+                    {` `}
+                    <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 숨김 처리됩니다.
                   </div>
                 </div>
               </div>
