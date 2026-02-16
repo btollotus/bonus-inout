@@ -1,3 +1,4 @@
+```tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -935,6 +936,21 @@ export default function TradeClient() {
 
   function removeLine(i: number) {
     setLines((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  // ✅ (추가) 택배비 버튼: 클릭 시 자동 품목 추가
+  function addShippingFeeLine(feeTotalInclVat: number) {
+    setLines((prev) => [
+      ...prev,
+      {
+        food_type: "",
+        name: "택배비",
+        weight_g: 0,
+        qty: 1,
+        unit: 0,
+        total_incl_vat: toInt(feeTotalInclVat),
+      },
+    ]);
   }
 
   // ====== 수정 모달용 라인 업데이트 ======
@@ -2034,9 +2050,17 @@ export default function TradeClient() {
 
                 <div className="mt-4 flex items-center justify-between">
                   <div className="text-sm font-semibold">품목(식품유형 자동완성 포함)</div>
-                  <button className={btn} onClick={addLine}>
-                    + 품목 추가
-                  </button>
+                  <div className="flex gap-2">
+                    <button className={btn} type="button" onClick={() => addShippingFeeLine(3300)}>
+                      택배비 3,300원
+                    </button>
+                    <button className={btn} type="button" onClick={() => addShippingFeeLine(4000)}>
+                      택배비 4,000원
+                    </button>
+                    <button className={btn} onClick={addLine}>
+                      + 품목 추가
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2 text-xs text-slate-600">
@@ -2418,3 +2442,4 @@ export default function TradeClient() {
     </div>
   );
 }
+```
