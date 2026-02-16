@@ -137,6 +137,10 @@ type UnifiedRow = {
   balance: number;
   rawId: string;
 
+  // ✅ 검색/편집용 추가
+  businessNo?: string; // 사업자번호(검색/표시용)
+  ledger_partner_id?: string | null; // ledger 수정 저장 시 유지용
+
   // 복사용(주문)
   ship_method?: string;
   order_title?: string | null;
@@ -413,6 +417,10 @@ export default function TradeClient() {
   const [amountStr, setAmountStr] = useState("");
   const [ledgerMemo, setLedgerMemo] = useState("");
 
+  // ✅ 금전출납: 거래처 미등록 매입처 수기 입력
+  const [manualCounterpartyName, setManualCounterpartyName] = useState("");
+  const [manualBusinessNo, setManualBusinessNo] = useState("");
+
   // 조회기간/데이터
   const [fromYMD, setFromYMD] = useState(addDays(todayYMD(), -30));
   const [toYMD, setToYMD] = useState(todayYMD());
@@ -422,6 +430,9 @@ export default function TradeClient() {
   // ✅ 기초잔액 포함 러닝잔액
   const [includeOpening, setIncludeOpening] = useState(true);
   const [openingBalance, setOpeningBalance] = useState(0);
+
+  // ✅ 거래내역 검색(매입 내용/제품 등)
+  const [tradeSearch, setTradeSearch] = useState("");
 
   // ✅ 메모 보기(팝업)
   const [memoOpen, setMemoOpen] = useState(false);
@@ -445,6 +456,8 @@ export default function TradeClient() {
   const [eCategory, setECategory] = useState<Category>("매출입금");
   const [eAmountStr, setEAmountStr] = useState("");
   const [eLedgerMemo, setELedgerMemo] = useState("");
+  const [eCounterpartyName, setECounterpartyName] = useState("");
+  const [eBusinessNo, setEBusinessNo] = useState("");
 
   // ✅ (현재 입력폼) 주문/출고 합계
   const orderTotals = useMemo(() => {
@@ -731,6 +744,14 @@ export default function TradeClient() {
     loadTrades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id, fromYMD, toYMD]);
+
+  // ✅ 거래처 선택 시, 수기 입력칸이 비어있으면 자동 채움
+  useEffect(() => {
+    if (!selectedPartner) return;
+    setManualCounterpartyName((prev) => (prev.trim() ? prev : selectedPartner.name ?? ""));
+    setManualBusinessNo((prev) => (prev.trim() ? prev : selectedPartner.business_no ?? ""));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPartner?.id]);
 
   function resetPartnerForm() {
     setP_name("");
@@ -1019,14 +1040,21 @@ export default function TradeClient() {
     await loadTrades();
   }
 
+  // ✅ 거래처 선택 필수 제거 + 수기 업체명/사업자번호 저장
   async function createLedger() {
     setMsg(null);
-    if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
 
     const amount = Number((amountStr || "0").replaceAll(",", ""));
     if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
 
     const dir = categoryToDirection(category);
+
+    const counterparty_name = manualCounterpartyName.trim() || selectedPartner?.name || null;
+    const business_no = manualBusinessNo.trim() || selectedPartner?.business_no || null;
+
+    if (!counterparty_name) {
+      return setMsg("업체명(매입처/상대방)을 입력하거나 왼쪽에서 거래처를 선택하세요.");
+    }
 
     const payload: any = {
       entry_date: entryDate,
@@ -1035,11 +1063,11 @@ export default function TradeClient() {
       amount,
       category,
       method: payMethod,
-      counterparty_name: selectedPartner.name,
-      business_no: selectedPartner.business_no,
+      counterparty_name,
+      business_no,
       memo: ledgerMemo.trim() || null,
       status: "POSTED",
-      partner_id: selectedPartner.id,
+      partner_id: selectedPartner?.id ?? null,
     };
 
     const { error } = await supabase.from("ledger_entries").insert(payload);
@@ -1047,6 +1075,12 @@ export default function TradeClient() {
 
     setAmountStr("");
     setLedgerMemo("");
+
+    // 거래처 미선택 상태에서 수기입력으로 기록한 경우, 다음 입력을 위해 비움
+    if (!selectedPartner) {
+      setManualCounterpartyName("");
+      setManualBusinessNo("");
+    }
 
     await loadTrades();
   }
@@ -1081,6 +1115,7 @@ export default function TradeClient() {
         date,
         tsKey,
         partnerName: o.customer_name ?? "",
+        businessNo: "", // (orders에서 사업자번호를 안불러오므로 빈값 유지)
         ordererName: orderer ?? "",
         category: "주문/출고",
         method: o.ship_method ?? "",
@@ -1115,6 +1150,8 @@ export default function TradeClient() {
         date: l.entry_date,
         tsKey: l.entry_ts || `${l.entry_date}T12:00:00.000Z`,
         partnerName: l.counterparty_name ?? "",
+        businessNo: l.business_no ?? "",
+        ledger_partner_id: l.partner_id ?? null,
         ordererName: "", // ✅ 금전출납은 주문자 없음
         category: l.category ?? "금전출납",
         method: l.method ?? "",
@@ -1140,6 +1177,8 @@ export default function TradeClient() {
         date: x.date,
         tsKey: x.tsKey,
         partnerName: x.partnerName,
+        businessNo: x.businessNo,
+        ledger_partner_id: x.ledger_partner_id ?? null,
         ordererName: x.ordererName,
         category: x.category,
         method: x.method,
@@ -1206,6 +1245,10 @@ export default function TradeClient() {
     setLedgerMemo(r.ledger_memo ?? "");
     const amt = Number(r.ledger_amount ?? 0);
     setAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
+
+    // ✅ 수기 입력칸도 같이 복사
+    setManualCounterpartyName(r.partnerName ?? "");
+    setManualBusinessNo(r.businessNo ?? "");
   }
 
   function onCopyClick(r: UnifiedRow) {
@@ -1255,6 +1298,10 @@ export default function TradeClient() {
       const amt = Number(r.ledger_amount ?? (r.inAmt || r.outAmt || 0));
       setEAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
       setELedgerMemo(r.ledger_memo ?? "");
+
+      // ✅ 업체명/사업자번호도 수정 가능하게 세팅
+      setECounterpartyName(r.partnerName ?? "");
+      setEBusinessNo(r.businessNo ?? "");
     }
 
     setEditOpen(true);
@@ -1345,6 +1392,11 @@ export default function TradeClient() {
 
       const dir = categoryToDirection(eCategory);
 
+      const counterparty_name = eCounterpartyName.trim() || null;
+      const business_no = eBusinessNo.trim() || null;
+
+      if (!counterparty_name) return setMsg("업체명(매입처/상대방)은 비울 수 없습니다.");
+
       const payload: any = {
         entry_date: eEntryDate,
         direction: dir,
@@ -1352,6 +1404,11 @@ export default function TradeClient() {
         category: eCategory,
         method: ePayMethod,
         memo: eLedgerMemo.trim() || null,
+
+        // ✅ 추가(세무사/검색용 핵심)
+        counterparty_name,
+        business_no,
+        partner_id: editRow.ledger_partner_id ?? null,
       };
 
       const { error } = await supabase.from("ledger_entries").update(payload).eq("id", editRow.rawId);
@@ -1745,7 +1802,18 @@ export default function TradeClient() {
                         />
                       </div>
 
-                      <div className="md:col-span-2">
+                      {/* ✅ 추가: 업체명/사업자번호 수정 */}
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div>
+                        <input className={input} value={eCounterpartyName} onChange={(e) => setECounterpartyName(e.target.value)} />
+                      </div>
+
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">사업자등록번호</div>
+                        <input className={input} value={eBusinessNo} onChange={(e) => setEBusinessNo(e.target.value)} />
+                      </div>
+
+                      <div className="md:col-span-3">
                         <div className="mb-1 text-xs text-slate-600">메모</div>
                         <input className={input} value={eLedgerMemo} onChange={(e) => setELedgerMemo(e.target.value)} />
                       </div>
@@ -2142,7 +2210,28 @@ export default function TradeClient() {
                     />
                   </div>
 
-                  <div className="md:col-span-2">
+                  {/* ✅ 추가: 거래처 미등록 매입처(업체명/사업자번호) 수기 입력 */}
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div>
+                    <input
+                      className={input}
+                      value={manualCounterpartyName}
+                      onChange={(e) => setManualCounterpartyName(e.target.value)}
+                      placeholder="예: 쿠팡 / 이마트 / 네이버페이 / ㅇㅇ상사"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">사업자등록번호</div>
+                    <input
+                      className={input}
+                      value={manualBusinessNo}
+                      onChange={(e) => setManualBusinessNo(e.target.value)}
+                      placeholder="예: 123-45-67890"
+                    />
+                  </div>
+
+                  <div className="md:col-span-3">
                     <div className="mb-1 text-xs text-slate-600">메모</div>
                     <input className={input} value={ledgerMemo} onChange={(e) => setLedgerMemo(e.target.value)} />
                   </div>
@@ -2210,6 +2299,16 @@ export default function TradeClient() {
                 </div>
               </div>
 
+              {/* ✅ 검색 */}
+              <div className="mb-3">
+                <input
+                  className={input}
+                  value={tradeSearch}
+                  onChange={(e) => setTradeSearch(e.target.value)}
+                  placeholder="검색: 매입처/사업자번호/메모(제품명)/품목명/카테고리/방법"
+                />
+              </div>
+
               {/* ✅ 2) 거래내역: 거래처-주문자-카테고리 사이에 주문자 컬럼 추가 */}
               <div className="overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="w-full table-fixed text-sm">
@@ -2245,6 +2344,31 @@ export default function TradeClient() {
                         if (mode === "ORDERS") return x.kind === "ORDER";
                         if (mode === "LEDGER") return x.kind === "LEDGER";
                         return true;
+                      })
+                      .filter((x) => {
+                        const q = tradeSearch.trim().toLowerCase();
+                        if (!q) return true;
+
+                        const orderLineText =
+                          x.kind === "ORDER"
+                            ? (x.order_lines ?? []).map((l) => `${l.name ?? ""} ${l.food_type ?? ""}`).join(" ")
+                            : "";
+
+                        const hay = [
+                          x.partnerName,
+                          x.businessNo ?? "",
+                          x.ordererName,
+                          x.category,
+                          x.method,
+                          x.order_title ?? "",
+                          x.ledger_memo ?? "",
+                          orderLineText,
+                        ]
+                          .filter(Boolean)
+                          .join(" ")
+                          .toLowerCase();
+
+                        return hay.includes(q);
                       })
                       .map((x) => (
                         <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
