@@ -1,3 +1,4 @@
+```tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -745,11 +746,10 @@ export default function TradeClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id, fromYMD, toYMD]);
 
-  // ✅ 거래처 선택 시, 수기 입력칸이 비어있으면 자동 채움
+  // ✅ 거래처 선택 변경 시, 금전출납 수기 입력칸을 선택된 거래처 값으로 초기화
   useEffect(() => {
-    if (!selectedPartner) return;
-    setManualCounterpartyName((prev) => (prev.trim() ? prev : selectedPartner.name ?? ""));
-    setManualBusinessNo((prev) => (prev.trim() ? prev : selectedPartner.business_no ?? ""));
+    setManualCounterpartyName(selectedPartner?.name ?? "");
+    setManualBusinessNo(selectedPartner?.business_no ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id]);
 
@@ -935,21 +935,6 @@ export default function TradeClient() {
 
   function removeLine(i: number) {
     setLines((prev) => prev.filter((_, idx) => idx !== i));
-  }
-
-  // ✅ (추가) 택배비 버튼: 클릭 시 자동 품목 추가
-  function addShippingFeeLine(feeTotalInclVat: number) {
-    setLines((prev) => [
-      ...prev,
-      {
-        food_type: "",
-        name: "택배비",
-        weight_g: 0,
-        qty: 1,
-        unit: 0,
-        total_incl_vat: toInt(feeTotalInclVat),
-      },
-    ]);
   }
 
   // ====== 수정 모달용 라인 업데이트 ======
@@ -1432,6 +1417,27 @@ export default function TradeClient() {
 
     setEditOpen(false);
     setEditRow(null);
+    await loadTrades();
+  }
+
+  // ✅ 거래내역 삭제
+  async function deleteTradeRow(r: UnifiedRow) {
+    setMsg(null);
+
+    const ok = window.confirm("삭제할까요? (삭제하면 복구할 수 없습니다.)");
+    if (!ok) return;
+
+    if (r.kind === "ORDER") {
+      const { error: dErr } = await supabase.from("order_lines").delete().eq("order_id", r.rawId);
+      if (dErr) return setMsg(dErr.message);
+
+      const { error: oErr } = await supabase.from("orders").delete().eq("id", r.rawId);
+      if (oErr) return setMsg(oErr.message);
+    } else {
+      const { error: lErr } = await supabase.from("ledger_entries").delete().eq("id", r.rawId);
+      if (lErr) return setMsg(lErr.message);
+    }
+
     await loadTrades();
   }
 
@@ -1984,7 +1990,13 @@ export default function TradeClient() {
             </div>
 
             <div className="mt-3 flex gap-2">
-              <button className={`${btn} flex-1`} onClick={() => setSelectedPartner(null)}>
+              <button
+                className={`${btn} flex-1`}
+                onClick={() => {
+                  setSelectedPartner(null);
+                  setPartnerFilter("");
+                }}
+              >
                 선택 해제
               </button>
               <button className={`${btn} flex-1`} onClick={() => loadTrades()}>
@@ -2049,17 +2061,9 @@ export default function TradeClient() {
 
                 <div className="mt-4 flex items-center justify-between">
                   <div className="text-sm font-semibold">품목(식품유형 자동완성 포함)</div>
-                  <div className="flex gap-2">
-                    <button className={btn} type="button" onClick={() => addShippingFeeLine(3300)}>
-                      택배비 3,300원
-                    </button>
-                    <button className={btn} type="button" onClick={() => addShippingFeeLine(4000)}>
-                      택배비 4,000원
-                    </button>
-                    <button className={btn} onClick={addLine}>
-                      + 품목 추가
-                    </button>
-                  </div>
+                  <button className={btn} onClick={addLine}>
+                    + 품목 추가
+                  </button>
                 </div>
 
                 <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2 text-xs text-slate-600">
@@ -2344,7 +2348,7 @@ export default function TradeClient() {
                     <col style={{ width: "110px" }} />
                     <col style={{ width: "110px" }} />
                     <col style={{ width: "130px" }} />
-                    <col style={{ width: "300px" }} />
+                    <col style={{ width: "360px" }} />
                   </colgroup>
 
                   <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
@@ -2357,7 +2361,7 @@ export default function TradeClient() {
                       <th className="px-3 py-2 text-right">입금</th>
                       <th className="px-3 py-2 text-right">출금</th>
                       <th className="px-3 py-2 text-right">잔액</th>
-                      <th className="px-3 py-2 text-center">복사/메모/수정</th>
+                      <th className="px-3 py-2 text-center">복사/메모/수정/삭제</th>
                     </tr>
                   </thead>
 
@@ -2417,6 +2421,9 @@ export default function TradeClient() {
                               <button className={`${btn} whitespace-nowrap text-xs px-2 py-1`} onClick={() => openEdit(x)}>
                                 수정
                               </button>
+                              <button className={`${btn} whitespace-nowrap text-xs px-2 py-1`} onClick={() => deleteTradeRow(x)}>
+                                삭제
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -2441,3 +2448,4 @@ export default function TradeClient() {
     </div>
   );
 }
+```
