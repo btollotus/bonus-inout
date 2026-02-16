@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 
 type PartyInfo = {
@@ -46,7 +45,6 @@ function normalizeMemo(raw: string | null) {
     const allEmpty = values.every((v) => v === null || v === "" || typeof v === "undefined");
     if (allEmpty) return "";
 
-    // 일부 값이 있으면 간단 요약
     const title = j.title ?? "";
     const orderer = j.orderer_name ?? "";
     const parts: string[] = [];
@@ -58,14 +56,16 @@ function normalizeMemo(raw: string | null) {
   return s;
 }
 
-export default function StatementClient() {
+export default function StatementClient({
+  partnerId,
+  from,
+  to,
+}: {
+  partnerId: string;
+  from: string;
+  to: string;
+}) {
   const supabase = useMemo(() => createClient(), []);
-  const sp = useSearchParams();
-
-  const partnerId = sp.get("partner_id") || "";
-  const from = sp.get("from") || "";
-  const to = sp.get("to") || "";
-
   const [msg, setMsg] = useState<string | null>(null);
 
   const [company, setCompany] = useState<PartyInfo>({
@@ -91,9 +91,10 @@ export default function StatementClient() {
   // ✅ theme (products-client.tsx 계열)
   const pageBg = "bg-slate-50 text-slate-900";
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
-  const btn = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
-  const btnOn = "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
-  const pill = "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700";
+  const btn =
+    "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
+  const pill =
+    "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700";
 
   useEffect(() => {
     (async () => {
@@ -203,7 +204,9 @@ export default function StatementClient() {
     <div className={`${pageBg} min-h-screen`}>
       <div className="mx-auto w-full max-w-[1200px] px-4 py-6">
         {msg ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{msg}</div>
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {msg}
+          </div>
         ) : null}
 
         {/* 헤더 */}
@@ -212,7 +215,7 @@ export default function StatementClient() {
             <div className="text-lg font-semibold">거래원장</div>
             <div className="mt-2 flex flex-wrap gap-2">
               <span className={pill}>
-                기간: {from} ~ {to}
+                기간: {from || "-"} ~ {to || "-"}
               </span>
             </div>
           </div>
@@ -287,7 +290,11 @@ export default function StatementClient() {
                       <td className="px-3 py-2 font-semibold">{r.label}</td>
 
                       {/* ✅ OUT(출고/출금)은 마이너스로 표시 */}
-                      <td className={`px-3 py-2 text-right tabular-nums font-semibold ${isOut ? "text-red-600" : "text-blue-700"}`}>
+                      <td
+                        className={`px-3 py-2 text-right tabular-nums font-semibold ${
+                          isOut ? "text-red-600" : "text-blue-700"
+                        }`}
+                      >
                         {isOut ? `-${formatMoney(r.amount)}` : formatMoney(r.amount)}
                       </td>
 
@@ -311,21 +318,27 @@ export default function StatementClient() {
                     <tr className="border-t border-slate-200 bg-slate-50">
                       <td className="px-3 py-2" />
                       <td className="px-3 py-2 font-semibold text-right">출고 합계</td>
-                      <td className="px-3 py-2 text-right font-semibold tabular-nums text-red-600">-{formatMoney(totals.outSum)}</td>
+                      <td className="px-3 py-2 text-right font-semibold tabular-nums text-red-600">
+                        -{formatMoney(totals.outSum)}
+                      </td>
                       <td className="px-3 py-2" />
                     </tr>
 
                     <tr className="border-t border-slate-200 bg-slate-50">
                       <td className="px-3 py-2" />
                       <td className="px-3 py-2 font-semibold text-right">입금 합계(매출입금)</td>
-                      <td className="px-3 py-2 text-right font-semibold tabular-nums text-blue-700">{formatMoney(totals.inSum)}</td>
+                      <td className="px-3 py-2 text-right font-semibold tabular-nums text-blue-700">
+                        {formatMoney(totals.inSum)}
+                      </td>
                       <td className="px-3 py-2" />
                     </tr>
 
                     <tr className="border-t border-slate-200 bg-slate-50">
                       <td className="px-3 py-2" />
                       <td className="px-3 py-2 font-semibold text-right">미수(출고-입금)</td>
-                      <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatMoney(totals.receivable)}</td>
+                      <td className="px-3 py-2 text-right font-semibold tabular-nums">
+                        {formatMoney(totals.receivable)}
+                      </td>
                       <td className="px-3 py-2" />
                     </tr>
                   </>
