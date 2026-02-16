@@ -49,24 +49,20 @@ function formatOrderMemo(memo: string | null | undefined) {
   const raw = (memo ?? "").toString().trim();
   if (!raw) return "";
 
-  // JSON 형태면 파싱 시도
   if (raw.startsWith("{") && raw.endsWith("}")) {
     try {
       const obj = JSON.parse(raw);
       const title = obj?.title ?? null;
       const orderer = obj?.orderer_name ?? null;
 
-      // 둘 다 null/빈값이면 표시 안함
       const t = String(title ?? "").trim();
       const o = String(orderer ?? "").trim();
       if (!t && !o) return "";
 
-      // 있는 것만 조합
       if (t && o) return `${t} / ${o}`;
       if (t) return t;
       return o;
     } catch {
-      // JSON 파싱 실패면 원문 노출(최소 변경)
       return raw;
     }
   }
@@ -112,7 +108,7 @@ export default function StatementClient() {
       }
       setPartner(p ?? null);
 
-      // 출고(orders) : customer_id 기준
+      // 출고(orders)
       const { data: o, error: oe } = await supabase
         .from("orders")
         .select("id, ship_date, customer_id, customer_name, total_amount, memo")
@@ -128,7 +124,7 @@ export default function StatementClient() {
       }
       setOrders((o ?? []) as any);
 
-      // 입금(ledger_entries): 매출입금 1개 카테고리만 + IN
+      // 입금(ledger_entries): 매출입금 + IN
       const { data: l, error: le } = await supabase
         .from("ledger_entries")
         .select("id, entry_date, direction, category, amount, memo, partner_id")
@@ -171,7 +167,7 @@ export default function StatementClient() {
       });
     }
 
-    // 날짜 오름차순, 같은날은 입금 먼저(원하시면 출고 먼저로 바꿀 수 있음)
+    // 날짜 오름차순, 같은날은 입금 먼저
     r.sort((a, b) => {
       if (a.date === b.date) return a.kind === b.kind ? 0 : a.kind === "입금" ? -1 : 1;
       return a.date < b.date ? -1 : 1;
@@ -180,31 +176,37 @@ export default function StatementClient() {
     return r;
   }, [orders, deposits]);
 
-  const sumShip = useMemo(() => rows.filter((x) => x.kind === "출고").reduce((s, x) => s + x.amount, 0), [rows]);
-  const sumIn = useMemo(() => rows.filter((x) => x.kind === "입금").reduce((s, x) => s + x.amount, 0), [rows]);
+  const sumShip = useMemo(
+    () => rows.filter((x) => x.kind === "출고").reduce((s, x) => s + x.amount, 0),
+    [rows]
+  );
+  const sumIn = useMemo(
+    () => rows.filter((x) => x.kind === "입금").reduce((s, x) => s + x.amount, 0),
+    [rows]
+  );
   const balance = useMemo(() => sumShip - sumIn, [sumShip, sumIn]); // 미수(출고-입금)
 
-  // ✅ products-client.tsx와 맞추는 “다크 배색” (statement 전용)
-  const pageBg = "min-h-screen bg-black text-white";
-  const card = "rounded-2xl border border-white/10 bg-black";
+  // ✅ TradeClient.tsx 테마와 동일
+  const pageBg = "bg-slate-50 text-slate-900";
+  const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
+  const btn = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100";
+  const hint = "text-xs text-slate-500";
 
   return (
-    <div className={pageBg}>
+    <div className={`${pageBg} min-h-screen`}>
       {/* ✅ 인쇄 전용 초압축 CSS + 상단 메뉴(TopNav) 숨김 강화 */}
       <style jsx global>{`
         @media print {
           @page { size: A4; margin: 6mm; }
           html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fff !important; color: #000 !important; }
 
-          /* ✅ TopNav가 어떤 태그로 렌더되어도 1차로 숨김 (layout에서 TopNav가 body 첫 자식인 구조를 가정) */
+          /* ✅ TopNav가 어떤 태그로 렌더되어도 1차로 숨김 */
           body > :first-child { display: none !important; }
-
-          /* 혹시 남는 경우 대비 */
           nav, header, .topnav, .no-print { display: none !important; }
 
           /* 행간/여백 최대 압축 */
           .bm-wrap { font-size: 11px !important; line-height: 1.05 !important; }
-          .bm-box { padding: 6px !important; margin: 0 0 6px 0 !important; border: 1px solid #ddd !important; }
+          .bm-box { padding: 6px !important; margin: 0 0 6px 0 !important; border: 1px solid #ddd !important; box-shadow: none !important; }
           .bm-title { font-size: 14px !important; margin: 0 0 4px 0 !important; }
           .bm-sub { margin: 0 !important; }
           table { border-collapse: collapse !important; }
@@ -239,66 +241,78 @@ export default function StatementClient() {
           </div>
 
           <div className="no-print mt-4 flex items-center gap-2">
-            <button
-              onClick={() => window.print()}
-              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm hover:bg-white/15"
-            >
+            <button onClick={() => window.print()} className={btn}>
               인쇄 / PDF 저장
             </button>
-            <div className="text-xs text-white/60">※ 인쇄 시 행간/여백은 자동으로 최대 축소됩니다.</div>
+            <div className={hint}>※ 인쇄 시 행간/여백은 자동으로 최대 축소됩니다.</div>
           </div>
         </div>
 
         <div className={`${card} bm-box mt-4 p-4`}>
-          {msg && <div className="mb-2 text-sm text-red-300">{msg}</div>}
+          {msg && (
+            <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {msg}
+            </div>
+          )}
+
           {loading ? (
-            <div className="text-sm text-white/70">불러오는 중...</div>
+            <div className="text-sm text-slate-600">불러오는 중...</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-white/15 bg-white/5 text-left">
-                    <th className="px-3 py-2">일자</th>
-                    <th className="px-3 py-2">구분</th>
+            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+              <table className="w-full text-sm table-fixed">
+                <colgroup>
+                  <col style={{ width: "120px" }} />
+                  <col style={{ width: "90px" }} />
+                  <col style={{ width: "140px" }} />
+                  <col style={{ width: "auto" }} />
+                </colgroup>
+
+                <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                  <tr>
+                    <th className="px-3 py-2 text-left">일자</th>
+                    <th className="px-3 py-2 text-left">구분</th>
                     <th className="px-3 py-2 text-right">금액</th>
-                    <th className="px-3 py-2">비고</th>
+                    <th className="px-3 py-2 text-left">비고</th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {rows.map((r, idx) => {
-                    // ✅ 출고는 마이너스 표시 (표시만 - 로, 계산은 기존대로)
+                    // ✅ 출고는 마이너스 표시(표시만)
                     const displayAmount = r.kind === "출고" ? `-${nf(r.amount)}` : nf(r.amount);
                     return (
-                      <tr key={`${r.date}-${r.kind}-${idx}`} className="border-b border-white/10">
-                        <td className="px-3 py-2 whitespace-nowrap">{r.date}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{r.kind}</td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">{displayAmount}</td>
+                      <tr key={`${r.date}-${r.kind}-${idx}`} className="border-t border-slate-200 bg-white">
+                        <td className="px-3 py-2 whitespace-nowrap tabular-nums font-semibold">{r.date}</td>
+                        <td className="px-3 py-2 whitespace-nowrap font-semibold">{r.kind}</td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums font-semibold">
+                          {displayAmount}
+                        </td>
                         <td className="px-3 py-2">{r.memo}</td>
                       </tr>
                     );
                   })}
 
                   {rows.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-6 text-center text-sm text-white/60">
+                    <tr className="bg-white">
+                      <td colSpan={4} className="px-3 py-6 text-center text-sm text-slate-500">
                         기간 내 거래내역이 없습니다.
                       </td>
                     </tr>
                   )}
                 </tbody>
 
-                <tfoot>
-                  <tr>
+                <tfoot className="bg-white">
+                  <tr className="border-t border-slate-200">
                     <td colSpan={2} className="px-3 py-2 text-right font-semibold">출고 합계</td>
                     <td className="px-3 py-2 text-right font-semibold tabular-nums">{`-${nf(sumShip)}`}</td>
                     <td />
                   </tr>
-                  <tr>
+                  <tr className="border-t border-slate-200">
                     <td colSpan={2} className="px-3 py-2 text-right font-semibold">입금 합계(매출입금)</td>
                     <td className="px-3 py-2 text-right font-semibold tabular-nums">{nf(sumIn)}</td>
                     <td />
                   </tr>
-                  <tr>
+                  <tr className="border-t border-slate-200">
                     <td colSpan={2} className="px-3 py-2 text-right font-extrabold">미수(출고-입금)</td>
                     <td className="px-3 py-2 text-right font-extrabold tabular-nums">{nf(balance)}</td>
                     <td />
