@@ -352,39 +352,42 @@ export default function StatementClient() {
           </div>
         </div>
 
-        {/* 거래처(좌) / 회사정보(우) */}
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-          {/* LEFT: 거래처 */}
-          <div className={`${card} print-card p-4`}>
-            <div className="mb-2 text-sm font-semibold">거래처</div>
-            {selectedPartner ? (
-              <div className="space-y-1 text-sm">
-                <div className="font-semibold">
-                  {selectedPartner.name} {selectedPartner.business_no ? `(${selectedPartner.business_no})` : ""}
-                </div>
-                {selectedPartner.ceo_name ? <div>대표: {selectedPartner.ceo_name}</div> : null}
-                {selectedPartner.address1 ? <div>주소: {selectedPartner.address1}</div> : null}
-                {(selectedPartner.biz_type || selectedPartner.biz_item) ? (
-                  <div>
-                    업종: {selectedPartner.biz_type ?? ""} {selectedPartner.biz_item ? `/ 업태: ${selectedPartner.biz_item}` : ""}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="text-sm text-slate-500">거래처를 선택하세요.</div>
-            )}
+   {/* 거래처(좌) / 회사정보(우) - 한 카드 안에서 좌우 2열 배치 */}
+<div className={`${card} print-card mt-4 p-4`}>
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+    {/* LEFT: 거래처 */}
+    <div>
+      <div className="mb-2 text-sm font-semibold">거래처</div>
+      {selectedPartner ? (
+        <div className="space-y-1 text-sm">
+          <div className="font-semibold">
+            {selectedPartner.name} {selectedPartner.business_no ? `(${selectedPartner.business_no})` : ""}
           </div>
-
-          {/* RIGHT: 회사정보 (요청사항: 오른쪽 배치, "우리회사" 단어 없음) */}
-          <div className={`${card} print-card p-4`}>
-            <div className="space-y-1 text-sm text-right">
-              <div className="font-semibold">{OUR.name}</div>
-              <div>대표: {OUR.ceo}</div>
-              <div>주소: {OUR.address1}</div>
-              <div>업종: {OUR.biz}</div>
+          {selectedPartner.ceo_name ? <div>대표: {selectedPartner.ceo_name}</div> : null}
+          {selectedPartner.address1 ? <div>주소: {selectedPartner.address1}</div> : null}
+          {(selectedPartner.biz_type || selectedPartner.biz_item) ? (
+            <div>
+              업종: {selectedPartner.biz_type ?? ""} {selectedPartner.biz_item ? `/ 업태: ${selectedPartner.biz_item}` : ""}
             </div>
-          </div>
+          ) : null}
         </div>
+      ) : (
+        <div className="text-sm text-slate-500">거래처를 선택하세요.</div>
+      )}
+    </div>
+
+    {/* RIGHT: 회사정보 */}
+    <div className="text-right">
+      <div className="mb-2 text-sm font-semibold opacity-0 select-none">.</div>
+      <div className="space-y-1 text-sm">
+        <div className="font-semibold">{OUR.name}</div>
+        <div>대표: {OUR.ceo}</div>
+        <div>주소: {OUR.address1}</div>
+        <div>업종: {OUR.biz}</div>
+      </div>
+    </div>
+  </div>
+</div>
 
         {/* 표 */}
         <div className={`${card} print-card mt-4 p-4`}>
