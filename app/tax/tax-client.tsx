@@ -327,6 +327,16 @@ export default function TaxClient() {
     window.print();
   }
 
+  // ✅ 거래처용 출력(새 탭)
+  function openStatement() {
+    if (customerId === "ALL") {
+      alert("매출처를 먼저 선택하세요.");
+      return;
+    }
+    const url = `/tax/statement?partnerId=${customerId}&from=${fromYMD}&to=${toYMD}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   return (
     <div className={`${pageBg} min-h-screen`}>
       <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
@@ -507,6 +517,11 @@ export default function TaxClient() {
               </div>
               <button className={btn} onClick={printNow} disabled={customerId === "ALL"}>
                 선택 거래원장 인쇄
+              </button>
+
+              {/* ✅ 추가: 거래처용 출력(새 탭) */}
+              <button className={btn} onClick={openStatement} disabled={customerId === "ALL"}>
+                거래처용 출력(새 탭)
               </button>
             </div>
           </div>
