@@ -86,7 +86,11 @@ export default function TaxClient() {
   // 카테고리(관리/필터)
   const [cats, setCats] = useState<LedgerCategoryRow[]>([]);
   const outCatNames = useMemo(
-    () => cats.filter((c) => c.is_active && String(c.direction) === "OUT").sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999)).map((c) => c.name),
+    () =>
+      cats
+        .filter((c) => c.is_active && String(c.direction) === "OUT")
+        .sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+        .map((c) => c.name),
     [cats]
   );
 
@@ -221,7 +225,6 @@ export default function TaxClient() {
     return ledgers.filter((l) => {
       if (String(l.direction) !== "OUT") return false;
       if (purchaseCatFilter.length && !set.has(l.category)) return false;
-      // 옵션2 기준: supply/vat/total이 있으면 그대로 사용, 없으면 amount 기반으로라도 집계(단, 세무리포트 정확성 위해 기본은 vat_type이 TAXED일 때만 부가세 집계)
       return true;
     });
   }, [ledgers, purchaseCatFilter]);
@@ -243,9 +246,7 @@ export default function TaxClient() {
         supply += s;
         if (vt === "TAXED") vat += v;
       } else {
-        // 데이터가 아직 채워지지 않은 과거건(옵션2 도입 전) 처리:
-        // - 총액은 집계
-        // - VAT는 0으로(정확성 우선)
+        // 과거건: 총액만 집계, VAT=0
         total += t;
       }
     }
@@ -286,7 +287,6 @@ export default function TaxClient() {
     }
 
     const arr = Array.from(map.values());
-    // 기본: 사업자번호 오름차순(요청)
     arr.sort((a, b) => String(a.business_no).localeCompare(String(b.business_no)));
     return arr;
   }, [purchaseLedgerRows]);
@@ -337,6 +337,39 @@ export default function TaxClient() {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  // ✅ (추가) 세무사 전달용 엑셀 다운로드: 매출+매입(OUT) 통합
+  async function downloadTaxExcel() {
+    try {
+      const qs = new URLSearchParams();
+      qs.set("from", fromYMD);
+      qs.set("to", toYMD);
+
+      // 현재 화면의 "매입 집계 포함 카테고리" 선택값을 그대로 전달
+      if (purchaseCatFilter.length) qs.set("outCats", purchaseCatFilter.join(","));
+
+      const res = await fetch(`/api/tax/excel?${qs.toString()}`, { method: "GET" });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        alert(`엑셀 다운로드 실패\n${txt}`);
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `세무사_통합_${fromYMD}_${toYMD}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert(`엑셀 다운로드 실패\n${String(e?.message ?? e)}`);
+    }
+  }
+
   return (
     <div className={`${pageBg} min-h-screen`}>
       <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
@@ -351,6 +384,10 @@ export default function TaxClient() {
           </div>
           <div className="flex gap-2">
             <button className={btn} onClick={printNow}>인쇄</button>
+
+            {/* ✅ 추가: 엑셀 다운로드 */}
+            <button className={btn} onClick={downloadTaxExcel}>엑셀 다운로드</button>
+
             <button className={btn} onClick={() => loadCats()}>카테고리 새로고침</button>
             <button className={btnOn} onClick={() => loadPeriod()}>기간 재조회</button>
           </div>
