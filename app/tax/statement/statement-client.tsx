@@ -354,7 +354,7 @@ export default function StatementClient() {
 
    {/* 거래처(좌) / 회사정보(우) - 한 카드 안에서 좌우 2열 배치 */}
 <div className={`${card} print-card mt-4 p-4`}>
-<div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+<div className="grid grid-cols-2 gap-6 items-start">
     {/* LEFT: 거래처 */}
     <div>
       <div className="mb-2 text-sm font-semibold">거래처</div>
