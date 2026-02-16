@@ -1,7 +1,7 @@
 // app/calendar/page.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
 type Visibility = "PUBLIC" | "ADMIN";
@@ -15,10 +15,8 @@ type CalendarMemoRow = {
   updated_at: string;
 };
 
-type OrdersAggRow = {
-  ship_date: string; // YYYY-MM-DD
-  cnt: number;
-};
+// ✅ 출고 방법(택배/퀵) 집계용 (orders 테이블에 ship_method 컬럼이 있다고 가정)
+type ShipMethod = "택배" | "퀵" | "기타";
 
 function ymd(d: Date) {
   const yyyy = d.getFullYear();
@@ -62,8 +60,6 @@ function build42Days(monthDate: Date) {
  * - 고정(양력): 1/1, 3/1, 5/5, 6/6, 8/15, 10/3, 10/9, 12/25
  * - 2026년 음력 기반(하드코딩): 설날(2/16~2/18), 부처님오신날(5/24), 추석(9/24~9/26)
  * - 대체공휴일(간단): 2026년 기준으로 필요한 것만 반영
- *
- * 필요하면 연도별로 테이블을 늘려가면 됩니다.
  */
 function getKoreaHolidaysMap(year: number): Record<string, string> {
   const map: Record<string, string> = {};
@@ -93,21 +89,29 @@ function getKoreaHolidaysMap(year: number): Record<string, string> {
     map["2026-09-26"] = "추석(연휴)";
 
     // 2026 대체공휴일(주요)
-    // 3/1(일) → 3/2(월)
     map["2026-03-02"] = "삼일절 대체";
-    // 5/24(일) 부처님오신날 → 5/25(월)
     map["2026-05-25"] = "부처님오신날 대체";
-    // 8/15(토) → 8/17(월)
     map["2026-08-17"] = "광복절 대체";
-    // 10/3(토) → 10/5(월)
     map["2026-10-05"] = "개천절 대체";
   }
 
   return map;
 }
 
+function normalizeShipMethod(v: any): ShipMethod {
+  const s = String(v ?? "").trim();
+  if (!s) return "기타";
+  if (s.includes("택배")) return "택배";
+  if (s.includes("퀵")) return "퀵";
+  return "기타";
+}
+
 export default function CalendarPage() {
   const supabase = useMemo(() => createClient(), []);
+  const todayStr = useMemo(() => ymd(new Date()), []);
+
+  // ✅ 오늘 날짜 셀 포커싱
+  const didFocusRef = useRef(false);
 
   // 테마: TradeClient와 동일 톤
   const pageBg = "bg-slate-50 text-slate-900";
@@ -120,31 +124,51 @@ export default function CalendarPage() {
   const pill =
     "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700";
 
+  const badge =
+    "inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700";
+
+  const badgeShip =
+    "inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700";
+  const badgeQuick =
+    "inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700";
+  const badgeEtc =
+    "inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700";
+
   const [msg, setMsg] = useState<string | null>(null);
 
-  const [curMonth, setCurMonth] = useState(() => {
-    const now = new Date();
-    return monthKey(now); // YYYY-MM
-  });
+  const [curMonth, setCurMonth] = useState(() => monthKey(new Date())); // ✅ 기본: 오늘이 속한 월
 
   const curMonthDate = useMemo(() => firstOfMonth(curMonth), [curMonth]);
   const days42 = useMemo(() => build42Days(curMonthDate), [curMonthDate]);
 
-  const holidays = useMemo(() => getKoreaHolidaysMap(curMonthDate.getFullYear()), [curMonthDate]);
+  const holidays = useMemo(
+    () => getKoreaHolidaysMap(curMonthDate.getFullYear()),
+    [curMonthDate]
+  );
 
   // 메모(월 범위)
   const [memos, setMemos] = useState<CalendarMemoRow[]>([]);
-  // 출고 집계(월 범위)
-  const [orderAgg, setOrderAgg] = useState<Map<string, number>>(new Map());
 
-  // 모달(날짜 클릭)
+  // ✅ 출고 집계(월 범위) : date -> { total, methods }
+  const [shipAgg, setShipAgg] = useState<
+    Map<string, { total: number; byMethod: Record<ShipMethod, number> }>
+  >(new Map());
+
+  // 모달(날짜 클릭 - 메모)
   const [open, setOpen] = useState(false);
   const [selDate, setSelDate] = useState<string>("");
 
   const [publicText, setPublicText] = useState("");
   const [adminText, setAdminText] = useState("");
-
   const [saving, setSaving] = useState(false);
+
+  // ✅ 모달(출고 클릭 - 방법 뱃지)
+  const [openShip, setOpenShip] = useState(false);
+  const [selShipDate, setSelShipDate] = useState<string>("");
+  const [selShipInfo, setSelShipInfo] = useState<{
+    total: number;
+    byMethod: Record<ShipMethod, number>;
+  } | null>(null);
 
   const range = useMemo(() => {
     const yyyy = curMonthDate.getFullYear();
@@ -180,31 +204,67 @@ export default function CalendarPage() {
       setMemos((data ?? []) as CalendarMemoRow[]);
     }
 
-    // 2) orders 출고 집계 (ship_date 기준)
+    // 2) orders 출고 집계 (ship_date + ship_method 기준)
     {
+      // ⚠️ orders 테이블에 ship_method 컬럼이 있어야 합니다.
+      // (만약 컬럼명이 다르면, 여기 select 컬럼명만 맞춰주면 됩니다)
       const { data, error } = await supabase
         .from("orders")
-        .select("ship_date")
+        .select("ship_date,ship_method")
         .gte("ship_date", range.from)
         .lt("ship_date", range.to)
         .not("ship_date", "is", null);
 
       if (error) return setMsg(error.message);
 
-      const map = new Map<string, number>();
+      const map = new Map<string, { total: number; byMethod: Record<ShipMethod, number> }>();
+
       for (const r of (data ?? []) as any[]) {
         const d = String(r.ship_date ?? "").slice(0, 10);
         if (!d) continue;
-        map.set(d, (map.get(d) ?? 0) + 1);
+
+        const method = normalizeShipMethod(r.ship_method);
+
+        const cur = map.get(d) ?? {
+          total: 0,
+          byMethod: { 택배: 0, 퀵: 0, 기타: 0 },
+        };
+
+        cur.total += 1;
+        cur.byMethod[method] = (cur.byMethod[method] ?? 0) + 1;
+
+        map.set(d, cur);
       }
-      setOrderAgg(map);
+
+      setShipAgg(map);
     }
   }
 
   useEffect(() => {
+    didFocusRef.current = false;
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curMonth]);
+
+  // ✅ 월이 바뀌거나 처음 로드되면 "오늘" 셀에 포커싱
+  useEffect(() => {
+    if (didFocusRef.current) return;
+
+    // 현재 보고 있는 달이 오늘이 속한 달일 때만 포커싱
+    const isSameMonth = curMonth === monthKey(new Date());
+    if (!isSameMonth) return;
+
+    // 렌더 후 DOM에서 해당 셀 버튼을 찾아 포커스
+    const t = window.setTimeout(() => {
+      const el = document.querySelector<HTMLButtonElement>(`button[data-date="${todayStr}"]`);
+      if (el) {
+        el.focus();
+        didFocusRef.current = true;
+      }
+    }, 0);
+
+    return () => window.clearTimeout(t);
+  }, [curMonth, todayStr]);
 
   function openDayModal(date: string) {
     setMsg(null);
@@ -217,6 +277,18 @@ export default function CalendarPage() {
     setAdminText(adm);
 
     setOpen(true);
+  }
+
+  function openShipModal(date: string) {
+    setMsg(null);
+    setSelShipDate(date);
+    const info =
+      shipAgg.get(date) ?? {
+        total: 0,
+        byMethod: { 택배: 0, 퀵: 0, 기타: 0 },
+      };
+    setSelShipInfo(info);
+    setOpenShip(true);
   }
 
   async function upsertMemo(date: string, vis: Visibility, content: string) {
@@ -291,7 +363,9 @@ export default function CalendarPage() {
     <div className={`${pageBg} min-h-screen`}>
       <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
         {msg ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{msg}</div>
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {msg}
+          </div>
         ) : null}
 
         {/* 상단 */}
@@ -353,37 +427,64 @@ export default function CalendarPage() {
               {days42.map((d) => {
                 const ds = ymd(d);
                 const inMonth = d.getMonth() === curMonthDate.getMonth();
+
+                // ✅ 다른 달(전/다음달)은 "완전 빈칸"으로(혼란 제거)
+                if (!inMonth) {
+                  return (
+                    <div key={ds} className="min-h-[108px] border-t border-slate-200 bg-slate-50" />
+                  );
+                }
+
                 const dayNum = d.getDate();
 
                 const pub = memoMap.get(memoKey(ds, "PUBLIC"))?.content?.trim() ?? "";
                 const adm = memoMap.get(memoKey(ds, "ADMIN"))?.content?.trim() ?? "";
-                const shipCnt = orderAgg.get(ds) ?? 0;
+
+                const shipInfo = shipAgg.get(ds);
+                const shipCnt = shipInfo?.total ?? 0;
 
                 const holidayName = holidays[ds] ?? "";
+                const isToday = ds === todayStr;
 
                 return (
                   <button
                     key={ds}
-                    className={`min-h-[108px] border-t border-slate-200 p-3 text-left hover:bg-slate-50 ${
-                      inMonth ? "bg-white" : "bg-slate-50"
-                    }`}
+                    data-date={ds}
+                    className={`min-h-[108px] border-t border-slate-200 p-3 text-left hover:bg-slate-50 bg-white
+                      ${isToday ? "ring-2 ring-blue-500/30 bg-blue-50/40" : ""}
+                    `}
                     onClick={() => openDayModal(ds)}
                     title="클릭해서 메모 추가/수정"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className={`text-sm font-semibold ${dayColor(d)}`}>{dayNum}</div>
-                      {holidayName ? (
-                        <div className="truncate rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-                          {holidayName}
-                        </div>
-                      ) : null}
+
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        {holidayName ? (
+                          <div className="truncate rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                            {holidayName}
+                          </div>
+                        ) : null}
+
+                        {isToday ? <span className={badge}>오늘</span> : null}
+                      </div>
                     </div>
 
-                    {/* 출고 표시 (orders) */}
+                    {/* ✅ 출고 표시 (orders) - 클릭하면 방법(택배/퀵) 뱃지 모달 */}
                     {shipCnt > 0 ? (
-                      <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800">
-                        출고 <span className="font-semibold tabular-nums">{shipCnt}</span>건
-                      </div>
+                      <button
+                        type="button"
+                        className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-left text-xs text-slate-800 hover:bg-slate-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openShipModal(ds);
+                        }}
+                        title="클릭해서 출고방법(택배/퀵) 확인"
+                      >
+                        출고{" "}
+                        <span className="font-semibold tabular-nums">{shipCnt}</span>
+                        건
+                      </button>
                     ) : null}
 
                     {/* 메모 표시: 없으면 아무것도 안 보이게(요청사항) */}
@@ -405,14 +506,21 @@ export default function CalendarPage() {
           </div>
 
           <div className="mt-2 text-xs text-slate-500">
-            ※ 메모가 비어 있으면 표시하지 않습니다. (기존 “공개메모 없음” 제거) · 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다.
+            ※ 메모가 비어 있으면 표시하지 않습니다. · 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다. ·
+            출고 건수는 <span className="font-semibold">orders.ship_date</span> 기준입니다.
           </div>
         </div>
 
-        {/* 모달 */}
+        {/* 모달: 메모 */}
         {open ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setOpen(false)}>
-            <div className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+            onClick={() => setOpen(false)}
+          >
+            <div
+              className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">메모 · {selDate}</div>
@@ -428,7 +536,7 @@ export default function CalendarPage() {
                 </div>
               </div>
 
-              <div className="px-5 py-4 space-y-4">
+              <div className="space-y-4 px-5 py-4">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <div className="mb-2 text-sm font-semibold">공개 메모 (전원)</div>
                   <textarea
@@ -454,6 +562,59 @@ export default function CalendarPage() {
 
                 <div className="text-xs text-slate-500">
                   출고 건수는 <span className="font-semibold">orders.ship_date</span> 기준으로 자동 표시됩니다.
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ✅ 모달: 출고(택배/퀵) 뱃지 */}
+        {openShip ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+            onClick={() => setOpenShip(false)}
+          >
+            <div
+              className="w-full max-w-[720px] rounded-2xl border border-slate-200 bg-white shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div>
+                  <div className="text-base font-semibold">출고 요약 · {selShipDate}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    “출고 N건”을 클릭하면 출고방법(택배/퀵)별 뱃지를 보여줍니다.
+                  </div>
+                </div>
+                <button className={btn} onClick={() => setOpenShip(false)}>
+                  닫기
+                </button>
+              </div>
+
+              <div className="px-5 py-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span className={badge}>
+                      총 <span className="tabular-nums">{selShipInfo?.total ?? 0}</span>건
+                    </span>
+                    <span className={badgeShip}>
+                      택배 <span className="tabular-nums">{selShipInfo?.byMethod?.["택배"] ?? 0}</span>
+                    </span>
+                    <span className={badgeQuick}>
+                      퀵 <span className="tabular-nums">{selShipInfo?.byMethod?.["퀵"] ?? 0}</span>
+                    </span>
+                    <span className={badgeEtc}>
+                      기타 <span className="tabular-nums">{selShipInfo?.byMethod?.["기타"] ?? 0}</span>
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-slate-500">
+                    ※ 집계는 <span className="font-semibold">orders.ship_date</span> +{" "}
+                    <span className="font-semibold">orders.ship_method</span> 기준입니다. (택배/퀵 외 값은 기타)
+                  </div>
+                </div>
+
+                <div className="mt-3 text-xs text-slate-500">
+                  원하시면 다음 단계로, 이 모달에 “출고 리스트(거래처/주문번호/금액 등)”도 같이 붙일 수 있습니다.
                 </div>
               </div>
             </div>
