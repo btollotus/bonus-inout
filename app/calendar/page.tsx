@@ -162,13 +162,15 @@ export default function CalendarPage() {
   const [adminText, setAdminText] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // ✅ 모달(출고 클릭 - 방법 뱃지)
+  // ✅ 모달(출고 클릭 - 출고 목록: 거래처 + 출고방식)
   const [openShip, setOpenShip] = useState(false);
   const [selShipDate, setSelShipDate] = useState<string>("");
-  const [selShipInfo, setSelShipInfo] = useState<{
-    total: number;
-    byMethod: Record<ShipMethod, number>;
-  } | null>(null);
+
+  const [shipListLoading, setShipListLoading] = useState(false);
+  const [shipListErr, setShipListErr] = useState<string | null>(null);
+
+  type ShipRow = { partner_name: string; ship_method: ShipMethod };
+  const [shipRows, setShipRows] = useState<ShipRow[]>([]);
 
   const range = useMemo(() => {
     const yyyy = curMonthDate.getFullYear();
@@ -279,17 +281,65 @@ export default function CalendarPage() {
     setOpen(true);
   }
 
-  function openShipModal(date: string) {
+  // ✅ “출고 n건” 클릭 → 해당 날짜 출고 목록(거래처 + 출고방식) 로드 후 모달 오픈
+  async function openShipModal(date: string) {
     setMsg(null);
     setSelShipDate(date);
-    const info =
-      shipAgg.get(date) ?? {
-        total: 0,
-        byMethod: { 택배: 0, 퀵: 0, 기타: 0 },
-      };
-    setSelShipInfo(info);
+
+    setShipListErr(null);
+    setShipListLoading(true);
+    setShipRows([]);
     setOpenShip(true);
+
+    try {
+      // ⚠️ 전제: orders.partner_id -> partners.id FK가 설정되어 있어서 partners(name) 조인이 가능
+      const { data, error } = await supabase
+        .from("orders")
+        .select("ship_method, partner_id, partners(name)")
+        .eq("ship_date", date);
+
+      if (error) throw error;
+
+      const rows: ShipRow[] = ((data ?? []) as any[]).map((r) => {
+        const partnerName = r?.partners?.name ?? "(거래처 미지정)";
+        const method = normalizeShipMethod(r?.ship_method);
+        return { partner_name: partnerName, ship_method: method };
+      });
+
+      setShipRows(rows);
+    } catch (e: any) {
+      setShipListErr(e?.message ?? "출고 목록 조회 중 오류");
+    } finally {
+      setShipListLoading(false);
+    }
   }
+
+  const shipSummary = useMemo(() => {
+    const total = shipRows.length;
+    const byMethod: Record<ShipMethod, number> = { 택배: 0, 퀵: 0, 기타: 0 };
+    for (const r of shipRows) byMethod[r.ship_method] += 1;
+    return { total, byMethod };
+  }, [shipRows]);
+
+  const shipGrouped = useMemo(() => {
+    // 거래처 -> (출고방식 -> count)
+    const m = new Map<string, Map<ShipMethod, number>>();
+    for (const r of shipRows) {
+      if (!m.has(r.partner_name)) m.set(r.partner_name, new Map());
+      const inner = m.get(r.partner_name)!;
+      inner.set(r.ship_method, (inner.get(r.ship_method) ?? 0) + 1);
+    }
+
+    // 보기 좋게 정렬(거래처명 오름차순)
+    return Array.from(m.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], "ko"))
+      .map(([partner, inner]) => ({
+        partner,
+        methods: (["택배", "퀵", "기타"] as ShipMethod[])
+          .map((k) => ({ ship_method: k, cnt: inner.get(k) ?? 0 }))
+          .filter((x) => x.cnt > 0),
+      }));
+  }, [shipRows]);
 
   async function upsertMemo(date: string, vis: Visibility, content: string) {
     const existing = memoMap.get(memoKey(date, vis));
@@ -470,7 +520,7 @@ export default function CalendarPage() {
                       </div>
                     </div>
 
-                    {/* ✅ 출고 표시 (orders) - 클릭하면 방법(택배/퀵) 뱃지 모달 */}
+                    {/* ✅ 출고 표시 (orders) - 클릭하면 "거래처+출고방식" 목록 모달 */}
                     {shipCnt > 0 ? (
                       <button
                         type="button"
@@ -479,7 +529,7 @@ export default function CalendarPage() {
                           e.stopPropagation();
                           openShipModal(ds);
                         }}
-                        title="클릭해서 출고방법(택배/퀵) 확인"
+                        title="클릭해서 출고 목록(거래처/출고방식) 확인"
                       >
                         출고{" "}
                         <span className="font-semibold tabular-nums">{shipCnt}</span>
@@ -568,21 +618,21 @@ export default function CalendarPage() {
           </div>
         ) : null}
 
-        {/* ✅ 모달: 출고(택배/퀵) 뱃지 */}
+        {/* ✅ 모달: 출고 목록(거래처 + 출고방식) */}
         {openShip ? (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
             onClick={() => setOpenShip(false)}
           >
             <div
-              className="w-full max-w-[720px] rounded-2xl border border-slate-200 bg-white shadow-xl"
+              className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
-                  <div className="text-base font-semibold">출고 요약 · {selShipDate}</div>
+                  <div className="text-base font-semibold">출고 목록 · {selShipDate}</div>
                   <div className="mt-1 text-xs text-slate-500">
-                    “출고 N건”을 클릭하면 출고방법(택배/퀵)별 뱃지를 보여줍니다.
+                    거래처별로 묶어서 출고방식(택배/퀵/기타) 건수를 표시합니다.
                   </div>
                 </div>
                 <button className={btn} onClick={() => setOpenShip(false)}>
@@ -594,27 +644,55 @@ export default function CalendarPage() {
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
                     <span className={badge}>
-                      총 <span className="tabular-nums">{selShipInfo?.total ?? 0}</span>건
+                      총 <span className="tabular-nums">{shipSummary.total}</span>건
                     </span>
                     <span className={badgeShip}>
-                      택배 <span className="tabular-nums">{selShipInfo?.byMethod?.["택배"] ?? 0}</span>
+                      택배 <span className="tabular-nums">{shipSummary.byMethod["택배"]}</span>
                     </span>
                     <span className={badgeQuick}>
-                      퀵 <span className="tabular-nums">{selShipInfo?.byMethod?.["퀵"] ?? 0}</span>
+                      퀵 <span className="tabular-nums">{shipSummary.byMethod["퀵"]}</span>
                     </span>
                     <span className={badgeEtc}>
-                      기타 <span className="tabular-nums">{selShipInfo?.byMethod?.["기타"] ?? 0}</span>
+                      기타 <span className="tabular-nums">{shipSummary.byMethod["기타"]}</span>
                     </span>
                   </div>
 
-                  <div className="text-xs text-slate-500">
-                    ※ 집계는 <span className="font-semibold">orders.ship_date</span> +{" "}
-                    <span className="font-semibold">orders.ship_method</span> 기준입니다. (택배/퀵 외 값은 기타)
-                  </div>
-                </div>
+                  {shipListLoading ? (
+                    <div className="text-sm text-slate-600">불러오는 중...</div>
+                  ) : shipListErr ? (
+                    <div className="text-sm text-red-700">{shipListErr}</div>
+                  ) : shipGrouped.length === 0 ? (
+                    <div className="text-sm text-slate-600">출고 건이 없습니다.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {shipGrouped.map((g) => (
+                        <div key={g.partner} className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <div className="text-sm font-semibold text-slate-900">{g.partner}</div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {g.methods.map((m) => {
+                              const cls =
+                                m.ship_method === "택배"
+                                  ? badgeShip
+                                  : m.ship_method === "퀵"
+                                  ? badgeQuick
+                                  : badgeEtc;
+                              return (
+                                <span key={m.ship_method} className={cls}>
+                                  {m.ship_method} <span className="tabular-nums">{m.cnt}</span>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                <div className="mt-3 text-xs text-slate-500">
-                  원하시면 다음 단계로, 이 모달에 “출고 리스트(거래처/주문번호/금액 등)”도 같이 붙일 수 있습니다.
+                  <div className="mt-3 text-xs text-slate-500">
+                    ※ 집계/표시는 <span className="font-semibold">orders.ship_date</span> +{" "}
+                    <span className="font-semibold">orders.ship_method</span> 기준이며, 거래처명은{" "}
+                    <span className="font-semibold">orders.partner_id → partners.name</span> 조인으로 가져옵니다.
+                  </div>
                 </div>
               </div>
             </div>
