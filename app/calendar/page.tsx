@@ -56,8 +56,9 @@ function build42Days(monthDate: Date) {
 }
 
 /**
- * 대한민국 공휴일(간단 버전)
+ * 대한민국 공휴일(간단 버전) + 회사 내부 고정 기념일
  * - 고정(양력): 1/1, 3/1, 5/5, 6/6, 8/15, 10/3, 10/9, 12/25
+ * - ✅ 회사 고정 기념일: 1/2 창립기념일
  * - 2026년 음력 기반(하드코딩): 설날(2/16~2/18), 부처님오신날(5/24), 추석(9/24~9/26)
  * - 대체공휴일(간단): 2026년 기준으로 필요한 것만 반영
  */
@@ -73,6 +74,9 @@ function getKoreaHolidaysMap(year: number): Record<string, string> {
     [`${year}-10-03`, "개천절"],
     [`${year}-10-09`, "한글날"],
     [`${year}-12-25`, "성탄절"],
+
+    // ✅ 회사 고정 기념일(공휴일이 아니라 사내 휴무/표시용)
+    [`${year}-01-02`, "창립기념일"],
   ];
   for (const [d, name] of fixed) map[d] = name;
 
@@ -86,10 +90,11 @@ function getKoreaHolidaysMap(year: number): Record<string, string> {
     map["2026-09-25"] = "추석";
     map["2026-09-26"] = "추석(연휴)";
 
-    map["2026-03-02"] = "삼일절 대체";
-    map["2026-05-25"] = "부처님오신날 대체";
-    map["2026-08-17"] = "광복절 대체";
-    map["2026-10-05"] = "개천절 대체";
+    // ✅ 라벨 문구 개선: “삼일절 대체” → “대체공휴일(삼일절)”
+    map["2026-03-02"] = "대체공휴일(삼일절)";
+    map["2026-05-25"] = "대체공휴일(부처님오신날)";
+    map["2026-08-17"] = "대체공휴일(광복절)";
+    map["2026-10-05"] = "대체공휴일(개천절)";
   }
 
   return map;
@@ -224,13 +229,11 @@ export default function CalendarPage() {
 
       if (error) return setMsg(error.message);
 
-      // date -> agg
       const map = new Map<
         string,
         { total: number; byMethod: Record<ShipMethod, number>; lines: string[] }
       >();
 
-      // date -> (partner__method -> cnt)
       const lineMapByDate = new Map<string, Map<string, number>>();
 
       for (const r of (data ?? []) as any[]) {
@@ -258,7 +261,6 @@ export default function CalendarPage() {
         lineMapByDate.set(d, lm);
       }
 
-      // 라인 만들기(정렬 포함)
       const methodOrder: Record<ShipMethod, number> = { 택배: 0, 퀵: 1, 기타: 2 };
 
       for (const [d, agg] of map.entries()) {
@@ -267,7 +269,6 @@ export default function CalendarPage() {
 
         const lines = Array.from(lm.entries()).map(([key, cnt]) => {
           const [partner, method] = key.split("__") as [string, ShipMethod];
-          // ✅ 셀에서는 "줄단위"로 보이되, 같은 업체/방법이 여러 건이면 (n)으로 압축
           const tail = cnt > 1 ? ` (${cnt})` : "";
           return { partner, method, text: `${partner}-${method}${tail}` };
         });
@@ -322,7 +323,6 @@ export default function CalendarPage() {
     setOpen(true);
   }
 
-  // ✅ 출고 라인 클릭 → 해당 날짜 출고 목록(모달)
   async function openShipModal(date: string) {
     setMsg(null);
     setSelShipDate(date);
@@ -355,7 +355,6 @@ export default function CalendarPage() {
     }
   }
 
-  // 모달 내 요약(숨김 적용 후 기준)
   const shipSummary = useMemo(() => {
     const total = shipRows.length;
     const byMethod: Record<ShipMethod, number> = { 택배: 0, 퀵: 0, 기타: 0 };
@@ -363,7 +362,6 @@ export default function CalendarPage() {
     return { total, byMethod };
   }, [shipRows]);
 
-  // ✅ 모달 표시 형태: "업체명 - 택배" 라인 단위(업체+방법별 건수)
   const shipLines = useMemo(() => {
     const m = new Map<string, number>(); // key: "업체명__방법" -> cnt
     for (const r of shipRows) {
@@ -376,7 +374,6 @@ export default function CalendarPage() {
       return { partner, method, cnt };
     });
 
-    // 정렬: 업체명 → 방법(택배/퀵/기타)
     const order: Record<ShipMethod, number> = { 택배: 0, 퀵: 1, 기타: 2 };
     lines.sort((a, b) => {
       const nameCmp = a.partner.localeCompare(b.partner, "ko");
@@ -391,7 +388,6 @@ export default function CalendarPage() {
     const existing = memoMap.get(memoKey(date, vis));
     const trimmed = content.trim();
 
-    // 빈 값이면 "삭제"
     if (!trimmed) {
       if (!existing) return;
       const { error } = await supabase.from("calendar_memos").delete().eq("id", existing.id);
@@ -466,7 +462,6 @@ export default function CalendarPage() {
           </div>
         ) : null}
 
-        {/* 상단 */}
         <div className={`${card} p-4`}>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
@@ -505,7 +500,6 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          {/* 요일 헤더 */}
           <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
             <div className="grid grid-cols-7 bg-slate-50 text-xs font-semibold">
               {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
@@ -515,13 +509,11 @@ export default function CalendarPage() {
               ))}
             </div>
 
-            {/* 달력 본문 */}
             <div className="grid grid-cols-7">
               {days42.map((d) => {
                 const ds = ymd(d);
                 const inMonth = d.getMonth() === curMonthDate.getMonth();
 
-                // ✅ 다른 달(전/다음달)은 "완전 빈칸"
                 if (!inMonth) {
                   return <div key={ds} className="min-h-[108px] border-t border-slate-200 bg-slate-50" />;
                 }
@@ -542,31 +534,32 @@ export default function CalendarPage() {
                   <button
                     key={ds}
                     data-date={ds}
-                    className={`min-h-[108px] border-t border-slate-200 p-3 text-left hover:bg-slate-50 bg-white ${
-                      isToday ? "ring-2 ring-blue-500/30 bg-blue-50/40" : ""
+                    className={`relative min-h-[108px] border-t border-slate-200 p-3 pt-8 text-left hover:bg-slate-50 bg-white ${
+                      isToday ? "bg-blue-100/60 ring-2 ring-blue-500/40" : ""
                     }`}
                     onClick={() => openDayModal(ds)}
                     title="클릭해서 메모 추가/수정"
                   >
-                    {/* ✅ 날짜는 좌상단 고정 */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className={`text-sm font-semibold ${dayColor(d)}`}>{dayNum}</div>
-
-                      <div className="flex flex-wrap items-center justify-end gap-1">
-                        {holidayName ? (
-                          <div className="truncate rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-                            {holidayName}
-                          </div>
-                        ) : null}
-
-                        {isToday ? <span className={badge}>오늘</span> : null}
-                      </div>
+                    {/* ✅ 날짜(일자 숫자) 좌상단 고정 */}
+                    <div className={`absolute left-3 top-2 text-sm font-semibold ${dayColor(d)}`}>
+                      {dayNum}
                     </div>
 
-                    {/* ✅ 출고가 제일 위(메모보다 위), 줄단위로 표시 */}
+                    {/* 우상단 배지(공휴일/오늘) */}
+                    <div className="absolute right-3 top-2 flex flex-wrap items-center justify-end gap-1">
+                      {holidayName ? (
+                        <div className="truncate rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                          {holidayName}
+                        </div>
+                      ) : null}
+
+                      {isToday ? <span className={badge}>오늘</span> : null}
+                    </div>
+
+                    {/* ✅ 출고가 제일 위(메모보다 위), 줄단위 */}
                     {shipCnt > 0 ? (
                       <div
-                        className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1"
+                        className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1"
                         onClick={(e) => {
                           e.stopPropagation();
                           openShipModal(ds);
@@ -580,10 +573,7 @@ export default function CalendarPage() {
 
                         <div className="space-y-0.5">
                           {shipLinesInCell.slice(0, 6).map((t, idx) => (
-                            <div
-                              key={`${ds}__shipline__${idx}`}
-                              className="truncate text-[11px] text-slate-800"
-                            >
+                            <div key={`${ds}__shipline__${idx}`} className="truncate text-[11px] text-slate-800">
                               {t}
                             </div>
                           ))}
@@ -596,7 +586,7 @@ export default function CalendarPage() {
                       </div>
                     ) : null}
 
-                    {/* ✅ 메모는 출고 아래, 줄단위 */}
+                    {/* 메모는 출고 아래 */}
                     {pub ? (
                       <div className="mt-2 truncate text-[11px] text-slate-700">
                         <span className="font-semibold text-slate-900">공개</span>: {pub}
@@ -679,7 +669,7 @@ export default function CalendarPage() {
           </div>
         ) : null}
 
-        {/* ✅ 모달: 출고 목록(업체명-택배 형태) */}
+        {/* 모달: 출고 목록 */}
         {openShip ? (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
@@ -726,19 +716,17 @@ export default function CalendarPage() {
                     <div className="text-sm text-slate-600">출고 건이 없습니다.</div>
                   ) : (
                     <div className="space-y-2">
-                      {shipLines.map((x) => {
-                        return (
-                          <div
-                            key={`${x.partner}__${x.method}`}
-                            className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                          >
-                            <div className="text-sm font-semibold text-slate-900">
-                              {x.partner} - {x.method}
-                              {x.cnt > 1 ? ` (${x.cnt})` : ""}
-                            </div>
+                      {shipLines.map((x) => (
+                        <div
+                          key={`${x.partner}__${x.method}`}
+                          className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                        >
+                          <div className="text-sm font-semibold text-slate-900">
+                            {x.partner} - {x.method}
+                            {x.cnt > 1 ? ` (${x.cnt})` : ""}
                           </div>
-                        );
-                      })}
+                        </div>
+                      ))}
                     </div>
                   )}
 
