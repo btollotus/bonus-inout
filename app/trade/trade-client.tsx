@@ -298,13 +298,11 @@ function buildMemoText(r: UnifiedRow) {
       .slice()
       .sort((a, b) => (a.seq ?? 1) - (b.seq ?? 1))
       .map((s) => {
-        const addr2 = String(s.ship_to_address2 ?? "").trim();
-        const zip = String(s.ship_zipcode ?? "").trim();
         const msg = String(s.delivery_message ?? "").trim();
         const mobile = String(s.ship_to_mobile ?? "").trim();
         const phone = String(s.ship_to_phone ?? "").trim();
         return `- 배송지${s.seq}: ${s.ship_to_name}
-  주소: ${s.ship_to_address1}${addr2 ? ` ${addr2}` : ""}${zip ? ` (${zip})` : ""}
+  주소: ${s.ship_to_address1}
   연락처: ${mobile || "-"} / ${phone || "-"}${msg ? `\n  요청사항: ${msg}` : ""}`;
       })
       .join("\n");
@@ -463,8 +461,6 @@ export default function TradeClient() {
   // ✅ 주문별 배송정보(스냅샷) - 1~2곳
   const [shipToName1, setShipToName1] = useState("");
   const [shipToAddr1_1, setShipToAddr1_1] = useState("");
-  const [shipToAddr2_1, setShipToAddr2_1] = useState("");
-  const [shipToZip1, setShipToZip1] = useState("");
   const [shipToMobile1, setShipToMobile1] = useState("");
   const [shipToPhone1, setShipToPhone1] = useState("");
   const [deliveryMsg1, setDeliveryMsg1] = useState("");
@@ -473,8 +469,6 @@ export default function TradeClient() {
 
   const [shipToName2, setShipToName2] = useState("");
   const [shipToAddr1_2, setShipToAddr1_2] = useState("");
-  const [shipToAddr2_2, setShipToAddr2_2] = useState("");
-  const [shipToZip2, setShipToZip2] = useState("");
   const [shipToMobile2, setShipToMobile2] = useState("");
   const [shipToPhone2, setShipToPhone2] = useState("");
   const [deliveryMsg2, setDeliveryMsg2] = useState("");
@@ -522,8 +516,6 @@ export default function TradeClient() {
   // ✅ 주문 수정용 배송지(1~2)
   const [eShipToName1, setEShipToName1] = useState("");
   const [eShipToAddr1_1, setEShipToAddr1_1] = useState("");
-  const [eShipToAddr2_1, setEShipToAddr2_1] = useState("");
-  const [eShipToZip1, setEShipToZip1] = useState("");
   const [eShipToMobile1, setEShipToMobile1] = useState("");
   const [eShipToPhone1, setEShipToPhone1] = useState("");
   const [eDeliveryMsg1, setEDeliveryMsg1] = useState("");
@@ -532,8 +524,6 @@ export default function TradeClient() {
 
   const [eShipToName2, setEShipToName2] = useState("");
   const [eShipToAddr1_2, setEShipToAddr1_2] = useState("");
-  const [eShipToAddr2_2, setEShipToAddr2_2] = useState("");
-  const [eShipToZip2, setEShipToZip2] = useState("");
   const [eShipToMobile2, setEShipToMobile2] = useState("");
   const [eShipToPhone2, setEShipToPhone2] = useState("");
   const [eDeliveryMsg2, setEDeliveryMsg2] = useState("");
@@ -848,8 +838,6 @@ export default function TradeClient() {
     setTwoShip(false);
     setShipToName2("");
     setShipToAddr1_2("");
-    setShipToAddr2_2("");
-    setShipToZip2("");
     setShipToMobile2("");
     setShipToPhone2("");
     setDeliveryMsg2("");
@@ -1157,10 +1145,8 @@ export default function TradeClient() {
         seq: 1,
         ship_to_name: shipToName1.trim(),
         ship_to_address1: shipToAddr1_1.trim(),
-        ship_to_address2: normText(shipToAddr2_1),
         ship_to_mobile: normText(shipToMobile1),
         ship_to_phone: normText(shipToPhone1),
-        ship_zipcode: normText(shipToZip1),
         delivery_message: normText(deliveryMsg1),
         created_by: null,
       },
@@ -1172,10 +1158,8 @@ export default function TradeClient() {
         seq: 2,
         ship_to_name: shipToName2.trim(),
         ship_to_address1: shipToAddr1_2.trim(),
-        ship_to_address2: normText(shipToAddr2_2),
         ship_to_mobile: normText(shipToMobile2),
         ship_to_phone: normText(shipToPhone2),
-        ship_zipcode: normText(shipToZip2),
         delivery_message: normText(deliveryMsg2),
         created_by: null,
       });
@@ -1192,8 +1176,6 @@ export default function TradeClient() {
     setTwoShip(false);
     setShipToName2("");
     setShipToAddr1_2("");
-    setShipToAddr2_2("");
-    setShipToZip2("");
     setShipToMobile2("");
     setShipToPhone2("");
     setDeliveryMsg2("");
@@ -1413,8 +1395,6 @@ export default function TradeClient() {
     if (s1) {
       setShipToName1(String(s1.ship_to_name ?? ""));
       setShipToAddr1_1(String(s1.ship_to_address1 ?? ""));
-      setShipToAddr2_1(String(s1.ship_to_address2 ?? ""));
-      setShipToZip1(String(s1.ship_zipcode ?? ""));
       setShipToMobile1(String(s1.ship_to_mobile ?? ""));
       setShipToPhone1(String(s1.ship_to_phone ?? ""));
       setDeliveryMsg1(String(s1.delivery_message ?? ""));
@@ -1424,8 +1404,6 @@ export default function TradeClient() {
       setTwoShip(true);
       setShipToName2(String(s2.ship_to_name ?? ""));
       setShipToAddr1_2(String(s2.ship_to_address1 ?? ""));
-      setShipToAddr2_2(String(s2.ship_to_address2 ?? ""));
-      setShipToZip2(String(s2.ship_zipcode ?? ""));
       setShipToMobile2(String(s2.ship_to_mobile ?? ""));
       setShipToPhone2(String(s2.ship_to_phone ?? ""));
       setDeliveryMsg2(String(s2.delivery_message ?? ""));
@@ -1433,8 +1411,6 @@ export default function TradeClient() {
       setTwoShip(false);
       setShipToName2("");
       setShipToAddr1_2("");
-      setShipToAddr2_2("");
-      setShipToZip2("");
       setShipToMobile2("");
       setShipToPhone2("");
       setDeliveryMsg2("");
@@ -1502,8 +1478,6 @@ export default function TradeClient() {
 
       setEShipToName1(String(s1?.ship_to_name ?? ""));
       setEShipToAddr1_1(String(s1?.ship_to_address1 ?? ""));
-      setEShipToAddr2_1(String(s1?.ship_to_address2 ?? ""));
-      setEShipToZip1(String(s1?.ship_zipcode ?? ""));
       setEShipToMobile1(String(s1?.ship_to_mobile ?? ""));
       setEShipToPhone1(String(s1?.ship_to_phone ?? ""));
       setEDeliveryMsg1(String(s1?.delivery_message ?? ""));
@@ -1512,8 +1486,6 @@ export default function TradeClient() {
         setETwoShip(true);
         setEShipToName2(String(s2.ship_to_name ?? ""));
         setEShipToAddr1_2(String(s2.ship_to_address1 ?? ""));
-        setEShipToAddr2_2(String(s2.ship_to_address2 ?? ""));
-        setEShipToZip2(String(s2.ship_zipcode ?? ""));
         setEShipToMobile2(String(s2.ship_to_mobile ?? ""));
         setEShipToPhone2(String(s2.ship_to_phone ?? ""));
         setEDeliveryMsg2(String(s2.delivery_message ?? ""));
@@ -1521,8 +1493,6 @@ export default function TradeClient() {
         setETwoShip(false);
         setEShipToName2("");
         setEShipToAddr1_2("");
-        setEShipToAddr2_2("");
-        setEShipToZip2("");
         setEShipToMobile2("");
         setEShipToPhone2("");
         setEDeliveryMsg2("");
@@ -1650,10 +1620,8 @@ export default function TradeClient() {
           seq: 1,
           ship_to_name: eShipToName1.trim(),
           ship_to_address1: eShipToAddr1_1.trim(),
-          ship_to_address2: normText(eShipToAddr2_1),
           ship_to_mobile: normText(eShipToMobile1),
           ship_to_phone: normText(eShipToPhone1),
-          ship_zipcode: normText(eShipToZip1),
           delivery_message: normText(eDeliveryMsg1),
           created_by: null,
         },
@@ -1665,10 +1633,8 @@ export default function TradeClient() {
           seq: 2,
           ship_to_name: eShipToName2.trim(),
           ship_to_address1: eShipToAddr1_2.trim(),
-          ship_to_address2: normText(eShipToAddr2_2),
           ship_to_mobile: normText(eShipToMobile2),
           ship_to_phone: normText(eShipToPhone2),
-          ship_zipcode: normText(eShipToZip2),
           delivery_message: normText(eDeliveryMsg2),
           created_by: null,
         });
@@ -1981,11 +1947,7 @@ export default function TradeClient() {
                           <div className="space-y-2">
                             <input className={input} placeholder="수화주명(필수)" value={eShipToName1} onChange={(e) => setEShipToName1(e.target.value)} />
                             <input className={input} placeholder="주소1(필수)" value={eShipToAddr1_1} onChange={(e) => setEShipToAddr1_1(e.target.value)} />
-                            <input className={input} placeholder="주소2" value={eShipToAddr2_1} onChange={(e) => setEShipToAddr2_1(e.target.value)} />
-                            <div className="grid grid-cols-2 gap-2">
-                              <input className={input} placeholder="우편번호" value={eShipToZip1} onChange={(e) => setEShipToZip1(e.target.value)} />
-                              <input className={input} placeholder="요청사항" value={eDeliveryMsg1} onChange={(e) => setEDeliveryMsg1(e.target.value)} />
-                            </div>
+                            <input className={input} placeholder="요청사항" value={eDeliveryMsg1} onChange={(e) => setEDeliveryMsg1(e.target.value)} />
                             <div className="grid grid-cols-2 gap-2">
                               <input className={input} placeholder="휴대폰" value={eShipToMobile1} onChange={(e) => setEShipToMobile1(e.target.value)} />
                               <input className={input} placeholder="전화" value={eShipToPhone1} onChange={(e) => setEShipToPhone1(e.target.value)} />
@@ -2006,11 +1968,7 @@ export default function TradeClient() {
                             <div className="space-y-2">
                               <input className={input} placeholder="수화주명(필수)" value={eShipToName2} onChange={(e) => setEShipToName2(e.target.value)} />
                               <input className={input} placeholder="주소1(필수)" value={eShipToAddr1_2} onChange={(e) => setEShipToAddr1_2(e.target.value)} />
-                              <input className={input} placeholder="주소2" value={eShipToAddr2_2} onChange={(e) => setEShipToAddr2_2(e.target.value)} />
-                              <div className="grid grid-cols-2 gap-2">
-                                <input className={input} placeholder="우편번호" value={eShipToZip2} onChange={(e) => setEShipToZip2(e.target.value)} />
-                                <input className={input} placeholder="요청사항" value={eDeliveryMsg2} onChange={(e) => setEDeliveryMsg2(e.target.value)} />
-                              </div>
+                              <input className={input} placeholder="요청사항" value={eDeliveryMsg2} onChange={(e) => setEDeliveryMsg2(e.target.value)} />
                               <div className="grid grid-cols-2 gap-2">
                                 <input className={input} placeholder="휴대폰" value={eShipToMobile2} onChange={(e) => setEShipToMobile2(e.target.value)} />
                                 <input className={input} placeholder="전화" value={eShipToPhone2} onChange={(e) => setEShipToPhone2(e.target.value)} />
@@ -2423,11 +2381,7 @@ export default function TradeClient() {
                       <div className="space-y-2">
                         <input className={input} placeholder="수화주명(필수)" value={shipToName1} onChange={(e) => setShipToName1(e.target.value)} />
                         <input className={input} placeholder="주소1(필수)" value={shipToAddr1_1} onChange={(e) => setShipToAddr1_1(e.target.value)} />
-                        <input className={input} placeholder="주소2" value={shipToAddr2_1} onChange={(e) => setShipToAddr2_1(e.target.value)} />
-                        <div className="grid grid-cols-2 gap-2">
-                          <input className={input} placeholder="우편번호" value={shipToZip1} onChange={(e) => setShipToZip1(e.target.value)} />
-                          <input className={input} placeholder="요청사항" value={deliveryMsg1} onChange={(e) => setDeliveryMsg1(e.target.value)} />
-                        </div>
+                        <input className={input} placeholder="요청사항" value={deliveryMsg1} onChange={(e) => setDeliveryMsg1(e.target.value)} />
                         <div className="grid grid-cols-2 gap-2">
                           <input className={input} placeholder="휴대폰" value={shipToMobile1} onChange={(e) => setShipToMobile1(e.target.value)} />
                           <input className={input} placeholder="전화" value={shipToPhone1} onChange={(e) => setShipToPhone1(e.target.value)} />
@@ -2448,11 +2402,7 @@ export default function TradeClient() {
                         <div className="space-y-2">
                           <input className={input} placeholder="수화주명(필수)" value={shipToName2} onChange={(e) => setShipToName2(e.target.value)} />
                           <input className={input} placeholder="주소1(필수)" value={shipToAddr1_2} onChange={(e) => setShipToAddr1_2(e.target.value)} />
-                          <input className={input} placeholder="주소2" value={shipToAddr2_2} onChange={(e) => setShipToAddr2_2(e.target.value)} />
-                          <div className="grid grid-cols-2 gap-2">
-                            <input className={input} placeholder="우편번호" value={shipToZip2} onChange={(e) => setShipToZip2(e.target.value)} />
-                            <input className={input} placeholder="요청사항" value={deliveryMsg2} onChange={(e) => setDeliveryMsg2(e.target.value)} />
-                          </div>
+                          <input className={input} placeholder="요청사항" value={deliveryMsg2} onChange={(e) => setDeliveryMsg2(e.target.value)} />
                           <div className="grid grid-cols-2 gap-2">
                             <input className={input} placeholder="휴대폰" value={shipToMobile2} onChange={(e) => setShipToMobile2(e.target.value)} />
                             <input className={input} placeholder="전화" value={shipToPhone2} onChange={(e) => setShipToPhone2(e.target.value)} />
