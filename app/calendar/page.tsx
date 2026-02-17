@@ -103,7 +103,7 @@ function normalizeShipMethod(v: any): ShipMethod {
   return "기타";
 }
 
-// ✅ 모달 출고목록에서 숨길 “판매 채널”
+// ✅ 모달/셀 출고표시에서 숨길 “판매 채널”
 const HIDE_CUSTOMERS = new Set(["카카오플러스-판매", "네이버-판매", "쿠팡-판매"]);
 
 export default function CalendarPage() {
@@ -149,9 +149,16 @@ export default function CalendarPage() {
   // 메모(월 범위)
   const [memos, setMemos] = useState<CalendarMemoRow[]>([]);
 
-  // ✅ 출고 집계(월 범위) : date -> { total, methods }
+  // ✅ 출고 집계(월 범위) : date -> { total, methods, lines }
   const [shipAgg, setShipAgg] = useState<
-    Map<string, { total: number; byMethod: Record<ShipMethod, number> }>
+    Map<
+      string,
+      {
+        total: number;
+        byMethod: Record<ShipMethod, number>;
+        lines: string[]; // ✅ 셀에 표시할 출고 라인(줄단위)
+      }
+    >
   >(new Map());
 
   // 모달(날짜 클릭 - 메모)
@@ -162,7 +169,7 @@ export default function CalendarPage() {
   const [adminText, setAdminText] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // ✅ 모달(출고 n건 클릭 - 출고 목록: 업체명-택배 형태)
+  // ✅ 모달(출고 클릭 - 출고 목록: 업체명-택배 형태)
   const [openShip, setOpenShip] = useState(false);
   const [selShipDate, setSelShipDate] = useState<string>("");
 
@@ -206,8 +213,7 @@ export default function CalendarPage() {
       setMemos((data ?? []) as CalendarMemoRow[]);
     }
 
-    // 2) orders 출고 집계 (ship_date + ship_method 기준)
-    // ✅ 달력 셀 출고 n건도 "숨김 판매 채널" 제외 기준으로 맞춤(모달과 동일)
+    // 2) orders 출고 집계 + ✅ 셀용 "출고 라인" 생성 (숨김 채널 제외)
     {
       const { data, error } = await supabase
         .from("orders")
@@ -218,7 +224,14 @@ export default function CalendarPage() {
 
       if (error) return setMsg(error.message);
 
-      const map = new Map<string, { total: number; byMethod: Record<ShipMethod, number> }>();
+      // date -> agg
+      const map = new Map<
+        string,
+        { total: number; byMethod: Record<ShipMethod, number>; lines: string[] }
+      >();
+
+      // date -> (partner__method -> cnt)
+      const lineMapByDate = new Map<string, Map<string, number>>();
 
       for (const r of (data ?? []) as any[]) {
         const d = String(r.ship_date ?? "").slice(0, 10);
@@ -227,17 +240,45 @@ export default function CalendarPage() {
         const customerName = String(r?.customer_name ?? "").trim() || "(거래처 미지정)";
         if (HIDE_CUSTOMERS.has(customerName)) continue;
 
-        const method = normalizeShipMethod(r.ship_method);
+        const method = normalizeShipMethod(r?.ship_method);
 
         const cur = map.get(d) ?? {
           total: 0,
           byMethod: { 택배: 0, 퀵: 0, 기타: 0 },
+          lines: [],
         };
 
         cur.total += 1;
         cur.byMethod[method] = (cur.byMethod[method] ?? 0) + 1;
-
         map.set(d, cur);
+
+        const key = `${customerName}__${method}`;
+        const lm = lineMapByDate.get(d) ?? new Map<string, number>();
+        lm.set(key, (lm.get(key) ?? 0) + 1);
+        lineMapByDate.set(d, lm);
+      }
+
+      // 라인 만들기(정렬 포함)
+      const methodOrder: Record<ShipMethod, number> = { 택배: 0, 퀵: 1, 기타: 2 };
+
+      for (const [d, agg] of map.entries()) {
+        const lm = lineMapByDate.get(d);
+        if (!lm) continue;
+
+        const lines = Array.from(lm.entries()).map(([key, cnt]) => {
+          const [partner, method] = key.split("__") as [string, ShipMethod];
+          // ✅ 셀에서는 "줄단위"로 보이되, 같은 업체/방법이 여러 건이면 (n)으로 압축
+          const tail = cnt > 1 ? ` (${cnt})` : "";
+          return { partner, method, text: `${partner}-${method}${tail}` };
+        });
+
+        lines.sort((a, b) => {
+          const nameCmp = a.partner.localeCompare(b.partner, "ko");
+          if (nameCmp !== 0) return nameCmp;
+          return (methodOrder[a.method] ?? 9) - (methodOrder[b.method] ?? 9);
+        });
+
+        agg.lines = lines.map((x) => x.text);
       }
 
       setShipAgg(map);
@@ -281,9 +322,7 @@ export default function CalendarPage() {
     setOpen(true);
   }
 
-  // ✅ “출고 n건” 클릭 → 해당 날짜 출고 목록(업체명-택배 형태)
-  // ✅ 현재 스키마 기준: orders.customer_name 을 거래처명으로 사용 (FK 없음)
-  // ✅ 네이버/쿠팡/카카오플러스 판매 채널은 숨김(목록/집계에서 제외)
+  // ✅ 출고 라인 클릭 → 해당 날짜 출고 목록(모달)
   async function openShipModal(date: string) {
     setMsg(null);
     setSelShipDate(date);
@@ -324,7 +363,7 @@ export default function CalendarPage() {
     return { total, byMethod };
   }, [shipRows]);
 
-  // ✅ 표시 형태: "업체명 - 택배" 라인 단위(업체+방법별 건수)
+  // ✅ 모달 표시 형태: "업체명 - 택배" 라인 단위(업체+방법별 건수)
   const shipLines = useMemo(() => {
     const m = new Map<string, number>(); // key: "업체명__방법" -> cnt
     for (const r of shipRows) {
@@ -494,6 +533,7 @@ export default function CalendarPage() {
 
                 const shipInfo = shipAgg.get(ds);
                 const shipCnt = shipInfo?.total ?? 0;
+                const shipLinesInCell = shipInfo?.lines ?? [];
 
                 const holidayName = holidays[ds] ?? "";
                 const isToday = ds === todayStr;
@@ -508,6 +548,7 @@ export default function CalendarPage() {
                     onClick={() => openDayModal(ds)}
                     title="클릭해서 메모 추가/수정"
                   >
+                    {/* ✅ 날짜는 좌상단 고정 */}
                     <div className="flex items-start justify-between gap-2">
                       <div className={`text-sm font-semibold ${dayColor(d)}`}>{dayNum}</div>
 
@@ -522,30 +563,48 @@ export default function CalendarPage() {
                       </div>
                     </div>
 
-                    {/* ✅ 출고 표시: 클릭하면 출고 목록(업체명-출고방식) 모달 */}
+                    {/* ✅ 출고가 제일 위(메모보다 위), 줄단위로 표시 */}
                     {shipCnt > 0 ? (
-                      <button
-                        type="button"
-                        className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-left text-xs text-slate-800 hover:bg-slate-100"
+                      <div
+                        className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1"
                         onClick={(e) => {
                           e.stopPropagation();
                           openShipModal(ds);
                         }}
                         title="클릭해서 출고 목록(업체명-출고방식) 확인"
+                        role="button"
                       >
-                        출고 <span className="font-semibold tabular-nums">{shipCnt}</span>건
-                      </button>
+                        <div className="mb-1 text-[11px] font-semibold text-slate-800">
+                          출고 <span className="tabular-nums">{shipCnt}</span>건
+                        </div>
+
+                        <div className="space-y-0.5">
+                          {shipLinesInCell.slice(0, 6).map((t, idx) => (
+                            <div
+                              key={`${ds}__shipline__${idx}`}
+                              className="truncate text-[11px] text-slate-800"
+                            >
+                              {t}
+                            </div>
+                          ))}
+                          {shipLinesInCell.length > 6 ? (
+                            <div className="text-[11px] text-slate-500">
+                              외 {shipLinesInCell.length - 6}건…
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
                     ) : null}
 
-                    {/* 메모 표시: 없으면 아무것도 안 보이게 */}
+                    {/* ✅ 메모는 출고 아래, 줄단위 */}
                     {pub ? (
-                      <div className="mt-2 line-clamp-2 text-xs text-slate-700">
+                      <div className="mt-2 truncate text-[11px] text-slate-700">
                         <span className="font-semibold text-slate-900">공개</span>: {pub}
                       </div>
                     ) : null}
 
                     {adm ? (
-                      <div className="mt-1 line-clamp-2 text-xs text-slate-700">
+                      <div className="mt-1 truncate text-[11px] text-slate-700">
                         <span className="font-semibold text-slate-900">관리</span>: {adm}
                       </div>
                     ) : null}
@@ -556,9 +615,10 @@ export default function CalendarPage() {
           </div>
 
           <div className="mt-2 text-xs text-slate-500">
-            ※ 메모가 비어 있으면 표시하지 않습니다. · 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다. · 출고 건수는{" "}
-            <span className="font-semibold">orders.ship_date</span> 기준이며,{" "}
-            <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 제외 집계합니다.
+            ※ 메모가 비어 있으면 표시하지 않습니다. · 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다. · 출고는{" "}
+            <span className="font-semibold">orders.ship_date</span> +{" "}
+            <span className="font-semibold">orders.ship_method</span> 기준이며,{" "}
+            <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 제외합니다.
           </div>
         </div>
 
