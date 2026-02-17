@@ -206,11 +206,12 @@ export default function CalendarPage() {
       setMemos((data ?? []) as CalendarMemoRow[]);
     }
 
-    // 2) orders 출고 집계 (ship_date + ship_method 기준)  ※ 달력 표시는 전체 주문 기준(변경 없음)
+    // 2) orders 출고 집계 (ship_date + ship_method 기준)
+    // ✅ 달력 셀 출고 n건도 "숨김 판매 채널" 제외 기준으로 맞춤(모달과 동일)
     {
       const { data, error } = await supabase
         .from("orders")
-        .select("ship_date,ship_method")
+        .select("ship_date,ship_method,customer_name")
         .gte("ship_date", range.from)
         .lt("ship_date", range.to)
         .not("ship_date", "is", null);
@@ -222,6 +223,9 @@ export default function CalendarPage() {
       for (const r of (data ?? []) as any[]) {
         const d = String(r.ship_date ?? "").slice(0, 10);
         if (!d) continue;
+
+        const customerName = String(r?.customer_name ?? "").trim() || "(거래처 미지정)";
+        if (HIDE_CUSTOMERS.has(customerName)) continue;
 
         const method = normalizeShipMethod(r.ship_method);
 
@@ -518,7 +522,7 @@ export default function CalendarPage() {
                       </div>
                     </div>
 
-                    {/* ✅ 출고 표시: 클릭하면 출고 목록(업체명-택배) 모달 */}
+                    {/* ✅ 출고 표시: 클릭하면 출고 목록(업체명-출고방식) 모달 */}
                     {shipCnt > 0 ? (
                       <button
                         type="button"
@@ -553,7 +557,8 @@ export default function CalendarPage() {
 
           <div className="mt-2 text-xs text-slate-500">
             ※ 메모가 비어 있으면 표시하지 않습니다. · 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다. · 출고 건수는{" "}
-            <span className="font-semibold">orders.ship_date</span> 기준입니다.
+            <span className="font-semibold">orders.ship_date</span> 기준이며,{" "}
+            <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 제외 집계합니다.
           </div>
         </div>
 
@@ -662,20 +667,15 @@ export default function CalendarPage() {
                   ) : (
                     <div className="space-y-2">
                       {shipLines.map((x) => {
-                        const cls =
-                          x.method === "택배" ? badgeShip : x.method === "퀵" ? badgeQuick : badgeEtc;
-
                         return (
                           <div
                             key={`${x.partner}__${x.method}`}
-                            className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                            className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
                           >
                             <div className="text-sm font-semibold text-slate-900">
                               {x.partner} - {x.method}
+                              {x.cnt > 1 ? ` (${x.cnt})` : ""}
                             </div>
-                            <span className={cls}>
-                              <span className="tabular-nums">{x.cnt}</span>
-                            </span>
                           </div>
                         );
                       })}
@@ -685,8 +685,7 @@ export default function CalendarPage() {
                   <div className="mt-3 text-xs text-slate-500">
                     ※ 집계/표시는 <span className="font-semibold">orders.ship_date</span> +{" "}
                     <span className="font-semibold">orders.ship_method</span> 기준이며, 거래처명은{" "}
-                    <span className="font-semibold">orders.customer_name</span>을 그대로 사용합니다. (FK 없음) ·
-                    {` `}
+                    <span className="font-semibold">orders.customer_name</span>을 그대로 사용합니다. (FK 없음) ·{" "}
                     <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 숨김 처리됩니다.
                   </div>
                 </div>
