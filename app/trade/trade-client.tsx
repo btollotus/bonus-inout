@@ -34,6 +34,21 @@ type PartnerShippingHistoryRow = {
   created_at: string;
 };
 
+type OrderShipmentRow = {
+  id: string;
+  order_id: string;
+  seq: number; // 1 or 2
+  ship_to_name: string;
+  ship_to_address1: string;
+  ship_to_address2: string | null;
+  ship_to_mobile: string | null;
+  ship_to_phone: string | null;
+  ship_zipcode: string | null;
+  delivery_message: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type OrderLineRow = {
   id: string;
   order_id: string;
@@ -72,6 +87,9 @@ type OrderRow = {
 
   // ✅ order_lines 테이블 분리 (정석 구조)
   order_lines?: OrderLineRow[];
+
+  // ✅ 주문별 배송지 스냅샷(1~2곳)
+  order_shipments?: OrderShipmentRow[];
 };
 
 type LedgerRow = {
@@ -157,6 +175,18 @@ type UnifiedRow = {
     unit_type?: "EA" | "BOX" | string;
     pack_ea?: number;
     actual_ea?: number;
+  }>;
+
+  // ✅ 주문별 배송지(메모/편집용)
+  order_shipments?: Array<{
+    seq: number;
+    ship_to_name: string;
+    ship_to_address1: string;
+    ship_to_address2?: string | null;
+    ship_to_mobile?: string | null;
+    ship_to_phone?: string | null;
+    ship_zipcode?: string | null;
+    delivery_message?: string | null;
   }>;
 
   // 복사용(금전출납)
@@ -263,6 +293,22 @@ function buildMemoText(r: UnifiedRow) {
     const title = r.order_title ?? "";
     const orderer = r.orderer_name ?? "";
     const lines = r.order_lines ?? [];
+
+    const shipList = (r.order_shipments ?? [])
+      .slice()
+      .sort((a, b) => (a.seq ?? 1) - (b.seq ?? 1))
+      .map((s) => {
+        const addr2 = String(s.ship_to_address2 ?? "").trim();
+        const zip = String(s.ship_zipcode ?? "").trim();
+        const msg = String(s.delivery_message ?? "").trim();
+        const mobile = String(s.ship_to_mobile ?? "").trim();
+        const phone = String(s.ship_to_phone ?? "").trim();
+        return `- 배송지${s.seq}: ${s.ship_to_name}
+  주소: ${s.ship_to_address1}${addr2 ? ` ${addr2}` : ""}${zip ? ` (${zip})` : ""}
+  연락처: ${mobile || "-"} / ${phone || "-"}${msg ? `\n  요청사항: ${msg}` : ""}`;
+      })
+      .join("\n");
+
     const rows = lines
       .map((l, idx) => {
         const qty = Number(l.qty ?? 0);
@@ -303,10 +349,14 @@ function buildMemoText(r: UnifiedRow) {
         )} / 부가세 ${formatMoney(vat)} / 총액 ${formatMoney(total)}`;
       })
       .join("\n");
+
     return `주문/출고 메모
 - 출고방법: ${r.ship_method ?? ""}
 - 주문자: ${orderer || "(없음)"}
 - 제목: ${title || "(없음)"}
+
+배송정보:
+${shipList || "(배송정보 없음)"}
 
 품목:
 ${rows || "(품목 없음)"}`;
@@ -377,7 +427,7 @@ export default function TradeClient() {
   const [ep_bizItem, setEP_bizItem] = useState("");
   const [ep_partnerType, setEP_partnerType] = useState<PartnerType>("CUSTOMER"); // ✅ 추가
 
-  // ✅ 배송정보(최근값) 편집
+  // ✅ 배송정보(최근값) 편집 (거래처)
   const [ship_to_name, setShipToName] = useState("");
   const [ship_to_address1, setShipToAddress1] = useState("");
   const [ship_to_mobile, setShipToMobile] = useState("");
@@ -409,6 +459,25 @@ export default function TradeClient() {
   const [shipMethod, setShipMethod] = useState("택배");
   const [orderTitle, setOrderTitle] = useState("");
   const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
+
+  // ✅ 주문별 배송정보(스냅샷) - 1~2곳
+  const [shipToName1, setShipToName1] = useState("");
+  const [shipToAddr1_1, setShipToAddr1_1] = useState("");
+  const [shipToAddr2_1, setShipToAddr2_1] = useState("");
+  const [shipToZip1, setShipToZip1] = useState("");
+  const [shipToMobile1, setShipToMobile1] = useState("");
+  const [shipToPhone1, setShipToPhone1] = useState("");
+  const [deliveryMsg1, setDeliveryMsg1] = useState("");
+
+  const [twoShip, setTwoShip] = useState(false);
+
+  const [shipToName2, setShipToName2] = useState("");
+  const [shipToAddr1_2, setShipToAddr1_2] = useState("");
+  const [shipToAddr2_2, setShipToAddr2_2] = useState("");
+  const [shipToZip2, setShipToZip2] = useState("");
+  const [shipToMobile2, setShipToMobile2] = useState("");
+  const [shipToPhone2, setShipToPhone2] = useState("");
+  const [deliveryMsg2, setDeliveryMsg2] = useState("");
 
   // 금전출납 입력
   const [entryDate, setEntryDate] = useState(todayYMD());
@@ -449,6 +518,25 @@ export default function TradeClient() {
   const [eShipMethod, setEShipMethod] = useState("택배");
   const [eOrderTitle, setEOrderTitle] = useState("");
   const [eLines, setELines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
+
+  // ✅ 주문 수정용 배송지(1~2)
+  const [eShipToName1, setEShipToName1] = useState("");
+  const [eShipToAddr1_1, setEShipToAddr1_1] = useState("");
+  const [eShipToAddr2_1, setEShipToAddr2_1] = useState("");
+  const [eShipToZip1, setEShipToZip1] = useState("");
+  const [eShipToMobile1, setEShipToMobile1] = useState("");
+  const [eShipToPhone1, setEShipToPhone1] = useState("");
+  const [eDeliveryMsg1, setEDeliveryMsg1] = useState("");
+
+  const [eTwoShip, setETwoShip] = useState(false);
+
+  const [eShipToName2, setEShipToName2] = useState("");
+  const [eShipToAddr1_2, setEShipToAddr1_2] = useState("");
+  const [eShipToAddr2_2, setEShipToAddr2_2] = useState("");
+  const [eShipToZip2, setEShipToZip2] = useState("");
+  const [eShipToMobile2, setEShipToMobile2] = useState("");
+  const [eShipToPhone2, setEShipToPhone2] = useState("");
+  const [eDeliveryMsg2, setEDeliveryMsg2] = useState("");
 
   // 금전출납 수정용
   const [eEntryDate, setEEntryDate] = useState(todayYMD());
@@ -634,11 +722,11 @@ export default function TradeClient() {
     const selectedBusinessNo = selectedPartner?.business_no ?? null;
     const selectedPartnerId = selectedPartner?.id ?? null;
 
-    // ---- 현재 기간 Orders (✅ order_lines 포함)
+    // ---- 현재 기간 Orders (✅ order_lines + ✅ order_shipments 포함)
     let oq = supabase
       .from("orders")
       .select(
-        "id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,created_at)"
+        "id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)"
       )
       .gte("ship_date", f)
       .lte("ship_date", t)
@@ -749,6 +837,23 @@ export default function TradeClient() {
   useEffect(() => {
     setManualCounterpartyName(selectedPartner?.name ?? "");
     setManualBusinessNo(selectedPartner?.business_no ?? "");
+
+    // ✅ 주문/출고 배송정보 기본값: partners.ship_to_* (수화주명/주소/연락처)
+    setShipToName1(selectedPartner?.ship_to_name ?? "");
+    setShipToAddr1_1(selectedPartner?.ship_to_address1 ?? "");
+    setShipToMobile1(selectedPartner?.ship_to_mobile ?? "");
+    setShipToPhone1(selectedPartner?.ship_to_phone ?? "");
+
+    // 2곳 배송은 기본 OFF, 2번 배송지는 비움
+    setTwoShip(false);
+    setShipToName2("");
+    setShipToAddr1_2("");
+    setShipToAddr2_2("");
+    setShipToZip2("");
+    setShipToMobile2("");
+    setShipToPhone2("");
+    setDeliveryMsg2("");
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id]);
 
@@ -952,6 +1057,19 @@ export default function TradeClient() {
     if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
     if (lines.length === 0) return setMsg("품목을 1개 이상 입력하세요.");
 
+    // ✅ 배송정보(수화주명/주소) 필수: 최소 1곳
+    const ship1_name = shipToName1.trim();
+    const ship1_addr1 = shipToAddr1_1.trim();
+    if (!ship1_name) return setMsg("배송정보(1) 수화주명을 입력하세요.");
+    if (!ship1_addr1) return setMsg("배송정보(1) 주소1을 입력하세요.");
+
+    if (twoShip) {
+      const ship2_name = shipToName2.trim();
+      const ship2_addr1 = shipToAddr1_2.trim();
+      if (!ship2_name) return setMsg("배송정보(2) 수화주명을 입력하세요.");
+      if (!ship2_addr1) return setMsg("배송정보(2) 주소1을 입력하세요.");
+    }
+
     const isMall = isMallPartner(selectedPartner);
 
     const cleanLines = lines
@@ -1032,9 +1150,53 @@ export default function TradeClient() {
     const { error: lErr } = await supabase.from("order_lines").insert(linePayloads);
     if (lErr) return setMsg(lErr.message);
 
+    // ✅ order_shipments insert (1~2곳)
+    const shipPayloads: any[] = [
+      {
+        order_id: orderId,
+        seq: 1,
+        ship_to_name: shipToName1.trim(),
+        ship_to_address1: shipToAddr1_1.trim(),
+        ship_to_address2: normText(shipToAddr2_1),
+        ship_to_mobile: normText(shipToMobile1),
+        ship_to_phone: normText(shipToPhone1),
+        ship_zipcode: normText(shipToZip1),
+        delivery_message: normText(deliveryMsg1),
+        created_by: null,
+      },
+    ];
+
+    if (twoShip) {
+      shipPayloads.push({
+        order_id: orderId,
+        seq: 2,
+        ship_to_name: shipToName2.trim(),
+        ship_to_address1: shipToAddr1_2.trim(),
+        ship_to_address2: normText(shipToAddr2_2),
+        ship_to_mobile: normText(shipToMobile2),
+        ship_to_phone: normText(shipToPhone2),
+        ship_zipcode: normText(shipToZip2),
+        delivery_message: normText(deliveryMsg2),
+        created_by: null,
+      });
+    }
+
+    const { error: sErr } = await supabase.from("order_shipments").insert(shipPayloads);
+    if (sErr) return setMsg(sErr.message);
+
     setOrderTitle("");
     setOrdererName(""); // ✅ 초기화
     setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
+
+    // 배송정보는 “거래처 기본값”을 유지(자주 수정 안함) → 값은 그대로 두고, 2곳만 OFF/비움
+    setTwoShip(false);
+    setShipToName2("");
+    setShipToAddr1_2("");
+    setShipToAddr2_2("");
+    setShipToZip2("");
+    setShipToMobile2("");
+    setShipToPhone2("");
+    setDeliveryMsg2("");
 
     await loadTrades();
   }
@@ -1136,6 +1298,16 @@ export default function TradeClient() {
           pack_ea: Number(l.pack_ea ?? 1),
           actual_ea: Number(l.actual_ea ?? 0),
         })),
+        order_shipments: (o.order_shipments ?? []).map((s) => ({
+          seq: Number(s.seq ?? 1),
+          ship_to_name: String(s.ship_to_name ?? ""),
+          ship_to_address1: String(s.ship_to_address1 ?? ""),
+          ship_to_address2: s.ship_to_address2 ?? null,
+          ship_to_mobile: s.ship_to_mobile ?? null,
+          ship_to_phone: s.ship_to_phone ?? null,
+          ship_zipcode: s.ship_zipcode ?? null,
+          delivery_message: s.delivery_message ?? null,
+        })),
       });
     }
 
@@ -1189,6 +1361,7 @@ export default function TradeClient() {
         order_title: x.order_title,
         orderer_name: x.orderer_name,
         order_lines: x.order_lines,
+        order_shipments: x.order_shipments,
         ledger_category: x.ledger_category,
         ledger_method: x.ledger_method,
         ledger_memo: x.ledger_memo,
@@ -1231,6 +1404,41 @@ export default function TradeClient() {
         : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }];
 
     setLines(nextLines);
+
+    // ✅ 배송지 복사(있으면)
+    const ships = (r.order_shipments ?? []).slice().sort((a, b) => (a.seq ?? 1) - (b.seq ?? 1));
+    const s1 = ships.find((x) => (x.seq ?? 1) === 1);
+    const s2 = ships.find((x) => (x.seq ?? 1) === 2);
+
+    if (s1) {
+      setShipToName1(String(s1.ship_to_name ?? ""));
+      setShipToAddr1_1(String(s1.ship_to_address1 ?? ""));
+      setShipToAddr2_1(String(s1.ship_to_address2 ?? ""));
+      setShipToZip1(String(s1.ship_zipcode ?? ""));
+      setShipToMobile1(String(s1.ship_to_mobile ?? ""));
+      setShipToPhone1(String(s1.ship_to_phone ?? ""));
+      setDeliveryMsg1(String(s1.delivery_message ?? ""));
+    }
+
+    if (s2) {
+      setTwoShip(true);
+      setShipToName2(String(s2.ship_to_name ?? ""));
+      setShipToAddr1_2(String(s2.ship_to_address1 ?? ""));
+      setShipToAddr2_2(String(s2.ship_to_address2 ?? ""));
+      setShipToZip2(String(s2.ship_zipcode ?? ""));
+      setShipToMobile2(String(s2.ship_to_mobile ?? ""));
+      setShipToPhone2(String(s2.ship_to_phone ?? ""));
+      setDeliveryMsg2(String(s2.delivery_message ?? ""));
+    } else {
+      setTwoShip(false);
+      setShipToName2("");
+      setShipToAddr1_2("");
+      setShipToAddr2_2("");
+      setShipToZip2("");
+      setShipToMobile2("");
+      setShipToPhone2("");
+      setDeliveryMsg2("");
+    }
   }
 
   function fillFromLedgerRow(r: UnifiedRow) {
@@ -1286,6 +1494,39 @@ export default function TradeClient() {
           : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }];
 
       setELines(nextLines);
+
+      // ✅ 배송지 세팅
+      const ships = (r.order_shipments ?? []).slice().sort((a, b) => (a.seq ?? 1) - (b.seq ?? 1));
+      const s1 = ships.find((x) => (x.seq ?? 1) === 1);
+      const s2 = ships.find((x) => (x.seq ?? 1) === 2);
+
+      setEShipToName1(String(s1?.ship_to_name ?? ""));
+      setEShipToAddr1_1(String(s1?.ship_to_address1 ?? ""));
+      setEShipToAddr2_1(String(s1?.ship_to_address2 ?? ""));
+      setEShipToZip1(String(s1?.ship_zipcode ?? ""));
+      setEShipToMobile1(String(s1?.ship_to_mobile ?? ""));
+      setEShipToPhone1(String(s1?.ship_to_phone ?? ""));
+      setEDeliveryMsg1(String(s1?.delivery_message ?? ""));
+
+      if (s2) {
+        setETwoShip(true);
+        setEShipToName2(String(s2.ship_to_name ?? ""));
+        setEShipToAddr1_2(String(s2.ship_to_address1 ?? ""));
+        setEShipToAddr2_2(String(s2.ship_to_address2 ?? ""));
+        setEShipToZip2(String(s2.ship_zipcode ?? ""));
+        setEShipToMobile2(String(s2.ship_to_mobile ?? ""));
+        setEShipToPhone2(String(s2.ship_to_phone ?? ""));
+        setEDeliveryMsg2(String(s2.delivery_message ?? ""));
+      } else {
+        setETwoShip(false);
+        setEShipToName2("");
+        setEShipToAddr1_2("");
+        setEShipToAddr2_2("");
+        setEShipToZip2("");
+        setEShipToMobile2("");
+        setEShipToPhone2("");
+        setEDeliveryMsg2("");
+      }
     } else {
       setEEntryDate(r.date || todayYMD());
       const m = (r.ledger_method ?? r.method ?? "BANK") as any;
@@ -1313,6 +1554,19 @@ export default function TradeClient() {
     if (editRow.kind === "ORDER") {
       // ✅ (오류 가능성 보완) selectedPartner가 null인 상태에서도 저장 시 에러 방지
       const isMall = selectedPartner ? isMallPartner(selectedPartner) : false;
+
+      // ✅ 배송정보(수화주명/주소) 필수: 최소 1곳
+      const ship1_name = eShipToName1.trim();
+      const ship1_addr1 = eShipToAddr1_1.trim();
+      if (!ship1_name) return setMsg("배송정보(1) 수화주명을 입력하세요.");
+      if (!ship1_addr1) return setMsg("배송정보(1) 주소1을 입력하세요.");
+
+      if (eTwoShip) {
+        const ship2_name = eShipToName2.trim();
+        const ship2_addr1 = eShipToAddr1_2.trim();
+        if (!ship2_name) return setMsg("배송정보(2) 수화주명을 입력하세요.");
+        if (!ship2_addr1) return setMsg("배송정보(2) 주소1을 입력하세요.");
+      }
 
       const cleanLines = eLines
         .map((l) => {
@@ -1385,6 +1639,43 @@ export default function TradeClient() {
 
       const { error: iErr } = await supabase.from("order_lines").insert(linePayloads);
       if (iErr) return setMsg(iErr.message);
+
+      // ✅ 배송지 교체: 기존 order_shipments 삭제 후 재삽입 (1~2곳)
+      const { error: sdErr } = await supabase.from("order_shipments").delete().eq("order_id", editRow.rawId);
+      if (sdErr) return setMsg(sdErr.message);
+
+      const shipPayloads: any[] = [
+        {
+          order_id: editRow.rawId,
+          seq: 1,
+          ship_to_name: eShipToName1.trim(),
+          ship_to_address1: eShipToAddr1_1.trim(),
+          ship_to_address2: normText(eShipToAddr2_1),
+          ship_to_mobile: normText(eShipToMobile1),
+          ship_to_phone: normText(eShipToPhone1),
+          ship_zipcode: normText(eShipToZip1),
+          delivery_message: normText(eDeliveryMsg1),
+          created_by: null,
+        },
+      ];
+
+      if (eTwoShip) {
+        shipPayloads.push({
+          order_id: editRow.rawId,
+          seq: 2,
+          ship_to_name: eShipToName2.trim(),
+          ship_to_address1: eShipToAddr1_2.trim(),
+          ship_to_address2: normText(eShipToAddr2_2),
+          ship_to_mobile: normText(eShipToMobile2),
+          ship_to_phone: normText(eShipToPhone2),
+          ship_zipcode: normText(eShipToZip2),
+          delivery_message: normText(eDeliveryMsg2),
+          created_by: null,
+        });
+      }
+
+      const { error: siErr } = await supabase.from("order_shipments").insert(shipPayloads);
+      if (siErr) return setMsg(siErr.message);
     } else {
       const amount = Number((eAmountStr || "0").replaceAll(",", ""));
       if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
@@ -1427,6 +1718,10 @@ export default function TradeClient() {
     if (!ok) return;
 
     if (r.kind === "ORDER") {
+      // ✅ shipments 먼저 삭제(혹시 FK cascade가 있어도 안전하게)
+      const { error: sErr } = await supabase.from("order_shipments").delete().eq("order_id", r.rawId);
+      if (sErr) return setMsg(sErr.message);
+
       const { error: dErr } = await supabase.from("order_lines").delete().eq("order_id", r.rawId);
       if (dErr) return setMsg(dErr.message);
 
@@ -1673,6 +1968,64 @@ export default function TradeClient() {
                       <div>
                         <div className="mb-1 text-xs text-slate-600">메모(title)</div>
                         <input className={input} value={eOrderTitle} onChange={(e) => setEOrderTitle(e.target.value)} />
+                      </div>
+                    </div>
+
+                    {/* ✅ 주문별 배송정보(스냅샷) */}
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="mb-2 text-sm font-semibold">배송정보(주문 스냅샷)</div>
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <div className="mb-2 text-sm font-semibold">배송지 1</div>
+                          <div className="space-y-2">
+                            <input className={input} placeholder="수화주명(필수)" value={eShipToName1} onChange={(e) => setEShipToName1(e.target.value)} />
+                            <input className={input} placeholder="주소1(필수)" value={eShipToAddr1_1} onChange={(e) => setEShipToAddr1_1(e.target.value)} />
+                            <input className={input} placeholder="주소2" value={eShipToAddr2_1} onChange={(e) => setEShipToAddr2_1(e.target.value)} />
+                            <div className="grid grid-cols-2 gap-2">
+                              <input className={input} placeholder="우편번호" value={eShipToZip1} onChange={(e) => setEShipToZip1(e.target.value)} />
+                              <input className={input} placeholder="요청사항" value={eDeliveryMsg1} onChange={(e) => setEDeliveryMsg1(e.target.value)} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input className={input} placeholder="휴대폰" value={eShipToMobile1} onChange={(e) => setEShipToMobile1(e.target.value)} />
+                              <input className={input} placeholder="전화" value={eShipToPhone1} onChange={(e) => setEShipToPhone1(e.target.value)} />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <div className="mb-2 flex items-center justify-between">
+                            <div className="text-sm font-semibold">배송지 2 (선택)</div>
+                            <label className="flex items-center gap-2 text-sm">
+                              <input type="checkbox" checked={eTwoShip} onChange={(e) => setETwoShip(e.target.checked)} />
+                              2곳 배송
+                            </label>
+                          </div>
+
+                          {eTwoShip ? (
+                            <div className="space-y-2">
+                              <input className={input} placeholder="수화주명(필수)" value={eShipToName2} onChange={(e) => setEShipToName2(e.target.value)} />
+                              <input className={input} placeholder="주소1(필수)" value={eShipToAddr1_2} onChange={(e) => setEShipToAddr1_2(e.target.value)} />
+                              <input className={input} placeholder="주소2" value={eShipToAddr2_2} onChange={(e) => setEShipToAddr2_2(e.target.value)} />
+                              <div className="grid grid-cols-2 gap-2">
+                                <input className={input} placeholder="우편번호" value={eShipToZip2} onChange={(e) => setEShipToZip2(e.target.value)} />
+                                <input className={input} placeholder="요청사항" value={eDeliveryMsg2} onChange={(e) => setEDeliveryMsg2(e.target.value)} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <input className={input} placeholder="휴대폰" value={eShipToMobile2} onChange={(e) => setEShipToMobile2(e.target.value)} />
+                                <input className={input} placeholder="전화" value={eShipToPhone2} onChange={(e) => setEShipToPhone2(e.target.value)} />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                              2곳 배송이 아니면 비워둡니다.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-2 text-xs text-slate-500">
+                        ※ 주문별 배송정보는 “스냅샷”으로 저장됩니다. 거래처 배송정보를 바꿔도 과거 주문은 유지됩니다.
                       </div>
                     </div>
 
@@ -2057,6 +2410,64 @@ export default function TradeClient() {
                   <div>
                     <div className="mb-1 text-xs text-slate-600">메모(title)</div>
                     <input className={input} value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} />
+                  </div>
+                </div>
+
+                {/* ✅ 주문별 배송정보(스냅샷) */}
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-2 text-sm font-semibold">배송정보(주문 스냅샷)</div>
+
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <div className="mb-2 text-sm font-semibold">배송지 1</div>
+                      <div className="space-y-2">
+                        <input className={input} placeholder="수화주명(필수)" value={shipToName1} onChange={(e) => setShipToName1(e.target.value)} />
+                        <input className={input} placeholder="주소1(필수)" value={shipToAddr1_1} onChange={(e) => setShipToAddr1_1(e.target.value)} />
+                        <input className={input} placeholder="주소2" value={shipToAddr2_1} onChange={(e) => setShipToAddr2_1(e.target.value)} />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input className={input} placeholder="우편번호" value={shipToZip1} onChange={(e) => setShipToZip1(e.target.value)} />
+                          <input className={input} placeholder="요청사항" value={deliveryMsg1} onChange={(e) => setDeliveryMsg1(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input className={input} placeholder="휴대폰" value={shipToMobile1} onChange={(e) => setShipToMobile1(e.target.value)} />
+                          <input className={input} placeholder="전화" value={shipToPhone1} onChange={(e) => setShipToPhone1(e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="text-sm font-semibold">배송지 2 (선택)</div>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input type="checkbox" checked={twoShip} onChange={(e) => setTwoShip(e.target.checked)} />
+                          2곳 배송
+                        </label>
+                      </div>
+
+                      {twoShip ? (
+                        <div className="space-y-2">
+                          <input className={input} placeholder="수화주명(필수)" value={shipToName2} onChange={(e) => setShipToName2(e.target.value)} />
+                          <input className={input} placeholder="주소1(필수)" value={shipToAddr1_2} onChange={(e) => setShipToAddr1_2(e.target.value)} />
+                          <input className={input} placeholder="주소2" value={shipToAddr2_2} onChange={(e) => setShipToAddr2_2(e.target.value)} />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input className={input} placeholder="우편번호" value={shipToZip2} onChange={(e) => setShipToZip2(e.target.value)} />
+                            <input className={input} placeholder="요청사항" value={deliveryMsg2} onChange={(e) => setDeliveryMsg2(e.target.value)} />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input className={input} placeholder="휴대폰" value={shipToMobile2} onChange={(e) => setShipToMobile2(e.target.value)} />
+                            <input className={input} placeholder="전화" value={shipToPhone2} onChange={(e) => setShipToPhone2(e.target.value)} />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                          2곳 배송이 아니면 비워둡니다.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-2 text-xs text-slate-500">
+                    ※ 배송정보는 주문마다 저장됩니다(스냅샷). 거래처(업체)명과 수화주명은 다를 수 있습니다.
                   </div>
                 </div>
 
