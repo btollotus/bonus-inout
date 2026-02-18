@@ -28,11 +28,7 @@ type LineRow = {
   name: string | null;
 };
 
-const HIDE_CUSTOMERS = new Set([
-  "카카오플러스-판매",
-  "네이버-판매",
-  "쿠팡-판매",
-]);
+const HIDE_CUSTOMERS = new Set(["카카오플러스-판매", "네이버-판매", "쿠팡-판매"]);
 
 const FIX_QTY = 1;
 const FIX_FEE = 3300;
@@ -42,12 +38,11 @@ const FIX_JEJU_PREPAID = "010";
 function safeStr(v: any) {
   return String(v ?? "").trim();
 }
-
 function buildAddress(a1: string | null, a2: string | null) {
   return [safeStr(a1), safeStr(a2)].filter(Boolean).join(" ");
 }
 
-// ✅ 숫자 제거: 제품명만 합침
+// ✅ 숫자 제거: 제품명(name)만 합침
 function buildProductName(lines: LineRow[]) {
   return lines
     .slice()
@@ -56,22 +51,47 @@ function buildProductName(lines: LineRow[]) {
     .join(", ");
 }
 
+function makeWorkbook() {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("출고");
+
+  ws.columns = [
+    { header: "수화주명", key: "ship_to_name", width: 18 },
+    { header: "주소1", key: "address1", width: 50 },
+    { header: "휴대폰", key: "mobile", width: 16 },
+    { header: "전화", key: "phone", width: 16 },
+    { header: "택배수량", key: "box_qty", width: 10 },
+    { header: "택배요금", key: "fee", width: 10 },
+    { header: "선착불", key: "prepaid", width: 8 },
+    { header: "제주선착불", key: "jeju_prepaid", width: 10 },
+    { header: "제품명", key: "product_name", width: 45 },
+    { header: "배송메세지", key: "delivery_message", width: 30 },
+  ];
+
+  ws.getRow(1).font = { bold: true };
+  return { wb, ws };
+}
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const date = safeStr(url.searchParams.get("date"));
+    if (!date) return new Response("date 파라미터가 필요합니다.", { status: 400 });
 
-    if (!date) {
-      return new Response("date 파라미터가 필요합니다.", { status: 400 });
-    }
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } }
-    );
+    if (!supabaseUrl) throw new Error("Missing env: NEXT_PUBLIC_SUPABASE_URL");
+    if (!serviceKey) throw new Error("Missing env: SUPABASE_SERVICE_ROLE_KEY");
 
-    // 1️⃣ orders 조회
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
+
+    // ✅ 어떤 경우에도 xlsx 반환(0건이어도 헤더만 있는 빈 파일)
+    const { wb, ws } = makeWorkbook();
+
+    // 1) orders 조회
     const { data: ordersData, error: oErr } = await supabase
       .from("orders")
       .select("id,ship_date,customer_name")
@@ -79,16 +99,27 @@ export async function GET(req: Request) {
 
     if (oErr) throw oErr;
 
-    const orders = (ordersData ?? []).filter(
-      (o: OrderRow) => !HIDE_CUSTOMERS.has(safeStr(o.customer_name))
-    ) as OrderRow[];
+    const orders = ((ordersData ?? []) as OrderRow[]).filter(
+      (o) => !HIDE_CUSTOMERS.has(safeStr(o.customer_name))
+    );
 
     const orderIds = orders.map((o) => o.id);
+
+    // 0건이면 그대로(헤더만) 내려줌
     if (orderIds.length === 0) {
-      return new Response("출고 데이터 없음", { status: 200 });
+      const buf0 = await wb.xlsx.writeBuffer();
+      return new Response(buf0, {
+        status: 200,
+        headers: {
+          "Content-Type":
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename=출고_${date}.xlsx`,
+          "Cache-Control": "no-store",
+        },
+      });
     }
 
-    // 2️⃣ 배송지 조회
+    // 2) 배송지 조회
     const { data: shipData, error: sErr } = await supabase
       .from("order_shipments")
       .select(
@@ -101,7 +132,6 @@ export async function GET(req: Request) {
     if (sErr) throw sErr;
 
     const ships = (shipData ?? []) as ShipRow[];
-
     const shipsByOrder = new Map<string, ShipRow[]>();
     for (const s of ships) {
       const arr = shipsByOrder.get(s.order_id) ?? [];
@@ -109,7 +139,7 @@ export async function GET(req: Request) {
       shipsByOrder.set(s.order_id, arr);
     }
 
-    // 3️⃣ 제품명 조회 (qty 제거됨)
+    // 3) 제품명 조회 (qty 절대 사용 안 함)
     const { data: lineData, error: lErr } = await supabase
       .from("order_lines")
       .select("order_id,line_no,name")
@@ -120,7 +150,6 @@ export async function GET(req: Request) {
     if (lErr) throw lErr;
 
     const lines = (lineData ?? []) as LineRow[];
-
     const linesByOrder = new Map<string, LineRow[]>();
     for (const l of lines) {
       const arr = linesByOrder.get(l.order_id) ?? [];
@@ -128,28 +157,11 @@ export async function GET(req: Request) {
       linesByOrder.set(l.order_id, arr);
     }
 
-    // 4️⃣ 엑셀 생성
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet("출고");
-
-    ws.columns = [
-      { header: "수화주명", key: "ship_to_name", width: 18 },
-      { header: "주소1", key: "address1", width: 50 },
-      { header: "휴대폰", key: "mobile", width: 16 },
-      { header: "전화", key: "phone", width: 16 },
-      { header: "택배수량", key: "box_qty", width: 10 },
-      { header: "택배요금", key: "fee", width: 10 },
-      { header: "선착불", key: "prepaid", width: 8 },
-      { header: "제주선착불", key: "jeju_prepaid", width: 10 },
-      { header: "제품명", key: "product_name", width: 45 },
-      { header: "배송메세지", key: "delivery_message", width: 30 },
-    ];
-
-    ws.getRow(1).font = { bold: true };
-
+    // 4) 엑셀 rows 생성
     for (const o of orders) {
       const shipRows = shipsByOrder.get(o.id) ?? [];
-      const targets = shipRows.length ? shipRows.slice(0, 2) : [null];
+      // ✅ 배송지 2개면 2줄, 없으면 1줄(빈 배송지)
+      const targets: (ShipRow | null)[] = shipRows.length ? shipRows.slice(0, 2) : [null];
 
       const productName = buildProductName(linesByOrder.get(o.id) ?? []);
 
@@ -170,7 +182,6 @@ export async function GET(req: Request) {
     }
 
     const buf = await wb.xlsx.writeBuffer();
-
     return new Response(buf, {
       status: 200,
       headers: {
@@ -181,9 +192,9 @@ export async function GET(req: Request) {
       },
     });
   } catch (e: any) {
-    return new Response(
-      `출고 엑셀 생성 오류: ${String(e?.message ?? e)}`,
-      { status: 500 }
-    );
+    // ✅ 캘린더에서 실패했을 때 원인 파악 쉽게 메시지 보강
+    return new Response(`출고 엑셀 생성 오류: ${String(e?.message ?? e)}`, {
+      status: 500,
+    });
   }
 }
