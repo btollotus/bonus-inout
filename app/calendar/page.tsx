@@ -184,6 +184,8 @@ export default function CalendarPage() {
   type ShipRow = { partner_name: string; ship_method: ShipMethod };
   const [shipRows, setShipRows] = useState<ShipRow[]>([]);
 
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
+
   const range = useMemo(() => {
     const yyyy = curMonthDate.getFullYear();
     const mm = curMonthDate.getMonth(); // 0-based
@@ -384,6 +386,43 @@ export default function CalendarPage() {
     return lines;
   }, [shipRows]);
 
+  async function downloadShipExcel(date: string) {
+    if (!date) return;
+    setDownloadingExcel(true);
+    setMsg(null);
+
+    try {
+      const res = await fetch(`/api/shipments/excel?date=${encodeURIComponent(date)}`, {
+        method: "GET",
+      });
+
+      if (!res.ok) {
+        let errText = "엑셀 다운로드 실패";
+        try {
+          const j = await res.json();
+          if (j?.error) errText = j.error;
+        } catch {}
+        throw new Error(errText);
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `출고목록_${date}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setMsg(e?.message ?? "엑셀 다운로드 중 오류");
+    } finally {
+      setDownloadingExcel(false);
+    }
+  }
+
   async function upsertMemo(date: string, vis: Visibility, content: string) {
     const existing = memoMap.get(memoKey(date, vis));
     const trimmed = content.trim();
@@ -577,9 +616,7 @@ export default function CalendarPage() {
                             </div>
                           ))}
                           {shipLinesInCell.length > 6 ? (
-                            <div className="text-[11px] text-slate-500">
-                              외 {shipLinesInCell.length - 6}건…
-                            </div>
+                            <div className="text-[11px] text-slate-500">외 {shipLinesInCell.length - 6}건…</div>
                           ) : null}
                         </div>
                       </div>
@@ -681,13 +718,22 @@ export default function CalendarPage() {
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">출고 목록 · {selShipDate}</div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    업체명-출고방식(택배/퀵/기타) 형태로 표시합니다.
-                  </div>
+                  <div className="mt-1 text-xs text-slate-500">업체명-출고방식(택배/퀵/기타) 형태로 표시합니다.</div>
                 </div>
-                <button className={btn} onClick={() => setOpenShip(false)}>
-                  닫기
-                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    className={btnOn}
+                    onClick={() => downloadShipExcel(selShipDate)}
+                    disabled={downloadingExcel || !selShipDate}
+                    title="해당 날짜 출고 목록을 엑셀로 다운로드"
+                  >
+                    {downloadingExcel ? "엑셀 생성중..." : "엑셀 다운로드"}
+                  </button>
+                  <button className={btn} onClick={() => setOpenShip(false)} disabled={downloadingExcel}>
+                    닫기
+                  </button>
+                </div>
               </div>
 
               <div className="px-5 py-4">
@@ -730,9 +776,8 @@ export default function CalendarPage() {
                   )}
 
                   <div className="mt-3 text-xs text-slate-500">
-                    ※ 집계/표시는 <span className="font-semibold">orders.ship_date</span> +{" "}
-                    <span className="font-semibold">orders.ship_method</span> 기준이며, 거래처명은{" "}
-                    <span className="font-semibold">orders.customer_name</span>을 그대로 사용합니다. (FK 없음) ·{" "}
+                    ※ 엑셀 다운로드는 <span className="font-semibold">order_shipments 기준</span>으로 생성됩니다. (배송지 2개면 2줄) · 제품명은{" "}
+                    <span className="font-semibold">order_lines를 합쳐 1칸</span>에 출력합니다. ·{" "}
                     <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 숨김 처리됩니다.
                   </div>
                 </div>
