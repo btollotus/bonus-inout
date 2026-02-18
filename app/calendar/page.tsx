@@ -540,19 +540,18 @@ export default function CalendarPage() {
                     onClick={() => openDayModal(ds)}
                     title="클릭해서 메모 추가/수정"
                   >
-                    {/* ✅ 날짜(일자 숫자) 좌상단 고정 */}
-                    <div className={`absolute left-3 top-2 text-sm font-semibold ${dayColor(d)}`}>
-                      {dayNum}
-                    </div>
-
-                    {/* 우상단 배지(공휴일/오늘) */}
-                    <div className="absolute right-3 top-2 flex flex-wrap items-center justify-end gap-1">
+                    {/* ✅ 날짜(일자 숫자) 좌상단 고정 + ✅ 공휴일/기념일 배지를 날짜 옆에 바로 붙임 */}
+                    <div className="absolute left-3 top-2 flex items-center gap-1">
+                      <div className={`text-sm font-semibold ${dayColor(d)}`}>{dayNum}</div>
                       {holidayName ? (
                         <div className="truncate rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
                           {holidayName}
                         </div>
                       ) : null}
+                    </div>
 
+                    {/* 우상단 배지(오늘) */}
+                    <div className="absolute right-3 top-2 flex flex-wrap items-center justify-end gap-1">
                       {isToday ? <span className={badge}>오늘</span> : null}
                     </div>
 
