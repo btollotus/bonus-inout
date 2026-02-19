@@ -67,18 +67,13 @@ function buildAddress(a1: string | null, a2: string | null) {
 }
 
 function buildProductName(lines: LineRow[]) {
-  // 요구사항: order_lines 모두 합쳐서 1칸
-  // (정보가 있으면 수량/단위도 같이 붙여 가독성만 올림. 원치 않으면 name만 join으로 바꾸면 됨)
+  // 요구사항: order_lines 모두 합쳐서 1칸 (✅ 수량/단위 등 숫자 표시 금지 → name만 합침)
   const parts = lines
     .slice()
     .sort((a, b) => Number(a.line_no ?? 9999) - Number(b.line_no ?? 9999))
     .map((l) => {
       const n = safeStr(l.name) || "(품목명없음)";
-      const q = l.qty == null ? "" : String(l.qty);
-      const u = safeStr(l.unit);
-      // qty/unit이 있으면 "품목명 qtyunit" 형태
-      const tail = q ? ` ${q}${u ? u : ""}` : "";
-      return `${n}${tail}`;
+      return n;
     });
 
   return parts.join(", ");
