@@ -4,13 +4,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
-type LeaveType = "FULL" | "AM" | "PM";
+type LogicalLeaveType = "FULL" | "AM" | "PM";
 
 type LeaveRow = {
   id: string;
   user_id: string;
   leave_date: string; // YYYY-MM-DD
-  leave_type: LeaveType | string | null;
+  leave_type: string | null;
   note: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -39,15 +39,66 @@ function shortUid(uid: string) {
   if (!uid) return "";
   return uid.slice(0, 6);
 }
-function typeLabel(t: string | null | undefined) {
+
+function typeLabelLogical(t: LogicalLeaveType) {
   if (t === "FULL") return "연차";
   if (t === "AM") return "오전반차";
-  if (t === "PM") return "오후반차";
-  return String(t ?? "");
+  return "오후반차";
+}
+
+// DB에 저장된 leave_type 문자열을 "논리 타입(FULL/AM/PM)"으로 최대한 복원
+function normalizeFromDb(v: string | null | undefined): LogicalLeaveType {
+  const s = String(v ?? "").trim();
+  if (!s) return "FULL";
+
+  // FULL 계열
+  if (s === "FULL" || s === "연차" || s === "ANNUAL" || s === "YEARLY" || s === "LEAVE_FULL") return "FULL";
+
+  // AM 계열
+  if (
+    s === "AM" ||
+    s === "오전반차" ||
+    s === "오전 반차" ||
+    s === "반차(오전)" ||
+    s === "HALF_AM" ||
+    s === "LEAVE_AM"
+  )
+    return "AM";
+
+  // PM 계열
+  if (
+    s === "PM" ||
+    s === "오후반차" ||
+    s === "오후 반차" ||
+    s === "반차(오후)" ||
+    s === "HALF_PM" ||
+    s === "LEAVE_PM"
+  )
+    return "PM";
+
+  // 알 수 없으면 FULL로
+  return "FULL";
+}
+
+// 논리 타입(FULL/AM/PM)을 DB enum 후보 문자열 목록으로 변환(여러 후보로 재시도)
+function dbCandidates(t: LogicalLeaveType): string[] {
+  if (t === "FULL") {
+    return ["FULL", "연차", "ANNUAL", "YEARLY", "LEAVE_FULL"];
+  }
+  if (t === "AM") {
+    return ["AM", "오전반차", "오전 반차", "반차(오전)", "HALF_AM", "LEAVE_AM"];
+  }
+  return ["PM", "오후반차", "오후 반차", "반차(오후)", "HALF_PM", "LEAVE_PM"];
+}
+
+function isEnumError(msg: string) {
+  // postgres: invalid input value for enum <enum_name>: "<value>"
+  return msg.includes("invalid input value for enum");
 }
 
 export default function LeaveClient() {
   const supabase = useMemo(() => createClient(), []);
+
   const pageBg = "bg-slate-50 text-slate-900";
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const input =
@@ -82,7 +133,7 @@ export default function LeaveClient() {
 
   // 입력 폼
   const [leaveDate, setLeaveDate] = useState<string>(() => ymd(new Date()));
-  const [leaveType, setLeaveType] = useState<LeaveType>("FULL");
+  const [leaveType, setLeaveType] = useState<LogicalLeaveType>("FULL");
   const [note, setNote] = useState("");
 
   // 데이터
@@ -93,7 +144,7 @@ export default function LeaveClient() {
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState<LeaveRow | null>(null);
   const [editDate, setEditDate] = useState("");
-  const [editType, setEditType] = useState<LeaveType>("FULL");
+  const [editType, setEditType] = useState<LogicalLeaveType>("FULL");
   const [editNote, setEditNote] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -102,7 +153,6 @@ export default function LeaveClient() {
     const u = data?.user;
     setUid(u?.id ?? null);
 
-    // is_admin RPC가 프로젝트에 존재한다는 전제(기존 캘린더 코드와 동일)
     if (u?.id) {
       const { data: adminData, error } = await supabase.rpc("is_admin", { p_uid: u.id });
       if (!error) setIsAdmin(!!adminData);
@@ -116,7 +166,6 @@ export default function LeaveClient() {
     setMsg(null);
     setLoading(true);
     try {
-      // ✅ 스키마 차이로 깨질 위험 최소화: select("*") 사용
       const { data, error } = await supabase
         .from("leave_requests")
         .select("*")
@@ -146,6 +195,37 @@ export default function LeaveClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curMonth]);
 
+  // ✅ enum 값을 몰라도 동작하도록: leave_type 후보들을 순서대로 넣어 재시도
+  async function insertWithEnumFallback(payloadBase: any, logicalType: LogicalLeaveType) {
+    const candidates = dbCandidates(logicalType);
+
+    let lastErr: any = null;
+    for (const c of candidates) {
+      const payload = { ...payloadBase, leave_type: c };
+      const { error } = await supabase.from("leave_requests").insert(payload);
+      if (!error) return;
+      lastErr = error;
+      const msg = String(error?.message ?? "");
+      if (!isEnumError(msg)) break; // enum 에러가 아니면 더 시도해도 의미 없음
+    }
+    throw lastErr ?? new Error("휴가 등록 중 오류");
+  }
+
+  async function updateWithEnumFallback(id: string, patchBase: any, logicalType: LogicalLeaveType) {
+    const candidates = dbCandidates(logicalType);
+
+    let lastErr: any = null;
+    for (const c of candidates) {
+      const patch = { ...patchBase, leave_type: c };
+      const { error } = await supabase.from("leave_requests").update(patch).eq("id", id);
+      if (!error) return;
+      lastErr = error;
+      const msg = String(error?.message ?? "");
+      if (!isEnumError(msg)) break;
+    }
+    throw lastErr ?? new Error("수정 중 오류");
+  }
+
   async function addLeave() {
     setMsg(null);
     if (!uid) {
@@ -159,16 +239,13 @@ export default function LeaveClient() {
 
     setSaving(true);
     try {
-      // ✅ RLS with_check: user_id = auth.uid() 만족
-      const payload: any = {
+      const payloadBase: any = {
         user_id: uid,
         leave_date: leaveDate,
-        leave_type: leaveType,
         note: note.trim() ? note.trim() : null,
       };
 
-      const { error } = await supabase.from("leave_requests").insert(payload);
-      if (error) throw error;
+      await insertWithEnumFallback(payloadBase, leaveType);
 
       setNote("");
       await loadLeaves();
@@ -188,7 +265,7 @@ export default function LeaveClient() {
     setMsg(null);
     setEditRow(r);
     setEditDate(r.leave_date);
-    setEditType((r.leave_type as LeaveType) || "FULL");
+    setEditType(normalizeFromDb(r.leave_type));
     setEditNote(r.note ?? "");
     setEditOpen(true);
   }
@@ -198,14 +275,12 @@ export default function LeaveClient() {
     setMsg(null);
     setSaving(true);
     try {
-      const patch: any = {
+      const patchBase: any = {
         leave_date: editDate,
-        leave_type: editType,
         note: editNote.trim() ? editNote.trim() : null,
       };
 
-      const { error } = await supabase.from("leave_requests").update(patch).eq("id", editRow.id);
-      if (error) throw error;
+      await updateWithEnumFallback(editRow.id, patchBase, editType);
 
       setEditOpen(false);
       setEditRow(null);
@@ -267,19 +342,13 @@ export default function LeaveClient() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <button
-                className={btn}
-                onClick={() => setCurMonth(monthKey(addMonths(curMonthDate, -1)))}
-              >
+              <button className={btn} onClick={() => setCurMonth(monthKey(addMonths(curMonthDate, -1)))}>
                 ◀ 이전달
               </button>
               <button className={btn} onClick={() => setCurMonth(monthKey(new Date()))}>
                 오늘
               </button>
-              <button
-                className={btn}
-                onClick={() => setCurMonth(monthKey(addMonths(curMonthDate, 1)))}
-              >
+              <button className={btn} onClick={() => setCurMonth(monthKey(addMonths(curMonthDate, 1)))}>
                 다음달 ▶
               </button>
               <button className={btnOn} onClick={loadLeaves} disabled={loading || saving}>
@@ -303,11 +372,7 @@ export default function LeaveClient() {
 
               <div className="md:col-span-3">
                 <div className="mb-1 text-sm font-semibold">구분</div>
-                <select
-                  className={input}
-                  value={leaveType}
-                  onChange={(e) => setLeaveType(e.target.value as LeaveType)}
-                >
+                <select className={input} value={leaveType} onChange={(e) => setLeaveType(e.target.value as any)}>
                   <option value="FULL">연차</option>
                   <option value="AM">오전반차</option>
                   <option value="PM">오후반차</option>
@@ -360,19 +425,16 @@ export default function LeaveClient() {
                 ) : (
                   rows.map((r) => {
                     const mine = uid && r.user_id === uid;
+                    const logical = normalizeFromDb(r.leave_type);
                     return (
                       <tr key={r.id} className="border-b border-slate-200 last:border-b-0">
                         <td className="px-4 py-3 tabular-nums">{r.leave_date}</td>
                         <td className="px-4 py-3">
-                          <span className={badge}>{typeLabel(r.leave_type)}</span>
+                          <span className={badge}>{typeLabelLogical(logical)}</span>
                         </td>
                         <td className="px-4 py-3 text-slate-700">{r.note ?? ""}</td>
                         <td className="px-4 py-3">
-                          {mine ? (
-                            <span className={badgeMine}>본인</span>
-                          ) : (
-                            <span className={badge}>UID:{shortUid(r.user_id)}</span>
-                          )}
+                          {mine ? <span className={badgeMine}>본인</span> : <span className={badge}>UID:{shortUid(r.user_id)}</span>}
                         </td>
                         <td className="px-4 py-3 text-right">
                           {canEdit(r) ? (
@@ -397,21 +459,14 @@ export default function LeaveClient() {
           </div>
 
           <div className="mt-2 text-xs text-slate-500">
-            ※ 직원 인사정보(employees)는 전 직원이 볼 수 없도록 설계되어 있어,
-            목록의 “작성자”는 본인 여부 또는 UID 일부만 표시합니다.
+            ※ 직원 인사정보(employees)는 전 직원이 볼 수 없도록 설계되어 있어, 목록의 “작성자”는 본인 여부 또는 UID 일부만 표시합니다.
           </div>
         </div>
 
         {/* 편집 모달 */}
         {editOpen ? (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-            onClick={() => setEditOpen(false)}
-          >
-            <div
-              className="w-full max-w-[720px] rounded-2xl border border-slate-200 bg-white shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setEditOpen(false)}>
+            <div className="w-full max-w-[720px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">휴가 수정</div>
@@ -431,21 +486,12 @@ export default function LeaveClient() {
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
                   <div className="md:col-span-4">
                     <div className="mb-1 text-sm font-semibold">날짜</div>
-                    <input
-                      type="date"
-                      className={input}
-                      value={editDate}
-                      onChange={(e) => setEditDate(e.target.value)}
-                    />
+                    <input type="date" className={input} value={editDate} onChange={(e) => setEditDate(e.target.value)} />
                   </div>
 
                   <div className="md:col-span-4">
                     <div className="mb-1 text-sm font-semibold">구분</div>
-                    <select
-                      className={input}
-                      value={editType}
-                      onChange={(e) => setEditType(e.target.value as LeaveType)}
-                    >
+                    <select className={input} value={editType} onChange={(e) => setEditType(e.target.value as any)}>
                       <option value="FULL">연차</option>
                       <option value="AM">오전반차</option>
                       <option value="PM">오후반차</option>
@@ -454,18 +500,11 @@ export default function LeaveClient() {
 
                   <div className="md:col-span-4">
                     <div className="mb-1 text-sm font-semibold">메모(선택)</div>
-                    <input
-                      className={input}
-                      value={editNote}
-                      onChange={(e) => setEditNote(e.target.value)}
-                      placeholder="예: 병원 / 개인사정"
-                    />
+                    <input className={input} value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="예: 병원 / 개인사정" />
                   </div>
                 </div>
 
-                <div className="text-xs text-slate-500">
-                  ※ 저장 시 DB에 즉시 반영됩니다. RLS 정책에 따라 권한이 없으면 실패합니다.
-                </div>
+                <div className="text-xs text-slate-500">※ 저장 시 DB에 즉시 반영됩니다. RLS 정책에 따라 권한이 없으면 실패합니다.</div>
               </div>
             </div>
           </div>
