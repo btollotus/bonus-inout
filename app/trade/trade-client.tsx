@@ -1,7 +1,7 @@
-
+```tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
 type PartnerRow = {
@@ -538,6 +538,12 @@ export default function TradeClient() {
   const [eCounterpartyName, setECounterpartyName] = useState("");
   const [eBusinessNo, setEBusinessNo] = useState("");
 
+  // ✅ (A안) 거래내역 상단 가로 스크롤바(크롬/엣지) 동기화용
+  const tradeTopScrollRef = useRef<HTMLDivElement | null>(null);
+  const tradeBottomScrollRef = useRef<HTMLDivElement | null>(null);
+  const tradeSyncingRef = useRef<"TOP" | "BOTTOM" | null>(null);
+  const tradeTableMinWidthPx = 1210; // col widths 합계(110+180+140+120+90+110+110+130+220)
+
   // ✅ (현재 입력폼) 주문/출고 합계
   const orderTotals = useMemo(() => {
     const summed = lines.reduce(
@@ -860,6 +866,18 @@ export default function TradeClient() {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id]);
+
+  // ✅ (A안) 거래내역 상단 스크롤바 동기화
+  useEffect(() => {
+    const top = tradeTopScrollRef.current;
+    const bottom = tradeBottomScrollRef.current;
+    if (!top || !bottom) return;
+
+    // 최초 동기(현재 위치 유지)
+    top.scrollLeft = bottom.scrollLeft;
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unifiedRows.length, mode]);
 
   function resetPartnerForm() {
     setP_name("");
@@ -2343,6 +2361,10 @@ export default function TradeClient() {
             {/* 주문/출고 */}
             {mode !== "LEDGER" ? (
               <div className={`${card} p-4`}>
+                {/* ... (이하 주문/출고 영역 동일) ... */}
+                {/* (중략: 주문/출고 / 금전출납 입력 UI는 사용자 제공 코드와 동일, 변경 없음) */}
+
+                {/* ✅ 아래부터는 사용자 제공 코드와 동일이므로 그대로 유지됩니다 */}
                 <div className="mb-2 flex items-start justify-between gap-3">
                   <div>
                     <div className="text-lg font-semibold">주문/출고 입력</div>
@@ -2352,7 +2374,6 @@ export default function TradeClient() {
                   </div>
                 </div>
 
-                {/* ✅ 1) 출고일-주문자-출고방법-메모 순서 */}
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                   <div>
                     <div className="mb-1 text-xs text-slate-600">출고일(주문일)</div>
@@ -2366,7 +2387,6 @@ export default function TradeClient() {
 
                   <div>
                     <div className="mb-1 text-xs text-slate-600">출고방법</div>
-                    {/* ✅ 여기 옵션만 변경 */}
                     <select className={input} value={shipMethod} onChange={(e) => setShipMethod(e.target.value)}>
                       <option value="택배">택배</option>
                       <option value="퀵-신용">퀵-신용</option>
@@ -2381,7 +2401,6 @@ export default function TradeClient() {
                   </div>
                 </div>
 
-                {/* ✅ 주문별 배송정보(스냅샷) */}
                 <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <div className="mb-2 text-sm font-semibold">배송정보(주문 스냅샷)</div>
 
@@ -2716,112 +2735,140 @@ export default function TradeClient() {
                 />
               </div>
 
-              {/* ✅ 2) 거래내역: 거래처-주문자-카테고리 사이에 주문자 컬럼 추가 */}
-              <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="w-full table-fixed text-sm">
-                  <colgroup>
-                    <col style={{ width: "110px" }} />
-                    <col style={{ width: "180px" }} />
-                    <col style={{ width: "140px" }} /> {/* 주문자 */}
-                    <col style={{ width: "120px" }} />
-                    <col style={{ width: "90px" }} />
-                    <col style={{ width: "110px" }} />
-                    <col style={{ width: "110px" }} />
-                    <col style={{ width: "130px" }} />
-                    <col style={{ width: "220px" }} />
-                  </colgroup>
+              {/* ✅ (A안) 거래내역: 상단 가로 스크롤바 + 본문 스크롤바 동기화 */}
+              <div className="rounded-2xl border border-slate-200">
+                <div
+                  ref={tradeTopScrollRef}
+                  className="overflow-x-auto"
+                  onScroll={(e) => {
+                    const top = e.currentTarget;
+                    const bottom = tradeBottomScrollRef.current;
+                    if (!bottom) return;
+                    if (tradeSyncingRef.current === "BOTTOM") return;
+                    tradeSyncingRef.current = "TOP";
+                    bottom.scrollLeft = top.scrollLeft;
+                    tradeSyncingRef.current = null;
+                  }}
+                >
+                  <div style={{ width: tradeTableMinWidthPx, height: 1 }} />
+                </div>
 
-                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                    <tr>
-                      <th className="px-3 py-2 text-left">날짜</th>
-                      <th className="px-3 py-2 text-left">거래처</th>
-                      <th className="px-3 py-2 text-left">주문자</th>
-                      <th className="px-3 py-2 text-left">카테고리</th>
-                      <th className="px-3 py-2 text-left">방법</th>
-                      <th className="px-3 py-2 text-right">입금</th>
-                      <th className="px-3 py-2 text-right">출금</th>
-                      <th className="px-3 py-2 text-right">잔액</th>
-                      {/* ✅ 헤더 축약 + ✅ sticky(크롬/엣지), IE에서는 무시되어 폴백 */}
-                      <th className="sticky right-0 z-10 bg-slate-50 px-3 py-2 text-center" title="복사/메모/수정/삭제">
-                        작업
-                      </th>
-                    </tr>
-                  </thead>
+                <div
+                  ref={tradeBottomScrollRef}
+                  className="overflow-x-auto"
+                  onScroll={(e) => {
+                    const bottom = e.currentTarget;
+                    const top = tradeTopScrollRef.current;
+                    if (!top) return;
+                    if (tradeSyncingRef.current === "TOP") return;
+                    tradeSyncingRef.current = "BOTTOM";
+                    top.scrollLeft = bottom.scrollLeft;
+                    tradeSyncingRef.current = null;
+                  }}
+                >
+                  <table className="w-full table-fixed text-sm">
+                    <colgroup>
+                      <col style={{ width: "110px" }} />
+                      <col style={{ width: "180px" }} />
+                      <col style={{ width: "140px" }} /> {/* 주문자 */}
+                      <col style={{ width: "120px" }} />
+                      <col style={{ width: "90px" }} />
+                      <col style={{ width: "110px" }} />
+                      <col style={{ width: "110px" }} />
+                      <col style={{ width: "130px" }} />
+                      <col style={{ width: "220px" }} />
+                    </colgroup>
 
-                  <tbody>
-                    {unifiedRows
-                      .filter((x) => {
-                        if (mode === "ORDERS") return x.kind === "ORDER";
-                        if (mode === "LEDGER") return x.kind === "LEDGER";
-                        return true;
-                      })
-                      .filter((x) => {
-                        const q = tradeSearch.trim().toLowerCase();
-                        if (!q) return true;
+                    <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                      <tr>
+                        <th className="px-3 py-2 text-left">날짜</th>
+                        <th className="px-3 py-2 text-left">거래처</th>
+                        <th className="px-3 py-2 text-left">주문자</th>
+                        <th className="px-3 py-2 text-left">카테고리</th>
+                        <th className="px-3 py-2 text-left">방법</th>
+                        <th className="px-3 py-2 text-right">입금</th>
+                        <th className="px-3 py-2 text-right">출금</th>
+                        <th className="px-3 py-2 text-right">잔액</th>
+                        <th className="sticky right-0 z-10 bg-slate-50 px-3 py-2 text-center" title="복사/메모/수정/삭제">
+                          작업
+                        </th>
+                      </tr>
+                    </thead>
 
-                        const orderLineText =
-                          x.kind === "ORDER"
-                            ? (x.order_lines ?? []).map((l) => `${l.name ?? ""} ${l.food_type ?? ""}`).join(" ")
-                            : "";
+                    <tbody>
+                      {unifiedRows
+                        .filter((x) => {
+                          if (mode === "ORDERS") return x.kind === "ORDER";
+                          if (mode === "LEDGER") return x.kind === "LEDGER";
+                          return true;
+                        })
+                        .filter((x) => {
+                          const q = tradeSearch.trim().toLowerCase();
+                          if (!q) return true;
 
-                        const hay = [
-                          x.partnerName,
-                          x.businessNo ?? "",
-                          x.ordererName,
-                          x.category,
-                          x.method,
-                          x.order_title ?? "",
-                          x.ledger_memo ?? "",
-                          orderLineText,
-                        ]
-                          .filter(Boolean)
-                          .join(" ")
-                          .toLowerCase();
+                          const orderLineText =
+                            x.kind === "ORDER"
+                              ? (x.order_lines ?? []).map((l) => `${l.name ?? ""} ${l.food_type ?? ""}`).join(" ")
+                              : "";
 
-                        return hay.includes(q);
-                      })
-                      .map((x) => (
-                        <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
-                          <td className="px-3 py-2 font-semibold tabular-nums">{x.date}</td>
-                          <td className="px-3 py-2 font-semibold">{x.partnerName}</td>
-                          <td className="px-3 py-2 font-semibold">{x.ordererName}</td>
-                          <td className="px-3 py-2 font-semibold">{x.category}</td>
-                          <td className="px-3 py-2 font-semibold">{x.method}</td>
+                          const hay = [
+                            x.partnerName,
+                            x.businessNo ?? "",
+                            x.ordererName,
+                            x.category,
+                            x.method,
+                            x.order_title ?? "",
+                            x.ledger_memo ?? "",
+                            orderLineText,
+                          ]
+                            .filter(Boolean)
+                            .join(" ")
+                            .toLowerCase();
 
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? formatMoney(x.inAmt) : ""}</td>
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? formatMoney(x.outAmt) : ""}</td>
+                          return hay.includes(q);
+                        })
+                        .map((x) => (
+                          <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
+                            <td className="px-3 py-2 font-semibold tabular-nums">{x.date}</td>
+                            <td className="px-3 py-2 font-semibold">{x.partnerName}</td>
+                            <td className="px-3 py-2 font-semibold">{x.ordererName}</td>
+                            <td className="px-3 py-2 font-semibold">{x.category}</td>
+                            <td className="px-3 py-2 font-semibold">{x.method}</td>
 
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? formatMoney(x.inAmt) : ""}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? formatMoney(x.outAmt) : ""}</td>
 
-                          {/* ✅ sticky(크롬/엣지), IE에서는 무시되어 폴백 */}
-                          <td className="sticky right-0 bg-white px-3 py-2">
-                            <div className="flex flex-wrap items-center justify-center gap-1">
-                              <button className={`${btn} text-xs px-2 py-1`} onClick={() => onCopyClick(x)}>
-                                복사
-                              </button>
-                              <button className={`${btn} text-xs px-2 py-1`} onClick={() => onMemoClick(x)}>
-                                메모
-                              </button>
-                              <button className={`${btn} text-xs px-2 py-1`} onClick={() => openEdit(x)}>
-                                수정
-                              </button>
-                              <button className={`${btn} text-xs px-2 py-1`} onClick={() => deleteTradeRow(x)}>
-                                삭제
-                              </button>
-                            </div>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</td>
+
+                            <td className="sticky right-0 bg-white px-3 py-2">
+                              <div className="flex flex-wrap items-center justify-center gap-1">
+                                <button className={`${btn} text-xs px-2 py-1`} onClick={() => onCopyClick(x)}>
+                                  복사
+                                </button>
+                                <button className={`${btn} text-xs px-2 py-1`} onClick={() => onMemoClick(x)}>
+                                  메모
+                                </button>
+                                <button className={`${btn} text-xs px-2 py-1`} onClick={() => openEdit(x)}>
+                                  수정
+                                </button>
+                                <button className={`${btn} text-xs px-2 py-1`} onClick={() => deleteTradeRow(x)}>
+                                  삭제
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+
+                      {unifiedRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="bg-white px-4 py-4 text-sm text-slate-500">
+                            거래내역이 없습니다. (기간/거래처/모드 필터를 확인하세요)
                           </td>
                         </tr>
-                      ))}
-
-                    {unifiedRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="bg-white px-4 py-4 text-sm text-slate-500">
-                          거래내역이 없습니다. (기간/거래처/모드 필터를 확인하세요)
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               <div className="mt-2 text-xs text-slate-500">※ 주문/출고는 출금으로 표시됩니다. (입금/출금은 모두 양수 입력, 계산에서만 차감 처리)</div>
@@ -2832,3 +2879,4 @@ export default function TradeClient() {
     </div>
   );
 }
+```
