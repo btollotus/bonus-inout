@@ -1,3 +1,4 @@
+```tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -288,6 +289,15 @@ function calcLineAmounts(qtyRaw: any, unitRaw: any, totalInclVatRaw: any) {
   return { supply: 0, vat: 0, total: 0 };
 }
 
+function methodLabel(m: any) {
+  const v = String(m ?? "").trim();
+  if (v === "BANK") return "입금";
+  if (v === "CASH") return "현금";
+  if (v === "CARD") return "카드";
+  if (v === "ETC") return "기타";
+  return v;
+}
+
 function buildMemoText(r: UnifiedRow) {
   if (r.kind === "ORDER") {
     const title = r.order_title ?? "";
@@ -362,7 +372,7 @@ ${rows || "(품목 없음)"}`;
 
   const memo = (r.ledger_memo ?? "").trim();
   const cat = r.ledger_category ?? r.category ?? "";
-  const method = r.ledger_method ?? r.method ?? "";
+  const method = methodLabel(r.ledger_method ?? r.method ?? "");
   const amt = Number(r.ledger_amount ?? 0);
   return `금전출납 메모\n- 카테고리: ${cat}\n- 결제수단: ${method}\n- 금액: ${formatMoney(amt)}\n\n메모:\n${memo || "(없음)"}`;
 }
@@ -2144,7 +2154,7 @@ export default function TradeClient() {
                       <div>
                         <div className="mb-1 text-slate-600 text-xs">결제수단</div>
                         <select className={input} value={ePayMethod} onChange={(e) => setEPayMethod(e.target.value as any)}>
-                          <option value="BANK">계좌입금</option>
+                          <option value="BANK">입금</option>
                           <option value="CASH">현금</option>
                           <option value="CARD">카드</option>
                           <option value="ETC">기타</option>
@@ -2614,7 +2624,7 @@ export default function TradeClient() {
                   <div>
                     <div className="mb-1 text-xs text-slate-600">결제수단</div>
                     <select className={input} value={payMethod} onChange={(e) => setPayMethod(e.target.value as any)}>
-                      <option value="BANK">계좌입금</option>
+                      <option value="BANK">입금</option>
                       <option value="CASH">현금</option>
                       <option value="CARD">카드</option>
                       <option value="ETC">기타</option>
@@ -2768,7 +2778,7 @@ export default function TradeClient() {
 
                 <div
                   ref={tradeBottomScrollRef}
-                  className="overflow-x-auto"
+                  className="max-h-[520px] overflow-x-auto overflow-y-auto"
                   onScroll={(e) => {
                     const bottom = e.currentTarget;
                     const top = tradeTopScrollRef.current;
@@ -2849,7 +2859,7 @@ export default function TradeClient() {
                             <td className="px-3 py-2 font-semibold">{x.partnerName}</td>
                             <td className="px-3 py-2 font-semibold">{x.ordererName}</td>
                             <td className="px-3 py-2 font-semibold">{x.category}</td>
-                            <td className="px-3 py-2 font-semibold">{x.method}</td>
+                            <td className="px-3 py-2 font-semibold">{x.kind === "LEDGER" ? methodLabel(x.method) : x.method}</td>
 
                             <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? formatMoney(x.inAmt) : ""}</td>
                             <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? formatMoney(x.outAmt) : ""}</td>
@@ -2860,7 +2870,7 @@ export default function TradeClient() {
                             </td>
 
                             <td className="sticky right-0 z-20 bg-white px-3 py-2">
-                              <div className="flex flex-wrap items-center justify-center gap-1">
+                              <div className="grid grid-cols-2 gap-1">
                                 <button className={`${btn} text-xs px-2 py-1`} onClick={() => onCopyClick(x)}>
                                   복사
                                 </button>
@@ -2910,3 +2920,4 @@ export default function TradeClient() {
     </div>
   );
 }
+```
