@@ -1,4 +1,4 @@
-
+```tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -1739,7 +1739,8 @@ export default function TradeClient() {
 
         {/* ✅ 거래처 수정 팝업 (신규 + 최근 5건 이력 버튼) */}
         {partnerEditOpen ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={closePartnerEdit}>
+          // ✅ 수정: 바깥 클릭으로 닫히지 않게 변경 (onClick 제거)
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
             <div
               className="w-full max-w-[860px] rounded-2xl border border-slate-200 bg-white shadow-xl"
               onClick={(e) => e.stopPropagation()}
@@ -1900,7 +1901,8 @@ export default function TradeClient() {
 
         {/* ✅ 수정 팝업 */}
         {editOpen && editRow ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setEditOpen(false)}>
+          // ✅ 수정: 바깥 클릭으로 닫히지 않게 변경 (onClick 제거)
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
             <div className="w-full max-w-[1100px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
@@ -2823,3 +2825,4 @@ export default function TradeClient() {
     </div>
   );
 }
+```
