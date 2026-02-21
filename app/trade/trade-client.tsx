@@ -507,6 +507,9 @@ export default function TradeClient() {
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState<UnifiedRow | null>(null);
 
+  // ✅ (추가) 행 우측 버튼 드롭다운(⋯)
+  const [rowMenuKey, setRowMenuKey] = useState<string | null>(null);
+
   // 주문 수정용
   const [eShipDate, setEShipDate] = useState(todayYMD());
   const [eOrdererName, setEOrdererName] = useState(""); // ✅ 주문자(수정)
@@ -725,7 +728,9 @@ export default function TradeClient() {
       .limit(500);
 
     if (selectedPartnerId) {
-      oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+      oq = oq.or(
+        `customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`
+      );
     }
 
     const { data: oData, error: oErr } = await oq;
@@ -767,7 +772,9 @@ export default function TradeClient() {
       .limit(5000);
 
     if (selectedPartnerId) {
-      oq2 = oq2.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+      oq2 = oq2.or(
+        `customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`
+      );
     }
 
     const { data: oPrev, error: oPrevErr } = await oq2;
@@ -823,6 +830,14 @@ export default function TradeClient() {
     loadTrades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id, fromYMD, toYMD]);
+
+  // ✅ (추가) ⋯ 메뉴 열림 상태에서, 바깥 클릭 시 닫기
+  useEffect(() => {
+    if (!rowMenuKey) return;
+    const onDown = () => setRowMenuKey(null);
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [rowMenuKey]);
 
   // ✅ 거래처 선택 변경 시, 금전출납 수기 입력칸을 선택된 거래처 값으로 초기화
   useEffect(() => {
@@ -1739,8 +1754,7 @@ export default function TradeClient() {
 
         {/* ✅ 거래처 수정 팝업 (신규 + 최근 5건 이력 버튼) */}
         {partnerEditOpen ? (
-          // ✅ 수정: 바깥 클릭으로 닫히지 않게 변경 (onClick 제거)
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={closePartnerEdit}>
             <div
               className="w-full max-w-[860px] rounded-2xl border border-slate-200 bg-white shadow-xl"
               onClick={(e) => e.stopPropagation()}
@@ -1901,8 +1915,7 @@ export default function TradeClient() {
 
         {/* ✅ 수정 팝업 */}
         {editOpen && editRow ? (
-          // ✅ 수정: 바깥 클릭으로 닫히지 않게 변경 (onClick 제거)
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setEditOpen(false)}>
             <div className="w-full max-w-[1100px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
@@ -2774,37 +2787,89 @@ export default function TradeClient() {
 
                         return hay.includes(q);
                       })
-                      .map((x) => (
-                        <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
-                          <td className="px-3 py-2 font-semibold tabular-nums">{x.date}</td>
-                          <td className="px-3 py-2 font-semibold">{x.partnerName}</td>
-                          <td className="px-3 py-2 font-semibold">{x.ordererName}</td>
-                          <td className="px-3 py-2 font-semibold">{x.category}</td>
-                          <td className="px-3 py-2 font-semibold">{x.method}</td>
+                      .map((x) => {
+                        const key = `${x.kind}-${x.rawId}`;
+                        const isOpen = rowMenuKey === key;
 
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? formatMoney(x.inAmt) : ""}</td>
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? formatMoney(x.outAmt) : ""}</td>
+                        return (
+                          <tr key={key} className="border-t border-slate-200 bg-white">
+                            <td className="px-3 py-2 font-semibold tabular-nums">{x.date}</td>
+                            <td className="px-3 py-2 font-semibold">{x.partnerName}</td>
+                            <td className="px-3 py-2 font-semibold">{x.ordererName}</td>
+                            <td className="px-3 py-2 font-semibold">{x.category}</td>
+                            <td className="px-3 py-2 font-semibold">{x.method}</td>
 
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? formatMoney(x.inAmt) : ""}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? formatMoney(x.outAmt) : ""}</td>
 
-                          <td className="px-3 py-2">
-                            <div className="flex items-center justify-center gap-1">
-                              <button className={`${btn} whitespace-nowrap text-xs px-2 py-1`} onClick={() => onCopyClick(x)}>
-                                복사
-                              </button>
-                              <button className={`${btn} whitespace-nowrap text-xs px-2 py-1`} onClick={() => onMemoClick(x)}>
-                                메모
-                              </button>
-                              <button className={`${btn} whitespace-nowrap text-xs px-2 py-1`} onClick={() => openEdit(x)}>
-                                수정
-                              </button>
-                              <button className={`${btn} whitespace-nowrap text-xs px-2 py-1`} onClick={() => deleteTradeRow(x)}>
-                                삭제
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</td>
+
+                            <td className="px-3 py-2">
+                              {/* ✅ (변경) 우측 버튼 4개 → 드롭다운(⋯) */}
+                              <div className="relative flex items-center justify-center">
+                                <button
+                                  className={`${btn} whitespace-nowrap text-xs px-2 py-1`}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setRowMenuKey((prev) => (prev === key ? null : key));
+                                  }}
+                                  aria-haspopup="menu"
+                                  aria-expanded={isOpen}
+                                  title="메뉴"
+                                >
+                                  ⋯
+                                </button>
+
+                                {isOpen ? (
+                                  <div
+                                    className="absolute right-0 top-[calc(100%+6px)] z-20 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                                      onClick={() => {
+                                        setRowMenuKey(null);
+                                        onCopyClick(x);
+                                      }}
+                                    >
+                                      복사
+                                    </button>
+                                    <button
+                                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                                      onClick={() => {
+                                        setRowMenuKey(null);
+                                        onMemoClick(x);
+                                      }}
+                                    >
+                                      메모
+                                    </button>
+                                    <button
+                                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                                      onClick={() => {
+                                        setRowMenuKey(null);
+                                        openEdit(x);
+                                      }}
+                                    >
+                                      수정
+                                    </button>
+                                    <button
+                                      className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-slate-50"
+                                      onClick={async () => {
+                                        setRowMenuKey(null);
+                                        await deleteTradeRow(x);
+                                      }}
+                                    >
+                                      삭제
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
 
                     {unifiedRows.length === 0 ? (
                       <tr>
