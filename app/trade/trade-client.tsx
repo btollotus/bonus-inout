@@ -1810,7 +1810,6 @@ export default function TradeClient() {
 
         {/* ✅ 거래처 수정 팝업 (신규 + 최근 5건 이력 버튼) */}
         {partnerEditOpen ? (
-          // ✅ 수정: 바깥 클릭으로 닫히지 않게 변경 (onClick 제거)
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
             <div
               className="w-full max-w-[860px] rounded-2xl border border-slate-200 bg-white shadow-xl"
@@ -1837,7 +1836,6 @@ export default function TradeClient() {
                   <input className={input} placeholder="업체명(필수)" value={ep_name} onChange={(e) => setEP_name(e.target.value)} />
                   <input className={input} placeholder="사업자등록번호" value={ep_businessNo} onChange={(e) => setEP_businessNo(e.target.value)} />
 
-                  {/* ✅ 추가: 거래처 구분 */}
                   <select className={input} value={ep_partnerType} onChange={(e) => setEP_partnerType(e.target.value as any)}>
                     <option value="CUSTOMER">매출처(CUSTOMER)</option>
                     <option value="VENDOR">매입처(VENDOR)</option>
@@ -1972,9 +1970,7 @@ export default function TradeClient() {
 
         {/* ✅ 수정 팝업 */}
         {editOpen && editRow ? (
-          // ✅ 수정: 바깥 클릭으로 닫히지 않게 변경 (onClick 제거)
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-            {/* ✅ 수정: 내용 많을 때 오른쪽 스크롤바(overflow-y) 생기도록 */}
             <div
               className="w-full max-w-[1100px] max-h-[90vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl flex flex-col"
               onClick={(e) => e.stopPropagation()}
@@ -2012,7 +2008,6 @@ export default function TradeClient() {
 
                       <div>
                         <div className="mb-1 text-xs text-slate-600">출고방법</div>
-                        {/* ✅ 여기 옵션만 변경 */}
                         <select className={input} value={eShipMethod} onChange={(e) => setEShipMethod(e.target.value)}>
                           <option value="택배">택배</option>
                           <option value="퀵-신용">퀵-신용</option>
@@ -2027,7 +2022,6 @@ export default function TradeClient() {
                       </div>
                     </div>
 
-                    {/* ✅ 주문별 배송정보(스냅샷) */}
                     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                       <div className="mb-2 text-sm font-semibold">배송정보(주문 스냅샷)</div>
 
@@ -2145,7 +2139,7 @@ export default function TradeClient() {
 
                             <input
                               className={inputRight}
-                              inputMode="numeric"
+                              inputMode="text"
                               value={typeof l.unit === "string" ? l.unit : l.unit !== 0 ? formatMoney(l.unit) : ""}
                               onChange={(e) => {
                                 const raw = sanitizeSignedIntInput(e.target.value);
@@ -2158,7 +2152,7 @@ export default function TradeClient() {
 
                             <input
                               className={inputRight}
-                              inputMode="numeric"
+                              inputMode="text"
                               placeholder="총액"
                               disabled={toIntSigned(l.unit) !== 0}
                               value={
@@ -2233,7 +2227,6 @@ export default function TradeClient() {
                         />
                       </div>
 
-                      {/* ✅ 추가: 업체명/사업자번호 수정 */}
                       <div>
                         <div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div>
                         <input className={input} value={eCounterpartyName} onChange={(e) => setECounterpartyName(e.target.value)} />
@@ -2322,7 +2315,6 @@ export default function TradeClient() {
                   <input className={input} placeholder="업체명(필수)" value={p_name} onChange={(e) => setP_name(e.target.value)} />
                   <input className={input} placeholder="사업자등록번호" value={p_businessNo} onChange={(e) => setP_businessNo(e.target.value)} />
 
-                  {/* ✅ 추가: 거래처 구분 */}
                   <select className={input} value={p_partnerType} onChange={(e) => setP_partnerType(e.target.value as any)}>
                     <option value="CUSTOMER">매출처(CUSTOMER)</option>
                     <option value="VENDOR">매입처(VENDOR)</option>
@@ -2432,7 +2424,8 @@ export default function TradeClient() {
             {/* 주문/출고 */}
             {mode !== "LEDGER" ? (
               <div className={`${card} p-4`}>
-                <div className="mb-3 flex items-center justify-between gap-3">
+                {/* ✅ 수정: 조회대상 pill을 제목 바로 옆으로 이동 */}
+                <div className="mb-3 flex items-center gap-3">
                   <div className="text-lg font-semibold">주문/출고 입력</div>
                   <span className={pill}>조회대상: {targetLabel}</span>
                 </div>
@@ -2584,7 +2577,7 @@ export default function TradeClient() {
 
                         <input
                           className={inputRight}
-                          inputMode="numeric"
+                          inputMode="text"
                           value={typeof l.unit === "string" ? l.unit : l.unit !== 0 ? formatMoney(l.unit) : ""}
                           onChange={(e) => {
                             const raw = sanitizeSignedIntInput(e.target.value);
@@ -2597,7 +2590,7 @@ export default function TradeClient() {
 
                         <input
                           className={inputRight}
-                          inputMode="numeric"
+                          inputMode="text"
                           placeholder="총액"
                           disabled={toIntSigned(l.unit) !== 0}
                           value={
@@ -2653,7 +2646,8 @@ export default function TradeClient() {
             {/* 금전출납 */}
             {mode !== "ORDERS" ? (
               <div className={`${card} p-4`}>
-                <div className="mb-3 flex items-center justify-between gap-3">
+                {/* ✅ 수정: 조회대상 pill을 제목 바로 옆으로 이동 */}
+                <div className="mb-3 flex items-center gap-3">
                   <div className="text-lg font-semibold">금전출납 입력</div>
                   <span className={pill}>조회대상: {targetLabel}</span>
                 </div>
@@ -2709,7 +2703,6 @@ export default function TradeClient() {
                     />
                   </div>
 
-                  {/* ✅ 추가: 거래처 미등록 매입처(업체명/사업자번호) 수기 입력 */}
                   <div>
                     <div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div>
                     <input
@@ -2744,7 +2737,7 @@ export default function TradeClient() {
               </div>
             ) : null}
 
-            {/* 거래내역 */}
+            {/* 거래내역 (이하 원본 그대로) */}
             <div className={`${card} p-4`}>
               <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
@@ -2798,7 +2791,6 @@ export default function TradeClient() {
                 </div>
               </div>
 
-              {/* ✅ 검색 */}
               <div className="mb-3">
                 <input
                   className={input}
@@ -2808,7 +2800,6 @@ export default function TradeClient() {
                 />
               </div>
 
-              {/* ✅ (A안) 거래내역: 상단 가로 스크롤바 + 본문 스크롤바 동기화 */}
               <div className="rounded-2xl border border-slate-200">
                 <div
                   ref={tradeTopScrollRef}
@@ -2843,7 +2834,7 @@ export default function TradeClient() {
                     <colgroup>
                       <col style={{ width: "110px" }} />
                       <col style={{ width: "180px" }} />
-                      <col style={{ width: "140px" }} /> {/* 주문자 */}
+                      <col style={{ width: "140px" }} />
                       <col style={{ width: "120px" }} />
                       <col style={{ width: "90px" }} />
                       <col style={{ width: "110px" }} />
@@ -2861,10 +2852,7 @@ export default function TradeClient() {
                         <th className="px-3 py-2 text-left">방법</th>
                         <th className="px-3 py-2 text-right">입금</th>
                         <th className="px-3 py-2 text-right">출금</th>
-
-                        {/* ✅ 수정: 잔액도 함께 sticky로 고정(작업 칸에 가려지지 않게) */}
                         <th className="sticky right-[220px] z-10 bg-slate-50 px-3 py-2 text-right">잔액</th>
-
                         <th className="sticky right-0 z-20 bg-slate-50 px-3 py-2 text-center" title="복사/메모/수정/삭제">
                           작업
                         </th>
@@ -2914,7 +2902,6 @@ export default function TradeClient() {
                             <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? formatMoney(x.inAmt) : ""}</td>
                             <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? formatMoney(x.outAmt) : ""}</td>
 
-                            {/* ✅ 수정: 잔액 sticky (작업 칸에 가려지지 않게) */}
                             <td className="sticky right-[220px] z-10 bg-white px-3 py-2 text-right tabular-nums font-semibold">
                               {formatMoney(x.balance)}
                             </td>
