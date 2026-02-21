@@ -1,4 +1,3 @@
-```tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -391,6 +390,9 @@ export default function TradeClient() {
   const supabase = useMemo(() => createClient(), []);
 
   const [msg, setMsg] = useState<string | null>(null);
+
+  // ✅ TOP 버튼 표시
+  const [showTopBtn, setShowTopBtn] = useState(false);
 
   // 거래처
   const [partnerView, setPartnerView] = useState<PartnerView>("ALL");
@@ -845,6 +847,17 @@ export default function TradeClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id, fromYMD, toYMD]);
 
+  // ✅ TOP 버튼 표시/숨김
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY || 0;
+      setShowTopBtn(y > 300);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   // ✅ 거래처 선택 변경 시, 금전출납 수기 입력칸을 선택된 거래처 값으로 초기화
   useEffect(() => {
     setManualCounterpartyName(selectedPartner?.name ?? "");
@@ -866,6 +879,153 @@ export default function TradeClient() {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id]);
+
+  const partnersToShow = useMemo(() => {
+    let list = partners;
+
+    if (partnerView === "PINNED") list = list.filter((p) => !!p.is_pinned);
+    else if (partnerView === "RECENT") {
+      const map = new Map(list.map((p) => [p.id, p]));
+      list = recentPartnerIds.map((id) => map.get(id)).filter(Boolean) as PartnerRow[];
+    }
+
+    return list;
+  }, [partners, partnerView, recentPartnerIds]);
+
+  // ✅ 통합표(장부 스타일)
+  const unifiedRows = useMemo<UnifiedRow[]>(() => {
+    const items: Array<Omit<UnifiedRow, "balance"> & { signed: number }> = [];
+
+    const timePart = (iso: string | null | undefined) => {
+      const s = String(iso ?? "").trim();
+      if (!s) return "";
+      const idx = s.indexOf("T");
+      if (idx < 0) return "";
+      return s.slice(idx + 1); // "HH:mm:ss.sssZ"
+    };
+
+    // Orders -> 출금
+    for (const o of orders) {
+      const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(o.memo);
+      const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
+      const tp = timePart(o.created_at);
+      const tsKey = tp ? `${date}T${tp}` : `${date}T12:00:00.000Z`;
+      const total = Number(o.total_amount ?? 0);
+
+      const orderer = (memo?.orderer_name ?? null) as string | null;
+
+      items.push({
+        kind: "ORDER",
+        date,
+        tsKey,
+        partnerName: o.customer_name ?? "",
+        businessNo: "", // (orders에서 사업자번호를 안불러오므로 빈값 유지)
+        ordererName: orderer ?? "",
+        category: "주문/출고",
+        method: o.ship_method ?? "",
+        inAmt: 0,
+        outAmt: total,
+        signed: -total,
+        rawId: o.id,
+        ship_method: o.ship_method ?? "택배",
+        order_title: memo?.title ?? null,
+        orderer_name: orderer,
+        order_lines: (o.order_lines ?? []).map((l) => ({
+          food_type: l.food_type ?? "",
+          name: l.name ?? "",
+          weight_g: Number(l.weight_g ?? 0),
+          qty: Number(l.qty ?? 0),
+          unit: Number(l.unit ?? 0),
+          total_amount: Number(l.total_amount ?? 0),
+          unit_type: (l.unit_type ?? "EA") as any,
+          pack_ea: Number(l.pack_ea ?? 1),
+          actual_ea: Number(l.actual_ea ?? 0),
+        })),
+        order_shipments: (o.order_shipments ?? []).map((s) => ({
+          seq: Number(s.seq ?? 1),
+          ship_to_name: String(s.ship_to_name ?? ""),
+          ship_to_address1: String(s.ship_to_address1 ?? ""),
+          ship_to_address2: s.ship_to_address2 ?? null,
+          ship_to_mobile: s.ship_to_mobile ?? null,
+          ship_to_phone: s.ship_to_phone ?? null,
+          ship_zipcode: s.ship_zipcode ?? null,
+          delivery_message: s.delivery_message ?? null,
+        })),
+      });
+    }
+
+    // Ledgers
+    for (const l of ledgers) {
+      const sign = String(l.direction) === "OUT" ? -1 : 1;
+      const amt = Number(l.amount ?? 0);
+
+      const tp = timePart(l.entry_ts) || timePart(l.created_at);
+      const tsKey = tp ? `${l.entry_date}T${tp}` : `${l.entry_date}T12:00:00.000Z`;
+
+      items.push({
+        kind: "LEDGER",
+        date: l.entry_date,
+        tsKey: tsKey,
+        partnerName: l.counterparty_name ?? "",
+        businessNo: l.business_no ?? "",
+        ledger_partner_id: l.partner_id ?? null,
+        ordererName: "", // ✅ 금전출납은 주문자 없음
+        category: l.category ?? "금전출납",
+        method: l.method ?? "",
+        inAmt: sign > 0 ? amt : 0,
+        outAmt: sign < 0 ? amt : 0,
+        signed: sign * amt,
+        rawId: l.id,
+        ledger_category: l.category ?? null,
+        ledger_method: l.method ?? null,
+        ledger_memo: l.memo ?? null,
+        ledger_amount: amt,
+      });
+    }
+
+    items.sort((a, b) => String(a.tsKey || a.date).localeCompare(String(b.tsKey || b.date)));
+
+    let running = includeOpening ? openingBalance : 0;
+
+    const withBal: UnifiedRow[] = items.map((x) => {
+      running += x.signed;
+      return {
+        kind: x.kind,
+        date: x.date,
+        tsKey: x.tsKey,
+        partnerName: x.partnerName,
+        businessNo: x.businessNo,
+        ledger_partner_id: x.ledger_partner_id ?? null,
+        ordererName: x.ordererName,
+        category: x.category,
+        method: x.method,
+        inAmt: x.inAmt,
+        outAmt: x.outAmt,
+        balance: running,
+        rawId: x.rawId,
+        ship_method: x.ship_method,
+        order_title: x.order_title,
+        orderer_name: x.orderer_name,
+        order_lines: x.order_lines,
+        order_shipments: x.order_shipments,
+        ledger_category: x.ledger_category,
+        ledger_method: x.ledger_method,
+        ledger_memo: x.ledger_memo,
+        ledger_amount: x.ledger_amount,
+      };
+    });
+
+    withBal.sort((a, b) => String(b.tsKey || b.date).localeCompare(String(a.tsKey || a.date)));
+    return withBal;
+  }, [orders, ledgers, includeOpening, openingBalance]);
+
+  const unifiedTotals = useMemo(() => {
+    const plus = unifiedRows.reduce((a, x) => a + x.inAmt, 0);
+    const minus = unifiedRows.reduce((a, x) => a + x.outAmt, 0);
+    const net = plus - minus;
+    const endBalance = unifiedRows.length ? unifiedRows[0].balance : includeOpening ? openingBalance : 0;
+    return { plus, minus, net, endBalance };
+  }, [unifiedRows, includeOpening, openingBalance]);
 
   // ✅ (A안) 거래내역 상단 스크롤바 동기화
   useEffect(() => {
@@ -1254,153 +1414,6 @@ export default function TradeClient() {
 
     await loadTrades();
   }
-
-  const partnersToShow = useMemo(() => {
-    let list = partners;
-
-    if (partnerView === "PINNED") list = list.filter((p) => !!p.is_pinned);
-    else if (partnerView === "RECENT") {
-      const map = new Map(list.map((p) => [p.id, p]));
-      list = recentPartnerIds.map((id) => map.get(id)).filter(Boolean) as PartnerRow[];
-    }
-
-    return list;
-  }, [partners, partnerView, recentPartnerIds]);
-
-  // ✅ 통합표(장부 스타일)
-  const unifiedRows = useMemo<UnifiedRow[]>(() => {
-    const items: Array<Omit<UnifiedRow, "balance"> & { signed: number }> = [];
-
-    const timePart = (iso: string | null | undefined) => {
-      const s = String(iso ?? "").trim();
-      if (!s) return "";
-      const idx = s.indexOf("T");
-      if (idx < 0) return "";
-      return s.slice(idx + 1); // "HH:mm:ss.sssZ"
-    };
-
-    // Orders -> 출금
-    for (const o of orders) {
-      const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(o.memo);
-      const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
-      const tp = timePart(o.created_at);
-      const tsKey = tp ? `${date}T${tp}` : `${date}T12:00:00.000Z`;
-      const total = Number(o.total_amount ?? 0);
-
-      const orderer = (memo?.orderer_name ?? null) as string | null;
-
-      items.push({
-        kind: "ORDER",
-        date,
-        tsKey,
-        partnerName: o.customer_name ?? "",
-        businessNo: "", // (orders에서 사업자번호를 안불러오므로 빈값 유지)
-        ordererName: orderer ?? "",
-        category: "주문/출고",
-        method: o.ship_method ?? "",
-        inAmt: 0,
-        outAmt: total,
-        signed: -total,
-        rawId: o.id,
-        ship_method: o.ship_method ?? "택배",
-        order_title: memo?.title ?? null,
-        orderer_name: orderer,
-        order_lines: (o.order_lines ?? []).map((l) => ({
-          food_type: l.food_type ?? "",
-          name: l.name ?? "",
-          weight_g: Number(l.weight_g ?? 0),
-          qty: Number(l.qty ?? 0),
-          unit: Number(l.unit ?? 0),
-          total_amount: Number(l.total_amount ?? 0),
-          unit_type: (l.unit_type ?? "EA") as any,
-          pack_ea: Number(l.pack_ea ?? 1),
-          actual_ea: Number(l.actual_ea ?? 0),
-        })),
-        order_shipments: (o.order_shipments ?? []).map((s) => ({
-          seq: Number(s.seq ?? 1),
-          ship_to_name: String(s.ship_to_name ?? ""),
-          ship_to_address1: String(s.ship_to_address1 ?? ""),
-          ship_to_address2: s.ship_to_address2 ?? null,
-          ship_to_mobile: s.ship_to_mobile ?? null,
-          ship_to_phone: s.ship_to_phone ?? null,
-          ship_zipcode: s.ship_zipcode ?? null,
-          delivery_message: s.delivery_message ?? null,
-        })),
-      });
-    }
-
-    // Ledgers
-    for (const l of ledgers) {
-      const sign = String(l.direction) === "OUT" ? -1 : 1;
-      const amt = Number(l.amount ?? 0);
-
-      const tp = timePart(l.entry_ts) || timePart(l.created_at);
-      const tsKey = tp ? `${l.entry_date}T${tp}` : `${l.entry_date}T12:00:00.000Z`;
-
-      items.push({
-        kind: "LEDGER",
-        date: l.entry_date,
-        tsKey: tsKey,
-        partnerName: l.counterparty_name ?? "",
-        businessNo: l.business_no ?? "",
-        ledger_partner_id: l.partner_id ?? null,
-        ordererName: "", // ✅ 금전출납은 주문자 없음
-        category: l.category ?? "금전출납",
-        method: l.method ?? "",
-        inAmt: sign > 0 ? amt : 0,
-        outAmt: sign < 0 ? amt : 0,
-        signed: sign * amt,
-        rawId: l.id,
-        ledger_category: l.category ?? null,
-        ledger_method: l.method ?? null,
-        ledger_memo: l.memo ?? null,
-        ledger_amount: amt,
-      });
-    }
-
-    items.sort((a, b) => String(a.tsKey || a.date).localeCompare(String(b.tsKey || b.date)));
-
-    let running = includeOpening ? openingBalance : 0;
-
-    const withBal: UnifiedRow[] = items.map((x) => {
-      running += x.signed;
-      return {
-        kind: x.kind,
-        date: x.date,
-        tsKey: x.tsKey,
-        partnerName: x.partnerName,
-        businessNo: x.businessNo,
-        ledger_partner_id: x.ledger_partner_id ?? null,
-        ordererName: x.ordererName,
-        category: x.category,
-        method: x.method,
-        inAmt: x.inAmt,
-        outAmt: x.outAmt,
-        balance: running,
-        rawId: x.rawId,
-        ship_method: x.ship_method,
-        order_title: x.order_title,
-        orderer_name: x.orderer_name,
-        order_lines: x.order_lines,
-        order_shipments: x.order_shipments,
-        ledger_category: x.ledger_category,
-        ledger_method: x.ledger_method,
-        ledger_memo: x.ledger_memo,
-        ledger_amount: x.ledger_amount,
-      };
-    });
-
-    withBal.sort((a, b) => String(b.tsKey || b.date).localeCompare(String(a.tsKey || a.date)));
-    return withBal;
-  }, [orders, ledgers, includeOpening, openingBalance]);
-
-  const unifiedTotals = useMemo(() => {
-    const plus = unifiedRows.reduce((a, x) => a + x.inAmt, 0);
-    const minus = unifiedRows.reduce((a, x) => a + x.outAmt, 0);
-    const net = plus - minus;
-    const endBalance = unifiedRows.length ? unifiedRows[0].balance : includeOpening ? openingBalance : 0;
-    return { plus, minus, net, endBalance };
-  }, [unifiedRows, includeOpening, openingBalance]);
 
   // ====== Copy Fill ======
   function fillFromOrderRow(r: UnifiedRow) {
@@ -1916,7 +1929,11 @@ export default function TradeClient() {
         {editOpen && editRow ? (
           // ✅ 수정: 바깥 클릭으로 닫히지 않게 변경 (onClick 제거)
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-            <div className="w-full max-w-[1100px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            {/* ✅ 수정: 내용 많을 때 오른쪽 스크롤바(overflow-y) 생기도록 */}
+            <div
+              className="w-full max-w-[1100px] max-h-[90vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">
@@ -1934,7 +1951,7 @@ export default function TradeClient() {
                 </div>
               </div>
 
-              <div className="px-5 py-4">
+              <div className="px-5 py-4 overflow-y-auto">
                 {editRow.kind === "ORDER" ? (
                   <>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
@@ -2361,10 +2378,6 @@ export default function TradeClient() {
             {/* 주문/출고 */}
             {mode !== "LEDGER" ? (
               <div className={`${card} p-4`}>
-                {/* ... (이하 주문/출고 영역 동일) ... */}
-                {/* (중략: 주문/출고 / 금전출납 입력 UI는 사용자 제공 코드와 동일, 변경 없음) */}
-
-                {/* ✅ 아래부터는 사용자 제공 코드와 동일이므로 그대로 유지됩니다 */}
                 <div className="mb-2 flex items-start justify-between gap-3">
                   <div>
                     <div className="text-lg font-semibold">주문/출고 입력</div>
@@ -2788,8 +2801,11 @@ export default function TradeClient() {
                         <th className="px-3 py-2 text-left">방법</th>
                         <th className="px-3 py-2 text-right">입금</th>
                         <th className="px-3 py-2 text-right">출금</th>
-                        <th className="px-3 py-2 text-right">잔액</th>
-                        <th className="sticky right-0 z-10 bg-slate-50 px-3 py-2 text-center" title="복사/메모/수정/삭제">
+
+                        {/* ✅ 수정: 잔액도 함께 sticky로 고정(작업 칸에 가려지지 않게) */}
+                        <th className="sticky right-[220px] z-10 bg-slate-50 px-3 py-2 text-right">잔액</th>
+
+                        <th className="sticky right-0 z-20 bg-slate-50 px-3 py-2 text-center" title="복사/메모/수정/삭제">
                           작업
                         </th>
                       </tr>
@@ -2838,9 +2854,12 @@ export default function TradeClient() {
                             <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? formatMoney(x.inAmt) : ""}</td>
                             <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? formatMoney(x.outAmt) : ""}</td>
 
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</td>
+                            {/* ✅ 수정: 잔액 sticky (작업 칸에 가려지지 않게) */}
+                            <td className="sticky right-[220px] z-10 bg-white px-3 py-2 text-right tabular-nums font-semibold">
+                              {formatMoney(x.balance)}
+                            </td>
 
-                            <td className="sticky right-0 bg-white px-3 py-2">
+                            <td className="sticky right-0 z-20 bg-white px-3 py-2">
                               <div className="flex flex-wrap items-center justify-center gap-1">
                                 <button className={`${btn} text-xs px-2 py-1`} onClick={() => onCopyClick(x)}>
                                   복사
@@ -2875,8 +2894,19 @@ export default function TradeClient() {
             </div>
           </div>
         </div>
+
+        {/* ✅ TOP 버튼 */}
+        {showTopBtn ? (
+          <button
+            type="button"
+            className="fixed bottom-6 right-6 z-50 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-lg hover:bg-slate-50 active:bg-slate-100"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            title="맨 위로"
+          >
+            TOP
+          </button>
+        ) : null}
       </div>
     </div>
   );
 }
-```
