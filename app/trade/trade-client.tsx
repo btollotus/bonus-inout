@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -139,8 +138,8 @@ type Line = {
   name: string;
   weight_g: number; // ✅ 소수점 허용
   qty: number;
-  unit: number;
-  total_incl_vat: number; // ✅ 품목별 총액(부가세 포함) 입력용
+  unit: number | string; // ✅ 마이너스/중간입력("-") 허용
+  total_incl_vat: number | string; // ✅ 마이너스/중간입력("-") 허용
 };
 
 type UnifiedRow = {
@@ -220,6 +219,21 @@ function toInt(n: any) {
   return Number.isFinite(v) ? Math.trunc(v) : 0;
 }
 
+// ✅ (추가) 부호(마이너스) 허용 정수 파싱: "-1,234" 지원
+function toIntSigned(n: any) {
+  const s = String(n ?? "").replaceAll(",", "").trim();
+  if (!s || s === "-") return 0;
+  const v = Number(s);
+  return Number.isFinite(v) ? Math.trunc(v) : 0;
+}
+
+// ✅ (추가) 입력 중간값 허용(숫자/콤마/선행 - 만 허용)
+function sanitizeSignedIntInput(raw: string) {
+  let v = raw.replace(/[^\d,-]/g, "");
+  v = v.replace(/(?!^)-/g, ""); // 선행 '-'만 허용
+  return v;
+}
+
 // ✅ 소수점 숫자 파싱 (무게용) : "2.8", "1,234.56" 지원
 function toNum(n: any) {
   const s = String(n ?? "").replaceAll(",", "").trim();
@@ -266,11 +280,11 @@ function categoryToDirection(c: Category): "IN" | "OUT" {
 // ✅ 품목 1줄 계산 (단가 방식 or 총액(부가세포함) 방식)
 function calcLineAmounts(qtyRaw: any, unitRaw: any, totalInclVatRaw: any) {
   const qty = toInt(qtyRaw);
-  const unit = toInt(unitRaw);
-  const totalInclVat = toInt(totalInclVatRaw);
+  const unit = toIntSigned(unitRaw);
+  const totalInclVat = toIntSigned(totalInclVatRaw);
 
   // ✅ (수정) 단가 방식은 qty 필요 / 총액 방식은 qty가 0이어도 공급가/부가세 분리 표시
-  if (unit > 0) {
+  if (unit !== 0) {
     if (qty <= 0) return { supply: 0, vat: 0, total: 0 };
     const supply = qty * unit;
     const vat = Math.round(supply * 0.1);
@@ -279,7 +293,7 @@ function calcLineAmounts(qtyRaw: any, unitRaw: any, totalInclVatRaw: any) {
   }
 
   // 총액(부가세 포함) 입력 방식
-  if (totalInclVat > 0) {
+  if (totalInclVat !== 0) {
     const supply = Math.round(totalInclVat / 1.1);
     const vat = totalInclVat - supply;
     const total = totalInclVat;
@@ -327,11 +341,11 @@ function buildMemoText(r: UnifiedRow) {
         let vat = 0;
         let total = 0;
 
-        if (unit > 0) {
+        if (unit !== 0) {
           supply = qty * unit;
           vat = Math.round(supply * 0.1);
           total = supply + vat;
-        } else if (totalAmount > 0) {
+        } else if (totalAmount !== 0) {
           total = totalAmount;
           supply = Math.round(total / 1.1);
           vat = total - supply;
@@ -350,7 +364,7 @@ function buildMemoText(r: UnifiedRow) {
             ? `박스 ${formatMoney(qty)} (입수 ${formatMoney(packEa)} / 실제 ${formatMoney(actualEa)}ea)`
             : `수량 ${formatMoney(qty)}`;
 
-        const unitText = unit > 0 ? `단가 ${formatMoney(unit)}` : `총액입력 ${formatMoney(total)}`;
+        const unitText = unit !== 0 ? `단가 ${formatMoney(unit)}` : `총액입력 ${formatMoney(total)}`;
 
         return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${formatWeight(w)}g, ` : ""}${qtyText} / ${unitText} / 공급가 ${formatMoney(
           supply
@@ -469,7 +483,7 @@ export default function TradeClient() {
   const [ordererName, setOrdererName] = useState(""); // ✅ 주문자
   const [shipMethod, setShipMethod] = useState("택배");
   const [orderTitle, setOrderTitle] = useState("");
-  const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
+  const [lines, setLines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
 
   // ✅ 주문별 배송정보(스냅샷) - 1~2곳
   const [shipToName1, setShipToName1] = useState("");
@@ -496,6 +510,27 @@ export default function TradeClient() {
   // ✅ 금전출납: 거래처 미등록 매입처 수기 입력
   const [manualCounterpartyName, setManualCounterpartyName] = useState("");
   const [manualBusinessNo, setManualBusinessNo] = useState("");
+
+  // ✅ (추가) 날짜 동기화(주문/출고 ↔ 금전출납)
+  const syncDateRef = useRef<"SHIP" | "ENTRY" | null>(null);
+  useEffect(() => {
+    if (syncDateRef.current === "ENTRY") {
+      syncDateRef.current = null;
+      return;
+    }
+    syncDateRef.current = "SHIP";
+    setEntryDate(shipDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shipDate]);
+  useEffect(() => {
+    if (syncDateRef.current === "SHIP") {
+      syncDateRef.current = null;
+      return;
+    }
+    syncDateRef.current = "ENTRY";
+    setShipDate(entryDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entryDate]);
 
   // 조회기간/데이터
   const [fromYMD, setFromYMD] = useState(addDays(todayYMD(), -30));
@@ -524,7 +559,7 @@ export default function TradeClient() {
   const [eOrdererName, setEOrdererName] = useState(""); // ✅ 주문자(수정)
   const [eShipMethod, setEShipMethod] = useState("택배");
   const [eOrderTitle, setEOrderTitle] = useState("");
-  const [eLines, setELines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
+  const [eLines, setELines] = useState<Line[]>([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
 
   // ✅ 주문 수정용 배송지(1~2)
   const [eShipToName1, setEShipToName1] = useState("");
@@ -637,8 +672,8 @@ export default function TradeClient() {
         name: "택배비",
         weight_g: 0,
         qty: 1,
-        unit: 0,
-        total_incl_vat: totalInclVat,
+        unit: "",
+        total_incl_vat: String(totalInclVat),
       },
     ]);
   }
@@ -1226,7 +1261,7 @@ export default function TradeClient() {
   }
 
   function addLine() {
-    setLines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
+    setLines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
   }
 
   function removeLine(i: number) {
@@ -1238,7 +1273,7 @@ export default function TradeClient() {
     setELines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
   function addEditLine() {
-    setELines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
+    setELines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
   }
   function removeEditLine(i: number) {
     setELines((prev) => prev.filter((_, idx) => idx !== i));
@@ -1255,7 +1290,7 @@ export default function TradeClient() {
       .map((l) => {
         const name = l.name.trim();
         const qty = toInt(l.qty);
-        const unit = toInt(l.unit);
+        const unit = toIntSigned(l.unit);
         const weight_g = toNum(l.weight_g);
         const food_type = (l.food_type || "").trim();
 
@@ -1279,7 +1314,7 @@ export default function TradeClient() {
           total_amount: r.total,
         };
       })
-      .filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) > 0);
+      .filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) !== 0);
 
     if (cleanLines.length === 0) return setMsg("품목명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
 
@@ -1361,7 +1396,7 @@ export default function TradeClient() {
 
     setOrderTitle("");
     setOrdererName(""); // ✅ 초기화
-    setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
+    setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
 
     // ✅ 요청: 주문/출고 생성 후 배송정보 입력창도 초기화
     setShipToName1("");
@@ -1442,10 +1477,10 @@ export default function TradeClient() {
             name: String(l.name ?? ""),
             weight_g: Number(l.weight_g ?? 0), // ✅ 소수점 유지
             qty: toInt(l.qty ?? 0),
-            unit: toInt(l.unit ?? 0),
-            total_incl_vat: toInt(l.total_amount ?? 0),
+            unit: Number(l.unit ?? 0),
+            total_incl_vat: Number(l.total_amount ?? 0),
           }))
-        : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }];
+        : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }];
 
     setLines(nextLines);
 
@@ -1526,10 +1561,10 @@ export default function TradeClient() {
               name: String(l.name ?? ""),
               weight_g: Number(l.weight_g ?? 0), // ✅ 소수점 유지
               qty: toInt(l.qty ?? 0),
-              unit: toInt(l.unit ?? 0),
-              total_incl_vat: toInt(l.total_amount ?? 0),
+              unit: Number(l.unit ?? 0),
+              total_incl_vat: Number(l.total_amount ?? 0),
             }))
-          : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }];
+          : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }];
 
       setELines(nextLines);
 
@@ -1591,7 +1626,7 @@ export default function TradeClient() {
         .map((l) => {
           const name = (l.name || "").trim();
           const qty = toInt(l.qty);
-          const unit = toInt(l.unit);
+          const unit = toIntSigned(l.unit);
           const weight_g = toNum(l.weight_g);
           const food_type = (l.food_type || "").trim();
 
@@ -1615,7 +1650,7 @@ export default function TradeClient() {
             total_amount: r.total,
           };
         })
-        .filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) > 0);
+        .filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) !== 0);
 
       if (cleanLines.length === 0) return setMsg("품목명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
 
@@ -2107,13 +2142,14 @@ export default function TradeClient() {
                                 return <span className={qtyBadge}>{isBox ? `BOX` : `EA`}</span>;
                               })()}
                             </div>
+
                             <input
                               className={inputRight}
                               inputMode="numeric"
-                              value={formatMoney(l.unit)}
+                              value={typeof l.unit === "string" ? l.unit : l.unit !== 0 ? formatMoney(l.unit) : ""}
                               onChange={(e) => {
-                                const v = toInt(e.target.value);
-                                updateEditLine(i, { unit: v, ...(v > 0 ? { total_incl_vat: 0 } : {}) });
+                                const raw = sanitizeSignedIntInput(e.target.value);
+                                updateEditLine(i, { unit: raw, ...(toIntSigned(raw) !== 0 ? { total_incl_vat: "" } : {}) });
                               }}
                             />
 
@@ -2124,9 +2160,17 @@ export default function TradeClient() {
                               className={inputRight}
                               inputMode="numeric"
                               placeholder="총액"
-                              disabled={toInt(l.unit) > 0}
-                              value={toInt(l.unit) > 0 ? formatMoney(r.total) : l.total_incl_vat ? formatMoney(l.total_incl_vat) : ""}
-                              onChange={(e) => updateEditLine(i, { total_incl_vat: toInt(e.target.value) })}
+                              disabled={toIntSigned(l.unit) !== 0}
+                              value={
+                                toIntSigned(l.unit) !== 0
+                                  ? formatMoney(r.total)
+                                  : typeof l.total_incl_vat === "string"
+                                    ? l.total_incl_vat
+                                    : l.total_incl_vat !== 0
+                                      ? formatMoney(l.total_incl_vat)
+                                      : ""
+                              }
+                              onChange={(e) => updateEditLine(i, { total_incl_vat: sanitizeSignedIntInput(e.target.value) })}
                             />
 
                             <button className={btn} onClick={() => removeEditLine(i)} title="삭제">
@@ -2388,13 +2432,9 @@ export default function TradeClient() {
             {/* 주문/출고 */}
             {mode !== "LEDGER" ? (
               <div className={`${card} p-4`}>
-                <div className="mb-2 flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-semibold">주문/출고 입력</div>
-                    <div className="mt-2">
-                      <span className={pill}>조회대상: {targetLabel}</span>
-                    </div>
-                  </div>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="text-lg font-semibold">주문/출고 입력</div>
+                  <span className={pill}>조회대상: {targetLabel}</span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
@@ -2541,13 +2581,14 @@ export default function TradeClient() {
                             return <span className={qtyBadge}>{isBox ? `BOX` : `EA`}</span>;
                           })()}
                         </div>
+
                         <input
                           className={inputRight}
                           inputMode="numeric"
-                          value={formatMoney(l.unit)}
+                          value={typeof l.unit === "string" ? l.unit : l.unit !== 0 ? formatMoney(l.unit) : ""}
                           onChange={(e) => {
-                            const v = toInt(e.target.value);
-                            updateLine(i, { unit: v, ...(v > 0 ? { total_incl_vat: 0 } : {}) });
+                            const raw = sanitizeSignedIntInput(e.target.value);
+                            updateLine(i, { unit: raw, ...(toIntSigned(raw) !== 0 ? { total_incl_vat: "" } : {}) });
                           }}
                         />
 
@@ -2558,9 +2599,17 @@ export default function TradeClient() {
                           className={inputRight}
                           inputMode="numeric"
                           placeholder="총액"
-                          disabled={toInt(l.unit) > 0}
-                          value={toInt(l.unit) > 0 ? formatMoney(r.total) : l.total_incl_vat ? formatMoney(l.total_incl_vat) : ""}
-                          onChange={(e) => updateLine(i, { total_incl_vat: toInt(e.target.value) })}
+                          disabled={toIntSigned(l.unit) !== 0}
+                          value={
+                            toIntSigned(l.unit) !== 0
+                              ? formatMoney(r.total)
+                              : typeof l.total_incl_vat === "string"
+                                ? l.total_incl_vat
+                                : l.total_incl_vat !== 0
+                                  ? formatMoney(l.total_incl_vat)
+                                  : ""
+                          }
+                          onChange={(e) => updateLine(i, { total_incl_vat: sanitizeSignedIntInput(e.target.value) })}
                         />
 
                         <button className={btn} onClick={() => removeLine(i)} title="삭제">
@@ -2604,14 +2653,15 @@ export default function TradeClient() {
             {/* 금전출납 */}
             {mode !== "ORDERS" ? (
               <div className={`${card} p-4`}>
-                <div className="mb-2">
+                <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="text-lg font-semibold">금전출납 입력</div>
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <span className={pill}>조회대상: {targetLabel}</span>
-                    <div className="text-sm text-slate-600">
-                      방향: <span className="font-semibold">{categoryToDirection(category) === "IN" ? "입금(+)" : "출금(-)"}</span>
-                      <span className="ml-2 text-xs text-slate-500">(카테고리로 자동)</span>
-                    </div>
+                  <span className={pill}>조회대상: {targetLabel}</span>
+                </div>
+
+                <div className="mb-2 flex items-center justify-end">
+                  <div className="text-sm text-slate-600">
+                    방향: <span className="font-semibold">{categoryToDirection(category) === "IN" ? "입금(+)" : "출금(-)"}</span>
+                    <span className="ml-2 text-xs text-slate-500">(카테고리로 자동)</span>
                   </div>
                 </div>
 
