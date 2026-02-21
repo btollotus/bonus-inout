@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -1244,11 +1245,20 @@ export default function TradeClient() {
   const unifiedRows = useMemo<UnifiedRow[]>(() => {
     const items: Array<Omit<UnifiedRow, "balance"> & { signed: number }> = [];
 
+    const timePart = (iso: string | null | undefined) => {
+      const s = String(iso ?? "").trim();
+      if (!s) return "";
+      const idx = s.indexOf("T");
+      if (idx < 0) return "";
+      return s.slice(idx + 1); // "HH:mm:ss.sssZ"
+    };
+
     // Orders -> 출금
     for (const o of orders) {
       const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(o.memo);
       const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
-      const tsKey = `${date}T12:00:00.000Z`;
+      const tp = timePart(o.created_at);
+      const tsKey = tp ? `${date}T${tp}` : `${date}T12:00:00.000Z`;
       const total = Number(o.total_amount ?? 0);
 
       const orderer = (memo?.orderer_name ?? null) as string | null;
@@ -1298,10 +1308,13 @@ export default function TradeClient() {
       const sign = String(l.direction) === "OUT" ? -1 : 1;
       const amt = Number(l.amount ?? 0);
 
+      const tp = timePart(l.entry_ts) || timePart(l.created_at);
+      const tsKey = tp ? `${l.entry_date}T${tp}` : `${l.entry_date}T12:00:00.000Z`;
+
       items.push({
         kind: "LEDGER",
         date: l.entry_date,
-        tsKey: l.entry_ts || `${l.entry_date}T12:00:00.000Z`,
+        tsKey: tsKey,
         partnerName: l.counterparty_name ?? "",
         businessNo: l.business_no ?? "",
         ledger_partner_id: l.partner_id ?? null,
