@@ -1,3 +1,4 @@
+```tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -136,7 +137,7 @@ type MasterProductRow = {
 type Line = {
   food_type: string;
   name: string;
-  weight_g: number; // ✅ 소수점 허용
+  weight_g: number | string; // ✅ 소수점 + 중간입력 허용
   qty: number;
   unit: number | string; // ✅ 마이너스/중간입력("-") 허용
   total_incl_vat: number | string; // ✅ 마이너스/중간입력("-") 허용
@@ -231,6 +232,17 @@ function toIntSigned(n: any) {
 function sanitizeSignedIntInput(raw: string) {
   let v = raw.replace(/[^\d,-]/g, "");
   v = v.replace(/(?!^)-/g, ""); // 선행 '-'만 허용
+  return v;
+}
+
+// ✅ (추가) 소수점 입력 중간값 허용(무게용): 숫자/콤마/점만 허용, 점 1개만
+function sanitizeDecimalInput(raw: string) {
+  let v = raw.replace(/[^\d.,]/g, "");
+  // 콤마는 그대로 두되, 점은 1개만 허용
+  const firstDot = v.indexOf(".");
+  if (firstDot >= 0) {
+    v = v.slice(0, firstDot + 1) + v.slice(firstDot + 1).replaceAll(".", "");
+  }
   return v;
 }
 
@@ -1767,6 +1779,9 @@ export default function TradeClient() {
     const ok = window.confirm("삭제할까요? (삭제하면 복구할 수 없습니다.)");
     if (!ok) return;
 
+    // ✅ INP 개선: confirm 이후 UI 업데이트가 먼저 처리되도록 이벤트 핸들러를 양보
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
     if (r.kind === "ORDER") {
       // ✅ shipments 먼저 삭제(혹시 FK cascade가 있어도 안전하게)
       const { error: sErr } = await supabase.from("order_shipments").delete().eq("order_id", r.rawId);
@@ -1799,7 +1814,13 @@ export default function TradeClient() {
   // ✅ 추가: BOX/EA 배지 (눈에 띄게)
   const qtyBadge =
     "shrink-0 inline-flex items-center justify-center rounded-lg border border-slate-300 bg-slate-900 px-2 py-1 text-[11px] font-extrabold text-white";
+  // ✅ 작업 버튼 최소 크기
+  const miniBtn = "rounded-lg border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] hover:bg-slate-50 active:bg-slate-100";
   const targetLabel = selectedPartner ? selectedPartner.name : "전체";
+
+  // ✅ 품목 그리드(품목명 최소 폭 확보)
+  const lineGridCols = "grid-cols-[180px_minmax(320px,1fr)_120px_110px_130px_120px_120px_130px_auto]";
+  const lineGridHeadCols = "grid-cols-[180px_minmax(320px,1fr)_120px_110px_130px_120px_120px_130px_auto]";
 
   return (
     <div className={`${pageBg} min-h-screen`}>
@@ -1960,9 +1981,7 @@ export default function TradeClient() {
                 </button>
               </div>
               <div className="px-5 py-4">
-                <pre className="whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">
-                  {memoBody}
-                </pre>
+                <pre className="whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">{memoBody}</pre>
               </div>
             </div>
           </div>
@@ -1972,7 +1991,7 @@ export default function TradeClient() {
         {editOpen && editRow ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
             <div
-              className="w-full max-w-[1100px] max-h-[90vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl flex flex-col"
+              className="w-full max-w-[1400px] max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
@@ -2059,9 +2078,7 @@ export default function TradeClient() {
                               </div>
                             </div>
                           ) : (
-                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">
-                              2곳 배송이 아니면 비워둡니다.
-                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">2곳 배송이 아니면 비워둡니다.</div>
                           )}
                         </div>
                       </div>
@@ -2078,7 +2095,7 @@ export default function TradeClient() {
                       </button>
                     </div>
 
-                    <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2 text-xs text-slate-600">
+                    <div className={`mt-3 grid ${lineGridHeadCols} gap-2 text-xs text-slate-600`}>
                       <div className="pl-3">식품유형</div>
                       <div className="pl-3">품목명</div>
                       <div className="pl-3">무게(g)</div>
@@ -2095,7 +2112,7 @@ export default function TradeClient() {
                         const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
 
                         return (
-                          <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2">
+                          <div key={i} className={`grid ${lineGridCols} gap-2`}>
                             <input className={input} list="food-types-list" value={l.food_type} onChange={(e) => updateEditLine(i, { food_type: e.target.value })} />
                             <input
                               className={input}
@@ -2117,8 +2134,9 @@ export default function TradeClient() {
                             <input
                               className={inputRight}
                               inputMode="decimal"
-                              value={formatWeight(l.weight_g)}
-                              onChange={(e) => updateEditLine(i, { weight_g: toNum(e.target.value) })}
+                              value={typeof l.weight_g === "string" ? l.weight_g : formatWeight(l.weight_g)}
+                              onChange={(e) => updateEditLine(i, { weight_g: sanitizeDecimalInput(e.target.value) })}
+                              onBlur={() => updateEditLine(i, { weight_g: toNum(l.weight_g) })}
                             />
                             <div className="flex items-center gap-1">
                               <input
@@ -2494,9 +2512,7 @@ export default function TradeClient() {
                           </div>
                         </div>
                       ) : (
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">
-                          2곳 배송이 아니면 비워둡니다.
-                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">2곳 배송이 아니면 비워둡니다.</div>
                       )}
                     </div>
                   </div>
@@ -2521,7 +2537,7 @@ export default function TradeClient() {
                   </div>
                 </div>
 
-                <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2 text-xs text-slate-600">
+                <div className={`mt-3 grid ${lineGridHeadCols} gap-2 text-xs text-slate-600`}>
                   <div className="pl-3">식품유형</div>
                   <div className="pl-3">품목명</div>
                   <div className="pl-3">무게(g)</div>
@@ -2538,7 +2554,7 @@ export default function TradeClient() {
                     const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
 
                     return (
-                      <div key={i} className="grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2">
+                      <div key={i} className={`grid ${lineGridCols} gap-2`}>
                         <input className={input} list="food-types-list" value={l.food_type} onChange={(e) => updateLine(i, { food_type: e.target.value })} />
                         <input
                           className={input}
@@ -2557,7 +2573,13 @@ export default function TradeClient() {
                             }
                           }}
                         />
-                        <input className={inputRight} inputMode="decimal" value={formatWeight(l.weight_g)} onChange={(e) => updateLine(i, { weight_g: toNum(e.target.value) })} />
+                        <input
+                          className={inputRight}
+                          inputMode="decimal"
+                          value={typeof l.weight_g === "string" ? l.weight_g : formatWeight(l.weight_g)}
+                          onChange={(e) => updateLine(i, { weight_g: sanitizeDecimalInput(e.target.value) })}
+                          onBlur={() => updateLine(i, { weight_g: toNum(l.weight_g) })}
+                        />
                         <div className="flex items-center gap-1">
                           <input
                             className={inputRight}
@@ -2850,10 +2872,12 @@ export default function TradeClient() {
                         <th className="px-3 py-2 text-left">주문자</th>
                         <th className="px-3 py-2 text-left">카테고리</th>
                         <th className="px-3 py-2 text-left">방법</th>
-                        <th className="px-3 py-2 text-right">입금</th>
-                        <th className="px-3 py-2 text-right">출금</th>
-                        <th className="sticky right-[220px] z-10 bg-slate-50 px-3 py-2 text-right">잔액</th>
-                        <th className="sticky right-0 z-20 bg-slate-50 px-3 py-2 text-center" title="복사/메모/수정/삭제">
+
+                        {/* ✅ 우측 고정: 입금/출금/잔액/작업 */}
+                        <th className="sticky right-[460px] z-20 bg-slate-50 px-3 py-2 text-right">입금</th>
+                        <th className="sticky right-[350px] z-20 bg-slate-50 px-3 py-2 text-right">출금</th>
+                        <th className="sticky right-[220px] z-20 bg-slate-50 px-3 py-2 text-right">잔액</th>
+                        <th className="sticky right-0 z-30 bg-slate-50 px-3 py-2 text-center" title="복사/메모/수정/삭제">
                           작업
                         </th>
                       </tr>
@@ -2871,9 +2895,7 @@ export default function TradeClient() {
                           if (!q) return true;
 
                           const orderLineText =
-                            x.kind === "ORDER"
-                              ? (x.order_lines ?? []).map((l) => `${l.name ?? ""} ${l.food_type ?? ""}`).join(" ")
-                              : "";
+                            x.kind === "ORDER" ? (x.order_lines ?? []).map((l) => `${l.name ?? ""} ${l.food_type ?? ""}`).join(" ") : "";
 
                           const hay = [
                             x.partnerName,
@@ -2899,25 +2921,29 @@ export default function TradeClient() {
                             <td className="px-3 py-2 font-semibold">{x.category}</td>
                             <td className="px-3 py-2 font-semibold">{x.kind === "LEDGER" ? methodLabel(x.method) : x.method}</td>
 
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? formatMoney(x.inAmt) : ""}</td>
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? formatMoney(x.outAmt) : ""}</td>
+                            <td className="sticky right-[460px] z-10 bg-white px-3 py-2 text-right tabular-nums font-semibold text-blue-700">
+                              {x.inAmt ? formatMoney(x.inAmt) : ""}
+                            </td>
+                            <td className="sticky right-[350px] z-10 bg-white px-3 py-2 text-right tabular-nums font-semibold text-red-600">
+                              {x.outAmt ? formatMoney(x.outAmt) : ""}
+                            </td>
 
                             <td className="sticky right-[220px] z-10 bg-white px-3 py-2 text-right tabular-nums font-semibold">
                               {formatMoney(x.balance)}
                             </td>
 
-                            <td className="sticky right-0 z-20 bg-white px-3 py-2">
+                            <td className="sticky right-0 z-20 bg-white px-2 py-2">
                               <div className="grid grid-cols-2 gap-1">
-                                <button className={`${btn} text-xs px-2 py-1`} onClick={() => onCopyClick(x)}>
+                                <button className={miniBtn} onClick={() => onCopyClick(x)}>
                                   복사
                                 </button>
-                                <button className={`${btn} text-xs px-2 py-1`} onClick={() => onMemoClick(x)}>
+                                <button className={miniBtn} onClick={() => onMemoClick(x)}>
                                   메모
                                 </button>
-                                <button className={`${btn} text-xs px-2 py-1`} onClick={() => openEdit(x)}>
+                                <button className={miniBtn} onClick={() => openEdit(x)}>
                                   수정
                                 </button>
-                                <button className={`${btn} text-xs px-2 py-1`} onClick={() => deleteTradeRow(x)}>
+                                <button className={miniBtn} onClick={() => deleteTradeRow(x)}>
                                   삭제
                                 </button>
                               </div>
@@ -2957,3 +2983,4 @@ export default function TradeClient() {
     </div>
   );
 }
+```
