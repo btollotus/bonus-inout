@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -1819,8 +1818,9 @@ export default function TradeClient() {
   const targetLabel = selectedPartner ? selectedPartner.name : "전체";
 
   // ✅ 품목 그리드(품목명 최소 폭 확보)
-  const lineGridCols = "grid-cols-[180px_minmax(320px,1fr)_120px_110px_130px_120px_120px_130px_auto]";
-  const lineGridHeadCols = "grid-cols-[180px_minmax(320px,1fr)_120px_110px_130px_120px_120px_130px_auto]";
+  // ✅ FIX: 품목명이 길어져도 그리드가 카드 밖으로 튀지 않도록 minmax(0,1fr) + 마지막 컬럼(삭제) 고정폭
+  const lineGridCols = "grid-cols-[180px_minmax(0,1fr)_120px_110px_130px_120px_120px_130px_44px]";
+  const lineGridHeadCols = "grid-cols-[180px_minmax(0,1fr)_120px_110px_130px_120px_120px_130px_44px]";
 
   return (
     <div className={`${pageBg} min-h-screen`}>
