@@ -507,9 +507,6 @@ export default function TradeClient() {
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState<UnifiedRow | null>(null);
 
-  // ✅ (추가) 행 우측 버튼 드롭다운(⋯)
-  const [rowMenuKey, setRowMenuKey] = useState<string | null>(null);
-
   // 주문 수정용
   const [eShipDate, setEShipDate] = useState(todayYMD());
   const [eOrdererName, setEOrdererName] = useState(""); // ✅ 주문자(수정)
@@ -611,6 +608,21 @@ export default function TradeClient() {
     if (!m) return 1;
     const n = Number(m[1]);
     return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 1;
+  }
+
+  // ✅ 택배비(고정) 품목 자동 삽입
+  function insertShippingFee(totalInclVat: number) {
+    setLines((prev) => [
+      ...prev,
+      {
+        food_type: "",
+        name: "택배비",
+        weight_g: 0,
+        qty: 1,
+        unit: 0,
+        total_incl_vat: totalInclVat,
+      },
+    ]);
   }
 
   // ====== Loaders ======
@@ -728,9 +740,7 @@ export default function TradeClient() {
       .limit(500);
 
     if (selectedPartnerId) {
-      oq = oq.or(
-        `customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`
-      );
+      oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
     }
 
     const { data: oData, error: oErr } = await oq;
@@ -772,9 +782,7 @@ export default function TradeClient() {
       .limit(5000);
 
     if (selectedPartnerId) {
-      oq2 = oq2.or(
-        `customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`
-      );
+      oq2 = oq2.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
     }
 
     const { data: oPrev, error: oPrevErr } = await oq2;
@@ -830,14 +838,6 @@ export default function TradeClient() {
     loadTrades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id, fromYMD, toYMD]);
-
-  // ✅ (추가) ⋯ 메뉴 열림 상태에서, 바깥 클릭 시 닫기
-  useEffect(() => {
-    if (!rowMenuKey) return;
-    const onDown = () => setRowMenuKey(null);
-    window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
-  }, [rowMenuKey]);
 
   // ✅ 거래처 선택 변경 시, 금전출납 수기 입력칸을 선택된 거래처 값으로 초기화
   useEffect(() => {
@@ -1061,19 +1061,6 @@ export default function TradeClient() {
     if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
     if (lines.length === 0) return setMsg("품목을 1개 이상 입력하세요.");
 
-    // ✅ 배송정보(수화주명/주소) 필수: 최소 1곳
-    const ship1_name = shipToName1.trim();
-    const ship1_addr1 = shipToAddr1_1.trim();
-    if (!ship1_name) return setMsg("배송정보(1) 수화주명을 입력하세요.");
-    if (!ship1_addr1) return setMsg("배송정보(1) 주소1을 입력하세요.");
-
-    if (twoShip) {
-      const ship2_name = shipToName2.trim();
-      const ship2_addr1 = shipToAddr1_2.trim();
-      if (!ship2_name) return setMsg("배송정보(2) 수화주명을 입력하세요.");
-      if (!ship2_addr1) return setMsg("배송정보(2) 주소1을 입력하세요.");
-    }
-
     const isMall = isMallPartner(selectedPartner);
 
     const cleanLines = lines
@@ -1154,7 +1141,7 @@ export default function TradeClient() {
     const { error: lErr } = await supabase.from("order_lines").insert(linePayloads);
     if (lErr) return setMsg(lErr.message);
 
-    // ✅ order_shipments insert (1~2곳)
+    // ✅ order_shipments insert (1~2곳)  (배송정보 없어도 생성 가능)
     const shipPayloads: any[] = [
       {
         order_id: orderId,
@@ -1188,7 +1175,13 @@ export default function TradeClient() {
     setOrdererName(""); // ✅ 초기화
     setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: 0, total_incl_vat: 0 }]);
 
-    // 배송정보는 “거래처 기본값”을 유지(자주 수정 안함) → 값은 그대로 두고, 2곳만 OFF/비움
+    // ✅ 요청: 주문/출고 생성 후 배송정보 입력창도 초기화
+    setShipToName1("");
+    setShipToAddr1_1("");
+    setShipToMobile1("");
+    setShipToPhone1("");
+    setDeliveryMsg1("");
+
     setTwoShip(false);
     setShipToName2("");
     setShipToAddr1_2("");
@@ -1553,19 +1546,6 @@ export default function TradeClient() {
       // ✅ (오류 가능성 보완) selectedPartner가 null인 상태에서도 저장 시 에러 방지
       const isMall = selectedPartner ? isMallPartner(selectedPartner) : false;
 
-      // ✅ 배송정보(수화주명/주소) 필수: 최소 1곳
-      const ship1_name = eShipToName1.trim();
-      const ship1_addr1 = eShipToAddr1_1.trim();
-      if (!ship1_name) return setMsg("배송정보(1) 수화주명을 입력하세요.");
-      if (!ship1_addr1) return setMsg("배송정보(1) 주소1을 입력하세요.");
-
-      if (eTwoShip) {
-        const ship2_name = eShipToName2.trim();
-        const ship2_addr1 = eShipToAddr1_2.trim();
-        if (!ship2_name) return setMsg("배송정보(2) 수화주명을 입력하세요.");
-        if (!ship2_addr1) return setMsg("배송정보(2) 주소1을 입력하세요.");
-      }
-
       const cleanLines = eLines
         .map((l) => {
           const name = (l.name || "").trim();
@@ -1638,7 +1618,7 @@ export default function TradeClient() {
       const { error: iErr } = await supabase.from("order_lines").insert(linePayloads);
       if (iErr) return setMsg(iErr.message);
 
-      // ✅ 배송지 교체: 기존 order_shipments 삭제 후 재삽입 (1~2곳)
+      // ✅ 배송지 교체: 기존 order_shipments 삭제 후 재삽입 (1~2곳)  (배송정보 없어도 저장 가능)
       const { error: sdErr } = await supabase.from("order_shipments").delete().eq("order_id", editRow.rawId);
       if (sdErr) return setMsg(sdErr.message);
 
@@ -1754,7 +1734,8 @@ export default function TradeClient() {
 
         {/* ✅ 거래처 수정 팝업 (신규 + 최근 5건 이력 버튼) */}
         {partnerEditOpen ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={closePartnerEdit}>
+          // ✅ 수정: 바깥 클릭으로 닫히지 않게 변경 (onClick 제거)
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
             <div
               className="w-full max-w-[860px] rounded-2xl border border-slate-200 bg-white shadow-xl"
               onClick={(e) => e.stopPropagation()}
@@ -1915,7 +1896,8 @@ export default function TradeClient() {
 
         {/* ✅ 수정 팝업 */}
         {editOpen && editRow ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setEditOpen(false)}>
+          // ✅ 수정: 바깥 클릭으로 닫히지 않게 변경 (onClick 제거)
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
             <div className="w-full max-w-[1100px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
@@ -1973,8 +1955,8 @@ export default function TradeClient() {
                         <div className="rounded-2xl border border-slate-200 bg-white p-3">
                           <div className="mb-2 text-sm font-semibold">배송지 1</div>
                           <div className="space-y-2">
-                            <input className={input} placeholder="수화주명(필수)" value={eShipToName1} onChange={(e) => setEShipToName1(e.target.value)} />
-                            <input className={input} placeholder="주소1(필수)" value={eShipToAddr1_1} onChange={(e) => setEShipToAddr1_1(e.target.value)} />
+                            <input className={input} placeholder="수화주명" value={eShipToName1} onChange={(e) => setEShipToName1(e.target.value)} />
+                            <input className={input} placeholder="주소1" value={eShipToAddr1_1} onChange={(e) => setEShipToAddr1_1(e.target.value)} />
                             <input className={input} placeholder="요청사항" value={eDeliveryMsg1} onChange={(e) => setEDeliveryMsg1(e.target.value)} />
                             <div className="grid grid-cols-2 gap-2">
                               <input className={input} placeholder="휴대폰" value={eShipToMobile1} onChange={(e) => setEShipToMobile1(e.target.value)} />
@@ -1994,8 +1976,8 @@ export default function TradeClient() {
 
                           {eTwoShip ? (
                             <div className="space-y-2">
-                              <input className={input} placeholder="수화주명(필수)" value={eShipToName2} onChange={(e) => setEShipToName2(e.target.value)} />
-                              <input className={input} placeholder="주소1(필수)" value={eShipToAddr1_2} onChange={(e) => setEShipToAddr1_2(e.target.value)} />
+                              <input className={input} placeholder="수화주명" value={eShipToName2} onChange={(e) => setEShipToName2(e.target.value)} />
+                              <input className={input} placeholder="주소1" value={eShipToAddr1_2} onChange={(e) => setEShipToAddr1_2(e.target.value)} />
                               <input className={input} placeholder="요청사항" value={eDeliveryMsg2} onChange={(e) => setEDeliveryMsg2(e.target.value)} />
                               <div className="grid grid-cols-2 gap-2">
                                 <input className={input} placeholder="휴대폰" value={eShipToMobile2} onChange={(e) => setEShipToMobile2(e.target.value)} />
@@ -2407,8 +2389,8 @@ export default function TradeClient() {
                     <div className="rounded-2xl border border-slate-200 bg-white p-3">
                       <div className="mb-2 text-sm font-semibold">배송지 1</div>
                       <div className="space-y-2">
-                        <input className={input} placeholder="수화주명(필수)" value={shipToName1} onChange={(e) => setShipToName1(e.target.value)} />
-                        <input className={input} placeholder="주소1(필수)" value={shipToAddr1_1} onChange={(e) => setShipToAddr1_1(e.target.value)} />
+                        <input className={input} placeholder="수화주명" value={shipToName1} onChange={(e) => setShipToName1(e.target.value)} />
+                        <input className={input} placeholder="주소1" value={shipToAddr1_1} onChange={(e) => setShipToAddr1_1(e.target.value)} />
                         <input className={input} placeholder="요청사항" value={deliveryMsg1} onChange={(e) => setDeliveryMsg1(e.target.value)} />
                         <div className="grid grid-cols-2 gap-2">
                           <input className={input} placeholder="휴대폰" value={shipToMobile1} onChange={(e) => setShipToMobile1(e.target.value)} />
@@ -2428,8 +2410,8 @@ export default function TradeClient() {
 
                       {twoShip ? (
                         <div className="space-y-2">
-                          <input className={input} placeholder="수화주명(필수)" value={shipToName2} onChange={(e) => setShipToName2(e.target.value)} />
-                          <input className={input} placeholder="주소1(필수)" value={shipToAddr1_2} onChange={(e) => setShipToAddr1_2(e.target.value)} />
+                          <input className={input} placeholder="수화주명" value={shipToName2} onChange={(e) => setShipToName2(e.target.value)} />
+                          <input className={input} placeholder="주소1" value={shipToAddr1_2} onChange={(e) => setShipToAddr1_2(e.target.value)} />
                           <input className={input} placeholder="요청사항" value={deliveryMsg2} onChange={(e) => setDeliveryMsg2(e.target.value)} />
                           <div className="grid grid-cols-2 gap-2">
                             <input className={input} placeholder="휴대폰" value={shipToMobile2} onChange={(e) => setShipToMobile2(e.target.value)} />
@@ -2451,9 +2433,17 @@ export default function TradeClient() {
 
                 <div className="mt-4 flex items-center justify-between">
                   <div className="text-sm font-semibold">품목(식품유형 자동완성 포함)</div>
-                  <button className={btn} onClick={addLine}>
-                    + 품목 추가
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button className={btn} onClick={() => insertShippingFee(3300)}>
+                      + 택배비 3,300
+                    </button>
+                    <button className={btn} onClick={() => insertShippingFee(4000)}>
+                      + 택배비 4,000
+                    </button>
+                    <button className={btn} onClick={addLine}>
+                      + 품목 추가
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-3 grid grid-cols-[180px_1fr_120px_110px_130px_120px_120px_130px_auto] gap-2 text-xs text-slate-600">
@@ -2738,7 +2728,7 @@ export default function TradeClient() {
                     <col style={{ width: "110px" }} />
                     <col style={{ width: "110px" }} />
                     <col style={{ width: "130px" }} />
-                    <col style={{ width: "360px" }} />
+                    <col style={{ width: "220px" }} />
                   </colgroup>
 
                   <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
@@ -2751,7 +2741,10 @@ export default function TradeClient() {
                       <th className="px-3 py-2 text-right">입금</th>
                       <th className="px-3 py-2 text-right">출금</th>
                       <th className="px-3 py-2 text-right">잔액</th>
-                      <th className="px-3 py-2 text-center">복사/메모/수정/삭제</th>
+                      {/* ✅ 헤더 축약 + ✅ sticky(크롬/엣지), IE에서는 무시되어 폴백 */}
+                      <th className="sticky right-0 z-10 bg-slate-50 px-3 py-2 text-center" title="복사/메모/수정/삭제">
+                        작업
+                      </th>
                     </tr>
                   </thead>
 
@@ -2787,89 +2780,38 @@ export default function TradeClient() {
 
                         return hay.includes(q);
                       })
-                      .map((x) => {
-                        const key = `${x.kind}-${x.rawId}`;
-                        const isOpen = rowMenuKey === key;
+                      .map((x) => (
+                        <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
+                          <td className="px-3 py-2 font-semibold tabular-nums">{x.date}</td>
+                          <td className="px-3 py-2 font-semibold">{x.partnerName}</td>
+                          <td className="px-3 py-2 font-semibold">{x.ordererName}</td>
+                          <td className="px-3 py-2 font-semibold">{x.category}</td>
+                          <td className="px-3 py-2 font-semibold">{x.method}</td>
 
-                        return (
-                          <tr key={key} className="border-t border-slate-200 bg-white">
-                            <td className="px-3 py-2 font-semibold tabular-nums">{x.date}</td>
-                            <td className="px-3 py-2 font-semibold">{x.partnerName}</td>
-                            <td className="px-3 py-2 font-semibold">{x.ordererName}</td>
-                            <td className="px-3 py-2 font-semibold">{x.category}</td>
-                            <td className="px-3 py-2 font-semibold">{x.method}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? formatMoney(x.inAmt) : ""}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? formatMoney(x.outAmt) : ""}</td>
 
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? formatMoney(x.inAmt) : ""}</td>
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? formatMoney(x.outAmt) : ""}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</td>
 
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(x.balance)}</td>
-
-                            <td className="px-3 py-2">
-                              {/* ✅ (변경) 우측 버튼 4개 → 드롭다운(⋯) */}
-                              <div className="relative flex items-center justify-center">
-                                <button
-                                  className={`${btn} whitespace-nowrap text-xs px-2 py-1`}
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setRowMenuKey((prev) => (prev === key ? null : key));
-                                  }}
-                                  aria-haspopup="menu"
-                                  aria-expanded={isOpen}
-                                  title="메뉴"
-                                >
-                                  ⋯
-                                </button>
-
-                                {isOpen ? (
-                                  <div
-                                    className="absolute right-0 top-[calc(100%+6px)] z-20 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <button
-                                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                                      onClick={() => {
-                                        setRowMenuKey(null);
-                                        onCopyClick(x);
-                                      }}
-                                    >
-                                      복사
-                                    </button>
-                                    <button
-                                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                                      onClick={() => {
-                                        setRowMenuKey(null);
-                                        onMemoClick(x);
-                                      }}
-                                    >
-                                      메모
-                                    </button>
-                                    <button
-                                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                                      onClick={() => {
-                                        setRowMenuKey(null);
-                                        openEdit(x);
-                                      }}
-                                    >
-                                      수정
-                                    </button>
-                                    <button
-                                      className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-slate-50"
-                                      onClick={async () => {
-                                        setRowMenuKey(null);
-                                        await deleteTradeRow(x);
-                                      }}
-                                    >
-                                      삭제
-                                    </button>
-                                  </div>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                          {/* ✅ sticky(크롬/엣지), IE에서는 무시되어 폴백 */}
+                          <td className="sticky right-0 bg-white px-3 py-2">
+                            <div className="flex flex-wrap items-center justify-center gap-1">
+                              <button className={`${btn} text-xs px-2 py-1`} onClick={() => onCopyClick(x)}>
+                                복사
+                              </button>
+                              <button className={`${btn} text-xs px-2 py-1`} onClick={() => onMemoClick(x)}>
+                                메모
+                              </button>
+                              <button className={`${btn} text-xs px-2 py-1`} onClick={() => openEdit(x)}>
+                                수정
+                              </button>
+                              <button className={`${btn} text-xs px-2 py-1`} onClick={() => deleteTradeRow(x)}>
+                                삭제
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
 
                     {unifiedRows.length === 0 ? (
                       <tr>
