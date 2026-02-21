@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/browser";
 type EmployeeRow = {
   id: string;
   name: string;
+  employee_code: string | null;
   auth_user_id: string | null;
 
   rrn: string | null;
@@ -20,6 +21,11 @@ type EmployeeRow = {
 
 function safeStr(v: any) {
   return String(v ?? "").trim();
+}
+
+function isUuid(v: string) {
+  // RFC 4122 v1~v5
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
 export default function EmployeesAdminClient() {
@@ -40,6 +46,7 @@ export default function EmployeesAdminClient() {
 
   // form
   const [name, setName] = useState("");
+  const [employeeCode, setEmployeeCode] = useState("");
   const [authUserId, setAuthUserId] = useState("");
   const [rrn, setRrn] = useState("");
   const [mobile, setMobile] = useState("");
@@ -56,7 +63,7 @@ export default function EmployeesAdminClient() {
     try {
       const { data, error } = await supabase
         .from("employees")
-        .select("id,name,auth_user_id,rrn,mobile,address,hire_date,resign_date,created_at,updated_at")
+        .select("id,name,employee_code,auth_user_id,rrn,mobile,address,hire_date,resign_date,created_at,updated_at")
         .order("created_at", { ascending: false })
         .limit(500);
 
@@ -71,6 +78,7 @@ export default function EmployeesAdminClient() {
 
   function resetForm() {
     setName("");
+    setEmployeeCode("");
     setAuthUserId("");
     setRrn("");
     setMobile("");
@@ -83,6 +91,7 @@ export default function EmployeesAdminClient() {
   function fillForm(r: EmployeeRow) {
     setEditingId(r.id);
     setName(safeStr(r.name));
+    setEmployeeCode(safeStr(r.employee_code));
     setAuthUserId(safeStr(r.auth_user_id));
     setRrn(safeStr(r.rrn));
     setMobile(safeStr(r.mobile));
@@ -94,20 +103,31 @@ export default function EmployeesAdminClient() {
   async function save() {
     setMsg(null);
 
+    const nm = safeStr(name);
+    if (!nm) {
+      setMsg("이름(name)은 필수입니다.");
+      return;
+    }
+
+    const code = safeStr(employeeCode) || null;
+
+    const au = safeStr(authUserId);
+    // ✅ auth_user_id는 "비워두거나" "진짜 uuid"만 허용
+    if (au && !isUuid(au)) {
+      setMsg('auth_user_id는 Supabase Auth Users의 "id(uuid)"만 입력 가능합니다. (예: 2c1d...-....) 20240301_0001 같은 사번은 employee_code에 입력하세요.');
+      return;
+    }
+
     const payload: any = {
-      name: safeStr(name),
-      auth_user_id: safeStr(authUserId) || null,
+      name: nm,
+      employee_code: code,
+      auth_user_id: au || null,
       rrn: safeStr(rrn) || null,
       mobile: safeStr(mobile) || null,
       address: safeStr(address) || null,
       hire_date: safeStr(hireDate) || null,
       resign_date: safeStr(resignDate) || null,
     };
-
-    if (!payload.name) {
-      setMsg("이름(name)은 필수입니다.");
-      return;
-    }
 
     setLoading(true);
     try {
@@ -163,7 +183,7 @@ export default function EmployeesAdminClient() {
             <div>
               <div className="text-lg font-semibold">직원 관리 (관리자)</div>
               <div className="mt-1 text-xs text-slate-500">
-                employees.auth_user_id에 직원의 로그인 UID(auth.users.id)를 매핑해야 /leave 입력이 정상 저장됩니다.
+                employees.auth_user_id에는 직원의 로그인 UID(auth.users.id, uuid)만 매핑하세요. 사번/코드는 employee_code에 입력합니다.
               </div>
             </div>
             <div className="flex gap-2">
@@ -184,13 +204,21 @@ export default function EmployeesAdminClient() {
               </div>
 
               <div>
-                <div className="mb-1 text-xs font-semibold text-slate-700">auth_user_id (직원 UID)</div>
+                <div className="mb-1 text-xs font-semibold text-slate-700">사번(employee_code)</div>
+                <input className={input} value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value)} placeholder="예: 20240301_0001" />
+              </div>
+
+              <div>
+                <div className="mb-1 text-xs font-semibold text-slate-700">auth_user_id (직원 UID, uuid)</div>
                 <input
                   className={input}
                   value={authUserId}
                   onChange={(e) => setAuthUserId(e.target.value)}
                   placeholder="예: 2c1d... (Supabase Auth Users의 id)"
                 />
+                <div className="mt-1 text-[11px] text-slate-500">
+                  ※ 여기에 사번(20240301_0001)을 넣으면 uuid 에러가 납니다.
+                </div>
               </div>
 
               <div>
@@ -236,6 +264,7 @@ export default function EmployeesAdminClient() {
               <thead className="bg-slate-50">
                 <tr className="text-left">
                   <th className="px-3 py-2">이름</th>
+                  <th className="px-3 py-2">사번</th>
                   <th className="px-3 py-2">auth_user_id</th>
                   <th className="px-3 py-2">휴대폰</th>
                   <th className="px-3 py-2">입사일</th>
@@ -246,7 +275,7 @@ export default function EmployeesAdminClient() {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-3 text-slate-500" colSpan={6}>
+                    <td className="px-3 py-3 text-slate-500" colSpan={7}>
                       {loading ? "불러오는 중..." : "직원 데이터가 없습니다."}
                     </td>
                   </tr>
@@ -254,6 +283,7 @@ export default function EmployeesAdminClient() {
                   rows.map((r) => (
                     <tr key={r.id} className="border-t border-slate-200 bg-white">
                       <td className="px-3 py-2 font-semibold">{r.name}</td>
+                      <td className="px-3 py-2">{r.employee_code ?? ""}</td>
                       <td className="px-3 py-2 font-mono text-xs">{r.auth_user_id ?? ""}</td>
                       <td className="px-3 py-2">{r.mobile ?? ""}</td>
                       <td className="px-3 py-2">{r.hire_date ?? ""}</td>
