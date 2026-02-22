@@ -1,4 +1,4 @@
-```tsx
+
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -816,4 +816,3 @@ export default function StatementClient() {
     </div>
   );
 }
-```
