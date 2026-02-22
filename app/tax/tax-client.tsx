@@ -121,6 +121,11 @@ export default function TaxClient() {
   const btnOn =
     "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
 
+  // ✅ (요청3) 탭 타이틀: "재고관리 MVP" -> "BONUSMATE ERP"
+  useEffect(() => {
+    document.title = "BONUSMATE ERP";
+  }, []);
+
   async function loadCats() {
     const { data, error } = await supabase
       .from("ledger_categories")
@@ -262,7 +267,10 @@ export default function TaxClient() {
   // 매입처별 집계(사업자번호 기준 정렬/그룹)
   // =========================
   const purchaseByVendor = useMemo(() => {
-    const map = new Map<string, { business_no: string; name: string; supply: number; vat: number; total: number; count: number }>();
+    const map = new Map<
+      string,
+      { business_no: string; name: string; supply: number; vat: number; total: number; count: number }
+    >();
 
     for (const l of purchaseLedgerRows) {
       const bn = String(l.business_no ?? "").trim() || "(미입력)";
@@ -347,6 +355,12 @@ export default function TaxClient() {
       // 현재 화면의 "매입 집계 포함 카테고리" 선택값을 그대로 전달
       if (purchaseCatFilter.length) qs.set("outCats", purchaseCatFilter.join(","));
 
+      // ✅ (요청1) 판매채널(카카오플러스-판매/네이버-판매/쿠팡-판매)도 엑셀 세부내역 포함하도록 플래그 전달
+      qs.set("includeSalesChannels", "1");
+
+      // ✅ (요청2) 엑셀 헤더/컬럼 순서 요청: 날짜/구분/사업자등록번호/거래처/주문자/비고/공급가/VAT/총액
+      qs.set("excelHeaderOrder", "date,type,bizno,partner,orderer,note,supply,vat,total");
+
       const res = await fetch(`/api/tax/excel?${qs.toString()}`, { method: "GET" });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
@@ -383,13 +397,21 @@ export default function TaxClient() {
             <div className="mt-1 text-sm text-slate-600">기간별 매출/매입/VAT 요약 + 매입처별 집계 + 매출처 거래원장 출력</div>
           </div>
           <div className="flex gap-2">
-            <button className={btn} onClick={printNow}>인쇄</button>
+            <button className={btn} onClick={printNow}>
+              인쇄
+            </button>
 
             {/* ✅ 추가: 엑셀 다운로드 */}
-            <button className={btn} onClick={downloadTaxExcel}>엑셀 다운로드</button>
+            <button className={btn} onClick={downloadTaxExcel}>
+              엑셀 다운로드
+            </button>
 
-            <button className={btn} onClick={() => loadCats()}>카테고리 새로고침</button>
-            <button className={btnOn} onClick={() => loadPeriod()}>기간 재조회</button>
+            <button className={btn} onClick={() => loadCats()}>
+              카테고리 새로고침
+            </button>
+            <button className={btnOn} onClick={() => loadPeriod()}>
+              기간 재조회
+            </button>
           </div>
         </div>
 
@@ -405,10 +427,22 @@ export default function TaxClient() {
               <input type="date" className={input} value={toYMD} onChange={(e) => setToYMD(e.target.value)} />
             </div>
             <div className="flex flex-wrap gap-2">
-              <button className={btn} onClick={() => { setFromYMD(addDays(todayYMD(), -30)); setToYMD(todayYMD()); }}>
+              <button
+                className={btn}
+                onClick={() => {
+                  setFromYMD(addDays(todayYMD(), -30));
+                  setToYMD(todayYMD());
+                }}
+              >
                 최근 30일
               </button>
-              <button className={btn} onClick={() => { setFromYMD(todayYMD().slice(0, 8) + "01"); setToYMD(todayYMD()); }}>
+              <button
+                className={btn}
+                onClick={() => {
+                  setFromYMD(todayYMD().slice(0, 8) + "01");
+                  setToYMD(todayYMD());
+                }}
+              >
                 이번달
               </button>
             </div>
@@ -416,7 +450,9 @@ export default function TaxClient() {
 
           {/* 매입집계 카테고리 */}
           <div className="mt-4">
-            <div className="mb-1 text-xs text-slate-600">매입 집계에 포함할 OUT 카테고리(복식부기는 세무사에서 하므로, 여기서는 단순 선택만)</div>
+            <div className="mb-1 text-xs text-slate-600">
+              매입 집계에 포함할 OUT 카테고리(복식부기는 세무사에서 하므로, 여기서는 단순 선택만)
+            </div>
             <div className="flex flex-wrap gap-2">
               {outCatNames.length === 0 ? (
                 <div className="text-sm text-slate-500">OUT 카테고리가 없습니다. (ledger_categories 확인)</div>
@@ -443,7 +479,8 @@ export default function TaxClient() {
               )}
             </div>
             <div className="mt-2 text-xs text-slate-500">
-              ※ 옵션2(정확 VAT) 기준으로, 매입 VAT는 ledger_entries.vat_amount(TAXED)만 집계합니다. 과거 데이터(vat 컬럼 비어있는 건)는 VAT 0으로 처리됩니다.
+              ※ 옵션2(정확 VAT) 기준으로, 매입 VAT는 ledger_entries.vat_amount(TAXED)만 집계합니다. 과거 데이터(vat 컬럼 비어있는 건)는 VAT
+              0으로 처리됩니다.
             </div>
           </div>
         </div>
@@ -466,9 +503,7 @@ export default function TaxClient() {
 
           <div className={`${card} p-4`}>
             <div className="text-sm font-semibold">예상 부가세 납부(= 매출VAT - 매입VAT)</div>
-            <div className="mt-3 text-2xl font-extrabold tabular-nums">
-              {formatMoney(expectedVatPayable)}
-            </div>
+            <div className="mt-3 text-2xl font-extrabold tabular-nums">{formatMoney(expectedVatPayable)}</div>
             <div className="mt-2 text-xs text-slate-500">
               ※ 실제 신고는 세무사에서 조정됩니다(공제불가/면세/간이/신용카드 등 반영).
             </div>
@@ -539,7 +574,12 @@ export default function TaxClient() {
             <div className="flex flex-col gap-2 md:flex-row md:items-end">
               <div className="w-full md:w-[280px]">
                 <div className="mb-1 text-xs text-slate-600">검색(상호/사업자번호)</div>
-                <input className={input} value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} placeholder="예: 네이버 / 220-81-..." />
+                <input
+                  className={input}
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  placeholder="예: 네이버 / 220-81-..."
+                />
               </div>
               <div className="w-full md:w-[360px]">
                 <div className="mb-1 text-xs text-slate-600">매출처 선택</div>
@@ -547,7 +587,8 @@ export default function TaxClient() {
                   <option value="ALL">전체(선택 안함)</option>
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name}{c.business_no ? ` · ${c.business_no}` : ""}
+                      {c.name}
+                      {c.business_no ? ` · ${c.business_no}` : ""}
                     </option>
                   ))}
                 </select>
@@ -567,9 +608,7 @@ export default function TaxClient() {
           {customerId !== "ALL" ? (
             <div className="mt-4">
               <div className="mb-3">
-                <div className="text-base font-semibold">
-                  거래원장: {customers.find((x) => x.id === customerId)?.name ?? ""}
-                </div>
+                <div className="text-base font-semibold">거래원장: {customers.find((x) => x.id === customerId)?.name ?? ""}</div>
                 <div className="mt-1 text-sm text-slate-600">
                   기간: {fromYMD} ~ {toYMD}
                 </div>
@@ -616,9 +655,9 @@ export default function TaxClient() {
               </div>
 
               <div className="mt-3 text-sm font-semibold">
-                합계: 공급가 {formatMoney(ledgerForCustomer.reduce((a, x) => a + x.supply_amount, 0))} ·
-                부가세 {formatMoney(ledgerForCustomer.reduce((a, x) => a + x.vat_amount, 0))} ·
-                총액 {formatMoney(ledgerForCustomer.reduce((a, x) => a + x.total_amount, 0))}
+                합계: 공급가 {formatMoney(ledgerForCustomer.reduce((a, x) => a + x.supply_amount, 0))} · 부가세{" "}
+                {formatMoney(ledgerForCustomer.reduce((a, x) => a + x.vat_amount, 0))} · 총액{" "}
+                {formatMoney(ledgerForCustomer.reduce((a, x) => a + x.total_amount, 0))}
               </div>
             </div>
           ) : (
