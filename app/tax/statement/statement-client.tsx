@@ -177,9 +177,6 @@ export default function StatementClient() {
   const [rows, setRows] = useState<StatementRow[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // ✅ 인쇄 중에는 TopNav가 같이 찍히는 문제 방지(거래명세서와 동일하게 처리)
-  const [isPrinting, setIsPrinting] = useState(false);
-
   const OUR = {
     name: "주식회사 보누스메이트",
     business_no: "343-88-03009",
@@ -470,25 +467,6 @@ export default function StatementClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ 인쇄 이벤트 훅
-  useEffect(() => {
-    function onBeforePrint() {
-      setIsPrinting(true);
-    }
-    function onAfterPrint() {
-      setIsPrinting(false);
-    }
-    window.addEventListener("beforeprint", onBeforePrint);
-    window.addEventListener("afterprint", onAfterPrint);
-    return () => {
-      window.removeEventListener("beforeprint", onBeforePrint);
-      window.removeEventListener("afterprint", onAfterPrint);
-    };
-  }, []);
-
-  // ✅ 인쇄 중엔 TopNav까지 같이 찍히는 케이스 방지(거래명세서처럼 “렌더 자체를 막음”)
-  if (isPrinting) return null;
-
   const canPrint = !!partnerId;
 
   return (
@@ -505,7 +483,10 @@ export default function StatementClient() {
           th, td { font-size: 10px !important; padding: 4px 6px !important; }
           .truncate { white-space: normal !important; }
 
-          /* ✅ 인쇄 시 하단 안내문 제거 */
+          /* ✅ 인쇄 시 상단 메뉴바 제거(요청) */
+          .app-topnav { display: none !important; }
+
+          /* ✅ 인쇄 시 하단 안내문 제거(요청) */
           .print-hide { display: none !important; }
         }
       `}</style>
@@ -538,10 +519,7 @@ export default function StatementClient() {
             </button>
             <button
               className={btn}
-              onClick={() => {
-                setIsPrinting(true);
-                window.setTimeout(() => window.print(), 0);
-              }}
+              onClick={() => window.print()}
               disabled={!canPrint}
               title={!canPrint ? "거래처를 먼저 선택하세요" : ""}
             >
