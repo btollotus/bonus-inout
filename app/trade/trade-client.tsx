@@ -1295,8 +1295,6 @@ export default function TradeClient() {
     if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
     if (lines.length === 0) return setMsg("품목을 1개 이상 입력하세요.");
 
-    const isMall = isMallPartner(selectedPartner);
-
     const cleanLines = lines
       .map((l) => {
         const name = l.name.trim();
@@ -1305,9 +1303,10 @@ export default function TradeClient() {
         const weight_g = toNum(l.weight_g);
         const food_type = (l.food_type || "").trim();
 
-        const unit_type = isMall ? "BOX" : "EA";
-        const pack_ea = isMall ? inferPackEaFromName(name) : 1;
-        const actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
+        // ✅ 요청 반영: 수량은 낱개(EA) 기준 입력값 그대로 저장
+        const unit_type = "EA";
+        const pack_ea = 1;
+        const actual_ea = qty;
 
         const r = calcLineAmounts(qty, unit, l.total_incl_vat);
 
@@ -1630,9 +1629,6 @@ export default function TradeClient() {
     setMsg(null);
 
     if (editRow.kind === "ORDER") {
-      // ✅ (오류 가능성 보완) selectedPartner가 null인 상태에서도 저장 시 에러 방지
-      const isMall = selectedPartner ? isMallPartner(selectedPartner) : false;
-
       const cleanLines = eLines
         .map((l) => {
           const name = (l.name || "").trim();
@@ -1641,9 +1637,10 @@ export default function TradeClient() {
           const weight_g = toNum(l.weight_g);
           const food_type = (l.food_type || "").trim();
 
-          const unit_type = isMall ? "BOX" : "EA";
-          const pack_ea = isMall ? inferPackEaFromName(name) : 1;
-          const actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
+          // ✅ 요청 반영: 수량은 낱개(EA) 기준 입력값 그대로 저장
+          const unit_type = "EA";
+          const pack_ea = 1;
+          const actual_ea = qty;
 
           const r = calcLineAmounts(qty, unit, l.total_incl_vat);
 
@@ -2014,7 +2011,8 @@ export default function TradeClient() {
               <div className="px-5 py-4 overflow-y-auto">
                 {editRow.kind === "ORDER" ? (
                   <>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                    {/* ✅ 메모(title) 공간 확장 */}
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
                       <div>
                         <div className="mb-1 text-xs text-slate-600">출고일(주문일)</div>
                         <input type="date" className={input} value={eShipDate} onChange={(e) => setEShipDate(e.target.value)} />
@@ -2035,7 +2033,7 @@ export default function TradeClient() {
                         </select>
                       </div>
 
-                      <div>
+                      <div className="md:col-span-2">
                         <div className="mb-1 text-xs text-slate-600">메모(title)</div>
                         <input className={input} value={eOrderTitle} onChange={(e) => setEOrderTitle(e.target.value)} />
                       </div>
@@ -2148,11 +2146,8 @@ export default function TradeClient() {
                                   updateEditLine(i, { qty: raw === "" ? 0 : toInt(raw) });
                                 }}
                               />
-                              {(() => {
-                                const pack = inferPackEaFromName(l.name);
-                                const isBox = pack > 1;
-                                return <span className={qtyBadge}>{isBox ? `BOX` : `EA`}</span>;
-                              })()}
+                              {/* ✅ 요청 반영: 수량은 낱개 기준이므로 항상 EA 표시 */}
+                              <span className={qtyBadge}>EA</span>
                             </div>
 
                             <input
@@ -2448,7 +2443,8 @@ export default function TradeClient() {
                   <span className={pill}>조회대상: {targetLabel}</span>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                {/* ✅ 메모(title) 공간 확장 */}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
                   <div>
                     <div className="mb-1 text-xs text-slate-600">출고일(주문일)</div>
                     <input type="date" className={input} value={shipDate} onChange={(e) => setShipDate(e.target.value)} />
@@ -2469,7 +2465,7 @@ export default function TradeClient() {
                     </select>
                   </div>
 
-                  <div>
+                  <div className="md:col-span-2">
                     <div className="mb-1 text-xs text-slate-600">메모(title)</div>
                     <input className={input} value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} />
                   </div>
@@ -2590,11 +2586,8 @@ export default function TradeClient() {
                               updateLine(i, { qty: raw === "" ? 0 : toInt(raw) });
                             }}
                           />
-                          {(() => {
-                            const pack = inferPackEaFromName(l.name);
-                            const isBox = pack > 1;
-                            return <span className={qtyBadge}>{isBox ? `BOX` : `EA`}</span>;
-                          })()}
+                          {/* ✅ 요청 반영: 수량은 낱개 기준이므로 항상 EA 표시 */}
+                          <span className={qtyBadge}>EA</span>
                         </div>
 
                         <input
