@@ -88,9 +88,7 @@ function normalizeRemark(raw: string | null) {
   if (obj && typeof obj === "object") {
     const title = String(obj.title ?? "").trim();
     const orderer = String(obj.orderer_name ?? "").trim();
-    // 둘 다 비었으면 숨김
     if (!title && !orderer) return "";
-    // 하나라도 있으면 보기좋게 합치기
     const parts = [];
     if (title) parts.push(title);
     if (orderer) parts.push(`주문자:${orderer}`);
@@ -157,7 +155,7 @@ export default function StatementClient() {
 
   function pushUrl(nextPartnerId: string, f: string, t: string) {
     const qs = new URLSearchParams();
-    if (nextPartnerId) qs.set("partnerId", nextPartnerId); // ✅ 앞으로는 partnerId로 통일해도 되고
+    if (nextPartnerId) qs.set("partnerId", nextPartnerId);
     if (f) qs.set("from", f);
     if (t) qs.set("to", t);
     router.replace(`/tax/statement?${qs.toString()}`);
@@ -173,7 +171,6 @@ export default function StatementClient() {
         return;
       }
 
-      // Orders: 주문/출고 = 출고(음수)
       const { data: oData, error: oErr } = await supabase
         .from("orders")
         .select("id,customer_id,customer_name,ship_date,ship_method,memo,total_amount,created_at")
@@ -188,7 +185,6 @@ export default function StatementClient() {
         return;
       }
 
-      // Ledger: IN/OUT
       const { data: lData, error: lErr } = await supabase
         .from("ledger_entries")
         .select("id,entry_date,entry_ts,direction,amount,category,method,memo,partner_id,counterparty_name,business_no,created_at")
@@ -211,7 +207,7 @@ export default function StatementClient() {
         list.push({
           date,
           kind: "출고",
-          amountSigned: -amt, // ✅ 출고는 마이너스
+          amountSigned: -amt,
           remark: normalizeRemark(o.memo),
         });
       }
@@ -228,7 +224,6 @@ export default function StatementClient() {
         });
       }
 
-      // 날짜 정렬
       list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
       setRows(list);
     } finally {
@@ -252,13 +247,11 @@ export default function StatementClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ 초기: URL에 partnerId/from/to가 있으면 자동 조회
   useEffect(() => {
     if (qpPartnerId && qpFrom && qpTo) {
       setPartnerId(qpPartnerId);
       setFromYMD(qpFrom);
       setToYMD(qpTo);
-      // partners 로딩 전이라도 조회는 가능
       loadStatement(qpPartnerId, qpFrom, qpTo);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -268,7 +261,6 @@ export default function StatementClient() {
 
   return (
     <div className={`${pageBg} min-h-screen`}>
-      {/* ✅ print 전용 스타일(TopNav 이미 숨김, 조회/버튼도 숨김) */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -299,7 +291,6 @@ export default function StatementClient() {
           </div>
         </div>
 
-        {/* 조회 조건 */}
         <div className={`${card} no-print p-4`}>
           <div className="mb-3 text-sm font-semibold">조회 조건</div>
 
@@ -352,51 +343,48 @@ export default function StatementClient() {
           </div>
         </div>
 
-   {/* 거래처(좌) / 회사정보(우) - 한 카드 안에서 좌우 2열 배치 */}
-<div className={`${card} print-card mt-4 p-4`}>
-<div className="grid grid-cols-2 gap-6 items-start">
-    {/* LEFT: 거래처 */}
-    <div>
-      <div className="mb-2 text-sm font-semibold">거래처</div>
-      {selectedPartner ? (
-        <div className="space-y-1 text-sm">
-          <div className="font-semibold">
-            {selectedPartner.name} {selectedPartner.business_no ? `(${selectedPartner.business_no})` : ""}
-          </div>
-          {selectedPartner.ceo_name ? <div>대표: {selectedPartner.ceo_name}</div> : null}
-          {selectedPartner.address1 ? <div>주소: {selectedPartner.address1}</div> : null}
-          {(selectedPartner.biz_type || selectedPartner.biz_item) ? (
+        {/* 거래처(좌) / 회사정보(우) - 한 카드 안에서 좌우 2열 배치 */}
+        <div className={`${card} print-card mt-4 p-4`}>
+          <div className="grid grid-cols-2 items-start gap-6">
             <div>
-              업종: {selectedPartner.biz_type ?? ""} {selectedPartner.biz_item ? `/ 업태: ${selectedPartner.biz_item}` : ""}
+              <div className="mb-2 text-sm font-semibold">거래처</div>
+              {selectedPartner ? (
+                <div className="space-y-1 text-sm">
+                  <div className="font-semibold">
+                    {selectedPartner.name} {selectedPartner.business_no ? `(${selectedPartner.business_no})` : ""}
+                  </div>
+                  {selectedPartner.ceo_name ? <div>대표: {selectedPartner.ceo_name}</div> : null}
+                  {selectedPartner.address1 ? <div>주소: {selectedPartner.address1}</div> : null}
+                  {selectedPartner.biz_type || selectedPartner.biz_item ? (
+                    <div>
+                      업종: {selectedPartner.biz_type ?? ""} {selectedPartner.biz_item ? `/ 업태: ${selectedPartner.biz_item}` : ""}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="text-sm text-slate-500">거래처를 선택하세요.</div>
+              )}
             </div>
-          ) : null}
+
+            <div className="text-right">
+              <div className="mb-2 select-none text-sm font-semibold opacity-0">.</div>
+              <div className="space-y-1 text-sm">
+                <div className="font-semibold">{OUR.name}</div>
+                <div>대표: {OUR.ceo}</div>
+                <div>주소: {OUR.address1}</div>
+                <div>업종: {OUR.biz}</div>
+              </div>
+            </div>
+          </div>
         </div>
-      ) : (
-        <div className="text-sm text-slate-500">거래처를 선택하세요.</div>
-      )}
-    </div>
 
-    {/* RIGHT: 회사정보 */}
-    <div className="text-right">
-      <div className="mb-2 text-sm font-semibold opacity-0 select-none">.</div>
-      <div className="space-y-1 text-sm">
-        <div className="font-semibold">{OUR.name}</div>
-        <div>대표: {OUR.ceo}</div>
-        <div>주소: {OUR.address1}</div>
-        <div>업종: {OUR.biz}</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-        {/* 표 */}
         <div className={`${card} print-card mt-4 p-4`}>
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="text-sm font-semibold">내역</div>
             <div className="text-sm text-slate-600">
-              입금 합계(매출입금) <span className="font-semibold tabular-nums">{formatMoney(totals.inSum)}</span> ·{" "}
-              출고/출금 합계 <span className="font-semibold tabular-nums">{formatMoney(totals.outSum)}</span> ·{" "}
-              미수(출고-입금) <span className="font-semibold tabular-nums">{formatMoney(Math.max(0, totals.outSum - totals.inSum))}</span>
+              입금 합계(매출입금) <span className="font-semibold tabular-nums">{formatMoney(totals.inSum)}</span> · 출고/출금 합계{" "}
+              <span className="font-semibold tabular-nums">{formatMoney(totals.outSum)}</span> · 미수(출고-입금){" "}
+              <span className="font-semibold tabular-nums">{formatMoney(Math.max(0, totals.outSum - totals.inSum))}</span>
             </div>
           </div>
 
