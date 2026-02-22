@@ -271,6 +271,7 @@ export default function SpecClient() {
       .slice(0, 50);
   }, [partners, partnerQuery]);
 
+  // ✅ “검색 결과가 없습니다”는 조건: (드롭다운 열림 && 입력값 있음 && 결과 0)
   const showNoResult = partnerOpen && partnerQuery.trim().length > 0 && filteredPartners.length === 0;
 
   function onPartnerFocus() {
@@ -282,6 +283,7 @@ export default function SpecClient() {
   }
 
   function onPartnerBlur() {
+    // 클릭 선택 중 blur 발생해도 닫히지 않도록 지연
     blurTimerRef.current = window.setTimeout(() => {
       setPartnerOpen(false);
       blurTimerRef.current = null;
@@ -290,6 +292,7 @@ export default function SpecClient() {
 
   function selectPartner(p: PartnerRow) {
     setPartnerId(p.id);
+    // ✅ 선택 즉시 드롭다운 닫기
     setPartnerOpen(false);
     setMsg(null);
   }
@@ -312,22 +315,31 @@ export default function SpecClient() {
 
   return (
     <div className={`min-h-screen ${pageBg} p-6`}>
-      {/* ✅ 인쇄: 상단 검은 네비(홈/스캔/품목… 줄) 제거 + 페이지 쪼개짐 방지 */}
+      {/* ✅ 인쇄: "거래명세서 본문"만 보이게(상단 홈/스캔/품목… 줄 포함 전부 제거) */}
       <style jsx global>{`
         @media print {
-          nav,
-          header,
-          [role="navigation"],
-          .no-print,
-          .print-hide,
-          .bg-black {
-            display: none !important;
+          body * {
+            visibility: hidden !important;
+          }
+          #spec-print-area,
+          #spec-print-area * {
+            visibility: visible !important;
+          }
+          #spec-print-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
           }
 
+          /* 인쇄 시 여백/배경 */
           body {
             background: white !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
 
+          /* 페이지 쪼개짐 방지 보조 */
           .avoid-break {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
@@ -335,7 +347,8 @@ export default function SpecClient() {
         }
       `}</style>
 
-      <div className="mx-auto max-w-6xl">
+      {/* ✅ 화면(웹)에서는 그대로 보이되, 인쇄에서는 이 영역만 남김 */}
+      <div id="spec-print-area" className="mx-auto max-w-6xl">
         {/* 상단 타이틀/버튼 */}
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="text-xl font-bold">거래명세서</div>
@@ -407,12 +420,7 @@ export default function SpecClient() {
 
             <div>
               <div className="mb-1 text-xs text-slate-500">일자</div>
-              <input
-                type="date"
-                className={input}
-                value={dateYMD}
-                onChange={(e) => setDateYMD(e.target.value)}
-              />
+              <input type="date" className={input} value={dateYMD} onChange={(e) => setDateYMD(e.target.value)} />
             </div>
 
             <div>
@@ -540,7 +548,7 @@ export default function SpecClient() {
               </table>
             </div>
 
-            {/* ✅ 하단 안내문 삭제 + 불필요 여백 최소화 + 인쇄 페이지 쪼개짐 방지 */}
+            {/* ✅ 하단 안내문 삭제 + 불필요 여백 최소화 */}
             <div className="mt-2 flex justify-end avoid-break">
               <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 text-sm">
                 <div className="flex items-center justify-between py-1">
