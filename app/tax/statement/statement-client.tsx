@@ -22,115 +22,57 @@ type OrderRow = {
   ship_date: string | null;
   ship_method: string | null;
   memo: string | null;
+  supply_amount: number | null;
+  vat_amount: number | null;
   total_amount: number | null;
   created_at: string;
 };
 
-type LedgerRow = {
+type OrderLineRow = {
   id: string;
-  entry_date: string;
-  entry_ts: string | null;
-  direction: "IN" | "OUT" | string;
-  amount: number;
-  category: string | null;
-  method: string | null;
-  memo: string | null;
-  partner_id: string | null;
-  counterparty_name: string | null;
-  business_no: string | null;
-  created_at: string;
+  order_id: string;
+  line_no: number;
+  name: string; // ✅ 품목명
+  qty: number; // ✅ 수량
+  unit: number; // ✅ 단가(프로젝트에서 unit을 단가로 사용)
+  supply_amount: number; // ✅ 공급가
+  vat_amount: number; // ✅ 부가세
+  total_amount: number; // ✅ 합계
 };
-
-type StatementRow = {
-  date: string;
-  kind: "입금" | "출고" | "출금";
-  amountSigned: number; // ✅ 음수면 - 표시
-  remark: string; // ✅ 의미없는 JSON은 "" 처리
-};
-
-function todayYMD() {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function addDays(ymd: string, delta: number) {
-  const d = new Date(ymd + "T00:00:00");
-  d.setDate(d.getDate() + delta);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
 
 function formatMoney(n: number | null | undefined) {
   const v = Number(n ?? 0);
   return v.toLocaleString("ko-KR");
 }
 
-function safeJsonParse<T>(s: string | null) {
-  if (!s) return null;
-  try {
-    return JSON.parse(s) as T;
-  } catch {
-    return null;
-  }
-}
-
-// ✅ {"title":null,"orderer_name":null} 같은 “의미없는 JSON 메모”는 표시 안함
-function normalizeRemark(raw: string | null) {
-  const s = String(raw ?? "").trim();
-  if (!s) return "";
-
-  const obj = safeJsonParse<{ title?: string | null; orderer_name?: string | null }>(s);
-  if (obj && typeof obj === "object") {
-    const title = String(obj.title ?? "").trim();
-    const orderer = String(obj.orderer_name ?? "").trim();
-    // 둘 다 비었으면 숨김
-    if (!title && !orderer) return "";
-    // 하나라도 있으면 보기좋게 합치기
-    const parts = [];
-    if (title) parts.push(title);
-    if (orderer) parts.push(`주문자:${orderer}`);
-    return parts.join(" / ");
-  }
-
-  return s;
-}
-
-export default function StatementClient() {
+export default function SpecClient() {
   const supabase = useMemo(() => createClient(), []);
   const sp = useSearchParams();
   const router = useRouter();
 
-  // ✅ URL 파라미터: partner_id / partnerId 둘 다 지원
-  const qpPartnerId = sp.get("partner_id") || sp.get("partnerId") || "";
-  const qpFrom = sp.get("from") || "";
-  const qpTo = sp.get("to") || "";
+  const qpPartnerId = sp.get("partnerId") || sp.get("partner_id") || "";
+  const qpDate = sp.get("date") || "";
 
   const [msg, setMsg] = useState<string | null>(null);
 
   const [partners, setPartners] = useState<PartnerRow[]>([]);
   const [partnerId, setPartnerId] = useState<string>(qpPartnerId);
-  const [fromYMD, setFromYMD] = useState<string>(qpFrom || addDays(todayYMD(), -30));
-  const [toYMD, setToYMD] = useState<string>(qpTo || todayYMD());
+  const [dateYMD, setDateYMD] = useState<string>(qpDate);
 
   const selectedPartner = useMemo(() => partners.find((p) => p.id === partnerId) ?? null, [partners, partnerId]);
 
-  const [rows, setRows] = useState<StatementRow[]>([]);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [lines, setLines] = useState<OrderLineRow[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // ✅ “회사정보” (오른쪽) : 제목에 "우리회사" 쓰지 않음 (요청사항)
   const OUR = {
     name: "주식회사 보누스메이트",
+    business_no: "343-88-03009",
     ceo: "조대성",
     address1: "경기도 파주시 광탄면 장지산로 250-90 1층",
     biz: "제조업 / 업태: 식품제조가공업",
   };
 
-  // ====== Theme (products-client.tsx와 동일한 톤) ======
   const pageBg = "bg-slate-50 text-slate-900";
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const input =
@@ -155,32 +97,31 @@ export default function StatementClient() {
     setPartners((data ?? []) as PartnerRow[]);
   }
 
-  function pushUrl(nextPartnerId: string, f: string, t: string) {
+  function pushUrl(nextPartnerId: string, date: string) {
     const qs = new URLSearchParams();
-    if (nextPartnerId) qs.set("partnerId", nextPartnerId); // ✅ 앞으로는 partnerId로 통일해도 되고
-    if (f) qs.set("from", f);
-    if (t) qs.set("to", t);
-    router.replace(`/tax/statement?${qs.toString()}`);
+    if (nextPartnerId) qs.set("partnerId", nextPartnerId);
+    if (date) qs.set("date", date);
+    router.replace(`/tax/spec?${qs.toString()}`);
   }
 
-  async function loadStatement(pId: string, f: string, t: string) {
+  async function loadSpec(pId: string, date: string) {
     setMsg(null);
     setLoading(true);
     try {
-      if (!pId) {
-        setRows([]);
-        setMsg("partner_id가 없습니다. (상단에서 거래처/기간 선택 후 조회를 누르세요)");
+      if (!pId || !date) {
+        setOrders([]);
+        setLines([]);
+        setMsg("partnerId 또는 date가 없습니다. (상단에서 거래처/일자 선택 후 조회)");
         return;
       }
 
-      // Orders: 주문/출고 = 출고(음수)
+      // 1) 해당 거래처 + 해당일 출고(order) 조회
       const { data: oData, error: oErr } = await supabase
         .from("orders")
-        .select("id,customer_id,customer_name,ship_date,ship_method,memo,total_amount,created_at")
+        .select("id,customer_id,customer_name,ship_date,ship_method,memo,supply_amount,vat_amount,total_amount,created_at")
         .eq("customer_id", pId)
-        .gte("ship_date", f)
-        .lte("ship_date", t)
-        .order("ship_date", { ascending: true })
+        .eq("ship_date", date)
+        .order("created_at", { ascending: true })
         .limit(5000);
 
       if (oErr) {
@@ -188,87 +129,93 @@ export default function StatementClient() {
         return;
       }
 
-      // Ledger: IN/OUT
+      const orderList = (oData ?? []) as any as OrderRow[];
+      setOrders(orderList);
+
+      const orderIds = orderList.map((o) => o.id).filter(Boolean);
+      if (orderIds.length === 0) {
+        setLines([]);
+        return;
+      }
+
+      // 2) 해당 주문들의 라인(order_lines) 조회
       const { data: lData, error: lErr } = await supabase
-        .from("ledger_entries")
-        .select("id,entry_date,entry_ts,direction,amount,category,method,memo,partner_id,counterparty_name,business_no,created_at")
-        .eq("partner_id", pId)
-        .gte("entry_date", f)
-        .lte("entry_date", t)
-        .order("entry_date", { ascending: true })
-        .limit(10000);
+        .from("order_lines")
+        .select("id,order_id,line_no,name,qty,unit,supply_amount,vat_amount,total_amount")
+        .in("order_id", orderIds)
+        .order("order_id", { ascending: true })
+        .order("line_no", { ascending: true })
+        .limit(20000);
 
       if (lErr) {
         setMsg(lErr.message);
         return;
       }
 
-      const list: StatementRow[] = [];
-
-      for (const o of (oData ?? []) as any as OrderRow[]) {
-        const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
-        const amt = Number(o.total_amount ?? 0);
-        list.push({
-          date,
-          kind: "출고",
-          amountSigned: -amt, // ✅ 출고는 마이너스
-          remark: normalizeRemark(o.memo),
-        });
-      }
-
-      for (const l of (lData ?? []) as any as LedgerRow[]) {
-        const date = l.entry_date;
-        const amt = Number(l.amount ?? 0);
-        const sign = String(l.direction) === "OUT" ? -1 : 1;
-        list.push({
-          date,
-          kind: sign > 0 ? "입금" : "출금",
-          amountSigned: sign * amt,
-          remark: normalizeRemark(l.memo),
-        });
-      }
-
-      // 날짜 정렬
-      list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
-      setRows(list);
+      setLines((lData ?? []) as any as OrderLineRow[]);
     } finally {
       setLoading(false);
     }
   }
 
-  const totals = useMemo(() => {
-    let inSum = 0;
-    let outSum = 0;
-    for (const r of rows) {
-      if (r.amountSigned >= 0) inSum += r.amountSigned;
-      else outSum += Math.abs(r.amountSigned);
+  // ✅ 하단 합계(라인 기준)
+  const sums = useMemo(() => {
+    let supply = 0;
+    let vat = 0;
+    let total = 0;
+    for (const ln of lines) {
+      supply += Number(ln.supply_amount ?? 0);
+      vat += Number(ln.vat_amount ?? 0);
+      total += Number(ln.total_amount ?? 0);
     }
-    const net = inSum - outSum;
-    return { inSum, outSum, net };
-  }, [rows]);
+    return { supply, vat, total };
+  }, [lines]);
+
+  // ✅ 미수금: “해당일 입금(IN) 합계”만 조회해서 total - paid 로 계산 (표에는 입금/출금 라인 표시 안함)
+  const [paidOnDay, setPaidOnDay] = useState(0);
+
+  async function loadPaidOnDay(pId: string, date: string) {
+    setPaidOnDay(0);
+    if (!pId || !date) return;
+
+    const { data, error } = await supabase
+      .from("ledger_entries")
+      .select("direction,amount")
+      .eq("partner_id", pId)
+      .eq("entry_date", date)
+      .limit(10000);
+
+    if (error) return;
+
+    let sum = 0;
+    for (const r of (data ?? []) as any[]) {
+      if (String(r.direction) === "IN") sum += Number(r.amount ?? 0);
+    }
+    setPaidOnDay(sum);
+  }
+
+  const outstanding = useMemo(() => {
+    const v = Number(sums.total ?? 0) - Number(paidOnDay ?? 0);
+    return v > 0 ? v : 0;
+  }, [sums.total, paidOnDay]);
 
   useEffect(() => {
     loadPartners();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ 초기: URL에 partnerId/from/to가 있으면 자동 조회
   useEffect(() => {
-    if (qpPartnerId && qpFrom && qpTo) {
+    if (qpPartnerId && qpDate) {
       setPartnerId(qpPartnerId);
-      setFromYMD(qpFrom);
-      setToYMD(qpTo);
-      // partners 로딩 전이라도 조회는 가능
-      loadStatement(qpPartnerId, qpFrom, qpTo);
+      setDateYMD(qpDate);
+      loadSpec(qpPartnerId, qpDate);
+      loadPaidOnDay(qpPartnerId, qpDate);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const canPrint = !!partnerId;
-
   return (
     <div className={`${pageBg} min-h-screen`}>
-      {/* ✅ print 전용 스타일(TopNav 이미 숨김, 조회/버튼도 숨김) */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -284,16 +231,17 @@ export default function StatementClient() {
 
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <div className="text-xl font-semibold">거래원장</div>
+            <div className="text-xl font-semibold">거래명세서 (일자별)</div>
             <div className="mt-2">
-              <span className={pill}>
-                기간: {fromYMD} ~ {toYMD}
-              </span>
+              <span className={pill}>일자: {dateYMD || "-"}</span>
             </div>
           </div>
 
           <div className="no-print flex gap-2">
-            <button className={btn} onClick={() => window.print()} disabled={!canPrint} title={!canPrint ? "거래처를 먼저 선택하세요" : ""}>
+            <button className={btn} onClick={() => router.push("/tax/statement")} title="거래원장으로 돌아가기">
+              원장으로
+            </button>
+            <button className={btn} onClick={() => window.print()} disabled={!partnerId || !dateYMD}>
               인쇄 / PDF 저장
             </button>
           </div>
@@ -303,7 +251,7 @@ export default function StatementClient() {
         <div className={`${card} no-print p-4`}>
           <div className="mb-3 text-sm font-semibold">조회 조건</div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_180px_auto] md:items-end">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px_auto] md:items-end">
             <div>
               <div className="mb-1 text-xs text-slate-600">거래처</div>
               <select className={input} value={partnerId} onChange={(e) => setPartnerId(e.target.value)}>
@@ -314,36 +262,20 @@ export default function StatementClient() {
                   </option>
                 ))}
               </select>
-              <div className="mt-2 text-xs text-slate-500">※ 상단 메뉴에서 들어와도 여기서 거래처/기간 선택 후 조회를 누르면 URL에 반영됩니다.</div>
             </div>
 
             <div>
-              <div className="mb-1 text-xs text-slate-600">From</div>
-              <input type="date" className={input} value={fromYMD} onChange={(e) => setFromYMD(e.target.value)} />
-            </div>
-
-            <div>
-              <div className="mb-1 text-xs text-slate-600">To</div>
-              <input type="date" className={input} value={toYMD} onChange={(e) => setToYMD(e.target.value)} />
+              <div className="mb-1 text-xs text-slate-600">일자</div>
+              <input type="date" className={input} value={dateYMD} onChange={(e) => setDateYMD(e.target.value)} />
             </div>
 
             <div className="flex gap-2">
               <button
-                className={btn}
-                onClick={() => {
-                  const f = addDays(todayYMD(), -30);
-                  const t = todayYMD();
-                  setFromYMD(f);
-                  setToYMD(t);
-                }}
-              >
-                최근 30일
-              </button>
-              <button
                 className={btnOn}
                 onClick={() => {
-                  pushUrl(partnerId, fromYMD, toYMD);
-                  loadStatement(partnerId, fromYMD, toYMD);
+                  pushUrl(partnerId, dateYMD);
+                  loadSpec(partnerId, dateYMD);
+                  loadPaidOnDay(partnerId, dateYMD);
                 }}
               >
                 조회
@@ -352,107 +284,127 @@ export default function StatementClient() {
           </div>
         </div>
 
-   {/* 거래처(좌) / 회사정보(우) - 한 카드 안에서 좌우 2열 배치 */}
-<div className={`${card} print-card mt-4 p-4`}>
-<div className="grid grid-cols-2 gap-6 items-start">
-    {/* LEFT: 거래처 */}
-    <div>
-      <div className="mb-2 text-sm font-semibold">거래처</div>
-      {selectedPartner ? (
-        <div className="space-y-1 text-sm">
-          <div className="font-semibold">
-            {selectedPartner.name} {selectedPartner.business_no ? `(${selectedPartner.business_no})` : ""}
-          </div>
-          {selectedPartner.ceo_name ? <div>대표: {selectedPartner.ceo_name}</div> : null}
-          {selectedPartner.address1 ? <div>주소: {selectedPartner.address1}</div> : null}
-          {(selectedPartner.biz_type || selectedPartner.biz_item) ? (
+        {/* 거래처/회사정보 */}
+        <div className={`${card} print-card mt-4 p-4`}>
+          <div className="grid grid-cols-2 gap-6 items-start">
             <div>
-              업종: {selectedPartner.biz_type ?? ""} {selectedPartner.biz_item ? `/ 업태: ${selectedPartner.biz_item}` : ""}
+              <div className="mb-2 text-sm font-semibold">거래처</div>
+              {selectedPartner ? (
+                <div className="space-y-1 text-sm">
+                  <div className="font-semibold">
+                    {selectedPartner.name} {selectedPartner.business_no ? `(${selectedPartner.business_no})` : ""}
+                  </div>
+                  {selectedPartner.ceo_name ? <div>대표: {selectedPartner.ceo_name}</div> : null}
+                  {selectedPartner.address1 ? <div>주소: {selectedPartner.address1}</div> : null}
+                  {(selectedPartner.biz_type || selectedPartner.biz_item) ? (
+                    <div>
+                      업종: {selectedPartner.biz_type ?? ""} {selectedPartner.biz_item ? `/ 업태: ${selectedPartner.biz_item}` : ""}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="text-sm text-slate-500">거래처를 선택하세요.</div>
+              )}
             </div>
-          ) : null}
+
+            <div className="text-right">
+              <div className="mb-2 text-sm font-semibold opacity-0 select-none">.</div>
+              <div className="space-y-1 text-sm">
+                <div className="font-semibold">
+                  {OUR.name} ({OUR.business_no})
+                </div>
+                <div>대표: {OUR.ceo}</div>
+                <div>주소: {OUR.address1}</div>
+                <div>업종: {OUR.biz}</div>
+              </div>
+            </div>
+          </div>
         </div>
-      ) : (
-        <div className="text-sm text-slate-500">거래처를 선택하세요.</div>
-      )}
-    </div>
 
-    {/* RIGHT: 회사정보 */}
-    <div className="text-right">
-      <div className="mb-2 text-sm font-semibold opacity-0 select-none">.</div>
-      <div className="space-y-1 text-sm">
-        <div className="font-semibold">{OUR.name}</div>
-        <div>대표: {OUR.ceo}</div>
-        <div>주소: {OUR.address1}</div>
-        <div>업종: {OUR.biz}</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-        {/* 표 */}
+        {/* 상세 표 */}
         <div className={`${card} print-card mt-4 p-4`}>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold">내역</div>
+            <div className="text-sm font-semibold">세부 내역</div>
             <div className="text-sm text-slate-600">
-              입금 합계(매출입금) <span className="font-semibold tabular-nums">{formatMoney(totals.inSum)}</span> ·{" "}
-              출고/출금 합계 <span className="font-semibold tabular-nums">{formatMoney(totals.outSum)}</span> ·{" "}
-              미수(출고-입금) <span className="font-semibold tabular-nums">{formatMoney(Math.max(0, totals.outSum - totals.inSum))}</span>
+              주문(출고) {orders.length}건 · 품목 {lines.length}줄
             </div>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <table className="w-full table-fixed text-sm">
               <colgroup>
-                <col style={{ width: "120px" }} />
+                <col style={{ width: "auto" }} />
+                <col style={{ width: "90px" }} />
                 <col style={{ width: "120px" }} />
                 <col style={{ width: "140px" }} />
-                <col style={{ width: "auto" }} />
+                <col style={{ width: "120px" }} />
+                <col style={{ width: "140px" }} />
               </colgroup>
 
               <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                 <tr>
-                  <th className="px-3 py-2 text-left">일자</th>
-                  <th className="px-3 py-2 text-left">구분</th>
-                  <th className="px-3 py-2 text-right">금액</th>
-                  <th className="px-3 py-2 text-left">비고</th>
+                  <th className="px-3 py-2 text-left">품목</th>
+                  <th className="px-3 py-2 text-right">수량</th>
+                  <th className="px-3 py-2 text-right">단가</th>
+                  <th className="px-3 py-2 text-right">공급가</th>
+                  <th className="px-3 py-2 text-right">부가세</th>
+                  <th className="px-3 py-2 text-right">합계</th>
                 </tr>
               </thead>
 
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-4 text-sm text-slate-500">
+                    <td colSpan={6} className="px-4 py-4 text-sm text-slate-500">
                       불러오는 중...
                     </td>
                   </tr>
-                ) : rows.length === 0 ? (
+                ) : lines.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-4 text-sm text-slate-500">
-                      표시할 내역이 없습니다. (partner_id / 기간 / 데이터 확인)
+                    <td colSpan={6} className="px-4 py-4 text-sm text-slate-500">
+                      표시할 내역이 없습니다. (거래처/일자/주문 데이터 확인)
                     </td>
                   </tr>
                 ) : (
-                  rows.map((r, idx) => {
-                    const isMinus = r.amountSigned < 0;
-                    const moneyText = isMinus ? `-${formatMoney(Math.abs(r.amountSigned))}` : formatMoney(r.amountSigned);
-                    return (
-                      <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
-                        <td className="px-3 py-2 font-semibold tabular-nums">{r.date}</td>
-                        <td className="px-3 py-2 font-semibold">{r.kind}</td>
-                        <td className={`px-3 py-2 text-right tabular-nums font-semibold ${isMinus ? "text-red-600" : "text-blue-700"}`}>
-                          {moneyText}
-                        </td>
-                        <td className="px-3 py-2">{r.remark ? r.remark : ""}</td>
-                      </tr>
-                    );
-                  })
+                  lines.map((ln) => (
+                    <tr key={ln.id} className="border-t border-slate-200 bg-white">
+                      <td className="px-3 py-2">{ln.name}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatMoney(ln.qty)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatMoney(ln.unit)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(ln.supply_amount)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatMoney(ln.vat_amount)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(ln.total_amount)}</td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
           </div>
 
-          <div className="mt-2 text-xs text-slate-500">
-            ※ 출고/출금은 <span className="font-semibold">음수</span>로 표시됩니다. / 비고의 의미 없는 JSON 메모는 자동으로 숨깁니다.
+          {/* 하단 합계 + 미수금 */}
+          <div className="mt-4 grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
+            <div className="text-slate-500">※ 거래명세서에는 “입금/출금 라인”을 표시하지 않습니다.</div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center justify-between">
+                <div>공급가</div>
+                <div className="font-semibold tabular-nums">{formatMoney(sums.supply)}</div>
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <div>부가세</div>
+                <div className="font-semibold tabular-nums">{formatMoney(sums.vat)}</div>
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <div>합계</div>
+                <div className="font-semibold tabular-nums">{formatMoney(sums.total)}</div>
+              </div>
+              <div className="mt-2 border-t border-slate-200 pt-2 flex items-center justify-between">
+                <div>미수금</div>
+                <div className="font-semibold tabular-nums">{formatMoney(outstanding)}</div>
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                (미수금 = 해당일 합계 - 해당일 입금 합계 {formatMoney(paidOnDay)})
+              </div>
+            </div>
           </div>
         </div>
       </div>
