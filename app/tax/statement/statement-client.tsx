@@ -1,11 +1,3 @@
-아래 **statement-client.tsx(거래원장)** 전체코드에서, **인쇄 화면에서만** 빨간 박스 표시된 2가지를 제거했습니다.
-
-1. **상단 메뉴바(TopNav / .app-topnav)** → 인쇄 시 숨김
-2. 하단 안내문(“※ 출고는 음수…”) → 인쇄 시 숨김
-
-그 외는 **절대 변경 없음**입니다.
-
-```tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -767,4 +759,3 @@ export default function StatementClient() {
     </div>
   );
 }
-```
