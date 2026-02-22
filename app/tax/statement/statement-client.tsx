@@ -1,3 +1,11 @@
+아래 **statement-client.tsx(거래원장)** 전체코드에서, **인쇄 화면에서만** 빨간 박스 표시된 2가지를 제거했습니다.
+
+1. **상단 메뉴바(TopNav / .app-topnav)** → 인쇄 시 숨김
+2. 하단 안내문(“※ 출고는 음수…”) → 인쇄 시 숨김
+
+그 외는 **절대 변경 없음**입니다.
+
+```tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -482,6 +490,12 @@ export default function StatementClient() {
           table { width: 100% !important; }
           th, td { font-size: 10px !important; padding: 4px 6px !important; }
           .truncate { white-space: normal !important; }
+
+          /* ✅ 인쇄 시 상단 메뉴바 제거(요청) */
+          .app-topnav { display: none !important; }
+
+          /* ✅ 인쇄 시 하단 안내문 제거(요청) */
+          .print-hide { display: none !important; }
         }
       `}</style>
 
@@ -745,9 +759,12 @@ export default function StatementClient() {
             </table>
           </div>
 
-          <div className="mt-2 text-xs text-slate-500">※ 출고는 음수(잔액 감소), 입금은 양수(잔액 증가)로 잔액이 계산됩니다.</div>
+          <div className="print-hide mt-2 text-xs text-slate-500">
+            ※ 출고는 음수(잔액 감소), 입금은 양수(잔액 증가)로 잔액이 계산됩니다.
+          </div>
         </div>
       </div>
     </div>
   );
 }
+```
