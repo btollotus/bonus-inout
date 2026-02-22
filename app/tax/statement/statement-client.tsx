@@ -643,12 +643,12 @@ export default function StatementClient() {
               <div className="space-y-1 text-sm">
                 <div className="font-semibold">{OUR.name}</div>
                 <div className="text-slate-700">{OUR.business_no}</div>
-                <div className="relative inline-block">
+                <div className="relative inline-block pr-12">
                   <span>대표: {OUR.ceo}</span>
                   <img
                     src="/stamp.png"
                     alt="stamp"
-                    className="pointer-events-none absolute -right-10 -top-3 h-12 w-12 opacity-90"
+                    className="pointer-events-none absolute right-0 -top-3 h-12 w-12 opacity-90"
                   />
                 </div>
                 <div>주소: {OUR.address1}</div>
