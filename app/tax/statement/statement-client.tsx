@@ -53,6 +53,7 @@ type StatementRow = {
   vat: number | null;
   amountSigned: number; // 잔액 계산용(입금 +, 출고 -)
   balance: number; // 누적 잔액
+  remark: string; // ✅ 비고(주문자)
 };
 
 function todayYMD() {
@@ -86,22 +87,15 @@ function safeJsonParse<T>(s: string | null) {
   }
 }
 
-function normalizeRemark(raw: string | null) {
+function extractOrderer(raw: string | null) {
   const s = String(raw ?? "").trim();
   if (!s) return "";
-
-  const obj = safeJsonParse<{ title?: string | null; orderer_name?: string | null }>(s);
+  const obj = safeJsonParse<{ orderer_name?: string | null }>(s);
   if (obj && typeof obj === "object") {
-    const title = String(obj.title ?? "").trim();
     const orderer = String(obj.orderer_name ?? "").trim();
-    if (!title && !orderer) return "";
-    const parts: string[] = [];
-    if (title) parts.push(title);
-    if (orderer) parts.push(`주문자:${orderer}`);
-    return parts.join(" / ");
+    return orderer ? `주문자:${orderer}` : "";
   }
-
-  return s;
+  return "";
 }
 
 // ---- order_lines 컬럼명이 프로젝트마다 다를 수 있어 후보키를 안전하게 매핑 ----
@@ -185,6 +179,7 @@ export default function StatementClient() {
 
   const OUR = {
     name: "주식회사 보누스메이트",
+    business_no: "343-88-03009",
     ceo: "조대성",
     address1: "경기도 파주시 광탄면 장지산로 250-90 1층",
     biz: "제조업 / 업태: 식품제조가공업",
@@ -288,16 +283,19 @@ export default function StatementClient() {
           return;
         }
 
-        // order_id -> ship_date 매핑
+        // order_id -> ship_date / 주문자 매핑
         const dateMap = new Map<string, string>();
+        const ordererMap = new Map<string, string>();
         for (const o of oRows) {
           const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
           if (o.id) dateMap.set(o.id, date);
+          if (o.id) ordererMap.set(o.id, extractOrderer(o.memo));
         }
 
         for (const line of (olData ?? []) as any as LineLoose[]) {
           const orderId = String(line?.order_id ?? "");
           const date = dateMap.get(orderId) ?? "";
+          const remark = ordererMap.get(orderId) ?? "";
           const m = mapLineToAmounts(line);
 
           if (!m.itemName || !String(m.itemName).trim()) continue;
@@ -313,23 +311,25 @@ export default function StatementClient() {
             supply: Number.isFinite(m.supply) ? m.supply : 0,
             vat: Number.isFinite(m.vat) ? m.vat : 0,
             amountSigned: amtSigned,
+            remark,
           });
         }
       }
 
-      // ✅ 입금: 품목명 칼럼에 메모(normalize) 표시 / 공급가 칼럼에 금액 표시
+      // ✅ 입금: 비고는 비움(요청: 주문자 항목)
       for (const l of (lData ?? []) as any as LedgerRow[]) {
         const date = l.entry_date;
         const amt = Number(l.amount ?? 0);
         list.push({
           date,
           kind: "입금",
-          itemName: normalizeRemark(l.memo),
+          itemName: "",
           qty: null,
           unitPrice: null,
           supply: amt,
           vat: 0,
           amountSigned: amt,
+          remark: "",
         });
       }
 
@@ -370,7 +370,7 @@ export default function StatementClient() {
   function downloadExcelCsv() {
     if (!partnerId) return;
 
-    const headers = ["일자", "구분", "품목명", "수량", "단가", "공급가", "부가세", "잔액"];
+    const headers = ["일자", "구분", "품목명", "수량", "단가", "공급가", "부가세", "잔액", "비고"];
     const lines: string[] = [];
     lines.push(headers.map(csvEscape).join(","));
 
@@ -384,6 +384,7 @@ export default function StatementClient() {
         r.supply === null ? "" : String(r.supply ?? ""),
         r.vat === null ? "" : String(r.vat ?? ""),
         String(r.balance ?? 0),
+        r.remark ?? "",
       ];
       lines.push(row.map(csvEscape).join(","));
     }
@@ -504,7 +505,12 @@ export default function StatementClient() {
             >
               엑셀(CSV) 다운로드
             </button>
-            <button className={btn} onClick={() => window.print()} disabled={!canPrint} title={!canPrint ? "거래처를 먼저 선택하세요" : ""}>
+            <button
+              className={btn}
+              onClick={() => window.print()}
+              disabled={!canPrint}
+              title={!canPrint ? "거래처를 먼저 선택하세요" : ""}
+            >
               인쇄 / PDF 저장
             </button>
           </div>
@@ -562,8 +568,6 @@ export default function StatementClient() {
                   </div>
                 ) : null}
               </div>
-
-              <div className="mt-2 text-xs text-slate-500">※ 거래처/기간 선택 후 조회를 누르면 URL에 반영됩니다.</div>
             </div>
 
             <div>
@@ -632,7 +636,15 @@ export default function StatementClient() {
               <div className="mb-2 text-sm font-semibold opacity-0 select-none">.</div>
               <div className="space-y-1 text-sm">
                 <div className="font-semibold">{OUR.name}</div>
-                <div>대표: {OUR.ceo}</div>
+                <div className="text-slate-700">{OUR.business_no}</div>
+                <div className="relative inline-block">
+                  <span>대표: {OUR.ceo}</span>
+                  <img
+                    src="/stamp.png"
+                    alt="stamp"
+                    className="pointer-events-none absolute -right-10 -top-3 h-12 w-12 opacity-90"
+                  />
+                </div>
                 <div>주소: {OUR.address1}</div>
                 <div>업종: {OUR.biz}</div>
               </div>
@@ -647,7 +659,9 @@ export default function StatementClient() {
             <div className="text-sm text-slate-600">
               입금 합계 <span className="font-semibold tabular-nums">{formatMoney(totals.inSum)}</span> · 출고 합계{" "}
               <span className="font-semibold tabular-nums">{formatMoney(totals.outSum)}</span> · 미수(출고-입금){" "}
-              <span className="font-semibold tabular-nums">{formatMoney(Math.max(0, totals.outSum - totals.inSum))}</span>
+              <span className="font-semibold tabular-nums">
+                {formatMoney(Math.max(0, totals.outSum - totals.inSum))}
+              </span>
             </div>
           </div>
 
@@ -662,6 +676,7 @@ export default function StatementClient() {
                 <col style={{ width: "120px" }} />
                 <col style={{ width: "110px" }} />
                 <col style={{ width: "130px" }} />
+                <col style={{ width: "140px" }} />
               </colgroup>
 
               <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
@@ -674,19 +689,20 @@ export default function StatementClient() {
                   <th className="px-3 py-2 text-right">공급가</th>
                   <th className="px-3 py-2 text-right">부가세</th>
                   <th className="px-3 py-2 text-right">잔액</th>
+                  <th className="px-3 py-2 text-left">비고</th>
                 </tr>
               </thead>
 
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-4 text-sm text-slate-500">
+                    <td colSpan={9} className="px-4 py-4 text-sm text-slate-500">
                       불러오는 중...
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-4 text-sm text-slate-500">
+                    <td colSpan={9} className="px-4 py-4 text-sm text-slate-500">
                       표시할 내역이 없습니다. (거래처/기간/데이터 확인)
                     </td>
                   </tr>
@@ -701,13 +717,20 @@ export default function StatementClient() {
                         <td className="px-3 py-2">
                           <div className="truncate">{r.itemName ? r.itemName : ""}</div>
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{r.qty === null ? "" : formatMoney(r.qty)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{r.unitPrice === null ? "" : formatMoney(r.unitPrice)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {r.qty === null ? "" : formatMoney(r.qty)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {r.unitPrice === null ? "" : formatMoney(r.unitPrice)}
+                        </td>
                         <td className={`px-3 py-2 text-right tabular-nums font-semibold ${moneyClass}`}>
                           {r.supply === null ? "" : formatMoney(r.supply)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{r.vat === null ? "" : formatMoney(r.vat)}</td>
                         <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(r.balance)}</td>
+                        <td className="px-3 py-2">
+                          <div className="truncate">{r.remark ? r.remark : ""}</div>
+                        </td>
                       </tr>
                     );
                   })
@@ -716,7 +739,9 @@ export default function StatementClient() {
             </table>
           </div>
 
-          <div className="mt-2 text-xs text-slate-500">※ 출고는 음수(잔액 감소), 입금은 양수(잔액 증가)로 잔액이 계산됩니다.</div>
+          <div className="mt-2 text-xs text-slate-500">
+            ※ 출고는 음수(잔액 감소), 입금은 양수(잔액 증가)로 잔액이 계산됩니다.
+          </div>
         </div>
       </div>
     </div>
