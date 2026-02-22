@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -52,6 +51,7 @@ type StatementRow = {
   unitPrice: number | null;
   supply: number | null;
   vat: number | null;
+  tradeAmount: number | null; // ✅ 거래금액(공급가+부가세)
   payment: number | null; // ✅ 결제(입금) 표시용
   amountSigned: number; // 잔액 계산용(입금 +, 출고 -)
   balance: number; // 누적 잔액
@@ -303,6 +303,8 @@ export default function StatementClient() {
           if (!m.itemName || !String(m.itemName).trim()) continue;
 
           const amtSigned = -Number(m.total ?? 0);
+          const supplyVal = Number.isFinite(m.supply) ? m.supply : 0;
+          const vatVal = Number.isFinite(m.vat) ? m.vat : 0;
 
           list.push({
             date,
@@ -310,8 +312,9 @@ export default function StatementClient() {
             itemName: m.itemName,
             qty: Number.isFinite(m.qty) ? m.qty : 0,
             unitPrice: Number.isFinite(m.unitPrice) ? m.unitPrice : 0,
-            supply: Number.isFinite(m.supply) ? m.supply : 0,
-            vat: Number.isFinite(m.vat) ? m.vat : 0,
+            supply: supplyVal,
+            vat: vatVal,
+            tradeAmount: supplyVal + vatVal, // ✅ 거래금액
             payment: null, // ✅ 출고는 결제칸 비움
             amountSigned: amtSigned,
             remark,
@@ -331,6 +334,7 @@ export default function StatementClient() {
           unitPrice: null,
           supply: null, // ✅ 입금은 공급가 칸 비움
           vat: null, // ✅ 입금은 부가세 칸 비움
+          tradeAmount: null, // ✅ 입금은 거래금액 칸 비움
           payment: amt, // ✅ 결제(입금)
           amountSigned: amt,
           remark: "",
@@ -374,7 +378,7 @@ export default function StatementClient() {
   function downloadExcelCsv() {
     if (!partnerId) return;
 
-    const headers = ["일자", "구분", "품목명", "수량", "단가", "공급가", "부가세", "결제", "잔액", "비고"];
+    const headers = ["일자", "구분", "품목명", "수량", "단가", "공급가", "부가세", "거래금액", "결제", "잔액", "비고"];
     const lines: string[] = [];
     lines.push(headers.map(csvEscape).join(","));
 
@@ -387,6 +391,7 @@ export default function StatementClient() {
         r.unitPrice === null ? "" : formatMoney(r.unitPrice),
         r.supply === null ? "" : formatMoney(r.supply),
         r.vat === null ? "" : formatMoney(r.vat),
+        r.tradeAmount === null ? "" : formatMoney(r.tradeAmount),
         r.payment === null ? "" : formatMoney(r.payment),
         formatMoney(r.balance ?? 0),
         r.remark ?? "",
@@ -675,7 +680,7 @@ export default function StatementClient() {
             <div className="grid grid-cols-2 gap-6 items-start">
               {/* LEFT */}
               <div>
-                <div className="mb-2 text-sm font-semibold">거래처</div>
+                {/* ✅ "거래처" 라벨 제거 */}
                 {selectedPartner ? (
                   <div className="space-y-1 text-sm">
                     <div className="font-semibold">{selectedPartner.name}</div>
@@ -741,6 +746,7 @@ export default function StatementClient() {
                   <col style={{ width: "60px" }} />
                   <col style={{ width: "78px" }} />
                   <col style={{ width: "78px" }} />
+                  <col style={{ width: "78px" }} />
                   <col style={{ width: "120px" }} />
                 </colgroup>
 
@@ -753,6 +759,7 @@ export default function StatementClient() {
                     <th className="px-2 py-2 text-right">단가</th>
                     <th className="px-2 py-2 text-right">공급가</th>
                     <th className="px-2 py-2 text-right">부가세</th>
+                    <th className="px-2 py-2 text-right">거래금액</th>
                     <th className="px-2 py-2 text-right">결제</th>
                     <th className="px-2 py-2 text-right">잔액</th>
                     <th className="px-2 py-2 text-left">비고</th>
@@ -762,13 +769,13 @@ export default function StatementClient() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-4 text-sm text-slate-500">
+                      <td colSpan={11} className="px-4 py-4 text-sm text-slate-500">
                         불러오는 중...
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-4 text-sm text-slate-500">
+                      <td colSpan={11} className="px-4 py-4 text-sm text-slate-500">
                         표시할 내역이 없습니다. (거래처/기간/데이터 확인)
                       </td>
                     </tr>
@@ -777,6 +784,7 @@ export default function StatementClient() {
                       const isOut = r.kind === "출고";
                       const supplyClass = isOut ? "text-red-600" : "";
                       const paymentClass = !isOut ? "text-blue-700" : "";
+                      const tradeClass = isOut ? "text-red-600" : "";
                       return (
                         <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
                           <td className="px-2 py-2 font-semibold tabular-nums">{r.date}</td>
@@ -794,6 +802,9 @@ export default function StatementClient() {
                             {r.supply === null ? "" : formatMoney(r.supply)}
                           </td>
                           <td className="px-2 py-2 text-right tabular-nums">{r.vat === null ? "" : formatMoney(r.vat)}</td>
+                          <td className={`px-2 py-2 text-right tabular-nums font-semibold ${tradeClass}`}>
+                            {r.tradeAmount === null ? "" : formatMoney(r.tradeAmount)}
+                          </td>
                           <td className={`px-2 py-2 text-right tabular-nums font-semibold ${paymentClass}`}>
                             {r.payment === null ? "" : formatMoney(r.payment)}
                           </td>
