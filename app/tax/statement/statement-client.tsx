@@ -471,288 +471,336 @@ export default function StatementClient() {
 
   return (
     <div className={`${pageBg} min-h-screen`}>
-      <style>{`
+      {/* ✅ spec-client.tsx와 동일한 방식: 인쇄 시 "statement-print-area"만 보이게 */}
+      <style jsx global>{`
         @media print {
-          .no-print { display: none !important; }
-          .print-card { box-shadow: none !important; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          @page { size: A4; margin: 10mm; }
+          body * {
+            visibility: hidden !important;
+          }
+          #statement-print-area,
+          #statement-print-area * {
+            visibility: visible !important;
+          }
+          #statement-print-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+          }
+
+          body {
+            background: white !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          @page {
+            size: A4;
+            margin: 10mm;
+          }
+
           /* 인쇄 시 가로 스크롤 방지 */
-          .table-wrap { overflow: visible !important; }
-          table { width: 100% !important; }
-          th, td { font-size: 10px !important; padding: 4px 6px !important; }
-          .truncate { white-space: normal !important; }
+          .table-wrap {
+            overflow: visible !important;
+          }
+          table {
+            width: 100% !important;
+          }
+          th,
+          td {
+            font-size: 10px !important;
+            padding: 4px 6px !important;
+          }
+          .truncate {
+            white-space: normal !important;
+          }
 
-          /* ✅ 인쇄 시 상단 메뉴바 제거(요청) */
-          .app-topnav { display: none !important; }
+          /* 혹시 남아있을 수 있는 상단 메뉴바 */
+          .app-topnav {
+            display: none !important;
+          }
 
-          /* ✅ 인쇄 시 하단 안내문 제거(요청) */
-          .print-hide { display: none !important; }
+          /* 인쇄 시 숨김 */
+          .no-print {
+            display: none !important;
+          }
+          .print-card {
+            box-shadow: none !important;
+          }
+          .print-hide {
+            display: none !important;
+          }
         }
       `}</style>
 
-      <div className="mx-auto w-full max-w-[1200px] px-4 py-6">
-        {msg ? (
-          <div className="no-print mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {msg}
-          </div>
-        ) : null}
-
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <div className="text-xl font-semibold">거래원장</div>
-            <div className="mt-2">
-              <span className={pill}>
-                기간: {fromYMD} ~ {toYMD}
-              </span>
+      {/* ✅ 화면(웹)에서는 그대로 보이되, 인쇄에서는 이 영역만 남김 */}
+      <div id="statement-print-area">
+        <div className="mx-auto w-full max-w-[1200px] px-4 py-6">
+          {msg ? (
+            <div className="no-print mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {msg}
             </div>
-          </div>
+          ) : null}
 
-          <div className="no-print flex gap-2">
-            <button
-              className={btn}
-              onClick={() => downloadExcelCsv()}
-              disabled={!canPrint}
-              title={!canPrint ? "거래처를 먼저 선택하세요" : ""}
-            >
-              엑셀(CSV) 다운로드
-            </button>
-            <button
-              className={btn}
-              onClick={() => window.print()}
-              disabled={!canPrint}
-              title={!canPrint ? "거래처를 먼저 선택하세요" : ""}
-            >
-              인쇄 / PDF 저장
-            </button>
-          </div>
-        </div>
-
-        {/* 조회 조건 */}
-        <div className={`${card} no-print p-4`}>
-          <div className="mb-3 text-sm font-semibold">조회 조건</div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_180px_auto] md:items-end">
-            {/* ✅ 거래처: 입력 검색 */}
+          <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              <div className="mb-1 text-xs text-slate-600">거래처</div>
-
-              <div ref={partnerWrapRef} className="relative">
-                <input
-                  className={input}
-                  value={partnerQuery}
-                  onChange={(e) => {
-                    setPartnerQuery(e.target.value);
-                    setPartnerOpen(true);
-                  }}
-                  onFocus={onPartnerFocus}
-                  onBlur={onPartnerBlur}
-                  placeholder="회사명을 입력하세요"
-                />
-
-                {/* ✅ 입력 중 추천 리스트 */}
-                {partnerOpen && partnerQuery.trim() ? (
-                  <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-                    <div className="max-h-72 overflow-y-auto">
-                      {showNoResult ? (
-                        <div className="px-3 py-2 text-sm text-slate-500">검색 결과가 없습니다.</div>
-                      ) : (
-                        filteredPartners.map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
-                            onMouseDown={(e) => e.preventDefault()} // blur 먼저 발생 방지
-                            onClick={() => {
-                              setPartnerId(p.id);
-                              setPartnerQuery(p.business_no ? `${p.name} (${p.business_no})` : p.name);
-                              setPartnerOpen(false);
-                            }}
-                          >
-                            <span className="truncate">
-                              {p.name} {p.business_no ? `(${p.business_no})` : ""}
-                            </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                    <div className="border-t border-slate-200 px-3 py-2 text-xs text-slate-500">※ 목록에서 클릭해서 선택하세요.</div>
-                  </div>
-                ) : null}
+              <div className="text-xl font-semibold">거래원장</div>
+              <div className="mt-2">
+                <span className={pill}>
+                  기간: {fromYMD} ~ {toYMD}
+                </span>
               </div>
             </div>
 
-            <div>
-              <div className="mb-1 text-xs text-slate-600">From</div>
-              <input type="date" className={input} value={fromYMD} onChange={(e) => setFromYMD(e.target.value)} />
-            </div>
-
-            <div>
-              <div className="mb-1 text-xs text-slate-600">To</div>
-              <input type="date" className={input} value={toYMD} onChange={(e) => setToYMD(e.target.value)} />
-            </div>
-
-            <div className="flex gap-2">
+            <div className="no-print flex gap-2">
               <button
                 className={btn}
-                onClick={() => {
-                  const f = addDays(todayYMD(), -30);
-                  const t = todayYMD();
-                  setFromYMD(f);
-                  setToYMD(t);
-                }}
+                onClick={() => downloadExcelCsv()}
+                disabled={!canPrint}
+                title={!canPrint ? "거래처를 먼저 선택하세요" : ""}
               >
-                최근 30일
+                엑셀(CSV) 다운로드
               </button>
               <button
-                className={btnOn}
-                onClick={() => {
-                  pushUrl(partnerId, fromYMD, toYMD);
-                  loadStatement(partnerId, fromYMD, toYMD);
-                }}
-                disabled={!partnerId}
-                title={!partnerId ? "거래처를 먼저 선택하세요" : ""}
+                className={btn}
+                onClick={() => window.print()}
+                disabled={!canPrint}
+                title={!canPrint ? "거래처를 먼저 선택하세요" : ""}
               >
-                조회
+                인쇄 / PDF 저장
               </button>
             </div>
           </div>
-        </div>
 
-        {/* 거래처(좌) / 회사정보(우) */}
-        <div className={`${card} print-card mt-4 p-4`}>
-          <div className="grid grid-cols-2 gap-6 items-start">
-            {/* LEFT */}
-            <div>
-              <div className="mb-2 text-sm font-semibold">거래처</div>
-              {selectedPartner ? (
-                <div className="space-y-1 text-sm">
-                  <div className="font-semibold">{selectedPartner.name}</div>
-                  {selectedPartner.business_no ? <div>{selectedPartner.business_no}</div> : null}
-                  {selectedPartner.ceo_name ? <div>대표: {selectedPartner.ceo_name}</div> : null}
-                  {selectedPartner.address1 ? <div>주소: {selectedPartner.address1}</div> : null}
-                  {selectedPartner.biz_type || selectedPartner.biz_item ? (
-                    <div>
-                      업종: {selectedPartner.biz_type ?? ""}{" "}
-                      {selectedPartner.biz_item ? `/ 업태: ${selectedPartner.biz_item}` : ""}
+          {/* 조회 조건 */}
+          <div className={`${card} no-print p-4`}>
+            <div className="mb-3 text-sm font-semibold">조회 조건</div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_180px_auto] md:items-end">
+              {/* ✅ 거래처: 입력 검색 */}
+              <div>
+                <div className="mb-1 text-xs text-slate-600">거래처</div>
+
+                <div ref={partnerWrapRef} className="relative">
+                  <input
+                    className={input}
+                    value={partnerQuery}
+                    onChange={(e) => {
+                      setPartnerQuery(e.target.value);
+                      setPartnerOpen(true);
+                    }}
+                    onFocus={onPartnerFocus}
+                    onBlur={onPartnerBlur}
+                    placeholder="회사명을 입력하세요"
+                  />
+
+                  {/* ✅ 입력 중 추천 리스트 */}
+                  {partnerOpen && partnerQuery.trim() ? (
+                    <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                      <div className="max-h-72 overflow-y-auto">
+                        {showNoResult ? (
+                          <div className="px-3 py-2 text-sm text-slate-500">검색 결과가 없습니다.</div>
+                        ) : (
+                          filteredPartners.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                              onMouseDown={(e) => e.preventDefault()} // blur 먼저 발생 방지
+                              onClick={() => {
+                                setPartnerId(p.id);
+                                setPartnerQuery(p.business_no ? `${p.name} (${p.business_no})` : p.name);
+                                setPartnerOpen(false);
+                              }}
+                            >
+                              <span className="truncate">
+                                {p.name} {p.business_no ? `(${p.business_no})` : ""}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                      <div className="border-t border-slate-200 px-3 py-2 text-xs text-slate-500">
+                        ※ 목록에서 클릭해서 선택하세요.
+                      </div>
                     </div>
                   ) : null}
                 </div>
-              ) : (
-                <div className="text-sm text-slate-500">거래처를 선택하세요.</div>
-              )}
-            </div>
+              </div>
 
-            {/* RIGHT */}
-            <div className="text-right">
-              <div className="mb-2 text-sm font-semibold opacity-0 select-none">.</div>
-              <div className="space-y-1 text-sm">
-                <div className="font-semibold">{OUR.name}</div>
-                <div className="text-slate-700">{OUR.business_no}</div>
-                <div className="relative inline-block pr-12">
-                  <span>대표: {OUR.ceo}</span>
-                  <img
-                    src="/stamp.png"
-                    alt="stamp"
-                    className="pointer-events-none absolute right-0 -top-3 h-12 w-12 opacity-90"
-                  />
-                </div>
-                <div>주소: {OUR.address1}</div>
-                <div>업종: {OUR.biz}</div>
+              <div>
+                <div className="mb-1 text-xs text-slate-600">From</div>
+                <input type="date" className={input} value={fromYMD} onChange={(e) => setFromYMD(e.target.value)} />
+              </div>
+
+              <div>
+                <div className="mb-1 text-xs text-slate-600">To</div>
+                <input type="date" className={input} value={toYMD} onChange={(e) => setToYMD(e.target.value)} />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  className={btn}
+                  onClick={() => {
+                    const f = addDays(todayYMD(), -30);
+                    const t = todayYMD();
+                    setFromYMD(f);
+                    setToYMD(t);
+                  }}
+                >
+                  최근 30일
+                </button>
+                <button
+                  className={btnOn}
+                  onClick={() => {
+                    pushUrl(partnerId, fromYMD, toYMD);
+                    loadStatement(partnerId, fromYMD, toYMD);
+                  }}
+                  disabled={!partnerId}
+                  title={!partnerId ? "거래처를 먼저 선택하세요" : ""}
+                >
+                  조회
+                </button>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* 표 */}
-        <div className={`${card} print-card mt-4 p-4`}>
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold">내역</div>
-            <div className="text-sm text-slate-600">
-              입금 합계 <span className="font-semibold tabular-nums">{formatMoney(totals.inSum)}</span> · 출고 합계{" "}
-              <span className="font-semibold tabular-nums">{formatMoney(totals.outSum)}</span> · 미수(출고-입금){" "}
-              <span className="font-semibold tabular-nums">{formatMoney(Math.max(0, totals.outSum - totals.inSum))}</span>
+          {/* 거래처(좌) / 회사정보(우) */}
+          <div className={`${card} print-card mt-4 p-4`}>
+            <div className="grid grid-cols-2 gap-6 items-start">
+              {/* LEFT */}
+              <div>
+                <div className="mb-2 text-sm font-semibold">거래처</div>
+                {selectedPartner ? (
+                  <div className="space-y-1 text-sm">
+                    <div className="font-semibold">{selectedPartner.name}</div>
+                    {selectedPartner.business_no ? <div>{selectedPartner.business_no}</div> : null}
+                    {selectedPartner.ceo_name ? <div>대표: {selectedPartner.ceo_name}</div> : null}
+                    {selectedPartner.address1 ? <div>주소: {selectedPartner.address1}</div> : null}
+                    {selectedPartner.biz_type || selectedPartner.biz_item ? (
+                      <div>
+                        업종: {selectedPartner.biz_type ?? ""}{" "}
+                        {selectedPartner.biz_item ? `/ 업태: ${selectedPartner.biz_item}` : ""}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-500">거래처를 선택하세요.</div>
+                )}
+              </div>
+
+              {/* RIGHT */}
+              <div className="text-right">
+                <div className="mb-2 text-sm font-semibold opacity-0 select-none">.</div>
+                <div className="space-y-1 text-sm">
+                  <div className="font-semibold">{OUR.name}</div>
+                  <div className="text-slate-700">{OUR.business_no}</div>
+                  <div className="relative inline-block pr-12">
+                    <span>대표: {OUR.ceo}</span>
+                    <img
+                      src="/stamp.png"
+                      alt="stamp"
+                      className="pointer-events-none absolute right-0 -top-3 h-12 w-12 opacity-90"
+                    />
+                  </div>
+                  <div>주소: {OUR.address1}</div>
+                  <div>업종: {OUR.biz}</div>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* ✅ 세로 스크롤 */}
-          <div className="table-wrap max-h-[520px] overflow-y-auto rounded-2xl border border-slate-200">
-            <table className="w-full table-fixed text-sm">
-              {/* ✅ 인쇄 가로 스크롤 없이: 폭 재조정 */}
-              <colgroup>
-                <col style={{ width: "76px" }} />
-                <col style={{ width: "52px" }} />
-                <col style={{ width: "180px" }} />
-                <col style={{ width: "52px" }} />
-                <col style={{ width: "64px" }} />
-                <col style={{ width: "72px" }} />
-                <col style={{ width: "60px" }} />
-                <col style={{ width: "78px" }} />
-                <col style={{ width: "120px" }} />
-              </colgroup>
+          {/* 표 */}
+          <div className={`${card} print-card mt-4 p-4`}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold">내역</div>
+              <div className="text-sm text-slate-600">
+                입금 합계 <span className="font-semibold tabular-nums">{formatMoney(totals.inSum)}</span> · 출고 합계{" "}
+                <span className="font-semibold tabular-nums">{formatMoney(totals.outSum)}</span> · 미수(출고-입금){" "}
+                <span className="font-semibold tabular-nums">
+                  {formatMoney(Math.max(0, totals.outSum - totals.inSum))}
+                </span>
+              </div>
+            </div>
 
-              <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                <tr>
-                  <th className="px-2 py-2 text-left">일자</th>
-                  <th className="px-2 py-2 text-left">구분</th>
-                  <th className="px-2 py-2 text-left">품목명</th>
-                  <th className="px-2 py-2 text-right">수량</th>
-                  <th className="px-2 py-2 text-right">단가</th>
-                  <th className="px-2 py-2 text-right">공급가</th>
-                  <th className="px-2 py-2 text-right">부가세</th>
-                  <th className="px-2 py-2 text-right">잔액</th>
-                  <th className="px-2 py-2 text-left">비고</th>
-                </tr>
-              </thead>
+            {/* ✅ 세로 스크롤 */}
+            <div className="table-wrap max-h-[520px] overflow-y-auto rounded-2xl border border-slate-200">
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  <col style={{ width: "76px" }} />
+                  <col style={{ width: "52px" }} />
+                  <col style={{ width: "180px" }} />
+                  <col style={{ width: "52px" }} />
+                  <col style={{ width: "64px" }} />
+                  <col style={{ width: "72px" }} />
+                  <col style={{ width: "60px" }} />
+                  <col style={{ width: "78px" }} />
+                  <col style={{ width: "120px" }} />
+                </colgroup>
 
-              <tbody>
-                {loading ? (
+                <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                   <tr>
-                    <td colSpan={9} className="px-4 py-4 text-sm text-slate-500">
-                      불러오는 중...
-                    </td>
+                    <th className="px-2 py-2 text-left">일자</th>
+                    <th className="px-2 py-2 text-left">구분</th>
+                    <th className="px-2 py-2 text-left">품목명</th>
+                    <th className="px-2 py-2 text-right">수량</th>
+                    <th className="px-2 py-2 text-right">단가</th>
+                    <th className="px-2 py-2 text-right">공급가</th>
+                    <th className="px-2 py-2 text-right">부가세</th>
+                    <th className="px-2 py-2 text-right">잔액</th>
+                    <th className="px-2 py-2 text-left">비고</th>
                   </tr>
-                ) : rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-4 text-sm text-slate-500">
-                      표시할 내역이 없습니다. (거래처/기간/데이터 확인)
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((r, idx) => {
-                    const isMinus = r.amountSigned < 0;
-                    const moneyClass = isMinus ? "text-red-600" : "text-blue-700";
-                    return (
-                      <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
-                        <td className="px-2 py-2 font-semibold tabular-nums">{r.date}</td>
-                        <td className="px-2 py-2 font-semibold">{r.kind}</td>
-                        <td className="px-2 py-2">
-                          <div className="truncate">{r.itemName ? r.itemName : ""}</div>
-                        </td>
-                        <td className="px-2 py-2 text-right tabular-nums">
-                          {r.qty === null ? "" : formatMoney(r.qty)}
-                        </td>
-                        <td className="px-2 py-2 text-right tabular-nums">
-                          {r.unitPrice === null ? "" : formatMoney(r.unitPrice)}
-                        </td>
-                        <td className={`px-2 py-2 text-right tabular-nums font-semibold ${moneyClass}`}>
-                          {r.supply === null ? "" : formatMoney(r.supply)}
-                        </td>
-                        <td className="px-2 py-2 text-right tabular-nums">{r.vat === null ? "" : formatMoney(r.vat)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums font-semibold">{formatMoney(r.balance)}</td>
-                        <td className="px-2 py-2">
-                          <div className="truncate">{r.remark ? r.remark : ""}</div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
 
-          <div className="print-hide mt-2 text-xs text-slate-500">
-            ※ 출고는 음수(잔액 감소), 입금은 양수(잔액 증가)로 잔액이 계산됩니다.
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-4 text-sm text-slate-500">
+                        불러오는 중...
+                      </td>
+                    </tr>
+                  ) : rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-4 text-sm text-slate-500">
+                        표시할 내역이 없습니다. (거래처/기간/데이터 확인)
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((r, idx) => {
+                      const isMinus = r.amountSigned < 0;
+                      const moneyClass = isMinus ? "text-red-600" : "text-blue-700";
+                      return (
+                        <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
+                          <td className="px-2 py-2 font-semibold tabular-nums">{r.date}</td>
+                          <td className="px-2 py-2 font-semibold">{r.kind}</td>
+                          <td className="px-2 py-2">
+                            <div className="truncate">{r.itemName ? r.itemName : ""}</div>
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            {r.qty === null ? "" : formatMoney(r.qty)}
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            {r.unitPrice === null ? "" : formatMoney(r.unitPrice)}
+                          </td>
+                          <td className={`px-2 py-2 text-right tabular-nums font-semibold ${moneyClass}`}>
+                            {r.supply === null ? "" : formatMoney(r.supply)}
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">{r.vat === null ? "" : formatMoney(r.vat)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums font-semibold">{formatMoney(r.balance)}</td>
+                          <td className="px-2 py-2">
+                            <div className="truncate">{r.remark ? r.remark : ""}</div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="print-hide mt-2 text-xs text-slate-500">
+              ※ 출고는 음수(잔액 감소), 입금은 양수(잔액 증가)로 잔액이 계산됩니다.
+            </div>
           </div>
         </div>
       </div>
