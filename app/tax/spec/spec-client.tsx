@@ -253,7 +253,7 @@ export default function SpecClient() {
     if (!selectedPartner) return;
     const label = `${selectedPartner.name}${selectedPartner.business_no ? ` (${selectedPartner.business_no})` : ""}`;
     setPartnerQuery(label);
-    // 검색창 드롭다운은 닫아준다 (✅ "검색 결과가 없습니다" 박스 고정 문제 방지)
+    // 검색창 드롭다운은 닫아준다
     setPartnerOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id]);
@@ -263,8 +263,6 @@ export default function SpecClient() {
     const q = partnerQuery.trim().toLowerCase();
     if (!q) return partners.slice(0, 50);
 
-    // 선택된 라벨(“이름 (사업자번호)”) 그대로면, 필터가 0이 될 수 있어
-    // 실제 검색은 name / business_no만으로 매칭
     return partners
       .filter((p) => {
         const n = (p.name ?? "").toLowerCase();
@@ -274,7 +272,7 @@ export default function SpecClient() {
       .slice(0, 50);
   }, [partners, partnerQuery]);
 
-  // ✅ “검색 결과가 없습니다”는 조건을 엄격하게: (드롭다운 열림 && 입력값 있음 && 결과 0)
+  // ✅ “검색 결과가 없습니다”는 조건: (드롭다운 열림 && 입력값 있음 && 결과 0)
   const showNoResult = partnerOpen && partnerQuery.trim().length > 0 && filteredPartners.length === 0;
 
   function onPartnerFocus() {
@@ -295,7 +293,7 @@ export default function SpecClient() {
 
   function selectPartner(p: PartnerRow) {
     setPartnerId(p.id);
-    // ✅ 선택 즉시 드롭다운 닫기 + “검색 결과 없음” 박스 제거
+    // ✅ 선택 즉시 드롭다운 닫기
     setPartnerOpen(false);
     setMsg(null);
   }
@@ -318,17 +316,31 @@ export default function SpecClient() {
 
   return (
     <div className={`min-h-screen ${pageBg} p-6`}>
-      {/* ✅ 인쇄 시 상단 검은색 메뉴바(네비/헤더) 숨김 */}
+      {/* ✅ 인쇄 시 상단(홈/스캔/품목… 글씨줄 포함) 네비 계열 요소를 강제로 숨김 */}
       <style jsx global>{`
         @media print {
           nav,
           header,
+          [role="navigation"],
           .no-print,
           .print-hide {
             display: none !important;
           }
+
+          /* ✅ 화면 상단에 “홈 스캔 품목/바코드 …” 글씨만 남는 경우까지 같이 제거 */
+          a {
+            display: none !important;
+          }
+
           body {
             background: white !important;
+          }
+
+          /* ✅ 인쇄에서도 거래처/우리회사 정보를 좌/우 2열로 고정 */
+          .spec-party-grid {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 16px !important;
           }
         }
       `}</style>
@@ -383,21 +395,18 @@ export default function SpecClient() {
                       </div>
                     ) : (
                       <div className="max-h-72 overflow-auto">
-                        {filteredPartners.map((p) => {
-                          const label = `${p.name}${p.business_no ? ` (${p.business_no})` : ""}`;
-                          return (
-                            <button
-                              key={p.id}
-                              type="button"
-                              className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                              onMouseDown={(e) => e.preventDefault()} // blur 먼저 발생 방지
-                              onClick={() => selectPartner(p)}
-                            >
-                              <div className="font-medium">{p.name}</div>
-                              <div className="text-xs text-slate-500">{p.business_no ?? ""}</div>
-                            </button>
-                          );
-                        })}
+                        {filteredPartners.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                            onMouseDown={(e) => e.preventDefault()} // blur 먼저 발생 방지
+                            onClick={() => selectPartner(p)}
+                          >
+                            <div className="font-medium">{p.name}</div>
+                            <div className="text-xs text-slate-500">{p.business_no ?? ""}</div>
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -438,7 +447,8 @@ export default function SpecClient() {
 
           {/* 거래처 / 우리회사 */}
           <div className={`${card} mb-4 p-4`}>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {/* ✅ class 추가: 인쇄에서도 2열 고정 */}
+            <div className="spec-party-grid grid grid-cols-1 gap-4 md:grid-cols-2">
               {/* 거래처 */}
               <div>
                 <div className="mb-2 text-sm font-semibold">거래처</div>
@@ -527,7 +537,6 @@ export default function SpecClient() {
                     lines.map((r, idx) => (
                       <tr key={idx} className="border-t border-slate-100">
                         <td className="px-3 py-2">
-                          {/* ✅ 한줄로 보이게 */}
                           <div className="truncate">{r.itemName}</div>
                         </td>
                         <td className="px-3 py-2 text-right">{formatMoney(r.qty)}</td>
@@ -563,7 +572,6 @@ export default function SpecClient() {
             </div>
           </div>
 
-          {/* 최초 진입 시 URL 없으면 안내 */}
           {!partnerId || !dateYMD ? (
             <div className="mt-4 text-sm text-slate-500">
               상단에서 거래처/일자를 선택하고 <span className="font-semibold">조회</span>를 눌러주세요.
