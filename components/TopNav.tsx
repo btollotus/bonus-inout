@@ -1,4 +1,3 @@
-현재 코드 줄테니 다시 확인하고 전체코드로 전달해줘. 요청하지 않은 부분은 절대 수정 편집하지말고. 적당한곳에 BONUSMATE ERP라고 넣어주고.
 "use client";
 
 import Link from "next/link";
