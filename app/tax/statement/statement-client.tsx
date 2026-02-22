@@ -1,3 +1,4 @@
+```tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -379,11 +380,11 @@ export default function StatementClient() {
         r.date ?? "",
         r.kind ?? "",
         r.itemName ?? "",
-        r.qty === null ? "" : String(r.qty ?? ""),
-        r.unitPrice === null ? "" : String(r.unitPrice ?? ""),
-        r.supply === null ? "" : String(r.supply ?? ""),
-        r.vat === null ? "" : String(r.vat ?? ""),
-        String(r.balance ?? 0),
+        r.qty === null ? "" : formatMoney(r.qty),
+        r.unitPrice === null ? "" : formatMoney(r.unitPrice),
+        r.supply === null ? "" : formatMoney(r.supply),
+        r.vat === null ? "" : formatMoney(r.vat),
+        formatMoney(r.balance ?? 0),
         r.remark ?? "",
       ];
       lines.push(row.map(csvEscape).join(","));
@@ -476,6 +477,12 @@ export default function StatementClient() {
           .no-print { display: none !important; }
           .print-card { box-shadow: none !important; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          @page { size: A4; margin: 10mm; }
+          /* 인쇄 시 가로 스크롤 방지 */
+          .table-wrap { overflow: visible !important; }
+          table { width: 100% !important; }
+          th, td { font-size: 10px !important; padding: 4px 6px !important; }
+          .truncate { white-space: normal !important; }
         }
       `}</style>
 
@@ -659,37 +666,37 @@ export default function StatementClient() {
             <div className="text-sm text-slate-600">
               입금 합계 <span className="font-semibold tabular-nums">{formatMoney(totals.inSum)}</span> · 출고 합계{" "}
               <span className="font-semibold tabular-nums">{formatMoney(totals.outSum)}</span> · 미수(출고-입금){" "}
-              <span className="font-semibold tabular-nums">
-                {formatMoney(Math.max(0, totals.outSum - totals.inSum))}
-              </span>
+              <span className="font-semibold tabular-nums">{formatMoney(Math.max(0, totals.outSum - totals.inSum))}</span>
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+          {/* ✅ 세로 스크롤 */}
+          <div className="table-wrap max-h-[520px] overflow-y-auto rounded-2xl border border-slate-200">
             <table className="w-full table-fixed text-sm">
+              {/* ✅ 인쇄 가로 스크롤 없이: 폭 재조정 */}
               <colgroup>
-                <col style={{ width: "110px" }} />
-                <col style={{ width: "80px" }} />
-                <col style={{ width: "340px" }} />
-                <col style={{ width: "90px" }} />
-                <col style={{ width: "110px" }} />
+                <col style={{ width: "76px" }} />
+                <col style={{ width: "52px" }} />
+                <col style={{ width: "180px" }} />
+                <col style={{ width: "52px" }} />
+                <col style={{ width: "64px" }} />
+                <col style={{ width: "72px" }} />
+                <col style={{ width: "60px" }} />
+                <col style={{ width: "78px" }} />
                 <col style={{ width: "120px" }} />
-                <col style={{ width: "110px" }} />
-                <col style={{ width: "130px" }} />
-                <col style={{ width: "140px" }} />
               </colgroup>
 
               <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                 <tr>
-                  <th className="px-3 py-2 text-left">일자</th>
-                  <th className="px-3 py-2 text-left">구분</th>
-                  <th className="px-3 py-2 text-left">품목명</th>
-                  <th className="px-3 py-2 text-right">수량</th>
-                  <th className="px-3 py-2 text-right">단가</th>
-                  <th className="px-3 py-2 text-right">공급가</th>
-                  <th className="px-3 py-2 text-right">부가세</th>
-                  <th className="px-3 py-2 text-right">잔액</th>
-                  <th className="px-3 py-2 text-left">비고</th>
+                  <th className="px-2 py-2 text-left">일자</th>
+                  <th className="px-2 py-2 text-left">구분</th>
+                  <th className="px-2 py-2 text-left">품목명</th>
+                  <th className="px-2 py-2 text-right">수량</th>
+                  <th className="px-2 py-2 text-right">단가</th>
+                  <th className="px-2 py-2 text-right">공급가</th>
+                  <th className="px-2 py-2 text-right">부가세</th>
+                  <th className="px-2 py-2 text-right">잔액</th>
+                  <th className="px-2 py-2 text-left">비고</th>
                 </tr>
               </thead>
 
@@ -712,23 +719,23 @@ export default function StatementClient() {
                     const moneyClass = isMinus ? "text-red-600" : "text-blue-700";
                     return (
                       <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
-                        <td className="px-3 py-2 font-semibold tabular-nums">{r.date}</td>
-                        <td className="px-3 py-2 font-semibold">{r.kind}</td>
-                        <td className="px-3 py-2">
+                        <td className="px-2 py-2 font-semibold tabular-nums">{r.date}</td>
+                        <td className="px-2 py-2 font-semibold">{r.kind}</td>
+                        <td className="px-2 py-2">
                           <div className="truncate">{r.itemName ? r.itemName : ""}</div>
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
+                        <td className="px-2 py-2 text-right tabular-nums">
                           {r.qty === null ? "" : formatMoney(r.qty)}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
+                        <td className="px-2 py-2 text-right tabular-nums">
                           {r.unitPrice === null ? "" : formatMoney(r.unitPrice)}
                         </td>
-                        <td className={`px-3 py-2 text-right tabular-nums font-semibold ${moneyClass}`}>
+                        <td className={`px-2 py-2 text-right tabular-nums font-semibold ${moneyClass}`}>
                           {r.supply === null ? "" : formatMoney(r.supply)}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{r.vat === null ? "" : formatMoney(r.vat)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(r.balance)}</td>
-                        <td className="px-3 py-2">
+                        <td className="px-2 py-2 text-right tabular-nums">{r.vat === null ? "" : formatMoney(r.vat)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums font-semibold">{formatMoney(r.balance)}</td>
+                        <td className="px-2 py-2">
                           <div className="truncate">{r.remark ? r.remark : ""}</div>
                         </td>
                       </tr>
@@ -739,11 +746,10 @@ export default function StatementClient() {
             </table>
           </div>
 
-          <div className="mt-2 text-xs text-slate-500">
-            ※ 출고는 음수(잔액 감소), 입금은 양수(잔액 증가)로 잔액이 계산됩니다.
-          </div>
+          <div className="mt-2 text-xs text-slate-500">※ 출고는 음수(잔액 감소), 입금은 양수(잔액 증가)로 잔액이 계산됩니다.</div>
         </div>
       </div>
     </div>
   );
 }
+```
