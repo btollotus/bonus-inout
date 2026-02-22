@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -350,8 +351,7 @@ export default function SpecClient() {
       {/* ✅ 화면(웹)에서는 그대로 보이되, 인쇄에서는 이 영역만 남김 */}
       <div id="spec-print-area" className="mx-auto max-w-6xl">
         {/* 상단 타이틀/버튼 */}
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="text-xl font-bold">거래명세서</div>
+        <div className="mb-4 flex items-start justify-end gap-3">
           <div className="flex gap-2 no-print">
             <button
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
@@ -447,7 +447,7 @@ export default function SpecClient() {
 
           {/* 거래처 / 우리회사 */}
           <div className={`${card} mb-4 p-4`}>
-            <div className="spec-party-grid grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="spec-party-grid grid grid-cols-2 gap-4">
               {/* 거래처 */}
               <div>
                 {/* ✅ 인쇄화면 상단 “거래처” 글씨 제거 */}
