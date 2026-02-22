@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 
@@ -115,6 +115,11 @@ export default function StatementClient() {
 
   // ✅ 거래처 “입력 검색”용
   const [partnerQuery, setPartnerQuery] = useState<string>("");
+
+  // ✅ 드롭다운 열림/닫힘(선택 후에도 "검색결과없음" 창이 남는 문제 해결용)
+  const [partnerOpen, setPartnerOpen] = useState(false);
+  const partnerWrapRef = useRef<HTMLDivElement | null>(null);
+  const blurTimerRef = useRef<number | null>(null);
 
   const selectedPartner = useMemo(() => partners.find((p) => p.id === partnerId) ?? null, [partners, partnerId]);
 
@@ -269,6 +274,33 @@ export default function StatementClient() {
     return scored.slice(0, 50).map((x) => x.p);
   }, [partners, partnerQuery]);
 
+  const showNoResult = partnerOpen && partnerQuery.trim().length > 0 && filteredPartners.length === 0;
+
+  function onPartnerFocus() {
+    if (blurTimerRef.current) {
+      window.clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    setPartnerOpen(true);
+  }
+
+  function onPartnerBlur() {
+    blurTimerRef.current = window.setTimeout(() => {
+      setPartnerOpen(false);
+      blurTimerRef.current = null;
+    }, 120) as unknown as number;
+  }
+
+  useEffect(() => {
+    function onDocDown(e: MouseEvent) {
+      const el = partnerWrapRef.current;
+      if (!el) return;
+      if (!el.contains(e.target as Node)) setPartnerOpen(false);
+    }
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, []);
+
   useEffect(() => {
     loadPartners();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -323,24 +355,28 @@ export default function StatementClient() {
           <div className="mb-3 text-sm font-semibold">조회 조건</div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_180px_auto] md:items-end">
-            {/* ✅ 거래처: 풀다운 대신 입력 검색 */}
+            {/* ✅ 거래처: 입력 검색 */}
             <div>
               <div className="mb-1 text-xs text-slate-600">거래처</div>
-              <div className="relative">
+
+              <div ref={partnerWrapRef} className="relative">
                 <input
                   className={input}
                   value={partnerQuery}
                   onChange={(e) => {
                     setPartnerQuery(e.target.value);
+                    setPartnerOpen(true);
                   }}
+                  onFocus={onPartnerFocus}
+                  onBlur={onPartnerBlur}
                   placeholder="회사명을 입력하세요"
                 />
 
                 {/* ✅ 입력 중 추천 리스트 */}
-                {partnerQuery.trim() ? (
+                {partnerOpen && partnerQuery.trim() ? (
                   <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
                     <div className="max-h-72 overflow-y-auto">
-                      {filteredPartners.length === 0 ? (
+                      {showNoResult ? (
                         <div className="px-3 py-2 text-sm text-slate-500">검색 결과가 없습니다.</div>
                       ) : (
                         filteredPartners.map((p) => (
@@ -348,9 +384,11 @@ export default function StatementClient() {
                             key={p.id}
                             type="button"
                             className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                            onMouseDown={(e) => e.preventDefault()} // blur 먼저 발생 방지
                             onClick={() => {
                               setPartnerId(p.id);
                               setPartnerQuery(p.business_no ? `${p.name} (${p.business_no})` : p.name);
+                              setPartnerOpen(false);
                             }}
                           >
                             <span className="truncate">

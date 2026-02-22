@@ -253,7 +253,6 @@ export default function SpecClient() {
     if (!selectedPartner) return;
     const label = `${selectedPartner.name}${selectedPartner.business_no ? ` (${selectedPartner.business_no})` : ""}`;
     setPartnerQuery(label);
-    // 검색창 드롭다운은 닫아준다
     setPartnerOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id]);
@@ -272,7 +271,6 @@ export default function SpecClient() {
       .slice(0, 50);
   }, [partners, partnerQuery]);
 
-  // ✅ “검색 결과가 없습니다”는 조건: (드롭다운 열림 && 입력값 있음 && 결과 0)
   const showNoResult = partnerOpen && partnerQuery.trim().length > 0 && filteredPartners.length === 0;
 
   function onPartnerFocus() {
@@ -284,7 +282,6 @@ export default function SpecClient() {
   }
 
   function onPartnerBlur() {
-    // 클릭 선택 중 blur 발생해도 닫히지 않도록 지연
     blurTimerRef.current = window.setTimeout(() => {
       setPartnerOpen(false);
       blurTimerRef.current = null;
@@ -293,7 +290,6 @@ export default function SpecClient() {
 
   function selectPartner(p: PartnerRow) {
     setPartnerId(p.id);
-    // ✅ 선택 즉시 드롭다운 닫기
     setPartnerOpen(false);
     setMsg(null);
   }
@@ -316,19 +312,15 @@ export default function SpecClient() {
 
   return (
     <div className={`min-h-screen ${pageBg} p-6`}>
-      {/* ✅ 인쇄 시 상단(홈/스캔/품목… 글씨줄 포함) 네비 계열 요소를 강제로 숨김 */}
+      {/* ✅ 인쇄: 상단 검은 네비(홈/스캔/품목… 줄) 제거 + 페이지 쪼개짐 방지 */}
       <style jsx global>{`
         @media print {
           nav,
           header,
           [role="navigation"],
           .no-print,
-          .print-hide {
-            display: none !important;
-          }
-
-          /* ✅ 화면 상단에 “홈 스캔 품목/바코드 …” 글씨만 남는 경우까지 같이 제거 */
-          a {
+          .print-hide,
+          .bg-black {
             display: none !important;
           }
 
@@ -336,11 +328,9 @@ export default function SpecClient() {
             background: white !important;
           }
 
-          /* ✅ 인쇄에서도 거래처/우리회사 정보를 좌/우 2열로 고정 */
-          .spec-party-grid {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr !important;
-            gap: 16px !important;
+          .avoid-break {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
           }
         }
       `}</style>
@@ -369,8 +359,9 @@ export default function SpecClient() {
         <div className={`${card} mb-4 p-4 no-print`}>
           <div className="mb-2 text-sm font-semibold">조회 조건</div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-            <div className="md:col-span-3">
+          {/* ✅ 3개(거래처/일자/조회) 크기 조절 */}
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_96px] md:items-end">
+            <div>
               <div className="mb-1 text-xs text-slate-500">거래처</div>
 
               <div ref={partnerWrapRef} className="relative">
@@ -414,26 +405,27 @@ export default function SpecClient() {
               </div>
             </div>
 
-            <div className="md:col-span-1">
+            <div>
               <div className="mb-1 text-xs text-slate-500">일자</div>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  className={input}
-                  value={dateYMD}
-                  onChange={(e) => setDateYMD(e.target.value)}
-                />
-                <button
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-                  onClick={() => {
-                    const d = dateYMD || todayYMD();
-                    pushUrl(partnerId, d);
-                    loadSpec(partnerId, d);
-                  }}
-                >
-                  조회
-                </button>
-              </div>
+              <input
+                type="date"
+                className={input}
+                value={dateYMD}
+                onChange={(e) => setDateYMD(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <button
+                className="w-full whitespace-nowrap rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+                onClick={() => {
+                  const d = dateYMD || todayYMD();
+                  pushUrl(partnerId, d);
+                  loadSpec(partnerId, d);
+                }}
+              >
+                조회
+              </button>
             </div>
           </div>
 
@@ -447,11 +439,10 @@ export default function SpecClient() {
 
           {/* 거래처 / 우리회사 */}
           <div className={`${card} mb-4 p-4`}>
-            {/* ✅ class 추가: 인쇄에서도 2열 고정 */}
             <div className="spec-party-grid grid grid-cols-1 gap-4 md:grid-cols-2">
               {/* 거래처 */}
               <div>
-                <div className="mb-2 text-sm font-semibold">거래처</div>
+                {/* ✅ 인쇄화면 상단 “거래처” 글씨 제거 */}
                 {selectedPartner ? (
                   <div className="space-y-1 text-sm">
                     <div className="font-semibold">{selectedPartner.name}</div>
@@ -476,7 +467,6 @@ export default function SpecClient() {
                   <div className="text-slate-700">{OUR.business_no}</div>
                   <div className="relative inline-block">
                     <span>대표: {OUR.ceo}</span>
-                    {/* ✅ 회사 도장 */}
                     <img
                       src="/stamp.png"
                       alt="stamp"
@@ -502,7 +492,6 @@ export default function SpecClient() {
             <div className="overflow-hidden rounded-xl border border-slate-200">
               <table className="w-full table-fixed text-sm">
                 <colgroup>
-                  {/* ✅ 품목 폭 넓히고(한줄), 다른 셀 폭 줄임 */}
                   <col style={{ width: "40%" }} />
                   <col style={{ width: "12%" }} />
                   <col style={{ width: "10%" }} />
@@ -551,10 +540,8 @@ export default function SpecClient() {
               </table>
             </div>
 
-            <div className="mt-3 text-xs text-slate-500">※ 거래명세서에는 “입금/출금 라인”을 표시하지 않습니다.</div>
-
-            {/* 합계 박스 */}
-            <div className="mt-4 flex justify-end">
+            {/* ✅ 하단 안내문 삭제 + 불필요 여백 최소화 + 인쇄 페이지 쪼개짐 방지 */}
+            <div className="mt-2 flex justify-end avoid-break">
               <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 text-sm">
                 <div className="flex items-center justify-between py-1">
                   <div className="text-slate-700">공급가</div>
