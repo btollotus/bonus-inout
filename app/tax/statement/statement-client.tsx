@@ -1,3 +1,4 @@
+```tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -51,6 +52,7 @@ type StatementRow = {
   unitPrice: number | null;
   supply: number | null;
   vat: number | null;
+  payment: number | null; // ✅ 결제(입금) 표시용
   amountSigned: number; // 잔액 계산용(입금 +, 출고 -)
   balance: number; // 누적 잔액
   remark: string; // ✅ 비고(주문자)
@@ -310,13 +312,14 @@ export default function StatementClient() {
             unitPrice: Number.isFinite(m.unitPrice) ? m.unitPrice : 0,
             supply: Number.isFinite(m.supply) ? m.supply : 0,
             vat: Number.isFinite(m.vat) ? m.vat : 0,
+            payment: null, // ✅ 출고는 결제칸 비움
             amountSigned: amtSigned,
             remark,
           });
         }
       }
 
-      // ✅ 입금: 비고는 비움(요청: 주문자 항목)
+      // ✅ 입금: 결제(입금) 칼럼에만 표시
       for (const l of (lData ?? []) as any as LedgerRow[]) {
         const date = l.entry_date;
         const amt = Number(l.amount ?? 0);
@@ -326,8 +329,9 @@ export default function StatementClient() {
           itemName: "",
           qty: null,
           unitPrice: null,
-          supply: amt,
-          vat: 0,
+          supply: null, // ✅ 입금은 공급가 칸 비움
+          vat: null, // ✅ 입금은 부가세 칸 비움
+          payment: amt, // ✅ 결제(입금)
           amountSigned: amt,
           remark: "",
         });
@@ -370,7 +374,7 @@ export default function StatementClient() {
   function downloadExcelCsv() {
     if (!partnerId) return;
 
-    const headers = ["일자", "구분", "품목명", "수량", "단가", "공급가", "부가세", "잔액", "비고"];
+    const headers = ["일자", "구분", "품목명", "수량", "단가", "공급가", "부가세", "결제", "잔액", "비고"];
     const lines: string[] = [];
     lines.push(headers.map(csvEscape).join(","));
 
@@ -383,6 +387,7 @@ export default function StatementClient() {
         r.unitPrice === null ? "" : formatMoney(r.unitPrice),
         r.supply === null ? "" : formatMoney(r.supply),
         r.vat === null ? "" : formatMoney(r.vat),
+        r.payment === null ? "" : formatMoney(r.payment),
         formatMoney(r.balance ?? 0),
         r.remark ?? "",
       ];
@@ -735,6 +740,7 @@ export default function StatementClient() {
                   <col style={{ width: "72px" }} />
                   <col style={{ width: "60px" }} />
                   <col style={{ width: "78px" }} />
+                  <col style={{ width: "78px" }} />
                   <col style={{ width: "120px" }} />
                 </colgroup>
 
@@ -747,6 +753,7 @@ export default function StatementClient() {
                     <th className="px-2 py-2 text-right">단가</th>
                     <th className="px-2 py-2 text-right">공급가</th>
                     <th className="px-2 py-2 text-right">부가세</th>
+                    <th className="px-2 py-2 text-right">결제</th>
                     <th className="px-2 py-2 text-right">잔액</th>
                     <th className="px-2 py-2 text-left">비고</th>
                   </tr>
@@ -755,20 +762,21 @@ export default function StatementClient() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-4 text-sm text-slate-500">
+                      <td colSpan={10} className="px-4 py-4 text-sm text-slate-500">
                         불러오는 중...
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-4 text-sm text-slate-500">
+                      <td colSpan={10} className="px-4 py-4 text-sm text-slate-500">
                         표시할 내역이 없습니다. (거래처/기간/데이터 확인)
                       </td>
                     </tr>
                   ) : (
                     rows.map((r, idx) => {
-                      const isMinus = r.amountSigned < 0;
-                      const moneyClass = isMinus ? "text-red-600" : "text-blue-700";
+                      const isOut = r.kind === "출고";
+                      const supplyClass = isOut ? "text-red-600" : "";
+                      const paymentClass = !isOut ? "text-blue-700" : "";
                       return (
                         <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
                           <td className="px-2 py-2 font-semibold tabular-nums">{r.date}</td>
@@ -782,10 +790,13 @@ export default function StatementClient() {
                           <td className="px-2 py-2 text-right tabular-nums">
                             {r.unitPrice === null ? "" : formatMoney(r.unitPrice)}
                           </td>
-                          <td className={`px-2 py-2 text-right tabular-nums font-semibold ${moneyClass}`}>
+                          <td className={`px-2 py-2 text-right tabular-nums font-semibold ${supplyClass}`}>
                             {r.supply === null ? "" : formatMoney(r.supply)}
                           </td>
                           <td className="px-2 py-2 text-right tabular-nums">{r.vat === null ? "" : formatMoney(r.vat)}</td>
+                          <td className={`px-2 py-2 text-right tabular-nums font-semibold ${paymentClass}`}>
+                            {r.payment === null ? "" : formatMoney(r.payment)}
+                          </td>
                           <td className="px-2 py-2 text-right tabular-nums font-semibold">{formatMoney(r.balance)}</td>
                           <td className="px-2 py-2">
                             <div className="truncate">{r.remark ? r.remark : ""}</div>
@@ -798,12 +809,11 @@ export default function StatementClient() {
               </table>
             </div>
 
-            <div className="print-hide mt-2 text-xs text-slate-500">
-              ※ 출고는 음수(잔액 감소), 입금은 양수(잔액 증가)로 잔액이 계산됩니다.
-            </div>
+            <div className="print-hide mt-2 text-xs text-slate-500"></div>
           </div>
         </div>
       </div>
     </div>
   );
 }
+```
