@@ -22,125 +22,112 @@ type OrderRow = {
   ship_date: string | null;
   ship_method: string | null;
   memo: string | null;
-  supply_amount: number | null;
-  vat_amount: number | null;
   total_amount: number | null;
   created_at: string;
 };
 
-type LineLoose = Record<string, any>;
-
-type SpecLine = {
-  itemName: string;
-  qty: number;
-  unitPrice: number;
-  supply: number;
-  vat: number;
-  total: number;
+type LedgerRow = {
+  id: string;
+  entry_date: string;
+  entry_ts: string | null;
+  direction: "IN" | "OUT" | string;
+  amount: number;
+  category: string | null;
+  method: string | null;
+  memo: string | null;
+  partner_id: string | null;
+  counterparty_name: string | null;
+  business_no: string | null;
+  created_at: string;
 };
+
+type StatementRow = {
+  date: string;
+  kind: "입금" | "출고" | "출금";
+  amountSigned: number;
+  remark: string;
+};
+
+function todayYMD() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function addDays(ymd: string, delta: number) {
+  const d = new Date(ymd + "T00:00:00");
+  d.setDate(d.getDate() + delta);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 function formatMoney(n: number | null | undefined) {
   const v = Number(n ?? 0);
   return v.toLocaleString("ko-KR");
 }
 
-function ymdToSlash(ymd: string) {
-  if (!ymd) return "";
-  return ymd.replaceAll("-", "/");
-}
-
-function monthRange(dateYMD: string) {
-  // dateYMD가 YYYY-MM-DD일 때 그 달 1일~말일
-  const d = new Date(dateYMD + "T00:00:00");
-  const yyyy = d.getFullYear();
-  const mm = d.getMonth(); // 0-based
-  const first = new Date(yyyy, mm, 1);
-  const last = new Date(yyyy, mm + 1, 0);
-  const f = `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, "0")}-${String(first.getDate()).padStart(2, "0")}`;
-  const t = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, "0")}-${String(last.getDate()).padStart(2, "0")}`;
-  return { f, t };
-}
-
-function pickString(row: LineLoose, keys: string[], fallback = "") {
-  for (const k of keys) {
-    const v = row?.[k];
-    if (v !== undefined && v !== null && String(v).trim() !== "") return String(v);
+function safeJsonParse<T>(s: string | null) {
+  if (!s) return null;
+  try {
+    return JSON.parse(s) as T;
+  } catch {
+    return null;
   }
-  return fallback;
 }
 
-function pickNumber(row: LineLoose, keys: string[], fallback = 0) {
-  for (const k of keys) {
-    const v = row?.[k];
-    if (v !== undefined && v !== null && v !== "" && !Number.isNaN(Number(v))) return Number(v);
-  }
-  return fallback;
-}
+function normalizeRemark(raw: string | null) {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
 
-/**
- * 라인 단위 공급가/부가세/합계 계산:
- * 1) line에 supply_amount/vat_amount/total_amount가 있으면 그대로 사용
- * 2) 없으면 qty*unitPrice로 공급가 만들고, 부가세는 0으로 둠
- */
-function mapLineToSpec(line: LineLoose): SpecLine {
-  const itemName = pickString(line, ["name", "item_name", "product_name", "variant_name", "title", "product_title"], "");
-  const qty = pickNumber(line, ["qty", "quantity", "ea", "count", "actual_ea"], 0);
-
-  // order_lines 실제 컬럼: unit (정수) 사용
-  const unitPrice = pickNumber(line, ["unit_price", "price", "unitPrice", "unit"], 0);
-
-  const supplyRaw = pickNumber(line, ["supply_amount", "supply", "supplyValue", "amount_supply"], NaN);
-  const vatRaw = pickNumber(line, ["vat_amount", "vat", "vatValue", "amount_vat"], NaN);
-  const totalRaw = pickNumber(line, ["total_amount", "total", "line_total", "amount_total"], NaN);
-
-  let supply = Number.isFinite(supplyRaw) ? supplyRaw : qty * unitPrice;
-  let vat = Number.isFinite(vatRaw) ? vatRaw : 0;
-  let total = Number.isFinite(totalRaw) ? totalRaw : supply + vat;
-
-  // 혹시 total만 있고 supply/vat이 없는 케이스: supply=total, vat=0
-  if (!Number.isFinite(supplyRaw) && Number.isFinite(totalRaw) && !Number.isFinite(vatRaw)) {
-    supply = totalRaw;
-    vat = 0;
-    total = totalRaw;
+  const obj = safeJsonParse<{ title?: string | null; orderer_name?: string | null }>(s);
+  if (obj && typeof obj === "object") {
+    const title = String(obj.title ?? "").trim();
+    const orderer = String(obj.orderer_name ?? "").trim();
+    if (!title && !orderer) return "";
+    const parts: string[] = [];
+    if (title) parts.push(title);
+    if (orderer) parts.push(`주문자:${orderer}`);
+    return parts.join(" / ");
   }
 
-  return { itemName, qty, unitPrice, supply, vat, total };
+  return s;
 }
 
-export default function SpecClient() {
+export default function StatementClient() {
   const supabase = useMemo(() => createClient(), []);
   const sp = useSearchParams();
   const router = useRouter();
 
-  const qpPartnerId = sp.get("partnerId") || sp.get("partner_id") || "";
-  const qpDate = sp.get("date") || "";
+  const qpPartnerId = sp.get("partner_id") || sp.get("partnerId") || "";
+  const qpFrom = sp.get("from") || "";
+  const qpTo = sp.get("to") || "";
 
   const [msg, setMsg] = useState<string | null>(null);
 
   const [partners, setPartners] = useState<PartnerRow[]>([]);
   const [partnerId, setPartnerId] = useState<string>(qpPartnerId);
+  const [fromYMD, setFromYMD] = useState<string>(qpFrom || addDays(todayYMD(), -30));
+  const [toYMD, setToYMD] = useState<string>(qpTo || todayYMD());
 
-  const [dateYMD, setDateYMD] = useState<string>(qpDate);
+  // ✅ 거래처 “입력 검색”용
+  const [partnerQuery, setPartnerQuery] = useState<string>("");
 
   const selectedPartner = useMemo(() => partners.find((p) => p.id === partnerId) ?? null, [partners, partnerId]);
 
-  const [orders, setOrders] = useState<OrderRow[]>([]);
-  const [lines, setLines] = useState<SpecLine[]>([]);
+  const [rows, setRows] = useState<StatementRow[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // ✅ 해당월 “거래 있는 날짜” 표시용
-  const [availableDates, setAvailableDates] = useState<string[]>([]);
-
-  // ✅ “회사정보”
   const OUR = {
     name: "주식회사 보누스메이트",
-    business_no: "343-88-03009",
     ceo: "조대성",
     address1: "경기도 파주시 광탄면 장지산로 250-90 1층",
     biz: "제조업 / 업태: 식품제조가공업",
   };
 
-  // ====== Theme ======
   const pageBg = "bg-slate-50 text-slate-900";
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const input =
@@ -150,8 +137,6 @@ export default function SpecClient() {
     "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
   const pill =
     "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700";
-  const chip =
-    "rounded-full border border-slate-200 bg-white px-3 py-1 text-xs hover:bg-slate-50 active:bg-slate-100";
 
   async function loadPartners() {
     const { data, error } = await supabase
@@ -164,66 +149,41 @@ export default function SpecClient() {
       setMsg(error.message);
       return;
     }
-    setPartners((data ?? []) as PartnerRow[]);
+    const list = (data ?? []) as PartnerRow[];
+    setPartners(list);
+
+    // ✅ URL로 partnerId가 들어왔으면 입력창에도 표시(형식 통일)
+    if (qpPartnerId) {
+      const p = list.find((x) => x.id === qpPartnerId);
+      if (p) setPartnerQuery(p.business_no ? `${p.name} (${p.business_no})` : p.name);
+    }
   }
 
-  function pushUrl(nextPartnerId: string, date: string) {
+  function pushUrl(nextPartnerId: string, f: string, t: string) {
     const qs = new URLSearchParams();
     if (nextPartnerId) qs.set("partnerId", nextPartnerId);
-    if (date) qs.set("date", date);
-    router.replace(`/tax/spec?${qs.toString()}`);
+    if (f) qs.set("from", f);
+    if (t) qs.set("to", t);
+    router.replace(`/tax/statement?${qs.toString()}`);
   }
 
-  async function loadAvailableDates(pId: string, baseDate: string) {
-    if (!pId || !baseDate) {
-      setAvailableDates([]);
-      return;
-    }
-    const { f, t } = monthRange(baseDate);
-
-    const { data, error } = await supabase
-      .from("orders")
-      .select("ship_date")
-      .eq("customer_id", pId)
-      .gte("ship_date", f)
-      .lte("ship_date", t)
-      .order("ship_date", { ascending: true })
-      .limit(5000);
-
-    if (error) {
-      setAvailableDates([]);
-      return;
-    }
-
-    const set = new Set<string>();
-    for (const r of data ?? []) {
-      const d = (r as any)?.ship_date;
-      if (d) set.add(String(d));
-    }
-    setAvailableDates(Array.from(set).sort((a, b) => a.localeCompare(b)));
-  }
-
-  async function loadSpec(pId: string, date: string) {
+  async function loadStatement(pId: string, f: string, t: string) {
     setMsg(null);
     setLoading(true);
     try {
-      if (!pId || !date) {
-        setOrders([]);
-        setLines([]);
-        setMsg("partnerId 또는 date가 없습니다. (상단에서 거래처/일자 선택 후 조회)");
+      if (!pId) {
+        setRows([]);
+        setMsg("partner_id가 없습니다. (상단에서 거래처/기간 선택 후 조회를 누르세요)");
         return;
       }
 
-      // ✅ 조회 버튼 누르면: 해당월 “거래 있는 날짜”를 먼저 표시(요청사항)
-      await loadAvailableDates(pId, date);
-
-      // 1) 해당 거래처 + 해당일 주문(출고) 조회
       const { data: oData, error: oErr } = await supabase
         .from("orders")
-        .select("id,customer_id,customer_name,ship_date,ship_method,memo,supply_amount,vat_amount,total_amount,created_at")
+        .select("id,customer_id,customer_name,ship_date,ship_method,memo,total_amount,created_at")
         .eq("customer_id", pId)
-        .eq("ship_date", date)
-        .order("created_at", { ascending: true })
+        .gte("ship_date", f)
+        .lte("ship_date", t)
+        .order("ship_date", { ascending: true })
         .limit(5000);
 
       if (oErr) {
@@ -231,45 +191,83 @@ export default function SpecClient() {
         return;
       }
 
-      const ords = (oData ?? []) as any as OrderRow[];
-      setOrders(ords);
-
-      const orderIds = ords.map((o) => o.id).filter(Boolean);
-      if (orderIds.length === 0) {
-        setLines([]);
-        return;
-      }
-
-      // 2) order_lines 조회
-      const { data: lData, error: lErr } = await supabase.from("order_lines").select("*").in("order_id", orderIds).order("line_no", { ascending: true });
+      const { data: lData, error: lErr } = await supabase
+        .from("ledger_entries")
+        .select("id,entry_date,entry_ts,direction,amount,category,method,memo,partner_id,counterparty_name,business_no,created_at")
+        .eq("partner_id", pId)
+        .gte("entry_date", f)
+        .lte("entry_date", t)
+        .order("entry_date", { ascending: true })
+        .limit(10000);
 
       if (lErr) {
         setMsg(lErr.message);
         return;
       }
 
-      const mapped: SpecLine[] = (lData ?? []).map((x) => mapLineToSpec(x as LineLoose));
-      setLines(mapped);
+      const list: StatementRow[] = [];
+
+      for (const o of (oData ?? []) as any as OrderRow[]) {
+        const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
+        const amt = Number(o.total_amount ?? 0);
+        list.push({
+          date,
+          kind: "출고",
+          amountSigned: -amt,
+          remark: normalizeRemark(o.memo),
+        });
+      }
+
+      for (const l of (lData ?? []) as any as LedgerRow[]) {
+        const date = l.entry_date;
+        const amt = Number(l.amount ?? 0);
+        const sign = String(l.direction) === "OUT" ? -1 : 1;
+        list.push({
+          date,
+          kind: sign > 0 ? "입금" : "출금",
+          amountSigned: sign * amt,
+          remark: normalizeRemark(l.memo),
+        });
+      }
+
+      list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      setRows(list);
     } finally {
       setLoading(false);
     }
   }
 
   const totals = useMemo(() => {
-    let supply = 0;
-    let vat = 0;
-    let total = 0;
-    for (const l of lines) {
-      supply += Number(l.supply ?? 0);
-      vat += Number(l.vat ?? 0);
-      total += Number(l.total ?? 0);
+    let inSum = 0;
+    let outSum = 0;
+    for (const r of rows) {
+      if (r.amountSigned >= 0) inSum += r.amountSigned;
+      else outSum += Math.abs(r.amountSigned);
     }
-    return { supply, vat, total };
-  }, [lines]);
+    const net = inSum - outSum;
+    return { inSum, outSum, net };
+  }, [rows]);
 
-  // ✅ 미수금 = (해당일 합계 - 해당일 입금 합계) 로 계산하려면 입금 데이터가 필요하지만,
-  // 요청사항에 “하단에 공급가/부가세/합계+미수금”이 있어서, 화면에는 “미수금” 영역만 유지하고 값은 0으로 둠 (기존 동작 유지)
-  const receivable = useMemo(() => 0, []);
+  // ✅ 입력 검색 필터
+  const filteredPartners = useMemo(() => {
+    const q = partnerQuery.trim().toLowerCase();
+    if (!q) return partners.slice(0, 50);
+
+    const scored = partners
+      .map((p) => {
+        const name = (p.name ?? "").toLowerCase();
+        const biz = (p.business_no ?? "").toLowerCase();
+        const key = `${name} ${biz}`;
+        const hit = key.includes(q);
+        const score =
+          !q ? 9999 : name.startsWith(q) ? 0 : name.includes(q) ? 1 : biz.includes(q) ? 2 : hit ? 3 : 99;
+        return { p, score, hit };
+      })
+      .filter((x) => x.hit)
+      .sort((a, b) => a.score - b.score || a.p.name.localeCompare(b.p.name));
+
+    return scored.slice(0, 50).map((x) => x.p);
+  }, [partners, partnerQuery]);
 
   useEffect(() => {
     loadPartners();
@@ -277,25 +275,23 @@ export default function SpecClient() {
   }, []);
 
   useEffect(() => {
-    if (qpPartnerId && qpDate) {
+    if (qpPartnerId && qpFrom && qpTo) {
       setPartnerId(qpPartnerId);
-      setDateYMD(qpDate);
-      loadSpec(qpPartnerId, qpDate);
+      setFromYMD(qpFrom);
+      setToYMD(qpTo);
+      loadStatement(qpPartnerId, qpFrom, qpTo);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const canPrint = !!partnerId && !!dateYMD;
+  const canPrint = !!partnerId;
 
   return (
     <div className={`${pageBg} min-h-screen`}>
-      {/* ✅ print 전용 스타일 */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
           .print-card { box-shadow: none !important; }
-          /* ✅ 인쇄 화면에서 상단 검은색 배경(네비/헤더) 숨김 (요청사항) */
-          nav, header { display: none !important; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
@@ -307,18 +303,16 @@ export default function SpecClient() {
 
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            {/* ✅ 제목 변경: 거래명세서 YYYY/MM/DD (요청사항) */}
-            <div className="text-xl font-semibold">
-              거래명세서 {dateYMD ? ymdToSlash(dateYMD) : ""}
+            <div className="text-xl font-semibold">거래원장</div>
+            <div className="mt-2">
+              <span className={pill}>
+                기간: {fromYMD} ~ {toYMD}
+              </span>
             </div>
-            {/* ✅ 밑에 일자표시 삭제 (요청사항) */}
           </div>
 
           <div className="no-print flex gap-2">
-            <button className={btn} onClick={() => router.push("/tax/statement")} title="원장으로">
-              원장으로
-            </button>
-            <button className={btn} onClick={() => window.print()} disabled={!canPrint} title={!canPrint ? "거래처/일자를 먼저 선택하세요" : ""}>
+            <button className={btn} onClick={() => window.print()} disabled={!canPrint} title={!canPrint ? "거래처를 먼저 선택하세요" : ""}>
               인쇄 / PDF 저장
             </button>
           </div>
@@ -328,76 +322,102 @@ export default function SpecClient() {
         <div className={`${card} no-print p-4`}>
           <div className="mb-3 text-sm font-semibold">조회 조건</div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_260px_auto] md:items-end">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_180px_auto] md:items-end">
+            {/* ✅ 거래처: 풀다운 대신 입력 검색 */}
             <div>
               <div className="mb-1 text-xs text-slate-600">거래처</div>
-              <select className={input} value={partnerId} onChange={(e) => setPartnerId(e.target.value)}>
-                <option value="">선택하세요</option>
-                {partners.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} {p.business_no ? `(${p.business_no})` : ""}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <input
+                  className={input}
+                  value={partnerQuery}
+                  onChange={(e) => {
+                    setPartnerQuery(e.target.value);
+                  }}
+                  placeholder="회사명을 입력하세요"
+                />
+
+                {/* ✅ 입력 중 추천 리스트 */}
+                {partnerQuery.trim() ? (
+                  <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                    <div className="max-h-72 overflow-y-auto">
+                      {filteredPartners.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-slate-500">검색 결과가 없습니다.</div>
+                      ) : (
+                        filteredPartners.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                            onClick={() => {
+                              setPartnerId(p.id);
+                              setPartnerQuery(p.business_no ? `${p.name} (${p.business_no})` : p.name);
+                            }}
+                          >
+                            <span className="truncate">
+                              {p.name} {p.business_no ? `(${p.business_no})` : ""}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <div className="border-t border-slate-200 px-3 py-2 text-xs text-slate-500">※ 목록에서 클릭해서 선택하세요.</div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="mt-2 text-xs text-slate-500">※ 거래처/기간 선택 후 조회를 누르면 URL에 반영됩니다.</div>
             </div>
 
             <div>
-              <div className="mb-1 text-xs text-slate-600">일자</div>
-              <input type="date" className={input} value={dateYMD} onChange={(e) => setDateYMD(e.target.value)} />
+              <div className="mb-1 text-xs text-slate-600">From</div>
+              <input type="date" className={input} value={fromYMD} onChange={(e) => setFromYMD(e.target.value)} />
+            </div>
+
+            <div>
+              <div className="mb-1 text-xs text-slate-600">To</div>
+              <input type="date" className={input} value={toYMD} onChange={(e) => setToYMD(e.target.value)} />
             </div>
 
             <div className="flex gap-2">
               <button
+                className={btn}
+                onClick={() => {
+                  const f = addDays(todayYMD(), -30);
+                  const t = todayYMD();
+                  setFromYMD(f);
+                  setToYMD(t);
+                }}
+              >
+                최근 30일
+              </button>
+              <button
                 className={btnOn}
                 onClick={() => {
-                  pushUrl(partnerId, dateYMD);
-                  loadSpec(partnerId, dateYMD);
+                  pushUrl(partnerId, fromYMD, toYMD);
+                  loadStatement(partnerId, fromYMD, toYMD);
                 }}
+                disabled={!partnerId}
+                title={!partnerId ? "거래처를 먼저 선택하세요" : ""}
               >
                 조회
               </button>
             </div>
           </div>
-
-          {/* ✅ 조회 후: 해당월 거래 있는 날짜 표시 (요청사항) */}
-          {availableDates.length > 0 ? (
-            <div className="mt-3">
-              <div className="mb-2 text-xs text-slate-600">해당월 거래 있는 날짜</div>
-              <div className="flex flex-wrap gap-2">
-                {availableDates.map((d) => (
-                  <button
-                    key={d}
-                    className={`${chip} ${d === dateYMD ? "border-blue-300 bg-blue-50 text-blue-700" : ""}`}
-                    onClick={() => {
-                      setDateYMD(d);
-                      pushUrl(partnerId, d);
-                      loadSpec(partnerId, d);
-                    }}
-                    type="button"
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
 
         {/* 거래처(좌) / 회사정보(우) */}
         <div className={`${card} print-card mt-4 p-4`}>
           <div className="grid grid-cols-2 gap-6 items-start">
-            {/* LEFT: 거래처 */}
+            {/* LEFT */}
             <div>
               <div className="mb-2 text-sm font-semibold">거래처</div>
               {selectedPartner ? (
                 <div className="space-y-1 text-sm">
-                  {/* ✅ 사업자번호를 업체명 밑 줄로 (요청사항) */}
                   <div className="font-semibold">{selectedPartner.name}</div>
-                  {selectedPartner.business_no ? <div className="text-slate-700">{selectedPartner.business_no}</div> : null}
-
+                  {selectedPartner.business_no ? <div>{selectedPartner.business_no}</div> : null}
                   {selectedPartner.ceo_name ? <div>대표: {selectedPartner.ceo_name}</div> : null}
                   {selectedPartner.address1 ? <div>주소: {selectedPartner.address1}</div> : null}
-                  {(selectedPartner.biz_type || selectedPartner.biz_item) ? (
+                  {selectedPartner.biz_type || selectedPartner.biz_item ? (
                     <div>
                       업종: {selectedPartner.biz_type ?? ""} {selectedPartner.biz_item ? `/ 업태: ${selectedPartner.biz_item}` : ""}
                     </div>
@@ -408,27 +428,12 @@ export default function SpecClient() {
               )}
             </div>
 
-            {/* RIGHT: 회사정보 */}
+            {/* RIGHT */}
             <div className="text-right">
               <div className="mb-2 text-sm font-semibold opacity-0 select-none">.</div>
               <div className="space-y-1 text-sm">
-                {/* ✅ 사업자번호를 업체명 밑 줄로 (요청사항) */}
                 <div className="font-semibold">{OUR.name}</div>
-                <div className="text-slate-700">{OUR.business_no}</div>
-
-                {/* ✅ 대표명 + 도장 삽입 (요청사항) */}
-                <div>
-                  대표:{" "}
-                  <span className="relative inline-block">
-                    {OUR.ceo}
-                    <img
-                      src="/stamp.png"
-                      alt="stamp"
-                      className="pointer-events-none absolute -right-3 -top-7 h-10 w-10 opacity-90"
-                    />
-                  </span>
-                </div>
-
+                <div>대표: {OUR.ceo}</div>
                 <div>주소: {OUR.address1}</div>
                 <div>업종: {OUR.biz}</div>
               </div>
@@ -436,97 +441,69 @@ export default function SpecClient() {
           </div>
         </div>
 
-        {/* 세부 내역 표 */}
+        {/* 표 */}
         <div className={`${card} print-card mt-4 p-4`}>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold">세부 내역</div>
-            <div className="text-xs text-slate-600">
-              주문(출고) {orders.length}건 · 품목 {lines.length}줄
+            <div className="text-sm font-semibold">내역</div>
+            <div className="text-sm text-slate-600">
+              입금 합계(매출입금) <span className="font-semibold tabular-nums">{formatMoney(totals.inSum)}</span> · 출고/출금 합계{" "}
+              <span className="font-semibold tabular-nums">{formatMoney(totals.outSum)}</span> · 미수(출고-입금){" "}
+              <span className="font-semibold tabular-nums">{formatMoney(Math.max(0, totals.outSum - totals.inSum))}</span>
             </div>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <table className="w-full table-fixed text-sm">
-              {/* ✅ 품목 폭 넓히고, 옆 컬럼 폭 줄임 (요청사항) */}
               <colgroup>
-                <col style={{ width: "auto" }} />
-                <col style={{ width: "90px" }} />
-                <col style={{ width: "90px" }} />
-                <col style={{ width: "110px" }} />
-                <col style={{ width: "110px" }} />
                 <col style={{ width: "120px" }} />
+                <col style={{ width: "120px" }} />
+                <col style={{ width: "140px" }} />
+                <col style={{ width: "auto" }} />
               </colgroup>
 
               <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                 <tr>
-                  <th className="px-3 py-2 text-left">품목</th>
-                  <th className="px-3 py-2 text-right">수량</th>
-                  <th className="px-3 py-2 text-right">단가</th>
-                  <th className="px-3 py-2 text-right">공급가</th>
-                  <th className="px-3 py-2 text-right">부가세</th>
-                  <th className="px-3 py-2 text-right">합계</th>
+                  <th className="px-3 py-2 text-left">일자</th>
+                  <th className="px-3 py-2 text-left">구분</th>
+                  <th className="px-3 py-2 text-right">금액</th>
+                  <th className="px-3 py-2 text-left">비고</th>
                 </tr>
               </thead>
 
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-4 text-sm text-slate-500">
+                    <td colSpan={4} className="px-4 py-4 text-sm text-slate-500">
                       불러오는 중...
                     </td>
                   </tr>
-                ) : lines.length === 0 ? (
+                ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-4 text-sm text-slate-500">
-                      표시할 내역이 없습니다. (거래처/일자/주문 데이터 확인)
+                    <td colSpan={4} className="px-4 py-4 text-sm text-slate-500">
+                      표시할 내역이 없습니다. (거래처/기간/데이터 확인)
                     </td>
                   </tr>
                 ) : (
-                  lines.map((r, idx) => (
-                    <tr key={idx} className="border-t border-slate-200 bg-white">
-                      {/* ✅ 품목 한 줄 유지 (요청사항) */}
-                      <td className="px-3 py-2 whitespace-nowrap">{r.itemName}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{formatMoney(r.qty)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{formatMoney(r.unitPrice)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(r.supply)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{formatMoney(r.vat)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(r.total)}</td>
-                    </tr>
-                  ))
+                  rows.map((r, idx) => {
+                    const isMinus = r.amountSigned < 0;
+                    const moneyText = isMinus ? `-${formatMoney(Math.abs(r.amountSigned))}` : formatMoney(r.amountSigned);
+                    return (
+                      <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
+                        <td className="px-3 py-2 font-semibold tabular-nums">{r.date}</td>
+                        <td className="px-3 py-2 font-semibold">{r.kind}</td>
+                        <td className={`px-3 py-2 text-right tabular-nums font-semibold ${isMinus ? "text-red-600" : "text-blue-700"}`}>
+                          {moneyText}
+                        </td>
+                        <td className="px-3 py-2">{r.remark ? r.remark : ""}</td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
 
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[1fr_320px] md:items-start">
-            <div className="text-xs text-slate-500">※ 거래명세서에는 “입금/출금” 라인을 표시하지 않습니다.</div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-3">
-              <div className="flex items-center justify-between text-sm">
-                <div className="text-slate-600">공급가</div>
-                <div className="font-semibold tabular-nums">{formatMoney(totals.supply)}</div>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-sm">
-                <div className="text-slate-600">부가세</div>
-                <div className="font-semibold tabular-nums">{formatMoney(totals.vat)}</div>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-sm">
-                <div className="text-slate-600">합계</div>
-                <div className="font-semibold tabular-nums">{formatMoney(totals.total)}</div>
-              </div>
-
-              <div className="mt-3 border-t border-slate-200 pt-2">
-                <div className="flex items-center justify-between text-sm">
-                  <div className="text-slate-600">미수금</div>
-                  <div className="font-semibold tabular-nums">{formatMoney(receivable)}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-2">
-            <span className={pill}>기간: {dateYMD ? ymdToSlash(dateYMD) : "-"}</span>
-          </div>
+          <div className="mt-2 text-xs text-slate-500">※ 출고/출금은 음수로 표시됩니다. / 비고의 의미 없는 JSON 메모는 자동으로 숨깁니다.</div>
         </div>
       </div>
     </div>
