@@ -1,4 +1,4 @@
-
+현재 코드 줄테니 다시 확인하고 전체코드로 전달해줘. 요청하지 않은 부분은 절대 수정 편집하지말고. 적당한곳에 BONUSMATE ERP라고 넣어주고.
 "use client";
 
 import Link from "next/link";
@@ -9,13 +9,9 @@ const nav = [
   { href: "/scan", label: "스캔" },
   { href: "/products", label: "품목/바코드" },
   { href: "/report", label: "재고대장" },
-
-  // ✅ 경리장부/주문출고 제거, 세무 메뉴 추가
+  { href: "/ledger", label: "경리장부" },
+  { href: "/orders", label: "주문/출고" },
   { href: "/trade", label: "거래내역(통합)" },
-  { href: "/tax", label: "세무사" },
-  { href: "/tax/spec", label: "거래명세서" },
-  { href: "/tax/statement", label: "거래원장" },
-
   { href: "/calendar", label: "출고 캘린더" },
 ];
 
@@ -41,8 +37,6 @@ export default function TopNav() {
     >
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "10px 16px" }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ color: "white", fontWeight: 900, marginRight: 8 }}>BONUSMATE ERP</span>
-
           <Link
             href="/"
             style={{
