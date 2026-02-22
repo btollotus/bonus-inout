@@ -16,6 +16,23 @@ function normalizeBizNo(bn: any) {
   return s || "";
 }
 
+function extractOrdererName(memo: any): string {
+  if (memo == null) return "";
+  const s = String(memo).trim();
+  if (!s) return "";
+  // JSON 형태에서 orderer_name 추출
+  if (s.startsWith("{") && s.endsWith("}")) {
+    try {
+      const j = JSON.parse(s);
+      const v = j?.orderer_name;
+      return v == null ? "" : String(v).trim();
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
@@ -31,43 +48,53 @@ export async function GET(req: Request) {
     : [];
 
   if (!from || !to) {
-    return NextResponse.json(
-      { error: "from/to 파라미터가 필요합니다." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "from/to 파라미터가 필요합니다." }, { status: 400 });
   }
 
   const supabase = await createClient();
 
   // 1) 매출(orders)
-  // - 현재 TaxClient와 동일 컬럼 사용
-  const { data: oData, error: oErr } = await supabase
-    .from("orders")
-    .select(
-      "id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount"
-    )
-    .gte("ship_date", from)
-    .lte("ship_date", to)
-    .order("ship_date", { ascending: true })
-    .limit(100000);
+  // ✅ 주문자 컬럼을 위해 memo 포함 시도 (없으면 fallback)
+  let oData: any[] | null = null;
+  {
+    const { data, error } = await supabase
+      .from("orders")
+      .select(
+        "id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount,memo"
+      )
+      .gte("ship_date", from)
+      .lte("ship_date", to)
+      .order("ship_date", { ascending: true })
+      .limit(100000);
 
-  if (oErr) {
-    return NextResponse.json(
-      { error: "orders 조회 실패", detail: oErr.message },
-      { status: 500 }
-    );
+    if (!error) {
+      oData = (data ?? []) as any[];
+    } else {
+      // memo 컬럼이 없는 경우를 대비한 fallback
+      const { data: data2, error: error2 } = await supabase
+        .from("orders")
+        .select("id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount")
+        .gte("ship_date", from)
+        .lte("ship_date", to)
+        .order("ship_date", { ascending: true })
+        .limit(100000);
+
+      if (error2) {
+        return NextResponse.json(
+          { error: "orders 조회 실패", detail: error2.message },
+          { status: 500 }
+        );
+      }
+      oData = (data2 ?? []) as any[];
+    }
   }
 
   // ✅ 매출처 사업자번호 매핑 (orders.customer_id -> partners.business_no)
   const customerIds = Array.from(
-    new Set(
-      (oData ?? [])
-        .map((x: any) => x.customer_id)
-        .filter(Boolean) as string[]
-    )
+    new Set((oData ?? []).map((x: any) => x.customer_id).filter(Boolean) as string[])
   );
 
-  let partnersById = new Map<string, { business_no: string | null }>();
+  const partnersById = new Map<string, { business_no: string | null }>();
   if (customerIds.length) {
     const { data: pData, error: pErr } = await supabase
       .from("partners")
@@ -77,9 +104,7 @@ export async function GET(req: Request) {
 
     if (!pErr && pData) {
       for (const p of pData as any[]) {
-        partnersById.set(String(p.id), {
-          business_no: p.business_no ?? null,
-        });
+        partnersById.set(String(p.id), { business_no: p.business_no ?? null });
       }
     }
   }
@@ -111,13 +136,12 @@ export async function GET(req: Request) {
 
   /**
    * ✅ 통합 1시트
-   * 컬럼:
-   * 날짜 / 거래처 / 사업자등록번호 / 구분 / 공급가 / VAT / 총액 / 비고
-   * (참조ID 제거)
+   * 요청 헤더 순서:
+   * 날짜 / 구분 / 사업자등록번호 / 거래처 / 주문자 / 비고 / 공급가 / VAT / 총액
    */
   const rows: any[] = [];
 
-  // 매출 행
+  // 매출 행 (orders) — 판매채널(카카오플러스-판매/네이버-판매/쿠팡-판매)도 '제외 없이' 그대로 포함
   for (const o of (oData ?? []) as any[]) {
     const supply = safeNum(o.supply_amount);
     const vat = safeNum(o.vat_amount);
@@ -126,15 +150,18 @@ export async function GET(req: Request) {
     const cid = String(o.customer_id ?? "");
     const partnerBizNo = cid ? partnersById.get(cid)?.business_no ?? "" : "";
 
+    const ordererName = extractOrdererName(o.memo);
+
     rows.push({
       날짜: toYmd(o.ship_date),
-      거래처: String(o.customer_name ?? ""),
-      사업자등록번호: normalizeBizNo(partnerBizNo),
       구분: "매출",
+      사업자등록번호: normalizeBizNo(partnerBizNo),
+      거래처: String(o.customer_name ?? ""),
+      주문자: ordererName,
+      비고: "",
       공급가: supply,
       VAT: vat,
       총액: total,
-      비고: "",
     });
   }
 
@@ -150,13 +177,14 @@ export async function GET(req: Request) {
 
     rows.push({
       날짜: toYmd(l.entry_date),
-      거래처: String(l.counterparty_name ?? ""),
-      사업자등록번호: normalizeBizNo(l.business_no),
       구분: `매입(${String(l.category ?? "OUT")})`,
+      사업자등록번호: normalizeBizNo(l.business_no),
+      거래처: String(l.counterparty_name ?? ""),
+      주문자: "",
+      비고: String(l.memo ?? ""),
       공급가: supply,
       VAT: vatForReport,
       총액: total,
-      비고: String(l.memo ?? ""),
     });
   }
 
@@ -166,33 +194,34 @@ export async function GET(req: Request) {
     return String(a.날짜).localeCompare(String(b.날짜));
   });
 
-  const ws = XLSX.utils.json_to_sheet(rows, {
-    header: ["날짜", "거래처", "사업자등록번호", "구분", "공급가", "VAT", "총액", "비고"],
-  });
+  const header = ["날짜", "구분", "사업자등록번호", "거래처", "주문자", "비고", "공급가", "VAT", "총액"];
+
+  const ws = XLSX.utils.json_to_sheet(rows, { header });
 
   // 열 너비
   (ws as any)["!cols"] = [
     { wch: 12 }, // 날짜
-    { wch: 26 }, // 거래처
-    { wch: 16 }, // 사업자등록번호
     { wch: 16 }, // 구분
+    { wch: 16 }, // 사업자등록번호
+    { wch: 26 }, // 거래처
+    { wch: 14 }, // 주문자
+    { wch: 30 }, // 비고
     { wch: 12 }, // 공급가
     { wch: 10 }, // VAT
     { wch: 12 }, // 총액
-    { wch: 30 }, // 비고
   ];
 
-  // ✅ 숫자 표시 형식(천단위) 적용: 공급가(E), VAT(F), 총액(G)
+  // ✅ 숫자 표시 형식(천단위) 적용: 공급가(G), VAT(H), 총액(I)
   const ref = ws["!ref"];
   if (ref) {
     const range = XLSX.utils.decode_range(ref);
     for (let r = range.s.r + 1; r <= range.e.r; r++) {
-      for (const c of [4, 5, 6]) { // E=4, F=5, G=6 (0-based)
+      for (const c of [6, 7, 8]) {
         const addr = XLSX.utils.encode_cell({ r, c });
         const cell = (ws as any)[addr];
         if (!cell) continue;
 
-        // 안전장치: 문자열이면 숫자로 교정
+        // 문자열이면 숫자로 교정
         if (cell.t === "s") {
           const n = Number(String(cell.v ?? "").replaceAll(",", ""));
           if (Number.isFinite(n)) {
@@ -218,11 +247,8 @@ export async function GET(req: Request) {
   return new NextResponse(buf, {
     status: 200,
     headers: {
-      "Content-Type":
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(
-        filename
-      )}`,
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
       "Cache-Control": "no-store",
     },
   });
