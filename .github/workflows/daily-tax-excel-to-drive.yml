@@ -46,7 +46,7 @@ jobs:
           TODAY="${{ steps.today.outputs.date }}"
           FILENAME="세무사_통합_${TODAY}_${TODAY}.xlsx"
 
-          rclone copyto "$FILENAME" "gdrive:{${GDRIVE_FOLDER_ID}}/${FILENAME}" \
-            --drive-shared-drive-id "${GDRIVE_SHARED_DRIVE_ID}" \
-            --drive-use-trash=false \
-            --retries 3
+rclone copyto "$FILENAME" "gdrive:${GDRIVE_FOLDER_ID}/${FILENAME}" \
+  --drive-shared-drive-id "${GDRIVE_SHARED_DRIVE_ID}" \
+  --drive-use-trash=false \
+  --retries 3
