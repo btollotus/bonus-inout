@@ -2031,6 +2031,7 @@ export default function TradeClient() {
                           <option value="택배">택배</option>
                           <option value="퀵-신용">퀵-신용</option>
                           <option value="퀵-착불">퀵-착불</option>
+                          <option value="방문">방문</option>
                           <option value="기타">기타</option>
                         </select>
                       </div>
@@ -2465,6 +2466,7 @@ export default function TradeClient() {
                       <option value="택배">택배</option>
                       <option value="퀵-신용">퀵-신용</option>
                       <option value="퀵-착불">퀵-착불</option>
+                      <option value="방문">방문</option>
                       <option value="기타">기타</option>
                     </select>
                   </div>
