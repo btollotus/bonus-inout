@@ -230,9 +230,8 @@ export async function GET(req: Request) {
   /**
    * ✅ 통합 1시트
    * 요청 헤더 순서:
-   * 날짜 / 구분 / 사업자등록번호 / 거래처 /
-   * 수화주명 / 주소1 / 휴대폰 / 전화 / 요청사항 / 배송지2 /
-   * 주문자 / 품목명 / 식품유형 / 무게 / 비고 / 공급가 / VAT / 총액
+   * 날짜 / 구분 / 사업자등록번호 / 거래처 / 주문자 / 품목명 / 식품유형 / 무게 / 비고 / 공급가 / VAT / 총액 /
+   * 수화주명 / 주소1 / 휴대폰 / 전화 / 요청사항 / 배송지2
    */
   const rows: any[] = [];
 
@@ -270,12 +269,11 @@ export async function GET(req: Request) {
     const reqMsg = s1 ? safeStr(s1.delivery_message) : "";
 
     // ✅ 배송지2: seq=2가 있으면 "수화주명 주소" 요약
-    const ship2 =
-      s2
-        ? [safeStr(s2.ship_to_name), buildAddress(s2.ship_to_address1, s2.ship_to_address2)]
-            .filter(Boolean)
-            .join(" ")
-        : "";
+    const ship2 = s2
+      ? [safeStr(s2.ship_to_name), buildAddress(s2.ship_to_address1, s2.ship_to_address2)]
+          .filter(Boolean)
+          .join(" ")
+      : "";
 
     const lns = linesByOrder.get(oid) ?? [];
 
@@ -406,12 +404,6 @@ export async function GET(req: Request) {
     "구분",
     "사업자등록번호",
     "거래처",
-    "수화주명",
-    "주소1",
-    "휴대폰",
-    "전화",
-    "요청사항",
-    "배송지2",
     "주문자",
     "품목명",
     "식품유형",
@@ -420,6 +412,12 @@ export async function GET(req: Request) {
     "공급가",
     "VAT",
     "총액",
+    "수화주명",
+    "주소1",
+    "휴대폰",
+    "전화",
+    "요청사항",
+    "배송지2",
   ];
 
   const ws = XLSX.utils.json_to_sheet(rows, { header });
@@ -431,13 +429,6 @@ export async function GET(req: Request) {
     { wch: 16 }, // 사업자등록번호
     { wch: 26 }, // 거래처
 
-    { wch: 14 }, // 수화주명
-    { wch: 40 }, // 주소1
-    { wch: 16 }, // 휴대폰
-    { wch: 16 }, // 전화
-    { wch: 22 }, // 요청사항
-    { wch: 28 }, // 배송지2
-
     { wch: 14 }, // 주문자
     { wch: 28 }, // 품목명
     { wch: 14 }, // 식품유형
@@ -446,6 +437,13 @@ export async function GET(req: Request) {
     { wch: 12 }, // 공급가
     { wch: 10 }, // VAT
     { wch: 12 }, // 총액
+
+    { wch: 14 }, // 수화주명
+    { wch: 40 }, // 주소1
+    { wch: 16 }, // 휴대폰
+    { wch: 16 }, // 전화
+    { wch: 22 }, // 요청사항
+    { wch: 28 }, // 배송지2
   ];
 
   // ✅ 숫자 표시 형식(천단위) 적용: 무게, 공급가, VAT, 총액
