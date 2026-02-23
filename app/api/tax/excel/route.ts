@@ -1,3 +1,4 @@
+
 // app/api/tax/excel/route.ts
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
@@ -161,26 +162,27 @@ export async function GET(req: Request) {
   if (orderIds.length) {
     const { data: shipData, error: shipErr } = await supabase
       .from("order_shipments")
-      .select(
-        "id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message"
-      )
+      .select("id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message")
       .in("order_id", orderIds)
       .order("order_id", { ascending: true })
       .order("seq", { ascending: true })
       .limit(200000);
 
     if (!shipErr && shipData) {
+      // ✅ seq 값이 0/1 이든 1/2 이든 상관없이 "정렬 후 첫 2개"를 배송지1/2로 사용 (배송지2 누락 방지)
+      const tmp = new Map<string, ShipRow[]>();
+
       for (const r of shipData as any[]) {
         const oid = String(r.order_id ?? "");
         if (!oid) continue;
+        const arr = tmp.get(oid) ?? [];
+        arr.push(r as ShipRow);
+        tmp.set(oid, arr);
+      }
 
-        const seq = safeNum(r.seq);
-        const cur = shipByOrder.get(oid) ?? { s1: null, s2: null };
-
-        if (seq === 1 && !cur.s1) cur.s1 = r as ShipRow;
-        else if (seq === 2 && !cur.s2) cur.s2 = r as ShipRow;
-
-        shipByOrder.set(oid, cur);
+      for (const [oid, arr] of tmp.entries()) {
+        const sorted = arr.slice().sort((a, b) => safeNum(a?.seq) - safeNum(b?.seq));
+        shipByOrder.set(oid, { s1: sorted[0] ?? null, s2: sorted[1] ?? null });
       }
     }
   }
@@ -190,11 +192,7 @@ export async function GET(req: Request) {
 
   const partnersById = new Map<string, { business_no: string | null }>();
   if (customerIds.length) {
-    const { data: pData, error: pErr } = await supabase
-      .from("partners")
-      .select("id,business_no")
-      .in("id", customerIds)
-      .limit(10000);
+    const { data: pData, error: pErr } = await supabase.from("partners").select("id,business_no").in("id", customerIds).limit(10000);
 
     if (!pErr && pData) {
       for (const p of pData as any[]) {
@@ -268,11 +266,9 @@ export async function GET(req: Request) {
     const phone = s1 ? safeStr(s1.ship_to_phone) : "";
     const reqMsg = s1 ? safeStr(s1.delivery_message) : "";
 
-    // ✅ 배송지2: seq=2가 있으면 "수화주명 주소" 요약
+    // ✅ 배송지2: 두번째 배송지가 있으면 "수화주명 주소" 요약
     const ship2 = s2
-      ? [safeStr(s2.ship_to_name), buildAddress(s2.ship_to_address1, s2.ship_to_address2)]
-          .filter(Boolean)
-          .join(" ")
+      ? [safeStr(s2.ship_to_name), buildAddress(s2.ship_to_address1, s2.ship_to_address2)].filter(Boolean).join(" ")
       : "";
 
     const lns = linesByOrder.get(oid) ?? [];
