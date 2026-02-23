@@ -1,19 +1,14 @@
-
 name: Daily Tax Excel to Google Drive
 
 on:
   schedule:
-    - cron: "10 15 * * *"
+    - cron: "10 15 * * *" # 매일 00:10 KST (UTC 15:10)
   workflow_dispatch:
 
 jobs:
   upload:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Set timezone to Asia/Seoul
-        run: sudo timedatectl set-timezone Asia/Seoul
-
       - name: Generate today date
         id: today
         run: echo "date=$(date +%F)" >> $GITHUB_OUTPUT
@@ -22,16 +17,14 @@ jobs:
         run: |
           TODAY="${{ steps.today.outputs.date }}"
           URL="https://bonus-inout.vercel.app/api/tax/excel?from=${TODAY}&to=${TODAY}&outCats=급여,세금,기타"
-
           FILENAME="세무사_통합_${TODAY}_${TODAY}.xlsx"
-
           echo "Downloading ${URL}"
           curl -L --fail -o "$FILENAME" "$URL"
 
       - name: Install rclone
         run: curl https://rclone.org/install.sh | sudo bash
 
-      - name: Configure rclone
+      - name: Configure rclone (service account)
         env:
           GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
         run: |
@@ -45,13 +38,15 @@ jobs:
           service_account_file = /tmp/sa.json
           EOF
 
-      - name: Upload to Google Drive
+      - name: Upload to Shared Drive folder
         env:
           GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+          GDRIVE_SHARED_DRIVE_ID: ${{ secrets.GDRIVE_SHARED_DRIVE_ID }}
         run: |
-          TODAY=$(date +%F)
+          TODAY="${{ steps.today.outputs.date }}"
           FILENAME="세무사_통합_${TODAY}_${TODAY}.xlsx"
 
           rclone copyto "$FILENAME" "gdrive:{${GDRIVE_FOLDER_ID}}/${FILENAME}" \
+            --drive-shared-drive-id "${GDRIVE_SHARED_DRIVE_ID}" \
             --drive-use-trash=false \
             --retries 3
