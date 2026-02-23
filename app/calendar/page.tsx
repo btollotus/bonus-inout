@@ -154,6 +154,14 @@ export default function CalendarPage() {
   // 메모(월 범위)
   const [memos, setMemos] = useState<CalendarMemoRow[]>([]);
 
+  type ShipLine = {
+    partner_id: string | null;
+    partner_name: string;
+    ship_method: ShipMethod;
+    cnt: number;
+    text: string;
+  };
+
   // ✅ 출고 집계(월 범위) : date -> { total, methods, lines }
   const [shipAgg, setShipAgg] = useState<
     Map<
@@ -161,7 +169,7 @@ export default function CalendarPage() {
       {
         total: number;
         byMethod: Record<ShipMethod, number>;
-        lines: string[]; // ✅ 셀에 표시할 출고 라인(줄단위)
+        lines: ShipLine[]; // ✅ 셀에 표시할 출고 라인(줄단위)
       }
     >
   >(new Map());
@@ -181,7 +189,7 @@ export default function CalendarPage() {
   const [shipListLoading, setShipListLoading] = useState(false);
   const [shipListErr, setShipListErr] = useState<string | null>(null);
 
-  type ShipRow = { partner_name: string; ship_method: ShipMethod };
+  type ShipRow = { partner_id: string | null; partner_name: string; ship_method: ShipMethod };
   const [shipRows, setShipRows] = useState<ShipRow[]>([]);
 
   const [downloadingExcel, setDownloadingExcel] = useState(false);
@@ -204,6 +212,15 @@ export default function CalendarPage() {
     return map;
   }, [memos]);
 
+  function openSpec(partnerId: string | null, date: string) {
+    if (!partnerId) return;
+    if (!date) return;
+    const url = `/tax/spec?partnerId=${encodeURIComponent(partnerId)}&from=${encodeURIComponent(
+      date
+    )}&to=${encodeURIComponent(date)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   async function loadAll() {
     setMsg(null);
 
@@ -224,7 +241,7 @@ export default function CalendarPage() {
     {
       const { data, error } = await supabase
         .from("orders")
-        .select("ship_date,ship_method,customer_name")
+        .select("ship_date,ship_method,customer_id,customer_name")
         .gte("ship_date", range.from)
         .lt("ship_date", range.to)
         .not("ship_date", "is", null);
@@ -233,10 +250,10 @@ export default function CalendarPage() {
 
       const map = new Map<
         string,
-        { total: number; byMethod: Record<ShipMethod, number>; lines: string[] }
+        { total: number; byMethod: Record<ShipMethod, number>; lines: ShipLine[] }
       >();
 
-      const lineMapByDate = new Map<string, Map<string, number>>();
+      const lineMapByDate = new Map<string, Map<string, { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }>>();
 
       for (const r of (data ?? []) as any[]) {
         const d = String(r.ship_date ?? "").slice(0, 10);
@@ -244,6 +261,8 @@ export default function CalendarPage() {
 
         const customerName = String(r?.customer_name ?? "").trim() || "(거래처 미지정)";
         if (HIDE_CUSTOMERS.has(customerName)) continue;
+
+        const partnerId = r?.customer_id == null ? null : String(r.customer_id);
 
         const method = normalizeShipMethod(r?.ship_method);
 
@@ -257,9 +276,18 @@ export default function CalendarPage() {
         cur.byMethod[method] = (cur.byMethod[method] ?? 0) + 1;
         map.set(d, cur);
 
-        const key = `${customerName}__${method}`;
-        const lm = lineMapByDate.get(d) ?? new Map<string, number>();
-        lm.set(key, (lm.get(key) ?? 0) + 1);
+        const key = `${partnerId ?? ""}__${customerName}__${method}`;
+        const lm = lineMapByDate.get(d) ?? new Map<
+          string,
+          { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }
+        >();
+
+        const prev = lm.get(key);
+        if (prev) {
+          prev.cnt += 1;
+        } else {
+          lm.set(key, { partner_id: partnerId, partner: customerName, method, cnt: 1 });
+        }
         lineMapByDate.set(d, lm);
       }
 
@@ -269,19 +297,24 @@ export default function CalendarPage() {
         const lm = lineMapByDate.get(d);
         if (!lm) continue;
 
-        const lines = Array.from(lm.entries()).map(([key, cnt]) => {
-          const [partner, method] = key.split("__") as [string, ShipMethod];
-          const tail = cnt > 1 ? ` (${cnt})` : "";
-          return { partner, method, text: `${partner}-${method}${tail}` };
+        const lines = Array.from(lm.values()).map((x) => {
+          const tail = x.cnt > 1 ? ` (${x.cnt})` : "";
+          return {
+            partner_id: x.partner_id,
+            partner_name: x.partner,
+            ship_method: x.method,
+            cnt: x.cnt,
+            text: `${x.partner}-${x.method}${tail}`,
+          } as ShipLine;
         });
 
         lines.sort((a, b) => {
-          const nameCmp = a.partner.localeCompare(b.partner, "ko");
+          const nameCmp = a.partner_name.localeCompare(b.partner_name, "ko");
           if (nameCmp !== 0) return nameCmp;
-          return (methodOrder[a.method] ?? 9) - (methodOrder[b.method] ?? 9);
+          return (methodOrder[a.ship_method] ?? 9) - (methodOrder[b.ship_method] ?? 9);
         });
 
-        agg.lines = lines.map((x) => x.text);
+        agg.lines = lines;
       }
 
       setShipAgg(map);
@@ -337,7 +370,7 @@ export default function CalendarPage() {
     try {
       const { data, error } = await supabase
         .from("orders")
-        .select("customer_name, ship_method")
+        .select("customer_id, customer_name, ship_method")
         .eq("ship_date", date);
 
       if (error) throw error;
@@ -345,7 +378,8 @@ export default function CalendarPage() {
       const rowsAll: ShipRow[] = ((data ?? []) as any[]).map((r) => {
         const customerName = String(r?.customer_name ?? "").trim() || "(거래처 미지정)";
         const method = normalizeShipMethod(r?.ship_method);
-        return { partner_name: customerName, ship_method: method };
+        const partnerId = r?.customer_id == null ? null : String(r.customer_id);
+        return { partner_id: partnerId, partner_name: customerName, ship_method: method };
       });
 
       const rows = rowsAll.filter((r) => !HIDE_CUSTOMERS.has(r.partner_name));
@@ -365,15 +399,16 @@ export default function CalendarPage() {
   }, [shipRows]);
 
   const shipLines = useMemo(() => {
-    const m = new Map<string, number>(); // key: "업체명__방법" -> cnt
+    const m = new Map<string, { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }>(); // key -> cnt
     for (const r of shipRows) {
-      const key = `${r.partner_name}__${r.ship_method}`;
-      m.set(key, (m.get(key) ?? 0) + 1);
+      const key = `${r.partner_id ?? ""}__${r.partner_name}__${r.ship_method}`;
+      const prev = m.get(key);
+      if (prev) prev.cnt += 1;
+      else m.set(key, { partner_id: r.partner_id, partner: r.partner_name, method: r.ship_method, cnt: 1 });
     }
 
-    const lines = Array.from(m.entries()).map(([key, cnt]) => {
-      const [partner, method] = key.split("__") as [string, ShipMethod];
-      return { partner, method, cnt };
+    const lines = Array.from(m.values()).map((x) => {
+      return { partner_id: x.partner_id, partner: x.partner, method: x.method, cnt: x.cnt };
     });
 
     const order: Record<ShipMethod, number> = { 택배: 0, 퀵: 1, 기타: 2 };
@@ -610,10 +645,19 @@ export default function CalendarPage() {
                         </div>
 
                         <div className="space-y-0.5">
-                          {shipLinesInCell.slice(0, 6).map((t, idx) => (
-                            <div key={`${ds}__shipline__${idx}`} className="truncate text-[11px] text-slate-800">
-                              {t}
-                            </div>
+                          {shipLinesInCell.slice(0, 6).map((x, idx) => (
+                            <button
+                              key={`${ds}__shipline__${idx}`}
+                              type="button"
+                              className="block w-full truncate text-left text-[11px] text-slate-800 hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openSpec(x.partner_id, ds);
+                              }}
+                              title="클릭하면 당일 거래명세서 출력"
+                            >
+                              {x.text}
+                            </button>
                           ))}
                           {shipLinesInCell.length > 6 ? (
                             <div className="text-[11px] text-slate-500">외 {shipLinesInCell.length - 6}건…</div>
@@ -763,13 +807,18 @@ export default function CalendarPage() {
                     <div className="space-y-2">
                       {shipLines.map((x) => (
                         <div
-                          key={`${x.partner}__${x.method}`}
+                          key={`${x.partner_id ?? ""}__${x.partner}__${x.method}`}
                           className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
                         >
-                          <div className="text-sm font-semibold text-slate-900">
+                          <button
+                            type="button"
+                            className="text-left text-sm font-semibold text-slate-900 hover:underline"
+                            onClick={() => openSpec(x.partner_id, selShipDate)}
+                            title="클릭하면 당일 거래명세서 출력"
+                          >
                             {x.partner} - {x.method}
                             {x.cnt > 1 ? ` (${x.cnt})` : ""}
-                          </div>
+                          </button>
                         </div>
                       ))}
                     </div>
