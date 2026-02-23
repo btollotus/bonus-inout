@@ -212,12 +212,13 @@ export default function CalendarPage() {
     return map;
   }, [memos]);
 
+  // ✅ 거래명세서 열기 + 인쇄 다이얼로그(= PDF 인쇄 화면) 자동 호출용 파라미터 추가
   function openSpec(partnerId: string | null, date: string) {
     if (!partnerId) return;
     if (!date) return;
     const url = `/tax/spec?partnerId=${encodeURIComponent(partnerId)}&from=${encodeURIComponent(
       date
-    )}&to=${encodeURIComponent(date)}`;
+    )}&to=${encodeURIComponent(date)}&autoprint=1`;
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
@@ -253,7 +254,10 @@ export default function CalendarPage() {
         { total: number; byMethod: Record<ShipMethod, number>; lines: ShipLine[] }
       >();
 
-      const lineMapByDate = new Map<string, Map<string, { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }>>();
+      const lineMapByDate = new Map<
+        string,
+        Map<string, { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }>
+      >();
 
       for (const r of (data ?? []) as any[]) {
         const d = String(r.ship_date ?? "").slice(0, 10);
@@ -277,10 +281,12 @@ export default function CalendarPage() {
         map.set(d, cur);
 
         const key = `${partnerId ?? ""}__${customerName}__${method}`;
-        const lm = lineMapByDate.get(d) ?? new Map<
-          string,
-          { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }
-        >();
+        const lm =
+          lineMapByDate.get(d) ??
+          new Map<
+            string,
+            { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }
+          >();
 
         const prev = lm.get(key);
         if (prev) {
@@ -399,7 +405,10 @@ export default function CalendarPage() {
   }, [shipRows]);
 
   const shipLines = useMemo(() => {
-    const m = new Map<string, { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }>(); // key -> cnt
+    const m = new Map<
+      string,
+      { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }
+    >(); // key -> cnt
     for (const r of shipRows) {
       const key = `${r.partner_id ?? ""}__${r.partner_name}__${r.ship_method}`;
       const prev = m.get(key);
@@ -654,7 +663,7 @@ export default function CalendarPage() {
                                 e.stopPropagation();
                                 openSpec(x.partner_id, ds);
                               }}
-                              title="클릭하면 당일 거래명세서 출력"
+                              title="클릭하면 당일 거래명세서(인쇄창까지) 출력"
                             >
                               {x.text}
                             </button>
@@ -814,7 +823,7 @@ export default function CalendarPage() {
                             type="button"
                             className="text-left text-sm font-semibold text-slate-900 hover:underline"
                             onClick={() => openSpec(x.partner_id, selShipDate)}
-                            title="클릭하면 당일 거래명세서 출력"
+                            title="클릭하면 당일 거래명세서(인쇄창까지) 출력"
                           >
                             {x.partner} - {x.method}
                             {x.cnt > 1 ? ` (${x.cnt})` : ""}

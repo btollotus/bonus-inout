@@ -107,7 +107,8 @@ export default function SpecClient() {
   const router = useRouter();
 
   const qpPartnerId = sp.get("partnerId") || sp.get("partner_id") || "";
-  const qpDate = sp.get("date") || "";
+  const qpDate = sp.get("date") || sp.get("from") || sp.get("to") || "";
+  const qpAutoPrint = sp.get("autoprint") || "";
 
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -248,6 +249,20 @@ export default function SpecClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ✅ URL로 partnerId/date가 들어온 경우: 자동 조회 1회 실행 (autoprint 포함 케이스 대응)
+  const didAutoLoadRef = useRef(false);
+  useEffect(() => {
+    if (didAutoLoadRef.current) return;
+    if (!partnerId || !dateYMD) return;
+
+    // URL로 들어온 값이 있는 경우에만 1회 자동 조회
+    if (qpPartnerId || qpDate) {
+      didAutoLoadRef.current = true;
+      loadSpec(partnerId, dateYMD);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partnerId, dateYMD]);
+
   // ✅ 파트너 선택 시, 검색 입력 텍스트를 “선택값”으로 동기화
   useEffect(() => {
     if (!selectedPartner) return;
@@ -307,6 +322,26 @@ export default function SpecClient() {
     document.addEventListener("mousedown", onDocDown);
     return () => document.removeEventListener("mousedown", onDocDown);
   }, []);
+
+  // ✅ autoprint=1 이면 로드 완료 후 인쇄창(CTRL+P) 자동 실행 (1회)
+  const didAutoPrintRef = useRef(false);
+  useEffect(() => {
+    const auto = String(qpAutoPrint ?? "").trim() === "1";
+    if (!auto) return;
+    if (didAutoPrintRef.current) return;
+    if (loading) return;
+
+    // 데이터 로드가 끝났다면(0건이어도) 인쇄창을 띄움
+    didAutoPrintRef.current = true;
+    const t = window.setTimeout(() => {
+      try {
+        window.focus();
+        window.print();
+      } catch {}
+    }, 350);
+
+    return () => window.clearTimeout(t);
+  }, [qpAutoPrint, loading, orders.length, lines.length]);
 
   // --- 합계 ---
   const sumSupply = useMemo(() => lines.reduce((a, r) => a + (r.supply ?? 0), 0), [lines]);
