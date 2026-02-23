@@ -320,12 +320,29 @@ export async function GET(req: Request) {
     { wch: 12 }, // 총액
   ];
 
-  // ✅ 숫자 표시 형식(천단위) 적용: 공급가(J=9), VAT(K=10), 총액(L=11)
+  // ✅ 숫자 표시 형식(천단위) 적용: 무게(H=7), 공급가(J=9), VAT(K=10), 총액(L=11)
+  // ✅ 전체 폰트: 굴림 / 10
   const ref = ws["!ref"];
   if (ref) {
     const range = XLSX.utils.decode_range(ref);
+
+    // 폰트 적용 (헤더 포함 전체)
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        const cell = (ws as any)[addr];
+        if (!cell) continue;
+
+        cell.s = {
+          ...(cell.s ?? {}),
+          font: { ...(cell.s?.font ?? {}), name: "굴림", sz: 10 },
+        };
+      }
+    }
+
+    // 숫자 형식 적용 (데이터 행만)
     for (let r = range.s.r + 1; r <= range.e.r; r++) {
-      for (const c of [9, 10, 11]) {
+      for (const c of [7, 9, 10, 11]) {
         const addr = XLSX.utils.encode_cell({ r, c });
         const cell = (ws as any)[addr];
         if (!cell) continue;
@@ -349,7 +366,7 @@ export async function GET(req: Request) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "세무사_통합");
 
-  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx", cellStyles: true });
 
   const filename = `세무사_통합_${from}_${to}.xlsx`;
 
