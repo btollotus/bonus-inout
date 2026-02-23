@@ -57,6 +57,18 @@ function ymdSlash(ymd: string) {
   return ymd.replaceAll("-", "/");
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function safeFileNamePart(s: string) {
+  // 윈도우 파일명 금지문자 제거
+  return String(s ?? "")
+    .replaceAll(/[\\/:*?"<>|]/g, " ")
+    .replaceAll(/\s+/g, " ")
+    .trim();
+}
+
 // ---- order_lines 컬럼명이 프로젝트마다 다를 수 있어 후보키를 안전하게 매핑 ----
 function pickString(row: LineLoose, keys: string[], fallback = "") {
   for (const k of keys) {
@@ -101,6 +113,8 @@ function mapLineToSpec(line: LineLoose): SpecLine {
   return { itemName, qty, unitPrice, supply, vat, total };
 }
 
+type RawLineWithOrder = SpecLine & { orderId: string };
+
 export default function SpecClient() {
   const supabase = useMemo(() => createClient(), []);
   const sp = useSearchParams();
@@ -122,8 +136,12 @@ export default function SpecClient() {
   );
 
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [rawLines, setRawLines] = useState<RawLineWithOrder[]>([]);
   const [lines, setLines] = useState<SpecLine[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // ✅ 여러 주문 중 선택 출력
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
 
   // --- 거래처 검색(입력형) UI 상태 ---
   const [partnerQuery, setPartnerQuery] = useState<string>("");
@@ -152,73 +170,6 @@ export default function SpecClient() {
     router.replace(`/tax/spec?${qs.toString()}`);
   }
 
-  function safeFilePart(s: string) {
-    return String(s ?? "")
-      .replace(/[\\/:*?"<>|]/g, "")
-      .trim();
-  }
-
-  function seqStorageKey(pId: string, date: string) {
-    // ✅ 같은 날짜 기준 01,02 관리 (거래처+날짜 조합 단위)
-    return `spec_seq__${pId}__${date}`;
-  }
-
-  function nextSeq2(pId: string, date: string) {
-    try {
-      if (!pId || !date) return "01";
-      const key = seqStorageKey(pId, date);
-      const prevRaw = window.localStorage.getItem(key);
-      const prev = Number(prevRaw ?? "0");
-      const next = Number.isFinite(prev) ? prev + 1 : 1;
-      window.localStorage.setItem(key, String(next));
-      return String(next).padStart(2, "0");
-    } catch {
-      return "01";
-    }
-  }
-
-  const printSeqRef = useRef<string | null>(null);
-
-  function buildFileName(pId: string, date: string) {
-    const partner = selectedPartner?.name ?? "거래처";
-    const safePartner = safeFilePart(partner) || "거래처";
-    const safeDate = safeFilePart(date) || todayYMD();
-
-    const seq = nextSeq2(pId, safeDate);
-    return `거래명세서-${safePartner}-${safeDate}-${seq}.pdf`;
-  }
-
-  function doPrint() {
-    const d = dateYMD || todayYMD();
-    const pId = partnerId || "";
-
-    // ✅ 같은 인쇄 플로우(한 번 클릭/자동출력)에서는 seq가 1회만 증가하도록
-    if (!printSeqRef.current) {
-      const filename = buildFileName(pId, d);
-      const seq = filename.split("-").pop()?.replace(".pdf", "") || "01";
-      printSeqRef.current = seq;
-    }
-
-    const partner = selectedPartner?.name ?? "거래처";
-    const safePartner = safeFilePart(partner) || "거래처";
-    const safeDate = safeFilePart(d) || todayYMD();
-    const seq = printSeqRef.current || "01";
-
-    const titleBase = `거래명세서-${safePartner}-${safeDate}-${seq}`;
-    const originalTitle = document.title;
-
-    document.title = titleBase;
-    try {
-      window.focus();
-      window.print();
-    } catch {}
-
-    setTimeout(() => {
-      document.title = originalTitle;
-      printSeqRef.current = null;
-    }, 1000);
-  }
-
   async function loadPartners() {
     const { data, error } = await supabase
       .from("partners")
@@ -233,6 +184,29 @@ export default function SpecClient() {
     setPartners((data ?? []) as PartnerRow[]);
   }
 
+  function rebuildLines(nextSelectedOrderIds: string[], raw: RawLineWithOrder[]) {
+    const sel = new Set(nextSelectedOrderIds);
+
+    const picked = raw.filter((x) => sel.has(x.orderId));
+
+    // 동일 품목+단가로 집계(선택된 주문만)
+    const agg = new Map<string, SpecLine>();
+    for (const r of picked) {
+      const key = `${r.itemName}||${r.unitPrice}`;
+      const prev = agg.get(key);
+      if (!prev) agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total });
+      else {
+        prev.qty += r.qty;
+        prev.supply += r.supply;
+        prev.vat += r.vat;
+        prev.total += r.total;
+      }
+    }
+
+    const out = Array.from(agg.values()).filter((x) => x.itemName.trim() !== "");
+    setLines(out);
+  }
+
   async function loadSpec(pId: string, date: string) {
     setMsg(null);
     setLoading(true);
@@ -240,7 +214,9 @@ export default function SpecClient() {
     try {
       if (!pId || !date) {
         setOrders([]);
+        setRawLines([]);
         setLines([]);
+        setSelectedOrderIds([]);
         setMsg("partnerId 또는 date가 없습니다. (상단에서 거래처/일자 선택 후 조회)");
         return;
       }
@@ -260,11 +236,16 @@ export default function SpecClient() {
       setOrders(oRows);
 
       if (oRows.length === 0) {
+        setRawLines([]);
         setLines([]);
+        setSelectedOrderIds([]);
         return;
       }
 
       const orderIds = oRows.map((o) => o.id);
+
+      // ✅ 기본: 조회되면 전부 선택(기존 동작 유지)
+      setSelectedOrderIds(orderIds);
 
       // 2) order_lines
       const { data: lData, error: lErr } = await supabase
@@ -276,28 +257,20 @@ export default function SpecClient() {
 
       if (lErr) throw lErr;
 
-      const mapped = (lData ?? []).map(mapLineToSpec);
+      const mappedRaw: RawLineWithOrder[] = (lData ?? []).map((row: any) => {
+        const spec = mapLineToSpec(row);
+        const oid = String(row?.order_id ?? "");
+        return { ...spec, orderId: oid };
+      });
 
-      // 3) 동일 품목+단가로 집계(한 날짜에 여러 주문이 있어도 거래명세서에 보기 좋게)
-      const agg = new Map<string, SpecLine>();
-      for (const r of mapped) {
-        const key = `${r.itemName}||${r.unitPrice}`;
-        const prev = agg.get(key);
-        if (!prev) agg.set(key, { ...r });
-        else {
-          prev.qty += r.qty;
-          prev.supply += r.supply;
-          prev.vat += r.vat;
-          prev.total += r.total;
-        }
-      }
-
-      const out = Array.from(agg.values()).filter((x) => x.itemName.trim() !== "");
-      setLines(out);
+      setRawLines(mappedRaw);
+      rebuildLines(orderIds, mappedRaw);
     } catch (e: any) {
       setMsg(e?.message ?? String(e));
       setOrders([]);
+      setRawLines([]);
       setLines([]);
+      setSelectedOrderIds([]);
     } finally {
       setLoading(false);
     }
@@ -390,6 +363,60 @@ export default function SpecClient() {
     return () => document.removeEventListener("mousedown", onDocDown);
   }, []);
 
+  // ✅ 선택 주문 변경 시: 선택된 주문만으로 lines 재구성
+  useEffect(() => {
+    if (!rawLines.length) return;
+    rebuildLines(selectedOrderIds, rawLines);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOrderIds]);
+
+  function makePrintTitle(partnerName: string, date: string, seq2: string) {
+    const pn = safeFileNamePart(partnerName || "거래처미지정");
+    const ds = safeFileNamePart(date || "");
+    return `거래명세서-${pn}-${ds}-${seq2}`;
+  }
+
+  function nextSeqForDate(partnerKey: string, date: string) {
+    // 같은 날짜 기준 01,02... (partnerId 단위로 관리)
+    const d = String(date || "").trim();
+    const pk = String(partnerKey || "").trim();
+    if (!d) return "01";
+
+    const storageKey = `spec_print_seq__${d}__${pk || "no_partner"}`;
+    let n = 0;
+    try {
+      const cur = Number(localStorage.getItem(storageKey) || "0");
+      n = Number.isFinite(cur) ? cur : 0;
+    } catch {
+      n = 0;
+    }
+    n += 1;
+    try {
+      localStorage.setItem(storageKey, String(n));
+    } catch {}
+    return pad2(n);
+  }
+
+  function doPrint() {
+    const partnerName = selectedPartner?.name ?? orders?.[0]?.customer_name ?? "";
+    const seq2 = nextSeqForDate(partnerId, dateYMD);
+    const newTitle = makePrintTitle(partnerName, dateYMD, seq2);
+
+    const prevTitle = document.title;
+    document.title = newTitle;
+
+    try {
+      window.focus();
+      window.print();
+    } catch {
+    } finally {
+      // 바로 복구하면 일부 브라우저에서 제목 반영이 덜 될 수 있어 약간 지연
+      window.setTimeout(() => {
+        document.title = prevTitle;
+      }, 800);
+    }
+  }
+
   // ✅ autoprint=1 이면 로드 완료 후 인쇄창(CTRL+P) 자동 실행 (1회)
   const didAutoPrintRef = useRef(false);
   useEffect(() => {
@@ -407,12 +434,18 @@ export default function SpecClient() {
     }, 350);
 
     return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qpAutoPrint, loading, orders.length, lines.length]);
 
   // --- 합계 ---
   const sumSupply = useMemo(() => lines.reduce((a, r) => a + (r.supply ?? 0), 0), [lines]);
   const sumVat = useMemo(() => lines.reduce((a, r) => a + (r.vat ?? 0), 0), [lines]);
   const sumTotal = useMemo(() => lines.reduce((a, r) => a + (r.total ?? 0), 0), [lines]);
+
+  const selectedOrderCount = useMemo(() => {
+    const set = new Set(selectedOrderIds);
+    return orders.filter((o) => set.has(o.id)).length;
+  }, [orders, selectedOrderIds]);
 
   return (
     <div className={`min-h-screen ${pageBg} p-6`}>
@@ -538,6 +571,80 @@ export default function SpecClient() {
           </div>
 
           {msg && <div className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{msg}</div>}
+
+          {/* ✅ 같은 날짜 주문 여러 건: 필요한 주문만 선택해서 거래명세서 출력 */}
+          {orders.length > 1 ? (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-semibold">출고(주문) 선택</div>
+                <div className="flex gap-2">
+                  <button
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs"
+                    onClick={() => setSelectedOrderIds(orders.map((o) => o.id))}
+                    type="button"
+                  >
+                    전체선택
+                  </button>
+                  <button
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs"
+                    onClick={() => setSelectedOrderIds([])}
+                    type="button"
+                  >
+                    전체해제
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-600 mb-2">
+                선택됨: <span className="font-semibold">{selectedOrderCount}</span>건 / 전체 {orders.length}건
+              </div>
+
+              <div className="max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white">
+                {orders.map((o, idx) => {
+                  const checked = selectedOrderIds.includes(o.id);
+                  const time = (o.created_at ?? "").slice(11, 19); // HH:MM:SS
+                  return (
+                    <label
+                      key={o.id}
+                      className="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 hover:bg-slate-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          setSelectedOrderIds((prev) => {
+                            const set = new Set(prev);
+                            if (on) set.add(o.id);
+                            else set.delete(o.id);
+                            return Array.from(set);
+                          });
+                        }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <div className="font-semibold">주문 {idx + 1}</div>
+                          {time ? <div className="text-xs text-slate-500">{time}</div> : null}
+                          {o.ship_method ? (
+                            <div className="text-xs text-slate-500">출고방법: {String(o.ship_method)}</div>
+                          ) : null}
+                        </div>
+                        {o.memo ? <div className="mt-0.5 truncate text-xs text-slate-600">메모: {o.memo}</div> : null}
+                      </div>
+                      <div className="text-right text-xs text-slate-700">
+                        <div>합계</div>
+                        <div className="font-semibold">{formatMoney(o.total_amount)}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div className="mt-2 text-xs text-slate-500">
+                ※ 체크된 주문만 아래 거래명세서(세부 내역)에 반영됩니다.
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {/* 본문(인쇄에도 동일하게 보여야 함) */}
@@ -596,7 +703,7 @@ export default function SpecClient() {
             <div className="mb-2 flex items-center justify-between">
               <div className="text-sm font-semibold">세부 내역</div>
               <div className="text-xs text-slate-500">
-                주문(출고) {orders.length}건 · 품목 {lines.length}줄
+                주문(출고) {orders.length}건 · 선택 {selectedOrderCount}건 · 품목 {lines.length}줄
               </div>
             </div>
 
