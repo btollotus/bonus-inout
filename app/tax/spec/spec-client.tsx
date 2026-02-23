@@ -152,6 +152,73 @@ export default function SpecClient() {
     router.replace(`/tax/spec?${qs.toString()}`);
   }
 
+  function safeFilePart(s: string) {
+    return String(s ?? "")
+      .replace(/[\\/:*?"<>|]/g, "")
+      .trim();
+  }
+
+  function seqStorageKey(pId: string, date: string) {
+    // ✅ 같은 날짜 기준 01,02 관리 (거래처+날짜 조합 단위)
+    return `spec_seq__${pId}__${date}`;
+  }
+
+  function nextSeq2(pId: string, date: string) {
+    try {
+      if (!pId || !date) return "01";
+      const key = seqStorageKey(pId, date);
+      const prevRaw = window.localStorage.getItem(key);
+      const prev = Number(prevRaw ?? "0");
+      const next = Number.isFinite(prev) ? prev + 1 : 1;
+      window.localStorage.setItem(key, String(next));
+      return String(next).padStart(2, "0");
+    } catch {
+      return "01";
+    }
+  }
+
+  const printSeqRef = useRef<string | null>(null);
+
+  function buildFileName(pId: string, date: string) {
+    const partner = selectedPartner?.name ?? "거래처";
+    const safePartner = safeFilePart(partner) || "거래처";
+    const safeDate = safeFilePart(date) || todayYMD();
+
+    const seq = nextSeq2(pId, safeDate);
+    return `거래명세서-${safePartner}-${safeDate}-${seq}.pdf`;
+  }
+
+  function doPrint() {
+    const d = dateYMD || todayYMD();
+    const pId = partnerId || "";
+
+    // ✅ 같은 인쇄 플로우(한 번 클릭/자동출력)에서는 seq가 1회만 증가하도록
+    if (!printSeqRef.current) {
+      const filename = buildFileName(pId, d);
+      const seq = filename.split("-").pop()?.replace(".pdf", "") || "01";
+      printSeqRef.current = seq;
+    }
+
+    const partner = selectedPartner?.name ?? "거래처";
+    const safePartner = safeFilePart(partner) || "거래처";
+    const safeDate = safeFilePart(d) || todayYMD();
+    const seq = printSeqRef.current || "01";
+
+    const titleBase = `거래명세서-${safePartner}-${safeDate}-${seq}`;
+    const originalTitle = document.title;
+
+    document.title = titleBase;
+    try {
+      window.focus();
+      window.print();
+    } catch {}
+
+    setTimeout(() => {
+      document.title = originalTitle;
+      printSeqRef.current = null;
+    }, 1000);
+  }
+
   async function loadPartners() {
     const { data, error } = await supabase
       .from("partners")
@@ -335,8 +402,7 @@ export default function SpecClient() {
     didAutoPrintRef.current = true;
     const t = window.setTimeout(() => {
       try {
-        window.focus();
-        window.print();
+        doPrint();
       } catch {}
     }, 350);
 
@@ -395,7 +461,7 @@ export default function SpecClient() {
             </button>
             <button
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              onClick={() => window.print()}
+              onClick={() => doPrint()}
             >
               인쇄 / PDF 저장
             </button>
