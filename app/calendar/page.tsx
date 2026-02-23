@@ -140,6 +140,10 @@ export default function CalendarPage() {
   const badgeEtc =
     "inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700";
 
+  // ✅ 날짜 셀에서도 바로 쓰는 “송장엑셀” 버튼 스타일(추가)
+  const btnMini =
+    "rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-50";
+
   const [msg, setMsg] = useState<string | null>(null);
   const [curMonth, setCurMonth] = useState(() => monthKey(new Date())); // ✅ 기본: 오늘이 속한 월
 
@@ -193,6 +197,7 @@ export default function CalendarPage() {
   const [shipRows, setShipRows] = useState<ShipRow[]>([]);
 
   const [downloadingExcel, setDownloadingExcel] = useState(false);
+  const [downloadingExcelDate, setDownloadingExcelDate] = useState<string | null>(null); // ✅ 추가(해당 날짜 버튼만 로딩)
 
   const range = useMemo(() => {
     const yyyy = curMonthDate.getFullYear();
@@ -283,10 +288,7 @@ export default function CalendarPage() {
         const key = `${partnerId ?? ""}__${customerName}__${method}`;
         const lm =
           lineMapByDate.get(d) ??
-          new Map<
-            string,
-            { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }
-          >();
+          new Map<string, { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }>();
 
         const prev = lm.get(key);
         if (prev) {
@@ -430,9 +432,11 @@ export default function CalendarPage() {
     return lines;
   }, [shipRows]);
 
+  // ✅ “해당 날짜 전체 출고”를 송장(택배 양식) 엑셀로 다운로드
   async function downloadShipExcel(date: string) {
     if (!date) return;
     setDownloadingExcel(true);
+    setDownloadingExcelDate(date);
     setMsg(null);
 
     try {
@@ -454,7 +458,8 @@ export default function CalendarPage() {
 
       const a = document.createElement("a");
       a.href = url;
-      a.download = `출고목록_${date}.xlsx`;
+      // 파일명만 사용자 표시용으로 “송장” 느낌으로 변경(내용/기능은 동일)
+      a.download = `송장_${date}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -464,6 +469,7 @@ export default function CalendarPage() {
       setMsg(e?.message ?? "엑셀 다운로드 중 오류");
     } finally {
       setDownloadingExcel(false);
+      setDownloadingExcelDate(null);
     }
   }
 
@@ -613,6 +619,8 @@ export default function CalendarPage() {
                 const holidayName = holidays[ds] ?? "";
                 const isToday = ds === todayStr;
 
+                const isDownloadingThisDay = downloadingExcel && downloadingExcelDate === ds;
+
                 return (
                   <button
                     key={ds}
@@ -649,8 +657,24 @@ export default function CalendarPage() {
                         title="클릭해서 출고 목록(업체명-출고방식) 확인"
                         role="button"
                       >
-                        <div className="mb-1 text-[11px] font-semibold text-slate-800">
-                          출고 <span className="tabular-nums">{shipCnt}</span>건
+                        {/* ✅ 여기: 날짜 셀에서 바로 “송장 엑셀(해당 날짜 전체)” 다운로드 버튼 추가 */}
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <div className="text-[11px] font-semibold text-slate-800">
+                            출고 <span className="tabular-nums">{shipCnt}</span>건
+                          </div>
+
+                          <button
+                            type="button"
+                            className={btnMini}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadShipExcel(ds);
+                            }}
+                            disabled={isDownloadingThisDay}
+                            title="해당 날짜 출고 예정 전체를 송장(택배 양식) 엑셀로 다운로드"
+                          >
+                            {isDownloadingThisDay ? "생성중..." : "송장엑셀"}
+                          </button>
                         </div>
 
                         <div className="space-y-0.5">
