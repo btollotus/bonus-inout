@@ -231,7 +231,8 @@ export async function GET(req: Request) {
    * ✅ 통합 1시트
    * 요청 헤더 순서:
    * 날짜 / 구분 / 사업자등록번호 / 거래처 / 주문자 / 품목명 / 식품유형 / 무게 / 비고 / 공급가 / VAT / 총액 /
-   * 수화주명 / 주소1 / 휴대폰 / 전화 / 요청사항 / 배송지2
+   * 수화주명 / 주소1 / 휴대폰 / 전화 / 요청사항 /
+   * 수화주명2 / 주소2 / 휴대폰2 / 전화2 / 요청사항2
    */
   const rows: any[] = [];
 
@@ -268,18 +269,11 @@ export async function GET(req: Request) {
     const phone = s1 ? safeStr(s1.ship_to_phone) : "";
     const reqMsg = s1 ? safeStr(s1.delivery_message) : "";
 
-    // ✅ 배송지2: seq=2가 있으면 "이름 / 주소 / 휴대폰 / 전화 / 요청사항2" 형태로 1칸에 합쳐 출력
-    const ship2 = s2
-      ? [
-          safeStr(s2.ship_to_name),
-          buildAddress(s2.ship_to_address1, s2.ship_to_address2),
-          safeStr(s2.ship_to_mobile),
-          safeStr(s2.ship_to_phone),
-          safeStr(s2.delivery_message),
-        ]
-          .filter(Boolean)
-          .join(" / ")
-      : "";
+    const ship_to_name2 = s2 ? safeStr(s2.ship_to_name) : "";
+    const address2 = s2 ? buildAddress(s2.ship_to_address1, s2.ship_to_address2) : "";
+    const mobile2 = s2 ? safeStr(s2.ship_to_mobile) : "";
+    const phone2 = s2 ? safeStr(s2.ship_to_phone) : "";
+    const reqMsg2 = s2 ? safeStr(s2.delivery_message) : "";
 
     const lns = linesByOrder.get(oid) ?? [];
 
@@ -305,7 +299,12 @@ export async function GET(req: Request) {
         휴대폰: mobile,
         전화: phone,
         요청사항: reqMsg,
-        배송지2: ship2,
+
+        수화주명2: ship_to_name2,
+        주소2: address2,
+        휴대폰2: mobile2,
+        전화2: phone2,
+        요청사항2: reqMsg2,
       });
       continue;
     }
@@ -358,7 +357,12 @@ export async function GET(req: Request) {
         휴대폰: mobile,
         전화: phone,
         요청사항: reqMsg,
-        배송지2: ship2,
+
+        수화주명2: ship_to_name2,
+        주소2: address2,
+        휴대폰2: mobile2,
+        전화2: phone2,
+        요청사항2: reqMsg2,
       });
     }
   }
@@ -395,7 +399,12 @@ export async function GET(req: Request) {
       휴대폰: "",
       전화: "",
       요청사항: "",
-      배송지2: "",
+
+      수화주명2: "",
+      주소2: "",
+      휴대폰2: "",
+      전화2: "",
+      요청사항2: "",
     });
   }
 
@@ -423,7 +432,11 @@ export async function GET(req: Request) {
     "휴대폰",
     "전화",
     "요청사항",
-    "배송지2",
+    "수화주명2",
+    "주소2",
+    "휴대폰2",
+    "전화2",
+    "요청사항2",
   ];
 
   const ws = XLSX.utils.json_to_sheet(rows, { header });
@@ -449,7 +462,12 @@ export async function GET(req: Request) {
     { wch: 16 }, // 휴대폰
     { wch: 16 }, // 전화
     { wch: 22 }, // 요청사항
-    { wch: 60 }, // 배송지2 (✅ 내용이 길어지므로 폭만 조금 증가)
+
+    { wch: 14 }, // 수화주명2
+    { wch: 40 }, // 주소2
+    { wch: 16 }, // 휴대폰2
+    { wch: 16 }, // 전화2
+    { wch: 22 }, // 요청사항2
   ];
 
   // ✅ 숫자 표시 형식(천단위) 적용: 무게, 공급가, VAT, 총액
