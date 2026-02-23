@@ -32,6 +32,55 @@ function extractOrdererName(memo: any): string {
   return "";
 }
 
+function extractShipSnapshot(memo: any): {
+  ship_to_name: string;
+  ship_to_address1: string;
+  ship_to_mobile: string;
+  ship_to_phone: string;
+  ship_to_note: string;
+  ship_to2_address1: string;
+} {
+  const empty = {
+    ship_to_name: "",
+    ship_to_address1: "",
+    ship_to_mobile: "",
+    ship_to_phone: "",
+    ship_to_note: "",
+    ship_to2_address1: "",
+  };
+
+  if (memo == null) return empty;
+  const s = String(memo).trim();
+  if (!s) return empty;
+
+  if (s.startsWith("{") && s.endsWith("}")) {
+    try {
+      const j = JSON.parse(s);
+
+      const pick = (obj: any, keys: string[]) => {
+        for (const k of keys) {
+          const v = obj?.[k];
+          if (v != null && String(v).trim() !== "") return String(v).trim();
+        }
+        return "";
+      };
+
+      return {
+        ship_to_name: pick(j, ["ship_to_name", "receiver_name", "recv_name", "consignee_name", "to_name"]),
+        ship_to_address1: pick(j, ["ship_to_address1", "receiver_address1", "recv_address1", "consignee_address1", "to_address1", "address1"]),
+        ship_to_mobile: pick(j, ["ship_to_mobile", "receiver_mobile", "recv_mobile", "consignee_mobile", "to_mobile", "mobile"]),
+        ship_to_phone: pick(j, ["ship_to_phone", "receiver_phone", "recv_phone", "consignee_phone", "to_phone", "phone"]),
+        ship_to_note: pick(j, ["ship_to_note", "ship_to_request", "receiver_note", "recv_note", "request", "requests", "note"]),
+        ship_to2_address1: pick(j, ["ship_to2_address1", "receiver2_address1", "recv2_address1", "to2_address1", "address2", "ship_to_address2"]),
+      };
+    } catch {
+      return empty;
+    }
+  }
+
+  return empty;
+}
+
 // ✅ 품목명에서 "100개", "(100개)" 같은 패턴을 찾아 1BOX(포장)당 EA 수량 추정
 function extractPackEaFromName(name: any): number | null {
   const s = String(name ?? "").trim();
@@ -77,12 +126,14 @@ export async function GET(req: Request) {
   // =============================
   // 1) 매출(orders)
   // =============================
-  // ✅ 주문자 추출을 위해 memo 포함 시도(없으면 fallback)
+  // ✅ 배송정보 컬럼이 있을 수도 있으므로 포함 select 시도(없으면 fallback)
   let orders: any[] = [];
   {
     const { data, error } = await supabase
       .from("orders")
-      .select("id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount,memo")
+      .select(
+        "id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount,memo,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone,ship_to_note,ship_to2_address1"
+      )
       .gte("ship_date", from)
       .lte("ship_date", to)
       .order("ship_date", { ascending: true })
@@ -93,7 +144,7 @@ export async function GET(req: Request) {
     } else {
       const { data: data2, error: error2 } = await supabase
         .from("orders")
-        .select("id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount")
+        .select("id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount,memo")
         .gte("ship_date", from)
         .lte("ship_date", to)
         .order("ship_date", { ascending: true })
@@ -174,8 +225,8 @@ export async function GET(req: Request) {
 
   /**
    * ✅ 통합 1시트
-   * 요청 헤더 순서:
-   * 날짜 / 구분 / 사업자등록번호 / 거래처 / 주문자 / 품목명 / 식품유형 / 무게 / 비고 / 공급가 / VAT / 총액
+   * 요청 헤더 순서(배송정보 포함):
+   * 날짜 / 구분 / 사업자등록번호 / 거래처 / 주문자 / 수화주명 / 주소1 / 휴대폰 / 전화 / 요청사항 / 배송지2 / 품목명 / 식품유형 / 무게 / 비고 / 공급가 / VAT / 총액
    */
   const rows: any[] = [];
 
@@ -199,6 +250,14 @@ export async function GET(req: Request) {
     const partnerBizNo = cid ? partnersById.get(cid)?.business_no ?? "" : "";
 
     const ordererName = extractOrdererName(o.memo);
+    const shipFromMemo = extractShipSnapshot(o.memo);
+
+    const shipToName = String(o.ship_to_name ?? "").trim() || shipFromMemo.ship_to_name;
+    const shipToAddress1 = String(o.ship_to_address1 ?? "").trim() || shipFromMemo.ship_to_address1;
+    const shipToMobile = String(o.ship_to_mobile ?? "").trim() || shipFromMemo.ship_to_mobile;
+    const shipToPhone = String(o.ship_to_phone ?? "").trim() || shipFromMemo.ship_to_phone;
+    const shipToNote = String(o.ship_to_note ?? "").trim() || shipFromMemo.ship_to_note;
+    const shipTo2Address1 = String(o.ship_to2_address1 ?? "").trim() || shipFromMemo.ship_to2_address1;
 
     const lns = linesByOrder.get(String(o.id)) ?? [];
 
@@ -210,6 +269,12 @@ export async function GET(req: Request) {
         사업자등록번호: normalizeBizNo(partnerBizNo),
         거래처: String(o.customer_name ?? ""),
         주문자: ordererName,
+        수화주명: shipToName,
+        주소1: shipToAddress1,
+        휴대폰: shipToMobile,
+        전화: shipToPhone,
+        요청사항: shipToNote,
+        배송지2: shipTo2Address1,
         품목명: "",
         식품유형: "",
         무게: "",
@@ -240,10 +305,8 @@ export async function GET(req: Request) {
       let totalQty = qty;
 
       if (packEa != null) {
-        // ✅ "품목명에 100개/200개"가 있으면 박스당 포장수량으로 보고 적용
         totalQty = qty * packEa;
       } else if (unit === "BOX") {
-        // (보조) unit이 BOX인데 품목명에서 packEa를 못 찾으면 qty 그대로(추정 불가)
         totalQty = qty;
       }
 
@@ -255,6 +318,12 @@ export async function GET(req: Request) {
         사업자등록번호: normalizeBizNo(partnerBizNo),
         거래처: String(o.customer_name ?? ""),
         주문자: ordererName,
+        수화주명: shipToName,
+        주소1: shipToAddress1,
+        휴대폰: shipToMobile,
+        전화: shipToPhone,
+        요청사항: shipToNote,
+        배송지2: shipTo2Address1,
         품목명: String(ln.name ?? ""),
         식품유형: String(ln.food_type ?? ""),
         무게: weightTotal,
@@ -284,6 +353,12 @@ export async function GET(req: Request) {
       사업자등록번호: normalizeBizNo(l.business_no),
       거래처: String(l.counterparty_name ?? ""),
       주문자: "",
+      수화주명: "",
+      주소1: "",
+      휴대폰: "",
+      전화: "",
+      요청사항: "",
+      배송지2: "",
       품목명: "",
       식품유형: "",
       무게: "",
@@ -300,7 +375,26 @@ export async function GET(req: Request) {
     return String(a.날짜).localeCompare(String(b.날짜));
   });
 
-  const header = ["날짜", "구분", "사업자등록번호", "거래처", "주문자", "품목명", "식품유형", "무게", "비고", "공급가", "VAT", "총액"];
+  const header = [
+    "날짜",
+    "구분",
+    "사업자등록번호",
+    "거래처",
+    "주문자",
+    "수화주명",
+    "주소1",
+    "휴대폰",
+    "전화",
+    "요청사항",
+    "배송지2",
+    "품목명",
+    "식품유형",
+    "무게",
+    "비고",
+    "공급가",
+    "VAT",
+    "총액",
+  ];
 
   const ws = XLSX.utils.json_to_sheet(rows, { header });
 
@@ -311,6 +405,12 @@ export async function GET(req: Request) {
     { wch: 16 }, // 사업자등록번호
     { wch: 26 }, // 거래처
     { wch: 14 }, // 주문자
+    { wch: 14 }, // 수화주명
+    { wch: 36 }, // 주소1
+    { wch: 16 }, // 휴대폰
+    { wch: 14 }, // 전화
+    { wch: 22 }, // 요청사항
+    { wch: 30 }, // 배송지2
     { wch: 28 }, // 품목명
     { wch: 14 }, // 식품유형
     { wch: 10 }, // 무게
@@ -320,7 +420,7 @@ export async function GET(req: Request) {
     { wch: 12 }, // 총액
   ];
 
-  // ✅ 숫자 표시 형식(천단위) 적용: 무게(H=7), 공급가(J=9), VAT(K=10), 총액(L=11)
+  // ✅ 숫자 표시 형식(천단위) 적용: 무게(N=13), 공급가(P=15), VAT(Q=16), 총액(R=17)
   // ✅ 전체 폰트: 굴림 / 10
   const ref = ws["!ref"];
   if (ref) {
@@ -342,7 +442,7 @@ export async function GET(req: Request) {
 
     // 숫자 형식 적용 (데이터 행만)
     for (let r = range.s.r + 1; r <= range.e.r; r++) {
-      for (const c of [7, 9, 10, 11]) {
+      for (const c of [13, 15, 16, 17]) {
         const addr = XLSX.utils.encode_cell({ r, c });
         const cell = (ws as any)[addr];
         if (!cell) continue;
