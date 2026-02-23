@@ -94,7 +94,7 @@ export async function GET(req: Request) {
   if (orderIds.length) {
     const { data: lines, error: linesErr } = await supabase
       .from("order_lines")
-      .select("order_id,name,food_type,qty,unit,supply_amount,vat_amount,total_amount")
+      .select("order_id,name,food_type,weight_g,qty,unit,supply_amount,vat_amount,total_amount")
       .in("order_id", orderIds)
       .limit(200000);
 
@@ -153,7 +153,7 @@ export async function GET(req: Request) {
   /**
    * ✅ 통합 1시트
    * 요청 헤더 순서:
-   * 날짜 / 구분 / 사업자등록번호 / 거래처 / 주문자 / 품목명 / 식품유형 / 비고 / 공급가 / VAT / 총액
+   * 날짜 / 구분 / 사업자등록번호 / 거래처 / 주문자 / 품목명 / 식품유형 / 무게 / 비고 / 공급가 / VAT / 총액
    */
   const rows: any[] = [];
 
@@ -190,6 +190,7 @@ export async function GET(req: Request) {
         주문자: ordererName,
         품목명: "",
         식품유형: "",
+        무게: "",
         비고: "",
         공급가: supplyOrder,
         VAT: vatOrder,
@@ -211,6 +212,7 @@ export async function GET(req: Request) {
         주문자: ordererName,
         품목명: String(ln.name ?? ""),
         식품유형: String(ln.food_type ?? ""),
+        무게: String(ln.weight_g ?? ""),
         비고: "",
         공급가: supply,
         VAT: vat,
@@ -239,6 +241,7 @@ export async function GET(req: Request) {
       주문자: "",
       품목명: "",
       식품유형: "",
+      무게: "",
       비고: String(l.memo ?? ""),
       공급가: supply,
       VAT: vatForReport,
@@ -252,7 +255,7 @@ export async function GET(req: Request) {
     return String(a.날짜).localeCompare(String(b.날짜));
   });
 
-  const header = ["날짜", "구분", "사업자등록번호", "거래처", "주문자", "품목명", "식품유형", "비고", "공급가", "VAT", "총액"];
+  const header = ["날짜", "구분", "사업자등록번호", "거래처", "주문자", "품목명", "식품유형", "무게", "비고", "공급가", "VAT", "총액"];
 
   const ws = XLSX.utils.json_to_sheet(rows, { header });
 
@@ -265,18 +268,19 @@ export async function GET(req: Request) {
     { wch: 14 }, // 주문자
     { wch: 28 }, // 품목명
     { wch: 14 }, // 식품유형
+    { wch: 10 }, // 무게
     { wch: 30 }, // 비고
     { wch: 12 }, // 공급가
     { wch: 10 }, // VAT
     { wch: 12 }, // 총액
   ];
 
-  // ✅ 숫자 표시 형식(천단위) 적용: 공급가(I=8), VAT(J=9), 총액(K=10)
+  // ✅ 숫자 표시 형식(천단위) 적용: 공급가(J=9), VAT(K=10), 총액(L=11)
   const ref = ws["!ref"];
   if (ref) {
     const range = XLSX.utils.decode_range(ref);
     for (let r = range.s.r + 1; r <= range.e.r; r++) {
-      for (const c of [8, 9, 10]) {
+      for (const c of [9, 10, 11]) {
         const addr = XLSX.utils.encode_cell({ r, c });
         const cell = (ws as any)[addr];
         if (!cell) continue;
