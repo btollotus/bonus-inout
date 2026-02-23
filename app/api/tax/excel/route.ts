@@ -32,6 +32,25 @@ function extractOrdererName(memo: any): string {
   return "";
 }
 
+// ✅ BOX인 경우, 품목명에서 "(100개)" 같은 패턴을 찾아 1BOX당 EA 수량 추정
+function extractPackEaFromName(name: any): number | null {
+  const s = String(name ?? "").trim();
+  if (!s) return null;
+
+  // (100개), ( 100 개 ), 100개 등 최대한 단순 패턴만
+  const m1 = s.match(/\(\s*(\d+)\s*개\s*\)/);
+  if (m1 && m1[1]) {
+    const n = Number(m1[1]);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  const m2 = s.match(/(\d+)\s*개/);
+  if (m2 && m2[1]) {
+    const n = Number(m2[1]);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
@@ -78,10 +97,7 @@ export async function GET(req: Request) {
         .limit(100000);
 
       if (error2) {
-        return NextResponse.json(
-          { error: "orders 조회 실패", detail: error2.message },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: "orders 조회 실패", detail: error2.message }, { status: 500 });
       }
       orders = (data2 ?? []) as any[];
     }
@@ -144,10 +160,7 @@ export async function GET(req: Request) {
   const { data: ledgers, error: lErr } = await ledgerQuery;
 
   if (lErr) {
-    return NextResponse.json(
-      { error: "ledger_entries(OUT) 조회 실패", detail: lErr.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "ledger_entries(OUT) 조회 실패", detail: lErr.message }, { status: 500 });
   }
 
   /**
@@ -204,6 +217,22 @@ export async function GET(req: Request) {
       const vat = safeNum(ln.vat_amount);
       const total = safeNum(ln.total_amount ?? supply + vat);
 
+      // ✅ 무게(품목무게 * 총수량) 계산
+      // - EA: qty 그대로
+      // - BOX: (qty * 1BOX당 EA수량) * 개별무게
+      const unit = String(ln.unit ?? "").toUpperCase();
+      const qty = safeNum(ln.qty);
+
+      const unitWeight = safeNum(ln.weight_g);
+      let totalQty = qty;
+
+      if (unit === "BOX") {
+        const packEa = extractPackEaFromName(ln.name);
+        if (packEa != null) totalQty = qty * packEa;
+      }
+
+      const weightTotal = unitWeight > 0 && totalQty > 0 ? unitWeight * totalQty : "";
+
       rows.push({
         날짜: toYmd(o.ship_date),
         구분: "매출",
@@ -212,7 +241,7 @@ export async function GET(req: Request) {
         주문자: ordererName,
         품목명: String(ln.name ?? ""),
         식품유형: String(ln.food_type ?? ""),
-        무게: String(ln.weight_g ?? ""),
+        무게: weightTotal,
         비고: "",
         공급가: supply,
         VAT: vat,
@@ -255,7 +284,20 @@ export async function GET(req: Request) {
     return String(a.날짜).localeCompare(String(b.날짜));
   });
 
-  const header = ["날짜", "구분", "사업자등록번호", "거래처", "주문자", "품목명", "식품유형", "무게", "비고", "공급가", "VAT", "총액"];
+  const header = [
+    "날짜",
+    "구분",
+    "사업자등록번호",
+    "거래처",
+    "주문자",
+    "품목명",
+    "식품유형",
+    "무게",
+    "비고",
+    "공급가",
+    "VAT",
+    "총액",
+  ];
 
   const ws = XLSX.utils.json_to_sheet(rows, { header });
 
