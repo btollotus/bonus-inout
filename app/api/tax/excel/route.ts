@@ -16,28 +16,32 @@ function normalizeBizNo(bn: any) {
   return s || "";
 }
 
-function extractOrdererName(memo: any): string {
-  if (memo == null) return "";
+function parseMemoJson(memo: any): any | null {
+  if (memo == null) return null;
   const s = String(memo).trim();
-  if (!s) return "";
-  if (s.startsWith("{") && s.endsWith("}")) {
-    try {
-      const j = JSON.parse(s);
-      const v = j?.orderer_name;
-      return v == null ? "" : String(v).trim();
-    } catch {
-      return "";
-    }
+  if (!s) return null;
+  if (!(s.startsWith("{") && s.endsWith("}"))) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
   }
-  return "";
 }
 
+function extractOrdererName(memo: any): string {
+  const j = parseMemoJson(memo);
+  if (!j) return "";
+  const v = j?.orderer_name;
+  return v == null ? "" : String(v).trim();
+}
+
+// ✅ memo(JSON)에서 배송정보를 최대한 폭넓게 추출
 function extractShipSnapshot(memo: any): {
   ship_to_name: string;
   ship_to_address1: string;
   ship_to_mobile: string;
   ship_to_phone: string;
-  ship_to_note: string;
+  ship_to_note: string; // 요청사항
   ship_to2_address1: string;
 } {
   const empty = {
@@ -49,36 +53,95 @@ function extractShipSnapshot(memo: any): {
     ship_to2_address1: "",
   };
 
-  if (memo == null) return empty;
-  const s = String(memo).trim();
-  if (!s) return empty;
+  const j = parseMemoJson(memo);
+  if (!j) return empty;
 
-  if (s.startsWith("{") && s.endsWith("}")) {
-    try {
-      const j = JSON.parse(s);
-
-      const pick = (obj: any, keys: string[]) => {
-        for (const k of keys) {
-          const v = obj?.[k];
-          if (v != null && String(v).trim() !== "") return String(v).trim();
-        }
-        return "";
-      };
-
-      return {
-        ship_to_name: pick(j, ["ship_to_name", "receiver_name", "recv_name", "consignee_name", "to_name"]),
-        ship_to_address1: pick(j, ["ship_to_address1", "receiver_address1", "recv_address1", "consignee_address1", "to_address1", "address1"]),
-        ship_to_mobile: pick(j, ["ship_to_mobile", "receiver_mobile", "recv_mobile", "consignee_mobile", "to_mobile", "mobile"]),
-        ship_to_phone: pick(j, ["ship_to_phone", "receiver_phone", "recv_phone", "consignee_phone", "to_phone", "phone"]),
-        ship_to_note: pick(j, ["ship_to_note", "ship_to_request", "receiver_note", "recv_note", "request", "requests", "note"]),
-        ship_to2_address1: pick(j, ["ship_to2_address1", "receiver2_address1", "recv2_address1", "to2_address1", "address2", "ship_to_address2"]),
-      };
-    } catch {
-      return empty;
+  const pick = (obj: any, keys: string[]) => {
+    for (const k of keys) {
+      const v = obj?.[k];
+      if (v != null && String(v).trim() !== "") return String(v).trim();
     }
+    return "";
+  };
+
+  // 1) 최상위 키 후보
+  const direct = {
+    ship_to_name: pick(j, ["ship_to_name", "receiver_name", "consignee_name", "to_name", "ship1_name", "ship_name"]),
+    ship_to_address1: pick(j, [
+      "ship_to_address1",
+      "ship_to_addr1",
+      "receiver_address1",
+      "receiver_addr1",
+      "consignee_address1",
+      "to_address1",
+      "to_addr1",
+      "ship1_address1",
+      "ship1_addr1",
+      "address1",
+      "addr1",
+    ]),
+    ship_to_mobile: pick(j, ["ship_to_mobile", "receiver_mobile", "consignee_mobile", "to_mobile", "ship1_mobile", "mobile"]),
+    ship_to_phone: pick(j, ["ship_to_phone", "receiver_phone", "consignee_phone", "to_phone", "ship1_phone", "phone"]),
+    ship_to_note: pick(j, ["ship_to_note", "ship_to_request", "request", "requests", "receiver_note", "note", "ship1_note"]),
+    ship_to2_address1: pick(j, ["ship_to2_address1", "ship_to2_addr1", "ship2_address1", "ship2_addr1", "address2", "addr2"]),
+  };
+
+  // 2) 중첩 구조 후보 (예: shipping, ship_to, ship1, 배송지1/2 등)
+  const nestedCandidates = [
+    j?.shipping,
+    j?.ship_to,
+    j?.shipTo,
+    j?.ship1,
+    j?.shipping1,
+    j?.delivery,
+    j?.delivery1,
+    j?.receiver,
+    j?.consignee,
+    j?.snapshot,
+    j?.ship_snapshot,
+    j?.shipping_snapshot,
+  ].filter(Boolean);
+
+  let n1 = {
+    ship_to_name: "",
+    ship_to_address1: "",
+    ship_to_mobile: "",
+    ship_to_phone: "",
+    ship_to_note: "",
+  };
+
+  for (const obj of nestedCandidates) {
+    n1 = {
+      ship_to_name: n1.ship_to_name || pick(obj, ["name", "ship_to_name", "receiver_name", "consignee_name", "to_name"]),
+      ship_to_address1:
+        n1.ship_to_address1 ||
+        pick(obj, ["address1", "addr1", "ship_to_address1", "ship_to_addr1", "receiver_address1", "receiver_addr1", "to_address1", "to_addr1"]),
+      ship_to_mobile: n1.ship_to_mobile || pick(obj, ["mobile", "ship_to_mobile", "receiver_mobile", "to_mobile"]),
+      ship_to_phone: n1.ship_to_phone || pick(obj, ["phone", "ship_to_phone", "receiver_phone", "to_phone"]),
+      ship_to_note: n1.ship_to_note || pick(obj, ["note", "request", "requests", "ship_to_note", "ship_to_request"]),
+    };
   }
 
-  return empty;
+  // 배송지2 중첩 후보
+  const nested2Candidates = [j?.ship2, j?.shipping2, j?.delivery2, j?.shipping?.ship2, j?.ship_to?.ship2].filter(Boolean);
+
+  let n2 = { ship_to2_address1: "" };
+  for (const obj of nested2Candidates) {
+    n2 = {
+      ship_to2_address1:
+        n2.ship_to2_address1 ||
+        pick(obj, ["address1", "addr1", "ship_to_address1", "ship_to_addr1", "to_address1", "to_addr1", "ship2_address1", "ship2_addr1", "address2", "addr2"]),
+    };
+  }
+
+  return {
+    ship_to_name: direct.ship_to_name || n1.ship_to_name || "",
+    ship_to_address1: direct.ship_to_address1 || n1.ship_to_address1 || "",
+    ship_to_mobile: direct.ship_to_mobile || n1.ship_to_mobile || "",
+    ship_to_phone: direct.ship_to_phone || n1.ship_to_phone || "",
+    ship_to_note: direct.ship_to_note || n1.ship_to_note || "",
+    ship_to2_address1: direct.ship_to2_address1 || n2.ship_to2_address1 || "",
+  };
 }
 
 // ✅ 품목명에서 "100개", "(100개)" 같은 패턴을 찾아 1BOX(포장)당 EA 수량 추정
@@ -126,38 +189,21 @@ export async function GET(req: Request) {
   // =============================
   // 1) 매출(orders)
   // =============================
-  // ✅ 배송정보 컬럼이 있을 수도 있으므로 포함 select 시도(없으면 fallback)
+  // ✅ orders 테이블에는 배송 컬럼이 없음(현재 확인됨) → memo로만 처리
   let orders: any[] = [];
   {
     const { data, error } = await supabase
       .from("orders")
-      .select(
-        "id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount,memo,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone,ship_to_note,ship_to2_address1"
-      )
+      .select("id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount,memo")
       .gte("ship_date", from)
       .lte("ship_date", to)
       .order("ship_date", { ascending: true })
       .limit(100000);
 
-    if (!error) {
-      orders = (data ?? []) as any[];
-    } else {
-      const { data: data2, error: error2 } = await supabase
-        .from("orders")
-        .select("id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount,memo")
-        .gte("ship_date", from)
-        .lte("ship_date", to)
-        .order("ship_date", { ascending: true })
-        .limit(100000);
-
-      if (error2) {
-        return NextResponse.json(
-          { error: "orders 조회 실패", detail: error2.message },
-          { status: 500 }
-        );
-      }
-      orders = (data2 ?? []) as any[];
+    if (error) {
+      return NextResponse.json({ error: "orders 조회 실패", detail: error.message }, { status: 500 });
     }
+    orders = (data ?? []) as any[];
   }
 
   // ✅ orders.id 목록으로 order_lines 조회 (품목명은 order_lines.name 사용)
@@ -177,9 +223,7 @@ export async function GET(req: Request) {
   }
 
   // ✅ 매출처 사업자번호 매핑 (orders.customer_id -> partners.business_no)
-  const customerIds = Array.from(
-    new Set((orders ?? []).map((x: any) => x.customer_id).filter(Boolean) as string[])
-  );
+  const customerIds = Array.from(new Set((orders ?? []).map((x: any) => x.customer_id).filter(Boolean) as string[]));
 
   const partnersById = new Map<string, { business_no: string | null }>();
   if (customerIds.length) {
@@ -217,10 +261,7 @@ export async function GET(req: Request) {
   const { data: ledgers, error: lErr } = await ledgerQuery;
 
   if (lErr) {
-    return NextResponse.json(
-      { error: "ledger_entries(OUT) 조회 실패", detail: lErr.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "ledger_entries(OUT) 조회 실패", detail: lErr.message }, { status: 500 });
   }
 
   /**
@@ -250,14 +291,7 @@ export async function GET(req: Request) {
     const partnerBizNo = cid ? partnersById.get(cid)?.business_no ?? "" : "";
 
     const ordererName = extractOrdererName(o.memo);
-    const shipFromMemo = extractShipSnapshot(o.memo);
-
-    const shipToName = String(o.ship_to_name ?? "").trim() || shipFromMemo.ship_to_name;
-    const shipToAddress1 = String(o.ship_to_address1 ?? "").trim() || shipFromMemo.ship_to_address1;
-    const shipToMobile = String(o.ship_to_mobile ?? "").trim() || shipFromMemo.ship_to_mobile;
-    const shipToPhone = String(o.ship_to_phone ?? "").trim() || shipFromMemo.ship_to_phone;
-    const shipToNote = String(o.ship_to_note ?? "").trim() || shipFromMemo.ship_to_note;
-    const shipTo2Address1 = String(o.ship_to2_address1 ?? "").trim() || shipFromMemo.ship_to2_address1;
+    const ship = extractShipSnapshot(o.memo);
 
     const lns = linesByOrder.get(String(o.id)) ?? [];
 
@@ -269,12 +303,12 @@ export async function GET(req: Request) {
         사업자등록번호: normalizeBizNo(partnerBizNo),
         거래처: String(o.customer_name ?? ""),
         주문자: ordererName,
-        수화주명: shipToName,
-        주소1: shipToAddress1,
-        휴대폰: shipToMobile,
-        전화: shipToPhone,
-        요청사항: shipToNote,
-        배송지2: shipTo2Address1,
+        수화주명: ship.ship_to_name,
+        주소1: ship.ship_to_address1,
+        휴대폰: ship.ship_to_mobile,
+        전화: ship.ship_to_phone,
+        요청사항: ship.ship_to_note,
+        배송지2: ship.ship_to2_address1,
         품목명: "",
         식품유형: "",
         무게: "",
@@ -292,13 +326,8 @@ export async function GET(req: Request) {
       const total = safeNum(ln.total_amount ?? supply + vat);
 
       // ✅ 무게(품목무게 * 총수량) 계산
-      // - EA: qty 그대로
-      // - BOX: (qty * 1BOX당 EA수량) * 개별무게
-      // - 단, 품목명에 "100개/200개"가 있으면: 수량 입력이 "박스 수량"인 케이스가 많으므로
-      //   unit이 EA라도 packEa를 우선 적용하여 총수량=qty*packEa로 계산
       const unit = String(ln.unit ?? "").toUpperCase();
       const qty = safeNum(ln.qty);
-
       const unitWeight = safeNum(ln.weight_g);
 
       const packEa = extractPackEaFromName(ln.name);
@@ -318,12 +347,12 @@ export async function GET(req: Request) {
         사업자등록번호: normalizeBizNo(partnerBizNo),
         거래처: String(o.customer_name ?? ""),
         주문자: ordererName,
-        수화주명: shipToName,
-        주소1: shipToAddress1,
-        휴대폰: shipToMobile,
-        전화: shipToPhone,
-        요청사항: shipToNote,
-        배송지2: shipTo2Address1,
+        수화주명: ship.ship_to_name,
+        주소1: ship.ship_to_address1,
+        휴대폰: ship.ship_to_mobile,
+        전화: ship.ship_to_phone,
+        요청사항: ship.ship_to_note,
+        배송지2: ship.ship_to2_address1,
         품목명: String(ln.name ?? ""),
         식품유형: String(ln.food_type ?? ""),
         무게: weightTotal,
