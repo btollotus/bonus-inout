@@ -599,6 +599,10 @@ export default function TradeClient() {
     setLines((prev) => [...prev, { food_type: "", name: "택배비", weight_g: 0, qty: 1, unit: "", total_incl_vat: String(totalInclVat) }]);
   }
 
+  function insertEditShippingFee(totalInclVat: number) {
+    setELines((prev) => [...prev, { food_type: "", name: "택배비", weight_g: 0, qty: 1, unit: "", total_incl_vat: String(totalInclVat) }]);
+  }
+
   // ─── Ship state helpers ───
   function applyShipmentsToForm(
     shipments: ShipmentSnap[],
@@ -924,7 +928,14 @@ export default function TradeClient() {
                       <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} value={eOrderTitle} onChange={(e) => setEOrderTitle(e.target.value)} /></div>
                     </div>
                     <ShipBlock s1={eShip1} setS1={setEShip1} s2={eShip2} setS2={setEShip2} two={eTwoShip} setTwo={setETwoShip} />
-                    <div className="mt-4 flex items-center justify-between"><div className="text-sm font-semibold">품목</div><button className={btn} onClick={addEditLine}>+ 품목 추가</button></div>
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="text-sm font-semibold">품목</div>
+                      <div className="flex items-center gap-2">
+                        <button className={btn} onClick={() => insertEditShippingFee(3300)}>+ 택배비 3,300</button>
+                        <button className={btn} onClick={() => insertEditShippingFee(4000)}>+ 택배비 4,000</button>
+                        <button className={btn} onClick={addEditLine}>+ 품목 추가</button>
+                      </div>
+                    </div>
                     <LineHeader gridCols={lineGridCols} />
                     <div className="mt-2 space-y-2">
                       {eLines.map((l, i) => <LineRow key={i} l={l} i={i} onUpdate={updateEditLine} onRemove={removeEditLine} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} />)}
