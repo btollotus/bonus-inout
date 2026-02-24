@@ -1,6 +1,7 @@
 import "./globals.css";
 import TopNav from "@/components/TopNav";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 export const metadata = {
   title: "재고관리 MVP",
@@ -18,13 +19,30 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const email: string = user?.email ?? "";
 
   if (user) {
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .single();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    role = data?.role ?? "USER";
+    const accessToken = session?.access_token;
+
+    if (accessToken) {
+      const supabaseAuthed = createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          global: { headers: { Authorization: `Bearer ${accessToken}` } },
+          auth: { persistSession: false, autoRefreshToken: false },
+        }
+      );
+
+      const { data } = await supabaseAuthed
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .single();
+
+      role = data?.role ?? "USER";
+    }
   }
 
   return (
