@@ -20,8 +20,9 @@ const nav = [
   { href: "/calendar", label: "출고 캘린더" },
 ];
 
-export default function TopNav() {
+export default function TopNav({ role }: { role?: string }) {
   const pathname = usePathname();
+  const isAdmin = role === "ADMIN";
 
   return (
     <div
@@ -60,6 +61,8 @@ export default function TopNav() {
           </Link>
 
           {nav.map((x) => {
+            if (!isAdmin && (x.href === "/products" || x.href === "/trade")) return null;
+
             const active = pathname === x.href;
             return (
               <Link
