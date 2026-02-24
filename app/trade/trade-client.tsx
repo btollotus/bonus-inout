@@ -256,6 +256,14 @@ const LineHeader = ({ gridCols }: { gridCols: string }) => (
 export default function TradeClient() {
   const supabase = useMemo(() => createClient(), []);
 
+  // ✅ 주소창에서 /trade 경로 숨김(표시만 변경)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (/\/trade\/?$/.test(window.location.pathname)) {
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
+
   // UI state
   const [msg, setMsg] = useState<string | null>(null);
   const [showTopBtn, setShowTopBtn] = useState(false);
@@ -753,7 +761,7 @@ export default function TradeClient() {
 
   // ─── Delete ───
   async function deleteTradeRow(r: UnifiedRow) {
-    if (!window.confirm("삭제할까요? (삭제하면 복구할 수 없습니다.)")) return;
+    if (!window.confirm("정말 삭제하시겠습니까?\n삭제하면 복구할 수 없습니다.")) return;
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     if (r.kind === "ORDER") {
       const { error: sErr } = await supabase.from("order_shipments").delete().eq("order_id", r.rawId); if (sErr) return setMsg(sErr.message);
