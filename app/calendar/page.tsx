@@ -103,16 +103,14 @@ function getKoreaHolidaysMap(year: number): Record<string, string> {
 function normalizeShipMethod(v: any): ShipMethod {
   const s = String(v ?? "").trim();
   if (!s) return "기타";
+
+  // ✅ 5종 우선 매핑
   if (s.includes("택배")) return "택배";
-
-  // ✅ 퀵은 신용/착불을 먼저 분기
-  if (s.includes("퀵-신용")) return "퀵-신용";
-  if (s.includes("퀵-착불")) return "퀵-착불";
-
-  // (fallback) 퀵 문자열만 있으면 기본 퀵-신용으로 분류(기존 데이터 호환)
-  if (s.includes("퀵")) return "퀵-신용";
-
+  if (s.includes("퀵") && (s.includes("착불") || s.includes("후불"))) return "퀵-착불";
+  if (s.includes("퀵") && (s.includes("신용") || s.includes("선불") || s.includes("카드"))) return "퀵-신용";
+  if (s.includes("퀵")) return "퀵-신용"; // 퀵만 있으면 기본 신용으로 처리(기존 데이터 호환)
   if (s.includes("방문")) return "방문";
+
   return "기타";
 }
 
@@ -125,9 +123,6 @@ export default function CalendarPage() {
 
   // ✅ 오늘 날짜 셀 포커싱
   const didFocusRef = useRef(false);
-
-  // ✅ 관리자 여부(관리자 메모 노출/저장 제어)
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   // 테마: TradeClient와 동일 톤
   const pageBg = "bg-slate-50 text-slate-900";
@@ -146,8 +141,10 @@ export default function CalendarPage() {
 
   const badgeShip =
     "inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700";
-  const badgeQuick =
+  const badgeQuickCredit =
     "inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700";
+  const badgeQuickCod =
+    "inline-flex items-center rounded-full border border-fuchsia-200 bg-fuchsia-50 px-2 py-0.5 text-[11px] font-semibold text-fuchsia-700";
   const badgeVisit =
     "inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700";
   const badgeEtc =
@@ -240,20 +237,14 @@ export default function CalendarPage() {
   async function loadAll() {
     setMsg(null);
 
-    // 1) calendar_memos
+    // 1) calendar_memos (PUBLIC은 전원, ADMIN은 RLS로 관리자만 내려옴)
     {
-      let q = supabase
+      const { data, error } = await supabase
         .from("calendar_memos")
         .select("id,memo_date,visibility,content,created_at,updated_at")
         .gte("memo_date", range.from)
         .lt("memo_date", range.to)
         .order("memo_date", { ascending: true });
-
-      if (!isAdmin) {
-        q = q.eq("visibility", "PUBLIC");
-      }
-
-      const { data, error } = await q;
 
       if (error) return setMsg(error.message);
       setMemos((data ?? []) as CalendarMemoRow[]);
@@ -270,10 +261,7 @@ export default function CalendarPage() {
 
       if (error) return setMsg(error.message);
 
-      const map = new Map<
-        string,
-        { total: number; byMethod: Record<ShipMethod, number>; lines: ShipLine[] }
-      >();
+      const map = new Map<string, { total: number; byMethod: Record<ShipMethod, number>; lines: ShipLine[] }>();
 
       const lineMapByDate = new Map<
         string,
@@ -315,13 +303,7 @@ export default function CalendarPage() {
         lineMapByDate.set(d, lm);
       }
 
-      const methodOrder: Record<ShipMethod, number> = {
-        택배: 0,
-        "퀵-신용": 1,
-        "퀵-착불": 2,
-        방문: 3,
-        기타: 4,
-      };
+      const methodOrder: Record<ShipMethod, number> = { 택배: 0, "퀵-신용": 1, "퀵-착불": 2, 방문: 3, 기타: 4 };
 
       for (const [d, agg] of map.entries()) {
         const lm = lineMapByDate.get(d);
@@ -351,31 +333,11 @@ export default function CalendarPage() {
     }
   }
 
-  // ✅ 현재 로그인 유저가 관리자(bonusmate@naver.com)인지 확인
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const { data } = await supabase.auth.getUser();
-        const email = (data?.user?.email ?? "").toLowerCase();
-        if (!alive) return;
-        setIsAdmin(email === "bonusmate@naver.com");
-      } catch {
-        if (!alive) return;
-        setIsAdmin(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [supabase]);
-
-  useEffect(() => {
-    if (isAdmin === null) return;
     didFocusRef.current = false;
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [curMonth, isAdmin]);
+  }, [curMonth]);
 
   // ✅ 월이 바뀌거나 처음 로드되면 "오늘" 셀에 포커싱
   useEffect(() => {
@@ -403,8 +365,7 @@ export default function CalendarPage() {
     const adm = memoMap.get(memoKey(date, "ADMIN"))?.content ?? "";
 
     setPublicText(pub);
-    if (isAdmin) setAdminText(adm);
-    else setAdminText("");
+    setAdminText(adm);
 
     setOpen(true);
   }
@@ -419,10 +380,7 @@ export default function CalendarPage() {
     setOpenShip(true);
 
     try {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("customer_id, customer_name, ship_method")
-        .eq("ship_date", date);
+      const { data, error } = await supabase.from("orders").select("customer_id, customer_name, ship_method").eq("ship_date", date);
 
       if (error) throw error;
 
@@ -450,10 +408,7 @@ export default function CalendarPage() {
   }, [shipRows]);
 
   const shipLines = useMemo(() => {
-    const m = new Map<
-      string,
-      { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }
-    >(); // key -> cnt
+    const m = new Map<string, { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }>(); // key -> cnt
     for (const r of shipRows) {
       const key = `${r.partner_id ?? ""}__${r.partner_name}__${r.ship_method}`;
       const prev = m.get(key);
@@ -483,15 +438,19 @@ export default function CalendarPage() {
     setMsg(null);
 
     try {
-      const res = await fetch(`/api/shipments/excel?date=${encodeURIComponent(date)}`, {
-        method: "GET",
-      });
+      const res = await fetch(`/api/shipments/excel?date=${encodeURIComponent(date)}`, { method: "GET" });
 
       if (!res.ok) {
-        let errText = "엑셀 다운로드 실패";
+        let errText = `엑셀 다운로드 실패 (HTTP ${res.status})`;
         try {
-          const j = await res.json();
-          if (j?.error) errText = j.error;
+          const txt = await res.text();
+          try {
+            const j = JSON.parse(txt);
+            if (j?.error) errText = j.error;
+            else if (txt) errText = txt;
+          } catch {
+            if (txt) errText = txt;
+          }
         } catch {}
         throw new Error(errText);
       }
@@ -501,7 +460,6 @@ export default function CalendarPage() {
 
       const a = document.createElement("a");
       a.href = url;
-      // 파일명만 사용자 표시용으로 “송장” 느낌으로 변경(내용/기능은 동일)
       a.download = `송장_${date}.xlsx`;
       document.body.appendChild(a);
       a.click();
@@ -516,43 +474,48 @@ export default function CalendarPage() {
     }
   }
 
-  // ✅ 메모 저장/삭제는 서버 API로 처리 (RLS 이슈 회피)
+  // ✅ (핵심 수정) 메모 저장 실패 시 서버 응답을 최대한 그대로 표시
   async function upsertMemo(date: string, vis: Visibility, content: string) {
+    const existing = memoMap.get(memoKey(date, vis));
     const trimmed = content.trim();
 
-    const res = await fetch("/api/calendar/memo", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        memo_date: date,
-        visibility: vis,
-        content: trimmed, // 빈 문자열이면 서버에서 삭제 처리
-      }),
-    });
-
-    if (!res.ok) {
-      let errText = "메모 저장 실패";
-      try {
-        const j = await res.json();
-        if (j?.error) errText = j.error;
-      } catch {}
-      throw new Error(errText);
+    if (!trimmed) {
+      if (!existing) return;
+      const { error } = await supabase.from("calendar_memos").delete().eq("id", existing.id);
+      if (error) throw new Error(error.message);
+      return;
     }
+
+    if (!existing) {
+      const payload: any = { memo_date: date, visibility: vis, content: trimmed, created_by: null };
+      const { error } = await supabase.from("calendar_memos").insert(payload);
+      if (error) throw new Error(error.message);
+      return;
+    }
+
+    const { error } = await supabase.from("calendar_memos").update({ content: trimmed }).eq("id", existing.id);
+    if (error) throw new Error(error.message);
   }
 
   async function saveModal() {
     if (!selDate) return;
     setSaving(true);
     setMsg(null);
+
     try {
       await upsertMemo(selDate, "PUBLIC", publicText);
-      if (isAdmin) {
+
+      // ✅ ADMIN 메모 저장 실패가 “메모 저장 실패”로만 보이지 않게, 오류 메시지를 그대로 띄움
+      try {
         await upsertMemo(selDate, "ADMIN", adminText);
+      } catch (e: any) {
+        throw new Error(e?.message ?? "관리자 메모 저장 실패");
       }
+
       setOpen(false);
       await loadAll();
     } catch (e: any) {
-      setMsg(e?.message ?? "저장 중 오류");
+      setMsg(e?.message ?? "메모 저장 실패");
     } finally {
       setSaving(false);
     }
@@ -584,9 +547,7 @@ export default function CalendarPage() {
     <div className={`${pageBg} min-h-screen`}>
       <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
         {msg ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {msg}
-          </div>
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{msg}</div>
         ) : null}
 
         <div className={`${card} p-4`}>
@@ -621,7 +582,7 @@ export default function CalendarPage() {
               >
                 다음달 ▶
               </button>
-              <button className={btnOn} onClick={loadAll} disabled={isAdmin === null}>
+              <button className={btnOn} onClick={loadAll}>
                 새로고침
               </button>
             </div>
@@ -744,7 +705,7 @@ export default function CalendarPage() {
                       </div>
                     ) : null}
 
-                    {isAdmin && adm ? (
+                    {adm ? (
                       <div className="mt-1 truncate text-[11px] text-slate-700">
                         <span className="font-semibold text-slate-900">관리</span>: {adm}
                       </div>
@@ -757,22 +718,15 @@ export default function CalendarPage() {
 
           <div className="mt-2 text-xs text-slate-500">
             ※ 메모가 비어 있으면 표시하지 않습니다. · 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다. · 출고는{" "}
-            <span className="font-semibold">orders.ship_date</span> +{" "}
-            <span className="font-semibold">orders.ship_method</span> 기준이며,{" "}
-            <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 제외합니다.
+            <span className="font-semibold">orders.ship_date</span> + <span className="font-semibold">orders.ship_method</span>{" "}
+            기준이며, <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 제외합니다.
           </div>
         </div>
 
         {/* 모달: 메모 */}
         {open ? (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-            onClick={() => setOpen(false)}
-          >
-            <div
-              className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setOpen(false)}>
+            <div className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">메모 · {selDate}</div>
@@ -799,20 +753,16 @@ export default function CalendarPage() {
                   />
                 </div>
 
-                {isAdmin ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="mb-2 text-sm font-semibold">관리자 메모 (관리자만)</div>
-                    <textarea
-                      className={`${input} min-h-[110px] resize-y`}
-                      value={adminText}
-                      onChange={(e) => setAdminText(e.target.value)}
-                      placeholder="예: 내부 생산/인원 배치/특이사항"
-                    />
-                    <div className="mt-2 text-xs text-slate-500">
-                      ※ 권한이 없으면 RLS로 인해 ADMIN 메모는 저장/조회되지 않습니다.
-                    </div>
-                  </div>
-                ) : null}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-2 text-sm font-semibold">관리자 메모 (관리자만)</div>
+                  <textarea
+                    className={`${input} min-h-[110px] resize-y`}
+                    value={adminText}
+                    onChange={(e) => setAdminText(e.target.value)}
+                    placeholder="예: 내부 생산/인원 배치/특이사항"
+                  />
+                  <div className="mt-2 text-xs text-slate-500">※ 권한이 없으면 RLS로 인해 ADMIN 메모는 저장/조회되지 않습니다.</div>
+                </div>
 
                 <div className="text-xs text-slate-500">
                   출고 건수는 <span className="font-semibold">orders.ship_date</span> 기준으로 자동 표시됩니다.
@@ -824,20 +774,12 @@ export default function CalendarPage() {
 
         {/* 모달: 출고 목록 */}
         {openShip ? (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-            onClick={() => setOpenShip(false)}
-          >
-            <div
-              className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setOpenShip(false)}>
+            <div className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">출고 목록 · {selShipDate}</div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    업체명-출고방식(택배/퀵-신용/퀵-착불/방문/기타) 형태로 표시합니다.
-                  </div>
+                  <div className="mt-1 text-xs text-slate-500">업체명-출고방식(택배/퀵-신용/퀵-착불/방문/기타) 형태로 표시합니다.</div>
                 </div>
 
                 <div className="flex gap-2">
@@ -864,10 +806,10 @@ export default function CalendarPage() {
                     <span className={badgeShip}>
                       택배 <span className="tabular-nums">{shipSummary.byMethod["택배"]}</span>
                     </span>
-                    <span className={badgeQuick}>
+                    <span className={badgeQuickCredit}>
                       퀵-신용 <span className="tabular-nums">{shipSummary.byMethod["퀵-신용"]}</span>
                     </span>
-                    <span className={badgeQuick}>
+                    <span className={badgeQuickCod}>
                       퀵-착불 <span className="tabular-nums">{shipSummary.byMethod["퀵-착불"]}</span>
                     </span>
                     <span className={badgeVisit}>
@@ -887,10 +829,7 @@ export default function CalendarPage() {
                   ) : (
                     <div className="space-y-2">
                       {shipLines.map((x) => (
-                        <div
-                          key={`${x.partner_id ?? ""}__${x.partner}__${x.method}`}
-                          className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                        >
+                        <div key={`${x.partner_id ?? ""}__${x.partner}__${x.method}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                           <button
                             type="button"
                             className="text-left text-sm font-semibold text-slate-900 hover:underline"
