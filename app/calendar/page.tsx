@@ -15,8 +15,8 @@ type CalendarMemoRow = {
   updated_at: string;
 };
 
-// ✅ 출고 방법(택배/퀵/방문/기타) 집계용 (orders.ship_method 기준)
-type ShipMethod = "택배" | "퀵" | "방문" | "기타";
+// ✅ 출고 방법(택배/퀵-신용/퀵-착불/방문/기타) 집계용 (orders.ship_method 기준)
+type ShipMethod = "택배" | "퀵-신용" | "퀵-착불" | "방문" | "기타";
 
 function ymd(d: Date) {
   const yyyy = d.getFullYear();
@@ -104,7 +104,14 @@ function normalizeShipMethod(v: any): ShipMethod {
   const s = String(v ?? "").trim();
   if (!s) return "기타";
   if (s.includes("택배")) return "택배";
-  if (s.includes("퀵")) return "퀵";
+
+  // ✅ 퀵은 신용/착불을 먼저 분기
+  if (s.includes("퀵-신용")) return "퀵-신용";
+  if (s.includes("퀵-착불")) return "퀵-착불";
+
+  // (fallback) 퀵 문자열만 있으면 기타로 두지 말고 기본 퀵-신용으로 분류(기존 데이터 호환)
+  if (s.includes("퀵")) return "퀵-신용";
+
   if (s.includes("방문")) return "방문";
   return "기타";
 }
@@ -121,6 +128,9 @@ export default function CalendarPage() {
 
   // ✅ 관리자 여부(관리자 메모 노출/저장 제어)
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  // ✅ 로그인 유저 id(auth.uid()) 저장 (RLS created_by 조건 대응)
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
 
   // 테마: TradeClient와 동일 톤
   const pageBg = "bg-slate-50 text-slate-900";
@@ -290,7 +300,7 @@ export default function CalendarPage() {
 
         const cur = map.get(d) ?? {
           total: 0,
-          byMethod: { 택배: 0, 퀵: 0, 방문: 0, 기타: 0 },
+          byMethod: { 택배: 0, "퀵-신용": 0, "퀵-착불": 0, 방문: 0, 기타: 0 },
           lines: [],
         };
 
@@ -312,7 +322,13 @@ export default function CalendarPage() {
         lineMapByDate.set(d, lm);
       }
 
-      const methodOrder: Record<ShipMethod, number> = { 택배: 0, 퀵: 1, 방문: 2, 기타: 3 };
+      const methodOrder: Record<ShipMethod, number> = {
+        택배: 0,
+        "퀵-신용": 1,
+        "퀵-착불": 2,
+        방문: 3,
+        기타: 4,
+      };
 
       for (const [d, agg] of map.entries()) {
         const lm = lineMapByDate.get(d);
@@ -342,17 +358,20 @@ export default function CalendarPage() {
     }
   }
 
-  // ✅ 현재 로그인 유저가 관리자(bonusmate@naver.com)인지 확인
+  // ✅ 현재 로그인 유저가 관리자(bonusmate@naver.com)인지 확인 + auth.uid 저장
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const { data } = await supabase.auth.getUser();
         const email = (data?.user?.email ?? "").toLowerCase();
+        const uid = data?.user?.id ?? null;
         if (!alive) return;
+        setAuthUserId(uid);
         setIsAdmin(email === "bonusmate@naver.com");
       } catch {
         if (!alive) return;
+        setAuthUserId(null);
         setIsAdmin(false);
       }
     })();
@@ -437,7 +456,7 @@ export default function CalendarPage() {
 
   const shipSummary = useMemo(() => {
     const total = shipRows.length;
-    const byMethod: Record<ShipMethod, number> = { 택배: 0, 퀵: 0, 방문: 0, 기타: 0 };
+    const byMethod: Record<ShipMethod, number> = { 택배: 0, "퀵-신용": 0, "퀵-착불": 0, 방문: 0, 기타: 0 };
     for (const r of shipRows) byMethod[r.ship_method] += 1;
     return { total, byMethod };
   }, [shipRows]);
@@ -458,7 +477,13 @@ export default function CalendarPage() {
       return { partner_id: x.partner_id, partner: x.partner, method: x.method, cnt: x.cnt };
     });
 
-    const order: Record<ShipMethod, number> = { 택배: 0, 퀵: 1, 방문: 2, 기타: 3 };
+    const order: Record<ShipMethod, number> = {
+      택배: 0,
+      "퀵-신용": 1,
+      "퀵-착불": 2,
+      방문: 3,
+      기타: 4,
+    };
     lines.sort((a, b) => {
       const nameCmp = a.partner.localeCompare(b.partner, "ko");
       if (nameCmp !== 0) return nameCmp;
@@ -525,8 +550,9 @@ export default function CalendarPage() {
         memo_date: date,
         visibility: vis,
         content: trimmed,
-        created_by: null,
+        created_by: vis === "ADMIN" ? authUserId : null,
       };
+
       const { error } = await supabase.from("calendar_memos").insert(payload);
       if (error) throw new Error(error.message);
       return;
@@ -547,8 +573,9 @@ export default function CalendarPage() {
     try {
       await upsertMemo(selDate, "PUBLIC", publicText);
 
-      // ✅ 관리자만 ADMIN 저장
+      // ✅ 관리자만 ADMIN 저장 + authUserId 없으면 저장 시도 자체를 안 함
       if (isAdmin) {
+        if (!authUserId) throw new Error("로그인 정보 확인 실패(관리자 메모 저장 불가)");
         await upsertMemo(selDate, "ADMIN", adminText);
       }
 
@@ -840,7 +867,9 @@ export default function CalendarPage() {
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">출고 목록 · {selShipDate}</div>
-                  <div className="mt-1 text-xs text-slate-500">업체명-출고방식(택배/퀵/방문/기타) 형태로 표시합니다.</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    업체명-출고방식(택배/퀵-신용/퀵-착불/방문/기타) 형태로 표시합니다.
+                  </div>
                 </div>
 
                 <div className="flex gap-2">
@@ -868,7 +897,10 @@ export default function CalendarPage() {
                       택배 <span className="tabular-nums">{shipSummary.byMethod["택배"]}</span>
                     </span>
                     <span className={badgeQuick}>
-                      퀵 <span className="tabular-nums">{shipSummary.byMethod["퀵"]}</span>
+                      퀵-신용 <span className="tabular-nums">{shipSummary.byMethod["퀵-신용"]}</span>
+                    </span>
+                    <span className={badgeQuick}>
+                      퀵-착불 <span className="tabular-nums">{shipSummary.byMethod["퀵-착불"]}</span>
                     </span>
                     <span className={badgeVisit}>
                       방문 <span className="tabular-nums">{shipSummary.byMethod["방문"]}</span>
@@ -906,7 +938,8 @@ export default function CalendarPage() {
                   )}
 
                   <div className="mt-3 text-xs text-slate-500">
-                    ※ 엑셀 다운로드는 <span className="font-semibold">order_shipments 기준</span>으로 생성됩니다. (배송지 2개면 2줄) · 제품명은{" "}
+                    ※ 엑셀 다운로드는 <span className="font-semibold">order_shipments 기준</span>으로 생성됩니다.
+                    (배송지 2개면 2줄) · 제품명은{" "}
                     <span className="font-semibold">order_lines를 합쳐 1칸</span>에 출력합니다. ·{" "}
                     <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 숨김 처리됩니다.
                   </div>
