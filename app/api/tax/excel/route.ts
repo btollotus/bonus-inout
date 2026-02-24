@@ -306,7 +306,7 @@ export async function GET(req: Request) {
         수화주명2: ship_to_name2,
         주소2: address2,
         휴대폰2: mobile2,
-        전화2: phone2,
+        전화: phone2,
         요청사항2: reqMsg2,
       });
       continue;
@@ -362,7 +362,7 @@ export async function GET(req: Request) {
         수화주명2: ship_to_name2,
         주소2: address2,
         휴대폰2: mobile2,
-        전화2: phone2,
+        전화: phone2,
         요청사항2: reqMsg2,
       });
     }
@@ -370,32 +370,40 @@ export async function GET(req: Request) {
 
   // =============================
   // 매입(OUT) 행: 급여/세금/기타만 "지출_*" 컬럼에 표기 (기타 OUT은 공란 유지)
-  // ✅ 총액만 있는 과거데이터도 공급가/VAT 역산해서 엑셀에 표시
+  // ✅ 급여는 부가세가 없으니 공급가/VAT 계산(역산)하지 않음:
+  //    - total만 사용하여 지출_총액에만 넣고, 지출_공급가/지출_VAT는 0 처리
   // =============================
   for (const l of (ledgers ?? []) as any[]) {
     const total = safeNum(l.total_amount ?? l.amount ?? 0);
     const vt = String(l.vat_type ?? "TAXED").toUpperCase();
     const cat = String(l.category ?? "OUT");
 
-    const hasExact = l.supply_amount != null || l.vat_amount != null || l.total_amount != null;
-
-    let supply = hasExact ? safeNum(l.supply_amount ?? 0) : 0;
-    let vat = hasExact ? safeNum(l.vat_amount ?? 0) : 0;
-
-    if (!hasExact) {
-      if (vt === "TAXED") {
-        const s = Math.round(total / 1.1);
-        supply = s;
-        vat = total - s;
-      } else {
-        supply = total;
-        vat = 0;
-      }
-    }
-
-    const vatForReport = vt === "TAXED" ? vat : 0;
-
     const exp = isExpenseCat(cat);
+    const isSalary = cat === "급여";
+
+    let supply = 0;
+    let vat = 0;
+    let vatForReport = 0;
+
+    if (!isSalary) {
+      const hasExact = l.supply_amount != null || l.vat_amount != null || l.total_amount != null;
+
+      supply = hasExact ? safeNum(l.supply_amount ?? 0) : 0;
+      vat = hasExact ? safeNum(l.vat_amount ?? 0) : 0;
+
+      if (!hasExact) {
+        if (vt === "TAXED") {
+          const s = Math.round(total / 1.1);
+          supply = s;
+          vat = total - s;
+        } else {
+          supply = total;
+          vat = 0;
+        }
+      }
+
+      vatForReport = vt === "TAXED" ? vat : 0;
+    }
 
     // ✅ 지출항목(급여/세금/기타)만 음수로 표기
     const supplyOut = exp ? -Math.abs(supply) : supply;
