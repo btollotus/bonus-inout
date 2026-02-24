@@ -4,6 +4,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import Holidays from "date-holidays";
 
+export const metadata = {
+  title: "출고 캘린더",
+};
+
 type Visibility = "PUBLIC" | "ADMIN";
 
 type MemoRow = {
