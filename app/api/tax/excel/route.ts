@@ -1,3 +1,4 @@
+// app/api/tax/excel/route.ts
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
@@ -305,7 +306,7 @@ export async function GET(req: Request) {
         수화주명2: ship_to_name2,
         주소2: address2,
         휴대폰2: mobile2,
-        전화: phone2,
+        전화2: phone2, // ✅ 중복 키(전화) 오류 수정: 전화 -> 전화2
         요청사항2: reqMsg2,
       });
       continue;
@@ -361,7 +362,7 @@ export async function GET(req: Request) {
         수화주명2: ship_to_name2,
         주소2: address2,
         휴대폰2: mobile2,
-        전화: phone2,
+        전화2: phone2,
         요청사항2: reqMsg2,
       });
     }
