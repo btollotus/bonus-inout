@@ -63,7 +63,12 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
           {nav.map((x) => {
             const active = pathname === x.href;
 
-            const isRestricted = x.href === "/products" || x.href === "/trade";
+            const isRestricted =
+              x.href === "/products" ||
+              x.href === "/trade" ||
+              x.href === "/tax" ||
+              x.href === "/tax/spec" ||
+              x.href === "/tax/statement";
             const disabled = isRestricted && !isAdmin;
 
             if (disabled) {
