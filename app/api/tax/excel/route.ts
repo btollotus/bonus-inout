@@ -369,12 +369,29 @@ export async function GET(req: Request) {
 
   // =============================
   // 매입(OUT) 행: 기존 방식 유지 (품목명 공란 + 배송정보 공란)
+  // ✅ 총액만 있는 과거데이터도 공급가/VAT 역산해서 엑셀에 표시
   // =============================
   for (const l of (ledgers ?? []) as any[]) {
     const total = safeNum(l.total_amount ?? l.amount ?? 0);
-    const supply = safeNum(l.supply_amount ?? 0);
-    const vat = safeNum(l.vat_amount ?? 0);
     const vt = String(l.vat_type ?? "TAXED").toUpperCase();
+
+    // ✅ DB에 정확 컬럼이 있으면 그대로 사용, 없으면(총액만) 역산
+    const hasExact =
+      l.supply_amount != null || l.vat_amount != null || l.total_amount != null;
+
+    let supply = hasExact ? safeNum(l.supply_amount ?? 0) : 0;
+    let vat = hasExact ? safeNum(l.vat_amount ?? 0) : 0;
+
+    if (!hasExact) {
+      if (vt === "TAXED") {
+        const s = Math.round(total / 1.1);
+        supply = s;
+        vat = total - s;
+      } else {
+        supply = total;
+        vat = 0;
+      }
+    }
 
     // VAT는 TAXED만 인정
     const vatForReport = vt === "TAXED" ? vat : 0;
