@@ -230,11 +230,16 @@ export async function GET(req: Request) {
   /**
    * ✅ 통합 1시트
    * 요청 헤더 순서:
-   * 날짜 / 구분 / 사업자등록번호 / 거래처 / 주문자 / 품목명 / 식품유형 / 무게 / 비고 / 공급가 / VAT / 총액 /
+   * 날짜 / 구분 / 사업자등록번호 / 거래처 / 주문자 / 품목명 / 식품유형 / 무게 / 비고 /
+   * (매출) 공급가 / (매출) VAT / (매출) 총액 /
+   * (급여/세금/기타) 공급가 / (급여/세금/기타) VAT / (급여/세금/기타) 총액 /
+   * (기타 매입) 공급가 / (기타 매입) VAT / (기타 매입) 총액 /
    * 수화주명 / 주소1 / 휴대폰 / 전화 / 요청사항 /
    * 수화주명2 / 주소2 / 휴대폰2 / 전화2 / 요청사항2
    */
   const rows: any[] = [];
+
+  const isExpenseCat = (cat: string) => cat === "급여" || cat === "세금" || cat === "기타";
 
   // =============================
   // 매출 행: order_lines 라인 단위로 출력
@@ -290,9 +295,18 @@ export async function GET(req: Request) {
         식품유형: "",
         무게: "",
         비고: "",
-        공급가: supplyOrder,
-        VAT: vatOrder,
-        총액: totalOrder,
+
+        "매출_공급가": supplyOrder,
+        "매출_VAT": vatOrder,
+        "매출_총액": totalOrder,
+
+        "급여세금기타_공급가": "",
+        "급여세금기타_VAT": "",
+        "급여세금기타_총액": "",
+
+        "매입기타_공급가": "",
+        "매입기타_VAT": "",
+        "매입기타_총액": "",
 
         수화주명: ship_to_name,
         주소1: address1,
@@ -348,9 +362,18 @@ export async function GET(req: Request) {
         식품유형: String(ln.food_type ?? ""),
         무게: weightTotal,
         비고: "",
-        공급가: supply,
-        VAT: vat,
-        총액: total,
+
+        "매출_공급가": supply,
+        "매출_VAT": vat,
+        "매출_총액": total,
+
+        "급여세금기타_공급가": "",
+        "급여세금기타_VAT": "",
+        "급여세금기타_총액": "",
+
+        "매입기타_공급가": "",
+        "매입기타_VAT": "",
+        "매입기타_총액": "",
 
         수화주명: ship_to_name,
         주소1: address1,
@@ -368,7 +391,7 @@ export async function GET(req: Request) {
   }
 
   // =============================
-  // 매입(OUT) 행: 기존 방식 유지 (품목명 공란 + 배송정보 공란)
+  // 매입(OUT) 행: 공급가/VAT/총액을 "급여세금기타" 또는 "매입기타" 컬럼으로 분리
   // ✅ 총액만 있는 과거데이터도 공급가/VAT 역산해서 엑셀에 표시
   // =============================
   for (const l of (ledgers ?? []) as any[]) {
@@ -394,14 +417,14 @@ export async function GET(req: Request) {
     }
 
     // VAT는 TAXED만 인정
-    let vatForReport = vt === "TAXED" ? vat : 0;
+    const vatForReport = vt === "TAXED" ? vat : 0;
 
-    // ✅ 급여/세금/기타는 지출항목이므로 공급가/VAT/총액을 마이너스로 표시
-    // (이미 음수여도 항상 음수 유지)
-    const isExpenseNeg = cat === "급여" || cat === "세금" || cat === "기타";
-    const supplyOut = isExpenseNeg ? -Math.abs(supply) : supply;
-    const vatOut = isExpenseNeg ? -Math.abs(vatForReport) : vatForReport;
-    const totalOut = isExpenseNeg ? -Math.abs(total) : total;
+    const exp = isExpenseCat(cat);
+
+    // ✅ 급여/세금/기타는 지출항목이므로 공급가/VAT/총액을 마이너스로 표시 (항상 음수 유지)
+    const supplyOut = exp ? -Math.abs(supply) : supply;
+    const vatOut = exp ? -Math.abs(vatForReport) : vatForReport;
+    const totalOut = exp ? -Math.abs(total) : total;
 
     rows.push({
       날짜: toYmd(l.entry_date),
@@ -414,9 +437,18 @@ export async function GET(req: Request) {
       식품유형: "",
       무게: "",
       비고: String(l.memo ?? ""),
-      공급가: supplyOut,
-      VAT: vatOut,
-      총액: totalOut,
+
+      "매출_공급가": "",
+      "매출_VAT": "",
+      "매출_총액": "",
+
+      "급여세금기타_공급가": exp ? supplyOut : "",
+      "급여세금기타_VAT": exp ? vatOut : "",
+      "급여세금기타_총액": exp ? totalOut : "",
+
+      "매입기타_공급가": !exp ? supplyOut : "",
+      "매입기타_VAT": !exp ? vatOut : "",
+      "매입기타_총액": !exp ? totalOut : "",
 
       수화주명: "",
       주소1: "",
@@ -448,14 +480,25 @@ export async function GET(req: Request) {
     "식품유형",
     "무게",
     "비고",
-    "공급가",
-    "VAT",
-    "총액",
+
+    "매출_공급가",
+    "매출_VAT",
+    "매출_총액",
+
+    "급여세금기타_공급가",
+    "급여세금기타_VAT",
+    "급여세금기타_총액",
+
+    "매입기타_공급가",
+    "매입기타_VAT",
+    "매입기타_총액",
+
     "수화주명",
     "주소1",
     "휴대폰",
     "전화",
     "요청사항",
+
     "수화주명2",
     "주소2",
     "휴대폰2",
@@ -477,9 +520,18 @@ export async function GET(req: Request) {
     { wch: 14 }, // 식품유형
     { wch: 10 }, // 무게
     { wch: 30 }, // 비고
-    { wch: 12 }, // 공급가
-    { wch: 10 }, // VAT
-    { wch: 12 }, // 총액
+
+    { wch: 12 }, // 매출_공급가
+    { wch: 10 }, // 매출_VAT
+    { wch: 12 }, // 매출_총액
+
+    { wch: 16 }, // 급여세금기타_공급가
+    { wch: 14 }, // 급여세금기타_VAT
+    { wch: 16 }, // 급여세금기타_총액
+
+    { wch: 12 }, // 매입기타_공급가
+    { wch: 10 }, // 매입기타_VAT
+    { wch: 12 }, // 매입기타_총액
 
     { wch: 14 }, // 수화주명
     { wch: 40 }, // 주소1
@@ -494,18 +546,27 @@ export async function GET(req: Request) {
     { wch: 22 }, // 요청사항2
   ];
 
-  // ✅ 숫자 표시 형식(천단위) 적용: 무게, 공급가, VAT, 총액
+  // ✅ 숫자 표시 형식(천단위) 적용: 무게, (매출/급여세금기타/매입기타) 공급가/VAT/총액
   // ✅ 전체 폰트: 굴림 / 10
-  // ✅ 급여/세금/기타(매입) 행은 공급가/VAT/총액 폰트 컬러 빨강
+  // ✅ 급여/세금/기타(매입) 열은 폰트 컬러 빨강
   const ref = ws["!ref"];
   if (ref) {
     const range = XLSX.utils.decode_range(ref);
 
     const idxType = header.indexOf("구분");
     const idxWeight = header.indexOf("무게");
-    const idxSupply = header.indexOf("공급가");
-    const idxVat = header.indexOf("VAT");
-    const idxTotal = header.indexOf("총액");
+
+    const idxSaleSupply = header.indexOf("매출_공급가");
+    const idxSaleVat = header.indexOf("매출_VAT");
+    const idxSaleTotal = header.indexOf("매출_총액");
+
+    const idxExpSupply = header.indexOf("급여세금기타_공급가");
+    const idxExpVat = header.indexOf("급여세금기타_VAT");
+    const idxExpTotal = header.indexOf("급여세금기타_총액");
+
+    const idxBuySupply = header.indexOf("매입기타_공급가");
+    const idxBuyVat = header.indexOf("매입기타_VAT");
+    const idxBuyTotal = header.indexOf("매입기타_총액");
 
     // 폰트 적용 (헤더 포함 전체)
     for (let r = range.s.r; r <= range.e.r; r++) {
@@ -521,6 +582,19 @@ export async function GET(req: Request) {
       }
     }
 
+    const numCols = [
+      idxWeight,
+      idxSaleSupply,
+      idxSaleVat,
+      idxSaleTotal,
+      idxExpSupply,
+      idxExpVat,
+      idxExpTotal,
+      idxBuySupply,
+      idxBuyVat,
+      idxBuyTotal,
+    ].filter((x) => x >= 0);
+
     // 숫자 형식 + (급여/세금/기타) 빨강 폰트 (데이터 행만)
     for (let r = range.s.r + 1; r <= range.e.r; r++) {
       // 해당 행 구분 확인 (예: 매입(급여))
@@ -533,16 +607,15 @@ export async function GET(req: Request) {
           typeVal === "매입(급여)" || typeVal === "매입(세금)" || typeVal === "매입(기타)";
       }
 
-      for (const c of [idxWeight, idxSupply, idxVat, idxTotal]) {
-        if (c < 0) continue;
-
+      for (const c of numCols) {
         const addr = XLSX.utils.encode_cell({ r, c });
         const cell = (ws as any)[addr];
         if (!cell) continue;
 
         // 문자열이면 숫자로 교정
         if (cell.t === "s") {
-          const n = Number(String(cell.v ?? "").replaceAll(",", ""));
+          const raw = String(cell.v ?? "");
+          const n = Number(raw.replaceAll(",", ""));
           if (Number.isFinite(n)) {
             cell.t = "n";
             cell.v = n;
@@ -553,8 +626,8 @@ export async function GET(req: Request) {
           cell.z = "#,##0";
         }
 
-        // ✅ 급여/세금/기타(매입) 행: 공급가/VAT/총액 폰트 컬러 빨강
-        if (isRedExpenseRow && (c === idxSupply || c === idxVat || c === idxTotal)) {
+        // ✅ 급여/세금/기타(매입) 행: "급여세금기타_*" 컬럼 폰트 컬러 빨강
+        if (isRedExpenseRow && (c === idxExpSupply || c === idxExpVat || c === idxExpTotal)) {
           cell.s = {
             ...(cell.s ?? {}),
             font: {
