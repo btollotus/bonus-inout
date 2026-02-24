@@ -20,7 +20,7 @@ const nav = [
   { href: "/calendar", label: "출고 캘린더" },
 ];
 
-export default function TopNav({ role }: { role?: string }) {
+export default function TopNav({ role, email }: { role?: string; email?: string }) {
   const pathname = usePathname();
   const isAdmin = role === "ADMIN";
 
@@ -114,6 +114,19 @@ export default function TopNav({ role }: { role?: string }) {
               </Link>
             );
           })}
+
+          {!!email && (
+            <span
+              style={{
+                marginLeft: "auto",
+                color: "rgba(255,255,255,0.70)",
+                fontWeight: 800,
+                fontSize: 12,
+              }}
+            >
+              {email}
+            </span>
+          )}
         </div>
       </div>
     </div>

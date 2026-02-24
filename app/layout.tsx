@@ -3,10 +3,7 @@ import TopNav from "@/components/TopNav";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
-  title: {
-    default: "BONUSMATE ERP",
-    template: "BONUSMATE ERP-%s",
-  },
+  title: "재고관리 MVP",
   description: "BONUS In/Out",
 };
 
@@ -18,6 +15,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   } = await supabase.auth.getUser();
 
   let role: string = "USER";
+  const email: string = user?.email ?? "";
 
   if (user) {
     const { data } = await supabase
@@ -39,7 +37,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           minHeight: "100vh",
         }}
       >
-        <TopNav role={role} />
+        <TopNav role={role} email={email} />
         {/* ✅ 풀폭 레이아웃 */}
         <main style={{ width: "100%" }}>{children}</main>
       </body>
