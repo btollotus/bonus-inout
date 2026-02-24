@@ -19,23 +19,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const email: string = user?.email ?? "";
 
   if (user) {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    const accessToken = session?.access_token;
-
-    if (accessToken) {
-      const supabaseAuthed = createSupabaseClient(
+    if (serviceKey) {
+      const supabaseAdmin = createSupabaseClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        serviceKey,
         {
-          global: { headers: { Authorization: `Bearer ${accessToken}` } },
           auth: { persistSession: false, autoRefreshToken: false },
         }
       );
 
-      const { data } = await supabaseAuthed
+      const { data } = await supabaseAdmin
         .from("user_roles")
         .select("role")
         .eq("user_id", user.id)
