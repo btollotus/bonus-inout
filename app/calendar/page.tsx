@@ -4,9 +4,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
-export const metadata = {
+import type { Metadata } from "next";
+import CalendarClient from "./calendar-client";
+
+export const metadata: Metadata = {
   title: "출고 캘린더",
 };
+
+export default function Page() {
+  return <CalendarClient />;
+}
 
 type Visibility = "PUBLIC" | "ADMIN";
 
