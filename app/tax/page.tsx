@@ -4,6 +4,10 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
+export const metadata = {
+  title: "세무사",
+};
+
 export default async function Page() {
   const supabase = await createClient();
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 
 // ─────────────────────── Types ───────────────────────
@@ -247,6 +248,31 @@ const LineHeader = ({ gridCols }: { gridCols: string }) => (
 // ─────────────────────── Main Component ───────────────────────
 export default function TradeClient() {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
+
+  // ✅ 권한 가드: USER는 /trade 접근 차단 (role === "ADMIN"만 허용)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data: uData } = await supabase.auth.getUser();
+      if (!alive) return;
+
+      const uid = uData?.user?.id;
+      if (!uid) {
+        router.replace("/login");
+        return;
+      }
+
+      const { data: rData } = await supabase.from("user_roles").select("role").eq("user_id", uid).maybeSingle();
+      if (!alive) return;
+
+      const role = String((rData as any)?.role ?? "USER");
+      if (role !== "ADMIN") {
+        router.replace("/");
+      }
+    })();
+    return () => { alive = false; };
+  }, [supabase, router]);
 
   // UI state
   const [msg, setMsg] = useState<string | null>(null);
