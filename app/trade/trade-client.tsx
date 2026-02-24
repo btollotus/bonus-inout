@@ -1,4 +1,3 @@
-전체코드 줄테니 수정해서 반드시 전체코드로 전달해주고, 요청하지 않은 부분은 절대 수정, 편집하지 말것.
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
