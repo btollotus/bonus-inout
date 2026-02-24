@@ -122,6 +122,14 @@ function calcLineAmounts(qtyRaw: any, unitRaw: any, totalInclVatRaw: any) {
   return { supply: 0, vat: 0, total: 0 };
 }
 
+function splitVatFromTotal(totalInclVatRaw: any) {
+  const total = toIntSigned(totalInclVatRaw);
+  if (!Number.isFinite(total) || total === 0) return { supply: 0, vat: 0, total: 0 };
+  const supply = Math.round(total / 1.1);
+  const vat = total - supply;
+  return { supply, vat, total };
+}
+
 function inferPackEaFromName(name: string) {
   const m = String(name ?? "").match(/(\d+)\s*개/);
   if (!m) return 1;
@@ -375,6 +383,9 @@ export default function TradeClient() {
   // ─── Computed totals ───
   const orderTotals = useMemo(() => lines.reduce((acc, l) => { const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat); return { supply: acc.supply + r.supply, vat: acc.vat + r.vat, total: acc.total + r.total }; }, { supply: 0, vat: 0, total: 0 }), [lines]);
   const editOrderTotals = useMemo(() => eLines.reduce((acc, l) => { const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat); return { supply: acc.supply + r.supply, vat: acc.vat + r.vat, total: acc.total + r.total }; }, { supply: 0, vat: 0, total: 0 }), [eLines]);
+
+  const ledgerSplit = useMemo(() => splitVatFromTotal(amountStr), [amountStr]);
+  const editLedgerSplit = useMemo(() => splitVatFromTotal(eAmountStr), [eAmountStr]);
 
   const partnersToShow = useMemo(() => {
     if (partnerView === "PINNED") return partners.filter((p) => !!p.is_pinned);
@@ -954,8 +965,20 @@ export default function TradeClient() {
                         </select>
                       </div>
                       <div><div className="mb-1 text-xs text-slate-600">카테고리</div><div className="flex flex-wrap gap-2">{CATEGORIES.map((c) => <button key={c} type="button" className={eCategory === c ? btnOn : btn} onClick={() => setECategory(c)}>{c}</button>)}</div></div>
-                      <div><div className="mb-1 text-xs text-slate-600">금액(원)</div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">금액(원)</div>
                         <input className={inpR} inputMode="numeric" value={eAmountStr} onChange={(e) => setEAmountStr(e.target.value.replace(/[^\d,]/g, ""))} onBlur={() => { const n = Number((eAmountStr||"0").replaceAll(",","")); if (Number.isFinite(n) && n > 0) setEAmountStr(n.toLocaleString("ko-KR")); }} />
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <div>
+                            <div className="mb-1 text-xs text-slate-600">공급가</div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{editLedgerSplit.total ? fmt(editLedgerSplit.supply) : ""}</div>
+                          </div>
+                          <div>
+                            <div className="mb-1 text-xs text-slate-600">부가세</div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{editLedgerSplit.total ? fmt(editLedgerSplit.vat) : ""}</div>
+                          </div>
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">※ 금액(총액)을 입력하면 공급가/부가세(10%)가 자동 분리됩니다.</div>
                       </div>
                       <div><div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div><input className={inp} value={eCounterpartyName} onChange={(e) => setECounterpartyName(e.target.value)} /></div>
                       <div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={eBusinessNo} onChange={(e) => setEBusinessNo(e.target.value)} /></div>
@@ -1095,8 +1118,20 @@ export default function TradeClient() {
                     </select>
                   </div>
                   <div><div className="mb-1 text-xs text-slate-600">카테고리</div><div className="flex flex-wrap gap-2">{CATEGORIES.map((c) => <button key={c} type="button" className={category === c ? btnOn : btn} onClick={() => setCategory(c)}>{c}</button>)}</div></div>
-                  <div><div className="mb-1 text-xs text-slate-600">금액(원)</div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">금액(원)</div>
                     <input className={inpR} inputMode="numeric" value={amountStr} onChange={(e) => setAmountStr(e.target.value.replace(/[^\d,]/g, ""))} onBlur={() => { const n = Number((amountStr||"0").replaceAll(",","")); if (Number.isFinite(n) && n > 0) setAmountStr(n.toLocaleString("ko-KR")); }} />
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">공급가</div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{ledgerSplit.total ? fmt(ledgerSplit.supply) : ""}</div>
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">부가세</div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{ledgerSplit.total ? fmt(ledgerSplit.vat) : ""}</div>
+                      </div>
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">※ 금액(총액)을 입력하면 공급가/부가세(10%)가 자동 분리됩니다.</div>
                   </div>
                   <div><div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div><input className={inp} value={manualCounterpartyName} onChange={(e) => setManualCounterpartyName(e.target.value)} placeholder="예: 쿠팡 / 이마트 / 네이버페이 / ㅇㅇ상사" /></div>
                   <div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={manualBusinessNo} onChange={(e) => setManualBusinessNo(e.target.value)} placeholder="예: 123-45-67890" /></div>
