@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React from "react";
+import { createClient } from "@/lib/supabase/browser";
 
 const nav = [
   { href: "/scan", label: "스캔" },
@@ -24,6 +25,12 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
   const pathname = usePathname();
   const isAdmin = role === "ADMIN";
 
+  const onLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  };
+
   return (
     <div
       className="app-topnav"
@@ -38,6 +45,31 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
         borderBottomColor: "rgba(255,255,255,0.10)",
       }}
     >
+      {/* ✅ 로그아웃 버튼 상단 우측 상시 고정(로그인 상태에서만 노출) */}
+      {!!email && (
+        <button
+          type="button"
+          onClick={onLogout}
+          style={{
+            position: "fixed",
+            top: 10,
+            right: 16,
+            zIndex: 9999,
+            padding: "8px 10px",
+            borderRadius: 12,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: "rgba(255,255,255,0.16)",
+            backgroundColor: "rgba(255,255,255,0.04)",
+            color: "white",
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          로그아웃
+        </button>
+      )}
+
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "10px 16px" }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <span style={{ color: "white", fontWeight: 900, marginRight: 8 }}>BONUSMATE ERP</span>
@@ -121,16 +153,20 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
           })}
 
           {!!email && (
-            <span
-              style={{
-                marginLeft: "auto",
-                color: "rgba(255,255,255,0.70)",
-                fontWeight: 800,
-                fontSize: 12,
-              }}
-            >
-              {email} {role ? `(${role})` : ""}
-            </span>
+            <>
+              <span
+                style={{
+                  marginLeft: "auto",
+                  color: "rgba(255,255,255,0.70)",
+                  fontWeight: 800,
+                  fontSize: 12,
+                }}
+              >
+                {email} {role ? `(${role})` : ""}
+              </span>
+
+              {/* ✅ 기존 로그아웃 버튼은 제거(상단 우측 고정 버튼으로 대체) */}
+            </>
           )}
         </div>
       </div>
