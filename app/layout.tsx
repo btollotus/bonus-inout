@@ -1,12 +1,31 @@
 import "./globals.css";
 import TopNav from "@/components/TopNav";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
   title: "재고관리 MVP",
   description: "BONUS In/Out",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let role: string = "USER";
+
+  if (user) {
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .single();
+
+    role = data?.role ?? "USER";
+  }
+
   return (
     <html lang="ko">
       <body
@@ -17,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           minHeight: "100vh",
         }}
       >
-        <TopNav />
+        <TopNav role={role} />
         {/* ✅ 풀폭 레이아웃 */}
         <main style={{ width: "100%" }}>{children}</main>
       </body>
