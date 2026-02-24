@@ -124,7 +124,7 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
                 fontSize: 12,
               }}
             >
-              {email}
+              {email} {role ? `(${role})` : ""}
             </span>
           )}
         </div>
