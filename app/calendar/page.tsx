@@ -15,8 +15,8 @@ type CalendarMemoRow = {
   updated_at: string;
 };
 
-// ✅ 출고 방법(택배/퀵) 집계용 (orders.ship_method 기준)
-type ShipMethod = "택배" | "퀵" | "기타";
+// ✅ 출고 방법(택배/퀵/방문/기타) 집계용 (orders.ship_method 기준)
+type ShipMethod = "택배" | "퀵" | "방문" | "기타";
 
 function ymd(d: Date) {
   const yyyy = d.getFullYear();
@@ -105,6 +105,7 @@ function normalizeShipMethod(v: any): ShipMethod {
   if (!s) return "기타";
   if (s.includes("택배")) return "택배";
   if (s.includes("퀵")) return "퀵";
+  if (s.includes("방문")) return "방문";
   return "기타";
 }
 
@@ -137,6 +138,8 @@ export default function CalendarPage() {
     "inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700";
   const badgeQuick =
     "inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700";
+  const badgeVisit =
+    "inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700";
   const badgeEtc =
     "inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700";
 
@@ -277,7 +280,7 @@ export default function CalendarPage() {
 
         const cur = map.get(d) ?? {
           total: 0,
-          byMethod: { 택배: 0, 퀵: 0, 기타: 0 },
+          byMethod: { 택배: 0, 퀵: 0, 방문: 0, 기타: 0 },
           lines: [],
         };
 
@@ -299,7 +302,7 @@ export default function CalendarPage() {
         lineMapByDate.set(d, lm);
       }
 
-      const methodOrder: Record<ShipMethod, number> = { 택배: 0, 퀵: 1, 기타: 2 };
+      const methodOrder: Record<ShipMethod, number> = { 택배: 0, 퀵: 1, 방문: 2, 기타: 3 };
 
       for (const [d, agg] of map.entries()) {
         const lm = lineMapByDate.get(d);
@@ -401,7 +404,7 @@ export default function CalendarPage() {
 
   const shipSummary = useMemo(() => {
     const total = shipRows.length;
-    const byMethod: Record<ShipMethod, number> = { 택배: 0, 퀵: 0, 기타: 0 };
+    const byMethod: Record<ShipMethod, number> = { 택배: 0, 퀵: 0, 방문: 0, 기타: 0 };
     for (const r of shipRows) byMethod[r.ship_method] += 1;
     return { total, byMethod };
   }, [shipRows]);
@@ -422,7 +425,7 @@ export default function CalendarPage() {
       return { partner_id: x.partner_id, partner: x.partner, method: x.method, cnt: x.cnt };
     });
 
-    const order: Record<ShipMethod, number> = { 택배: 0, 퀵: 1, 기타: 2 };
+    const order: Record<ShipMethod, number> = { 택배: 0, 퀵: 1, 방문: 2, 기타: 3 };
     lines.sort((a, b) => {
       const nameCmp = a.partner.localeCompare(b.partner, "ko");
       if (nameCmp !== 0) return nameCmp;
@@ -795,7 +798,7 @@ export default function CalendarPage() {
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">출고 목록 · {selShipDate}</div>
-                  <div className="mt-1 text-xs text-slate-500">업체명-출고방식(택배/퀵/기타) 형태로 표시합니다.</div>
+                  <div className="mt-1 text-xs text-slate-500">업체명-출고방식(택배/퀵/방문/기타) 형태로 표시합니다.</div>
                 </div>
 
                 <div className="flex gap-2">
@@ -824,6 +827,9 @@ export default function CalendarPage() {
                     </span>
                     <span className={badgeQuick}>
                       퀵 <span className="tabular-nums">{shipSummary.byMethod["퀵"]}</span>
+                    </span>
+                    <span className={badgeVisit}>
+                      방문 <span className="tabular-nums">{shipSummary.byMethod["방문"]}</span>
                     </span>
                     <span className={badgeEtc}>
                       기타 <span className="tabular-nums">{shipSummary.byMethod["기타"]}</span>
