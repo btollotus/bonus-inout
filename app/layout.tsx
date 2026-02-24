@@ -3,7 +3,10 @@ import TopNav from "@/components/TopNav";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
-  title: "재고관리 MVP",
+  title: {
+    default: "BONUSMATE ERP",
+    template: "BONUSMATE ERP-%s",
+  },
   description: "BONUS In/Out",
 };
 
