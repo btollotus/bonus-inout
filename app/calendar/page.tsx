@@ -4,10 +4,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
-export default function Page() {
-  return <CalendarClient />;
-}
-
 type Visibility = "PUBLIC" | "ADMIN";
 
 type CalendarMemoRow = {
