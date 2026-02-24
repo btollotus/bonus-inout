@@ -119,6 +119,9 @@ export default function CalendarPage() {
   // ✅ 오늘 날짜 셀 포커싱
   const didFocusRef = useRef(false);
 
+  // ✅ 관리자 여부(관리자 메모 노출/저장 제어)
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
   // 테마: TradeClient와 동일 톤
   const pageBg = "bg-slate-50 text-slate-900";
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
@@ -233,14 +236,21 @@ export default function CalendarPage() {
   async function loadAll() {
     setMsg(null);
 
-    // 1) calendar_memos (PUBLIC은 전원, ADMIN은 RLS로 관리자만 내려옴)
+    // 1) calendar_memos (PUBLIC은 전원, ADMIN은 관리자만)
     {
-      const { data, error } = await supabase
+      let q = supabase
         .from("calendar_memos")
         .select("id,memo_date,visibility,content,created_at,updated_at")
         .gte("memo_date", range.from)
         .lt("memo_date", range.to)
         .order("memo_date", { ascending: true });
+
+      // ✅ UI 차단(추가 안전장치): 비관리자는 PUBLIC만 가져오도록 제한
+      if (!isAdmin) {
+        q = q.eq("visibility", "PUBLIC");
+      }
+
+      const { data, error } = await q;
 
       if (error) return setMsg(error.message);
       setMemos((data ?? []) as CalendarMemoRow[]);
@@ -332,11 +342,31 @@ export default function CalendarPage() {
     }
   }
 
+  // ✅ 현재 로그인 유저가 관리자(bonusmate@naver.com)인지 확인
   useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        const email = (data?.user?.email ?? "").toLowerCase();
+        if (!alive) return;
+        setIsAdmin(email === "bonusmate@naver.com");
+      } catch {
+        if (!alive) return;
+        setIsAdmin(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [supabase]);
+
+  useEffect(() => {
+    if (isAdmin === null) return;
     didFocusRef.current = false;
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [curMonth]);
+  }, [curMonth, isAdmin]);
 
   // ✅ 월이 바뀌거나 처음 로드되면 "오늘" 셀에 포커싱
   useEffect(() => {
@@ -364,7 +394,10 @@ export default function CalendarPage() {
     const adm = memoMap.get(memoKey(date, "ADMIN"))?.content ?? "";
 
     setPublicText(pub);
-    setAdminText(adm);
+
+    // ✅ 관리자만 ADMIN 메모를 열어볼 수 있게
+    if (isAdmin) setAdminText(adm);
+    else setAdminText("");
 
     setOpen(true);
   }
@@ -513,7 +546,12 @@ export default function CalendarPage() {
     setMsg(null);
     try {
       await upsertMemo(selDate, "PUBLIC", publicText);
-      await upsertMemo(selDate, "ADMIN", adminText);
+
+      // ✅ 관리자만 ADMIN 저장
+      if (isAdmin) {
+        await upsertMemo(selDate, "ADMIN", adminText);
+      }
+
       setOpen(false);
       await loadAll();
     } catch (e: any) {
@@ -586,7 +624,7 @@ export default function CalendarPage() {
               >
                 다음달 ▶
               </button>
-              <button className={btnOn} onClick={loadAll}>
+              <button className={btnOn} onClick={loadAll} disabled={isAdmin === null}>
                 새로고침
               </button>
             </div>
@@ -709,7 +747,8 @@ export default function CalendarPage() {
                       </div>
                     ) : null}
 
-                    {adm ? (
+                    {/* ✅ 관리자만 ADMIN 표시 */}
+                    {isAdmin && adm ? (
                       <div className="mt-1 truncate text-[11px] text-slate-700">
                         <span className="font-semibold text-slate-900">관리</span>: {adm}
                       </div>
@@ -764,18 +803,21 @@ export default function CalendarPage() {
                   />
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="mb-2 text-sm font-semibold">관리자 메모 (관리자만)</div>
-                  <textarea
-                    className={`${input} min-h-[110px] resize-y`}
-                    value={adminText}
-                    onChange={(e) => setAdminText(e.target.value)}
-                    placeholder="예: 내부 생산/인원 배치/특이사항"
-                  />
-                  <div className="mt-2 text-xs text-slate-500">
-                    ※ 권한이 없으면 RLS로 인해 ADMIN 메모는 저장/조회되지 않습니다.
+                {/* ✅ 관리자만 관리자 메모 영역 노출 */}
+                {isAdmin ? (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="mb-2 text-sm font-semibold">관리자 메모 (관리자만)</div>
+                    <textarea
+                      className={`${input} min-h-[110px] resize-y`}
+                      value={adminText}
+                      onChange={(e) => setAdminText(e.target.value)}
+                      placeholder="예: 내부 생산/인원 배치/특이사항"
+                    />
+                    <div className="mt-2 text-xs text-slate-500">
+                      ※ 권한이 없으면 RLS로 인해 ADMIN 메모는 저장/조회되지 않습니다.
+                    </div>
                   </div>
-                </div>
+                ) : null}
 
                 <div className="text-xs text-slate-500">
                   출고 건수는 <span className="font-semibold">orders.ship_date</span> 기준으로 자동 표시됩니다.
