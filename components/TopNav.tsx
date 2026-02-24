@@ -61,9 +61,39 @@ export default function TopNav({ role }: { role?: string }) {
           </Link>
 
           {nav.map((x) => {
-            if (!isAdmin && (x.href === "/products" || x.href === "/trade")) return null;
-
             const active = pathname === x.href;
+
+            const isRestricted = x.href === "/products" || x.href === "/trade";
+            const disabled = isRestricted && !isAdmin;
+
+            if (disabled) {
+              return (
+                <a
+                  key={x.href}
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    alert("접근 권한이 없습니다.");
+                  }}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderStyle: "solid",
+                    borderColor: active ? "rgba(255,255,255,0.40)" : "rgba(255,255,255,0.14)",
+                    backgroundColor: active ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.02)",
+                    color: "white",
+                    textDecoration: "none",
+                    fontWeight: 800,
+                    opacity: 0.55,
+                    cursor: "not-allowed",
+                  }}
+                >
+                  {x.label}
+                </a>
+              );
+            }
+
             return (
               <Link
                 key={x.href}
