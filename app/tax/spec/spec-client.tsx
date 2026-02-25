@@ -137,7 +137,6 @@ export default function SpecClient() {
 
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [rawLines, setRawLines] = useState<RawLineWithOrder[]>([]);
-  const [lines, setLines] = useState<SpecLine[]>([]);
   const [loading, setLoading] = useState(false);
 
   // ✅ 여러 주문 중 선택 출력
@@ -184,30 +183,6 @@ export default function SpecClient() {
     setPartners((data ?? []) as PartnerRow[]);
   }
 
-  function rebuildLines(nextSelectedOrderIds: string[], raw: RawLineWithOrder[]) {
-    const sel = new Set(nextSelectedOrderIds);
-
-    const picked = raw.filter((x) => sel.has(x.orderId));
-
-    // 동일 품목+단가로 집계(선택된 주문만)
-    const agg = new Map<string, SpecLine>();
-    for (const r of picked) {
-      const key = `${r.itemName}||${r.unitPrice}`;
-      const prev = agg.get(key);
-      if (!prev)
-        agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total });
-      else {
-        prev.qty += r.qty;
-        prev.supply += r.supply;
-        prev.vat += r.vat;
-        prev.total += r.total;
-      }
-    }
-
-    const out = Array.from(agg.values()).filter((x) => x.itemName.trim() !== "");
-    setLines(out);
-  }
-
   async function loadSpec(pId: string, date: string) {
     setMsg(null);
     setLoading(true);
@@ -216,7 +191,6 @@ export default function SpecClient() {
       if (!pId || !date) {
         setOrders([]);
         setRawLines([]);
-        setLines([]);
         setSelectedOrderIds([]);
         setMsg("partnerId 또는 date가 없습니다. (상단에서 거래처/일자 선택 후 조회)");
         return;
@@ -238,7 +212,6 @@ export default function SpecClient() {
 
       if (oRows.length === 0) {
         setRawLines([]);
-        setLines([]);
         setSelectedOrderIds([]);
         return;
       }
@@ -265,12 +238,10 @@ export default function SpecClient() {
       });
 
       setRawLines(mappedRaw);
-      rebuildLines(orderIds, mappedRaw);
     } catch (e: any) {
       setMsg(e?.message ?? String(e));
       setOrders([]);
       setRawLines([]);
-      setLines([]);
       setSelectedOrderIds([]);
     } finally {
       setLoading(false);
@@ -364,13 +335,6 @@ export default function SpecClient() {
     return () => document.removeEventListener("mousedown", onDocDown);
   }, []);
 
-  // ✅ 선택 주문 변경 시: 선택된 주문만으로 lines 재구성
-  useEffect(() => {
-    if (!rawLines.length) return;
-    rebuildLines(selectedOrderIds, rawLines);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedOrderIds]);
-
   function makePrintTitle(partnerName: string, date: string, seq2: string) {
     const pn = safeFileNamePart(partnerName || "거래처미지정");
     const ds = safeFileNamePart(date || "");
@@ -411,7 +375,6 @@ export default function SpecClient() {
       window.print();
     } catch {
     } finally {
-      // 바로 복구하면 일부 브라우저에서 제목 반영이 덜 될 수 있어 약간 지연
       window.setTimeout(() => {
         document.title = prevTitle;
       }, 800);
@@ -426,7 +389,6 @@ export default function SpecClient() {
     if (didAutoPrintRef.current) return;
     if (loading) return;
 
-    // 데이터 로드가 끝났다면(0건이어도) 인쇄창을 띄움
     didAutoPrintRef.current = true;
     const t = window.setTimeout(() => {
       try {
@@ -436,19 +398,9 @@ export default function SpecClient() {
 
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qpAutoPrint, loading, orders.length, lines.length]);
+  }, [qpAutoPrint, loading, orders.length, rawLines.length, selectedOrderIds.length]);
 
-  // --- 합계 ---
-  const sumSupply = useMemo(() => lines.reduce((a, r) => a + (r.supply ?? 0), 0), [lines]);
-  const sumVat = useMemo(() => lines.reduce((a, r) => a + (r.vat ?? 0), 0), [lines]);
-  const sumTotal = useMemo(() => lines.reduce((a, r) => a + (r.total ?? 0), 0), [lines]);
-
-  const selectedOrderCount = useMemo(() => {
-    const set = new Set(selectedOrderIds);
-    return orders.filter((o) => set.has(o.id)).length;
-  }, [orders, selectedOrderIds]);
-
-  // ✅ [추가] 판매채널 3곳만 주문자 표시 + memo(JSON)에서 orderer_name 추출
+  // ✅ [주문자 표시] 판매채널 3곳만 memo(JSON)에서 orderer_name 추출
   const CHANNEL_SET = useMemo(() => new Set(["네이버-판매", "쿠팡-판매", "카카오플러스-판매"]), []);
   const isChannelPartner = useMemo(() => {
     return !!selectedPartner && CHANNEL_SET.has(selectedPartner.name);
@@ -480,18 +432,36 @@ export default function SpecClient() {
     return m;
   }, [orders]);
 
-  const titleOrdererName = useMemo(() => {
-    if (!isChannelPartner) return "";
-    if (!orders.length) return "";
-    const sel = new Set(selectedOrderIds);
-    const picked = orders.filter((o) => sel.has(o.id));
-    const first = (picked.length ? picked : orders)[0];
-    return extractOrdererName(first?.memo);
-  }, [isChannelPartner, orders, selectedOrderIds]);
+  // ✅ 선택된 주문들(출력 순서 유지: created_at 오름차순)
+  const selectedOrders = useMemo(() => {
+    const set = new Set(selectedOrderIds);
+    return orders.filter((o) => set.has(o.id));
+  }, [orders, selectedOrderIds]);
+
+  const selectedOrderCount = selectedOrders.length;
+
+  // ✅ [핵심] 주문 1건의 라인만 집계해서 반환 (품목+단가 기준으로 그 주문 내에서만 합산)
+  function buildLinesForOrder(orderId: string) {
+    const picked = rawLines.filter((x) => x.orderId === orderId);
+
+    const agg = new Map<string, SpecLine>();
+    for (const r of picked) {
+      const key = `${r.itemName}||${r.unitPrice}`;
+      const prev = agg.get(key);
+      if (!prev) agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total });
+      else {
+        prev.qty += r.qty;
+        prev.supply += r.supply;
+        prev.vat += r.vat;
+        prev.total += r.total;
+      }
+    }
+
+    return Array.from(agg.values()).filter((x) => x.itemName.trim() !== "");
+  }
 
   return (
     <div className={`min-h-screen ${pageBg} p-6`}>
-      {/* ✅ 인쇄: "거래명세서 본문"만 보이게(상단 홈/스캔/품목… 줄 포함 전부 제거) */}
       <style jsx global>{`
         @media print {
           body * {
@@ -508,24 +478,29 @@ export default function SpecClient() {
             width: 100% !important;
           }
 
-          /* 인쇄 시 여백/배경 */
           body {
             background: white !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
 
-          /* 페이지 쪼개짐 방지 보조 */
           .avoid-break {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
+
+          /* ✅ [추가] 여러 주문 선택 시: 주문 1건 = 1페이지로 강제 분리 */
+          .spec-page {
+            page-break-after: always !important;
+          }
+          .spec-page:last-child {
+            page-break-after: auto !important;
+          }
         }
       `}</style>
 
-      {/* ✅ 화면(웹)에서는 그대로 보이되, 인쇄에서는 이 영역만 남김 */}
       <div id="spec-print-area" className="mx-auto max-w-6xl">
-        {/* 상단 타이틀/버튼 */}
+        {/* 상단 버튼 */}
         <div className="mb-4 flex items-start justify-end gap-3">
           <div className="flex gap-2 no-print">
             <button
@@ -547,7 +522,6 @@ export default function SpecClient() {
         <div className={`${card} mb-4 p-4 no-print`}>
           <div className="mb-2 text-sm font-semibold">조회 조건</div>
 
-          {/* ✅ 3개(거래처/일자/조회) 크기 조절 */}
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_96px] md:items-end">
             <div>
               <div className="mb-1 text-xs text-slate-500">거래처</div>
@@ -579,7 +553,7 @@ export default function SpecClient() {
                             key={p.id}
                             type="button"
                             className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                            onMouseDown={(e) => e.preventDefault()} // blur 먼저 발생 방지
+                            onMouseDown={(e) => e.preventDefault()}
                             onClick={() => selectPartner(p)}
                           >
                             <div className="font-medium">{p.name}</div>
@@ -614,7 +588,7 @@ export default function SpecClient() {
 
           {msg && <div className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{msg}</div>}
 
-          {/* ✅ 같은 날짜 주문 여러 건: 필요한 주문만 선택해서 거래명세서 출력 */}
+          {/* 주문 선택 */}
           {orders.length > 1 ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -644,7 +618,7 @@ export default function SpecClient() {
               <div className="max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white">
                 {orders.map((o, idx) => {
                   const checked = selectedOrderIds.includes(o.id);
-                  const time = (o.created_at ?? "").slice(11, 19); // HH:MM:SS
+                  const time = (o.created_at ?? "").slice(11, 19);
                   const orderer = isChannelPartner ? (ordererByOrderId.get(o.id) ?? "") : "";
                   return (
                     <label
@@ -673,7 +647,6 @@ export default function SpecClient() {
                           ) : null}
                         </div>
 
-                        {/* ✅ [변경] 판매채널 3곳이면 memo(JSON) 그대로 노출하지 않고 주문자만 표시 */}
                         {isChannelPartner ? (
                           orderer ? (
                             <div className="mt-0.5 truncate text-xs text-slate-600">주문자: {orderer}</div>
@@ -695,148 +668,156 @@ export default function SpecClient() {
               </div>
 
               <div className="mt-2 text-xs text-slate-500">
-                ※ 체크된 주문만 아래 거래명세서(세부 내역)에 반영됩니다.
+                ※ 체크된 주문은 아래 거래명세서가 “주문별로 페이지 분리”되어 출력됩니다.
               </div>
             </div>
           ) : null}
         </div>
 
-        {/* 본문(인쇄에도 동일하게 보여야 함) */}
-        <div className={`${card} p-4`}>
-          {/* ✅ [변경] 날짜 옆(빨간 박스 자리)에 주문자 이름 표시 (판매채널 3곳만) */}
-          <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}${isChannelPartner && titleOrdererName ? ` ${titleOrdererName}` : ""}`}</div>
+        {/* ✅ [핵심] 선택된 주문들을 "주문 1건 = 1페이지"로 렌더링 */}
+        {loading ? (
+          <div className={`${card} p-6 text-center text-slate-500`}>불러오는 중...</div>
+        ) : selectedOrders.length === 0 ? (
+          <div className={`${card} p-6 text-center text-slate-500`}>표시할 내역이 없습니다. (거래처/일자/주문 데이터 확인)</div>
+        ) : (
+          selectedOrders.map((o, pageIdx) => {
+            const orderLines = buildLinesForOrder(o.id);
+            const sumSupply = orderLines.reduce((a, r) => a + (r.supply ?? 0), 0);
+            const sumVat = orderLines.reduce((a, r) => a + (r.vat ?? 0), 0);
+            const sumTotal = orderLines.reduce((a, r) => a + (r.total ?? 0), 0);
 
-          {/* 거래처 / 우리회사 */}
-          <div className={`${card} mb-4 p-4`}>
-            <div className="spec-party-grid grid grid-cols-2 gap-4">
-              {/* 거래처 */}
-              <div>
-                {/* ✅ 인쇄화면 상단 “거래처” 글씨 제거 */}
-                {selectedPartner ? (
-                  <div className="space-y-1 text-sm">
-                    <div className="font-semibold">{selectedPartner.name}</div>
-                    <div className="text-slate-700">{selectedPartner.business_no ?? ""}</div>
-                    <div>대표: {selectedPartner.ceo_name ?? ""}</div>
-                    <div>주소: {selectedPartner.address1 ?? ""}</div>
+            const ordererName = isChannelPartner ? extractOrdererName(o.memo) : "";
+            const title = `거래명세서 ${ymdSlash(dateYMD)}${isChannelPartner && ordererName ? ` ${ordererName}` : ""}`;
+
+            return (
+              <div key={o.id} className={`spec-page ${card} p-4 mb-4`}>
+                {/* 타이틀 */}
+                <div className="mb-4 text-base font-bold">{title}</div>
+
+                {/* 거래처 / 우리회사 */}
+                <div className={`${card} mb-4 p-4`}>
+                  <div className="spec-party-grid grid grid-cols-2 gap-4">
+                    {/* 거래처 */}
                     <div>
-                      업종: {selectedPartner.biz_type ?? ""} / 업태: {selectedPartner.biz_item ?? ""}
+                      {selectedPartner ? (
+                        <div className="space-y-1 text-sm">
+                          <div className="font-semibold">{selectedPartner.name}</div>
+                          <div className="text-slate-700">{selectedPartner.business_no ?? ""}</div>
+                          <div>대표: {selectedPartner.ceo_name ?? ""}</div>
+                          <div>주소: {selectedPartner.address1 ?? ""}</div>
+                          <div>
+                            업종: {selectedPartner.biz_type ?? ""} / 업태: {selectedPartner.biz_item ?? ""}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-slate-500">거래처를 선택하세요.</div>
+                      )}
+                    </div>
+
+                    {/* 우리회사 + 도장 */}
+                    <div className="relative text-right">
+                      <div className="mb-2 text-sm font-semibold"> </div>
+                      <div className="space-y-1 text-sm">
+                        <div className="font-semibold">{OUR.name}</div>
+                        <div className="text-slate-700">{OUR.business_no}</div>
+
+                        <div className="relative inline-block pr-12">
+                          <span>대표: {OUR.ceo}</span>
+                          <img
+                            src="/stamp.png"
+                            alt="stamp"
+                            className="pointer-events-none absolute right-0 -top-3 h-12 w-12 opacity-90"
+                          />
+                        </div>
+
+                        <div>주소: {OUR.address1}</div>
+                        <div>{OUR.biz}</div>
+                      </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="text-sm text-slate-500">거래처를 선택하세요.</div>
-                )}
-              </div>
+                </div>
 
-              {/* 우리회사 + 도장 */}
-              <div className="relative text-right">
-                <div className="mb-2 text-sm font-semibold"> </div>
-
-                <div className="space-y-1 text-sm">
-                  <div className="font-semibold">{OUR.name}</div>
-                  <div className="text-slate-700">{OUR.business_no}</div>
-
-                  {/* ✅ 수정: 도장 잘림 방지 (박스 안으로 들어오게) */}
-                  <div className="relative inline-block pr-12">
-                    <span>대표: {OUR.ceo}</span>
-                    <img
-                      src="/stamp.png"
-                      alt="stamp"
-                      className="pointer-events-none absolute right-0 -top-3 h-12 w-12 opacity-90"
-                    />
+                {/* 세부 내역 */}
+                <div className={`${card} p-4`}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-sm font-semibold">세부 내역</div>
+                    <div className="text-xs text-slate-500">
+                      선택 {pageIdx + 1}/{selectedOrders.length} · 품목 {orderLines.length}줄
+                    </div>
                   </div>
 
-                  <div>주소: {OUR.address1}</div>
-                  <div>{OUR.biz}</div>
+                  <div className="overflow-hidden rounded-xl border border-slate-200">
+                    <table className="w-full table-fixed text-sm">
+                      <colgroup>
+                        <col style={{ width: "40%" }} />
+                        <col style={{ width: "12%" }} />
+                        <col style={{ width: "10%" }} />
+                        <col style={{ width: "13%" }} />
+                        <col style={{ width: "12%" }} />
+                        <col style={{ width: "13%" }} />
+                      </colgroup>
+                      <thead className="bg-slate-50">
+                        <tr className="text-xs text-slate-600">
+                          <th className="px-3 py-2 text-left">품목</th>
+                          <th className="px-3 py-2 text-right">수량</th>
+                          <th className="px-3 py-2 text-right">단가</th>
+                          <th className="px-3 py-2 text-right">공급가</th>
+                          <th className="px-3 py-2 text-right">부가세</th>
+                          <th className="px-3 py-2 text-right">합계</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {orderLines.length === 0 ? (
+                          <tr>
+                            <td className="px-3 py-6 text-center text-slate-500" colSpan={6}>
+                              표시할 내역이 없습니다.
+                            </td>
+                          </tr>
+                        ) : (
+                          orderLines.map((r, idx) => (
+                            <tr key={idx} className="border-t border-slate-100">
+                              <td className="px-3 py-2">
+                                <div className="truncate">{r.itemName}</div>
+                              </td>
+                              <td className="px-3 py-2 text-right">{formatMoney(r.qty)}</td>
+                              <td className="px-3 py-2 text-right">{formatMoney(r.unitPrice)}</td>
+                              <td className="px-3 py-2 text-right font-semibold">{formatMoney(r.supply)}</td>
+                              <td className="px-3 py-2 text-right">{formatMoney(r.vat)}</td>
+                              <td className="px-3 py-2 text-right font-semibold">{formatMoney(r.total)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-2 flex justify-end avoid-break">
+                    <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 text-sm">
+                      <div className="flex items-center justify-between py-1">
+                        <div className="text-slate-700">공급가</div>
+                        <div className="font-semibold">{formatMoney(sumSupply)}</div>
+                      </div>
+                      <div className="flex items-center justify-between py-1">
+                        <div className="text-slate-700">부가세</div>
+                        <div className="font-semibold">{formatMoney(sumVat)}</div>
+                      </div>
+                      <div className="flex items-center justify-between py-1">
+                        <div className="text-slate-900">합계</div>
+                        <div className="text-base font-bold">{formatMoney(sumTotal)}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            );
+          })
+        )}
+
+        {!partnerId || !dateYMD ? (
+          <div className="mt-4 text-sm text-slate-500">
+            상단에서 거래처/일자를 선택하고 <span className="font-semibold">조회</span>를 눌러주세요.
           </div>
-
-          {/* 세부 내역 */}
-          <div className={`${card} p-4`}>
-            <div className="mb-2 flex items-center justify-between">
-              <div className="text-sm font-semibold">세부 내역</div>
-              <div className="text-xs text-slate-500">
-                주문(출고) {orders.length}건 · 선택 {selectedOrderCount}건 · 품목 {lines.length}줄
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-slate-200">
-              <table className="w-full table-fixed text-sm">
-                <colgroup>
-                  <col style={{ width: "40%" }} />
-                  <col style={{ width: "12%" }} />
-                  <col style={{ width: "10%" }} />
-                  <col style={{ width: "13%" }} />
-                  <col style={{ width: "12%" }} />
-                  <col style={{ width: "13%" }} />
-                </colgroup>
-                <thead className="bg-slate-50">
-                  <tr className="text-xs text-slate-600">
-                    <th className="px-3 py-2 text-left">품목</th>
-                    <th className="px-3 py-2 text-right">수량</th>
-                    <th className="px-3 py-2 text-right">단가</th>
-                    <th className="px-3 py-2 text-right">공급가</th>
-                    <th className="px-3 py-2 text-right">부가세</th>
-                    <th className="px-3 py-2 text-right">합계</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td className="px-3 py-6 text-center text-slate-500" colSpan={6}>
-                        불러오는 중...
-                      </td>
-                    </tr>
-                  ) : lines.length === 0 ? (
-                    <tr>
-                      <td className="px-3 py-6 text-center text-slate-500" colSpan={6}>
-                        표시할 내역이 없습니다. (거래처/일자/주문 데이터 확인)
-                      </td>
-                    </tr>
-                  ) : (
-                    lines.map((r, idx) => (
-                      <tr key={idx} className="border-t border-slate-100">
-                        <td className="px-3 py-2">
-                          <div className="truncate">{r.itemName}</div>
-                        </td>
-                        <td className="px-3 py-2 text-right">{formatMoney(r.qty)}</td>
-                        <td className="px-3 py-2 text-right">{formatMoney(r.unitPrice)}</td>
-                        <td className="px-3 py-2 text-right font-semibold">{formatMoney(r.supply)}</td>
-                        <td className="px-3 py-2 text-right">{formatMoney(r.vat)}</td>
-                        <td className="px-3 py-2 text-right font-semibold">{formatMoney(r.total)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* ✅ 하단 안내문 삭제 + 불필요 여백 최소화 */}
-            <div className="mt-2 flex justify-end avoid-break">
-              <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 text-sm">
-                <div className="flex items-center justify-between py-1">
-                  <div className="text-slate-700">공급가</div>
-                  <div className="font-semibold">{formatMoney(sumSupply)}</div>
-                </div>
-                <div className="flex items-center justify-between py-1">
-                  <div className="text-slate-700">부가세</div>
-                  <div className="font-semibold">{formatMoney(sumVat)}</div>
-                </div>
-                <div className="flex items-center justify-between py-1">
-                  <div className="text-slate-900">합계</div>
-                  <div className="text-base font-bold">{formatMoney(sumTotal)}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {!partnerId || !dateYMD ? (
-            <div className="mt-4 text-sm text-slate-500">
-              상단에서 거래처/일자를 선택하고 <span className="font-semibold">조회</span>를 눌러주세요.
-            </div>
-          ) : null}
-        </div>
+        ) : null}
       </div>
     </div>
   );
