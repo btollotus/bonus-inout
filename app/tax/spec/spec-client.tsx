@@ -163,14 +163,6 @@ export default function SpecClient() {
   const input =
     "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200";
 
-  // ✅ [추가] 판매채널 3곳만 주문자 표시
-  const CHANNEL_SET = useMemo(() => new Set(["네이버-판매", "쿠팡-판매", "카카오플러스-판매"]), []);
-  const ordererName = useMemo(() => {
-    if (!selectedPartner) return "";
-    if (!CHANNEL_SET.has(selectedPartner.name)) return "";
-    return orders?.[0]?.customer_name ?? "";
-  }, [selectedPartner, orders, CHANNEL_SET]);
-
   function pushUrl(nextPartnerId: string, date: string) {
     const qs = new URLSearchParams();
     if (nextPartnerId) qs.set("partnerId", nextPartnerId);
@@ -202,7 +194,8 @@ export default function SpecClient() {
     for (const r of picked) {
       const key = `${r.itemName}||${r.unitPrice}`;
       const prev = agg.get(key);
-      if (!prev) agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total });
+      if (!prev)
+        agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total });
       else {
         prev.qty += r.qty;
         prev.supply += r.supply;
@@ -455,6 +448,47 @@ export default function SpecClient() {
     return orders.filter((o) => set.has(o.id)).length;
   }, [orders, selectedOrderIds]);
 
+  // ✅ [추가] 판매채널 3곳만 주문자 표시 + memo(JSON)에서 orderer_name 추출
+  const CHANNEL_SET = useMemo(() => new Set(["네이버-판매", "쿠팡-판매", "카카오플러스-판매"]), []);
+  const isChannelPartner = useMemo(() => {
+    return !!selectedPartner && CHANNEL_SET.has(selectedPartner.name);
+  }, [selectedPartner, CHANNEL_SET]);
+
+  function extractOrdererName(memo: string | null | undefined) {
+    const s = String(memo ?? "").trim();
+    if (!s) return "";
+    try {
+      const obj = JSON.parse(s);
+      const v =
+        obj?.orderer_name ??
+        obj?.ordererName ??
+        obj?.orderer ??
+        obj?.buyer_name ??
+        obj?.buyerName ??
+        "";
+      return String(v ?? "").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  const ordererByOrderId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of orders) {
+      m.set(o.id, extractOrdererName(o.memo));
+    }
+    return m;
+  }, [orders]);
+
+  const titleOrdererName = useMemo(() => {
+    if (!isChannelPartner) return "";
+    if (!orders.length) return "";
+    const sel = new Set(selectedOrderIds);
+    const picked = orders.filter((o) => sel.has(o.id));
+    const first = (picked.length ? picked : orders)[0];
+    return extractOrdererName(first?.memo);
+  }, [isChannelPartner, orders, selectedOrderIds]);
+
   return (
     <div className={`min-h-screen ${pageBg} p-6`}>
       {/* ✅ 인쇄: "거래명세서 본문"만 보이게(상단 홈/스캔/품목… 줄 포함 전부 제거) */}
@@ -611,6 +645,7 @@ export default function SpecClient() {
                 {orders.map((o, idx) => {
                   const checked = selectedOrderIds.includes(o.id);
                   const time = (o.created_at ?? "").slice(11, 19); // HH:MM:SS
+                  const orderer = isChannelPartner ? (ordererByOrderId.get(o.id) ?? "") : "";
                   return (
                     <label
                       key={o.id}
@@ -637,8 +672,19 @@ export default function SpecClient() {
                             <div className="text-xs text-slate-500">출고방법: {String(o.ship_method)}</div>
                           ) : null}
                         </div>
-                        {o.memo ? <div className="mt-0.5 truncate text-xs text-slate-600">메모: {o.memo}</div> : null}
+
+                        {/* ✅ [변경] 판매채널 3곳이면 memo(JSON) 그대로 노출하지 않고 주문자만 표시 */}
+                        {isChannelPartner ? (
+                          orderer ? (
+                            <div className="mt-0.5 truncate text-xs text-slate-600">주문자: {orderer}</div>
+                          ) : o.memo ? (
+                            <div className="mt-0.5 truncate text-xs text-slate-600">메모: {o.memo}</div>
+                          ) : null
+                        ) : o.memo ? (
+                          <div className="mt-0.5 truncate text-xs text-slate-600">메모: {o.memo}</div>
+                        ) : null}
                       </div>
+
                       <div className="text-right text-xs text-slate-700">
                         <div>합계</div>
                         <div className="font-semibold">{formatMoney(o.total_amount)}</div>
@@ -657,8 +703,8 @@ export default function SpecClient() {
 
         {/* 본문(인쇄에도 동일하게 보여야 함) */}
         <div className={`${card} p-4`}>
-          {/* ✅ [변경] 인쇄용 타이틀: 판매채널 3곳이면 날짜 옆에 주문자 표시 */}
-          <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}${ordererName ? ` ${ordererName}` : ""}`}</div>
+          {/* ✅ [변경] 날짜 옆(빨간 박스 자리)에 주문자 이름 표시 (판매채널 3곳만) */}
+          <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}${isChannelPartner && titleOrdererName ? ` ${titleOrdererName}` : ""}`}</div>
 
           {/* 거래처 / 우리회사 */}
           <div className={`${card} mb-4 p-4`}>
