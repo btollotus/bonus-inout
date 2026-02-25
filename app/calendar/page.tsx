@@ -224,6 +224,11 @@ export default function CalendarPage() {
     return map;
   }, [memos]);
 
+  // ✅ (요청 1) 탭(브라우저 타이틀) 변경
+  useEffect(() => {
+    document.title = "BONUSMATE ERP 출고캘린더";
+  }, []);
+
   // ✅ 거래명세서 열기 + 인쇄 다이얼로그(= PDF 인쇄 화면) 자동 호출용 파라미터 추가
   function openSpec(partnerId: string | null, date: string) {
     if (!partnerId) return;
@@ -380,7 +385,10 @@ export default function CalendarPage() {
     setOpenShip(true);
 
     try {
-      const { data, error } = await supabase.from("orders").select("customer_id, customer_name, ship_method").eq("ship_date", date);
+      const { data, error } = await supabase
+        .from("orders")
+        .select("customer_id, customer_name, ship_method")
+        .eq("ship_date", date);
 
       if (error) throw error;
 
@@ -611,6 +619,20 @@ export default function CalendarPage() {
                 const pub = memoMap.get(memoKey(ds, "PUBLIC"))?.content?.trim() ?? "";
                 const adm = memoMap.get(memoKey(ds, "ADMIN"))?.content?.trim() ?? "";
 
+                // ✅ (요청 2) 메모를 줄/건 단위로 표시
+                const pubItems = pub
+                  ? pub
+                      .split(/\r?\n/)
+                      .map((x) => x.trim())
+                      .filter(Boolean)
+                  : [];
+                const admItems = adm
+                  ? adm
+                      .split(/\r?\n/)
+                      .map((x) => x.trim())
+                      .filter(Boolean)
+                  : [];
+
                 const shipInfo = shipAgg.get(ds);
                 const shipCnt = shipInfo?.total ?? 0;
                 const shipLinesInCell = shipInfo?.lines ?? [];
@@ -698,16 +720,32 @@ export default function CalendarPage() {
                       </div>
                     ) : null}
 
-                    {/* 메모는 출고 아래 */}
-                    {pub ? (
-                      <div className="mt-2 truncate text-[11px] text-slate-700">
-                        <span className="font-semibold text-slate-900">공개</span>: {pub}
+                    {/* 메모는 출고 아래 (건/줄 단위 표시) */}
+                    {pubItems.length > 0 ? (
+                      <div className="mt-2 space-y-1">
+                        {pubItems.map((t, i) => (
+                          <div
+                            key={`${ds}__pub__${i}`}
+                            className="truncate rounded-md border border-yellow-200 bg-yellow-50 px-2 py-1 text-[11px] text-slate-900"
+                            title={t}
+                          >
+                            {t}
+                          </div>
+                        ))}
                       </div>
                     ) : null}
 
-                    {adm ? (
-                      <div className="mt-1 truncate text-[11px] text-slate-700">
-                        <span className="font-semibold text-slate-900">관리</span>: {adm}
+                    {admItems.length > 0 ? (
+                      <div className="mt-2 space-y-1">
+                        {admItems.map((t, i) => (
+                          <div
+                            key={`${ds}__adm__${i}`}
+                            className="truncate rounded-md border border-purple-200 bg-purple-50 px-2 py-1 text-[11px] text-slate-900"
+                            title={t}
+                          >
+                            {t}
+                          </div>
+                        ))}
                       </div>
                     ) : null}
                   </button>
@@ -726,7 +764,10 @@ export default function CalendarPage() {
         {/* 모달: 메모 */}
         {open ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setOpen(false)}>
-            <div className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div
+              className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">메모 · {selDate}</div>
@@ -775,7 +816,10 @@ export default function CalendarPage() {
         {/* 모달: 출고 목록 */}
         {openShip ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setOpenShip(false)}>
-            <div className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div
+              className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">출고 목록 · {selShipDate}</div>
@@ -829,7 +873,10 @@ export default function CalendarPage() {
                   ) : (
                     <div className="space-y-2">
                       {shipLines.map((x) => (
-                        <div key={`${x.partner_id ?? ""}__${x.partner}__${x.method}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <div
+                          key={`${x.partner_id ?? ""}__${x.partner}__${x.method}`}
+                          className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                        >
                           <button
                             type="button"
                             className="text-left text-sm font-semibold text-slate-900 hover:underline"
