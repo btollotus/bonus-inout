@@ -2,9 +2,7 @@ name: Daily Tax Excel to Google Drive
 
 on:
   schedule:
-    # KST 12:00 = UTC 03:00
     - cron: "0 3 * * *"
-    # KST 18:00 = UTC 09:00
     - cron: "0 9 * * *"
   workflow_dispatch:
 
@@ -31,7 +29,6 @@ jobs:
         run: |
           mkdir -p ~/.config/rclone
 
-          # ✅ JSON이 깨지는 것 방지(heredoc)
           cat > ~/.config/rclone/sa.json << 'EOF'
           ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
           EOF
@@ -42,32 +39,6 @@ jobs:
           scope = drive
           service_account_file = ~/.config/rclone/sa.json
           EOF
-
-      - name: Show service account email (debug)
-        env:
-          SA_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
-        run: |
-          python3 - << 'PY'
-          import os, json
-          j = json.loads(os.environ["SA_JSON"])
-          print("client_email =", j.get("client_email"))
-          print("project_id   =", j.get("project_id"))
-          PY
-
-      - name: Find Shared Drive ID (Supabase-Backup)
-        id: drive
-        run: |
-          echo "Listing drives..."
-          rclone backend drives gdrive: || true
-
-          DRIVE_ID=$(rclone backend drives gdrive: | awk -F'|' '/Supabase-Backup/ {gsub(/ /,"",$3); print $3; exit}')
-          if [ -z "$DRIVE_ID" ]; then
-            echo "ERROR: Could not find Shared Drive named 'Supabase-Backup' in rclone backend drives output."
-            exit 1
-          fi
-
-          echo "drive_id=$DRIVE_ID" >> $GITHUB_OUTPUT
-          echo "Found Supabase-Backup drive_id=$DRIVE_ID"
 
       - name: Download tax excel
         run: |
@@ -89,9 +60,14 @@ jobs:
           TODAY="${{ steps.dates.outputs.today }}"
           FILENAME="세무사_통합_${FROM}_${TO}_생성일_${TODAY}.xlsx"
 
-          # ✅ Shared Drive(=Supabase-Backup) 내부 경로로 업로드
-          # - root_folder_id 를 Shared Drive ID로 지정하면 "내 드라이브"가 아니라 공유드라이브에 업로드됨
-          DEST="gdrive:bonus-inout/excel-tax"
-          rclone copy "$FILENAME" "$DEST" --drive-root-folder-id "${{ steps.drive.outputs.drive_id }}" -P
+          # 🔥 Supabase-Backup 공유드라이브 ID (고정값)
+          DRIVE_ID="0A0qDyXMm-zyUk9PVA"
 
-          echo "Uploaded: $DEST/$FILENAME"
+          DEST="gdrive:bonus-inout/excel-tax"
+
+          rclone copy "$FILENAME" "$DEST" \
+            --drive-root-folder-id "$DRIVE_ID" \
+            --drive-shared-with-me \
+            -P
+
+          echo "Uploaded to Supabase-Backup/$DEST/$FILENAME"
