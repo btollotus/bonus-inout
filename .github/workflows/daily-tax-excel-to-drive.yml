@@ -63,7 +63,7 @@ jobs:
           TODAY="${{ steps.dates.outputs.today }}"
           FILENAME="세무사_통합_${FROM}_${TO}_생성일_${TODAY}.xlsx"
 
-          DEST="gdrive:erp_backup/excel-tax"
+          DEST="gdrive:Supabase-Backup/bonus-inout/excel-tax"
           rclone copy "$FILENAME" "$DEST" -P
 
           echo "Uploaded: $DEST/$FILENAME"
