@@ -540,6 +540,24 @@ export default function SpecClient() {
     return orders.filter((o) => set.has(o.id));
   }, [orders, selectedOrderIds]);
 
+  // ✅ (요청사항) 화면용 제목에서도 "선택된 주문자" 표시
+  const screenTitleSuffix = useMemo(() => {
+    if (!isChannelCustomer) return "";
+    if (!selectedOrders.length) return "";
+
+    const names = selectedOrders
+      .map((o) => extractOrdererName(o.memo))
+      .filter((x) => String(x).trim() !== "");
+
+    if (!names.length) return "";
+
+    const first = names[0];
+    const allSame = names.every((n) => n === first);
+
+    if (allSame) return ` ${first}`;
+    return ` ${first} 외`;
+  }, [isChannelCustomer, selectedOrders]);
+
   return (
     <div className={`min-h-screen ${pageBg} p-6`}>
       {/* ✅ 인쇄: "거래명세서 본문"만 보이게(상단 홈/스캔/품목… 줄 포함 전부 제거) */}
@@ -743,7 +761,7 @@ export default function SpecClient() {
                           ) : null}
                         </div>
 
-                        {/* ✅ 빨간박스 영역: (채널=주문자명) / (기타=첫품목 n개 외) */}
+                        {/* ✅ 빨간박스 영역 */}
                         <div className="mt-0.5 truncate text-xs text-slate-600">{subLabel}</div>
                       </div>
                       <div className="text-right text-xs text-slate-700">
@@ -764,17 +782,15 @@ export default function SpecClient() {
 
         {/* ===================== 화면용(기존 합산 1장 유지) ===================== */}
         <div className="screen-only">
-          {/* 본문(인쇄에도 동일하게 보여야 함) */}
           <div className={`${card} p-4`}>
-            {/* 인쇄용 타이틀: 거래명세서 YYYY/MM/DD */}
-            <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}`}</div>
+            {/* ✅ (수정) 날짜 옆에 선택 주문자 표시 */}
+            <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}${screenTitleSuffix}`}</div>
 
             {/* 거래처 / 우리회사 */}
             <div className={`${card} mb-4 p-4`}>
               <div className="spec-party-grid grid grid-cols-2 gap-4">
                 {/* 거래처 */}
                 <div>
-                  {/* ✅ 인쇄화면 상단 “거래처” 글씨 제거 */}
                   {selectedPartner ? (
                     <div className="space-y-1 text-sm">
                       <div className="font-semibold">{selectedPartner.name}</div>
@@ -798,7 +814,6 @@ export default function SpecClient() {
                     <div className="font-semibold">{OUR.name}</div>
                     <div className="text-slate-700">{OUR.business_no}</div>
 
-                    {/* ✅ 수정: 도장 잘림 방지 (박스 안으로 들어오게) */}
                     <div className="relative inline-block pr-12">
                       <span>대표: {OUR.ceo}</span>
                       <img
@@ -875,7 +890,6 @@ export default function SpecClient() {
                 </table>
               </div>
 
-              {/* ✅ 하단 안내문 삭제 + 불필요 여백 최소화 */}
               <div className="mt-2 flex justify-end avoid-break">
                 <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 text-sm">
                   <div className="flex items-center justify-between py-1">
@@ -916,13 +930,10 @@ export default function SpecClient() {
 
               return (
                 <div key={o.id} className={`print-page ${card} p-4`}>
-                  {/* ✅ 날짜 옆 빨간박스 영역: (채널=주문자명) / (기타=첫품목 n개 외) */}
                   <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}${titleSuffix}`}</div>
 
-                  {/* 거래처 / 우리회사 */}
                   <div className={`${card} mb-4 p-4`}>
                     <div className="spec-party-grid grid grid-cols-2 gap-4">
-                      {/* 거래처 */}
                       <div>
                         {selectedPartner ? (
                           <div className="space-y-1 text-sm">
@@ -939,7 +950,6 @@ export default function SpecClient() {
                         )}
                       </div>
 
-                      {/* 우리회사 + 도장 */}
                       <div className="relative text-right">
                         <div className="mb-2 text-sm font-semibold"> </div>
 
@@ -963,13 +973,10 @@ export default function SpecClient() {
                     </div>
                   </div>
 
-                  {/* 세부 내역 */}
                   <div className={`${card} p-4`}>
                     <div className="mb-2 flex items-center justify-between">
                       <div className="text-sm font-semibold">세부 내역</div>
-                      <div className="text-xs text-slate-500">
-                        선택 주문 1건 · 품목 {orderLines.length}줄
-                      </div>
+                      <div className="text-xs text-slate-500">선택 주문 1건 · 품목 {orderLines.length}줄</div>
                     </div>
 
                     <div className="overflow-hidden rounded-xl border border-slate-200">
