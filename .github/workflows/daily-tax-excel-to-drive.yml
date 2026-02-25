@@ -2,7 +2,9 @@ name: Daily Tax Excel to Google Drive
 
 on:
   schedule:
+    # KST 12:00 = UTC 03:00
     - cron: "0 3 * * *"
+    # KST 18:00 = UTC 09:00
     - cron: "0 9 * * *"
   workflow_dispatch:
 
@@ -25,20 +27,85 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rclone
 
-      - name: Configure rclone for Google Drive (Service Account)
+      # ✅ (중요) secret JSON을 파일로 정확히 저장 (깨짐/공백 이슈 방지)
+      - name: Write service account json
+        env:
+          GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
         run: |
           mkdir -p ~/.config/rclone
+          python3 - <<'PY'
+          import os
+          p = "/home/runner/.config/rclone/sa.json"
+          s = os.environ.get("GDRIVE_SA_JSON","")
+          if not s.strip():
+            raise SystemExit("ERROR: secrets.GDRIVE_SERVICE_ACCOUNT_JSON is empty")
+          with open(p, "w", encoding="utf-8") as f:
+            f.write(s)
+          print("sa.json written:", p, "bytes=", len(s.encode("utf-8")))
+          PY
 
-          cat > ~/.config/rclone/sa.json << 'EOF'
-          ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
-          EOF
+      # ✅ 서비스계정 이메일 로그로 찍기(디버그)
+      - name: Show service account email (debug)
+        run: |
+          python3 - <<'PY'
+          import json
+          p="/home/runner/.config/rclone/sa.json"
+          j=json.load(open(p,"r",encoding="utf-8"))
+          print("client_email =", j.get("client_email"))
+          print("project_id   =", j.get("project_id"))
+          PY
 
+      # ✅ 공유드라이브(Supabase-Backup) driveId 찾기
+      - name: Find Shared Drive ID (Supabase-Backup)
+        id: sd
+        run: |
+          # rclone이 드라이브 목록을 JSON으로 반환
+          rclone backend drives "gdrive:" --json || true
+
+      # ✅ 위 step에서 아직 rclone remote가 없으니, 먼저 임시 remote 만들어서 drives 조회
+      - name: Create temp rclone remote and resolve Shared Drive ID
+        id: resolve
+        run: |
           cat > ~/.config/rclone/rclone.conf << 'EOF'
           [gdrive]
           type = drive
           scope = drive
-          service_account_file = ~/.config/rclone/sa.json
+          service_account_file = /home/runner/.config/rclone/sa.json
           EOF
+
+          python3 - <<'PY'
+          import json, subprocess
+          target_name = "Supabase-Backup"
+
+          out = subprocess.check_output(["rclone","backend","drives","gdrive:","--json"], text=True)
+          drives = json.loads(out)
+
+          did = ""
+          for d in drives:
+            if str(d.get("name","")) == target_name:
+              did = str(d.get("id",""))
+              break
+
+          if not did:
+            print("AVAILABLE DRIVES:")
+            for d in drives:
+              print("-", d.get("name"), d.get("id"))
+            raise SystemExit(f"ERROR: Could not find Shared Drive named '{target_name}'")
+
+          print("shared_drive_id =", did)
+
+          # rclone.conf를 공유드라이브 고정(team_drive)으로 재작성
+          conf = f"""[gdrive]
+          type = drive
+          scope = drive
+          service_account_file = /home/runner/.config/rclone/sa.json
+          team_drive = {did}
+          """
+          open("/home/runner/.config/rclone/rclone.conf","w",encoding="utf-8").write(conf)
+          PY
+
+          echo "rclone.conf:"
+          cat ~/.config/rclone/rclone.conf
 
       - name: Download tax excel
         run: |
@@ -60,14 +127,14 @@ jobs:
           TODAY="${{ steps.dates.outputs.today }}"
           FILENAME="세무사_통합_${FROM}_${TO}_생성일_${TODAY}.xlsx"
 
-          # 🔥 Supabase-Backup 공유드라이브 ID (고정값)
-          DRIVE_ID="0A0qDyXMm-zyUk9PVA"
-
+          # ✅ team_drive가 Supabase-Backup으로 고정되어 있으므로,
+          # 경로는 공유드라이브 루트 기준으로 잡으면 됩니다.
           DEST="gdrive:bonus-inout/excel-tax"
 
-          rclone copy "$FILENAME" "$DEST" \
-            --drive-root-folder-id "$DRIVE_ID" \
-            --drive-shared-with-me \
-            -P
+          # 폴더 없으면 생성
+          rclone mkdir "$DEST" || true
 
-          echo "Uploaded to Supabase-Backup/$DEST/$FILENAME"
+          # 업로드
+          rclone copy "$FILENAME" "$DEST" -P
+
+          echo "Uploaded: $DEST/$FILENAME"
