@@ -114,7 +114,8 @@ function normalizeShipMethod(v: any): ShipMethod {
   return "기타";
 }
 
-// ✅ 모달/셀 출고표시에서 숨길 “판매 채널”
+// ✅ 네이버/쿠팡/카카오플러스 판매 채널
+// - 요청사항: 이 채널들은 "택배"만 숨기고, 퀵-신용/퀵-착불/방문/기타는 다이어리에 표시
 const HIDE_CUSTOMERS = new Set(["카카오플러스-판매", "네이버-판매", "쿠팡-판매"]);
 
 export default function CalendarPage() {
@@ -224,7 +225,7 @@ export default function CalendarPage() {
     return map;
   }, [memos]);
 
-  // ✅ (요청 1) 탭(브라우저 타이틀) 변경
+  // ✅ 탭(브라우저 타이틀) 변경
   useEffect(() => {
     document.title = "BONUSMATE ERP 출고캘린더";
   }, []);
@@ -255,7 +256,8 @@ export default function CalendarPage() {
       setMemos((data ?? []) as CalendarMemoRow[]);
     }
 
-    // 2) orders 출고 집계 + ✅ 셀용 "출고 라인" 생성 (숨김 채널 제외)
+    // 2) orders 출고 집계 + ✅ 셀용 "출고 라인" 생성
+    //    - 네이버/쿠팡/카카오플러스 채널은 "택배"만 숨기고, 나머지 출고방식은 표시
     {
       const { data, error } = await supabase
         .from("orders")
@@ -278,11 +280,12 @@ export default function CalendarPage() {
         if (!d) continue;
 
         const customerName = String(r?.customer_name ?? "").trim() || "(거래처 미지정)";
-        if (HIDE_CUSTOMERS.has(customerName)) continue;
+        const method = normalizeShipMethod(r?.ship_method);
+
+        // ✅ (핵심) 판매채널은 택배만 숨김
+        if (HIDE_CUSTOMERS.has(customerName) && method === "택배") continue;
 
         const partnerId = r?.customer_id == null ? null : String(r.customer_id);
-
-        const method = normalizeShipMethod(r?.ship_method);
 
         const cur = map.get(d) ?? {
           total: 0,
@@ -399,7 +402,9 @@ export default function CalendarPage() {
         return { partner_id: partnerId, partner_name: customerName, ship_method: method };
       });
 
-      const rows = rowsAll.filter((r) => !HIDE_CUSTOMERS.has(r.partner_name));
+      // ✅ (핵심) 판매채널은 택배만 숨김
+      const rows = rowsAll.filter((r) => !(HIDE_CUSTOMERS.has(r.partner_name) && r.ship_method === "택배"));
+
       setShipRows(rows);
     } catch (e: any) {
       setShipListErr(e?.message ?? "출고 목록 조회 중 오류");
@@ -619,7 +624,7 @@ export default function CalendarPage() {
                 const pub = memoMap.get(memoKey(ds, "PUBLIC"))?.content?.trim() ?? "";
                 const adm = memoMap.get(memoKey(ds, "ADMIN"))?.content?.trim() ?? "";
 
-                // ✅ (요청 2) 메모를 줄/건 단위로 표시
+                // ✅ 메모를 줄/건 단위로 표시
                 const pubItems = pub
                   ? pub
                       .split(/\r?\n/)
@@ -678,7 +683,6 @@ export default function CalendarPage() {
                         title="클릭해서 출고 목록(업체명-출고방식) 확인"
                         role="button"
                       >
-                        {/* ✅ 여기: 날짜 셀에서 바로 “송장 엑셀(해당 날짜 전체)” 다운로드 버튼 추가 */}
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <div className="text-[11px] font-semibold text-slate-800">
                             출고 <span className="tabular-nums">{shipCnt}</span>건
@@ -757,7 +761,8 @@ export default function CalendarPage() {
           <div className="mt-2 text-xs text-slate-500">
             ※ 메모가 비어 있으면 표시하지 않습니다. · 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다. · 출고는{" "}
             <span className="font-semibold">orders.ship_date</span> + <span className="font-semibold">orders.ship_method</span>{" "}
-            기준이며, <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 제외합니다.
+            기준이며, <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는{" "}
+            <span className="font-semibold">택배만 숨김</span> 처리하고, 퀵/방문/기타는 표시합니다.
           </div>
         </div>
 
@@ -894,7 +899,8 @@ export default function CalendarPage() {
                   <div className="mt-3 text-xs text-slate-500">
                     ※ 엑셀 다운로드는 <span className="font-semibold">order_shipments 기준</span>으로 생성됩니다. (배송지 2개면 2줄) · 제품명은{" "}
                     <span className="font-semibold">order_lines를 합쳐 1칸</span>에 출력합니다. ·{" "}
-                    <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 숨김 처리됩니다.
+                    <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는{" "}
+                    <span className="font-semibold">택배만 숨김</span> 처리하고, 퀵/방문/기타는 표시합니다.
                   </div>
                 </div>
               </div>
