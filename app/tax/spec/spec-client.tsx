@@ -163,6 +163,14 @@ export default function SpecClient() {
   const input =
     "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200";
 
+  // ✅ [추가] 판매채널 3곳만 주문자 표시
+  const CHANNEL_SET = useMemo(() => new Set(["네이버-판매", "쿠팡-판매", "카카오플러스-판매"]), []);
+  const ordererName = useMemo(() => {
+    if (!selectedPartner) return "";
+    if (!CHANNEL_SET.has(selectedPartner.name)) return "";
+    return orders?.[0]?.customer_name ?? "";
+  }, [selectedPartner, orders, CHANNEL_SET]);
+
   function pushUrl(nextPartnerId: string, date: string) {
     const qs = new URLSearchParams();
     if (nextPartnerId) qs.set("partnerId", nextPartnerId);
@@ -649,8 +657,8 @@ export default function SpecClient() {
 
         {/* 본문(인쇄에도 동일하게 보여야 함) */}
         <div className={`${card} p-4`}>
-          {/* 인쇄용 타이틀: 거래명세서 YYYY/MM/DD */}
-          <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}`}</div>
+          {/* ✅ [변경] 인쇄용 타이틀: 판매채널 3곳이면 날짜 옆에 주문자 표시 */}
+          <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}${ordererName ? ` ${ordererName}` : ""}`}</div>
 
           {/* 거래처 / 우리회사 */}
           <div className={`${card} mb-4 p-4`}>
