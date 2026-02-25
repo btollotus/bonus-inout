@@ -193,7 +193,6 @@ export default function SpecClient() {
 
   function rebuildLines(nextSelectedOrderIds: string[], raw: RawLineWithOrder[]) {
     const sel = new Set(nextSelectedOrderIds);
-
     const picked = raw.filter((x) => sel.has(x.orderId));
 
     // 동일 품목+단가로 집계(선택된 주문만)
@@ -444,7 +443,7 @@ export default function SpecClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qpAutoPrint, loading, orders.length, lines.length]);
 
-  // --- 합계 ---
+  // --- 합계(선택된 주문 "통합" 기준) ---
   const sumSupply = useMemo(() => lines.reduce((a, r) => a + (r.supply ?? 0), 0), [lines]);
   const sumVat = useMemo(() => lines.reduce((a, r) => a + (r.vat ?? 0), 0), [lines]);
   const sumTotal = useMemo(() => lines.reduce((a, r) => a + (r.total ?? 0), 0), [lines]);
@@ -494,7 +493,7 @@ export default function SpecClient() {
       return nm ? `주문자: ${nm}` : `주문자: `;
     }
     const sum = buildFirstItemSummary(o.id);
-    return sum ? `${sum}${sum.includes(" 외") ? "" : " 외"}`.replaceAll("  ", " ").trim() : `외`;
+    return sum ? sum : `외`;
   }
 
   // ✅ 인쇄용: 페이지 제목에 붙일 텍스트(날짜 옆)
@@ -503,11 +502,7 @@ export default function SpecClient() {
       const nm = extractOrdererName(o.memo);
       return nm ? ` ${nm}` : "";
     }
-    const sum = buildFirstItemSummary(o.id);
-    if (!sum) return "";
-    // 예: "장유중 616개 외"
-    if (sum.includes(" 외")) return ` ${sum}`;
-    return ` ${sum} 외`;
+    return "";
   }
 
   // ✅ 인쇄용: 주문 1건의 라인 집계(품목+단가)
@@ -528,10 +523,10 @@ export default function SpecClient() {
     return Array.from(agg.values()).filter((x) => x.itemName.trim() !== "");
   }
 
-  function sumOf(lines: SpecLine[]) {
-    const supply = lines.reduce((a, r) => a + (r.supply ?? 0), 0);
-    const vat = lines.reduce((a, r) => a + (r.vat ?? 0), 0);
-    const total = lines.reduce((a, r) => a + (r.total ?? 0), 0);
+  function sumOf(ls: SpecLine[]) {
+    const supply = ls.reduce((a, r) => a + (r.supply ?? 0), 0);
+    const vat = ls.reduce((a, r) => a + (r.vat ?? 0), 0);
+    const total = ls.reduce((a, r) => a + (r.total ?? 0), 0);
     return { supply, vat, total };
   }
 
@@ -540,7 +535,7 @@ export default function SpecClient() {
     return orders.filter((o) => set.has(o.id));
   }, [orders, selectedOrderIds]);
 
-  // ✅ (요청사항) 화면용 제목에서도 "선택된 주문자" 표시
+  // ✅ (화면용 제목) 판매채널일 때만 날짜 옆에 주문자 표시
   const screenTitleSuffix = useMemo(() => {
     if (!isChannelCustomer) return "";
     if (!selectedOrders.length) return "";
@@ -560,7 +555,6 @@ export default function SpecClient() {
 
   return (
     <div className={`min-h-screen ${pageBg} p-6`}>
-      {/* ✅ 인쇄: "거래명세서 본문"만 보이게(상단 홈/스캔/품목… 줄 포함 전부 제거) */}
       <style jsx global>{`
         .print-only {
           display: none;
@@ -580,20 +574,17 @@ export default function SpecClient() {
             width: 100% !important;
           }
 
-          /* 인쇄 시 여백/배경 */
           body {
             background: white !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
 
-          /* 페이지 쪼개짐 방지 보조 */
           .avoid-break {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
 
-          /* 화면용(합산 1장) 숨기고, 인쇄용(주문별 페이지)만 출력 */
           .screen-only {
             display: none !important;
           }
@@ -601,7 +592,7 @@ export default function SpecClient() {
             display: block !important;
           }
 
-          /* 주문별 페이지 분리 */
+          /* 주문별 페이지 분리(판매채널에서만 사용) */
           .print-page {
             page-break-after: always !important;
           }
@@ -611,7 +602,6 @@ export default function SpecClient() {
         }
       `}</style>
 
-      {/* ✅ 화면(웹)에서는 그대로 보이되, 인쇄에서는 이 영역만 남김 */}
       <div id="spec-print-area" className="mx-auto max-w-6xl">
         {/* 상단 타이틀/버튼 */}
         <div className="mb-4 flex items-start justify-end gap-3">
@@ -635,7 +625,6 @@ export default function SpecClient() {
         <div className={`${card} mb-4 p-4 no-print`}>
           <div className="mb-2 text-sm font-semibold">조회 조건</div>
 
-          {/* ✅ 3개(거래처/일자/조회) 크기 조절 */}
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_96px] md:items-end">
             <div>
               <div className="mb-1 text-xs text-slate-500">거래처</div>
@@ -667,7 +656,7 @@ export default function SpecClient() {
                             key={p.id}
                             type="button"
                             className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                            onMouseDown={(e) => e.preventDefault()} // blur 먼저 발생 방지
+                            onMouseDown={(e) => e.preventDefault()}
                             onClick={() => selectPartner(p)}
                           >
                             <div className="font-medium">{p.name}</div>
@@ -702,7 +691,6 @@ export default function SpecClient() {
 
           {msg && <div className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{msg}</div>}
 
-          {/* ✅ 같은 날짜 주문 여러 건: 필요한 주문만 선택해서 거래명세서 출력 */}
           {orders.length > 1 ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -732,7 +720,7 @@ export default function SpecClient() {
               <div className="max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white">
                 {orders.map((o, idx) => {
                   const checked = selectedOrderIds.includes(o.id);
-                  const time = (o.created_at ?? "").slice(11, 19); // HH:MM:SS
+                  const time = (o.created_at ?? "").slice(11, 19);
                   const subLabel = getOrderSubLabel(o);
                   return (
                     <label
@@ -761,7 +749,6 @@ export default function SpecClient() {
                           ) : null}
                         </div>
 
-                        {/* ✅ 빨간박스 영역 */}
                         <div className="mt-0.5 truncate text-xs text-slate-600">{subLabel}</div>
                       </div>
                       <div className="text-right text-xs text-slate-700">
@@ -780,16 +767,13 @@ export default function SpecClient() {
           ) : null}
         </div>
 
-        {/* ===================== 화면용(기존 합산 1장 유지) ===================== */}
+        {/* ===================== 화면용(통합 1장 화면 유지) ===================== */}
         <div className="screen-only">
           <div className={`${card} p-4`}>
-            {/* ✅ (수정) 날짜 옆에 선택 주문자 표시 */}
             <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}${screenTitleSuffix}`}</div>
 
-            {/* 거래처 / 우리회사 */}
             <div className={`${card} mb-4 p-4`}>
               <div className="spec-party-grid grid grid-cols-2 gap-4">
-                {/* 거래처 */}
                 <div>
                   {selectedPartner ? (
                     <div className="space-y-1 text-sm">
@@ -806,7 +790,6 @@ export default function SpecClient() {
                   )}
                 </div>
 
-                {/* 우리회사 + 도장 */}
                 <div className="relative text-right">
                   <div className="mb-2 text-sm font-semibold"> </div>
 
@@ -830,7 +813,6 @@ export default function SpecClient() {
               </div>
             </div>
 
-            {/* 세부 내역 */}
             <div className={`${card} p-4`}>
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-sm font-semibold">세부 내역</div>
@@ -916,13 +898,14 @@ export default function SpecClient() {
           </div>
         </div>
 
-        {/* ===================== 인쇄용(주문별 페이지 분리 출력) ===================== */}
+        {/* ===================== 인쇄용(조건 분기) ===================== */}
         <div className="print-only">
           {selectedOrders.length === 0 ? (
             <div className={`${card} p-4`}>
               <div className="text-sm text-slate-500">표시할 주문이 없습니다.</div>
             </div>
-          ) : (
+          ) : isChannelCustomer ? (
+            // ✅ 판매채널: 선택된 주문들을 "주문별" 페이지 분리 출력
             selectedOrders.map((o) => {
               const orderLines = buildLinesForOrder(o.id);
               const sums = sumOf(orderLines);
@@ -1044,6 +1027,123 @@ export default function SpecClient() {
                 </div>
               );
             })
+          ) : (
+            // ✅ 일반 거래처: 선택된 여러 주문을 "1건"으로 통합 출력 (요청사항)
+            <div className={`${card} p-4`}>
+              <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}`}</div>
+
+              <div className={`${card} mb-4 p-4`}>
+                <div className="spec-party-grid grid grid-cols-2 gap-4">
+                  <div>
+                    {selectedPartner ? (
+                      <div className="space-y-1 text-sm">
+                        <div className="font-semibold">{selectedPartner.name}</div>
+                        <div className="text-slate-700">{selectedPartner.business_no ?? ""}</div>
+                        <div>대표: {selectedPartner.ceo_name ?? ""}</div>
+                        <div>주소: {selectedPartner.address1 ?? ""}</div>
+                        <div>
+                          업종: {selectedPartner.biz_type ?? ""} / 업태: {selectedPartner.biz_item ?? ""}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-slate-500">거래처를 선택하세요.</div>
+                    )}
+                  </div>
+
+                  <div className="relative text-right">
+                    <div className="mb-2 text-sm font-semibold"> </div>
+
+                    <div className="space-y-1 text-sm">
+                      <div className="font-semibold">{OUR.name}</div>
+                      <div className="text-slate-700">{OUR.business_no}</div>
+
+                      <div className="relative inline-block pr-12">
+                        <span>대표: {OUR.ceo}</span>
+                        <img
+                          src="/stamp.png"
+                          alt="stamp"
+                          className="pointer-events-none absolute right-0 -top-3 h-12 w-12 opacity-90"
+                        />
+                      </div>
+
+                      <div>주소: {OUR.address1}</div>
+                      <div>{OUR.biz}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`${card} p-4`}>
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-sm font-semibold">세부 내역</div>
+                  <div className="text-xs text-slate-500">
+                    선택 {selectedOrderCount}건 · 품목 {lines.length}줄
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <table className="w-full table-fixed text-sm">
+                    <colgroup>
+                      <col style={{ width: "40%" }} />
+                      <col style={{ width: "12%" }} />
+                      <col style={{ width: "10%" }} />
+                      <col style={{ width: "13%" }} />
+                      <col style={{ width: "12%" }} />
+                      <col style={{ width: "13%" }} />
+                    </colgroup>
+                    <thead className="bg-slate-50">
+                      <tr className="text-xs text-slate-600">
+                        <th className="px-3 py-2 text-left">품목</th>
+                        <th className="px-3 py-2 text-right">수량</th>
+                        <th className="px-3 py-2 text-right">단가</th>
+                        <th className="px-3 py-2 text-right">공급가</th>
+                        <th className="px-3 py-2 text-right">부가세</th>
+                        <th className="px-3 py-2 text-right">합계</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.length === 0 ? (
+                        <tr>
+                          <td className="px-3 py-6 text-center text-slate-500" colSpan={6}>
+                            표시할 내역이 없습니다.
+                          </td>
+                        </tr>
+                      ) : (
+                        lines.map((r, idx) => (
+                          <tr key={idx} className="border-t border-slate-100">
+                            <td className="px-3 py-2">
+                              <div className="truncate">{r.itemName}</div>
+                            </td>
+                            <td className="px-3 py-2 text-right">{formatMoney(r.qty)}</td>
+                            <td className="px-3 py-2 text-right">{formatMoney(r.unitPrice)}</td>
+                            <td className="px-3 py-2 text-right font-semibold">{formatMoney(r.supply)}</td>
+                            <td className="px-3 py-2 text-right">{formatMoney(r.vat)}</td>
+                            <td className="px-3 py-2 text-right font-semibold">{formatMoney(r.total)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-2 flex justify-end avoid-break">
+                  <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 text-sm">
+                    <div className="flex items-center justify-between py-1">
+                      <div className="text-slate-700">공급가</div>
+                      <div className="font-semibold">{formatMoney(sumSupply)}</div>
+                    </div>
+                    <div className="flex items-center justify-between py-1">
+                      <div className="text-slate-700">부가세</div>
+                      <div className="font-semibold">{formatMoney(sumVat)}</div>
+                    </div>
+                    <div className="flex items-center justify-between py-1">
+                      <div className="text-slate-900">합계</div>
+                      <div className="text-base font-bold">{formatMoney(sumTotal)}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
