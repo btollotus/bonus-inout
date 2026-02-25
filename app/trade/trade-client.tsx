@@ -176,6 +176,17 @@ function loadRecentFromLS(): string[] {
 function saveRecentToLS(ids: string[]) { try { localStorage.setItem(LS_RECENT_PARTNERS, JSON.stringify(ids)); } catch {} }
 const isMallPartner = (p: PartnerRow | null) => ["네이버", "쿠팡", "카카오"].some((k) => String(p?.name ?? "").includes(k));
 
+function buildOrderSummaryText(r: UnifiedRow) {
+  if (r.kind !== "ORDER") return (r.ledger_memo ?? "").trim();
+  const lines = (r.order_lines ?? []) as Array<{ name: string }>;
+  if (!lines.length) return (r.order_title ?? "").trim();
+  const first = String(lines[0]?.name ?? "").trim();
+  const rest = Math.max(0, lines.length - 1);
+  if (first && rest > 0) return `${first} 외 ${rest}건`;
+  if (first) return first;
+  return rest > 0 ? `외 ${rest}건` : "";
+}
+
 // ─────────────────────── Sub-components ───────────────────────
 type ShipFormState = { name: string; addr: string; mobile: string; phone: string; msg: string };
 const emptyShip = (): ShipFormState => ({ name: "", addr: "", mobile: "", phone: "", msg: "" });
@@ -1014,7 +1025,7 @@ export default function TradeClient() {
               </div>
             </div>
             <div className="mb-3 flex gap-2">
-              {(["PINNED","RECENT","ALL"] as PartnerView[]).map((v, _, arr) => {
+              {(["PINNED","RECENT","ALL"] as PartnerView[]).map((v) => {
                 const labels: Record<PartnerView, string> = { PINNED: "즐겨찾기", RECENT: "최근", ALL: "전체" };
                 return <button key={v} className={partnerView === v ? btnOn : btn} onClick={() => setPartnerView(v)}>{labels[v]}</button>;
               })}
@@ -1186,15 +1197,23 @@ export default function TradeClient() {
                   onScroll={(e) => { const bottom = e.currentTarget, top = tradeTopScrollRef.current; if (!top || tradeSyncingRef.current === "TOP") return; tradeSyncingRef.current = "BOTTOM"; top.scrollLeft = bottom.scrollLeft; tradeSyncingRef.current = null; }}>
                   <table className="w-full table-fixed text-sm">
                     <colgroup>
-                      <col style={{ width: "110px" }} /><col style={{ width: "180px" }} /><col style={{ width: "140px" }} />
-                      <col style={{ width: "120px" }} /><col style={{ width: "90px" }} /><col style={{ width: "110px" }} />
-                      <col style={{ width: "110px" }} /><col style={{ width: "130px" }} /><col style={{ width: "220px" }} />
+                      <col style={{ width: "110px" }} />
+                      <col style={{ width: "180px" }} />
+                      <col style={{ width: "140px" }} />
+                      <col style={{ width: "220px" }} />
+                      <col style={{ width: "120px" }} />
+                      <col style={{ width: "90px" }} />
+                      <col style={{ width: "110px" }} />
+                      <col style={{ width: "110px" }} />
+                      <col style={{ width: "130px" }} />
+                      <col style={{ width: "220px" }} />
                     </colgroup>
                     <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                       <tr>
                         <th className="px-3 py-2 text-left">날짜</th>
                         <th className="px-3 py-2 text-left">거래처</th>
                         <th className="px-3 py-2 text-left">주문자</th>
+                        <th className="px-3 py-2 text-left">적요</th>
                         <th className="px-3 py-2 text-left">카테고리</th>
                         <th className="px-3 py-2 text-left">방법</th>
                         <th className="sticky right-[460px] z-20 bg-slate-50 px-3 py-2 text-right">입금</th>
@@ -1212,12 +1231,14 @@ export default function TradeClient() {
                         const q = tradeSearch.trim().toLowerCase();
                         if (!q) return true;
                         const orderLineText = x.kind === "ORDER" ? (x.order_lines ?? []).map((l) => `${l.name ?? ""} ${l.food_type ?? ""}`).join(" ") : "";
-                        return [x.partnerName, x.businessNo ?? "", x.ordererName, x.category, x.method, x.order_title ?? "", x.ledger_memo ?? "", orderLineText].filter(Boolean).join(" ").toLowerCase().includes(q);
+                        const summaryText = buildOrderSummaryText(x);
+                        return [x.partnerName, x.businessNo ?? "", x.ordererName, summaryText, x.category, x.method, x.order_title ?? "", x.ledger_memo ?? "", orderLineText].filter(Boolean).join(" ").toLowerCase().includes(q);
                       }).map((x) => (
                         <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
                           <td className="px-3 py-2 font-semibold tabular-nums">{x.date}</td>
                           <td className="px-3 py-2 font-semibold">{x.partnerName}</td>
                           <td className="px-3 py-2 font-semibold">{x.ordererName}</td>
+                          <td className="px-3 py-2 font-semibold">{buildOrderSummaryText(x)}</td>
                           <td className="px-3 py-2 font-semibold">{x.category}</td>
                           <td className="px-3 py-2 font-semibold">{x.kind === "LEDGER" ? methodLabel(x.method) : x.method}</td>
                           <td className="sticky right-[460px] z-10 bg-white px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? fmt(x.inAmt) : ""}</td>
@@ -1234,7 +1255,7 @@ export default function TradeClient() {
                         </tr>
                       ))}
                       {unifiedRows.length === 0 ? (
-                        <tr><td colSpan={9} className="bg-white px-4 py-4 text-sm text-slate-500">거래내역이 없습니다. (기간/거래처/모드 필터를 확인하세요)</td></tr>
+                        <tr><td colSpan={10} className="bg-white px-4 py-4 text-sm text-slate-500">거래내역이 없습니다. (기간/거래처/모드 필터를 확인하세요)</td></tr>
                       ) : null}
                     </tbody>
                   </table>
