@@ -56,6 +56,7 @@ jobs:
           type = drive
           scope = drive
           service_account_file = ~/.config/rclone/sa.json
+          team_drive = ${{ secrets.GDRIVE_SHARED_DRIVE_ID }}
           EOF
 
           # (디버그용) JSON이 정상 파일인지 1줄만 확인(내용은 출력 안 함)
@@ -67,8 +68,7 @@ jobs:
 
       - name: Upload to Google Shared Drive
         run: |
-          # ✅ 공유 드라이브 루트(=Shared Drive ID)를 루트로 잡고,
-          # 그 안의 subfolder로 업로드
+          # ✅ remote 자체가 공유드라이브(Supabase-Backup)를 가리킴
+          # 그래서 경로에는 드라이브 이름을 쓰지 않고, 폴더만 사용
           rclone copy supabase.dump.gz gdrive:"${GDRIVE_SUBFOLDER}" \
-            --drive-root-folder-id="${GDRIVE_SHARED_DRIVE_ID}" \
             --progress
