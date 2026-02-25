@@ -2,10 +2,9 @@ name: Daily Tax Excel to Google Drive
 
 on:
   schedule:
-    # ✅ GitHub Actions cron은 UTC 기준
-    # ✅ KST 12:00 = UTC 03:00
-    # ✅ KST 18:00 = UTC 09:00
+    # KST 12:00 = UTC 03:00
     - cron: "0 3 * * *"
+    # KST 18:00 = UTC 09:00
     - cron: "0 9 * * *"
   workflow_dispatch:
 
@@ -23,58 +22,48 @@ jobs:
           echo "to=$TO" >> $GITHUB_OUTPUT
           echo "today=$TODAY" >> $GITHUB_OUTPUT
 
+      - name: Install rclone
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rclone
+
+      - name: Configure rclone for Google Drive (Service Account)
+        run: |
+          mkdir -p ~/.config/rclone
+
+          # ✅ JSON이 깨지는 것 방지(heredoc)
+          cat > ~/.config/rclone/sa.json << 'EOF'
+          ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+          EOF
+
+          cat > ~/.config/rclone/rclone.conf << 'EOF'
+          [gdrive]
+          type = drive
+          scope = drive
+          service_account_file = ~/.config/rclone/sa.json
+          EOF
+
       - name: Download tax excel
         run: |
           FROM="${{ steps.dates.outputs.from }}"
           TO="${{ steps.dates.outputs.to }}"
           TODAY="${{ steps.dates.outputs.today }}"
+
           URL="https://bonus-inout.vercel.app/api/tax/excel?from=${FROM}&to=${TO}&outCats=급여,세금,기타"
           FILENAME="세무사_통합_${FROM}_${TO}_생성일_${TODAY}.xlsx"
+
           echo "Downloading: $URL"
           curl -L --fail -o "$FILENAME" "$URL"
           ls -al
 
-      - name: Install rclone
-        run: curl https://rclone.org/install.sh | sudo bash
-
-      - name: Configure rclone (service account)
-        env:
-          GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
-        run: |
-          mkdir -p ~/.config/rclone
-          cat > ~/.config/rclone/rclone.conf << 'EOF'
-          [gdrive]
-          type = drive
-          scope = drive
-          service_account_credentials = __SA_JSON__
-          EOF
-          python3 - <<'PY'
-          import os
-          p = os.path.expanduser("~/.config/rclone/rclone.conf")
-          txt = open(p, "r", encoding="utf-8").read()
-          sa = os.environ["GDRIVE_SA_JSON"]
-          # rclone은 JSON을 한 줄 문자열로 넣어야 안전함
-          sa_one_line = sa.replace("\n", "")
-          txt = txt.replace("__SA_JSON__", sa_one_line)
-          open(p, "w", encoding="utf-8").write(txt)
-          PY
-          rclone version
-          rclone lsd gdrive: --drive-shared-with-me || true
-
-      - name: Upload to Shared Drive folder
+      - name: Upload to Google Drive (Shared Drive folder)
         run: |
           FROM="${{ steps.dates.outputs.from }}"
           TO="${{ steps.dates.outputs.to }}"
           TODAY="${{ steps.dates.outputs.today }}"
           FILENAME="세무사_통합_${FROM}_${TO}_생성일_${TODAY}.xlsx"
 
-          # ✅ 공유드라이브 경로 (요구사항)
-          # erp_backup / excel-tax
           DEST="gdrive:erp_backup/excel-tax"
+          rclone copy "$FILENAME" "$DEST" -P
 
-          rclone copy "$FILENAME" "$DEST" \
-            --drive-server-side-across-configs \
-            --drive-stop-on-upload-limit \
-            --transfers 1 -P
-
-          echo "Uploaded to: $DEST/$FILENAME"
+          echo "Uploaded: $DEST/$FILENAME"
