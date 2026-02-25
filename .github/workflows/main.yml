@@ -18,8 +18,8 @@ jobs:
       PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       PGSSLMODE: require
 
-      # ✅ excel-tax 폴더 ID 넣어둔 secret
-      GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_SHARED_DRIVE_ID }}
+      # ✅ "공유드라이브 ID" 말고, 업로드할 "폴더 ID" 를 넣어야 함
+      GDRIVE_DB_BACKUP_FOLDER_ID: ${{ secrets.GDRIVE_DB_BACKUP_FOLDER_ID }}
 
     steps:
       - name: Checkout repository
@@ -38,6 +38,9 @@ jobs:
         run: |
           pg_dump -F c --no-owner --no-acl -f supabase.dump
           gzip -f supabase.dump
+          TS=$(date +%F_%H%M%S)
+          mv supabase.dump.gz "supabase_${TS}.dump.gz"
+          ls -al
 
       - name: Configure rclone for Google Drive (Service Account)
         run: |
@@ -56,6 +59,7 @@ jobs:
 
       - name: Upload to Google Drive (Folder ID root mode)
         run: |
-          rclone copy supabase.dump.gz gdrive:"" \
-            --drive-root-folder-id="${GDRIVE_ROOT_FOLDER_ID}" \
+          rclone copy . gdrive:"" \
+            --include "supabase_*.dump.gz" \
+            --drive-root-folder-id="${GDRIVE_DB_BACKUP_FOLDER_ID}" \
             -P
