@@ -195,13 +195,23 @@ export default function SpecClient() {
     const sel = new Set(nextSelectedOrderIds);
     const picked = raw.filter((x) => sel.has(x.orderId));
 
-    // 동일 품목+단가로 집계(선택된 주문만)
+    // ✅ 같은 품목명이라도 "서로 다른 주문"이면 합산 금지
+    // - 주문 내에서는 (품목+단가)로 집계
+    // - 주문이 다르면 orderId가 달라져서 별도 줄로 유지
     const agg = new Map<string, SpecLine>();
     for (const r of picked) {
-      const key = `${r.itemName}||${r.unitPrice}`;
+      const key = `${r.orderId}||${r.itemName}||${r.unitPrice}`;
       const prev = agg.get(key);
-      if (!prev) agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total });
-      else {
+      if (!prev) {
+        agg.set(key, {
+          itemName: r.itemName,
+          qty: r.qty,
+          unitPrice: r.unitPrice,
+          supply: r.supply,
+          vat: r.vat,
+          total: r.total,
+        });
+      } else {
         prev.qty += r.qty;
         prev.supply += r.supply;
         prev.vat += r.vat;
