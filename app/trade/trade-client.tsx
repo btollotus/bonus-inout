@@ -192,15 +192,24 @@ type ShipFormState = { name: string; addr: string; mobile: string; phone: string
 const emptyShip = (): ShipFormState => ({ name: "", addr: "", mobile: "", phone: "", msg: "" });
 
 function ShipmentForm({ label, value, onChange, cls }: { label: string; value: ShipFormState; onChange: (p: Partial<ShipFormState>) => void; cls: string }) {
+  // ✅ (요청 2) 어떤 케이스에서도 value가 null/undefined로 흘러들어가 키보드 입력 시 에러가 나지 않게 방어
+  const safe = {
+    name: String((value as any)?.name ?? ""),
+    addr: String((value as any)?.addr ?? ""),
+    mobile: String((value as any)?.mobile ?? ""),
+    phone: String((value as any)?.phone ?? ""),
+    msg: String((value as any)?.msg ?? ""),
+  };
+
   return (
     <div className="space-y-2">
       <div className="mb-2 text-sm font-semibold">{label}</div>
-      <input className={cls} placeholder="수화주명" value={value.name} onChange={(e) => onChange({ name: e.target.value })} />
-      <input className={cls} placeholder="주소1" value={value.addr} onChange={(e) => onChange({ addr: e.target.value })} />
-      <input className={cls} placeholder="요청사항" value={value.msg} onChange={(e) => onChange({ msg: e.target.value })} />
+      <input className={cls} placeholder="수화주명" value={safe.name} onChange={(e) => onChange({ name: e.target.value })} />
+      <input className={cls} placeholder="주소1" value={safe.addr} onChange={(e) => onChange({ addr: e.target.value })} />
+      <input className={cls} placeholder="요청사항" value={safe.msg} onChange={(e) => onChange({ msg: e.target.value })} />
       <div className="grid grid-cols-2 gap-2">
-        <input className={cls} placeholder="휴대폰" value={value.mobile} onChange={(e) => onChange({ mobile: e.target.value })} />
-        <input className={cls} placeholder="전화" value={value.phone} onChange={(e) => onChange({ phone: e.target.value })} />
+        <input className={cls} placeholder="휴대폰" value={safe.mobile} onChange={(e) => onChange({ mobile: e.target.value })} />
+        <input className={cls} placeholder="전화" value={safe.phone} onChange={(e) => onChange({ phone: e.target.value })} />
       </div>
     </div>
   );
@@ -446,17 +455,28 @@ export default function TradeClient() {
       });
     }
 
+    // ✅ (요청 1) "날짜순 + 입력된 시간 순서" = 오름차순 정렬
     items.sort((a, b) => String(a.tsKey || a.date).localeCompare(String(b.tsKey || b.date)));
+
     let running = includeOpening ? openingBalance : 0;
-    const withBal: UnifiedRow[] = items.map((x) => { running += x.signed; const { signed, ...rest } = x; return { ...rest, balance: running }; });
-    withBal.sort((a, b) => String(b.tsKey || b.date).localeCompare(String(a.tsKey || a.date)));
+    const withBal: UnifiedRow[] = items.map((x) => {
+      running += x.signed;
+      const { signed, ...rest } = x;
+      return { ...rest, balance: running };
+    });
+
+    // ✅ 화면 표시도 동일하게 오름차순 유지
     return withBal;
   }, [orders, ledgers, includeOpening, openingBalance]);
 
   const unifiedTotals = useMemo(() => {
     const plus = unifiedRows.reduce((a, x) => a + x.inAmt, 0);
     const minus = unifiedRows.reduce((a, x) => a + x.outAmt, 0);
-    return { plus, minus, net: plus - minus, endBalance: unifiedRows.length ? unifiedRows[0].balance : includeOpening ? openingBalance : 0 };
+    // ✅ 오름차순일 때 "최신 잔액"은 마지막 row
+    const endBalance = unifiedRows.length
+      ? unifiedRows[unifiedRows.length - 1].balance
+      : (includeOpening ? openingBalance : 0);
+    return { plus, minus, net: plus - minus, endBalance };
   }, [unifiedRows, includeOpening, openingBalance]);
 
   // ─── Scroll sync ───
