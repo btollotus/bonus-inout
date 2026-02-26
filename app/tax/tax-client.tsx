@@ -121,9 +121,9 @@ export default function TaxClient() {
   const btnOn =
     "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
 
-  // ✅ (요청3) 탭 타이틀: "재고관리 MVP" -> "BONUSMATE ERP"
+  // ✅ (요청) 탭 타이틀: "BONUSMATE ERP-미수금"
   useEffect(() => {
-    document.title = "BONUSMATE ERP";
+    document.title = "BONUSMATE ERP-미수금";
   }, []);
 
   async function loadCats() {
