@@ -48,17 +48,6 @@ type LedgerRow = {
   vat_rate: number | null;
 };
 
-type ARSummaryRow = {
-  partner_id: string;
-  partner_name: string;
-  business_no: string | null;
-  sales_out: number;
-  cash_in: number;
-  balance: number;
-  last_ship_date: string | null;
-  last_in_date: string | null;
-};
-
 function formatMoney(n: number | null | undefined) {
   const v = Number(n ?? 0);
   return v.toLocaleString("ko-KR");
@@ -84,8 +73,6 @@ function toInt(n: any) {
   const v = Number(String(n ?? "").replaceAll(",", ""));
   return Number.isFinite(v) ? Math.trunc(v) : 0;
 }
-
-type ViewMode = "PURCHASE" | "SALES" | "AR";
 
 export default function TaxClient() {
   const supabase = useMemo(() => createClient(), []);
@@ -122,12 +109,9 @@ export default function TaxClient() {
   const [ledgers, setLedgers] = useState<LedgerRow[]>([]);
   const [partnersById, setPartnersById] = useState<Map<string, PartnerRow>>(new Map());
 
-  // ✅ 뷰 모드(매입처/매출처/미수금)
-  const [viewMode, setViewMode] = useState<ViewMode>("PURCHASE");
-
-  // ✅ 미수금(AR) 옵션/데이터
-  const [includeChannelsAR, setIncludeChannelsAR] = useState<boolean>(false);
-  const [arRows, setArRows] = useState<ARSummaryRow[]>([]);
+  // 거래원장(매출처 선택)
+  const [customerId, setCustomerId] = useState<string>("ALL");
+  const [customerSearch, setCustomerSearch] = useState("");
 
   const pageBg = "bg-slate-50 text-slate-900";
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
@@ -137,9 +121,9 @@ export default function TaxClient() {
   const btnOn =
     "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
 
-  // ✅ 탭 타이틀
+  // ✅ (요청3) 탭 타이틀: "재고관리 MVP" -> "BONUSMATE ERP"
   useEffect(() => {
-    document.title = "BONUSMATE ERP 세무";
+    document.title = "BONUSMATE ERP";
   }, []);
 
   async function loadCats() {
@@ -219,33 +203,6 @@ export default function TaxClient() {
     }
   }
 
-  async function loadAR() {
-    setMsg(null);
-    const asOf = toYMD || todayYMD();
-
-    const { data, error } = await supabase.rpc("ar_summary", {
-      as_of: asOf,
-      include_channels: includeChannelsAR,
-    });
-
-    if (error) return setMsg(error.message);
-
-    const rows = ((data ?? []) as any[]).map((r) => ({
-      partner_id: String(r.partner_id ?? ""),
-      partner_name: String(r.partner_name ?? ""),
-      business_no: r.business_no == null ? null : String(r.business_no),
-      sales_out: Number(r.sales_out ?? 0),
-      cash_in: Number(r.cash_in ?? 0),
-      balance: Number(r.balance ?? 0),
-      last_ship_date: r.last_ship_date == null ? null : String(r.last_ship_date),
-      last_in_date: r.last_in_date == null ? null : String(r.last_in_date),
-    })) as ARSummaryRow[];
-
-    // 미수금 큰 순서(= balance 내림차순)
-    rows.sort((a, b) => (b.balance ?? 0) - (a.balance ?? 0));
-    setArRows(rows);
-  }
-
   useEffect(() => {
     loadCats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -255,11 +212,6 @@ export default function TaxClient() {
     loadPeriod();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromYMD, toYMD]);
-
-  useEffect(() => {
-    if (viewMode === "AR") loadAR();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, toYMD, includeChannelsAR]);
 
   // =========================
   // 집계: 매출/매입/VAT
@@ -312,7 +264,7 @@ export default function TaxClient() {
   }, [salesSummary.vat, purchaseSummary.vat]);
 
   // =========================
-  // 매입처별 집계(총액 많은 순서 + 비율)
+  // 매입처별 집계(사업자번호 기준 정렬/그룹)
   // =========================
   const purchaseByVendor = useMemo(() => {
     const map = new Map<
@@ -324,7 +276,9 @@ export default function TaxClient() {
       const bn = String(l.business_no ?? "").trim() || "(미입력)";
       const name = String(l.counterparty_name ?? "").trim() || "(거래처명 없음)";
 
-      const key = bn;
+      // ✅ [최소수정] 사업자번호 미입력은 (미입력)로 한 덩어리 합치지 말고 "거래처명" 기준으로 묶기
+      const key = bn === "(미입력)" ? `NAME||${name}` : `BIZ||${bn}`;
+
       if (!map.has(key)) map.set(key, { business_no: bn, name, supply: 0, vat: 0, total: 0, count: 0 });
 
       const row = map.get(key)!;
@@ -343,54 +297,54 @@ export default function TaxClient() {
     }
 
     const arr = Array.from(map.values());
-    // ✅ 총액 많은 순
-    arr.sort((a, b) => (b.total ?? 0) - (a.total ?? 0));
+    arr.sort((a, b) => String(a.business_no).localeCompare(String(b.business_no)));
     return arr;
   }, [purchaseLedgerRows]);
 
-  const purchaseTotalAll = useMemo(() => purchaseByVendor.reduce((a, x) => a + (x.total ?? 0), 0), [purchaseByVendor]);
-
   // =========================
-  // 매출처별 집계(총액 많은 순서 + 비율)
+  // 매출처별 거래원장(기간 내 orders)
   // =========================
-  const salesByCustomer = useMemo(() => {
-    const map = new Map<
-      string,
-      { customer_id: string; name: string; business_no: string | null; supply: number; vat: number; total: number; count: number }
-    >();
-
+  const customers = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; business_no: string | null }>();
     for (const o of orders) {
-      const id = String(o.customer_id ?? "").trim();
+      const id = o.customer_id ?? "";
       if (!id) continue;
       const p = partnersById.get(id);
-      const name = String(o.customer_name ?? p?.name ?? "(이름없음)").trim() || "(이름없음)";
+      const name = o.customer_name ?? p?.name ?? "(이름없음)";
       const bn = p?.business_no ?? null;
-
-      if (!map.has(id)) map.set(id, { customer_id: id, name, business_no: bn, supply: 0, vat: 0, total: 0, count: 0 });
-
-      const row = map.get(id)!;
-      row.supply += Number(o.supply_amount ?? 0);
-      row.vat += Number(o.vat_amount ?? 0);
-      row.total += Number(o.total_amount ?? 0);
-      row.count += 1;
-
-      if (!row.business_no && bn) row.business_no = bn;
-      if (row.name === "(이름없음)" && name !== "(이름없음)") row.name = name;
+      if (!map.has(id)) map.set(id, { id, name, business_no: bn });
     }
-
-    const arr = Array.from(map.values());
-    // ✅ 총액 많은 순
-    arr.sort((a, b) => (b.total ?? 0) - (a.total ?? 0));
+    let arr = Array.from(map.values());
+    const q = customerSearch.trim();
+    if (q) {
+      arr = arr.filter((x) => (x.name || "").includes(q) || (x.business_no || "").includes(q));
+    }
+    arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     return arr;
-  }, [orders, partnersById]);
+  }, [orders, partnersById, customerSearch]);
 
-  const salesTotalAll = useMemo(() => salesByCustomer.reduce((a, x) => a + (x.total ?? 0), 0), [salesByCustomer]);
+  const ledgerForCustomer = useMemo(() => {
+    if (customerId === "ALL") return [];
+    return orders
+      .filter((o) => o.customer_id === customerId)
+      .sort((a, b) => String(a.ship_date).localeCompare(String(b.ship_date)));
+  }, [orders, customerId]);
 
   // =========================
   // 인쇄
   // =========================
   function printNow() {
     window.print();
+  }
+
+  // ✅ 거래처용 출력(새 탭)
+  function openStatement() {
+    if (customerId === "ALL") {
+      alert("매출처를 먼저 선택하세요.");
+      return;
+    }
+    const url = `/tax/statement?partnerId=${customerId}&from=${fromYMD}&to=${toYMD}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   // ✅ (추가) 세무사 전달용 엑셀 다운로드: 매출+매입(OUT) 통합
@@ -442,25 +396,14 @@ export default function TaxClient() {
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between print:hidden">
           <div>
             <div className="text-xl font-semibold">세무사 전달용 통합장부(리포트)</div>
-            <div className="mt-1 text-sm text-slate-600">기간별 매출/매입/VAT 요약 + 매입/매출/미수 집계</div>
+            <div className="mt-1 text-sm text-slate-600">기간별 매출/매입/VAT 요약 + 매입처별 집계 + 매출처 거래원장 출력</div>
           </div>
-
-          {/* ✅ 상단 메뉴 버튼 수정 */}
-          <div className="flex flex-wrap gap-2">
-            <button className={viewMode === "PURCHASE" ? btnOn : btn} onClick={() => setViewMode("PURCHASE")}>
-              매입처
-            </button>
-            <button className={viewMode === "SALES" ? btnOn : btn} onClick={() => setViewMode("SALES")}>
-              매출처
-            </button>
-            <button className={viewMode === "AR" ? btnOn : btn} onClick={() => setViewMode("AR")}>
-              미수금
-            </button>
-
+          <div className="flex gap-2">
             <button className={btn} onClick={printNow}>
               인쇄
             </button>
 
+            {/* ✅ 추가: 엑셀 다운로드 */}
             <button className={btn} onClick={downloadTaxExcel}>
               엑셀 다운로드
             </button>
@@ -468,13 +411,7 @@ export default function TaxClient() {
             <button className={btn} onClick={() => loadCats()}>
               카테고리 새로고침
             </button>
-            <button
-              className={btnOn}
-              onClick={() => {
-                loadPeriod();
-                if (viewMode === "AR") loadAR();
-              }}
-            >
+            <button className={btnOn} onClick={() => loadPeriod()}>
               기간 재조회
             </button>
           </div>
@@ -544,8 +481,8 @@ export default function TaxClient() {
               )}
             </div>
             <div className="mt-2 text-xs text-slate-500">
-              ※ 옵션2(정확 VAT) 기준으로, 매입 VAT는 ledger_entries.vat_amount(TAXED)만 집계합니다. 과거 데이터(vat 컬럼 비어있는 건)는 VAT 0으로
-              처리됩니다.
+              ※ 옵션2(정확 VAT) 기준으로, 매입 VAT는 ledger_entries.vat_amount(TAXED)만 집계합니다. 과거 데이터(vat 컬럼 비어있는 건)는 VAT
+              0으로 처리됩니다.
             </div>
           </div>
         </div>
@@ -569,209 +506,166 @@ export default function TaxClient() {
           <div className={`${card} p-4`}>
             <div className="text-sm font-semibold">예상 부가세 납부(= 매출VAT - 매입VAT)</div>
             <div className="mt-3 text-2xl font-extrabold tabular-nums">{formatMoney(expectedVatPayable)}</div>
-            <div className="mt-2 text-xs text-slate-500">※ 실제 신고는 세무사에서 조정됩니다(공제불가/면세/간이/신용카드 등 반영).</div>
+            <div className="mt-2 text-xs text-slate-500">
+              ※ 실제 신고는 세무사에서 조정됩니다(공제불가/면세/간이/신용카드 등 반영).
+            </div>
           </div>
         </div>
 
-        {/* ====== 뷰 모드별 집계 ====== */}
-
         {/* 매입처별 집계 */}
-        {viewMode === "PURCHASE" ? (
-          <div className={`${card} mt-6 p-4`}>
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <div className="text-lg font-semibold">매입처별 집계</div>
-                <div className="mt-1 text-xs text-slate-600">정렬: 총액 많은 순 · 비율(%) 표시</div>
-              </div>
-              <div className="text-xs text-slate-500">건수 {purchaseByVendor.reduce((a, x) => a + x.count, 0)}건</div>
+        <div className={`${card} mt-6 p-4`}>
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div className="text-lg font-semibold">매입처별 집계(사업자등록번호 기준)</div>
+              <div className="mt-1 text-xs text-slate-600">정렬: 사업자등록번호 오름차순</div>
             </div>
+            <div className="text-xs text-slate-500">건수 {purchaseByVendor.reduce((a, x) => a + x.count, 0)}건</div>
+          </div>
 
-            <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="w-full table-fixed text-sm">
-                <colgroup>
-                  <col style={{ width: "160px" }} />
-                  <col style={{ width: "260px" }} />
-                  <col style={{ width: "140px" }} />
-                  <col style={{ width: "140px" }} />
-                  <col style={{ width: "140px" }} />
-                  <col style={{ width: "110px" }} />
-                  <col style={{ width: "90px" }} />
-                </colgroup>
-                <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+          <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col style={{ width: "160px" }} />
+                <col style={{ width: "260px" }} />
+                <col style={{ width: "140px" }} />
+                <col style={{ width: "140px" }} />
+                <col style={{ width: "140px" }} />
+                <col style={{ width: "90px" }} />
+              </colgroup>
+              <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                <tr>
+                  <th className="px-3 py-2 text-left">사업자번호</th>
+                  <th className="px-3 py-2 text-left">매입처</th>
+                  <th className="px-3 py-2 text-right">공급가</th>
+                  <th className="px-3 py-2 text-right">부가세</th>
+                  <th className="px-3 py-2 text-right">총액</th>
+                  <th className="px-3 py-2 text-right">건수</th>
+                </tr>
+              </thead>
+              <tbody>
+                {purchaseByVendor.length === 0 ? (
                   <tr>
-                    <th className="px-3 py-2 text-left">사업자번호</th>
-                    <th className="px-3 py-2 text-left">매입처</th>
-                    <th className="px-3 py-2 text-right">공급가</th>
-                    <th className="px-3 py-2 text-right">부가세</th>
-                    <th className="px-3 py-2 text-right">총액</th>
-                    <th className="px-3 py-2 text-right">비율</th>
-                    <th className="px-3 py-2 text-right">건수</th>
+                    <td colSpan={6} className="bg-white px-4 py-4 text-sm text-slate-500">
+                      매입 집계 대상 데이터가 없습니다. (기간/카테고리 선택을 확인하세요)
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {purchaseByVendor.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="bg-white px-4 py-4 text-sm text-slate-500">
-                        매입 집계 대상 데이터가 없습니다. (기간/카테고리 선택을 확인하세요)
-                      </td>
+                ) : (
+                  purchaseByVendor.map((v) => (
+                    <tr key={`${v.business_no}||${v.name}`} className="border-t border-slate-200 bg-white">
+                      <td className="px-3 py-2 font-semibold tabular-nums">{v.business_no}</td>
+                      <td className="px-3 py-2 font-semibold">{v.name}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatMoney(v.supply)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatMoney(v.vat)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(v.total)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatMoney(v.count)}</td>
                     </tr>
-                  ) : (
-                    purchaseByVendor.map((v) => {
-                      const pct =
-                        purchaseTotalAll > 0 ? Math.round(((v.total ?? 0) / purchaseTotalAll) * 1000) / 10 : 0;
-                      return (
-                        <tr key={v.business_no} className="border-t border-slate-200 bg-white">
-                          <td className="px-3 py-2 font-semibold tabular-nums">{v.business_no}</td>
-                          <td className="px-3 py-2 font-semibold">{v.name}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatMoney(v.supply)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatMoney(v.vat)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(v.total)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{pct.toFixed(1)}%</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatMoney(v.count)}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 매출처 거래원장 */}
+        <div className={`${card} mt-6 p-4`}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between print:hidden">
+            <div>
+              <div className="text-lg font-semibold">매출처 거래원장(기간 내 orders)</div>
+              <div className="mt-1 text-xs text-slate-600">매출처별 기간 거래내역 출력(인쇄)</div>
+            </div>
+            <div className="flex flex-col gap-2 md:flex-row md:items-end">
+              <div className="w-full md:w-[280px]">
+                <div className="mb-1 text-xs text-slate-600">검색(상호/사업자번호)</div>
+                <input
+                  className={input}
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  placeholder="예: 네이버 / 220-81-..."
+                />
+              </div>
+              <div className="w-full md:w-[360px]">
+                <div className="mb-1 text-xs text-slate-600">매출처 선택</div>
+                <select className={input} value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+                  <option value="ALL">전체(선택 안함)</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                      {c.business_no ? ` · ${c.business_no}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button className={btn} onClick={printNow} disabled={customerId === "ALL"}>
+                선택 거래원장 인쇄
+              </button>
+
+              {/* ✅ 추가: 거래처용 출력(새 탭) */}
+              <button className={btn} onClick={openStatement} disabled={customerId === "ALL"}>
+                거래처용 출력(새 탭)
+              </button>
             </div>
           </div>
-        ) : null}
 
-        {/* 매출처별 집계 */}
-        {viewMode === "SALES" ? (
-          <div className={`${card} mt-6 p-4`}>
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <div className="text-lg font-semibold">매출처별 집계</div>
-                <div className="mt-1 text-xs text-slate-600">정렬: 총액 많은 순 · 비율(%) 표시</div>
-              </div>
-              <div className="text-xs text-slate-500">건수 {salesByCustomer.reduce((a, x) => a + x.count, 0)}건</div>
-            </div>
-
-            <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="w-full table-fixed text-sm">
-                <colgroup>
-                  <col style={{ width: "160px" }} />
-                  <col style={{ width: "320px" }} />
-                  <col style={{ width: "140px" }} />
-                  <col style={{ width: "140px" }} />
-                  <col style={{ width: "140px" }} />
-                  <col style={{ width: "110px" }} />
-                  <col style={{ width: "90px" }} />
-                </colgroup>
-                <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                  <tr>
-                    <th className="px-3 py-2 text-left">사업자번호</th>
-                    <th className="px-3 py-2 text-left">매출처</th>
-                    <th className="px-3 py-2 text-right">공급가</th>
-                    <th className="px-3 py-2 text-right">부가세</th>
-                    <th className="px-3 py-2 text-right">총액</th>
-                    <th className="px-3 py-2 text-right">비율</th>
-                    <th className="px-3 py-2 text-right">건수</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {salesByCustomer.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="bg-white px-4 py-4 text-sm text-slate-500">
-                        매출 집계 대상 데이터가 없습니다. (기간을 확인하세요)
-                      </td>
-                    </tr>
-                  ) : (
-                    salesByCustomer.map((v) => {
-                      const pct = salesTotalAll > 0 ? Math.round(((v.total ?? 0) / salesTotalAll) * 1000) / 10 : 0;
-                      return (
-                        <tr key={v.customer_id} className="border-t border-slate-200 bg-white">
-                          <td className="px-3 py-2 font-semibold tabular-nums">{v.business_no ?? "(미입력)"}</td>
-                          <td className="px-3 py-2 font-semibold">{v.name}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatMoney(v.supply)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatMoney(v.vat)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(v.total)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{pct.toFixed(1)}%</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatMoney(v.count)}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
-
-        {/* 미수금(AR) */}
-        {viewMode === "AR" ? (
-          <div className={`${card} mt-6 p-4`}>
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <div className="text-lg font-semibold">미수금(거래처별)</div>
-                <div className="mt-1 text-xs text-slate-600">
-                  기준일: {toYMD} · ar_summary(as_of=toYMD, include_channels 토글)
+          {/* 인쇄 영역 */}
+          {customerId !== "ALL" ? (
+            <div className="mt-4">
+              <div className="mb-3">
+                <div className="text-base font-semibold">거래원장: {customers.find((x) => x.id === customerId)?.name ?? ""}</div>
+                <div className="mt-1 text-sm text-slate-600">
+                  기간: {fromYMD} ~ {toYMD}
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  className={includeChannelsAR ? btnOn : btn}
-                  onClick={() => setIncludeChannelsAR((v) => !v)}
-                  type="button"
-                >
-                  판매채널 포함
-                </button>
-                <button className={btn} onClick={loadAR} type="button">
-                  미수금 재조회
-                </button>
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full table-fixed text-sm">
+                  <colgroup>
+                    <col style={{ width: "120px" }} />
+                    <col style={{ width: "110px" }} />
+                    <col style={{ width: "140px" }} />
+                    <col style={{ width: "140px" }} />
+                    <col style={{ width: "140px" }} />
+                  </colgroup>
+                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left">출고일</th>
+                      <th className="px-3 py-2 text-left">방법</th>
+                      <th className="px-3 py-2 text-right">공급가</th>
+                      <th className="px-3 py-2 text-right">부가세</th>
+                      <th className="px-3 py-2 text-right">총액</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ledgerForCustomer.map((o) => (
+                      <tr key={o.id} className="border-t border-slate-200 bg-white">
+                        <td className="px-3 py-2 font-semibold tabular-nums">{o.ship_date}</td>
+                        <td className="px-3 py-2">{o.ship_method ?? ""}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(o.supply_amount)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(o.vat_amount)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(o.total_amount)}</td>
+                      </tr>
+                    ))}
+
+                    {ledgerForCustomer.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="bg-white px-4 py-4 text-sm text-slate-500">
+                          선택한 매출처의 기간 내 거래가 없습니다.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3 text-sm font-semibold">
+                합계: 공급가 {formatMoney(ledgerForCustomer.reduce((a, x) => a + x.supply_amount, 0))} · 부가세{" "}
+                {formatMoney(ledgerForCustomer.reduce((a, x) => a + x.vat_amount, 0))} · 총액{" "}
+                {formatMoney(ledgerForCustomer.reduce((a, x) => a + x.total_amount, 0))}
               </div>
             </div>
-
-            <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="w-full table-fixed text-sm">
-                <colgroup>
-                  <col style={{ width: "160px" }} />
-                  <col style={{ width: "320px" }} />
-                  <col style={{ width: "140px" }} />
-                  <col style={{ width: "140px" }} />
-                  <col style={{ width: "160px" }} />
-                  <col style={{ width: "130px" }} />
-                  <col style={{ width: "130px" }} />
-                </colgroup>
-                <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                  <tr>
-                    <th className="px-3 py-2 text-left">사업자번호</th>
-                    <th className="px-3 py-2 text-left">거래처</th>
-                    <th className="px-3 py-2 text-right">출고(매출)</th>
-                    <th className="px-3 py-2 text-right">입금</th>
-                    <th className="px-3 py-2 text-right">미수금(=출고-입금)</th>
-                    <th className="px-3 py-2 text-left">최근출고</th>
-                    <th className="px-3 py-2 text-left">최근입금</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {arRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="bg-white px-4 py-4 text-sm text-slate-500">
-                        미수금 데이터가 없습니다. (기준일/판매채널 포함 여부를 확인하세요)
-                      </td>
-                    </tr>
-                  ) : (
-                    arRows.map((r) => (
-                      <tr key={r.partner_id} className="border-t border-slate-200 bg-white">
-                        <td className="px-3 py-2 font-semibold tabular-nums">{r.business_no ?? "(미입력)"}</td>
-                        <td className="px-3 py-2 font-semibold">{r.partner_name}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(r.sales_out)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(r.cash_in)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(r.balance)}</td>
-                        <td className="px-3 py-2 tabular-nums">{r.last_ship_date ?? ""}</td>
-                        <td className="px-3 py-2 tabular-nums">{r.last_in_date ?? ""}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
+          ) : (
+            <div className="mt-3 text-sm text-slate-500">매출처를 선택하면 해당 거래원장이 표시됩니다.</div>
+          )}
+        </div>
 
         <div className="mt-6 text-xs text-slate-500">
           ※ 이 페이지는 “세무사 전달/인쇄/집계” 전용입니다. 입력은 기존 주문/출고/금전출납 화면에서 하시면 됩니다.
