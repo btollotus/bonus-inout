@@ -565,20 +565,20 @@ export default function TaxClient() {
           </div>
         </div>
 
-        {/* 요약 (매입/매출/이익/예상 부가세 납부 순서) */}
+        {/* 요약 (✅ 요청: 매출, 매입 순서로 변경) */}
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-          <div className={`${card} p-4`}>
-            <div className="text-sm font-semibold">매입(ledger_entries OUT)</div>
-            <div className="mt-2 text-sm text-slate-600">공급가 {formatMoney(purchaseSummary.supply)}</div>
-            <div className="text-sm text-slate-600">부가세 {formatMoney(purchaseSummary.vat)}</div>
-            <div className="mt-1 text-base font-semibold">총액 {formatMoney(purchaseSummary.total)}</div>
-          </div>
-
           <div className={`${card} p-4`}>
             <div className="text-sm font-semibold">매출(orders)</div>
             <div className="mt-2 text-sm text-slate-600">공급가 {formatMoney(salesSummary.supply)}</div>
             <div className="text-sm text-slate-600">부가세 {formatMoney(salesSummary.vat)}</div>
             <div className="mt-1 text-base font-semibold">총액 {formatMoney(salesSummary.total)}</div>
+          </div>
+
+          <div className={`${card} p-4`}>
+            <div className="text-sm font-semibold">매입(ledger_entries OUT)</div>
+            <div className="mt-2 text-sm text-slate-600">공급가 {formatMoney(purchaseSummary.supply)}</div>
+            <div className="text-sm text-slate-600">부가세 {formatMoney(purchaseSummary.vat)}</div>
+            <div className="mt-1 text-base font-semibold">총액 {formatMoney(purchaseSummary.total)}</div>
           </div>
 
           <div className={`${card} p-4`}>
