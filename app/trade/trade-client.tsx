@@ -191,6 +191,57 @@ function buildOrderSummaryText(r: UnifiedRow) {
 type ShipFormState = { name: string; addr: string; mobile: string; phone: string; msg: string };
 const emptyShip = (): ShipFormState => ({ name: "", addr: "", mobile: "", phone: "", msg: "" });
 
+function ImeSafeInput({
+  value,
+  onValueChange,
+  className,
+  placeholder,
+  name,
+  autoComplete,
+  inputMode,
+  disabled,
+}: {
+  value: string;
+  onValueChange: (v: string) => void;
+  className: string;
+  placeholder?: string;
+  name?: string;
+  autoComplete?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  disabled?: boolean;
+}) {
+  const [local, setLocal] = useState<string>(value ?? "");
+  const composingRef = useRef(false);
+
+  useEffect(() => {
+    if (!composingRef.current) setLocal(value ?? "");
+  }, [value]);
+
+  return (
+    <input
+      className={className}
+      placeholder={placeholder}
+      name={name}
+      autoComplete={autoComplete}
+      inputMode={inputMode}
+      disabled={disabled}
+      value={local}
+      onCompositionStart={() => { composingRef.current = true; }}
+      onCompositionEnd={(e) => {
+        composingRef.current = false;
+        const v = (e.currentTarget as HTMLInputElement).value;
+        setLocal(v);
+        onValueChange(v);
+      }}
+      onChange={(e) => {
+        const v = e.target.value;
+        setLocal(v);
+        if (!composingRef.current) onValueChange(v);
+      }}
+    />
+  );
+}
+
 function ShipmentForm({
   label,
   value,
@@ -207,46 +258,46 @@ function ShipmentForm({
   return (
     <div className="space-y-2">
       <div className="mb-2 text-sm font-semibold">{label}</div>
-      <input
+      <ImeSafeInput
         className={cls}
         placeholder="수화주명"
         value={value.name}
         name={`${namePrefix}_name`}
         autoComplete="off"
-        onChange={(e) => onChange({ name: e.target.value })}
+        onValueChange={(v) => onChange({ name: v })}
       />
-      <input
+      <ImeSafeInput
         className={cls}
         placeholder="주소1"
         value={value.addr}
         name={`${namePrefix}_addr`}
         autoComplete="off"
-        onChange={(e) => onChange({ addr: e.target.value })}
+        onValueChange={(v) => onChange({ addr: v })}
       />
-      <input
+      <ImeSafeInput
         className={cls}
         placeholder="요청사항"
         value={value.msg}
         name={`${namePrefix}_msg`}
         autoComplete="off"
-        onChange={(e) => onChange({ msg: e.target.value })}
+        onValueChange={(v) => onChange({ msg: v })}
       />
       <div className="grid grid-cols-2 gap-2">
-        <input
+        <ImeSafeInput
           className={cls}
           placeholder="휴대폰"
           value={value.mobile}
           name={`${namePrefix}_mobile`}
           autoComplete="off"
-          onChange={(e) => onChange({ mobile: e.target.value })}
+          onValueChange={(v) => onChange({ mobile: v })}
         />
-        <input
+        <ImeSafeInput
           className={cls}
           placeholder="전화"
           value={value.phone}
           name={`${namePrefix}_phone`}
           autoComplete="off"
-          onChange={(e) => onChange({ phone: e.target.value })}
+          onValueChange={(v) => onChange({ phone: v })}
         />
       </div>
     </div>
@@ -264,34 +315,14 @@ type LineRowProps = {
 function LineRow({ l, i, onUpdate, onRemove, masterByName, inputCls, inputRightCls, btnCls, gridCols, qtyBadgeCls }: LineRowProps) {
   const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
   const pack = inferPackEaFromName(l.name);
-
-  // ✅ IME(한글 조합) 입력 중에는 자동완성 매칭/자동채움 로직을 건드리지 않도록 처리
-  const composingRef = useRef(false);
-
-  const applyMasterHit = (v: string) => {
-    const hit = masterByName.get(v);
-    if (hit) onUpdate(i, { food_type: hit.food_type ?? "", weight_g: Number(hit.weight_g ?? 0) });
-  };
-
   return (
     <div className={`grid ${gridCols} gap-2`}>
       <input className={inputCls} list="food-types-list" value={l.food_type} onChange={(e) => onUpdate(i, { food_type: e.target.value })} />
-      <input
-        className={inputCls}
-        list="master-product-list"
-        value={l.name}
-        onCompositionStart={() => { composingRef.current = true; }}
-        onCompositionEnd={(e) => {
-          composingRef.current = false;
-          const v = e.currentTarget.value;
-          // 조합이 끝난 "최종값"에 대해서만 자동채움 적용
-          applyMasterHit(v);
-        }}
+      <input className={inputCls} list="master-product-list" value={l.name}
         onChange={(e) => {
-          const v = e.target.value;
-          onUpdate(i, { name: v });
-          // 조합 중(ㄱ ㅏ ㄴ...)에는 자동채움이 커서를 깨뜨릴 수 있어 막음
-          if (!composingRef.current) applyMasterHit(v);
+          const v = e.target.value; onUpdate(i, { name: v });
+          const hit = masterByName.get(v);
+          if (hit) onUpdate(i, { food_type: hit.food_type ?? "", weight_g: Number(hit.weight_g ?? 0) });
         }}
       />
       <input className={inputRightCls} inputMode="decimal"
@@ -329,6 +360,36 @@ const LineHeader = ({ gridCols }: { gridCols: string }) => (
     ))}
   </div>
 );
+
+// ✅ ShipBlock을 컴포넌트 밖으로 빼서(함수 재생성 방지) 커서 튕김/IME 문제 예방
+function ShipBlock({
+  s1, setS1, s2, setS2, two, setTwo, prefix, inpClass,
+}: {
+  s1: ShipFormState; setS1: (v: ShipFormState) => void;
+  s2: ShipFormState; setS2: (v: ShipFormState) => void;
+  two: boolean; setTwo: (v: boolean) => void;
+  prefix: string;
+  inpClass: string;
+}) {
+  return (
+    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 text-sm font-semibold">배송정보(주문 스냅샷)</div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+          <ShipmentForm label="배송지 1" value={s1} onChange={(p) => setS1({ ...s1, ...p })} cls={inpClass} namePrefix={`${prefix}_ship1`} />
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-sm font-semibold">배송지 2 (선택)</div>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={two} onChange={(e) => setTwo(e.target.checked)} />2곳 배송</label>
+          </div>
+          {two ? <ShipmentForm label="" value={s2} onChange={(p) => setS2({ ...s2, ...p })} cls={inpClass} namePrefix={`${prefix}_ship2`} /> : <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">2곳 배송이 아니면 비워둡니다.</div>}
+        </div>
+      </div>
+      <div className="mt-2 text-xs text-slate-500">※ 배송정보는 주문마다 저장됩니다(스냅샷). 거래처(업체)명과 수화주명은 다를 수 있습니다.</div>
+    </div>
+  );
+}
 
 // ─────────────────────── Main Component ───────────────────────
 export default function TradeClient() {
@@ -954,26 +1015,6 @@ export default function TradeClient() {
     </>
   );
 
-  // ─── Shared ship block ───
-  const ShipBlock = ({ s1, setS1, s2, setS2, two, setTwo, prefix }: { s1: ShipFormState; setS1: (v: ShipFormState) => void; s2: ShipFormState; setS2: (v: ShipFormState) => void; two: boolean; setTwo: (v: boolean) => void; prefix: string }) => (
-    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-      <div className="mb-2 text-sm font-semibold">배송정보(주문 스냅샷)</div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-3">
-          <ShipmentForm label="배송지 1" value={s1} onChange={(p) => setS1({ ...s1, ...p })} cls={inp} namePrefix={`${prefix}_ship1`} />
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-sm font-semibold">배송지 2 (선택)</div>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={two} onChange={(e) => setTwo(e.target.checked)} />2곳 배송</label>
-          </div>
-          {two ? <ShipmentForm label="" value={s2} onChange={(p) => setS2({ ...s2, ...p })} cls={inp} namePrefix={`${prefix}_ship2`} /> : <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">2곳 배송이 아니면 비워둡니다.</div>}
-        </div>
-      </div>
-      <div className="mt-2 text-xs text-slate-500">※ 배송정보는 주문마다 저장됩니다(스냅샷). 거래처(업체)명과 수화주명은 다를 수 있습니다.</div>
-    </div>
-  );
-
   // ─── Partner type select ───
   const PartnerTypeSelect = ({ value, onChange }: { value: PartnerType; onChange: (v: PartnerType) => void }) => (
     <select className={inp} value={value} onChange={(e) => onChange(e.target.value as any)}>
@@ -1022,11 +1063,31 @@ export default function TradeClient() {
                   <button className={btn} onClick={async () => { const next = !shipHistOpen; setShipHistOpen(next); if (next && selectedPartner) await loadShippingHistory5(selectedPartner.id); }}>배송정보 이력(최근 5건)</button>
                 </div>
                 <div className="space-y-2">
-                  <input className={inp} placeholder="수화주명" value={shipEdit.name} onChange={(e) => setShipEdit({ ...shipEdit, name: e.target.value })} />
-                  <input className={inp} placeholder="주소1" value={shipEdit.addr} onChange={(e) => setShipEdit({ ...shipEdit, addr: e.target.value })} />
+                  <ImeSafeInput
+                    className={inp}
+                    placeholder="수화주명"
+                    value={shipEdit.name}
+                    onValueChange={(v) => setShipEdit({ ...shipEdit, name: v })}
+                  />
+                  <ImeSafeInput
+                    className={inp}
+                    placeholder="주소1"
+                    value={shipEdit.addr}
+                    onValueChange={(v) => setShipEdit({ ...shipEdit, addr: v })}
+                  />
                   <div className="grid grid-cols-2 gap-2">
-                    <input className={inp} placeholder="휴대폰" value={shipEdit.mobile} onChange={(e) => setShipEdit({ ...shipEdit, mobile: e.target.value })} />
-                    <input className={inp} placeholder="전화" value={shipEdit.phone} onChange={(e) => setShipEdit({ ...shipEdit, phone: e.target.value })} />
+                    <ImeSafeInput
+                      className={inp}
+                      placeholder="휴대폰"
+                      value={shipEdit.mobile}
+                      onValueChange={(v) => setShipEdit({ ...shipEdit, mobile: v })}
+                    />
+                    <ImeSafeInput
+                      className={inp}
+                      placeholder="전화"
+                      value={shipEdit.phone}
+                      onValueChange={(v) => setShipEdit({ ...shipEdit, phone: v })}
+                    />
                   </div>
                   <div className="text-xs text-slate-500">※ 배송정보가 변경되면 history 테이블에 기록으로 남고, 다음부터는 최근값이 자동으로 사용됩니다.</div>
                 </div>
@@ -1106,7 +1167,7 @@ export default function TradeClient() {
                       </div>
                       <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} value={eOrderTitle} onChange={(e) => setEOrderTitle(e.target.value)} /></div>
                     </div>
-                    <ShipBlock s1={eShip1} setS1={setEShip1} s2={eShip2} setS2={setEShip2} two={eTwoShip} setTwo={setETwoShip} prefix={`edit_${editRow.rawId}`} />
+                    <ShipBlock s1={eShip1} setS1={setEShip1} s2={eShip2} setS2={setEShip2} two={eTwoShip} setTwo={setETwoShip} prefix={`edit_${editRow.rawId}`} inpClass={inp} />
                     <div className="mt-4 flex items-center justify-between">
                       <div className="text-sm font-semibold">품목</div>
                       <div className="flex items-center gap-2">
@@ -1249,7 +1310,7 @@ export default function TradeClient() {
                   </div>
                   <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} /></div>
                 </div>
-                <ShipBlock s1={ship1} setS1={setShip1} s2={ship2} setS2={setShip2} two={twoShip} setTwo={setTwoShip} prefix="create" />
+                <ShipBlock s1={ship1} setS1={setShip1} s2={ship2} setS2={setShip2} two={twoShip} setTwo={setTwoShip} prefix="create" inpClass={inp} />
                 <div className="mt-4 flex items-center justify-between">
                   <div className="text-sm font-semibold">품목(식품유형 자동완성 포함)</div>
                   <div className="flex items-center gap-2">
