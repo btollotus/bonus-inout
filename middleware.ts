@@ -10,10 +10,12 @@ export async function middleware(req: NextRequest) {
   // - login
   // - next static
   // - favicon
+  // - api/tax/excel (GitHub Actions 백업용)
   const isPublic =
     pathname.startsWith("/login") ||
     pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico";
+    pathname === "/favicon.ico" ||
+    pathname.startsWith("/api/tax/excel");
 
   if (isPublic) return NextResponse.next();
 
