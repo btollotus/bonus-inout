@@ -191,6 +191,57 @@ function buildOrderSummaryText(r: UnifiedRow) {
 type ShipFormState = { name: string; addr: string; mobile: string; phone: string; msg: string };
 const emptyShip = (): ShipFormState => ({ name: "", addr: "", mobile: "", phone: "", msg: "" });
 
+function ImeSafeInput({
+  value,
+  onValueChange,
+  className,
+  placeholder,
+  name,
+  autoComplete,
+  inputMode,
+  disabled,
+}: {
+  value: string;
+  onValueChange: (v: string) => void;
+  className: string;
+  placeholder?: string;
+  name?: string;
+  autoComplete?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  disabled?: boolean;
+}) {
+  const [local, setLocal] = useState<string>(value ?? "");
+  const composingRef = useRef(false);
+
+  useEffect(() => {
+    if (!composingRef.current) setLocal(value ?? "");
+  }, [value]);
+
+  return (
+    <input
+      className={className}
+      placeholder={placeholder}
+      name={name}
+      autoComplete={autoComplete}
+      inputMode={inputMode}
+      disabled={disabled}
+      value={local}
+      onCompositionStart={() => { composingRef.current = true; }}
+      onCompositionEnd={(e) => {
+        composingRef.current = false;
+        const v = (e.currentTarget as HTMLInputElement).value;
+        setLocal(v);
+        onValueChange(v);
+      }}
+      onChange={(e) => {
+        const v = e.target.value;
+        setLocal(v);
+        if (!composingRef.current) onValueChange(v);
+      }}
+    />
+  );
+}
+
 function ShipmentForm({
   label,
   value,
@@ -207,46 +258,46 @@ function ShipmentForm({
   return (
     <div className="space-y-2">
       <div className="mb-2 text-sm font-semibold">{label}</div>
-      <input
+      <ImeSafeInput
         className={cls}
         placeholder="수화주명"
         value={value.name}
         name={`${namePrefix}_name`}
         autoComplete="off"
-        onChange={(e) => onChange({ name: e.target.value })}
+        onValueChange={(v) => onChange({ name: v })}
       />
-      <input
+      <ImeSafeInput
         className={cls}
         placeholder="주소1"
         value={value.addr}
         name={`${namePrefix}_addr`}
         autoComplete="off"
-        onChange={(e) => onChange({ addr: e.target.value })}
+        onValueChange={(v) => onChange({ addr: v })}
       />
-      <input
+      <ImeSafeInput
         className={cls}
         placeholder="요청사항"
         value={value.msg}
         name={`${namePrefix}_msg`}
         autoComplete="off"
-        onChange={(e) => onChange({ msg: e.target.value })}
+        onValueChange={(v) => onChange({ msg: v })}
       />
       <div className="grid grid-cols-2 gap-2">
-        <input
+        <ImeSafeInput
           className={cls}
           placeholder="휴대폰"
           value={value.mobile}
           name={`${namePrefix}_mobile`}
           autoComplete="off"
-          onChange={(e) => onChange({ mobile: e.target.value })}
+          onValueChange={(v) => onChange({ mobile: v })}
         />
-        <input
+        <ImeSafeInput
           className={cls}
           placeholder="전화"
           value={value.phone}
           name={`${namePrefix}_phone`}
           autoComplete="off"
-          onChange={(e) => onChange({ phone: e.target.value })}
+          onValueChange={(v) => onChange({ phone: v })}
         />
       </div>
     </div>
@@ -1002,11 +1053,31 @@ export default function TradeClient() {
                   <button className={btn} onClick={async () => { const next = !shipHistOpen; setShipHistOpen(next); if (next && selectedPartner) await loadShippingHistory5(selectedPartner.id); }}>배송정보 이력(최근 5건)</button>
                 </div>
                 <div className="space-y-2">
-                  <input className={inp} placeholder="수화주명" value={shipEdit.name} onChange={(e) => setShipEdit({ ...shipEdit, name: e.target.value })} />
-                  <input className={inp} placeholder="주소1" value={shipEdit.addr} onChange={(e) => setShipEdit({ ...shipEdit, addr: e.target.value })} />
+                  <ImeSafeInput
+                    className={inp}
+                    placeholder="수화주명"
+                    value={shipEdit.name}
+                    onValueChange={(v) => setShipEdit({ ...shipEdit, name: v })}
+                  />
+                  <ImeSafeInput
+                    className={inp}
+                    placeholder="주소1"
+                    value={shipEdit.addr}
+                    onValueChange={(v) => setShipEdit({ ...shipEdit, addr: v })}
+                  />
                   <div className="grid grid-cols-2 gap-2">
-                    <input className={inp} placeholder="휴대폰" value={shipEdit.mobile} onChange={(e) => setShipEdit({ ...shipEdit, mobile: e.target.value })} />
-                    <input className={inp} placeholder="전화" value={shipEdit.phone} onChange={(e) => setShipEdit({ ...shipEdit, phone: e.target.value })} />
+                    <ImeSafeInput
+                      className={inp}
+                      placeholder="휴대폰"
+                      value={shipEdit.mobile}
+                      onValueChange={(v) => setShipEdit({ ...shipEdit, mobile: v })}
+                    />
+                    <ImeSafeInput
+                      className={inp}
+                      placeholder="전화"
+                      value={shipEdit.phone}
+                      onValueChange={(v) => setShipEdit({ ...shipEdit, phone: v })}
+                    />
                   </div>
                   <div className="text-xs text-slate-500">※ 배송정보가 변경되면 history 테이블에 기록으로 남고, 다음부터는 최근값이 자동으로 사용됩니다.</div>
                 </div>
