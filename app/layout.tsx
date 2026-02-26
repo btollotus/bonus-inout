@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 export const metadata = {
-  title: "재고관리 MVP",
+  title: "BONUSMATE ERP",
   description: "BONUS In/Out",
 };
 

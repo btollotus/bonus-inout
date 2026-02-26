@@ -14,11 +14,11 @@ const nav = [
   { href: "/trade", label: "거래내역(통합)" },
 
   // ✅ 세무 메뉴 추가
-  { href: "/tax", label: "세무사" },
+  { href: "/tax", label: "세무" },
   { href: "/tax/spec", label: "거래명세서" },
   { href: "/tax/statement", label: "거래원장" },
 
-  { href: "/calendar", label: "출고 캘린더" },
+  { href: "/calendar", label: "캘린더" },
 ];
 
 export default function TopNav({ role, email }: { role?: string; email?: string }) {
