@@ -191,25 +191,63 @@ function buildOrderSummaryText(r: UnifiedRow) {
 type ShipFormState = { name: string; addr: string; mobile: string; phone: string; msg: string };
 const emptyShip = (): ShipFormState => ({ name: "", addr: "", mobile: "", phone: "", msg: "" });
 
-function ShipmentForm({ label, value, onChange, cls }: { label: string; value: ShipFormState; onChange: (p: Partial<ShipFormState>) => void; cls: string }) {
-  // ✅ (요청 2) 어떤 케이스에서도 value가 null/undefined로 흘러들어가 키보드 입력 시 에러가 나지 않게 방어
-  const safe = {
-    name: String((value as any)?.name ?? ""),
-    addr: String((value as any)?.addr ?? ""),
-    mobile: String((value as any)?.mobile ?? ""),
-    phone: String((value as any)?.phone ?? ""),
-    msg: String((value as any)?.msg ?? ""),
-  };
-
+function ShipmentForm({
+  label,
+  value,
+  onChange,
+  cls,
+  namePrefix,
+}: {
+  label: string;
+  value: ShipFormState;
+  onChange: (p: Partial<ShipFormState>) => void;
+  cls: string;
+  namePrefix: string;
+}) {
   return (
     <div className="space-y-2">
       <div className="mb-2 text-sm font-semibold">{label}</div>
-      <input className={cls} placeholder="수화주명" value={safe.name} onChange={(e) => onChange({ name: e.target.value })} />
-      <input className={cls} placeholder="주소1" value={safe.addr} onChange={(e) => onChange({ addr: e.target.value })} />
-      <input className={cls} placeholder="요청사항" value={safe.msg} onChange={(e) => onChange({ msg: e.target.value })} />
+      <input
+        className={cls}
+        placeholder="수화주명"
+        value={value.name}
+        name={`${namePrefix}_name`}
+        autoComplete="off"
+        onChange={(e) => onChange({ name: e.target.value })}
+      />
+      <input
+        className={cls}
+        placeholder="주소1"
+        value={value.addr}
+        name={`${namePrefix}_addr`}
+        autoComplete="off"
+        onChange={(e) => onChange({ addr: e.target.value })}
+      />
+      <input
+        className={cls}
+        placeholder="요청사항"
+        value={value.msg}
+        name={`${namePrefix}_msg`}
+        autoComplete="off"
+        onChange={(e) => onChange({ msg: e.target.value })}
+      />
       <div className="grid grid-cols-2 gap-2">
-        <input className={cls} placeholder="휴대폰" value={safe.mobile} onChange={(e) => onChange({ mobile: e.target.value })} />
-        <input className={cls} placeholder="전화" value={safe.phone} onChange={(e) => onChange({ phone: e.target.value })} />
+        <input
+          className={cls}
+          placeholder="휴대폰"
+          value={value.mobile}
+          name={`${namePrefix}_mobile`}
+          autoComplete="off"
+          onChange={(e) => onChange({ mobile: e.target.value })}
+        />
+        <input
+          className={cls}
+          placeholder="전화"
+          value={value.phone}
+          name={`${namePrefix}_phone`}
+          autoComplete="off"
+          onChange={(e) => onChange({ phone: e.target.value })}
+        />
       </div>
     </div>
   );
@@ -423,8 +461,22 @@ export default function TradeClient() {
 
   // ─── Unified rows ───
   const unifiedRows = useMemo<UnifiedRow[]>(() => {
-    const timePart = (iso: string | null | undefined) => { const s = String(iso ?? "").trim(); const idx = s.indexOf("T"); return idx < 0 ? "" : s.slice(idx + 1); };
-    const items: Array<Omit<UnifiedRow, "balance"> & { signed: number }> = [];
+    const timePart = (iso: string | null | undefined) => {
+      const s = String(iso ?? "").trim();
+      const idx = s.indexOf("T");
+      return idx < 0 ? "" : s.slice(idx + 1);
+    };
+
+    const toTsMs = (date: string, tp: string) => {
+      // date(YYYY-MM-DD) + time part(예: HH:mm:ss.SSSZ) 를 안전하게 ms로 변환
+      const candidate = tp ? `${date}T${tp}` : `${date}T12:00:00.000Z`;
+      const ms = Date.parse(candidate);
+      if (Number.isFinite(ms)) return ms;
+      const ms2 = Date.parse(`${date}T00:00:00.000Z`);
+      return Number.isFinite(ms2) ? ms2 : 0;
+    };
+
+    const items: Array<Omit<UnifiedRow, "balance"> & { signed: number; tsMs: number }> = [];
 
     for (const o of orders) {
       const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(o.memo);
@@ -432,13 +484,48 @@ export default function TradeClient() {
       const tp = timePart(o.created_at);
       const total = Number(o.total_amount ?? 0);
       const orderer = (memo?.orderer_name ?? null) as string | null;
+
+      const tsKey = tp ? `${date}T${tp}` : `${date}T12:00:00.000Z`;
+      const tsMs = toTsMs(date, tp);
+
       items.push({
-        kind: "ORDER", date, tsKey: tp ? `${date}T${tp}` : `${date}T12:00:00.000Z`,
-        partnerName: o.customer_name ?? "", businessNo: "", ordererName: orderer ?? "",
-        category: "주문/출고", method: o.ship_method ?? "", inAmt: 0, outAmt: total, signed: -total, rawId: o.id,
-        ship_method: o.ship_method ?? "택배", order_title: memo?.title ?? null, orderer_name: orderer,
-        order_lines: (o.order_lines ?? []).map((l) => ({ food_type: l.food_type ?? "", name: l.name ?? "", weight_g: Number(l.weight_g ?? 0), qty: Number(l.qty ?? 0), unit: Number(l.unit ?? 0), total_amount: Number(l.total_amount ?? 0), unit_type: (l.unit_type ?? "EA") as any, pack_ea: Number(l.pack_ea ?? 1), actual_ea: Number(l.actual_ea ?? 0) })),
-        order_shipments: (o.order_shipments ?? []).map((s) => ({ seq: Number(s.seq ?? 1), ship_to_name: String(s.ship_to_name ?? ""), ship_to_address1: String(s.ship_to_address1 ?? ""), ship_to_address2: s.ship_to_address2 ?? null, ship_to_mobile: s.ship_to_mobile ?? null, ship_to_phone: s.ship_to_phone ?? null, ship_zipcode: s.ship_zipcode ?? null, delivery_message: s.delivery_message ?? null })),
+        kind: "ORDER",
+        date,
+        tsKey,
+        tsMs,
+        partnerName: o.customer_name ?? "",
+        businessNo: "",
+        ordererName: orderer ?? "",
+        category: "주문/출고",
+        method: o.ship_method ?? "",
+        inAmt: 0,
+        outAmt: total,
+        signed: -total,
+        rawId: o.id,
+        ship_method: o.ship_method ?? "택배",
+        order_title: memo?.title ?? null,
+        orderer_name: orderer,
+        order_lines: (o.order_lines ?? []).map((l) => ({
+          food_type: l.food_type ?? "",
+          name: l.name ?? "",
+          weight_g: Number(l.weight_g ?? 0),
+          qty: Number(l.qty ?? 0),
+          unit: Number(l.unit ?? 0),
+          total_amount: Number(l.total_amount ?? 0),
+          unit_type: (l.unit_type ?? "EA") as any,
+          pack_ea: Number(l.pack_ea ?? 1),
+          actual_ea: Number(l.actual_ea ?? 0),
+        })),
+        order_shipments: (o.order_shipments ?? []).map((s) => ({
+          seq: Number(s.seq ?? 1),
+          ship_to_name: String(s.ship_to_name ?? ""),
+          ship_to_address1: String(s.ship_to_address1 ?? ""),
+          ship_to_address2: s.ship_to_address2 ?? null,
+          ship_to_mobile: s.ship_to_mobile ?? null,
+          ship_to_phone: s.ship_to_phone ?? null,
+          ship_zipcode: s.ship_zipcode ?? null,
+          delivery_message: s.delivery_message ?? null,
+        })),
       });
     }
 
@@ -446,37 +533,59 @@ export default function TradeClient() {
       const sign = String(l.direction) === "OUT" ? -1 : 1;
       const amt = Number(l.amount ?? 0);
       const tp = timePart(l.entry_ts) || timePart(l.created_at);
+
+      const tsKey = tp ? `${l.entry_date}T${tp}` : `${l.entry_date}T12:00:00.000Z`;
+      const tsMs = toTsMs(l.entry_date, tp);
+
       items.push({
-        kind: "LEDGER", date: l.entry_date, tsKey: tp ? `${l.entry_date}T${tp}` : `${l.entry_date}T12:00:00.000Z`,
-        partnerName: l.counterparty_name ?? "", businessNo: l.business_no ?? "", ledger_partner_id: l.partner_id ?? null,
-        ordererName: "", category: l.category ?? "금전출납", method: l.method ?? "",
-        inAmt: sign > 0 ? amt : 0, outAmt: sign < 0 ? amt : 0, signed: sign * amt, rawId: l.id,
-        ledger_category: l.category ?? null, ledger_method: l.method ?? null, ledger_memo: l.memo ?? null, ledger_amount: amt,
+        kind: "LEDGER",
+        date: l.entry_date,
+        tsKey,
+        tsMs,
+        partnerName: l.counterparty_name ?? "",
+        businessNo: l.business_no ?? "",
+        ledger_partner_id: l.partner_id ?? null,
+        ordererName: "",
+        category: l.category ?? "금전출납",
+        method: l.method ?? "",
+        inAmt: sign > 0 ? amt : 0,
+        outAmt: sign < 0 ? amt : 0,
+        signed: sign * amt,
+        rawId: l.id,
+        ledger_category: l.category ?? null,
+        ledger_method: l.method ?? null,
+        ledger_memo: l.memo ?? null,
+        ledger_amount: amt,
       });
     }
 
-    // ✅ (요청 1) "날짜순 + 입력된 시간 순서" = 오름차순 정렬
-    items.sort((a, b) => String(a.tsKey || a.date).localeCompare(String(b.tsKey || b.date)));
+    // ✅ 1) 러닝잔액 계산은 "과거 → 현재" (오래된 것부터)
+    items.sort((a, b) => (a.tsMs - b.tsMs) || String(a.rawId).localeCompare(String(b.rawId)));
 
     let running = includeOpening ? openingBalance : 0;
     const withBal: UnifiedRow[] = items.map((x) => {
       running += x.signed;
-      const { signed, ...rest } = x;
+      const { signed, tsMs, ...rest } = x;
       return { ...rest, balance: running };
     });
 
-    // ✅ 화면 표시도 동일하게 오름차순 유지
+    // ✅ 2) 화면 표시는 "현재 → 과거" (최신이 위) + 날짜/시간 내림차순
+    withBal.sort((a, b) => {
+      const am = Date.parse(a.tsKey);
+      const bm = Date.parse(b.tsKey);
+      const aMs = Number.isFinite(am) ? am : 0;
+      const bMs = Number.isFinite(bm) ? bm : 0;
+      if (aMs !== bMs) return bMs - aMs;
+      return String(b.rawId).localeCompare(String(a.rawId));
+    });
+
     return withBal;
   }, [orders, ledgers, includeOpening, openingBalance]);
 
   const unifiedTotals = useMemo(() => {
     const plus = unifiedRows.reduce((a, x) => a + x.inAmt, 0);
     const minus = unifiedRows.reduce((a, x) => a + x.outAmt, 0);
-    // ✅ 오름차순일 때 "최신 잔액"은 마지막 row
-    const endBalance = unifiedRows.length
-      ? unifiedRows[unifiedRows.length - 1].balance
-      : (includeOpening ? openingBalance : 0);
-    return { plus, minus, net: plus - minus, endBalance };
+    return { plus, minus, net: plus - minus, endBalance: unifiedRows.length ? unifiedRows[0].balance : includeOpening ? openingBalance : 0 };
   }, [unifiedRows, includeOpening, openingBalance]);
 
   // ─── Scroll sync ───
@@ -826,19 +935,19 @@ export default function TradeClient() {
   );
 
   // ─── Shared ship block ───
-  const ShipBlock = ({ s1, setS1, s2, setS2, two, setTwo }: { s1: ShipFormState; setS1: (v: ShipFormState) => void; s2: ShipFormState; setS2: (v: ShipFormState) => void; two: boolean; setTwo: (v: boolean) => void }) => (
+  const ShipBlock = ({ s1, setS1, s2, setS2, two, setTwo, prefix }: { s1: ShipFormState; setS1: (v: ShipFormState) => void; s2: ShipFormState; setS2: (v: ShipFormState) => void; two: boolean; setTwo: (v: boolean) => void; prefix: string }) => (
     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
       <div className="mb-2 text-sm font-semibold">배송정보(주문 스냅샷)</div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-3">
-          <ShipmentForm label="배송지 1" value={s1} onChange={(p) => setS1({ ...s1, ...p })} cls={inp} />
+          <ShipmentForm label="배송지 1" value={s1} onChange={(p) => setS1({ ...s1, ...p })} cls={inp} namePrefix={`${prefix}_ship1`} />
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-3">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-sm font-semibold">배송지 2 (선택)</div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={two} onChange={(e) => setTwo(e.target.checked)} />2곳 배송</label>
           </div>
-          {two ? <ShipmentForm label="" value={s2} onChange={(p) => setS2({ ...s2, ...p })} cls={inp} /> : <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">2곳 배송이 아니면 비워둡니다.</div>}
+          {two ? <ShipmentForm label="" value={s2} onChange={(p) => setS2({ ...s2, ...p })} cls={inp} namePrefix={`${prefix}_ship2`} /> : <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">2곳 배송이 아니면 비워둡니다.</div>}
         </div>
       </div>
       <div className="mt-2 text-xs text-slate-500">※ 배송정보는 주문마다 저장됩니다(스냅샷). 거래처(업체)명과 수화주명은 다를 수 있습니다.</div>
@@ -977,7 +1086,7 @@ export default function TradeClient() {
                       </div>
                       <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} value={eOrderTitle} onChange={(e) => setEOrderTitle(e.target.value)} /></div>
                     </div>
-                    <ShipBlock s1={eShip1} setS1={setEShip1} s2={eShip2} setS2={setEShip2} two={eTwoShip} setTwo={setETwoShip} />
+                    <ShipBlock s1={eShip1} setS1={setEShip1} s2={eShip2} setS2={setEShip2} two={eTwoShip} setTwo={setETwoShip} prefix={`edit_${editRow.rawId}`} />
                     <div className="mt-4 flex items-center justify-between">
                       <div className="text-sm font-semibold">품목</div>
                       <div className="flex items-center gap-2">
@@ -1120,7 +1229,7 @@ export default function TradeClient() {
                   </div>
                   <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} /></div>
                 </div>
-                <ShipBlock s1={ship1} setS1={setShip1} s2={ship2} setS2={setShip2} two={twoShip} setTwo={setTwoShip} />
+                <ShipBlock s1={ship1} setS1={setShip1} s2={ship2} setS2={setShip2} two={twoShip} setTwo={setTwoShip} prefix="create" />
                 <div className="mt-4 flex items-center justify-between">
                   <div className="text-sm font-semibold">품목(식품유형 자동완성 포함)</div>
                   <div className="flex items-center gap-2">
