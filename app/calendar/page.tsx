@@ -768,7 +768,7 @@ export default function CalendarPage() {
 
         {/* 모달: 메모 */}
         {open ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setOpen(false)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
             <div
               className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
               onClick={(e) => e.stopPropagation()}
