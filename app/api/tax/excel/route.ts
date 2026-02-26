@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 function toYmd(d: string) {
   return (d || "").slice(0, 10);
@@ -80,6 +81,11 @@ type ShipRow = {
 };
 
 export async function GET(req: Request) {
+  // ✅ (추가) GitHub Actions 등 외부 자동화용 API Key 인증
+  const authHeader = req.headers.get("x-api-key");
+  const internalApiKey = process.env.INTERNAL_API_KEY;
+  const isAuthorized = !!internalApiKey && authHeader === internalApiKey;
+
   const { searchParams } = new URL(req.url);
 
   const from = toYmd(searchParams.get("from") || "");
@@ -97,7 +103,22 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "from/to 파라미터가 필요합니다." }, { status: 400 });
   }
 
-  const supabase = await createClient();
+  // ✅ (추가) 키가 맞으면 Service Role로 Supabase 연결 (세션/쿠키/RLS 영향 최소화)
+  // ❌ 키가 없거나 틀리면 기존 createClient() 흐름 유지 (로그인 세션 기반)
+  const supabase = isAuthorized
+    ? (() => {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (!url || !serviceKey) {
+          // 서버 설정 누락이면 즉시 오류 반환
+          // (GitHub Actions 백업이 “조용히 HTML 저장” 같은 문제로 이어지지 않게)
+          throw new Error("SUPABASE_SERVICE_ROLE_KEY 또는 NEXT_PUBLIC_SUPABASE_URL 누락");
+        }
+        return createSupabaseClient(url, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+      })()
+    : await createClient();
 
   // =============================
   // 1) 매출(orders)
@@ -127,7 +148,7 @@ export async function GET(req: Request) {
       if (error2) {
         return NextResponse.json({ error: "orders 조회 실패", detail: error2.message }, { status: 500 });
       }
-      orders = (data2 ?? []) as any[];
+      orders = (data2 ?? []) as any[]; // fallback
     }
   }
 
@@ -306,7 +327,7 @@ export async function GET(req: Request) {
         수화주명2: ship_to_name2,
         주소2: address2,
         휴대폰2: mobile2,
-        전화2: phone2, // ✅ 중복 키(전화) 오류 수정: 전화 -> 전화2
+        전화2: phone2,
         요청사항2: reqMsg2,
       });
       continue;
