@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -898,7 +899,25 @@ export default function TradeClient() {
     const counterparty_name = manualCounterpartyName.trim() || selectedPartner?.name || null;
     const business_no = manualBusinessNo.trim() || selectedPartner?.business_no || null;
     if (!counterparty_name) return setMsg("업체명(매입처/상대방)을 입력하거나 왼쪽에서 거래처를 선택하세요.");
-    const { error } = await supabase.from("ledger_entries").insert({ entry_date: entryDate, entry_ts: new Date().toISOString(), direction: categoryToDirection(category), amount, category, method: payMethod, counterparty_name, business_no, memo: ledgerMemo.trim() || null, status: "POSTED", partner_id: selectedPartner?.id ?? null });
+
+    const split = splitVatFromTotal(amount);
+
+    const { error } = await supabase.from("ledger_entries").insert({
+      entry_date: entryDate,
+      entry_ts: new Date().toISOString(),
+      direction: categoryToDirection(category),
+      amount,
+      supply_amount: split.supply,
+      vat_amount: split.vat,
+      total_amount: split.total,
+      category,
+      method: payMethod,
+      counterparty_name,
+      business_no,
+      memo: ledgerMemo.trim() || null,
+      status: "POSTED",
+      partner_id: selectedPartner?.id ?? null
+    });
     if (error) return setMsg(error.message);
     setAmountStr(""); setLedgerMemo("");
     if (!selectedPartner) { setManualCounterpartyName(""); setManualBusinessNo(""); }
@@ -974,7 +993,23 @@ export default function TradeClient() {
       if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
       const counterparty_name = eCounterpartyName.trim() || null;
       if (!counterparty_name) return setMsg("업체명(매입처/상대방)은 비울 수 없습니다.");
-      const { error } = await supabase.from("ledger_entries").update({ entry_date: eEntryDate, direction: categoryToDirection(eCategory), amount, category: eCategory, method: ePayMethod, memo: eLedgerMemo.trim() || null, counterparty_name, business_no: eBusinessNo.trim() || null, partner_id: editRow.ledger_partner_id ?? null }).eq("id", editRow.rawId);
+
+      const split = splitVatFromTotal(amount);
+
+      const { error } = await supabase.from("ledger_entries").update({
+        entry_date: eEntryDate,
+        direction: categoryToDirection(eCategory),
+        amount,
+        supply_amount: split.supply,
+        vat_amount: split.vat,
+        total_amount: split.total,
+        category: eCategory,
+        method: ePayMethod,
+        memo: eLedgerMemo.trim() || null,
+        counterparty_name,
+        business_no: eBusinessNo.trim() || null,
+        partner_id: editRow.ledger_partner_id ?? null
+      }).eq("id", editRow.rawId);
       if (error) return setMsg(error.message);
     }
     setEditOpen(false); setEditRow(null); await loadTrades();
