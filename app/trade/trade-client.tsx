@@ -43,6 +43,7 @@ type LedgerRow = {
   amount: number; category: string | null; method: string | null;
   counterparty_name: string | null; business_no: string | null; memo: string | null;
   status: string | null; partner_id: string | null; created_at: string;
+  supply_amount?: number | null; vat_amount?: number | null; total_amount?: number | null;
 };
 type Mode = "ORDERS" | "LEDGER" | "UNIFIED";
 type PartnerView = "PINNED" | "RECENT" | "ALL";
@@ -573,7 +574,14 @@ export default function TradeClient() {
       return Number.isFinite(ms) ? ms : 0;
     };
 
-    const items: Array<Omit<UnifiedRow, "balance"> & { signed: number; tsMs: number }> = [];
+    const ymdToMs = (ymd: string) => {
+      const v = String(ymd ?? "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return 0;
+      const ms = Date.parse(`${v}T00:00:00.000Z`);
+      return Number.isFinite(ms) ? ms : 0;
+    };
+
+    const items: Array<Omit<UnifiedRow, "balance"> & { signed: number; tsMs: number; dateMs: number }> = [];
 
     for (const o of orders) {
       const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(o.memo);
@@ -581,16 +589,17 @@ export default function TradeClient() {
       const total = Number(o.total_amount ?? 0);
       const orderer = (memo?.orderer_name ?? null) as string | null;
 
-      // ✅ 최근 입력(생성) 순서가 정확히 반영되도록 created_at 기반으로 tsKey/tsMs 구성
       const oIso = normalizeIso(o.created_at);
       const tsKey = oIso || (date ? `${date}T12:00:00.000Z` : "");
       const tsMs = oIso ? safeParseMs(oIso) : (date ? safeParseMs(`${date}T12:00:00.000Z`) : 0);
+      const dateMs = ymdToMs(date) || (tsMs ? ymdToMs(new Date(tsMs).toISOString().slice(0, 10)) : 0);
 
       items.push({
         kind: "ORDER",
         date,
         tsKey,
         tsMs,
+        dateMs,
         partnerName: o.customer_name ?? "",
         businessNo: "",
         ordererName: orderer ?? "",
@@ -631,16 +640,17 @@ export default function TradeClient() {
       const sign = String(l.direction) === "OUT" ? -1 : 1;
       const amt = Number(l.amount ?? 0);
 
-      // ✅ 최근 입력(기록) 순서가 정확히 반영되도록 entry_ts(우선) → created_at 기반으로 tsKey/tsMs 구성
       const lIso = normalizeIso(l.entry_ts) || normalizeIso(l.created_at);
       const tsKey = lIso || (l.entry_date ? `${l.entry_date}T12:00:00.000Z` : "");
       const tsMs = lIso ? safeParseMs(lIso) : (l.entry_date ? safeParseMs(`${l.entry_date}T12:00:00.000Z`) : 0);
+      const dateMs = ymdToMs(l.entry_date) || (tsMs ? ymdToMs(new Date(tsMs).toISOString().slice(0, 10)) : 0);
 
       items.push({
         kind: "LEDGER",
         date: l.entry_date,
         tsKey,
         tsMs,
+        dateMs,
         partnerName: l.counterparty_name ?? "",
         businessNo: l.business_no ?? "",
         ledger_partner_id: l.partner_id ?? null,
@@ -658,23 +668,30 @@ export default function TradeClient() {
       });
     }
 
-    // ✅ 1) 러닝잔액 계산은 "과거 → 현재" (오래된 것부터)
-    items.sort((a, b) => (a.tsMs - b.tsMs) || String(a.rawId).localeCompare(String(b.rawId)));
+    // ✅ 1) 러닝잔액 계산은 "과거 → 현재" (날짜 오름차순 → 같은 날짜는 시간 오름차순)
+    items.sort((a, b) => (a.dateMs - b.dateMs) || (a.tsMs - b.tsMs) || String(a.rawId).localeCompare(String(b.rawId)));
 
     let running = includeOpening ? openingBalance : 0;
     const withBal: UnifiedRow[] = items.map((x) => {
       running += x.signed;
-      const { signed, tsMs, ...rest } = x;
+      const { signed, tsMs, dateMs, ...rest } = x;
       return { ...rest, balance: running };
     });
 
-    // ✅ 2) 화면 표시는 "현재 → 과거" (최신이 위) + 시간 내림차순(동률이면 rawId)
+    // ✅ 2) 화면 표시는 "현재 → 과거" (날짜 내림차순 → 같은 날짜는 시간 내림차순)
     withBal.sort((a, b) => {
+      const aDateMs = /^\d{4}-\d{2}-\d{2}$/.test(String(a.date ?? "")) ? Date.parse(`${a.date}T00:00:00.000Z`) : 0;
+      const bDateMs = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date ?? "")) ? Date.parse(`${b.date}T00:00:00.000Z`) : 0;
+      const ad = Number.isFinite(aDateMs) ? aDateMs : 0;
+      const bd = Number.isFinite(bDateMs) ? bDateMs : 0;
+      if (ad !== bd) return bd - ad;
+
       const am = Date.parse(a.tsKey);
       const bm = Date.parse(b.tsKey);
       const aMs = Number.isFinite(am) ? am : 0;
       const bMs = Number.isFinite(bm) ? bm : 0;
       if (aMs !== bMs) return bMs - aMs;
+
       return String(b.rawId).localeCompare(String(a.rawId));
     });
 
@@ -752,7 +769,7 @@ export default function TradeClient() {
     if (oErr) return setMsg(oErr.message);
     setOrders((oData ?? []) as OrderRow[]);
 
-    let lq = supabase.from("ledger_entries").select("id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,status,partner_id,created_at").gte("entry_date", f).lte("entry_date", t).order("entry_date", { ascending: false }).limit(1000);
+    let lq = supabase.from("ledger_entries").select("id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,status,partner_id,created_at,supply_amount,vat_amount,total_amount").gte("entry_date", f).lte("entry_date", t).order("entry_date", { ascending: false }).limit(1000);
     if (selectedPartnerId || selectedBusinessNo) {
       const ors: string[] = [];
       if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
@@ -916,7 +933,22 @@ export default function TradeClient() {
     const counterparty_name = manualCounterpartyName.trim() || selectedPartner?.name || null;
     const business_no = manualBusinessNo.trim() || selectedPartner?.business_no || null;
     if (!counterparty_name) return setMsg("업체명(매입처/상대방)을 입력하거나 왼쪽에서 거래처를 선택하세요.");
-    const { error } = await supabase.from("ledger_entries").insert({ entry_date: entryDate, entry_ts: new Date().toISOString(), direction: categoryToDirection(category), amount, category, method: payMethod, counterparty_name, business_no, memo: ledgerMemo.trim() || null, status: "POSTED", partner_id: selectedPartner?.id ?? null });
+    const { error } = await supabase.from("ledger_entries").insert({
+      entry_date: entryDate,
+      entry_ts: new Date().toISOString(),
+      direction: categoryToDirection(category),
+      amount,
+      supply_amount: ledgerSplit.supply,
+      vat_amount: ledgerSplit.vat,
+      total_amount: ledgerSplit.total,
+      category,
+      method: payMethod,
+      counterparty_name,
+      business_no,
+      memo: ledgerMemo.trim() || null,
+      status: "POSTED",
+      partner_id: selectedPartner?.id ?? null
+    });
     if (error) return setMsg(error.message);
     setAmountStr(""); setLedgerMemo("");
     setVatFree(false); // ✅ 입력단 체크는 입력 기준으로만 사용(저장 후 초기화)
@@ -995,7 +1027,20 @@ export default function TradeClient() {
       if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
       const counterparty_name = eCounterpartyName.trim() || null;
       if (!counterparty_name) return setMsg("업체명(매입처/상대방)은 비울 수 없습니다.");
-      const { error } = await supabase.from("ledger_entries").update({ entry_date: eEntryDate, direction: categoryToDirection(eCategory), amount, category: eCategory, method: ePayMethod, memo: eLedgerMemo.trim() || null, counterparty_name, business_no: eBusinessNo.trim() || null, partner_id: editRow.ledger_partner_id ?? null }).eq("id", editRow.rawId);
+      const { error } = await supabase.from("ledger_entries").update({
+        entry_date: eEntryDate,
+        direction: categoryToDirection(eCategory),
+        amount,
+        supply_amount: editLedgerSplit.supply,
+        vat_amount: editLedgerSplit.vat,
+        total_amount: editLedgerSplit.total,
+        category: eCategory,
+        method: ePayMethod,
+        memo: eLedgerMemo.trim() || null,
+        counterparty_name,
+        business_no: eBusinessNo.trim() || null,
+        partner_id: editRow.ledger_partner_id ?? null
+      }).eq("id", editRow.rawId);
       if (error) return setMsg(error.message);
     }
     setEditOpen(false); setEditRow(null); await loadTrades();
