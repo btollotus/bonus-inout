@@ -437,6 +437,16 @@ export default function TradeClient() {
   const [openingBalance, setOpeningBalance] = useState(0);
   const [tradeSearch, setTradeSearch] = useState("");
 
+  // ✅ To 날짜 자동맞춤(사용자 직접 변경 여부)
+  const [toTouched, setToTouched] = useState(false);
+
+  // ✅ 상단 에러 배너 대신 alert로 표시
+  useEffect(() => {
+    if (!msg) return;
+    window.alert(msg);
+    setMsg(null);
+  }, [msg]);
+
   // Partner state
   const [partnerView, setPartnerView] = useState<PartnerView>("ALL");
   const [partnerFilter, setPartnerFilter] = useState("");
@@ -521,11 +531,20 @@ export default function TradeClient() {
   useEffect(() => {
     if (syncDateRef.current === "ENTRY") { syncDateRef.current = null; return; }
     syncDateRef.current = "SHIP"; setEntryDate(shipDate);
+
+    // ✅ (1) 입력 날짜가 거래내역 From보다 이전이면, 거래내역 From도 같이 당김
+    if (shipDate && fromYMD && shipDate < fromYMD) setFromYMD(shipDate);
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shipDate]);
+
   useEffect(() => {
     if (syncDateRef.current === "SHIP") { syncDateRef.current = null; return; }
     syncDateRef.current = "ENTRY"; setShipDate(entryDate);
+
+    // ✅ (1) 입력 날짜가 거래내역 From보다 이전이면, 거래내역 From도 같이 당김
+    if (entryDate && fromYMD && entryDate < fromYMD) setFromYMD(entryDate);
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entryDate]);
 
@@ -542,6 +561,10 @@ export default function TradeClient() {
     setManualBusinessNo(selectedPartner?.business_no ?? "");
     setShip1({ name: selectedPartner?.ship_to_name ?? "", addr: selectedPartner?.ship_to_address1 ?? "", mobile: selectedPartner?.ship_to_mobile ?? "", phone: selectedPartner?.ship_to_phone ?? "", msg: "" });
     setShip2(emptyShip()); setTwoShip(false);
+
+    // ✅ 거래처 바뀌면 To 자동맞춤 기본으로 복귀
+    setToTouched(false);
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id]);
 
@@ -763,7 +786,37 @@ export default function TradeClient() {
 
   async function loadTrades() {
     setMsg(null);
-    const f = fromYMD || addDays(todayYMD(), -30), t = toYMD || todayYMD();
+    const f = fromYMD || addDays(todayYMD(), -30);
+
+    // ✅ (2) 기본 To는 "마지막 거래내역 날짜"로 자동 맞춤(사용자가 To를 직접 만진 경우 제외)
+    if (!toTouched) {
+      const selectedBusinessNo = selectedPartner?.business_no ?? null;
+      const selectedPartnerId = selectedPartner?.id ?? null;
+
+      let latestOrderDate = "";
+      let latestLedgerDate = "";
+
+      let oqLatest = supabase.from("orders").select("ship_date,customer_id,customer_name").not("ship_date", "is", null).order("ship_date", { ascending: false }).limit(1);
+      if (selectedPartnerId) oqLatest = oqLatest.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+      const { data: oLatest, error: oLatestErr } = await oqLatest;
+      if (!oLatestErr && oLatest && oLatest[0]?.ship_date) latestOrderDate = String(oLatest[0].ship_date);
+
+      let lqLatest = supabase.from("ledger_entries").select("entry_date,partner_id,business_no,counterparty_name").not("entry_date", "is", null).order("entry_date", { ascending: false }).limit(1);
+      if (selectedPartnerId || selectedBusinessNo) {
+        const ors: string[] = [];
+        if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
+        if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
+        if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
+        lqLatest = lqLatest.or(ors.join(","));
+      }
+      const { data: lLatest, error: lLatestErr } = await lqLatest;
+      if (!lLatestErr && lLatest && lLatest[0]?.entry_date) latestLedgerDate = String(lLatest[0].entry_date);
+
+      const latest = [latestOrderDate, latestLedgerDate].filter(Boolean).sort().pop() || todayYMD();
+      if (latest && latest !== toYMD) { setToYMD(latest); return; }
+    }
+
+    const t = toYMD || todayYMD();
     const selectedBusinessNo = selectedPartner?.business_no ?? null;
     const selectedPartnerId = selectedPartner?.id ?? null;
 
@@ -808,7 +861,7 @@ export default function TradeClient() {
   // ─── Init ───
   useEffect(() => { setRecentPartnerIds(loadRecentFromLS()); loadPartners(); loadFoodTypes(); loadPresetProducts(); loadMasterProducts(); /* eslint-disable-next-line */ }, []);
   useEffect(() => { loadPartners(); /* eslint-disable-next-line */ }, [partnerFilter]);
-  useEffect(() => { loadTrades(); /* eslint-disable-next-line */ }, [selectedPartner?.id, fromYMD, toYMD]);
+  useEffect(() => { loadTrades(); /* eslint-disable-next-line */ }, [selectedPartner?.id, fromYMD, toYMD, toTouched]);
 
   // ─── Partner CRUD ───
   function resetPartnerForm() { setP_name(""); setP_businessNo(""); setP_ceo(""); setP_phone(""); setP_address1(""); setP_bizType(""); setP_bizItem(""); setP_partnerType("CUSTOMER"); }
@@ -1102,7 +1155,7 @@ export default function TradeClient() {
   return (
     <div className="bg-slate-50 text-slate-900 min-h-screen">
       <div className="mx-auto w-full max-w-[1600px] overflow-x-hidden px-4 py-6">
-        {msg ? <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{msg}</div> : null}
+        {/* ✅ msg 배너 출력 제거 (alert로 표시) */}
 
         {/* ──── Partner edit modal ──── */}
         {partnerEditOpen ? (
@@ -1486,9 +1539,9 @@ export default function TradeClient() {
               </div>
               <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
                 <div><div className="mb-1 text-xs text-slate-600">From</div><input type="date" className={inp} value={fromYMD} onChange={(e) => setFromYMD(e.target.value)} /></div>
-                <div><div className="mb-1 text-xs text-slate-600">To</div><input type="date" className={inp} value={toYMD} onChange={(e) => setToYMD(e.target.value)} /></div>
+                <div><div className="mb-1 text-xs text-slate-600">To</div><input type="date" className={inp} value={toYMD} onChange={(e) => { setToTouched(true); setToYMD(e.target.value); }} /></div>
                 <div className="flex flex-wrap gap-2">
-                  <button className={btn} onClick={() => { setFromYMD(addDays(todayYMD(), -30)); setToYMD(todayYMD()); }}>기간 초기화</button>
+                  <button className={btn} onClick={() => { setFromYMD(addDays(todayYMD(), -30)); setToYMD(todayYMD()); setToTouched(false); }}>기간 초기화</button>
                   <button className={btnOn} onClick={loadTrades}>조회</button>
                   <button className={includeOpening ? btnOn : btn} onClick={() => setIncludeOpening((v) => !v)} title="기간 시작 전 기초잔액을 러닝잔액에 포함">기초잔액 포함 러닝잔액</button>
                 </div>
@@ -1501,7 +1554,7 @@ export default function TradeClient() {
                   <div style={{ width: TRADE_TABLE_MIN_WIDTH, height: 1 }} />
                 </div>
 
-                {/* ✅ 거래내역 표시 라인(행) 15개까지 보이도록 높이 증가 */}
+                {/* ✅ (3) 줄간격 축소 + 15줄 보이도록 */}
                 <div ref={tradeBottomScrollRef} className="max-h-[680px] overflow-x-auto overflow-y-auto"
                   onScroll={(e) => { const bottom = e.currentTarget, top = tradeTopScrollRef.current; if (!top || tradeSyncingRef.current === "TOP") return; tradeSyncingRef.current = "BOTTOM"; top.scrollLeft = bottom.scrollLeft; tradeSyncingRef.current = null; }}>
                   <table className="w-full table-fixed text-sm">
@@ -1544,16 +1597,16 @@ export default function TradeClient() {
                         return [x.partnerName, x.businessNo ?? "", x.ordererName, summaryText, x.category, x.method, x.order_title ?? "", x.ledger_memo ?? "", orderLineText].filter(Boolean).join(" ").toLowerCase().includes(q);
                       }).map((x) => (
                         <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
-                          <td className="px-3 py-2 font-semibold tabular-nums">{x.date}</td>
-                          <td className="px-3 py-2 font-semibold">{x.partnerName}</td>
-                          <td className="px-3 py-2 font-semibold">{x.ordererName}</td>
-                          <td className="px-3 py-2 font-semibold">{buildOrderSummaryText(x)}</td>
-                          <td className="px-3 py-2 font-semibold">{x.category}</td>
-                          <td className="px-3 py-2 font-semibold">{x.kind === "LEDGER" ? methodLabel(x.method) : x.method}</td>
-                          <td className="sticky right-[460px] z-10 bg-white px-3 py-2 text-right tabular-nums font-semibold text-blue-700">{x.inAmt ? fmt(x.inAmt) : ""}</td>
-                          <td className="sticky right-[350px] z-10 bg-white px-3 py-2 text-right tabular-nums font-semibold text-red-600">{x.outAmt ? fmt(x.outAmt) : ""}</td>
-                          <td className="sticky right-[220px] z-10 bg-white px-3 py-2 text-right tabular-nums font-semibold">{fmt(x.balance)}</td>
-                          <td className="sticky right-0 z-20 bg-white px-2 py-2">
+                          <td className="px-3 py-1 font-semibold tabular-nums leading-tight">{x.date}</td>
+                          <td className="px-3 py-1 font-semibold leading-tight">{x.partnerName}</td>
+                          <td className="px-3 py-1 font-semibold leading-tight">{x.ordererName}</td>
+                          <td className="px-3 py-1 font-semibold leading-tight">{buildOrderSummaryText(x)}</td>
+                          <td className="px-3 py-1 font-semibold leading-tight">{x.category}</td>
+                          <td className="px-3 py-1 font-semibold leading-tight">{x.kind === "LEDGER" ? methodLabel(x.method) : x.method}</td>
+                          <td className="sticky right-[460px] z-10 bg-white px-3 py-1 text-right tabular-nums font-semibold text-blue-700 leading-tight">{x.inAmt ? fmt(x.inAmt) : ""}</td>
+                          <td className="sticky right-[350px] z-10 bg-white px-3 py-1 text-right tabular-nums font-semibold text-red-600 leading-tight">{x.outAmt ? fmt(x.outAmt) : ""}</td>
+                          <td className="sticky right-[220px] z-10 bg-white px-3 py-1 text-right tabular-nums font-semibold leading-tight">{fmt(x.balance)}</td>
+                          <td className="sticky right-0 z-20 bg-white px-2 py-1">
                             <div className="grid grid-cols-2 gap-1">
                               <button className={miniBtn} onClick={() => onCopyClick(x)}>복사</button>
                               <button className={miniBtn} onClick={() => onMemoClick(x)}>메모</button>
