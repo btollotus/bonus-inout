@@ -61,10 +61,6 @@ type UnifiedRow = {
   order_shipments?: ShipmentSnap[];
   ledger_category?: string | null; ledger_method?: string | null;
   ledger_memo?: string | null; ledger_amount?: number;
-
-  // ✅ 화면 정렬(최근 입력/수정이 위)용
-  inputTsKey?: string;
-  inputTsMs?: number;
 };
 
 // ─────────────────────── Constants ───────────────────────
@@ -577,14 +573,7 @@ export default function TradeClient() {
       return Number.isFinite(ms2) ? ms2 : 0;
     };
 
-    const parseIsoMs = (iso: string | null | undefined) => {
-      const s = String(iso ?? "").trim();
-      if (!s) return 0;
-      const ms = Date.parse(s);
-      return Number.isFinite(ms) ? ms : 0;
-    };
-
-    const items: Array<Omit<UnifiedRow, "balance"> & { signed: number; bizTsMs: number; inputTsMs: number; }> = [];
+    const items: Array<Omit<UnifiedRow, "balance"> & { signed: number; tsMs: number }> = [];
 
     for (const o of orders) {
       const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(o.memo);
@@ -593,19 +582,14 @@ export default function TradeClient() {
       const total = Number(o.total_amount ?? 0);
       const orderer = (memo?.orderer_name ?? null) as string | null;
 
-      const bizTsMs = toTsMs(date, tp);
-      const inputIso = o.created_at;
-      const inputTsMs = parseIsoMs(inputIso) || bizTsMs;
-
       const tsKey = tp ? `${date}T${tp}` : `${date}T12:00:00.000Z`;
+      const tsMs = toTsMs(date, tp);
 
       items.push({
         kind: "ORDER",
         date,
         tsKey,
-        bizTsMs,
-        inputTsKey: inputIso,
-        inputTsMs,
+        tsMs,
         partnerName: o.customer_name ?? "",
         businessNo: "",
         ordererName: orderer ?? "",
@@ -647,19 +631,14 @@ export default function TradeClient() {
       const amt = Number(l.amount ?? 0);
       const tp = timePart(l.entry_ts) || timePart(l.created_at);
 
-      const bizTsMs = toTsMs(l.entry_date, tp);
-      const inputIso = (l.entry_ts || l.created_at) as string;
-      const inputTsMs = parseIsoMs(inputIso) || bizTsMs;
-
       const tsKey = tp ? `${l.entry_date}T${tp}` : `${l.entry_date}T12:00:00.000Z`;
+      const tsMs = toTsMs(l.entry_date, tp);
 
       items.push({
         kind: "LEDGER",
         date: l.entry_date,
         tsKey,
-        bizTsMs,
-        inputTsKey: inputIso,
-        inputTsMs,
+        tsMs,
         partnerName: l.counterparty_name ?? "",
         businessNo: l.business_no ?? "",
         ledger_partner_id: l.partner_id ?? null,
@@ -677,20 +656,22 @@ export default function TradeClient() {
       });
     }
 
-    // ✅ 1) 러닝잔액 계산은 "업무일자 기준 과거 → 현재" (오래된 것부터)
-    items.sort((a, b) => (a.bizTsMs - b.bizTsMs) || String(a.rawId).localeCompare(String(b.rawId)));
+    // ✅ 1) 러닝잔액 계산은 "과거 → 현재" (오래된 것부터)
+    items.sort((a, b) => (a.tsMs - b.tsMs) || String(a.rawId).localeCompare(String(b.rawId)));
 
     let running = includeOpening ? openingBalance : 0;
     const withBal: UnifiedRow[] = items.map((x) => {
       running += x.signed;
-      const { signed, bizTsMs, ...rest } = x;
+      const { signed, tsMs, ...rest } = x;
       return { ...rest, balance: running };
     });
 
-    // ✅ 2) 화면 표시는 "최근 입력한 자료 → 과거" (입력시간 내림차순)
+    // ✅ 2) 화면 표시는 "현재 → 과거" (최신이 위) + 날짜/시간 내림차순
     withBal.sort((a, b) => {
-      const aMs = Number.isFinite(Number(a.inputTsMs)) ? Number(a.inputTsMs) : 0;
-      const bMs = Number.isFinite(Number(b.inputTsMs)) ? Number(b.inputTsMs) : 0;
+      const am = Date.parse(a.tsKey);
+      const bm = Date.parse(b.tsKey);
+      const aMs = Number.isFinite(am) ? am : 0;
+      const bMs = Number.isFinite(bm) ? bm : 0;
       if (aMs !== bMs) return bMs - aMs;
       return String(b.rawId).localeCompare(String(a.rawId));
     });
