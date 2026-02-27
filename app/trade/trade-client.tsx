@@ -1341,7 +1341,18 @@ export default function TradeClient() {
                 </div>
               </div>
             ) : null}
-            <input className={`${inp} mb-3`} placeholder="목록 필터(이름/사업자번호)" value={partnerFilter} onChange={(e) => setPartnerFilter(e.target.value)} />
+
+            {/* ✅ 거래처 목록 키워드 입력 시, 거래내역 검색어(tradeSearch) 초기화 */}
+            <input
+              className={`${inp} mb-3`}
+              placeholder="목록 필터(이름/사업자번호)"
+              value={partnerFilter}
+              onChange={(e) => {
+                setTradeSearch("");
+                setPartnerFilter(e.target.value);
+              }}
+            />
+
             <div className="mb-2 text-xs text-slate-600">선택된 거래처: {selectedPartner ? `${selectedPartner.name}${selectedPartner.business_no ? ` · ${selectedPartner.business_no}` : ""}` : "없음"}</div>
             <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
               {partnersToShow.length === 0 ? (
@@ -1489,7 +1500,9 @@ export default function TradeClient() {
                   onScroll={(e) => { const top = e.currentTarget, bottom = tradeBottomScrollRef.current; if (!bottom || tradeSyncingRef.current === "BOTTOM") return; tradeSyncingRef.current = "TOP"; bottom.scrollLeft = top.scrollLeft; tradeSyncingRef.current = null; }}>
                   <div style={{ width: TRADE_TABLE_MIN_WIDTH, height: 1 }} />
                 </div>
-                <div ref={tradeBottomScrollRef} className="max-h-[520px] overflow-x-auto overflow-y-auto"
+
+                {/* ✅ 거래내역 표시 라인(행) 15개까지 보이도록 높이 증가 */}
+                <div ref={tradeBottomScrollRef} className="max-h-[680px] overflow-x-auto overflow-y-auto"
                   onScroll={(e) => { const bottom = e.currentTarget, top = tradeTopScrollRef.current; if (!top || tradeSyncingRef.current === "TOP") return; tradeSyncingRef.current = "BOTTOM"; top.scrollLeft = bottom.scrollLeft; tradeSyncingRef.current = null; }}>
                   <table className="w-full table-fixed text-sm">
                     <colgroup>
