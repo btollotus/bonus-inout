@@ -93,7 +93,7 @@ function pickNumber(row: LineLoose, keys: string[], fallback = 0) {
 function mapLineToSpec(line: LineLoose): SpecLine {
   const itemName = pickString(line, ["item_name", "product_name", "variant_name", "name", "title", "product_title"], "");
   const qty = pickNumber(line, ["qty", "quantity", "ea", "count"], 0);
-  const unitPrice = pickNumber(line, ["unit_price", "price", "unitPrice"], 0);
+  let unitPrice = pickNumber(line, ["unit_price", "price", "unitPrice"], 0);
 
   const supplyRaw = pickNumber(line, ["supply_amount", "supply", "supplyValue", "amount_supply"], Number.NaN);
   const vatRaw = pickNumber(line, ["vat_amount", "vat", "vatValue", "amount_vat"], Number.NaN);
@@ -108,6 +108,14 @@ function mapLineToSpec(line: LineLoose): SpecLine {
     supply = totalRaw;
     vat = 0;
     total = totalRaw;
+  }
+
+  // ✅ (요청) 단가가 0으로 뜨는 케이스 보정:
+  // - 라인에 unit_price가 없지만 supply(또는 total)와 qty가 있으면 단가를 계산해서 표시
+  // - 단가 = 공급가 / 수량 (원단위 반올림)
+  if ((unitPrice ?? 0) === 0 && qty > 0) {
+    const baseSupply = Number.isFinite(supply) ? supply : 0;
+    if (baseSupply > 0) unitPrice = Math.round(baseSupply / qty);
   }
 
   return { itemName, qty, unitPrice, supply, vat, total };
