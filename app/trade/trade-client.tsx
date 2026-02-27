@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -126,6 +125,15 @@ function calcLineAmounts(qtyRaw: any, unitRaw: any, totalInclVatRaw: any) {
 function splitVatFromTotal(totalInclVatRaw: any) {
   const total = toIntSigned(totalInclVatRaw);
   if (!Number.isFinite(total) || total === 0) return { supply: 0, vat: 0, total: 0 };
+  const supply = Math.round(total / 1.1);
+  const vat = total - supply;
+  return { supply, vat, total };
+}
+
+function splitVatFromTotalFlexible(totalInclVatRaw: any, vatFree: boolean) {
+  const total = toIntSigned(totalInclVatRaw);
+  if (!Number.isFinite(total) || total === 0) return { supply: 0, vat: 0, total: 0 };
+  if (vatFree) return { supply: total, vat: 0, total };
   const supply = Math.round(total / 1.1);
   const vat = total - supply;
   return { supply, vat, total };
@@ -396,6 +404,11 @@ function ShipBlock({
 export default function TradeClient() {
   const supabase = useMemo(() => createClient(), []);
 
+  // ✅ 브라우저 탭 제목
+  useEffect(() => {
+    if (typeof document !== "undefined") document.title = "BONUSMATE ERP 거래내역(통합)";
+  }, []);
+
   // ✅ 주소창에서 /trade 경로 숨김(표시만 변경)
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -468,6 +481,7 @@ export default function TradeClient() {
   const [ledgerMemo, setLedgerMemo] = useState("");
   const [manualCounterpartyName, setManualCounterpartyName] = useState("");
   const [manualBusinessNo, setManualBusinessNo] = useState("");
+  const [vatFree, setVatFree] = useState(false);
 
   // Edit modal - order
   const [eShipDate, setEShipDate] = useState(todayYMD());
@@ -487,6 +501,7 @@ export default function TradeClient() {
   const [eLedgerMemo, setELedgerMemo] = useState("");
   const [eCounterpartyName, setECounterpartyName] = useState("");
   const [eBusinessNo, setEBusinessNo] = useState("");
+  const [eVatFree, setEVatFree] = useState(false);
 
   // Query range
   const [fromYMD, setFromYMD] = useState(addDays(todayYMD(), -30));
@@ -532,8 +547,8 @@ export default function TradeClient() {
   const orderTotals = useMemo(() => lines.reduce((acc, l) => { const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat); return { supply: acc.supply + r.supply, vat: acc.vat + r.vat, total: acc.total + r.total }; }, { supply: 0, vat: 0, total: 0 }), [lines]);
   const editOrderTotals = useMemo(() => eLines.reduce((acc, l) => { const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat); return { supply: acc.supply + r.supply, vat: acc.vat + r.vat, total: acc.total + r.total }; }, { supply: 0, vat: 0, total: 0 }), [eLines]);
 
-  const ledgerSplit = useMemo(() => splitVatFromTotal(amountStr), [amountStr]);
-  const editLedgerSplit = useMemo(() => splitVatFromTotal(eAmountStr), [eAmountStr]);
+  const ledgerSplit = useMemo(() => splitVatFromTotalFlexible(amountStr, vatFree), [amountStr, vatFree]);
+  const editLedgerSplit = useMemo(() => splitVatFromTotalFlexible(eAmountStr, eVatFree), [eAmountStr, eVatFree]);
 
   const partnersToShow = useMemo(() => {
     if (partnerView === "PINNED") return partners.filter((p) => !!p.is_pinned);
@@ -899,25 +914,7 @@ export default function TradeClient() {
     const counterparty_name = manualCounterpartyName.trim() || selectedPartner?.name || null;
     const business_no = manualBusinessNo.trim() || selectedPartner?.business_no || null;
     if (!counterparty_name) return setMsg("업체명(매입처/상대방)을 입력하거나 왼쪽에서 거래처를 선택하세요.");
-
-    const split = splitVatFromTotal(amount);
-
-    const { error } = await supabase.from("ledger_entries").insert({
-      entry_date: entryDate,
-      entry_ts: new Date().toISOString(),
-      direction: categoryToDirection(category),
-      amount,
-      supply_amount: split.supply,
-      vat_amount: split.vat,
-      total_amount: split.total,
-      category,
-      method: payMethod,
-      counterparty_name,
-      business_no,
-      memo: ledgerMemo.trim() || null,
-      status: "POSTED",
-      partner_id: selectedPartner?.id ?? null
-    });
+    const { error } = await supabase.from("ledger_entries").insert({ entry_date: entryDate, entry_ts: new Date().toISOString(), direction: categoryToDirection(category), amount, category, method: payMethod, counterparty_name, business_no, memo: ledgerMemo.trim() || null, status: "POSTED", partner_id: selectedPartner?.id ?? null });
     if (error) return setMsg(error.message);
     setAmountStr(""); setLedgerMemo("");
     if (!selectedPartner) { setManualCounterpartyName(""); setManualBusinessNo(""); }
@@ -963,6 +960,7 @@ export default function TradeClient() {
       const amt = Number(r.ledger_amount ?? (r.inAmt || r.outAmt || 0));
       setEAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
       setELedgerMemo(r.ledger_memo ?? ""); setECounterpartyName(r.partnerName ?? ""); setEBusinessNo(r.businessNo ?? "");
+      setEVatFree(false);
     }
     setEditOpen(true);
   }
@@ -993,23 +991,7 @@ export default function TradeClient() {
       if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
       const counterparty_name = eCounterpartyName.trim() || null;
       if (!counterparty_name) return setMsg("업체명(매입처/상대방)은 비울 수 없습니다.");
-
-      const split = splitVatFromTotal(amount);
-
-      const { error } = await supabase.from("ledger_entries").update({
-        entry_date: eEntryDate,
-        direction: categoryToDirection(eCategory),
-        amount,
-        supply_amount: split.supply,
-        vat_amount: split.vat,
-        total_amount: split.total,
-        category: eCategory,
-        method: ePayMethod,
-        memo: eLedgerMemo.trim() || null,
-        counterparty_name,
-        business_no: eBusinessNo.trim() || null,
-        partner_id: editRow.ledger_partner_id ?? null
-      }).eq("id", editRow.rawId);
+      const { error } = await supabase.from("ledger_entries").update({ entry_date: eEntryDate, direction: categoryToDirection(eCategory), amount, category: eCategory, method: ePayMethod, memo: eLedgerMemo.trim() || null, counterparty_name, business_no: eBusinessNo.trim() || null, partner_id: editRow.ledger_partner_id ?? null }).eq("id", editRow.rawId);
       if (error) return setMsg(error.message);
     }
     setEditOpen(false); setEditRow(null); await loadTrades();
@@ -1232,6 +1214,12 @@ export default function TradeClient() {
                       <div>
                         <div className="mb-1 text-xs text-slate-600">금액(원)</div>
                         <input className={inpR} inputMode="numeric" value={eAmountStr} onChange={(e) => setEAmountStr(e.target.value.replace(/[^\d,]/g, ""))} onBlur={() => { const n = Number((eAmountStr||"0").replaceAll(",","")); if (Number.isFinite(n) && n > 0) setEAmountStr(n.toLocaleString("ko-KR")); }} />
+                        <div className="mt-2 flex items-center gap-2">
+                          <label className="flex items-center gap-2 text-sm text-slate-700">
+                            <input type="checkbox" checked={eVatFree} onChange={(e) => setEVatFree(e.target.checked)} />
+                            부가세 없음(총액=공급가)
+                          </label>
+                        </div>
                         <div className="mt-2 grid grid-cols-2 gap-2">
                           <div>
                             <div className="mb-1 text-xs text-slate-600">공급가</div>
@@ -1242,7 +1230,7 @@ export default function TradeClient() {
                             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{editLedgerSplit.total ? fmt(editLedgerSplit.vat) : ""}</div>
                           </div>
                         </div>
-                        <div className="mt-1 text-xs text-slate-500">※ 금액(총액)을 입력하면 공급가/부가세(10%)가 자동 분리됩니다.</div>
+                        <div className="mt-1 text-xs text-slate-500">※ 금액(총액)을 입력하면 공급가/부가세(10%)가 자동 분리됩니다. (부가세 없음 체크 시 총액=공급가)</div>
                       </div>
                       <div><div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div><input className={inp} value={eCounterpartyName} onChange={(e) => setECounterpartyName(e.target.value)} /></div>
                       <div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={eBusinessNo} onChange={(e) => setEBusinessNo(e.target.value)} /></div>
@@ -1385,6 +1373,12 @@ export default function TradeClient() {
                   <div>
                     <div className="mb-1 text-xs text-slate-600">금액(원)</div>
                     <input className={inpR} inputMode="numeric" value={amountStr} onChange={(e) => setAmountStr(e.target.value.replace(/[^\d,]/g, ""))} onBlur={() => { const n = Number((amountStr||"0").replaceAll(",","")); if (Number.isFinite(n) && n > 0) setAmountStr(n.toLocaleString("ko-KR")); }} />
+                    <div className="mt-2 flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-sm text-slate-700">
+                        <input type="checkbox" checked={vatFree} onChange={(e) => setVatFree(e.target.checked)} />
+                        부가세 없음(총액=공급가)
+                      </label>
+                    </div>
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <div>
                         <div className="mb-1 text-xs text-slate-600">공급가</div>
@@ -1395,7 +1389,7 @@ export default function TradeClient() {
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{ledgerSplit.total ? fmt(ledgerSplit.vat) : ""}</div>
                       </div>
                     </div>
-                    <div className="mt-1 text-xs text-slate-500">※ 금액(총액)을 입력하면 공급가/부가세(10%)가 자동 분리됩니다.</div>
+                    <div className="mt-1 text-xs text-slate-500">※ 금액(총액)을 입력하면 공급가/부가세(10%)가 자동 분리됩니다. (부가세 없음 체크 시 총액=공급가)</div>
                   </div>
                   <div><div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div><input className={inp} value={manualCounterpartyName} onChange={(e) => setManualCounterpartyName(e.target.value)} placeholder="예: 쿠팡 / 이마트 / 네이버페이 / ㅇㅇ상사" /></div>
                   <div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={manualBusinessNo} onChange={(e) => setManualBusinessNo(e.target.value)} placeholder="예: 123-45-67890" /></div>
