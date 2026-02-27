@@ -558,19 +558,19 @@ export default function TradeClient() {
 
   // ─── Unified rows ───
   const unifiedRows = useMemo<UnifiedRow[]>(() => {
-    const timePart = (iso: string | null | undefined) => {
-      const s = String(iso ?? "").trim();
-      const idx = s.indexOf("T");
-      return idx < 0 ? "" : s.slice(idx + 1);
+    const normalizeIso = (s: string | null | undefined) => {
+      let v = String(s ?? "").trim();
+      if (!v) return "";
+      // "YYYY-MM-DD HH:mm:ss" → "YYYY-MM-DDTHH:mm:ss"
+      if (v.includes(" ") && !v.includes("T")) v = v.replace(" ", "T");
+      // timezone 없는 "YYYY-MM-DDTHH:mm:ss" → "Z" 부착(UTC로 파싱되게)
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(v)) v = `${v}Z`;
+      return v;
     };
 
-    const toTsMs = (date: string, tp: string) => {
-      // date(YYYY-MM-DD) + time part(예: HH:mm:ss.SSSZ) 를 안전하게 ms로 변환
-      const candidate = tp ? `${date}T${tp}` : `${date}T12:00:00.000Z`;
-      const ms = Date.parse(candidate);
-      if (Number.isFinite(ms)) return ms;
-      const ms2 = Date.parse(`${date}T00:00:00.000Z`);
-      return Number.isFinite(ms2) ? ms2 : 0;
+    const safeParseMs = (isoLike: string) => {
+      const ms = Date.parse(isoLike);
+      return Number.isFinite(ms) ? ms : 0;
     };
 
     const items: Array<Omit<UnifiedRow, "balance"> & { signed: number; tsMs: number }> = [];
@@ -578,12 +578,13 @@ export default function TradeClient() {
     for (const o of orders) {
       const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(o.memo);
       const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
-      const tp = timePart(o.created_at);
       const total = Number(o.total_amount ?? 0);
       const orderer = (memo?.orderer_name ?? null) as string | null;
 
-      const tsKey = tp ? `${date}T${tp}` : `${date}T12:00:00.000Z`;
-      const tsMs = toTsMs(date, tp);
+      // ✅ 최근 입력(생성) 순서가 정확히 반영되도록 created_at 기반으로 tsKey/tsMs 구성
+      const oIso = normalizeIso(o.created_at);
+      const tsKey = oIso || (date ? `${date}T12:00:00.000Z` : "");
+      const tsMs = oIso ? safeParseMs(oIso) : (date ? safeParseMs(`${date}T12:00:00.000Z`) : 0);
 
       items.push({
         kind: "ORDER",
@@ -629,10 +630,11 @@ export default function TradeClient() {
     for (const l of ledgers) {
       const sign = String(l.direction) === "OUT" ? -1 : 1;
       const amt = Number(l.amount ?? 0);
-      const tp = timePart(l.entry_ts) || timePart(l.created_at);
 
-      const tsKey = tp ? `${l.entry_date}T${tp}` : `${l.entry_date}T12:00:00.000Z`;
-      const tsMs = toTsMs(l.entry_date, tp);
+      // ✅ 최근 입력(기록) 순서가 정확히 반영되도록 entry_ts(우선) → created_at 기반으로 tsKey/tsMs 구성
+      const lIso = normalizeIso(l.entry_ts) || normalizeIso(l.created_at);
+      const tsKey = lIso || (l.entry_date ? `${l.entry_date}T12:00:00.000Z` : "");
+      const tsMs = lIso ? safeParseMs(lIso) : (l.entry_date ? safeParseMs(`${l.entry_date}T12:00:00.000Z`) : 0);
 
       items.push({
         kind: "LEDGER",
@@ -666,7 +668,7 @@ export default function TradeClient() {
       return { ...rest, balance: running };
     });
 
-    // ✅ 2) 화면 표시는 "현재 → 과거" (최신이 위) + 날짜/시간 내림차순
+    // ✅ 2) 화면 표시는 "현재 → 과거" (최신이 위) + 시간 내림차순(동률이면 rawId)
     withBal.sort((a, b) => {
       const am = Date.parse(a.tsKey);
       const bm = Date.parse(b.tsKey);
