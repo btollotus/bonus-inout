@@ -98,15 +98,15 @@ function sanitizeDecimalInput(raw: string) {
   return v;
 }
 const safeJsonParse = <T,>(s: string | null): T | null => { if (!s) return null; try { return JSON.parse(s) as T; } catch { return null; } };
-const todayYMD = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+const todayYMD = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 function addDays(ymd: string, delta: number) {
   const d = new Date(ymd + "T00:00:00"); d.setDate(d.getDate() + delta);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 const categoryToDirection = (c: Category): "IN" | "OUT" => c === "매출입금" ? "IN" : "OUT";
 const methodLabel = (m: any) => ({ BANK: "입금", CASH: "현금", CARD: "카드", ETC: "기타" }[String(m ?? "").trim()] ?? String(m ?? "").trim());
 const normText = (s: any) => { const v = String(s ?? "").trim(); return v === "" ? null : v; };
-const fmtKST = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
+const fmtKST = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
 function calcLineAmounts(qtyRaw: any, unitRaw: any, totalInclVatRaw: any) {
   const qty = toInt(qtyRaw), unit = toIntSigned(unitRaw), totalInclVat = toIntSigned(totalInclVatRaw);
@@ -182,7 +182,7 @@ function loadRecentFromLS(): string[] {
     return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
   } catch { return []; }
 }
-function saveRecentToLS(ids: string[]) { try { localStorage.setItem(LS_RECENT_PARTNERS, JSON.stringify(ids)); } catch {} }
+function saveRecentToLS(ids: string[]) { try { localStorage.setItem(LS_RECENT_PARTNERS, JSON.stringify(ids)); } catch { } }
 const isMallPartner = (p: PartnerRow | null) => ["네이버", "쿠팡", "카카오"].some((k) => String(p?.name ?? "").includes(k));
 
 function buildOrderSummaryText(r: UnifiedRow) {
@@ -364,7 +364,7 @@ function LineRow({ l, i, onUpdate, onRemove, masterByName, inputCls, inputRightC
 
 const LineHeader = ({ gridCols }: { gridCols: string }) => (
   <div className={`mt-3 grid ${gridCols} gap-2 text-xs text-slate-600`}>
-    {["식품유형","품목명","무게(g)","수량","단가","공급가","부가세","총액(입력)",""].map((h, i) => (
+    {["식품유형", "품목명", "무게(g)", "수량", "단가", "공급가", "부가세", "총액(입력)", ""].map((h, i) => (
       <div key={i} className={i < 8 ? "pl-3" : ""}>{h}</div>
     ))}
   </div>
@@ -519,12 +519,12 @@ export default function TradeClient() {
   useEffect(() => {
     if (syncDateRef.current === "ENTRY") { syncDateRef.current = null; return; }
     syncDateRef.current = "SHIP"; setEntryDate(shipDate);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shipDate]);
   useEffect(() => {
     if (syncDateRef.current === "SHIP") { syncDateRef.current = null; return; }
     syncDateRef.current = "ENTRY"; setShipDate(entryDate);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entryDate]);
 
   // ─── TOP button ───
@@ -540,7 +540,7 @@ export default function TradeClient() {
     setManualBusinessNo(selectedPartner?.business_no ?? "");
     setShip1({ name: selectedPartner?.ship_to_name ?? "", addr: selectedPartner?.ship_to_address1 ?? "", mobile: selectedPartner?.ship_to_mobile ?? "", phone: selectedPartner?.ship_to_phone ?? "", msg: "" });
     setShip2(emptyShip()); setTwoShip(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id]);
 
   // ─── Computed totals ───
@@ -691,7 +691,7 @@ export default function TradeClient() {
   useEffect(() => {
     const top = tradeTopScrollRef.current, bottom = tradeBottomScrollRef.current;
     if (top && bottom) top.scrollLeft = bottom.scrollLeft;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unifiedRows.length, mode]);
 
   // ─── Recent partners ───
@@ -817,7 +817,7 @@ export default function TradeClient() {
     setEP_address1(selectedPartner.address1 ?? ""); setEP_bizType(selectedPartner.biz_type ?? "");
     setEP_bizItem(selectedPartner.biz_item ?? "");
     const pt = String(selectedPartner.partner_type ?? "CUSTOMER") as any;
-    setEP_partnerType(["CUSTOMER","VENDOR","BOTH"].includes(pt) ? pt : "CUSTOMER");
+    setEP_partnerType(["CUSTOMER", "VENDOR", "BOTH"].includes(pt) ? pt : "CUSTOMER");
     const latest = await loadLatestShippingForPartner(selectedPartner.id);
     const cur = selectedPartner;
     setShipEdit({ name: (latest?.ship_to_name ?? cur.ship_to_name ?? "") || "", addr: (latest?.ship_to_address1 ?? cur.ship_to_address1 ?? "") || "", mobile: (latest?.ship_to_mobile ?? cur.ship_to_mobile ?? "") || "", phone: (latest?.ship_to_phone ?? cur.ship_to_phone ?? "") || "", msg: "" });
@@ -919,6 +919,7 @@ export default function TradeClient() {
     const { error } = await supabase.from("ledger_entries").insert({ entry_date: entryDate, entry_ts: new Date().toISOString(), direction: categoryToDirection(category), amount, category, method: payMethod, counterparty_name, business_no, memo: ledgerMemo.trim() || null, status: "POSTED", partner_id: selectedPartner?.id ?? null });
     if (error) return setMsg(error.message);
     setAmountStr(""); setLedgerMemo("");
+    setVatFree(false); // ✅ 입력단 체크는 입력 기준으로만 사용(저장 후 초기화)
     if (!selectedPartner) { setManualCounterpartyName(""); setManualBusinessNo(""); }
     await loadTrades();
   }
@@ -937,6 +938,7 @@ export default function TradeClient() {
       setPayMethod((r.ledger_method as any) ?? "BANK"); setLedgerMemo(r.ledger_memo ?? "");
       const amt = Number(r.ledger_amount ?? 0); setAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
       setManualCounterpartyName(r.partnerName ?? ""); setManualBusinessNo(r.businessNo ?? "");
+      setVatFree(false);
     }
   }
 
@@ -956,7 +958,7 @@ export default function TradeClient() {
     } else {
       setEEntryDate(r.date || todayYMD());
       const m = (r.ledger_method ?? r.method ?? "BANK") as any;
-      setEPayMethod(["BANK","CASH","CARD","ETC"].includes(m) ? m : "BANK");
+      setEPayMethod(["BANK", "CASH", "CARD", "ETC"].includes(m) ? m : "BANK");
       const c = (r.ledger_category as Category) ?? (r.category as Category) ?? "기타";
       setECategory(CATEGORIES.includes(c) ? c : "기타");
       const amt = Number(r.ledger_amount ?? (r.inAmt || r.outAmt || 0));
@@ -1125,7 +1127,7 @@ export default function TradeClient() {
                         <table className="w-full table-fixed text-sm">
                           <colgroup><col style={{ width: "160px" }} /><col style={{ width: "140px" }} /><col style={{ width: "auto" }} /><col style={{ width: "140px" }} /><col style={{ width: "140px" }} /></colgroup>
                           <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                            <tr>{["변경시각","수화주명","주소1","휴대폰","전화"].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr>
+                            <tr>{["변경시각", "수화주명", "주소1", "휴대폰", "전화"].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr>
                           </thead>
                           <tbody>
                             {shipHist.map((h) => (
@@ -1181,7 +1183,7 @@ export default function TradeClient() {
                       <div><div className="mb-1 text-xs text-slate-600">주문자</div><input className={inp} value={eOrdererName} onChange={(e) => setEOrdererName(e.target.value)} /></div>
                       <div><div className="mb-1 text-xs text-slate-600">출고방법</div>
                         <select className={inp} value={eShipMethod} onChange={(e) => setEShipMethod(e.target.value)}>
-                          {["택배","퀵-신용","퀵-착불","방문","기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                          {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                         </select>
                       </div>
                       <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} value={eOrderTitle} onChange={(e) => setEOrderTitle(e.target.value)} /></div>
@@ -1209,13 +1211,13 @@ export default function TradeClient() {
                       <div><div className="mb-1 text-xs text-slate-600">일자</div><input type="date" className={inp} value={eEntryDate} onChange={(e) => setEEntryDate(e.target.value)} /></div>
                       <div><div className="mb-1 text-slate-600 text-xs">결제수단</div>
                         <select className={inp} value={ePayMethod} onChange={(e) => setEPayMethod(e.target.value as any)}>
-                          {[["BANK","입금"],["CASH","현금"],["CARD","카드"],["ETC","기타"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                          {[["BANK", "입금"], ["CASH", "현금"], ["CARD", "카드"], ["ETC", "기타"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                         </select>
                       </div>
                       <div><div className="mb-1 text-xs text-slate-600">카테고리</div><div className="flex flex-wrap gap-2">{CATEGORIES.map((c) => <button key={c} type="button" className={eCategory === c ? btnOn : btn} onClick={() => setECategory(c)}>{c}</button>)}</div></div>
                       <div>
                         <div className="mb-1 text-xs text-slate-600">금액(원)</div>
-                        <input className={inpR} inputMode="numeric" value={eAmountStr} onChange={(e) => setEAmountStr(e.target.value.replace(/[^\d,]/g, ""))} onBlur={() => { const n = Number((eAmountStr||"0").replaceAll(",","")); if (Number.isFinite(n) && n > 0) setEAmountStr(n.toLocaleString("ko-KR")); }} />
+                        <input className={inpR} inputMode="numeric" value={eAmountStr} onChange={(e) => setEAmountStr(e.target.value.replace(/[^\d,]/g, ""))} onBlur={() => { const n = Number((eAmountStr || "0").replaceAll(",", "")); if (Number.isFinite(n) && n > 0) setEAmountStr(n.toLocaleString("ko-KR")); }} />
                         <div className="mt-2 flex items-center gap-2">
                           <label className="flex items-center gap-2 text-sm text-slate-700">
                             <input type="checkbox" checked={eVatFree} onChange={(e) => setEVatFree(e.target.checked)} />
@@ -1260,7 +1262,7 @@ export default function TradeClient() {
               </div>
             </div>
             <div className="mb-3 flex gap-2">
-              {(["PINNED","RECENT","ALL"] as PartnerView[]).map((v) => {
+              {(["PINNED", "RECENT", "ALL"] as PartnerView[]).map((v) => {
                 const labels: Record<PartnerView, string> = { PINNED: "즐겨찾기", RECENT: "최근", ALL: "전체" };
                 return <button key={v} className={partnerView === v ? btnOn : btn} onClick={() => setPartnerView(v)}>{labels[v]}</button>;
               })}
@@ -1315,7 +1317,7 @@ export default function TradeClient() {
           {/* RIGHT */}
           <div className="min-w-0 space-y-6">
             <div className="flex gap-2">
-              {(["ORDERS","LEDGER","UNIFIED"] as Mode[]).map((m) => {
+              {(["ORDERS", "LEDGER", "UNIFIED"] as Mode[]).map((m) => {
                 const labels: Record<Mode, string> = { ORDERS: "주문/출고", LEDGER: "금전출납", UNIFIED: "통합" };
                 return <button key={m} className={mode === m ? btnOn : btn} onClick={() => setMode(m)}>{labels[m]}</button>;
               })}
@@ -1330,7 +1332,7 @@ export default function TradeClient() {
                   <div><div className="mb-1 text-xs text-slate-600">주문자</div><input className={inp} value={ordererName} onChange={(e) => setOrdererName(e.target.value)} /></div>
                   <div><div className="mb-1 text-xs text-slate-600">출고방법</div>
                     <select className={inp} value={shipMethod} onChange={(e) => setShipMethod(e.target.value)}>
-                      {["택배","퀵-신용","퀵-착불","방문","기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                      {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                     </select>
                   </div>
                   <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} /></div>
@@ -1368,13 +1370,13 @@ export default function TradeClient() {
                   <div><div className="mb-1 text-xs text-slate-600">일자</div><input type="date" className={inp} value={entryDate} onChange={(e) => setEntryDate(e.target.value)} /></div>
                   <div><div className="mb-1 text-xs text-slate-600">결제수단</div>
                     <select className={inp} value={payMethod} onChange={(e) => setPayMethod(e.target.value as any)}>
-                      {[["BANK","입금"],["CASH","현금"],["CARD","카드"],["ETC","기타"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                      {[["BANK", "입금"], ["CASH", "현금"], ["CARD", "카드"], ["ETC", "기타"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                   </div>
                   <div><div className="mb-1 text-xs text-slate-600">카테고리</div><div className="flex flex-wrap gap-2">{CATEGORIES.map((c) => <button key={c} type="button" className={category === c ? btnOn : btn} onClick={() => setCategory(c)}>{c}</button>)}</div></div>
                   <div>
                     <div className="mb-1 text-xs text-slate-600">금액(원)</div>
-                    <input className={inpR} inputMode="numeric" value={amountStr} onChange={(e) => setAmountStr(e.target.value.replace(/[^\d,]/g, ""))} onBlur={() => { const n = Number((amountStr||"0").replaceAll(",","")); if (Number.isFinite(n) && n > 0) setAmountStr(n.toLocaleString("ko-KR")); }} />
+                    <input className={inpR} inputMode="numeric" value={amountStr} onChange={(e) => setAmountStr(e.target.value.replace(/[^\d,]/g, ""))} onBlur={() => { const n = Number((amountStr || "0").replaceAll(",", "")); if (Number.isFinite(n) && n > 0) setAmountStr(n.toLocaleString("ko-KR")); }} />
                     <div className="mt-2 flex items-center gap-2">
                       <label className="flex items-center gap-2 text-sm text-slate-700">
                         <input type="checkbox" checked={vatFree} onChange={(e) => setVatFree(e.target.checked)} />
