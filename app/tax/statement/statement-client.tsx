@@ -254,7 +254,6 @@ export default function StatementClient() {
         .from("ledger_entries")
         .select("id,entry_date,entry_ts,direction,amount,category,method,memo,partner_id,counterparty_name,business_no,created_at")
         .eq("partner_id", pId)
-        .eq("direction", "IN") // ✅ 구분은 "입금 또는 출고"만 표시
         .gte("entry_date", f)
         .lte("entry_date", t)
         .order("entry_date", { ascending: true })
@@ -322,21 +321,31 @@ export default function StatementClient() {
         }
       }
 
-      // ✅ 입금: 결제(입금) 칼럼에만 표시
+      // ✅ 입금/출고(ledger): direction 기준으로 구분 + 잔액 반영
       for (const l of (lData ?? []) as any as LedgerRow[]) {
         const date = l.entry_date;
         const amt = Number(l.amount ?? 0);
+        const dir = String(l.direction ?? "").toUpperCase();
+
+        const isIn = dir === "IN";
+        const isOut = dir === "OUT";
+
+        const kind: "입금" | "출고" = isIn ? "입금" : "출고";
+        const signed = isIn ? amt : -amt;
+
+        // ledger 출고(OUT)는 품목명이 없으니 memo를 품목명 칸에 보여주면
+        // 화면에서 "잔액조정용" 같은 항목이 확인 가능
         list.push({
           date,
-          kind: "입금",
-          itemName: "",
+          kind,
+          itemName: isOut ? String(l.memo ?? "") : "",
           qty: null,
           unitPrice: null,
-          supply: null, // ✅ 입금은 공급가 칸 비움
-          vat: null, // ✅ 입금은 부가세 칸 비움
-          tradeAmount: null, // ✅ 입금은 거래금액 칸 비움
-          payment: amt, // ✅ 결제(입금)
-          amountSigned: amt,
+          supply: isOut ? amt : null, // ✅ ledger 출고는 공급가=amt로 표시
+          vat: isOut ? 0 : null, // ✅ ledger 출고는 부가세 0
+          tradeAmount: isOut ? amt : null, // ✅ ledger 출고는 거래금액=amt
+          payment: isIn ? amt : null, // ✅ 입금은 결제(입금)
+          amountSigned: signed,
           remark: "",
         });
       }
@@ -413,6 +422,11 @@ export default function StatementClient() {
 
     URL.revokeObjectURL(url);
   }
+
+    // ✅ 탭(브라우저 타이틀) 변경
+    useEffect(() => {
+      document.title = "BONUSMATE ERP 거래원장";
+    }, []);
 
   // ✅ 입력 검색 필터
   const filteredPartners = useMemo(() => {
