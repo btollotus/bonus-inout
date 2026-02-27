@@ -282,26 +282,40 @@ export default function TaxClient() {
     });
   }, [ledgers, purchaseCatFilter]);
 
+  // ✅ 공급가/부가세 계산: (1) 컬럼이 있으면 그대로, (2) 없으면 vat_type/vat_rate로 total에서 역산
+  function calcLedgerSVT(l: LedgerRow) {
+    const vt = String(l.vat_type ?? "TAXED").toUpperCase();
+    const total = Number(l.total_amount ?? l.amount ?? 0);
+
+    // 컬럼이 있으면 우선 사용
+    if (l.supply_amount != null && l.vat_amount != null && l.total_amount != null) {
+      const supply = Number(l.supply_amount ?? 0);
+      const vat = vt === "TAXED" ? Number(l.vat_amount ?? 0) : 0;
+      return { supply, vat, total: Number(l.total_amount ?? total) };
+    }
+
+    // 컬럼이 없으면 total에서 계산
+    if (vt === "TAXED") {
+      const rate = Number.isFinite(Number(l.vat_rate)) ? Number(l.vat_rate) : 0.1;
+      const supply = Math.round(total / (1 + (rate || 0)));
+      const vat = total - supply;
+      return { supply, vat, total };
+    }
+
+    // EXEMPT/ZERO/NA 등은 VAT 0, 총액=공급가
+    return { supply: total, vat: 0, total };
+  }
+
   const purchaseSummary = useMemo(() => {
     let supply = 0;
     let vat = 0;
     let total = 0;
 
     for (const l of purchaseLedgerRows) {
-      const t = Number(l.total_amount ?? l.amount ?? 0);
-      const s = Number(l.supply_amount ?? 0);
-      const v = Number(l.vat_amount ?? 0);
-
-      // vat_type 기준 (TAXED만 VAT 인정)
-      const vt = String(l.vat_type ?? "TAXED").toUpperCase();
-      if (l.supply_amount != null && l.vat_amount != null && l.total_amount != null) {
-        total += t;
-        supply += s;
-        if (vt === "TAXED") vat += v;
-      } else {
-        // 과거건: 총액만 집계, VAT=0
-        total += t;
-      }
+      const x = calcLedgerSVT(l);
+      total += Number(x.total ?? 0);
+      supply += Number(x.supply ?? 0);
+      vat += Number(x.vat ?? 0);
     }
     return { supply, vat, total };
   }, [purchaseLedgerRows]);
@@ -336,16 +350,13 @@ export default function TaxClient() {
 
       const row = map.get(key)!;
 
-      const t = Number(l.total_amount ?? l.amount ?? 0);
-      const s = Number(l.supply_amount ?? 0);
-      const v = Number(l.vat_amount ?? 0);
-      const vt = String(l.vat_type ?? "TAXED").toUpperCase();
+      const x = calcLedgerSVT(l);
 
-      row.total += t;
+      row.total += Number(x.total ?? 0);
+      row.supply += Number(x.supply ?? 0);
+      row.vat += Number(x.vat ?? 0);
       row.count += 1;
 
-      if (l.supply_amount != null && l.total_amount != null) row.supply += s;
-      if (l.vat_amount != null && vt === "TAXED") row.vat += v;
       if (row.name === "(거래처명 없음)" && name !== "(거래처명 없음)") row.name = name;
     }
 
