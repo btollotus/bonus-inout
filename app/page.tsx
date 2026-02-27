@@ -6,7 +6,7 @@ export default function HomePage() {
     <AuthGate>
       <main className="min-h-screen bg-black text-white p-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">재고관리 MVP</h1>
+          <h1 className="text-2xl font-semibold">BONUSMATE ERP</h1>
           <LogoutButton />
         </div>
 
@@ -50,7 +50,7 @@ export default function HomePage() {
             href="/ledger"
             className="inline-flex rounded-xl border border-white/15 px-4 py-2"
           >
-            경리장부(통합장부)
+            거래내역(통합)
           </a>
 
           <a

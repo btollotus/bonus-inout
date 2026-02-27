@@ -62,6 +62,7 @@ type UnifiedRow = {
   order_shipments?: ShipmentSnap[];
   ledger_category?: string | null; ledger_method?: string | null;
   ledger_memo?: string | null; ledger_amount?: number;
+  ledger_supply_amount?: number | null; ledger_vat_amount?: number | null; ledger_total_amount?: number | null;
 };
 
 // ─────────────────────── Constants ───────────────────────
@@ -665,6 +666,9 @@ export default function TradeClient() {
         ledger_method: l.method ?? null,
         ledger_memo: l.memo ?? null,
         ledger_amount: amt,
+        ledger_supply_amount: (l.supply_amount ?? null) as any,
+        ledger_vat_amount: (l.vat_amount ?? null) as any,
+        ledger_total_amount: (l.total_amount ?? null) as any,
       });
     }
 
@@ -996,7 +1000,11 @@ export default function TradeClient() {
       const amt = Number(r.ledger_amount ?? (r.inAmt || r.outAmt || 0));
       setEAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
       setELedgerMemo(r.ledger_memo ?? ""); setECounterpartyName(r.partnerName ?? ""); setEBusinessNo(r.businessNo ?? "");
-      setEVatFree(false);
+
+      const vatAmt = Number(r.ledger_vat_amount ?? 0);
+      const supplyAmt = Number(r.ledger_supply_amount ?? 0);
+      const totalAmt = Number(r.ledger_total_amount ?? 0);
+      setEVatFree(amt > 0 && vatAmt === 0 && supplyAmt === amt && totalAmt === amt);
     }
     setEditOpen(true);
   }
