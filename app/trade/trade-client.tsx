@@ -792,11 +792,14 @@ export default function TradeClient() {
     setMsg(null);
     const f = fromYMD || addDays(todayYMD(), -30);
 
-    // ✅ (2) 기본 To는 "마지막 거래내역 날짜"로 자동 맞춤(사용자가 To를 직접 만진 경우 제외)
-    if (!toTouched) {
-      const selectedBusinessNo = selectedPartner?.business_no ?? null;
-      const selectedPartnerId = selectedPartner?.id ?? null;
+    const selectedBusinessNo = selectedPartner?.business_no ?? null;
+    const selectedPartnerId = selectedPartner?.id ?? null;
 
+    // ✅ (2) 기본 To는 "마지막 거래내역 날짜"로 자동 맞춤(사용자가 To를 직접 만진 경우 제외)
+    // ✅ FIX: To를 맞추더라도 여기서 return 하지 말고, 이번 조회의 t를 latest로 사용하여 즉시 조회까지 진행
+    let t = toYMD || todayYMD();
+
+    if (!toTouched) {
       let latestOrderDate = "";
       let latestLedgerDate = "";
 
@@ -817,12 +820,11 @@ export default function TradeClient() {
       if (!lLatestErr && lLatest && lLatest[0]?.entry_date) latestLedgerDate = String(lLatest[0].entry_date);
 
       const latest = [latestOrderDate, latestLedgerDate].filter(Boolean).sort().pop() || todayYMD();
-      if (latest && latest !== toYMD) { setToYMD(latest); return; }
+      if (latest) {
+        if (latest !== t) setToYMD(latest);
+        t = latest;
+      }
     }
-
-    const t = toYMD || todayYMD();
-    const selectedBusinessNo = selectedPartner?.business_no ?? null;
-    const selectedPartnerId = selectedPartner?.id ?? null;
 
     let oq = supabase.from("orders").select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)").gte("ship_date", f).lte("ship_date", t).order("ship_date", { ascending: false }).limit(500);
     if (selectedPartnerId) oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
