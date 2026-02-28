@@ -891,6 +891,9 @@ export default function StatementClient() {
                       // ✅ 결제/출고합계 행은 날짜/구분을 공란으로 표시
                       const hideLead = !!r.isPaySummary || !!r.isShipSummary;
 
+                      // ✅ 출고 라인(잔액 반영 안하는 라인)은 잔액 표시도 공란(요청 이미지처럼)
+                      const hideBalance = !r.isPaySummary && !r.isShipSummary && Number(r.amountSigned ?? 0) === 0;
+
                       return (
                         <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
                           <td className="px-2 py-2 font-semibold tabular-nums">{hideLead ? "" : r.date}</td>
@@ -916,7 +919,9 @@ export default function StatementClient() {
                           <td className={`px-2 py-2 text-right tabular-nums font-semibold ${paymentClass}`}>
                             {r.payment === null ? "" : formatMoney(r.payment)}
                           </td>
-                          <td className="px-2 py-2 text-right tabular-nums font-semibold">{formatMoney(r.balance)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums font-semibold">
+                            {hideBalance ? "" : formatMoney(r.balance)}
+                          </td>
                           <td className="px-2 py-2">
                             <div className="truncate">{hideLead ? "" : r.remark ? r.remark : ""}</div>
                           </td>
