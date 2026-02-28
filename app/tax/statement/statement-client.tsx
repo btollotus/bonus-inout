@@ -264,11 +264,14 @@ export default function StatementClient() {
         return;
       }
 
-      const list: Omit<StatementRow, "balance">[] = [];
+      // ✅ 정렬 안정화를 위한 내부용 row
+      type RowTmp = Omit<StatementRow, "balance"> & { __sortDate: string; __sortKind: number; __sortIdx: number };
+      const list: RowTmp[] = [];
+      let sortIdx = 0;
 
       const oRows = (oData ?? []) as any as OrderRow[];
 
-      // ✅ 출고: "라인 단위 나열"이 아니라, "주문/출고 입력 건(=order) 단위"로 총액 1줄 표시 + 잔액 계산
+      // ✅ 출고: order_lines로 품목 나열 + "주문/출고 입력 건" 단위 총액(요약행)으로 잔액 계산
       if (oRows.length > 0) {
         const orderIds = oRows.map((o) => o.id);
 
@@ -293,74 +296,79 @@ export default function StatementClient() {
           if (o.id) ordererMap.set(o.id, extractOrderer(o.memo));
         }
 
-        // order_id별 합산
-        const orderAgg = new Map<
-          string,
-          { firstName: string; lineCount: number; supplySum: number; vatSum: number; totalSum: number }
-        >();
-
+        // ✅ order_id 단위로 라인 모으기
+        const linesByOrder = new Map<string, LineLoose[]>();
         for (const line of (olData ?? []) as any as LineLoose[]) {
           const orderId = String(line?.order_id ?? "");
           if (!orderId) continue;
-
-          const m = mapLineToAmounts(line);
-          if (!m.itemName || !String(m.itemName).trim()) continue;
-
-          const supplyVal = Number.isFinite(m.supply) ? Number(m.supply) : 0;
-          const vatVal = Number.isFinite(m.vat) ? Number(m.vat) : 0;
-          const totalVal = Number.isFinite(m.total) ? Number(m.total) : supplyVal + vatVal;
-
-          const cur = orderAgg.get(orderId);
-          if (!cur) {
-            orderAgg.set(orderId, {
-              firstName: String(m.itemName),
-              lineCount: 1,
-              supplySum: supplyVal,
-              vatSum: vatVal,
-              totalSum: totalVal,
-            });
-          } else {
-            orderAgg.set(orderId, {
-              firstName: cur.firstName,
-              lineCount: cur.lineCount + 1,
-              supplySum: cur.supplySum + supplyVal,
-              vatSum: cur.vatSum + vatVal,
-              totalSum: cur.totalSum + totalVal,
-            });
-          }
+          if (!linesByOrder.has(orderId)) linesByOrder.set(orderId, []);
+          linesByOrder.get(orderId)!.push(line);
         }
 
-        // 주문(출고) 1건 = 1줄
+        // ✅ orders(출고일 순) 순서대로 출력
         for (const o of oRows) {
           const orderId = String(o.id ?? "");
+          if (!orderId) continue;
+
           const date = dateMap.get(orderId) ?? "";
           const remark = ordererMap.get(orderId) ?? "";
 
-          const agg = orderAgg.get(orderId) ?? null;
+          const lines = linesByOrder.get(orderId) ?? [];
+          if (lines.length === 0) continue;
 
-          // 라인이 없으면 orders.total_amount 기반으로라도 1줄 표시(부가세 분리 불가 → 공급가=total, 부가세=0)
-          const supplyVal = agg ? agg.supplySum : Number(o.total_amount ?? 0);
-          const vatVal = agg ? agg.vatSum : 0;
-          const totalVal = agg ? agg.totalSum : supplyVal + vatVal;
+          const mapped = lines
+            .map((ln) => mapLineToAmounts(ln))
+            .filter((m) => m.itemName && String(m.itemName).trim() !== "");
 
-          const firstName = agg ? agg.firstName : "";
-          const cnt = agg ? agg.lineCount : 0;
-          const itemName = firstName ? (cnt > 1 ? `${firstName} 외 ${cnt - 1}건` : firstName) : "";
+          if (mapped.length === 0) continue;
 
-          const amtSigned = -Number(totalVal ?? 0);
+          // 라인 나열(잔액/거래금액은 요약행에서만 표시)
+          for (const m of mapped) {
+            const supplyVal = Number.isFinite(m.supply) ? m.supply : 0;
+            const vatVal = Number.isFinite(m.vat) ? m.vat : 0;
+
+            list.push({
+              date,
+              kind: "출고",
+              itemName: m.itemName,
+              qty: Number.isFinite(m.qty) ? m.qty : 0,
+              unitPrice: Number.isFinite(m.unitPrice) ? m.unitPrice : 0,
+              supply: supplyVal,
+              vat: vatVal,
+              tradeAmount: null, // ✅ 라인에는 거래금액 미표시(요약행에서 표시)
+              payment: null,
+              amountSigned: 0, // ✅ 라인 나열은 잔액에 영향 없음
+              remark: "",
+              __sortDate: date,
+              __sortKind: 1, // 같은 날짜에서 입금(0) 다음
+              __sortIdx: sortIdx++,
+            });
+          }
+
+          // ✅ 주문/출고 입력 건 단위 요약행(총액 + 잔액 반영)
+          const sumSupply = mapped.reduce((acc, x) => acc + Number(x.supply ?? 0), 0);
+          const sumVat = mapped.reduce((acc, x) => acc + Number(x.vat ?? 0), 0);
+          const sumTotal = mapped.reduce((acc, x) => acc + Number(x.total ?? 0), 0);
+
+          const firstName = mapped[0]?.itemName ?? "";
+          const etcCount = Math.max(0, mapped.length - 1);
+          const summaryName = etcCount > 0 ? `${firstName} 외 ${etcCount}건` : firstName;
 
           list.push({
             date,
             kind: "출고",
-            itemName,
+            itemName: summaryName,
             qty: null,
             unitPrice: null,
-            supply: Number.isFinite(supplyVal) ? supplyVal : 0,
-            vat: Number.isFinite(vatVal) ? vatVal : 0,
-            tradeAmount: Number.isFinite(totalVal) ? totalVal : 0, // ✅ 주문/출고 입력 건 단위 거래금액
-            payment: null, // ✅ 출고는 결제칸 비움
-            amountSigned: amtSigned,
+            supply: sumSupply,
+            vat: sumVat,
+            tradeAmount: sumSupply + sumVat, // ✅ 요약행에 거래금액 표시
+            payment: null,
+            amountSigned: -Number(sumTotal ?? 0), // ✅ 요약행에서만 잔액 차감
             remark,
+            __sortDate: date,
+            __sortKind: 1,
+            __sortIdx: sortIdx++,
           });
         }
       }
@@ -391,22 +399,27 @@ export default function StatementClient() {
           payment: isIn ? amt : null, // ✅ 입금은 결제(입금)
           amountSigned: signed,
           remark: "",
+          __sortDate: date,
+          __sortKind: isIn ? 0 : 2, // ✅ 같은 날짜: 입금 먼저, 주문/출고(라인+요약) 다음, ledger 출고는 맨 뒤
+          __sortIdx: sortIdx++,
         });
       }
 
-      // 정렬(일자 우선, 같은 일자는 입금 먼저, 그 다음 출고)
+      // ✅ 정렬(일자 우선, 같은 일자는 입금 -> 주문/출고(라인+요약) -> ledger 출고)
       list.sort((a, b) => {
-        const d = String(a.date).localeCompare(String(b.date));
+        const d = String(a.__sortDate).localeCompare(String(b.__sortDate));
         if (d !== 0) return d;
-        if (a.kind === b.kind) return 0;
-        return a.kind === "입금" ? -1 : 1;
+        const k = a.__sortKind - b.__sortKind;
+        if (k !== 0) return k;
+        return a.__sortIdx - b.__sortIdx;
       });
 
       // 잔액 누적
       let bal = 0;
       const withBal: StatementRow[] = list.map((r) => {
         bal += Number(r.amountSigned ?? 0);
-        return { ...r, balance: bal };
+        const { __sortDate, __sortKind, __sortIdx, ...rest } = r;
+        return { ...rest, balance: bal };
       });
 
       setRows(withBal);
@@ -483,7 +496,8 @@ export default function StatementClient() {
         const biz = (p.business_no ?? "").toLowerCase();
         const key = `${name} ${biz}`;
         const hit = key.includes(q);
-        const score = !q ? 9999 : name.startsWith(q) ? 0 : name.includes(q) ? 1 : biz.includes(q) ? 2 : hit ? 3 : 99;
+        const score =
+          !q ? 9999 : name.startsWith(q) ? 0 : name.includes(q) ? 1 : biz.includes(q) ? 2 : hit ? 3 : 99;
         return { p, score, hit };
       })
       .filter((x) => x.hit)
