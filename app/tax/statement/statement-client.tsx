@@ -56,6 +56,10 @@ type StatementRow = {
   amountSigned: number; // 잔액 계산용(입금 +, 출고 -)
   balance: number; // 누적 잔액
   remark: string; // ✅ 비고(주문자)
+
+  // ✅ 정렬용(표시에는 사용 안함)
+  sortTs?: string | null; // 실제 입력/생성 시간
+  sortSeq?: number; // 같은 시각 내 라인 순서
 };
 
 function todayYMD() {
@@ -289,11 +293,13 @@ export default function StatementClient() {
         const ordererMap = new Map<string, string>();
         const orderTotalMap = new Map<string, number>();
         const orderHasTotal = new Set<string>();
+        const orderCreatedMap = new Map<string, string>();
 
         for (const o of oRows) {
           const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
           if (o.id) dateMap.set(o.id, date);
           if (o.id) ordererMap.set(o.id, extractOrderer(o.memo));
+          if (o.id) orderCreatedMap.set(o.id, String(o.created_at ?? ""));
 
           const tot = Number(o.total_amount ?? Number.NaN);
           if (o.id) {
@@ -313,6 +319,7 @@ export default function StatementClient() {
           {
             date: string;
             remark: string;
+            sortTs: string;
             lines: Array<{ itemName: string; qty: number; unitPrice: number; supply: number; vat: number; total: number }>;
           }
         >();
@@ -323,6 +330,7 @@ export default function StatementClient() {
 
           const date = dateMap.get(orderId) ?? "";
           const remark = ordererMap.get(orderId) ?? "";
+          const sortTs = orderCreatedMap.get(orderId) ?? "";
           const m = mapLineToAmounts(line);
 
           if (!m.itemName || !String(m.itemName).trim()) continue;
@@ -332,7 +340,7 @@ export default function StatementClient() {
           const totalVal = Number.isFinite(m.total) ? m.total : supplyVal + vatVal;
 
           if (!perOrder.has(orderId)) {
-            perOrder.set(orderId, { date, remark, lines: [] });
+            perOrder.set(orderId, { date, remark, sortTs, lines: [] });
             orderIdOrder.push(orderId);
           }
           perOrder.get(orderId)!.lines.push({
@@ -357,6 +365,7 @@ export default function StatementClient() {
 
           const orderTotal = Number(orderTotalMap.get(orderId) ?? 0);
           let first = true;
+          let seq = 0;
 
           for (const ln of pack.lines) {
             const amtSigned = -Number(ln.total ?? 0);
@@ -373,9 +382,12 @@ export default function StatementClient() {
               payment: null, // ✅ 출고는 결제칸 비움
               amountSigned: amtSigned,
               remark: pack.remark,
+              sortTs: pack.sortTs,
+              sortSeq: seq,
             });
 
             first = false;
+            seq += 1;
           }
         }
       }
@@ -406,15 +418,28 @@ export default function StatementClient() {
           payment: isIn ? amt : null, // ✅ 입금은 결제(입금)
           amountSigned: signed,
           remark: "",
+          sortTs: (l.entry_ts && String(l.entry_ts).trim()) ? String(l.entry_ts) : String(l.created_at ?? ""),
+          sortSeq: 0,
         });
       }
 
-      // 정렬(일자 우선, 같은 일자는 입금 먼저, 그 다음 출고)
+      // ✅ 정렬: 날짜는 반드시 일자 기준(오름차순) 유지.
+      // ✅ 같은 날짜 내에서는 실제 입력/생성 시간이 최근일수록 "아래"로 가도록 오름차순 정렬(옛날→최근)
       list.sort((a, b) => {
         const d = String(a.date).localeCompare(String(b.date));
         if (d !== 0) return d;
-        if (a.kind === b.kind) return 0;
-        return a.kind === "입금" ? -1 : 1;
+
+        const ta = String(a.sortTs ?? "");
+        const tb = String(b.sortTs ?? "");
+        const t = ta.localeCompare(tb);
+        if (t !== 0) return t;
+
+        const sa = Number(a.sortSeq ?? 0);
+        const sb = Number(b.sortSeq ?? 0);
+        if (sa !== sb) return sa - sb;
+
+        if (a.kind !== b.kind) return a.kind === "입금" ? -1 : 1;
+        return 0;
       });
 
       // 잔액 누적
