@@ -71,7 +71,8 @@ type Category = (typeof CATEGORIES)[number];
 const PARTNER_TYPES = ["CUSTOMER", "VENDOR", "BOTH"] as const;
 type PartnerType = (typeof PARTNER_TYPES)[number];
 const LS_RECENT_PARTNERS = "bonus_trade_recent_partners_v1";
-const TRADE_TABLE_MIN_WIDTH = 1210;
+// ✅ colgroup 합계(110+180+140+220+120+90+110+110+130+220 = 1330)와 불일치로 상단 스크롤 폭이 짧아지는 근본 원인 수정
+const TRADE_TABLE_MIN_WIDTH = 1330;
 
 // ─────────────────────── Helpers ───────────────────────
 const fmt = (n: number | null | undefined) => Number(n ?? 0).toLocaleString("ko-KR");
