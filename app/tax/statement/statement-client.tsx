@@ -244,6 +244,22 @@ export default function StatementClient() {
         return;
       }
 
+      const p = partners.find((x) => x.id === pId) ?? null;
+      const pName = String(p?.name ?? "").trim();
+      const pBiz = String(p?.business_no ?? "").trim();
+
+      // ✅ ledger_entries: partner_id가 null로 들어간 케이스(거래내역(통합) 입력)도 포함하기 위해 OR 조건 구성
+      // - partner_id = pId 는 기본
+      // - partner_id is null 이면서 business_no가 같거나(우선), counterparty_name이 같은 것도 포함(보조)
+      const ledgerOr =
+        pBiz && pName
+          ? `partner_id.eq.${pId},and(partner_id.is.null,business_no.eq.${pBiz}),and(partner_id.is.null,counterparty_name.eq.${pName})`
+          : pBiz
+            ? `partner_id.eq.${pId},and(partner_id.is.null,business_no.eq.${pBiz})`
+            : pName
+              ? `partner_id.eq.${pId},and(partner_id.is.null,counterparty_name.eq.${pName})`
+              : `partner_id.eq.${pId}`;
+
       // ✅ 기간 내 데이터
       const { data: oData, error: oErr } = await supabase
         .from("orders")
@@ -262,7 +278,7 @@ export default function StatementClient() {
       const { data: lData, error: lErr } = await supabase
         .from("ledger_entries")
         .select("id,entry_date,entry_ts,direction,amount,category,method,memo,partner_id,counterparty_name,business_no,created_at")
-        .eq("partner_id", pId)
+        .or(ledgerOr)
         .gte("entry_date", f)
         .lte("entry_date", t)
         .order("entry_date", { ascending: true })
@@ -281,7 +297,7 @@ export default function StatementClient() {
         const { data: lPrev, error: lPrevErr } = await supabase
           .from("ledger_entries")
           .select("direction,amount")
-          .eq("partner_id", pId)
+          .or(ledgerOr)
           .lt("entry_date", f)
           .order("entry_date", { ascending: true })
           .limit(20000);
