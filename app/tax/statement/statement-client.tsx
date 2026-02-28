@@ -382,7 +382,7 @@ export default function StatementClient() {
             unitPrice: s.unitPrice,
             supply: s.supply,
             vat: s.vat,
-            tradeAmount: null, // ✅ 라인에서는 비움
+            tradeAmount: s.total, // ✅ 거래금액을 출고 라인에 표시(요청 위치)
             payment: null,
             amountSigned: 0, // ✅ 라인은 잔액 반영 안함
             remark: s.remark,
@@ -898,7 +898,9 @@ export default function StatementClient() {
                           <td className="px-2 py-2">
                             <div className="truncate">{hideLead ? "" : r.itemName ? r.itemName : ""}</div>
                           </td>
-                          <td className="px-2 py-2 text-right tabular-nums">{hideLead ? "" : r.qty === null ? "" : formatMoney(r.qty)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            {hideLead ? "" : r.qty === null ? "" : formatMoney(r.qty)}
+                          </td>
                           <td className="px-2 py-2 text-right tabular-nums">
                             {hideLead ? "" : r.unitPrice === null ? "" : formatMoney(r.unitPrice)}
                           </td>
