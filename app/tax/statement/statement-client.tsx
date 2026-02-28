@@ -56,6 +56,7 @@ type StatementRow = {
   amountSigned: number; // 잔액 계산용(입금 +, 출고 -)
   balance: number; // 누적 잔액
   remark: string; // ✅ 비고(주문자)
+  isSubtotal?: boolean; // ✅ 주문/출고 입력건 단위 합계행
 };
 
 function todayYMD() {
@@ -264,14 +265,11 @@ export default function StatementClient() {
         return;
       }
 
-      // ✅ 정렬 안정화를 위한 내부용 row
-      type RowTmp = Omit<StatementRow, "balance"> & { __sortDate: string; __sortKind: number; __sortIdx: number };
-      const list: RowTmp[] = [];
-      let sortIdx = 0;
+      const list: Omit<StatementRow, "balance">[] = [];
 
       const oRows = (oData ?? []) as any as OrderRow[];
 
-      // ✅ 출고: order_lines로 품목 나열 + "주문/출고 입력 건" 단위 총액(요약행)으로 잔액 계산
+      // ✅ 출고: order_lines는 라인대로 나열하되, "주문/출고 입력 건" 단위로 합계행 1줄 추가(잔액은 합계행에서만 반영)
       if (oRows.length > 0) {
         const orderIds = oRows.map((o) => o.id);
 
@@ -296,37 +294,36 @@ export default function StatementClient() {
           if (o.id) ordererMap.set(o.id, extractOrderer(o.memo));
         }
 
-        // ✅ order_id 단위로 라인 모으기
-        const linesByOrder = new Map<string, LineLoose[]>();
+        // order_id 별 라인 그룹핑(정렬은 이미 order_id, line_no로 되어있다고 가정)
+        const byOrder = new Map<string, LineLoose[]>();
         for (const line of (olData ?? []) as any as LineLoose[]) {
           const orderId = String(line?.order_id ?? "");
           if (!orderId) continue;
-          if (!linesByOrder.has(orderId)) linesByOrder.set(orderId, []);
-          linesByOrder.get(orderId)!.push(line);
+          if (!byOrder.has(orderId)) byOrder.set(orderId, []);
+          byOrder.get(orderId)!.push(line);
         }
 
-        // ✅ orders(출고일 순) 순서대로 출력
         for (const o of oRows) {
           const orderId = String(o.id ?? "");
-          if (!orderId) continue;
+          const lines = byOrder.get(orderId) ?? [];
+          if (lines.length === 0) continue;
 
           const date = dateMap.get(orderId) ?? "";
           const remark = ordererMap.get(orderId) ?? "";
 
-          const lines = linesByOrder.get(orderId) ?? [];
-          if (lines.length === 0) continue;
+          let orderTotal = 0;
 
-          const mapped = lines
-            .map((ln) => mapLineToAmounts(ln))
-            .filter((m) => m.itemName && String(m.itemName).trim() !== "");
+          for (const line of lines) {
+            const m = mapLineToAmounts(line);
+            if (!m.itemName || !String(m.itemName).trim()) continue;
 
-          if (mapped.length === 0) continue;
-
-          // 라인 나열(잔액/거래금액은 요약행에서만 표시)
-          for (const m of mapped) {
             const supplyVal = Number.isFinite(m.supply) ? m.supply : 0;
             const vatVal = Number.isFinite(m.vat) ? m.vat : 0;
+            const totalVal = Number.isFinite(m.total) ? m.total : supplyVal + vatVal;
 
+            orderTotal += Number(totalVal ?? 0);
+
+            // ✅ 라인행: 공급가/부가세는 표시, "거래금액/잔액"은 합계행에서만 표시
             list.push({
               date,
               kind: "출고",
@@ -335,41 +332,30 @@ export default function StatementClient() {
               unitPrice: Number.isFinite(m.unitPrice) ? m.unitPrice : 0,
               supply: supplyVal,
               vat: vatVal,
-              tradeAmount: null, // ✅ 라인에는 거래금액 미표시(요약행에서 표시)
+              tradeAmount: null, // ✅ 라인에서는 비움
               payment: null,
-              amountSigned: 0, // ✅ 라인 나열은 잔액에 영향 없음
-              remark: "",
-              __sortDate: date,
-              __sortKind: 1, // 같은 날짜에서 입금(0) 다음
-              __sortIdx: sortIdx++,
+              amountSigned: 0, // ✅ 라인에서는 잔액 반영 안함
+              remark,
             });
           }
 
-          // ✅ 주문/출고 입력 건 단위 요약행(총액 + 잔액 반영)
-          const sumSupply = mapped.reduce((acc, x) => acc + Number(x.supply ?? 0), 0);
-          const sumVat = mapped.reduce((acc, x) => acc + Number(x.vat ?? 0), 0);
-          const sumTotal = mapped.reduce((acc, x) => acc + Number(x.total ?? 0), 0);
-
-          const firstName = mapped[0]?.itemName ?? "";
-          const etcCount = Math.max(0, mapped.length - 1);
-          const summaryName = etcCount > 0 ? `${firstName} 외 ${etcCount}건` : firstName;
-
-          list.push({
-            date,
-            kind: "출고",
-            itemName: summaryName,
-            qty: null,
-            unitPrice: null,
-            supply: sumSupply,
-            vat: sumVat,
-            tradeAmount: sumSupply + sumVat, // ✅ 요약행에 거래금액 표시
-            payment: null,
-            amountSigned: -Number(sumTotal ?? 0), // ✅ 요약행에서만 잔액 차감
-            remark,
-            __sortDate: date,
-            __sortKind: 1,
-            __sortIdx: sortIdx++,
-          });
+          // ✅ 합계행(주문/출고 입력 건 단위): 거래금액(총액) 표시 + 잔액 반영
+          if (orderTotal !== 0) {
+            list.push({
+              date,
+              kind: "출고",
+              itemName: "",
+              qty: null,
+              unitPrice: null,
+              supply: null,
+              vat: null,
+              tradeAmount: orderTotal,
+              payment: null,
+              amountSigned: -orderTotal,
+              remark: "",
+              isSubtotal: true,
+            });
+          }
         }
       }
 
@@ -399,27 +385,29 @@ export default function StatementClient() {
           payment: isIn ? amt : null, // ✅ 입금은 결제(입금)
           amountSigned: signed,
           remark: "",
-          __sortDate: date,
-          __sortKind: isIn ? 0 : 2, // ✅ 같은 날짜: 입금 먼저, 주문/출고(라인+요약) 다음, ledger 출고는 맨 뒤
-          __sortIdx: sortIdx++,
         });
       }
 
-      // ✅ 정렬(일자 우선, 같은 일자는 입금 -> 주문/출고(라인+요약) -> ledger 출고)
+      // 정렬(일자 우선, 같은 일자는 입금 먼저, 그 다음 출고 / 출고 내에서는 라인 -> 합계행 순서 유지)
       list.sort((a, b) => {
-        const d = String(a.__sortDate).localeCompare(String(b.__sortDate));
+        const d = String(a.date).localeCompare(String(b.date));
         if (d !== 0) return d;
-        const k = a.__sortKind - b.__sortKind;
-        if (k !== 0) return k;
-        return a.__sortIdx - b.__sortIdx;
+
+        if (a.kind !== b.kind) return a.kind === "입금" ? -1 : 1;
+
+        if (a.kind === "출고" && b.kind === "출고") {
+          const aSub = a.isSubtotal ? 1 : 0;
+          const bSub = b.isSubtotal ? 1 : 0;
+          if (aSub !== bSub) return aSub - bSub; // 라인(0) 먼저, 합계(1) 나중
+        }
+        return 0;
       });
 
       // 잔액 누적
       let bal = 0;
       const withBal: StatementRow[] = list.map((r) => {
         bal += Number(r.amountSigned ?? 0);
-        const { __sortDate, __sortKind, __sortIdx, ...rest } = r;
-        return { ...rest, balance: bal };
+        return { ...r, balance: bal };
       });
 
       setRows(withBal);
@@ -856,32 +844,40 @@ export default function StatementClient() {
                       const supplyClass = isOut ? "text-red-600" : "";
                       const paymentClass = !isOut ? "text-blue-700" : "";
                       const tradeClass = isOut ? "text-red-600" : "";
+
+                      const showDate = r.isSubtotal ? "" : r.date;
+                      const showKind = r.isSubtotal ? "" : r.kind;
+
                       return (
                         <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
-                          <td className="px-2 py-2 font-semibold tabular-nums">{r.date}</td>
-                          <td className="px-2 py-2 font-semibold">{r.kind}</td>
+                          <td className="px-2 py-2 font-semibold tabular-nums">{showDate}</td>
+                          <td className="px-2 py-2 font-semibold">{showKind}</td>
                           <td className="px-2 py-2">
-                            <div className="truncate">{r.itemName ? r.itemName : ""}</div>
+                            <div className="truncate">{r.isSubtotal ? "" : r.itemName ? r.itemName : ""}</div>
                           </td>
                           <td className="px-2 py-2 text-right tabular-nums">
-                            {r.qty === null ? "" : formatMoney(r.qty)}
+                            {r.isSubtotal ? "" : r.qty === null ? "" : formatMoney(r.qty)}
                           </td>
                           <td className="px-2 py-2 text-right tabular-nums">
-                            {r.unitPrice === null ? "" : formatMoney(r.unitPrice)}
+                            {r.isSubtotal ? "" : r.unitPrice === null ? "" : formatMoney(r.unitPrice)}
                           </td>
                           <td className={`px-2 py-2 text-right tabular-nums font-semibold ${supplyClass}`}>
-                            {r.supply === null ? "" : formatMoney(r.supply)}
+                            {r.isSubtotal ? "" : r.supply === null ? "" : formatMoney(r.supply)}
                           </td>
-                          <td className="px-2 py-2 text-right tabular-nums">{r.vat === null ? "" : formatMoney(r.vat)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            {r.isSubtotal ? "" : r.vat === null ? "" : formatMoney(r.vat)}
+                          </td>
                           <td className={`px-2 py-2 text-right tabular-nums font-semibold ${tradeClass}`}>
                             {r.tradeAmount === null ? "" : formatMoney(r.tradeAmount)}
                           </td>
                           <td className={`px-2 py-2 text-right tabular-nums font-semibold ${paymentClass}`}>
                             {r.payment === null ? "" : formatMoney(r.payment)}
                           </td>
-                          <td className="px-2 py-2 text-right tabular-nums font-semibold">{formatMoney(r.balance)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums font-semibold">
+                            {r.isSubtotal || r.kind === "입금" ? formatMoney(r.balance) : ""}
+                          </td>
                           <td className="px-2 py-2">
-                            <div className="truncate">{r.remark ? r.remark : ""}</div>
+                            <div className="truncate">{r.isSubtotal ? "" : r.remark ? r.remark : ""}</div>
                           </td>
                         </tr>
                       );
