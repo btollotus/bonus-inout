@@ -440,10 +440,14 @@ export default function TradeClient() {
   // ✅ To 날짜 자동맞춤(사용자 직접 변경 여부)
   const [toTouched, setToTouched] = useState(false);
 
-  // ✅ 상단 에러 배너 대신 alert로 표시
+  // ✅ 상단 에러 배너 대신 "삭제 확인창"처럼 모달 알림
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertText, setAlertText] = useState("");
+
   useEffect(() => {
     if (!msg) return;
-    window.alert(msg);
+    setAlertText(msg);
+    setAlertOpen(true);
     setMsg(null);
   }, [msg]);
 
@@ -532,7 +536,7 @@ export default function TradeClient() {
     if (syncDateRef.current === "ENTRY") { syncDateRef.current = null; return; }
     syncDateRef.current = "SHIP"; setEntryDate(shipDate);
 
-    // ✅ (1) 입력 날짜가 거래내역 From보다 이전이면, 거래내역 From도 같이 당김
+    // ✅ (1) 입력 날짜가 거래내역 From보다 이전이면, 거래내역 From도 같은 날짜로 동기화
     if (shipDate && fromYMD && shipDate < fromYMD) setFromYMD(shipDate);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -542,7 +546,7 @@ export default function TradeClient() {
     if (syncDateRef.current === "SHIP") { syncDateRef.current = null; return; }
     syncDateRef.current = "ENTRY"; setShipDate(entryDate);
 
-    // ✅ (1) 입력 날짜가 거래내역 From보다 이전이면, 거래내역 From도 같이 당김
+    // ✅ (1) 입력 날짜가 거래내역 From보다 이전이면, 거래내역 From도 같은 날짜로 동기화
     if (entryDate && fromYMD && entryDate < fromYMD) setFromYMD(entryDate);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -979,6 +983,7 @@ export default function TradeClient() {
     if (sErr) return setMsg(sErr.message);
     setOrderTitle(""); setOrdererName(""); setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false);
+    setToTouched(false); // ✅ 기본은 항상 마지막 거래내역까지 보이게
     await loadTrades();
   }
 
@@ -1010,6 +1015,7 @@ export default function TradeClient() {
     setAmountStr(""); setLedgerMemo("");
     setVatFree(false); // ✅ 입력단 체크는 입력 기준으로만 사용(저장 후 초기화)
     if (!selectedPartner) { setManualCounterpartyName(""); setManualBusinessNo(""); }
+    setToTouched(false); // ✅ 기본은 항상 마지막 거래내역까지 보이게
     await loadTrades();
   }
 
@@ -1155,7 +1161,26 @@ export default function TradeClient() {
   return (
     <div className="bg-slate-50 text-slate-900 min-h-screen">
       <div className="mx-auto w-full max-w-[1600px] overflow-x-hidden px-4 py-6">
-        {/* ✅ msg 배너 출력 제거 (alert로 표시) */}
+        {/* ✅ msg 배너 출력 제거 (모달 알림으로 표시) */}
+        {alertOpen ? (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4" onClick={() => setAlertOpen(false)}>
+            <div className="w-full max-w-[520px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div>
+                  <div className="text-base font-semibold">알림</div>
+                  <div className="mt-1 text-xs text-slate-500">확인 버튼을 누르면 닫힙니다.</div>
+                </div>
+                <button className={btn} onClick={() => setAlertOpen(false)}>닫기</button>
+              </div>
+              <div className="px-5 py-4">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 whitespace-pre-wrap break-words">{alertText}</div>
+                <div className="mt-4 flex justify-end">
+                  <button className={btnOn} onClick={() => setAlertOpen(false)}>확인</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {/* ──── Partner edit modal ──── */}
         {partnerEditOpen ? (
@@ -1538,7 +1563,7 @@ export default function TradeClient() {
                 </div>
               </div>
               <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
-                <div><div className="mb-1 text-xs text-slate-600">From</div><input type="date" className={inp} value={fromYMD} onChange={(e) => setFromYMD(e.target.value)} /></div>
+                <div><div className="mb-1 text-xs text-slate-600">From</div><input type="date" className={inp} value={fromYMD} onChange={(e) => { setToTouched(false); setFromYMD(e.target.value); }} /></div>
                 <div><div className="mb-1 text-xs text-slate-600">To</div><input type="date" className={inp} value={toYMD} onChange={(e) => { setToTouched(true); setToYMD(e.target.value); }} /></div>
                 <div className="flex flex-wrap gap-2">
                   <button className={btn} onClick={() => { setFromYMD(addDays(todayYMD(), -30)); setToYMD(todayYMD()); setToTouched(false); }}>기간 초기화</button>
