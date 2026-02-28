@@ -363,7 +363,6 @@ export default function StatementClient() {
         }
 
         // ✅ 같은 주문(order_id) 묶음에서 거래금액은 "총액"을 첫 라인에만 표시
-        // ✅ 잔액은 "마지막 라인"에만 표시(나머지는 화면/CSV에서 공란 처리)
         for (const orderId of orderIdOrder) {
           const pack = perOrder.get(orderId);
           if (!pack) continue;
@@ -480,6 +479,15 @@ export default function StatementClient() {
     return { inSum, outSum, net };
   }, [rows]);
 
+  // ✅ 주문/출고 입력 "건"의 최종 잔액(그룹 마지막 라인의 balance)을 모아서, 첫 라인(거래금액 표시 라인) 위치에 표시하기 위함
+  const groupFinalBalanceMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) {
+      if (r.groupId && r.groupLast) m.set(String(r.groupId), Number(r.balance ?? 0));
+    }
+    return m;
+  }, [rows]);
+
   function downloadExcelCsv() {
     if (!partnerId) return;
 
@@ -488,7 +496,11 @@ export default function StatementClient() {
     lines.push(headers.map(csvEscape).join(","));
 
     for (const r of rows) {
-      const showBalance = r.groupId ? !!r.groupLast : true;
+      const showGroupBalanceHere = !!r.groupId && r.tradeAmount !== null; // ✅ 그룹 첫 라인(거래금액 표시 라인)에 잔액 표시
+      const showBalance = r.groupId ? showGroupBalanceHere : true;
+
+      const balVal =
+        r.groupId && showGroupBalanceHere ? groupFinalBalanceMap.get(String(r.groupId)) ?? r.balance : r.balance;
 
       const row = [
         r.date ?? "",
@@ -500,7 +512,7 @@ export default function StatementClient() {
         r.vat === null ? "" : formatMoney(r.vat),
         r.tradeAmount === null ? "" : formatMoney(r.tradeAmount),
         r.payment === null ? "" : formatMoney(r.payment),
-        showBalance ? formatMoney(r.balance ?? 0) : "",
+        showBalance ? formatMoney(balVal ?? 0) : "",
         r.remark ?? "",
       ];
       lines.push(row.map(csvEscape).join(","));
@@ -898,7 +910,13 @@ export default function StatementClient() {
                       const paymentClass = !isOut ? "text-blue-700" : "";
                       const tradeClass = isOut ? "text-red-600" : "";
 
-                      const showBalance = r.groupId ? !!r.groupLast : true;
+                      // ✅ 그룹(주문/출고 입력 건) 잔액은: "거래금액(총액)"이 표시되는 첫 라인 위치에만 표시
+                      const showGroupBalanceHere = !!r.groupId && r.tradeAmount !== null;
+                      const showBalance = r.groupId ? showGroupBalanceHere : true;
+                      const balVal =
+                        r.groupId && showGroupBalanceHere
+                          ? groupFinalBalanceMap.get(String(r.groupId)) ?? r.balance
+                          : r.balance;
 
                       return (
                         <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
@@ -924,7 +942,7 @@ export default function StatementClient() {
                             {r.payment === null ? "" : formatMoney(r.payment)}
                           </td>
                           <td className="px-2 py-2 text-right tabular-nums font-semibold">
-                            {showBalance ? formatMoney(r.balance) : ""}
+                            {showBalance ? formatMoney(balVal) : ""}
                           </td>
                           <td className="px-2 py-2">
                             <div className="truncate">{r.remark ? r.remark : ""}</div>
