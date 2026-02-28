@@ -60,6 +60,10 @@ type StatementRow = {
   // ✅ 정렬용(표시에는 사용 안함)
   sortTs?: string | null; // 실제 입력/생성 시간
   sortSeq?: number; // 같은 시각 내 라인 순서
+
+  // ✅ 주문/출고(orders) 묶음 표시 제어용
+  groupId?: string | null; // order_id
+  groupLast?: boolean; // 같은 주문/출고 입력 건의 "마지막 라인" 여부
 };
 
 function todayYMD() {
@@ -359,15 +363,19 @@ export default function StatementClient() {
         }
 
         // ✅ 같은 주문(order_id) 묶음에서 거래금액은 "총액"을 첫 라인에만 표시
+        // ✅ 잔액은 "마지막 라인"에만 표시(나머지는 화면/CSV에서 공란 처리)
         for (const orderId of orderIdOrder) {
           const pack = perOrder.get(orderId);
           if (!pack) continue;
 
           const orderTotal = Number(orderTotalMap.get(orderId) ?? 0);
+          const lastIdx = Math.max(0, pack.lines.length - 1);
+
           let first = true;
           let seq = 0;
 
-          for (const ln of pack.lines) {
+          for (let i = 0; i < pack.lines.length; i++) {
+            const ln = pack.lines[i];
             const amtSigned = -Number(ln.total ?? 0);
 
             list.push({
@@ -384,6 +392,8 @@ export default function StatementClient() {
               remark: pack.remark,
               sortTs: pack.sortTs,
               sortSeq: seq,
+              groupId: orderId,
+              groupLast: i === lastIdx,
             });
 
             first = false;
@@ -420,6 +430,8 @@ export default function StatementClient() {
           remark: "",
           sortTs: (l.entry_ts && String(l.entry_ts).trim()) ? String(l.entry_ts) : String(l.created_at ?? ""),
           sortSeq: 0,
+          groupId: null,
+          groupLast: false,
         });
       }
 
@@ -431,8 +443,8 @@ export default function StatementClient() {
 
         const ta = String(a.sortTs ?? "");
         const tb = String(b.sortTs ?? "");
-        const t = ta.localeCompare(tb);
-        if (t !== 0) return t;
+        const tcmp = ta.localeCompare(tb);
+        if (tcmp !== 0) return tcmp;
 
         const sa = Number(a.sortSeq ?? 0);
         const sb = Number(b.sortSeq ?? 0);
@@ -476,6 +488,8 @@ export default function StatementClient() {
     lines.push(headers.map(csvEscape).join(","));
 
     for (const r of rows) {
+      const showBalance = r.groupId ? !!r.groupLast : true;
+
       const row = [
         r.date ?? "",
         r.kind ?? "",
@@ -486,7 +500,7 @@ export default function StatementClient() {
         r.vat === null ? "" : formatMoney(r.vat),
         r.tradeAmount === null ? "" : formatMoney(r.tradeAmount),
         r.payment === null ? "" : formatMoney(r.payment),
-        formatMoney(r.balance ?? 0),
+        showBalance ? formatMoney(r.balance ?? 0) : "",
         r.remark ?? "",
       ];
       lines.push(row.map(csvEscape).join(","));
@@ -883,6 +897,9 @@ export default function StatementClient() {
                       const supplyClass = isOut ? "text-red-600" : "";
                       const paymentClass = !isOut ? "text-blue-700" : "";
                       const tradeClass = isOut ? "text-red-600" : "";
+
+                      const showBalance = r.groupId ? !!r.groupLast : true;
+
                       return (
                         <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
                           <td className="px-2 py-2 font-semibold tabular-nums">{r.date}</td>
@@ -906,7 +923,9 @@ export default function StatementClient() {
                           <td className={`px-2 py-2 text-right tabular-nums font-semibold ${paymentClass}`}>
                             {r.payment === null ? "" : formatMoney(r.payment)}
                           </td>
-                          <td className="px-2 py-2 text-right tabular-nums font-semibold">{formatMoney(r.balance)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums font-semibold">
+                            {showBalance ? formatMoney(r.balance) : ""}
+                          </td>
                           <td className="px-2 py-2">
                             <div className="truncate">{r.remark ? r.remark : ""}</div>
                           </td>
