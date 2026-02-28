@@ -268,7 +268,7 @@ export default function StatementClient() {
 
       const oRows = (oData ?? []) as any as OrderRow[];
 
-      // ✅ 출고: order_lines로 품목/수량/단가/공급가/부가세 구성
+      // ✅ 출고: "라인 단위 나열"이 아니라, "주문/출고 입력 건(=order) 단위"로 총액 1줄 표시 + 잔액 계산
       if (oRows.length > 0) {
         const orderIds = oRows.map((o) => o.id);
 
@@ -293,27 +293,71 @@ export default function StatementClient() {
           if (o.id) ordererMap.set(o.id, extractOrderer(o.memo));
         }
 
+        // order_id별 합산
+        const orderAgg = new Map<
+          string,
+          { firstName: string; lineCount: number; supplySum: number; vatSum: number; totalSum: number }
+        >();
+
         for (const line of (olData ?? []) as any as LineLoose[]) {
           const orderId = String(line?.order_id ?? "");
-          const date = dateMap.get(orderId) ?? "";
-          const remark = ordererMap.get(orderId) ?? "";
-          const m = mapLineToAmounts(line);
+          if (!orderId) continue;
 
+          const m = mapLineToAmounts(line);
           if (!m.itemName || !String(m.itemName).trim()) continue;
 
-          const amtSigned = -Number(m.total ?? 0);
-          const supplyVal = Number.isFinite(m.supply) ? m.supply : 0;
-          const vatVal = Number.isFinite(m.vat) ? m.vat : 0;
+          const supplyVal = Number.isFinite(m.supply) ? Number(m.supply) : 0;
+          const vatVal = Number.isFinite(m.vat) ? Number(m.vat) : 0;
+          const totalVal = Number.isFinite(m.total) ? Number(m.total) : supplyVal + vatVal;
+
+          const cur = orderAgg.get(orderId);
+          if (!cur) {
+            orderAgg.set(orderId, {
+              firstName: String(m.itemName),
+              lineCount: 1,
+              supplySum: supplyVal,
+              vatSum: vatVal,
+              totalSum: totalVal,
+            });
+          } else {
+            orderAgg.set(orderId, {
+              firstName: cur.firstName,
+              lineCount: cur.lineCount + 1,
+              supplySum: cur.supplySum + supplyVal,
+              vatSum: cur.vatSum + vatVal,
+              totalSum: cur.totalSum + totalVal,
+            });
+          }
+        }
+
+        // 주문(출고) 1건 = 1줄
+        for (const o of oRows) {
+          const orderId = String(o.id ?? "");
+          const date = dateMap.get(orderId) ?? "";
+          const remark = ordererMap.get(orderId) ?? "";
+
+          const agg = orderAgg.get(orderId) ?? null;
+
+          // 라인이 없으면 orders.total_amount 기반으로라도 1줄 표시(부가세 분리 불가 → 공급가=total, 부가세=0)
+          const supplyVal = agg ? agg.supplySum : Number(o.total_amount ?? 0);
+          const vatVal = agg ? agg.vatSum : 0;
+          const totalVal = agg ? agg.totalSum : supplyVal + vatVal;
+
+          const firstName = agg ? agg.firstName : "";
+          const cnt = agg ? agg.lineCount : 0;
+          const itemName = firstName ? (cnt > 1 ? `${firstName} 외 ${cnt - 1}건` : firstName) : "";
+
+          const amtSigned = -Number(totalVal ?? 0);
 
           list.push({
             date,
             kind: "출고",
-            itemName: m.itemName,
-            qty: Number.isFinite(m.qty) ? m.qty : 0,
-            unitPrice: Number.isFinite(m.unitPrice) ? m.unitPrice : 0,
-            supply: supplyVal,
-            vat: vatVal,
-            tradeAmount: supplyVal + vatVal, // ✅ 거래금액
+            itemName,
+            qty: null,
+            unitPrice: null,
+            supply: Number.isFinite(supplyVal) ? supplyVal : 0,
+            vat: Number.isFinite(vatVal) ? vatVal : 0,
+            tradeAmount: Number.isFinite(totalVal) ? totalVal : 0, // ✅ 주문/출고 입력 건 단위 거래금액
             payment: null, // ✅ 출고는 결제칸 비움
             amountSigned: amtSigned,
             remark,
@@ -423,10 +467,10 @@ export default function StatementClient() {
     URL.revokeObjectURL(url);
   }
 
-    // ✅ 탭(브라우저 타이틀) 변경
-    useEffect(() => {
-      document.title = "BONUSMATE ERP 거래원장";
-    }, []);
+  // ✅ 탭(브라우저 타이틀) 변경
+  useEffect(() => {
+    document.title = "BONUSMATE ERP 거래원장";
+  }, []);
 
   // ✅ 입력 검색 필터
   const filteredPartners = useMemo(() => {
@@ -439,8 +483,7 @@ export default function StatementClient() {
         const biz = (p.business_no ?? "").toLowerCase();
         const key = `${name} ${biz}`;
         const hit = key.includes(q);
-        const score =
-          !q ? 9999 : name.startsWith(q) ? 0 : name.includes(q) ? 1 : biz.includes(q) ? 2 : hit ? 3 : 99;
+        const score = !q ? 9999 : name.startsWith(q) ? 0 : name.includes(q) ? 1 : biz.includes(q) ? 2 : hit ? 3 : 99;
         return { p, score, hit };
       })
       .filter((x) => x.hit)
