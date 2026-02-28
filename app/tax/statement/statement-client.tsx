@@ -287,37 +287,96 @@ export default function StatementClient() {
         // order_id -> ship_date / 주문자 매핑
         const dateMap = new Map<string, string>();
         const ordererMap = new Map<string, string>();
+        const orderTotalMap = new Map<string, number>();
+        const orderHasTotal = new Set<string>();
+
         for (const o of oRows) {
           const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
           if (o.id) dateMap.set(o.id, date);
           if (o.id) ordererMap.set(o.id, extractOrderer(o.memo));
+
+          const tot = Number(o.total_amount ?? Number.NaN);
+          if (o.id) {
+            if (Number.isFinite(tot)) {
+              orderTotalMap.set(o.id, tot);
+              orderHasTotal.add(o.id);
+            } else {
+              orderTotalMap.set(o.id, 0);
+            }
+          }
         }
+
+        // ✅ order_id별 라인들을 먼저 모으고(총액 계산용), 그 다음 출력(list push)
+        const orderIdOrder: string[] = [];
+        const perOrder = new Map<
+          string,
+          {
+            date: string;
+            remark: string;
+            lines: Array<{ itemName: string; qty: number; unitPrice: number; supply: number; vat: number; total: number }>;
+          }
+        >();
 
         for (const line of (olData ?? []) as any as LineLoose[]) {
           const orderId = String(line?.order_id ?? "");
+          if (!orderId) continue;
+
           const date = dateMap.get(orderId) ?? "";
           const remark = ordererMap.get(orderId) ?? "";
           const m = mapLineToAmounts(line);
 
           if (!m.itemName || !String(m.itemName).trim()) continue;
 
-          const amtSigned = -Number(m.total ?? 0);
           const supplyVal = Number.isFinite(m.supply) ? m.supply : 0;
           const vatVal = Number.isFinite(m.vat) ? m.vat : 0;
+          const totalVal = Number.isFinite(m.total) ? m.total : supplyVal + vatVal;
 
-          list.push({
-            date,
-            kind: "출고",
+          if (!perOrder.has(orderId)) {
+            perOrder.set(orderId, { date, remark, lines: [] });
+            orderIdOrder.push(orderId);
+          }
+          perOrder.get(orderId)!.lines.push({
             itemName: m.itemName,
             qty: Number.isFinite(m.qty) ? m.qty : 0,
             unitPrice: Number.isFinite(m.unitPrice) ? m.unitPrice : 0,
             supply: supplyVal,
             vat: vatVal,
-            tradeAmount: supplyVal + vatVal, // ✅ 거래금액
-            payment: null, // ✅ 출고는 결제칸 비움
-            amountSigned: amtSigned,
-            remark,
+            total: totalVal,
           });
+
+          // orders.total_amount가 없으면 라인 합계로 계산
+          if (!orderHasTotal.has(orderId)) {
+            orderTotalMap.set(orderId, Number(orderTotalMap.get(orderId) ?? 0) + Number(totalVal ?? 0));
+          }
+        }
+
+        // ✅ 같은 주문(order_id) 묶음에서 거래금액은 "총액"을 첫 라인에만 표시
+        for (const orderId of orderIdOrder) {
+          const pack = perOrder.get(orderId);
+          if (!pack) continue;
+
+          const orderTotal = Number(orderTotalMap.get(orderId) ?? 0);
+          let first = true;
+
+          for (const ln of pack.lines) {
+            const amtSigned = -Number(ln.total ?? 0);
+
+            list.push({
+              date: pack.date,
+              kind: "출고",
+              itemName: ln.itemName,
+              qty: ln.qty,
+              unitPrice: ln.unitPrice,
+              supply: ln.supply,
+              vat: ln.vat,
+              tradeAmount: first ? orderTotal : null, // ✅ 거래금액: 주문/출고 입력 "건" 총액만 표시
+              payment: null, // ✅ 출고는 결제칸 비움
+              amountSigned: amtSigned,
+              remark: pack.remark,
+            });
+
+            first = false;
+          }
         }
       }
 
@@ -423,10 +482,10 @@ export default function StatementClient() {
     URL.revokeObjectURL(url);
   }
 
-    // ✅ 탭(브라우저 타이틀) 변경
-    useEffect(() => {
-      document.title = "BONUSMATE ERP 거래원장";
-    }, []);
+  // ✅ 탭(브라우저 타이틀) 변경
+  useEffect(() => {
+    document.title = "BONUSMATE ERP 거래원장";
+  }, []);
 
   // ✅ 입력 검색 필터
   const filteredPartners = useMemo(() => {
