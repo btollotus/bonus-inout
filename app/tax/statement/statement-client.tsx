@@ -244,6 +244,7 @@ export default function StatementClient() {
         return;
       }
 
+      // ✅ 기간 내 데이터
       const { data: oData, error: oErr } = await supabase
         .from("orders")
         .select("id,customer_id,customer_name,ship_date,ship_method,memo,total_amount,created_at")
@@ -270,6 +271,98 @@ export default function StatementClient() {
       if (lErr) {
         setMsg(lErr.message);
         return;
+      }
+
+      // ✅ 최초 기록부터 누적 잔액을 맞추기 위한 "기간 시작 전" 누적값 계산
+      let initialBal = 0;
+
+      // 1) 기간 시작 전 ledger 누적
+      {
+        const { data: lPrev, error: lPrevErr } = await supabase
+          .from("ledger_entries")
+          .select("direction,amount")
+          .eq("partner_id", pId)
+          .lt("entry_date", f)
+          .order("entry_date", { ascending: true })
+          .limit(20000);
+
+        if (lPrevErr) {
+          setMsg(lPrevErr.message);
+          return;
+        }
+
+        for (const x of (lPrev ?? []) as any[]) {
+          const amt = Number(x?.amount ?? 0);
+          const dir = String(x?.direction ?? "").toUpperCase();
+          const isIn = dir === "IN";
+          const isOut = dir === "OUT";
+          if (isIn) initialBal += amt;
+          else if (isOut) initialBal -= amt;
+        }
+      }
+
+      // 2) 기간 시작 전 orders 누적(출고는 잔액에 -)
+      {
+        const { data: oPrev, error: oPrevErr } = await supabase
+          .from("orders")
+          .select("id,total_amount,created_at,ship_date")
+          .eq("customer_id", pId)
+          .lt("ship_date", f)
+          .order("ship_date", { ascending: true })
+          .limit(20000);
+
+        if (oPrevErr) {
+          setMsg(oPrevErr.message);
+          return;
+        }
+
+        const prevOrders = (oPrev ?? []) as any as OrderRow[];
+        if (prevOrders.length > 0) {
+          const ids = prevOrders.map((x) => x.id).filter(Boolean);
+
+          const prevTotalMap = new Map<string, number>();
+          const needLineIds: string[] = [];
+
+          for (const o of prevOrders) {
+            const tot = Number(o.total_amount ?? Number.NaN);
+            if (o.id) {
+              if (Number.isFinite(tot)) prevTotalMap.set(o.id, tot);
+              else {
+                prevTotalMap.set(o.id, 0);
+                needLineIds.push(o.id);
+              }
+            }
+          }
+
+          if (needLineIds.length > 0) {
+            const { data: prevLines, error: prevLinesErr } = await supabase
+              .from("order_lines")
+              .select("*")
+              .in("order_id", needLineIds)
+              .order("order_id", { ascending: true })
+              .order("line_no", { ascending: true });
+
+            if (prevLinesErr) {
+              setMsg(prevLinesErr.message);
+              return;
+            }
+
+            for (const line of (prevLines ?? []) as any as LineLoose[]) {
+              const oid = String(line?.order_id ?? "");
+              if (!oid) continue;
+              const m = mapLineToAmounts(line);
+              const supplyVal = Number.isFinite(m.supply) ? m.supply : 0;
+              const vatVal = Number.isFinite(m.vat) ? m.vat : 0;
+              const totalVal = Number.isFinite(m.total) ? m.total : supplyVal + vatVal;
+              prevTotalMap.set(oid, Number(prevTotalMap.get(oid) ?? 0) + Number(totalVal ?? 0));
+            }
+          }
+
+          for (const oid of ids) {
+            const tot = Number(prevTotalMap.get(oid) ?? 0);
+            initialBal -= tot;
+          }
+        }
       }
 
       const list: Omit<StatementRow, "balance">[] = [];
@@ -427,7 +520,7 @@ export default function StatementClient() {
           payment: isIn ? amt : null, // ✅ 입금은 결제(입금)
           amountSigned: signed,
           remark: "",
-          sortTs: (l.entry_ts && String(l.entry_ts).trim()) ? String(l.entry_ts) : String(l.created_at ?? ""),
+          sortTs: l.entry_ts && String(l.entry_ts).trim() ? String(l.entry_ts) : String(l.created_at ?? ""),
           sortSeq: 0,
           groupId: null,
           groupLast: false,
@@ -453,8 +546,8 @@ export default function StatementClient() {
         return 0;
       });
 
-      // 잔액 누적
-      let bal = 0;
+      // ✅ 잔액 누적: 기간이 달라도 "최초 기록부터" 누적된 잔액을 유지
+      let bal = initialBal;
       const withBal: StatementRow[] = list.map((r) => {
         bal += Number(r.amountSigned ?? 0);
         return { ...r, balance: bal };
@@ -776,10 +869,10 @@ export default function StatementClient() {
                 <button
                   className={btn}
                   onClick={() => {
-                    const f = addDays(todayYMD(), -30);
-                    const t = todayYMD();
-                    setFromYMD(f);
-                    setToYMD(t);
+                    const f2 = addDays(todayYMD(), -30);
+                    const t2 = todayYMD();
+                    setFromYMD(f2);
+                    setToYMD(t2);
                   }}
                 >
                   최근 30일
