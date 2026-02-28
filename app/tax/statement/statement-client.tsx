@@ -56,10 +56,6 @@ type StatementRow = {
   amountSigned: number; // 잔액 계산용(입금 +, 출고 -)
   balance: number; // 누적 잔액
   remark: string; // ✅ 비고(주문자)
-
-  // ✅ 화면표시용(요청 이미지처럼: 출고 라인들 아래에 결제/거래금액 합계 2줄)
-  isPaySummary?: boolean; // 결제 합계행
-  isShipSummary?: boolean; // 거래금액(출고 합계)행
 };
 
 function todayYMD() {
@@ -271,44 +267,8 @@ export default function StatementClient() {
       const list: Omit<StatementRow, "balance">[] = [];
 
       const oRows = (oData ?? []) as any as OrderRow[];
-      const ledgers = (lData ?? []) as any as LedgerRow[];
 
-      // ✅ 날짜별 결제 합계(ledger IN) / 출고 합계(order_lines total) 만들기
-      const payByDate = new Map<string, number>(); // entry_date -> sum(IN)
-      for (const l of ledgers) {
-        const dir = String(l.direction ?? "").toUpperCase();
-        if (dir === "IN") {
-          const d = String(l.entry_date ?? "");
-          const amt = Number(l.amount ?? 0);
-          payByDate.set(d, (payByDate.get(d) ?? 0) + amt);
-        }
-      }
-
-      // ✅ ledger OUT는 그대로 라인으로 넣되(잔액 반영), IN은 합계행으로만 표시
-      const outLedgerByDate = new Map<string, LedgerRow[]>();
-      for (const l of ledgers) {
-        const dir = String(l.direction ?? "").toUpperCase();
-        if (dir !== "OUT") continue;
-        const d = String(l.entry_date ?? "");
-        if (!outLedgerByDate.has(d)) outLedgerByDate.set(d, []);
-        outLedgerByDate.get(d)!.push(l);
-      }
-
-      // ✅ 출고: order_lines를 날짜 단위로 라인 나열하고, 마지막에 (결제 합계행 → 출고 합계행) 2줄 추가
-      const shipLinesByDate = new Map<
-        string,
-        Array<{
-          itemName: string;
-          qty: number;
-          unitPrice: number;
-          supply: number;
-          vat: number;
-          total: number;
-          remark: string;
-        }>
-      >();
-      const shipTotalByDate = new Map<string, number>();
-
+      // ✅ 출고: order_lines로 품목/수량/단가/공급가/부가세 구성
       if (oRows.length > 0) {
         const orderIds = oRows.map((o) => o.id);
 
@@ -336,116 +296,67 @@ export default function StatementClient() {
         for (const line of (olData ?? []) as any as LineLoose[]) {
           const orderId = String(line?.order_id ?? "");
           const date = dateMap.get(orderId) ?? "";
-          if (!date) continue;
-
           const remark = ordererMap.get(orderId) ?? "";
           const m = mapLineToAmounts(line);
 
           if (!m.itemName || !String(m.itemName).trim()) continue;
 
+          const amtSigned = -Number(m.total ?? 0);
           const supplyVal = Number.isFinite(m.supply) ? m.supply : 0;
           const vatVal = Number.isFinite(m.vat) ? m.vat : 0;
-          const totalVal = Number.isFinite(m.total) ? m.total : supplyVal + vatVal;
 
-          if (!shipLinesByDate.has(date)) shipLinesByDate.set(date, []);
-          shipLinesByDate.get(date)!.push({
+          list.push({
+            date,
+            kind: "출고",
             itemName: m.itemName,
             qty: Number.isFinite(m.qty) ? m.qty : 0,
             unitPrice: Number.isFinite(m.unitPrice) ? m.unitPrice : 0,
             supply: supplyVal,
             vat: vatVal,
-            total: totalVal,
+            tradeAmount: supplyVal + vatVal, // ✅ 거래금액
+            payment: null, // ✅ 출고는 결제칸 비움
+            amountSigned: amtSigned,
             remark,
           });
-
-          shipTotalByDate.set(date, (shipTotalByDate.get(date) ?? 0) + Number(totalVal ?? 0));
         }
       }
 
-      // ✅ 표시할 날짜 목록(출고/결제/ledger OUT 중 하나라도 있으면 포함)
-      const dateSet = new Set<string>();
-      for (const d of shipLinesByDate.keys()) dateSet.add(d);
-      for (const d of payByDate.keys()) dateSet.add(d);
-      for (const d of outLedgerByDate.keys()) dateSet.add(d);
+      // ✅ 입금/출고(ledger): direction 기준으로 구분 + 잔액 반영
+      for (const l of (lData ?? []) as any as LedgerRow[]) {
+        const date = l.entry_date;
+        const amt = Number(l.amount ?? 0);
+        const dir = String(l.direction ?? "").toUpperCase();
 
-      const dates = Array.from(dateSet).sort((a, b) => String(a).localeCompare(String(b)));
+        const isIn = dir === "IN";
+        const isOut = dir === "OUT";
 
-      for (const date of dates) {
-        // 1) (해당 날짜) 출고 라인들 먼저 표시 (잔액 반영 X)
-        const shipLines = shipLinesByDate.get(date) ?? [];
-        for (const s of shipLines) {
-          list.push({
-            date,
-            kind: "출고",
-            itemName: s.itemName,
-            qty: s.qty,
-            unitPrice: s.unitPrice,
-            supply: s.supply,
-            vat: s.vat,
-            tradeAmount: s.total, // ✅ 거래금액을 출고 라인에 표시(요청 위치)
-            payment: null,
-            amountSigned: 0, // ✅ 라인은 잔액 반영 안함
-            remark: s.remark,
-          });
-        }
+        const kind: "입금" | "출고" = isIn ? "입금" : "출고";
+        const signed = isIn ? amt : -amt;
 
-        // 2) ledger OUT(잔액조정 등) 라인 (잔액 반영 O)
-        const outLines = outLedgerByDate.get(date) ?? [];
-        for (const l of outLines) {
-          const amt = Number(l.amount ?? 0);
-          list.push({
-            date,
-            kind: "출고",
-            itemName: String(l.memo ?? ""),
-            qty: null,
-            unitPrice: null,
-            supply: amt,
-            vat: 0,
-            tradeAmount: amt,
-            payment: null,
-            amountSigned: -amt,
-            remark: "",
-          });
-        }
-
-        // 3) ✅ 결제(입금) 합계행(요청 이미지처럼: 날짜/구분 공란으로 보이게) + 잔액 반영
-        const paySum = Number(payByDate.get(date) ?? 0);
-        if (paySum !== 0) {
-          list.push({
-            date,
-            kind: "입금",
-            itemName: "",
-            qty: null,
-            unitPrice: null,
-            supply: null,
-            vat: null,
-            tradeAmount: null,
-            payment: paySum,
-            amountSigned: paySum,
-            remark: "",
-            isPaySummary: true,
-          });
-        }
-
-        // 4) ✅ 출고 거래금액 합계행(요청 이미지처럼: 날짜/구분 공란으로 보이게) + 잔액 반영
-        const shipSum = Number(shipTotalByDate.get(date) ?? 0);
-        if (shipSum !== 0) {
-          list.push({
-            date,
-            kind: "출고",
-            itemName: "",
-            qty: null,
-            unitPrice: null,
-            supply: null,
-            vat: null,
-            tradeAmount: shipSum,
-            payment: null,
-            amountSigned: -shipSum,
-            remark: "",
-            isShipSummary: true,
-          });
-        }
+        // ledger 출고(OUT)는 품목명이 없으니 memo를 품목명 칸에 보여주면
+        // 화면에서 "잔액조정용" 같은 항목이 확인 가능
+        list.push({
+          date,
+          kind,
+          itemName: isOut ? String(l.memo ?? "") : "",
+          qty: null,
+          unitPrice: null,
+          supply: isOut ? amt : null, // ✅ ledger 출고는 공급가=amt로 표시
+          vat: isOut ? 0 : null, // ✅ ledger 출고는 부가세 0
+          tradeAmount: isOut ? amt : null, // ✅ ledger 출고는 거래금액=amt
+          payment: isIn ? amt : null, // ✅ 입금은 결제(입금)
+          amountSigned: signed,
+          remark: "",
+        });
       }
+
+      // 정렬(일자 우선, 같은 일자는 입금 먼저, 그 다음 출고)
+      list.sort((a, b) => {
+        const d = String(a.date).localeCompare(String(b.date));
+        if (d !== 0) return d;
+        if (a.kind === b.kind) return 0;
+        return a.kind === "입금" ? -1 : 1;
+      });
 
       // 잔액 누적
       let bal = 0;
@@ -512,10 +423,10 @@ export default function StatementClient() {
     URL.revokeObjectURL(url);
   }
 
-  // ✅ 탭(브라우저 타이틀) 변경
-  useEffect(() => {
-    document.title = "BONUSMATE ERP 거래원장";
-  }, []);
+    // ✅ 탭(브라우저 타이틀) 변경
+    useEffect(() => {
+      document.title = "BONUSMATE ERP 거래원장";
+    }, []);
 
   // ✅ 입력 검색 필터
   const filteredPartners = useMemo(() => {
@@ -528,7 +439,8 @@ export default function StatementClient() {
         const biz = (p.business_no ?? "").toLowerCase();
         const key = `${name} ${biz}`;
         const hit = key.includes(q);
-        const score = !q ? 9999 : name.startsWith(q) ? 0 : name.includes(q) ? 1 : biz.includes(q) ? 2 : hit ? 3 : 99;
+        const score =
+          !q ? 9999 : name.startsWith(q) ? 0 : name.includes(q) ? 1 : biz.includes(q) ? 2 : hit ? 3 : 99;
         return { p, score, hit };
       })
       .filter((x) => x.hit)
@@ -885,45 +797,34 @@ export default function StatementClient() {
                     rows.map((r, idx) => {
                       const isOut = r.kind === "출고";
                       const supplyClass = isOut ? "text-red-600" : "";
-                      const paymentClass = r.payment !== null ? "text-blue-700" : "";
+                      const paymentClass = !isOut ? "text-blue-700" : "";
                       const tradeClass = isOut ? "text-red-600" : "";
-
-                      // ✅ 결제/출고합계 행은 날짜/구분을 공란으로 표시
-                      const hideLead = !!r.isPaySummary || !!r.isShipSummary;
-
-                      // ✅ 출고 라인(잔액 반영 안하는 라인)은 잔액 표시도 공란(요청 이미지처럼)
-                      const hideBalance = !r.isPaySummary && !r.isShipSummary && Number(r.amountSigned ?? 0) === 0;
-
                       return (
                         <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
-                          <td className="px-2 py-2 font-semibold tabular-nums">{hideLead ? "" : r.date}</td>
-                          <td className="px-2 py-2 font-semibold">{hideLead ? "" : r.kind}</td>
+                          <td className="px-2 py-2 font-semibold tabular-nums">{r.date}</td>
+                          <td className="px-2 py-2 font-semibold">{r.kind}</td>
                           <td className="px-2 py-2">
-                            <div className="truncate">{hideLead ? "" : r.itemName ? r.itemName : ""}</div>
+                            <div className="truncate">{r.itemName ? r.itemName : ""}</div>
                           </td>
                           <td className="px-2 py-2 text-right tabular-nums">
-                            {hideLead ? "" : r.qty === null ? "" : formatMoney(r.qty)}
+                            {r.qty === null ? "" : formatMoney(r.qty)}
                           </td>
                           <td className="px-2 py-2 text-right tabular-nums">
-                            {hideLead ? "" : r.unitPrice === null ? "" : formatMoney(r.unitPrice)}
+                            {r.unitPrice === null ? "" : formatMoney(r.unitPrice)}
                           </td>
-                          <td className={`px-2 py-2 text-right tabular-nums font-semibold ${hideLead ? "" : supplyClass}`}>
-                            {hideLead ? "" : r.supply === null ? "" : formatMoney(r.supply)}
+                          <td className={`px-2 py-2 text-right tabular-nums font-semibold ${supplyClass}`}>
+                            {r.supply === null ? "" : formatMoney(r.supply)}
                           </td>
-                          <td className="px-2 py-2 text-right tabular-nums">
-                            {hideLead ? "" : r.vat === null ? "" : formatMoney(r.vat)}
-                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">{r.vat === null ? "" : formatMoney(r.vat)}</td>
                           <td className={`px-2 py-2 text-right tabular-nums font-semibold ${tradeClass}`}>
                             {r.tradeAmount === null ? "" : formatMoney(r.tradeAmount)}
                           </td>
                           <td className={`px-2 py-2 text-right tabular-nums font-semibold ${paymentClass}`}>
                             {r.payment === null ? "" : formatMoney(r.payment)}
                           </td>
-                          <td className="px-2 py-2 text-right tabular-nums font-semibold">
-                            {hideBalance ? "" : formatMoney(r.balance)}
-                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums font-semibold">{formatMoney(r.balance)}</td>
                           <td className="px-2 py-2">
-                            <div className="truncate">{hideLead ? "" : r.remark ? r.remark : ""}</div>
+                            <div className="truncate">{r.remark ? r.remark : ""}</div>
                           </td>
                         </tr>
                       );
