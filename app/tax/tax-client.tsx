@@ -40,15 +40,15 @@ type LedgerRow = {
   business_no: string | null;
   memo: string | null;
 
-  // ✅ partner_id (DB에 존재)
-  partner_id: string | null;
-
   // ✅ 옵션2(정확 VAT) 컬럼들 (migration 완료 기준)
   supply_amount: number | null;
   vat_amount: number | null;
   total_amount: number | null;
   vat_type: string | null; // TAXED/EXEMPT/ZERO/NA 등
   vat_rate: number | null;
+
+  // ✅ partner_id (DB에 이미 있음)
+  partner_id?: string | null;
 };
 
 type ARSummaryRow = {
@@ -185,7 +185,7 @@ export default function TaxClient() {
     const { data: lData, error: lErr } = await supabase
       .from("ledger_entries")
       .select(
-        "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,partner_id,supply_amount,vat_amount,total_amount,vat_type,vat_rate"
+        "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,supply_amount,vat_amount,total_amount,vat_type,vat_rate,partner_id"
       )
       .gte("entry_date", f)
       .lte("entry_date", t)
@@ -200,7 +200,7 @@ export default function TaxClient() {
       vat_amount: r.vat_amount == null ? null : Number(r.vat_amount),
       total_amount: r.total_amount == null ? null : Number(r.total_amount),
       vat_rate: r.vat_rate == null ? null : Number(r.vat_rate),
-      partner_id: r.partner_id == null ? null : String(r.partner_id),
+      partner_id: r.partner_id ?? null,
     })) as LedgerRow[];
     setLedgers(lRows);
 
@@ -225,7 +225,7 @@ export default function TaxClient() {
 
   async function loadAR() {
     // ✅ 거래원장 기준과 동일하게: "최초 기록부터 ~ 기준일(toYMD)까지 누적"으로 미수금 계산
-    // ✅ 매칭 기준 고정: (1) partner_id 우선, (2) business_no만 허용, (3) 이름 매칭 완전 제거
+    // ✅ 이름 매칭 제거: partner_id 우선, 없으면 business_no(정규화)로만 매칭
     setMsg(null);
     const asOf = toYMD || todayYMD();
     const START = "1900-01-01";
@@ -257,11 +257,11 @@ export default function TaxClient() {
         total_amount: Number(r.total_amount ?? 0),
       })) as OrderRow[];
 
-      // 2) 누적 입금: ledger_entries(IN) (START ~ asOf) + partner_id 포함
+      // 2) 누적 입금/출금: ledger_entries (START ~ asOf) + partner_id 포함
       const { data: lData, error: lErr } = await supabase
         .from("ledger_entries")
         .select(
-          "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,partner_id,supply_amount,vat_amount,total_amount,vat_type,vat_rate"
+          "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,supply_amount,vat_amount,total_amount,vat_type,vat_rate,partner_id"
         )
         .gte("entry_date", START)
         .lte("entry_date", asOf)
@@ -277,38 +277,46 @@ export default function TaxClient() {
         vat_amount: r.vat_amount == null ? null : Number(r.vat_amount),
         total_amount: r.total_amount == null ? null : Number(r.total_amount),
         vat_rate: r.vat_rate == null ? null : Number(r.vat_rate),
-        partner_id: r.partner_id == null ? null : String(r.partner_id),
+        partner_id: r.partner_id ?? null,
       })) as LedgerRow[];
 
-      // 3) partners 매핑(orders.customer_id 기반)
-      const ids = Array.from(new Set(oRows.map((x) => x.customer_id).filter(Boolean) as string[]));
-      let pMap = new Map<string, PartnerRow>();
-      if (ids.length) {
-        const { data: pData, error: pErr } = await supabase
-          .from("partners")
-          .select("id,name,business_no")
-          .in("id", ids)
-          .limit(20000);
-        if (!pErr) {
-          for (const p of (pData ?? []) as any[]) pMap.set(String(p.id), p as PartnerRow);
+      // 3) partner_id가 비어있는 ledger를 business_no로만 보정 매칭하기 위해 partners 전체(또는 충분히 크게) 로딩
+      //    - 이름 매칭은 완전 제거
+      const { data: pAll, error: pAllErr } = await supabase
+        .from("partners")
+        .select("id,name,business_no")
+        .limit(20000);
+
+      const pAllMap = new Map<string, PartnerRow>();
+      const bizToPartnerId = new Map<string, string>();
+      if (!pAllErr) {
+        for (const p of (pAll ?? []) as any[]) {
+          const pid = String(p.id);
+          pAllMap.set(pid, p as PartnerRow);
+          const bn = normBizNo(p.business_no);
+          if (bn) bizToPartnerId.set(bn, pid);
         }
       }
 
-      // business_no -> partner_id 매핑(이름매칭 제거)
-      const bizToPartnerId = new Map<string, string>();
-      for (const [pid, p] of pMap.entries()) {
-        const bn = normBizNo(p.business_no);
-        if (bn) bizToPartnerId.set(bn, pid);
+      // helper: ledger row -> partner_id 결정(이름매칭 제거)
+      function ledgerPid(l: LedgerRow) {
+        const pid = String(l.partner_id ?? "").trim();
+        if (pid) return pid;
+
+        const bn = normBizNo(l.business_no);
+        if (bn && bizToPartnerId.has(bn)) return bizToPartnerId.get(bn)!;
+
+        return "";
       }
 
       const map = new Map<string, ARSummaryRow>();
 
-      // 누적 출고 합산
+      // 누적 출고 합산: orders는 customer_id(=partner_id) 기준이 가장 정확
       for (const o of oRows) {
         const pid = String(o.customer_id ?? "").trim();
         if (!pid) continue;
 
-        const p = pMap.get(pid);
+        const p = pAllMap.get(pid);
         const pname = String(o.customer_name ?? p?.name ?? "").trim();
 
         if (!includeChannelsAR && CHANNEL_NAMES.has(pname)) continue;
@@ -316,7 +324,7 @@ export default function TaxClient() {
         if (!map.has(pid)) {
           map.set(pid, {
             partner_id: pid,
-            partner_name: pname || "(이름없음)",
+            partner_name: pname || p?.name || "(이름없음)",
             business_no: p?.business_no ?? null,
             sales_out: 0,
             cash_in: 0,
@@ -335,10 +343,11 @@ export default function TaxClient() {
         }
 
         if (!row.business_no && p?.business_no) row.business_no = p.business_no;
-        if (row.partner_name === "(이름없음)" && pname) row.partner_name = pname;
+        if ((row.partner_name === "(이름없음)" || !row.partner_name) && (pname || p?.name)) row.partner_name = pname || p?.name || "(이름없음)";
       }
 
-      // ✅ (추가) 환불/조정 성격 OUT은 "매출에서 차감" (= 출고에서 빼기)
+      // ✅ 환불/조정 성격 OUT은 "매출에서 차감" (= 출고에서 빼기)
+      // ✅ 매칭은 partner_id 우선, 없으면 business_no로만
       for (const l of lRows) {
         if (String(l.direction) !== "OUT") continue;
 
@@ -347,13 +356,7 @@ export default function TaxClient() {
         const isRefundLike = cat.includes("환불") || memo.includes("환불");
         if (!isRefundLike) continue;
 
-        let pid = String(l.partner_id ?? "").trim();
-
-        if (!pid) {
-          const lBiz = normBizNo(l.business_no);
-          if (lBiz && bizToPartnerId.has(lBiz)) pid = bizToPartnerId.get(lBiz)!;
-        }
-
+        const pid = ledgerPid(l);
         if (!pid || !map.has(pid)) continue;
 
         const row = map.get(pid)!;
@@ -368,16 +371,11 @@ export default function TaxClient() {
         }
       }
 
-      // 누적 입금 합산 (IN만)
+      // 누적 입금 합산 (IN만) - ✅ partner_id 우선, 없으면 business_no로만
       for (const l of lRows) {
         if (String(l.direction) !== "IN") continue;
 
-        let pid = String(l.partner_id ?? "").trim();
-
-        if (!pid) {
-          const lBiz = normBizNo(l.business_no);
-          if (lBiz && bizToPartnerId.has(lBiz)) pid = bizToPartnerId.get(lBiz)!;
-        }
+        const pid = ledgerPid(l);
 
         // 출고가 있는 거래처만 누적 입금 반영(리포트 AR 표 구조 유지)
         if (!pid || !map.has(pid)) continue;
@@ -392,6 +390,11 @@ export default function TaxClient() {
         if (idt) {
           if (!row.last_in_date || idt > row.last_in_date) row.last_in_date = idt;
         }
+
+        // partner_name/business_no 보강
+        const p = pAllMap.get(pid);
+        if (!row.business_no && p?.business_no) row.business_no = p.business_no;
+        if ((row.partner_name === "(이름없음)" || !row.partner_name) && p?.name) row.partner_name = p.name;
       }
 
       const rows = Array.from(map.values()).map((r) => ({
