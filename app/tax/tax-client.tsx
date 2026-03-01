@@ -220,30 +220,156 @@ export default function TaxClient() {
   }
 
   async function loadAR() {
+    // ✅ 거래원장 기준과 동일하게: "최초 기록부터 ~ 기준일(toYMD)까지 누적"으로 미수금 계산
     setMsg(null);
     const asOf = toYMD || todayYMD();
+    const START = "1900-01-01";
 
-    const { data, error } = await supabase.rpc("ar_summary", {
-      as_of: asOf,
-      include_channels: includeChannelsAR,
-    });
+    const CHANNEL_NAMES = new Set(["네이버-판매", "쿠팡-판매", "카카오플러스-판매"]);
 
-    if (error) return setMsg(error.message);
+    function normBizNo(bn: string | null | undefined) {
+      const s = String(bn ?? "").trim();
+      if (!s) return "";
+      return s.replaceAll(/[^0-9]/g, "");
+    }
+    function normName(n: string | null | undefined) {
+      return String(n ?? "").trim();
+    }
 
-    const rows = ((data ?? []) as any[]).map((r) => ({
-      partner_id: String(r.partner_id ?? ""),
-      partner_name: String(r.partner_name ?? ""),
-      business_no: r.business_no == null ? null : String(r.business_no),
-      sales_out: Number(r.sales_out ?? 0),
-      cash_in: Number(r.cash_in ?? 0),
-      balance: Number(r.balance ?? 0),
-      last_ship_date: r.last_ship_date == null ? null : String(r.last_ship_date),
-      last_in_date: r.last_in_date == null ? null : String(r.last_in_date),
-    })) as ARSummaryRow[];
+    try {
+      // 1) 누적 출고(매출): orders (START ~ asOf)
+      const { data: oData, error: oErr } = await supabase
+        .from("orders")
+        .select("id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount")
+        .gte("ship_date", START)
+        .lte("ship_date", asOf)
+        .order("ship_date", { ascending: true })
+        .limit(20000);
 
-    // 미수금 큰 순서(= balance 내림차순)
-    rows.sort((a, b) => (b.balance ?? 0) - (a.balance ?? 0));
-    setArRows(rows);
+      if (oErr) return setMsg(oErr.message);
+
+      const oRows = (oData ?? []).map((r: any) => ({
+        ...r,
+        supply_amount: Number(r.supply_amount ?? 0),
+        vat_amount: Number(r.vat_amount ?? 0),
+        total_amount: Number(r.total_amount ?? 0),
+      })) as OrderRow[];
+
+      // 2) 누적 입금: ledger_entries(IN) (START ~ asOf)
+      const { data: lData, error: lErr } = await supabase
+        .from("ledger_entries")
+        .select(
+          "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,supply_amount,vat_amount,total_amount,vat_type,vat_rate"
+        )
+        .gte("entry_date", START)
+        .lte("entry_date", asOf)
+        .order("entry_date", { ascending: true })
+        .limit(50000);
+
+      if (lErr) return setMsg(lErr.message);
+
+      const lRows = (lData ?? []).map((r: any) => ({
+        ...r,
+        amount: Number(r.amount ?? 0),
+        supply_amount: r.supply_amount == null ? null : Number(r.supply_amount),
+        vat_amount: r.vat_amount == null ? null : Number(r.vat_amount),
+        total_amount: r.total_amount == null ? null : Number(r.total_amount),
+        vat_rate: r.vat_rate == null ? null : Number(r.vat_rate),
+      })) as LedgerRow[];
+
+      // 3) partners 매핑(가능하면 넓게 가져옴): orders.customer_id 기반
+      const ids = Array.from(new Set(oRows.map((x) => x.customer_id).filter(Boolean) as string[]));
+      let pMap = new Map<string, PartnerRow>();
+      if (ids.length) {
+        const { data: pData, error: pErr } = await supabase.from("partners").select("id,name,business_no").in("id", ids).limit(20000);
+        if (!pErr) {
+          for (const p of (pData ?? []) as any[]) pMap.set(String(p.id), p as PartnerRow);
+        }
+      }
+
+      const bizToPartnerId = new Map<string, string>();
+      const nameToPartnerId = new Map<string, string>();
+
+      for (const [pid, p] of pMap.entries()) {
+        const bn = normBizNo(p.business_no);
+        const nm = normName(p.name);
+        if (bn) bizToPartnerId.set(bn, pid);
+        if (nm) nameToPartnerId.set(nm, pid);
+      }
+
+      const map = new Map<string, ARSummaryRow>();
+
+      // 누적 출고 합산
+      for (const o of oRows) {
+        const pid = String(o.customer_id ?? "").trim();
+        if (!pid) continue;
+
+        const p = pMap.get(pid);
+        const pname = String(o.customer_name ?? p?.name ?? "").trim();
+
+        if (!includeChannelsAR && CHANNEL_NAMES.has(pname)) continue;
+
+        if (!map.has(pid)) {
+          map.set(pid, {
+            partner_id: pid,
+            partner_name: pname || "(이름없음)",
+            business_no: p?.business_no ?? null,
+            sales_out: 0,
+            cash_in: 0,
+            balance: 0,
+            last_ship_date: null,
+            last_in_date: null,
+          });
+        }
+
+        const row = map.get(pid)!;
+        row.sales_out += Number(o.total_amount ?? 0);
+
+        const sd = String(o.ship_date ?? "");
+        if (sd) {
+          if (!row.last_ship_date || sd > row.last_ship_date) row.last_ship_date = sd;
+        }
+
+        if (!row.business_no && p?.business_no) row.business_no = p.business_no;
+        if (row.partner_name === "(이름없음)" && pname) row.partner_name = pname;
+      }
+
+      // 누적 입금 합산 (IN만)
+      for (const l of lRows) {
+        if (String(l.direction) !== "IN") continue;
+
+        const lBiz = normBizNo(l.business_no);
+        const lName = normName(l.counterparty_name);
+
+        let pid = "";
+        if (lBiz && bizToPartnerId.has(lBiz)) pid = bizToPartnerId.get(lBiz)!;
+        else if (lName && nameToPartnerId.has(lName)) pid = nameToPartnerId.get(lName)!;
+
+        // 출고가 있는 거래처만 누적 입금 반영(리포트 AR 표 구조 유지)
+        if (!pid || !map.has(pid)) continue;
+
+        const row = map.get(pid)!;
+        if (!includeChannelsAR && CHANNEL_NAMES.has(row.partner_name)) continue;
+
+        const amt = Number(l.total_amount ?? l.amount ?? 0);
+        row.cash_in += amt;
+
+        const idt = String(l.entry_date ?? "");
+        if (idt) {
+          if (!row.last_in_date || idt > row.last_in_date) row.last_in_date = idt;
+        }
+      }
+
+      const rows = Array.from(map.values()).map((r) => ({
+        ...r,
+        balance: Number(r.sales_out ?? 0) - Number(r.cash_in ?? 0),
+      }));
+
+      rows.sort((a, b) => (b.balance ?? 0) - (a.balance ?? 0));
+      setArRows(rows);
+    } catch (e: any) {
+      setMsg(String(e?.message ?? e));
+    }
   }
 
   useEffect(() => {
@@ -738,9 +864,7 @@ export default function TaxClient() {
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
                 <div className="text-lg font-semibold">미수금(거래처별)</div>
-                <div className="mt-1 text-xs text-slate-600">
-                  기준일: {toYMD} · ar_summary(as_of=toYMD, include_channels 토글)
-                </div>
+                <div className="mt-1 text-xs text-slate-600">기준일: {toYMD} · 최초기록부터 누적(=출고-입금)</div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
