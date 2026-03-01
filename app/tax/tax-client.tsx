@@ -334,6 +334,36 @@ export default function TaxClient() {
         if (row.partner_name === "(이름없음)" && pname) row.partner_name = pname;
       }
 
+      // ✅ (추가) 거래원장에 "출고"로 같이 잡히는 환불/조정 성격 OUT도 매출(출고)에 포함
+      for (const l of lRows) {
+        if (String(l.direction) !== "OUT") continue;
+
+        const cat = String(l.category ?? "");
+        const memo = String(l.memo ?? "");
+        const isRefundLike = cat.includes("환불") || memo.includes("환불");
+        if (!isRefundLike) continue;
+
+        const lBiz = normBizNo(l.business_no);
+        const lName = normName(l.counterparty_name);
+
+        let pid = "";
+        if (lBiz && bizToPartnerId.has(lBiz)) pid = bizToPartnerId.get(lBiz)!;
+        else if (lName && nameToPartnerId.has(lName)) pid = nameToPartnerId.get(lName)!;
+
+        if (!pid || !map.has(pid)) continue;
+
+        const row = map.get(pid)!;
+        if (!includeChannelsAR && CHANNEL_NAMES.has(row.partner_name)) continue;
+
+        const amt = Math.abs(Number(l.total_amount ?? l.amount ?? 0));
+        row.sales_out += amt;
+
+        const dt = String(l.entry_date ?? "");
+        if (dt) {
+          if (!row.last_ship_date || dt > row.last_ship_date) row.last_ship_date = dt;
+        }
+      }
+
       // 누적 입금 합산 (IN만)
       for (const l of lRows) {
         if (String(l.direction) !== "IN") continue;
