@@ -524,18 +524,6 @@ export default function TaxClient() {
 
   const purchaseTotalAll = useMemo(() => purchaseByVendor.reduce((a, x) => a + (x.total ?? 0), 0), [purchaseByVendor]);
 
-  // ✅ (추가) 매입(OUT) 상세 노출용 (선택한 카테고리의 실제 내역)
-  const purchaseDetailRows = useMemo(() => {
-    const arr = [...purchaseLedgerRows];
-    arr.sort((a, b) => {
-      const da = String(a.entry_date ?? "");
-      const db = String(b.entry_date ?? "");
-      if (da === db) return String(a.entry_ts ?? "").localeCompare(String(b.entry_ts ?? ""));
-      return da.localeCompare(db);
-    });
-    return arr;
-  }, [purchaseLedgerRows]);
-
   // =========================
   // 매출처별 집계(총액 많은 순서 + 비율)
   // =========================
@@ -834,68 +822,6 @@ export default function TaxClient() {
                   )}
                 </tbody>
               </table>
-            </div>
-
-            {/* ✅ (추가) 선택한 OUT 카테고리 실제 내역(상세) */}
-            <div className="mt-6">
-              <div className="flex items-end justify-between gap-3">
-                <div>
-                  <div className="text-lg font-semibold">매입(OUT) 상세</div>
-                  <div className="mt-1 text-xs text-slate-600">
-                    선택한 OUT 카테고리의 실제 금전출납 내역이 표시됩니다.
-                  </div>
-                </div>
-                <div className="text-xs text-slate-500">건수 {purchaseDetailRows.length}건</div>
-              </div>
-
-              <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="w-full table-fixed text-sm">
-                  <colgroup>
-                    <col style={{ width: "120px" }} />
-                    <col style={{ width: "140px" }} />
-                    <col style={{ width: "220px" }} />
-                    <col style={{ width: "420px" }} />
-                    <col style={{ width: "140px" }} />
-                    <col style={{ width: "140px" }} />
-                    <col style={{ width: "140px" }} />
-                  </colgroup>
-                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                    <tr>
-                      <th className="px-3 py-2 text-left">일자</th>
-                      <th className="px-3 py-2 text-left">카테고리</th>
-                      <th className="px-3 py-2 text-left">거래처</th>
-                      <th className="px-3 py-2 text-left">메모</th>
-                      <th className="px-3 py-2 text-right">공급가</th>
-                      <th className="px-3 py-2 text-right">부가세</th>
-                      <th className="px-3 py-2 text-right">총액</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {purchaseDetailRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="bg-white px-4 py-4 text-sm text-slate-500">
-                          선택한 OUT 카테고리 내역이 없습니다. (기간/카테고리 선택을 확인하세요)
-                        </td>
-                      </tr>
-                    ) : (
-                      purchaseDetailRows.map((l) => {
-                        const x = calcLedgerSVT(l);
-                        return (
-                          <tr key={l.id} className="border-t border-slate-200 bg-white">
-                            <td className="px-3 py-2 tabular-nums">{l.entry_date}</td>
-                            <td className="px-3 py-2 font-semibold">{l.category}</td>
-                            <td className="px-3 py-2">{String(l.counterparty_name ?? "").trim()}</td>
-                            <td className="px-3 py-2 text-slate-700">{String(l.memo ?? "").trim()}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{formatMoney(x.supply)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{formatMoney(x.vat)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(x.total)}</td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
             </div>
           </div>
         ) : null}
