@@ -132,7 +132,7 @@ function pickNumber(row: LineLoose, keys: string[], fallback = 0) {
 function mapLineToAmounts(line: LineLoose) {
   const itemName = pickString(line, ["item_name", "product_name", "variant_name", "name", "title", "product_title"], "");
   const qty = pickNumber(line, ["qty", "quantity", "ea", "count"], 0);
-  const unitPrice = pickNumber(line, ["unit_price", "price", "unitPrice"], 0);
+  let unitPrice = pickNumber(line, ["unit_price", "price", "unitPrice"], 0);
 
   const supplyRaw = pickNumber(line, ["supply_amount", "supply", "supplyValue", "amount_supply"], Number.NaN);
   const vatRaw = pickNumber(line, ["vat_amount", "vat", "vatValue", "amount_vat"], Number.NaN);
@@ -147,6 +147,12 @@ function mapLineToAmounts(line: LineLoose) {
     supply = totalRaw;
     vat = 0;
     total = totalRaw;
+  }
+
+  // ✅ 단가가 비어있는 경우(현재 화면에서 단가 0 표시 문제) 공급가/수량으로 역산
+  // - 공급가/수량이 정수로 떨어지는 케이스(예: 227,360 / 1,624 = 140)에 맞춤
+  if ((unitPrice === 0 || !Number.isFinite(unitPrice)) && qty > 0 && Number.isFinite(supply) && supply > 0) {
+    unitPrice = Math.round(supply / qty);
   }
 
   return { itemName, qty, unitPrice, supply, vat, total };
@@ -1027,8 +1033,15 @@ export default function StatementClient() {
                           ? groupFinalBalanceMap.get(String(r.groupId)) ?? r.balance
                           : r.balance;
 
+                      // ✅ 같은 주문/출고 입력 건 내부 라인 사이(예: 마산고운조/자은초)는 구분선 제거
+                      const prev = idx > 0 ? rows[idx - 1] : null;
+                      const sameGroupAsPrev = !!r.groupId && !!prev?.groupId && String(r.groupId) === String(prev.groupId);
+
                       return (
-                        <tr key={`${r.date}-${idx}`} className="border-t border-slate-200 bg-white">
+                        <tr
+                          key={`${r.date}-${idx}`}
+                          className={`${sameGroupAsPrev ? "" : "border-t border-slate-200"} bg-white`}
+                        >
                           <td className="px-2 py-2 font-semibold tabular-nums">{r.date}</td>
                           <td className="px-2 py-2 font-semibold">{r.kind}</td>
                           <td className="px-2 py-2">
