@@ -221,6 +221,7 @@ export default function TaxClient() {
 
   async function loadAR() {
     // ✅ 거래원장 기준과 동일하게: "최초 기록부터 ~ 기준일(toYMD)까지 누적"으로 미수금 계산
+    // ✅ 이름 매칭 제거(또는 매우 제한) 요청: ledger_entries(IN/OUT 환불)는 business_no 매칭만 사용
     setMsg(null);
     const asOf = toYMD || todayYMD();
     const START = "1900-01-01";
@@ -281,20 +282,21 @@ export default function TaxClient() {
       const ids = Array.from(new Set(oRows.map((x) => x.customer_id).filter(Boolean) as string[]));
       let pMap = new Map<string, PartnerRow>();
       if (ids.length) {
-        const { data: pData, error: pErr } = await supabase.from("partners").select("id,name,business_no").in("id", ids).limit(20000);
+        const { data: pData, error: pErr } = await supabase
+          .from("partners")
+          .select("id,name,business_no")
+          .in("id", ids)
+          .limit(20000);
         if (!pErr) {
           for (const p of (pData ?? []) as any[]) pMap.set(String(p.id), p as PartnerRow);
         }
       }
 
       const bizToPartnerId = new Map<string, string>();
-      const nameToPartnerId = new Map<string, string>();
 
       for (const [pid, p] of pMap.entries()) {
         const bn = normBizNo(p.business_no);
-        const nm = normName(p.name);
         if (bn) bizToPartnerId.set(bn, pid);
-        if (nm) nameToPartnerId.set(nm, pid);
       }
 
       const map = new Map<string, ARSummaryRow>();
@@ -335,6 +337,7 @@ export default function TaxClient() {
       }
 
       // ✅ (추가) 환불/조정 성격 OUT은 "매출에서 차감" (= 출고에서 빼기)
+      // ✅ business_no 매칭만 사용(이름 매칭 제거)
       for (const l of lRows) {
         if (String(l.direction) !== "OUT") continue;
 
@@ -344,11 +347,9 @@ export default function TaxClient() {
         if (!isRefundLike) continue;
 
         const lBiz = normBizNo(l.business_no);
-        const lName = normName(l.counterparty_name);
 
         let pid = "";
         if (lBiz && bizToPartnerId.has(lBiz)) pid = bizToPartnerId.get(lBiz)!;
-        else if (lName && nameToPartnerId.has(lName)) pid = nameToPartnerId.get(lName)!;
 
         if (!pid || !map.has(pid)) continue;
 
@@ -365,15 +366,14 @@ export default function TaxClient() {
       }
 
       // 누적 입금 합산 (IN만)
+      // ✅ business_no 매칭만 사용(이름 매칭 제거)
       for (const l of lRows) {
         if (String(l.direction) !== "IN") continue;
 
         const lBiz = normBizNo(l.business_no);
-        const lName = normName(l.counterparty_name);
 
         let pid = "";
         if (lBiz && bizToPartnerId.has(lBiz)) pid = bizToPartnerId.get(lBiz)!;
-        else if (lName && nameToPartnerId.has(lName)) pid = nameToPartnerId.get(lName)!;
 
         // 출고가 있는 거래처만 누적 입금 반영(리포트 AR 표 구조 유지)
         if (!pid || !map.has(pid)) continue;
