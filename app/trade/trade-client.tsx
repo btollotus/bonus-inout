@@ -846,22 +846,54 @@ export default function TradeClient() {
     setLedgers(((lData ?? []).map((r: any) => ({ ...r, amount: Number(r.amount ?? 0) }))) as LedgerRow[]);
 
     // Opening balance
+    // ✅ FIX: 기간 설정이 바뀌어도 "최초 기록부터 누적"이 깨지지 않도록,
+    //        기간 시작 전 합계를 LIMIT 없이 전량 누적(페이지네이션)으로 계산
     let opening = 0;
-    let oq2 = supabase.from("orders").select("id,ship_date,total_amount,customer_id,customer_name").lt("ship_date", f).order("ship_date", { ascending: false }).limit(5000);
-    if (selectedPartnerId) oq2 = oq2.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
-    const { data: oPrev, error: oPrevErr } = await oq2;
-    if (!oPrevErr && oPrev) opening += -(oPrev.reduce((acc: number, r: any) => acc + Number(r.total_amount ?? 0), 0));
 
-    let lq2 = supabase.from("ledger_entries").select("id,entry_date,direction,amount,partner_id,business_no,counterparty_name").lt("entry_date", f).order("entry_date", { ascending: false }).limit(10000);
-    if (selectedPartnerId || selectedBusinessNo) {
-      const ors: string[] = [];
-      if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
-      if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
-      if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
-      lq2 = lq2.or(ors.join(","));
+    // orders: ship_date < f 인 total_amount 합 (출금 처리)
+    {
+      const pageSize = 1000;
+      let from = 0;
+      while (true) {
+        let oq2 = supabase.from("orders")
+          .select("id,ship_date,total_amount,customer_id,customer_name")
+          .lt("ship_date", f)
+          .order("ship_date", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (selectedPartnerId) oq2 = oq2.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+        const { data: oPrev, error: oPrevErr } = await oq2;
+        if (oPrevErr) break;
+        if (oPrev && oPrev.length) opening += -(oPrev.reduce((acc: number, r: any) => acc + Number(r.total_amount ?? 0), 0));
+        if (!oPrev || oPrev.length < pageSize) break;
+        from += pageSize;
+      }
     }
-    const { data: lPrev, error: lPrevErr } = await lq2;
-    if (!lPrevErr && lPrev) opening += lPrev.reduce((acc: number, r: any) => acc + (String(r.direction) === "OUT" ? -1 : 1) * Number(r.amount ?? 0), 0);
+
+    // ledger_entries: entry_date < f 인 amount 합 (direction 반영)
+    {
+      const pageSize = 1000;
+      let from = 0;
+      while (true) {
+        let lq2 = supabase.from("ledger_entries")
+          .select("id,entry_date,direction,amount,partner_id,business_no,counterparty_name")
+          .lt("entry_date", f)
+          .order("entry_date", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (selectedPartnerId || selectedBusinessNo) {
+          const ors: string[] = [];
+          if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
+          if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
+          if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
+          lq2 = lq2.or(ors.join(","));
+        }
+        const { data: lPrev, error: lPrevErr } = await lq2;
+        if (lPrevErr) break;
+        if (lPrev && lPrev.length) opening += lPrev.reduce((acc: number, r: any) => acc + (String(r.direction) === "OUT" ? -1 : 1) * Number(r.amount ?? 0), 0);
+        if (!lPrev || lPrev.length < pageSize) break;
+        from += pageSize;
+      }
+    }
+
     setOpeningBalance(opening);
   }
 
