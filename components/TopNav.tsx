@@ -7,18 +7,21 @@ import { createClient } from "@/lib/supabase/browser";
 
 const nav = [
   { href: "/scan", label: "스캔" },
-  { href: "/products", label: "품목/바코드" },
+  { href: "/products", label: "품목/바코드!!!!" },
   { href: "/report", label: "재고대장" },
 
   // ❌ 경리장부(/ledger), 주문/출고(/orders) 제거
   { href: "/trade", label: "거래내역(통합)" },
 
   // ✅ 세무 메뉴 추가
-  { href: "/tax", label: "세무" },
+  { href: "/tax", label: "세무사" },
   { href: "/tax/spec", label: "거래명세서" },
   { href: "/tax/statement", label: "거래원장" },
 
-  { href: "/calendar", label: "캘린더" },
+  { href: "/calendar", label: "출고 캘린더" },
+
+  // ✅ 인사관리 메뉴 추가
+  { href: "/admin/employees", label: "인사관리" },
 ];
 
 export default function TopNav({ role, email }: { role?: string; email?: string }) {
@@ -100,7 +103,8 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
               x.href === "/trade" ||
               x.href === "/tax" ||
               x.href === "/tax/spec" ||
-              x.href === "/tax/statement";
+              x.href === "/tax/statement" ||
+              x.href === "/admin/employees";
             const disabled = isRestricted && !isAdmin;
 
             if (disabled) {
