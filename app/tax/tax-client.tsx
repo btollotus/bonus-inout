@@ -137,6 +137,9 @@ export default function TaxClient() {
   const btnOn =
     "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
 
+  // ✅ (추가) 매출 환불 카테고리
+  const SALES_REFUND_CATEGORY = "매출환불";
+
   // ✅ 탭 타이틀
   useEffect(() => {
     document.title = "BONUSMATE ERP 세무";
@@ -334,9 +337,30 @@ export default function TaxClient() {
         if (row.partner_name === "(이름없음)" && pname) row.partner_name = pname;
       }
 
-      // 누적 입금 합산 (IN만)
+      // ✅ (추가) 누적 매출환불 반영: ledger_entries.category === "매출환불" 은 "매출(-)"로 처리 (입금 합산에서 제외)
+      for (const l of lRows) {
+        if (String(l.category ?? "") !== SALES_REFUND_CATEGORY) continue;
+
+        const lBiz = normBizNo(l.business_no);
+        const lName = normName(l.counterparty_name);
+
+        let pid = "";
+        if (lBiz && bizToPartnerId.has(lBiz)) pid = bizToPartnerId.get(lBiz)!;
+        else if (lName && nameToPartnerId.has(lName)) pid = nameToPartnerId.get(lName)!;
+
+        if (!pid || !map.has(pid)) continue;
+
+        const row = map.get(pid)!;
+        if (!includeChannelsAR && CHANNEL_NAMES.has(row.partner_name)) continue;
+
+        const amt = Number(l.total_amount ?? l.amount ?? 0);
+        row.sales_out -= amt;
+      }
+
+      // 누적 입금 합산 (IN만) - 단, 매출환불은 제외
       for (const l of lRows) {
         if (String(l.direction) !== "IN") continue;
+        if (String(l.category ?? "") === SALES_REFUND_CATEGORY) continue;
 
         const lBiz = normBizNo(l.business_no);
         const lName = normName(l.counterparty_name);
@@ -391,23 +415,6 @@ export default function TaxClient() {
   // 집계: 매출/매입/VAT
   // =========================
 
-  const salesSummary = useMemo(() => {
-    const supply = orders.reduce((a, x) => a + Number(x.supply_amount ?? 0), 0);
-    const vat = orders.reduce((a, x) => a + Number(x.vat_amount ?? 0), 0);
-    const total = orders.reduce((a, x) => a + Number(x.total_amount ?? 0), 0);
-    return { supply, vat, total };
-  }, [orders]);
-
-  // ✅ 매입집계 대상: OUT + (선택카테고리 포함) + (VAT 컬럼 있는 행 우선)
-  const purchaseLedgerRows = useMemo(() => {
-    const set = new Set(purchaseCatFilter);
-    return ledgers.filter((l) => {
-      if (String(l.direction) !== "OUT") return false;
-      if (purchaseCatFilter.length && !set.has(l.category)) return false;
-      return true;
-    });
-  }, [ledgers, purchaseCatFilter]);
-
   // ✅ 공급가/부가세 계산: (1) 컬럼이 있으면 그대로, (2) 없으면 vat_type/vat_rate로 total에서 역산
   function calcLedgerSVT(l: LedgerRow) {
     const vt = String(l.vat_type ?? "TAXED").toUpperCase();
@@ -431,6 +438,47 @@ export default function TaxClient() {
     // EXEMPT/ZERO/NA 등은 VAT 0, 총액=공급가
     return { supply: total, vat: 0, total };
   }
+
+  // ✅ (추가) 매출 환불(ledger_entries.category === "매출환불") 집계
+  const salesRefundSummary = useMemo(() => {
+    let supply = 0;
+    let vat = 0;
+    let total = 0;
+
+    for (const l of ledgers) {
+      if (String(l.category ?? "") !== SALES_REFUND_CATEGORY) continue;
+      const x = calcLedgerSVT(l);
+      total += Number(x.total ?? 0);
+      supply += Number(x.supply ?? 0);
+      vat += Number(x.vat ?? 0);
+    }
+
+    return { supply, vat, total };
+  }, [ledgers]);
+
+  // ✅ 매출 요약: orders - 매출환불
+  const salesSummary = useMemo(() => {
+    const supply0 = orders.reduce((a, x) => a + Number(x.supply_amount ?? 0), 0);
+    const vat0 = orders.reduce((a, x) => a + Number(x.vat_amount ?? 0), 0);
+    const total0 = orders.reduce((a, x) => a + Number(x.total_amount ?? 0), 0);
+
+    return {
+      supply: supply0 - Number(salesRefundSummary.supply ?? 0),
+      vat: vat0 - Number(salesRefundSummary.vat ?? 0),
+      total: total0 - Number(salesRefundSummary.total ?? 0),
+    };
+  }, [orders, salesRefundSummary]);
+
+  // ✅ 매입집계 대상: OUT + (선택카테고리 포함) + (VAT 컬럼 있는 행 우선)
+  const purchaseLedgerRows = useMemo(() => {
+    const set = new Set(purchaseCatFilter);
+    return ledgers.filter((l) => {
+      if (String(l.direction) !== "OUT") return false;
+      if (String(l.category ?? "") === SALES_REFUND_CATEGORY) return false; // ✅ 매출환불은 매입집계에서 제외
+      if (purchaseCatFilter.length && !set.has(l.category)) return false;
+      return true;
+    });
+  }, [ledgers, purchaseCatFilter]);
 
   const purchaseSummary = useMemo(() => {
     let supply = 0;
@@ -530,11 +578,50 @@ export default function TaxClient() {
       if (row.name === "(이름없음)" && name !== "(이름없음)") row.name = name;
     }
 
+    // ✅ (추가) 매출환불을 매출처별 집계에서 차감(가능한 경우: business_no 또는 counterparty_name 매칭)
+    function normBizNo(bn: string | null | undefined) {
+      const s = String(bn ?? "").trim();
+      if (!s) return "";
+      return s.replaceAll(/[^0-9]/g, "");
+    }
+    function normName(n: string | null | undefined) {
+      return String(n ?? "").trim();
+    }
+
+    const bizToId = new Map<string, string>();
+    const nameToId = new Map<string, string>();
+    for (const [id, row] of map.entries()) {
+      const b = normBizNo(row.business_no);
+      const n = normName(row.name);
+      if (b) bizToId.set(b, id);
+      if (n) nameToId.set(n, id);
+    }
+
+    for (const l of ledgers) {
+      if (String(l.category ?? "") !== SALES_REFUND_CATEGORY) continue;
+
+      const b = normBizNo(l.business_no);
+      const n = normName(l.counterparty_name);
+
+      let id = "";
+      if (b && bizToId.has(b)) id = bizToId.get(b)!;
+      else if (n && nameToId.has(n)) id = nameToId.get(n)!;
+
+      if (!id || !map.has(id)) continue;
+
+      const row = map.get(id)!;
+      const x = calcLedgerSVT(l);
+
+      row.supply -= Number(x.supply ?? 0);
+      row.vat -= Number(x.vat ?? 0);
+      row.total -= Number(x.total ?? 0);
+    }
+
     const arr = Array.from(map.values());
     // ✅ 총액 많은 순
     arr.sort((a, b) => (b.total ?? 0) - (a.total ?? 0));
     return arr;
-  }, [orders, partnersById]);
+  }, [orders, partnersById, ledgers]);
 
   const salesTotalAll = useMemo(() => salesByCustomer.reduce((a, x) => a + (x.total ?? 0), 0), [salesByCustomer]);
 
