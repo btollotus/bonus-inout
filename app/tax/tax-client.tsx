@@ -46,9 +46,6 @@ type LedgerRow = {
   total_amount: number | null;
   vat_type: string | null; // TAXED/EXEMPT/ZERO/NA 등
   vat_rate: number | null;
-
-  // ✅ partner_id (DB에 이미 있음)
-  partner_id?: string | null;
 };
 
 type ARSummaryRow = {
@@ -181,11 +178,11 @@ export default function TaxClient() {
     })) as OrderRow[];
     setOrders(oRows);
 
-    // 2) 금전출납(ledger_entries) - VAT 정확 컬럼 포함 + partner_id 포함
+    // 2) 금전출납(ledger_entries) - VAT 정확 컬럼 포함
     const { data: lData, error: lErr } = await supabase
       .from("ledger_entries")
       .select(
-        "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,supply_amount,vat_amount,total_amount,vat_type,vat_rate,partner_id"
+        "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,supply_amount,vat_amount,total_amount,vat_type,vat_rate"
       )
       .gte("entry_date", f)
       .lte("entry_date", t)
@@ -200,7 +197,6 @@ export default function TaxClient() {
       vat_amount: r.vat_amount == null ? null : Number(r.vat_amount),
       total_amount: r.total_amount == null ? null : Number(r.total_amount),
       vat_rate: r.vat_rate == null ? null : Number(r.vat_rate),
-      partner_id: r.partner_id ?? null,
     })) as LedgerRow[];
     setLedgers(lRows);
 
@@ -225,7 +221,6 @@ export default function TaxClient() {
 
   async function loadAR() {
     // ✅ 거래원장 기준과 동일하게: "최초 기록부터 ~ 기준일(toYMD)까지 누적"으로 미수금 계산
-    // ✅ 이름 매칭 제거: partner_id 우선, 없으면 business_no(정규화)로만 매칭
     setMsg(null);
     const asOf = toYMD || todayYMD();
     const START = "1900-01-01";
@@ -236,6 +231,9 @@ export default function TaxClient() {
       const s = String(bn ?? "").trim();
       if (!s) return "";
       return s.replaceAll(/[^0-9]/g, "");
+    }
+    function normName(n: string | null | undefined) {
+      return String(n ?? "").trim();
     }
 
     try {
@@ -257,11 +255,11 @@ export default function TaxClient() {
         total_amount: Number(r.total_amount ?? 0),
       })) as OrderRow[];
 
-      // 2) 누적 입금/출금: ledger_entries (START ~ asOf) + partner_id 포함
+      // 2) 누적 입금: ledger_entries(IN) (START ~ asOf)
       const { data: lData, error: lErr } = await supabase
         .from("ledger_entries")
         .select(
-          "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,supply_amount,vat_amount,total_amount,vat_type,vat_rate,partner_id"
+          "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,supply_amount,vat_amount,total_amount,vat_type,vat_rate"
         )
         .gte("entry_date", START)
         .lte("entry_date", asOf)
@@ -277,46 +275,36 @@ export default function TaxClient() {
         vat_amount: r.vat_amount == null ? null : Number(r.vat_amount),
         total_amount: r.total_amount == null ? null : Number(r.total_amount),
         vat_rate: r.vat_rate == null ? null : Number(r.vat_rate),
-        partner_id: r.partner_id ?? null,
       })) as LedgerRow[];
 
-      // 3) partner_id가 비어있는 ledger를 business_no로만 보정 매칭하기 위해 partners 전체(또는 충분히 크게) 로딩
-      //    - 이름 매칭은 완전 제거
-      const { data: pAll, error: pAllErr } = await supabase
-        .from("partners")
-        .select("id,name,business_no")
-        .limit(20000);
-
-      const pAllMap = new Map<string, PartnerRow>();
-      const bizToPartnerId = new Map<string, string>();
-      if (!pAllErr) {
-        for (const p of (pAll ?? []) as any[]) {
-          const pid = String(p.id);
-          pAllMap.set(pid, p as PartnerRow);
-          const bn = normBizNo(p.business_no);
-          if (bn) bizToPartnerId.set(bn, pid);
+      // 3) partners 매핑(가능하면 넓게 가져옴): orders.customer_id 기반
+      const ids = Array.from(new Set(oRows.map((x) => x.customer_id).filter(Boolean) as string[]));
+      let pMap = new Map<string, PartnerRow>();
+      if (ids.length) {
+        const { data: pData, error: pErr } = await supabase.from("partners").select("id,name,business_no").in("id", ids).limit(20000);
+        if (!pErr) {
+          for (const p of (pData ?? []) as any[]) pMap.set(String(p.id), p as PartnerRow);
         }
       }
 
-      // helper: ledger row -> partner_id 결정(이름매칭 제거)
-      function ledgerPid(l: LedgerRow) {
-        const pid = String(l.partner_id ?? "").trim();
-        if (pid) return pid;
+      const bizToPartnerId = new Map<string, string>();
+      const nameToPartnerId = new Map<string, string>();
 
-        const bn = normBizNo(l.business_no);
-        if (bn && bizToPartnerId.has(bn)) return bizToPartnerId.get(bn)!;
-
-        return "";
+      for (const [pid, p] of pMap.entries()) {
+        const bn = normBizNo(p.business_no);
+        const nm = normName(p.name);
+        if (bn) bizToPartnerId.set(bn, pid);
+        if (nm) nameToPartnerId.set(nm, pid);
       }
 
       const map = new Map<string, ARSummaryRow>();
 
-      // 누적 출고 합산: orders는 customer_id(=partner_id) 기준이 가장 정확
+      // 누적 출고 합산
       for (const o of oRows) {
         const pid = String(o.customer_id ?? "").trim();
         if (!pid) continue;
 
-        const p = pAllMap.get(pid);
+        const p = pMap.get(pid);
         const pname = String(o.customer_name ?? p?.name ?? "").trim();
 
         if (!includeChannelsAR && CHANNEL_NAMES.has(pname)) continue;
@@ -324,7 +312,7 @@ export default function TaxClient() {
         if (!map.has(pid)) {
           map.set(pid, {
             partner_id: pid,
-            partner_name: pname || p?.name || "(이름없음)",
+            partner_name: pname || "(이름없음)",
             business_no: p?.business_no ?? null,
             sales_out: 0,
             cash_in: 0,
@@ -343,39 +331,19 @@ export default function TaxClient() {
         }
 
         if (!row.business_no && p?.business_no) row.business_no = p.business_no;
-        if ((row.partner_name === "(이름없음)" || !row.partner_name) && (pname || p?.name)) row.partner_name = pname || p?.name || "(이름없음)";
+        if (row.partner_name === "(이름없음)" && pname) row.partner_name = pname;
       }
 
-      // ✅ 환불/조정 성격 OUT은 "매출에서 차감" (= 출고에서 빼기)
-      // ✅ 매칭은 partner_id 우선, 없으면 business_no로만
-      for (const l of lRows) {
-        if (String(l.direction) !== "OUT") continue;
-
-        const cat = String(l.category ?? "");
-        const memo = String(l.memo ?? "");
-        const isRefundLike = cat.includes("환불") || memo.includes("환불");
-        if (!isRefundLike) continue;
-
-        const pid = ledgerPid(l);
-        if (!pid || !map.has(pid)) continue;
-
-        const row = map.get(pid)!;
-        if (!includeChannelsAR && CHANNEL_NAMES.has(row.partner_name)) continue;
-
-        const amt = Math.abs(Number(l.total_amount ?? l.amount ?? 0));
-        row.sales_out -= amt;
-
-        const dt = String(l.entry_date ?? "");
-        if (dt) {
-          if (!row.last_ship_date || dt > row.last_ship_date) row.last_ship_date = dt;
-        }
-      }
-
-      // 누적 입금 합산 (IN만) - ✅ partner_id 우선, 없으면 business_no로만
+      // 누적 입금 합산 (IN만)
       for (const l of lRows) {
         if (String(l.direction) !== "IN") continue;
 
-        const pid = ledgerPid(l);
+        const lBiz = normBizNo(l.business_no);
+        const lName = normName(l.counterparty_name);
+
+        let pid = "";
+        if (lBiz && bizToPartnerId.has(lBiz)) pid = bizToPartnerId.get(lBiz)!;
+        else if (lName && nameToPartnerId.has(lName)) pid = nameToPartnerId.get(lName)!;
 
         // 출고가 있는 거래처만 누적 입금 반영(리포트 AR 표 구조 유지)
         if (!pid || !map.has(pid)) continue;
@@ -390,11 +358,6 @@ export default function TaxClient() {
         if (idt) {
           if (!row.last_in_date || idt > row.last_in_date) row.last_in_date = idt;
         }
-
-        // partner_name/business_no 보강
-        const p = pAllMap.get(pid);
-        if (!row.business_no && p?.business_no) row.business_no = p.business_no;
-        if ((row.partner_name === "(이름없음)" || !row.partner_name) && p?.name) row.partner_name = p.name;
       }
 
       const rows = Array.from(map.values()).map((r) => ({
@@ -530,18 +493,6 @@ export default function TaxClient() {
   }, [purchaseLedgerRows]);
 
   const purchaseTotalAll = useMemo(() => purchaseByVendor.reduce((a, x) => a + (x.total ?? 0), 0), [purchaseByVendor]);
-
-  // ✅ (추가) 매입(OUT) 상세 노출용 (선택한 카테고리의 실제 내역)
-  const purchaseDetailRows = useMemo(() => {
-    const arr = [...purchaseLedgerRows];
-    arr.sort((a, b) => {
-      const da = String(a.entry_date ?? "");
-      const db = String(b.entry_date ?? "");
-      if (da === db) return String(a.entry_ts ?? "").localeCompare(String(b.entry_ts ?? ""));
-      return da.localeCompare(db);
-    });
-    return arr;
-  }, [purchaseLedgerRows]);
 
   // =========================
   // 매출처별 집계(총액 많은 순서 + 비율)
@@ -841,68 +792,6 @@ export default function TaxClient() {
                   )}
                 </tbody>
               </table>
-            </div>
-
-            {/* ✅ (추가) 선택한 OUT 카테고리 실제 내역(상세) */}
-            <div className="mt-6">
-              <div className="flex items-end justify-between gap-3">
-                <div>
-                  <div className="text-lg font-semibold">매입(OUT) 상세</div>
-                  <div className="mt-1 text-xs text-slate-600">
-                    선택한 OUT 카테고리의 실제 금전출납 내역이 표시됩니다.
-                  </div>
-                </div>
-                <div className="text-xs text-slate-500">건수 {purchaseDetailRows.length}건</div>
-              </div>
-
-              <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="w-full table-fixed text-sm">
-                  <colgroup>
-                    <col style={{ width: "120px" }} />
-                    <col style={{ width: "140px" }} />
-                    <col style={{ width: "220px" }} />
-                    <col style={{ width: "420px" }} />
-                    <col style={{ width: "140px" }} />
-                    <col style={{ width: "140px" }} />
-                    <col style={{ width: "140px" }} />
-                  </colgroup>
-                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                    <tr>
-                      <th className="px-3 py-2 text-left">일자</th>
-                      <th className="px-3 py-2 text-left">카테고리</th>
-                      <th className="px-3 py-2 text-left">거래처</th>
-                      <th className="px-3 py-2 text-left">메모</th>
-                      <th className="px-3 py-2 text-right">공급가</th>
-                      <th className="px-3 py-2 text-right">부가세</th>
-                      <th className="px-3 py-2 text-right">총액</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {purchaseDetailRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="bg-white px-4 py-4 text-sm text-slate-500">
-                          선택한 OUT 카테고리 내역이 없습니다. (기간/카테고리 선택을 확인하세요)
-                        </td>
-                      </tr>
-                    ) : (
-                      purchaseDetailRows.map((l) => {
-                        const x = calcLedgerSVT(l);
-                        return (
-                          <tr key={l.id} className="border-t border-slate-200 bg-white">
-                            <td className="px-3 py-2 tabular-nums">{l.entry_date}</td>
-                            <td className="px-3 py-2 font-semibold">{l.category}</td>
-                            <td className="px-3 py-2">{String(l.counterparty_name ?? "").trim()}</td>
-                            <td className="px-3 py-2 text-slate-700">{String(l.memo ?? "").trim()}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{formatMoney(x.supply)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{formatMoney(x.vat)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(x.total)}</td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
             </div>
           </div>
         ) : null}
