@@ -66,7 +66,7 @@ type UnifiedRow = {
 };
 
 // ─────────────────────── Constants ───────────────────────
-const CATEGORIES = ["매출입금", "급여", "세금", "기타"] as const;
+const CATEGORIES = ["매출입금", "매출환불", "급여", "세금", "기타"] as const;
 type Category = (typeof CATEGORIES)[number];
 const PARTNER_TYPES = ["CUSTOMER", "VENDOR", "BOTH"] as const;
 type PartnerType = (typeof PARTNER_TYPES)[number];
