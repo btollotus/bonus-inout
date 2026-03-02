@@ -65,6 +65,8 @@ type UnifiedRow = {
   ledger_supply_amount?: number | null; ledger_vat_amount?: number | null; ledger_total_amount?: number | null;
 };
 
+type EmployeeRow = { id: string; name: string | null };
+
 // ─────────────────────── Constants ───────────────────────
 const CATEGORIES = ["매출입금", "매출환불", "급여", "세금", "기타"] as const;
 type Category = (typeof CATEGORIES)[number];
@@ -480,6 +482,10 @@ export default function TradeClient() {
   const [masterProducts, setMasterProducts] = useState<MasterProductRow[]>([]);
   const masterByName = useMemo(() => { const m = new Map<string, MasterProductRow>(); for (const p of masterProducts) m.set(p.product_name, p); return m; }, [masterProducts]);
 
+  // Employees (for 급여 연동)
+  const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [salaryEmployeeId, setSalaryEmployeeId] = useState<string>("");
+
   // Order form
   const [shipDate, setShipDate] = useState(todayYMD());
   const [ordererName, setOrdererName] = useState("");
@@ -519,6 +525,7 @@ export default function TradeClient() {
   const [eCounterpartyName, setECounterpartyName] = useState("");
   const [eBusinessNo, setEBusinessNo] = useState("");
   const [eVatFree, setEVatFree] = useState(false);
+  const [eSalaryEmployeeId, setESalaryEmployeeId] = useState<string>("");
 
   // Query range
   const [fromYMD, setFromYMD] = useState(addDays(todayYMD(), -30));
@@ -774,6 +781,12 @@ export default function TradeClient() {
     if (data) setMasterProducts(data as MasterProductRow[]);
   }
 
+  async function loadEmployees() {
+    const { data, error } = await supabase.from("employees").select("id,name").order("name", { ascending: true }).limit(500);
+    if (error) return;
+    setEmployees((data ?? []) as EmployeeRow[]);
+  }
+
   async function loadLatestShippingForPartner(partnerId: string) {
     const { data, error } = await supabase.from("partner_shipping_history").select("id,partner_id,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone,created_at").eq("partner_id", partnerId).order("created_at", { ascending: false }).limit(1);
     if (error) return null;
@@ -898,7 +911,7 @@ export default function TradeClient() {
   }
 
   // ─── Init ───
-  useEffect(() => { setRecentPartnerIds(loadRecentFromLS()); loadPartners(); loadFoodTypes(); loadPresetProducts(); loadMasterProducts(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { setRecentPartnerIds(loadRecentFromLS()); loadPartners(); loadFoodTypes(); loadPresetProducts(); loadMasterProducts(); loadEmployees(); /* eslint-disable-next-line */ }, []);
   useEffect(() => { loadPartners(); /* eslint-disable-next-line */ }, [partnerFilter]);
   useEffect(() => { loadTrades(); /* eslint-disable-next-line */ }, [selectedPartner?.id, fromYMD, toYMD, toTouched]);
 
@@ -1027,10 +1040,16 @@ export default function TradeClient() {
     setMsg(null);
     const amount = Number((amountStr || "0").replaceAll(",", ""));
     if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
+
+    if (category === "급여") {
+      if (!salaryEmployeeId) return setMsg("급여는 직원 선택이 필요합니다.");
+    }
+
     const counterparty_name = manualCounterpartyName.trim() || selectedPartner?.name || null;
     const business_no = manualBusinessNo.trim() || selectedPartner?.business_no || null;
     if (!counterparty_name) return setMsg("업체명(매입처/상대방)을 입력하거나 왼쪽에서 거래처를 선택하세요.");
-    const { error } = await supabase.from("ledger_entries").insert({
+
+    const { data: inserted, error } = await supabase.from("ledger_entries").insert({
       entry_date: entryDate,
       entry_ts: new Date().toISOString(),
       direction: categoryToDirection(category),
@@ -1045,11 +1064,29 @@ export default function TradeClient() {
       memo: ledgerMemo.trim() || null,
       status: "POSTED",
       partner_id: selectedPartner?.id ?? null
-    });
+    }).select("id").single();
+
     if (error) return setMsg(error.message);
+
+    const ledgerEntryId = (inserted as any)?.id as string | undefined;
+
+    if (category === "급여" && ledgerEntryId && salaryEmployeeId) {
+      const payMonth = String(entryDate ?? "").slice(0, 7);
+      const { error: hpErr } = await supabase.from("hr_payments").insert({
+        ledger_entry_id: ledgerEntryId,
+        employee_id: salaryEmployeeId,
+        pay_month: payMonth,
+        kind: "SALARY",
+        amount: amount,
+        note: null
+      });
+      if (hpErr) return setMsg(hpErr.message);
+    }
+
     setAmountStr(""); setLedgerMemo("");
     setVatFree(false); // ✅ 입력단 체크는 입력 기준으로만 사용(저장 후 초기화)
     if (!selectedPartner) { setManualCounterpartyName(""); setManualBusinessNo(""); }
+    setSalaryEmployeeId("");
     setToTouched(false); // ✅ 기본은 항상 마지막 거래내역까지 보이게
     await loadTrades();
   }
@@ -1069,6 +1106,7 @@ export default function TradeClient() {
       const amt = Number(r.ledger_amount ?? 0); setAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
       setManualCounterpartyName(r.partnerName ?? ""); setManualBusinessNo(r.businessNo ?? "");
       setVatFree(false);
+      setSalaryEmployeeId("");
     }
   }
 
@@ -1078,7 +1116,7 @@ export default function TradeClient() {
   }
 
   // ─── Edit ───
-  function openEdit(r: UnifiedRow) {
+  async function openEdit(r: UnifiedRow) {
     setMsg(null); setEditRow(r);
     if (r.kind === "ORDER") {
       setEShipDate(r.date || todayYMD()); setEOrdererName(r.orderer_name ?? r.ordererName ?? "");
@@ -1099,6 +1137,16 @@ export default function TradeClient() {
       const supplyAmt = Number(r.ledger_supply_amount ?? 0);
       const totalAmt = Number(r.ledger_total_amount ?? 0);
       setEVatFree(amt > 0 && vatAmt === 0 && supplyAmt === amt && totalAmt === amt);
+
+      setESalaryEmployeeId("");
+      if (CATEGORIES.includes(c) && c === "급여") {
+        const { data: hp, error: hpErr } = await supabase
+          .from("hr_payments")
+          .select("employee_id")
+          .eq("ledger_entry_id", r.rawId)
+          .limit(1);
+        if (!hpErr && hp && hp[0]?.employee_id) setESalaryEmployeeId(String(hp[0].employee_id));
+      }
     }
     setEditOpen(true);
   }
@@ -1127,6 +1175,11 @@ export default function TradeClient() {
     } else {
       const amount = Number((eAmountStr || "0").replaceAll(",", ""));
       if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
+
+      if (eCategory === "급여") {
+        if (!eSalaryEmployeeId) return setMsg("급여는 직원 선택이 필요합니다.");
+      }
+
       const counterparty_name = eCounterpartyName.trim() || null;
       if (!counterparty_name) return setMsg("업체명(매입처/상대방)은 비울 수 없습니다.");
       const { error } = await supabase.from("ledger_entries").update({
@@ -1144,6 +1197,22 @@ export default function TradeClient() {
         partner_id: editRow.ledger_partner_id ?? null
       }).eq("id", editRow.rawId);
       if (error) return setMsg(error.message);
+
+      if (eCategory === "급여") {
+        const payMonth = String(eEntryDate ?? "").slice(0, 7);
+        const { error: hpUpErr } = await supabase.from("hr_payments").upsert({
+          ledger_entry_id: editRow.rawId,
+          employee_id: eSalaryEmployeeId,
+          pay_month: payMonth,
+          kind: "SALARY",
+          amount: amount,
+          note: null
+        }, { onConflict: "ledger_entry_id" });
+        if (hpUpErr) return setMsg(hpUpErr.message);
+      } else {
+        const { error: hpDelErr } = await supabase.from("hr_payments").delete().eq("ledger_entry_id", editRow.rawId);
+        if (hpDelErr) return setMsg(hpDelErr.message);
+      }
     }
     setEditOpen(false); setEditRow(null); await loadTrades();
   }
@@ -1381,6 +1450,19 @@ export default function TradeClient() {
                         </select>
                       </div>
                       <div><div className="mb-1 text-xs text-slate-600">카테고리</div><div className="flex flex-wrap gap-2">{CATEGORIES.map((c) => <button key={c} type="button" className={eCategory === c ? btnOn : btn} onClick={() => setECategory(c)}>{c}</button>)}</div></div>
+
+                      {eCategory === "급여" ? (
+                        <div className="md:col-span-3">
+                          <div className="mb-1 text-xs text-slate-600">직원 선택(급여)</div>
+                          <select className={inp} value={eSalaryEmployeeId} onChange={(e) => setESalaryEmployeeId(e.target.value)}>
+                            <option value="">직원을 선택하세요</option>
+                            {employees.map((emp) => (
+                              <option key={emp.id} value={emp.id}>{emp.name ?? "(이름없음)"}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
+
                       <div>
                         <div className="mb-1 text-xs text-slate-600">금액(원)</div>
                         <input className={inpR} inputMode="numeric" value={eAmountStr} onChange={(e) => setEAmountStr(e.target.value.replace(/[^\d,]/g, ""))} onBlur={() => { const n = Number((eAmountStr || "0").replaceAll(",", "")); if (Number.isFinite(n) && n > 0) setEAmountStr(n.toLocaleString("ko-KR")); }} />
@@ -1550,7 +1632,20 @@ export default function TradeClient() {
                       {[["BANK", "입금"], ["CASH", "현금"], ["CARD", "카드"], ["ETC", "기타"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                   </div>
-                  <div><div className="mb-1 text-xs text-slate-600">카테고리</div><div className="flex flex-wrap gap-2">{CATEGORIES.map((c) => <button key={c} type="button" className={category === c ? btnOn : btn} onClick={() => setCategory(c)}>{c}</button>)}</div></div>
+                  <div><div className="mb-1 text-xs text-slate-600">카테고리</div><div className="flex flex-wrap gap-2">{CATEGORIES.map((c) => <button key={c} type="button" className={category === c ? btnOn : btn} onClick={() => { setCategory(c); if (c !== "급여") setSalaryEmployeeId(""); }}>{c}</button>)}</div></div>
+
+                  {category === "급여" ? (
+                    <div className="md:col-span-3">
+                      <div className="mb-1 text-xs text-slate-600">직원 선택(급여)</div>
+                      <select className={inp} value={salaryEmployeeId} onChange={(e) => setSalaryEmployeeId(e.target.value)}>
+                        <option value="">직원을 선택하세요</option>
+                        {employees.map((emp) => (
+                          <option key={emp.id} value={emp.id}>{emp.name ?? "(이름없음)"}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+
                   <div>
                     <div className="mb-1 text-xs text-slate-600">금액(원)</div>
                     <input className={inpR} inputMode="numeric" value={amountStr} onChange={(e) => setAmountStr(e.target.value.replace(/[^\d,]/g, ""))} onBlur={() => { const n = Number((amountStr || "0").replaceAll(",", "")); if (Number.isFinite(n) && n > 0) setAmountStr(n.toLocaleString("ko-KR")); }} />
