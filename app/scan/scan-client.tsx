@@ -73,7 +73,9 @@ function isEditableInput(
   if (tag !== "input") return false;
   const input = el as HTMLInputElement;
   const t = (input.type || "text").toLowerCase();
-  return ["text", "search", "tel", "url", "email", "number", "password"].includes(t);
+  return ["text", "search", "tel", "url", "email", "number", "password"].includes(
+    t
+  );
 }
 
 export default function ScanClient() {
@@ -100,7 +102,8 @@ export default function ScanClient() {
   const barcodeRef = useRef<HTMLInputElement | null>(null);
   const lotsSectionRef = useRef<HTMLDivElement | null>(null);
 
-  const focusBarcode = () => requestAnimationFrame(() => barcodeRef.current?.focus());
+  const focusBarcode = () =>
+    requestAnimationFrame(() => barcodeRef.current?.focus());
 
   useEffect(() => {
     focusBarcode();
@@ -115,7 +118,10 @@ export default function ScanClient() {
 
   const scrollToLots = () => {
     requestAnimationFrame(() => {
-      lotsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      lotsSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
     });
   };
 
@@ -230,14 +236,16 @@ export default function ScanClient() {
 
       const qty = intMin(qtyEa, 1);
       const vInfo = await fetchVariantInfo(code);
-      if (!vInfo) throw new Error("등록되지 않은 바코드입니다. (품목관리에서 먼저 등록)");
+      if (!vInfo)
+        throw new Error("등록되지 않은 바코드입니다. (품목관리에서 먼저 등록)");
 
       const needExpiry = type === "IN" || type === "DISCARD";
       const exp = needExpiry ? expiry : "";
 
       if (needExpiry) {
         if (!exp) throw new Error("소비기한을 입력하세요. (입고/폐기)");
-        if (!isValidDateYYYYMMDD(exp)) throw new Error("소비기한 형식은 YYYY-MM-DD 입니다.");
+        if (!isValidDateYYYYMMDD(exp))
+          throw new Error("소비기한 형식은 YYYY-MM-DD 입니다.");
       }
 
       setCart((prev) => {
@@ -302,15 +310,30 @@ export default function ScanClient() {
 
     // 폴백: FEFO 분할 insert
     const fefoLots = await pickFefoLots(row.barcode);
-    if (fefoLots.length === 0) throw new Error(`출고/증정 가능한 재고가 없습니다. (재고 0) : ${row.barcode}`);
+    if (fefoLots.length === 0)
+      throw new Error(
+        `출고/증정 가능한 재고가 없습니다. (재고 0) : ${row.barcode}`
+      );
 
-    const totalEA = fefoLots.reduce((sum, r) => sum + intMin(r.stock_qty ?? 0, 0), 0);
+    const totalEA = fefoLots.reduce(
+      (sum, r) => sum + intMin(r.stock_qty ?? 0, 0),
+      0
+    );
     if (requestEA > totalEA) {
-      throw new Error(`재고 부족(${row.barcode}): 총 ${fmtInt(totalEA)}EA / 요청 ${fmtInt(requestEA)}EA`);
+      throw new Error(
+        `재고 부족(${row.barcode}): 총 ${fmtInt(totalEA)}EA / 요청 ${fmtInt(
+          requestEA
+        )}EA`
+      );
     }
 
     let remain = requestEA;
-    const inserts: { lot_id: string; type: MovementType; qty: number; note?: string | null }[] = [];
+    const inserts: {
+      lot_id: string;
+      type: MovementType;
+      qty: number;
+      note?: string | null;
+    }[] = [];
 
     for (const lot of fefoLots) {
       if (remain <= 0) break;
@@ -318,7 +341,12 @@ export default function ScanClient() {
       if (can <= 0) continue;
 
       const use = Math.min(can, remain);
-      inserts.push({ lot_id: lot.lot_id, type: row.type, qty: use, note: row.note || null });
+      inserts.push({
+        lot_id: lot.lot_id,
+        type: row.type,
+        qty: use,
+        note: row.note || null,
+      });
       remain -= use;
     }
 
@@ -333,7 +361,8 @@ export default function ScanClient() {
   // ✅ IN/DISCARD 저장 (EA 기준)
   const saveInDiscard = async (row: CartRow) => {
     if (!row.expiry) throw new Error(`소비기한 누락: ${row.barcode}`);
-    if (!isValidDateYYYYMMDD(row.expiry)) throw new Error(`소비기한 형식 오류: ${row.barcode} (${row.expiry})`);
+    if (!isValidDateYYYYMMDD(row.expiry))
+      throw new Error(`소비기한 형식 오류: ${row.barcode} (${row.expiry})`);
 
     const eachQty = intMin(row.qty_ea, 1);
 
@@ -454,7 +483,10 @@ export default function ScanClient() {
 
       try {
         el.value = st.snapshotValue;
-        if (typeof st.snapshotSelStart === "number" && typeof st.snapshotSelEnd === "number") {
+        if (
+          typeof st.snapshotSelStart === "number" &&
+          typeof st.snapshotSelEnd === "number"
+        ) {
           el.setSelectionRange(st.snapshotSelStart, st.snapshotSelEnd);
         }
       } catch {
@@ -512,7 +544,8 @@ export default function ScanClient() {
       if (e.isComposing) return;
 
       const key = e.key;
-      if (key === "Shift" || key === "Alt" || key === "Control" || key === "Meta") return;
+      if (key === "Shift" || key === "Alt" || key === "Control" || key === "Meta")
+        return;
 
       const now = Date.now();
       const st = scanStateRef.current;
@@ -525,7 +558,8 @@ export default function ScanClient() {
       if (key.length === 1) {
         if (!st.buf) {
           st.startedAt = now;
-          st.activeEl = !isBarcodeFocused && isEditableInput(active) ? (active as any) : null;
+          st.activeEl =
+            !isBarcodeFocused && isEditableInput(active) ? (active as any) : null;
 
           if (st.activeEl) {
             st.snapshotValue = st.activeEl.value;
@@ -577,13 +611,35 @@ export default function ScanClient() {
 
   const cartTotalLines = cart.length;
 
+  // ✅ 다른 페이지들과 톤 맞추기(공통 클래스)
+  const pageBg = "min-h-screen bg-[#0b0b0b] text-white";
+  const panel = "rounded-2xl border border-white/10 bg-white/5";
+  const inputBase =
+    "mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none placeholder-white/30 focus:border-white/25";
+  const selectBase =
+    "mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none focus:border-white/25";
+  const tableWrap = "mt-3 rounded-2xl border border-white/10 overflow-hidden";
+  const theadBg = "bg-white/5";
+  const trBorder = "border-t border-white/10";
+  const btnPrimary =
+    "rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 px-3 py-2 text-sm font-medium disabled:opacity-60";
+  const btnPrimaryLg =
+    "rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 px-4 py-2 font-medium disabled:opacity-60";
+  const btnGhost =
+    "rounded-xl border border-white/15 bg-transparent hover:bg-white/5 px-3 py-2 text-sm disabled:opacity-60";
+  const btnGhostLg =
+    "rounded-xl border border-white/15 bg-transparent hover:bg-white/5 px-4 py-2 disabled:opacity-60";
+  const msgBox = "rounded-xl border border-white/10 bg-white/5 p-3 text-sm";
+
   return (
-    <div className="min-h-screen bg-black text-white p-6">
+    <div className={`${pageBg} p-6`}>
       <h1 className="text-2xl font-semibold">스캔 입력</h1>
       <p className="text-white/60 mt-2">
-        - 모든 유형(IN/OUT/GIFT/DISCARD): 수량은 “EA(낱개)” 기준으로 입력<br />
-        - 입고/폐기: 소비기한 입력 필요 / 출고/증정: FEFO로 소비기한 자동 선택<br />
-        - ✅ 스캐너 입력은 어떤 칸에 커서가 있어도 바코드로 처리됩니다. (비고 포함)
+        - 모든 유형(IN/OUT/GIFT/DISCARD): 수량은 “EA(낱개)” 기준으로 입력
+        <br />
+        - 입고/폐기: 소비기한 입력 필요 / 출고/증정: FEFO로 소비기한 자동 선택
+        <br />- ✅ 스캐너 입력은 어떤 칸에 커서가 있어도 바코드로 처리됩니다. (비고
+        포함)
       </p>
 
       <div className="mt-6 grid gap-3 max-w-3xl">
@@ -592,7 +648,7 @@ export default function ScanClient() {
             <label className="text-sm text-white/70">바코드</label>
             <input
               ref={barcodeRef}
-              className="mt-1 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 outline-none"
+              className={inputBase}
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
               onKeyDown={(e) => {
@@ -605,37 +661,48 @@ export default function ScanClient() {
             />
 
             {normalizeBarcode(barcode) && (
-              <div className="mt-2 rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
+              <div className={`${panel} mt-2 p-3 text-sm`}>
                 {variantInfo ? (
                   <div className="flex flex-col gap-1">
                     <div className="text-white/80">
                       <span className="text-white/50">제품명:</span>{" "}
-                      <span className="font-semibold">{variantInfo.product_name || "-"}</span>
+                      <span className="font-semibold">
+                        {variantInfo.product_name || "-"}
+                      </span>
                     </div>
                     <div className="text-white/70">
-                      <span className="text-white/50">옵션:</span> {variantInfo.variant_name || "-"}
+                      <span className="text-white/50">옵션:</span>{" "}
+                      {variantInfo.variant_name || "-"}
                     </div>
                     <div className="text-white/70">
-                      <span className="text-white/50">바코드:</span> {variantInfo.barcode}
+                      <span className="text-white/50">바코드:</span>{" "}
+                      {variantInfo.barcode}
                     </div>
                     {/* pack_unit은 참고 정보로만 */}
                     <div className="text-white/70">
-                      <span className="text-white/50">참고(포장단위):</span> {variantInfo.pack_unit} EA/BOX
+                      <span className="text-white/50">참고(포장단위):</span>{" "}
+                      {variantInfo.pack_unit} EA/BOX
                     </div>
                     {lots.length === 0 && (
-                      <div className="text-white/60 mt-1">※ 등록은 되어있지만, 아직 입고(소비기한 LOT)가 없습니다.</div>
+                      <div className="text-white/60 mt-1">
+                        ※ 등록은 되어있지만, 아직 입고(소비기한 LOT)가 없습니다.
+                      </div>
                     )}
                   </div>
                 ) : (
                   <div className="text-white/70">
-                    바코드 <span className="text-white/90">{normalizeBarcode(barcode)}</span> 조회 중… 또는 등록되지 않았습니다.
+                    바코드{" "}
+                    <span className="text-white/90">
+                      {normalizeBarcode(barcode)}
+                    </span>{" "}
+                    조회 중… 또는 등록되지 않았습니다.
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className={`${panel} p-4`}>
             <div className="text-sm text-white/70">스캔 목록</div>
             <div className="mt-1 text-2xl font-semibold">{cartTotalLines}건</div>
 
@@ -643,14 +710,14 @@ export default function ScanClient() {
 
             <div className="mt-3 flex gap-2">
               <button
-                className="rounded-xl bg-white text-black px-3 py-2 text-sm font-medium disabled:opacity-60"
+                className={btnPrimary}
                 disabled={loading || cart.length === 0}
                 onClick={commitCart}
               >
                 {loading ? "저장 중..." : "일괄 저장"}
               </button>
               <button
-                className="rounded-xl border border-white/15 px-3 py-2 text-sm disabled:opacity-60"
+                className={btnGhost}
                 disabled={loading || cart.length === 0}
                 onClick={() => {
                   setCart([]);
@@ -668,7 +735,7 @@ export default function ScanClient() {
           <div>
             <label className="text-sm text-white/70">유형</label>
             <select
-              className="mt-1 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 outline-none"
+              className={selectBase}
               value={type}
               onChange={(e) => setType(e.target.value as MovementType)}
             >
@@ -683,28 +750,36 @@ export default function ScanClient() {
             <label className="text-sm text-white/70">수량(EA)</label>
             <input
               data-top-field="qtyEa"
-              className="mt-1 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 outline-none"
+              className={inputBase}
               type="number"
               min={1}
               value={qtyEa}
               onChange={(e) => setQtyEa(parseInt(e.target.value || "1", 10))}
             />
             <div className="mt-1 text-xs text-white/40">
-              저장/재고 계산 기준: <span className="text-white/70">EA(낱개)</span>
+              저장/재고 계산 기준:{" "}
+              <span className="text-white/70">EA(낱개)</span>
             </div>
           </div>
 
           <div className="md:col-span-2">
             <label className="text-sm text-white/70">
               소비기한 (YYYY-MM-DD)
-              {expiryDisabled && <span className="ml-2 text-white/50 text-xs">(출고/증정은 자동 선택)</span>}
+              {expiryDisabled && (
+                <span className="ml-2 text-white/50 text-xs">
+                  (출고/증정은 자동 선택)
+                </span>
+              )}
             </label>
 
             <input
               data-top-field="expiry"
               className={[
-                "mt-1 w-full rounded-xl bg-black/40 border px-3 py-2 outline-none",
-                expiryDisabled ? "border-white/5 text-white/40" : "border-white/10",
+                "mt-1 w-full rounded-xl border px-3 py-2 outline-none placeholder-white/30 focus:border-white/25",
+                "bg-white/5",
+                expiryDisabled
+                  ? "border-white/5 text-white/40"
+                  : "border-white/10",
               ].join(" ")}
               type="text"
               inputMode="numeric"
@@ -727,18 +802,18 @@ export default function ScanClient() {
           <label className="text-sm text-white/70">비고(선택)</label>
           <input
             data-top-field="note"
-            className="mt-1 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 outline-none"
+            className={inputBase}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="예: 샘플 입고/출고"
           />
         </div>
 
-        {msg && <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm">{msg}</div>}
+        {msg && <div className={msgBox}>{msg}</div>}
 
         <div className="flex flex-wrap gap-2">
           <button
-            className="rounded-xl bg-white text-black px-4 py-2 font-medium disabled:opacity-60"
+            className={btnPrimaryLg}
             disabled={loading}
             onClick={() => addToCart()}
           >
@@ -746,14 +821,14 @@ export default function ScanClient() {
           </button>
 
           <button
-            className="rounded-xl border border-white/15 px-4 py-2 disabled:opacity-60"
+            className={btnGhostLg}
             onClick={() => searchLotsByCode(barcode)}
             disabled={loading}
           >
             바코드로 재고 조회
           </button>
 
-          <a className="rounded-xl border border-white/15 px-4 py-2" href="/">
+          <a className={btnGhostLg} href="/">
             홈
           </a>
         </div>
@@ -761,11 +836,13 @@ export default function ScanClient() {
 
       {/* ✅ 스캔 목록 */}
       <div className="mt-10">
-        <h2 className="text-lg font-semibold">스캔 목록 (최종 확인 후 일괄 저장)</h2>
+        <h2 className="text-lg font-semibold">
+          스캔 목록 (최종 확인 후 일괄 저장)
+        </h2>
 
-        <div className="mt-3 rounded-2xl border border-white/10 overflow-hidden">
+        <div className={tableWrap}>
           <table className="w-full text-sm">
-            <thead className="bg-white/5">
+            <thead className={theadBg}>
               <tr>
                 <th className="text-left p-3">유형</th>
                 <th className="text-left p-3">제품명</th>
@@ -794,7 +871,7 @@ export default function ScanClient() {
                   const expiryOk = !needExpiry || isValidDateYYYYMMDD(r.expiry);
 
                   return (
-                    <tr key={r.id} className="border-t border-white/10 align-top">
+                    <tr key={r.id} className={`${trBorder} align-top`}>
                       <td className="p-3">{r.type}</td>
                       <td className="p-3">{r.variantInfo.product_name}</td>
                       <td className="p-3">{r.variantInfo.product_category ?? "-"}</td>
@@ -806,18 +883,22 @@ export default function ScanClient() {
                         <input
                           data-cart-id={r.id}
                           data-cart-field="qty_ea"
-                          className="w-28 text-right rounded-lg bg-black/40 border border-white/10 px-2 py-1 outline-none"
+                          className="w-28 text-right rounded-lg bg-white/5 border border-white/10 px-2 py-1 outline-none placeholder-white/30 focus:border-white/25"
                           type="number"
                           min={1}
                           value={r.qty_ea}
                           onChange={(e) => {
                             const v = parseInt(e.target.value || "1", 10);
                             setCart((prev) =>
-                              prev.map((x) => (x.id === r.id ? { ...x, qty_ea: intMin(v, 1) } : x))
+                              prev.map((x) =>
+                                x.id === r.id ? { ...x, qty_ea: intMin(v, 1) } : x
+                              )
                             );
                           }}
                         />
-                        <div className="mt-1 text-xs text-white/50">{fmtInt(r.qty_ea)} EA</div>
+                        <div className="mt-1 text-xs text-white/50">
+                          {fmtInt(r.qty_ea)} EA
+                        </div>
                       </td>
 
                       <td className="p-3">
@@ -826,7 +907,7 @@ export default function ScanClient() {
                             data-cart-id={r.id}
                             data-cart-field="expiry"
                             className={[
-                              "w-32 rounded-lg bg-black/40 border px-2 py-1 outline-none",
+                              "w-32 rounded-lg bg-white/5 border px-2 py-1 outline-none placeholder-white/30 focus:border-white/25",
                               expiryOk ? "border-white/10" : "border-red-500/60",
                             ].join(" ")}
                             value={r.expiry}
@@ -836,7 +917,9 @@ export default function ScanClient() {
                               let v = e.target.value.replace(/[^0-9]/g, "");
                               if (v.length > 4) v = v.slice(0, 4) + "-" + v.slice(4);
                               if (v.length > 7) v = v.slice(0, 7) + "-" + v.slice(7, 9);
-                              setCart((prev) => prev.map((x) => (x.id === r.id ? { ...x, expiry: v } : x)));
+                              setCart((prev) =>
+                                prev.map((x) => (x.id === r.id ? { ...x, expiry: v } : x))
+                              );
                             }}
                           />
                         ) : (
@@ -848,11 +931,13 @@ export default function ScanClient() {
                         <input
                           data-cart-id={r.id}
                           data-cart-field="note"
-                          className="w-56 rounded-lg bg-black/40 border border-white/10 px-2 py-1 outline-none"
+                          className="w-56 rounded-lg bg-white/5 border border-white/10 px-2 py-1 outline-none placeholder-white/30 focus:border-white/25"
                           value={r.note}
                           onChange={(e) => {
                             const v = e.target.value;
-                            setCart((prev) => prev.map((x) => (x.id === r.id ? { ...x, note: v } : x)));
+                            setCart((prev) =>
+                              prev.map((x) => (x.id === r.id ? { ...x, note: v } : x))
+                            );
                           }}
                           placeholder="비고"
                         />
@@ -860,7 +945,7 @@ export default function ScanClient() {
 
                       <td className="p-3 text-right">
                         <button
-                          className="rounded-lg border border-white/15 px-2 py-1 text-xs"
+                          className="rounded-lg border border-white/15 bg-transparent hover:bg-white/5 px-2 py-1 text-xs"
                           onClick={() => setCart((prev) => prev.filter((x) => x.id !== r.id))}
                         >
                           삭제
@@ -876,7 +961,7 @@ export default function ScanClient() {
 
         <div className="mt-3 flex gap-2">
           <button
-            className="rounded-xl bg-white text-black px-4 py-2 font-medium disabled:opacity-60"
+            className={btnPrimaryLg}
             disabled={loading || cart.length === 0}
             onClick={commitCart}
           >
@@ -884,7 +969,7 @@ export default function ScanClient() {
           </button>
 
           <button
-            className="rounded-xl border border-white/15 px-4 py-2 disabled:opacity-60"
+            className={btnGhostLg}
             disabled={loading || cart.length === 0}
             onClick={() => {
               setCart([]);
@@ -897,7 +982,9 @@ export default function ScanClient() {
         </div>
 
         <div className="mt-2 text-xs text-white/40">
-          ※ 수량/재고/저장 계산은 모두 <span className="text-white/70">EA(낱개)</span> 기준입니다. OUT/GIFT는 FEFO로 자동 차감됩니다.
+          ※ 수량/재고/저장 계산은 모두{" "}
+          <span className="text-white/70">EA(낱개)</span> 기준입니다. OUT/GIFT는
+          FEFO로 자동 차감됩니다.
         </div>
       </div>
 
@@ -905,9 +992,9 @@ export default function ScanClient() {
       <div className="mt-10" ref={lotsSectionRef}>
         <h2 className="text-lg font-semibold">해당 바코드 LOT 재고</h2>
 
-        <div className="mt-3 rounded-2xl border border-white/10 overflow-hidden">
+        <div className={tableWrap}>
           <table className="w-full text-sm">
-            <thead className="bg-white/5">
+            <thead className={theadBg}>
               <tr>
                 <th className="text-left p-3">제품명</th>
                 <th className="text-left p-3">구분</th>
@@ -919,16 +1006,19 @@ export default function ScanClient() {
               {lots.length === 0 ? (
                 <tr>
                   <td className="p-3 text-white/60" colSpan={4}>
-                    바코드를 스캔하면 자동으로 조회됩니다. (재고 0 LOT은 표시되지 않습니다)
+                    바코드를 스캔하면 자동으로 조회됩니다. (재고 0 LOT은 표시되지
+                    않습니다)
                   </td>
                 </tr>
               ) : (
                 lots.map((r) => (
-                  <tr key={r.lot_id} className="border-t border-white/10">
+                  <tr key={r.lot_id} className={trBorder}>
                     <td className="p-3">{r.product_name}</td>
                     <td className="p-3">{r.product_category ?? "-"}</td>
                     <td className="p-3">{r.expiry_date}</td>
-                    <td className="p-3 text-right">{fmtInt(intMin(r.stock_qty ?? 0, 0))}</td>
+                    <td className="p-3 text-right">
+                      {fmtInt(intMin(r.stock_qty ?? 0, 0))}
+                    </td>
                   </tr>
                 ))
               )}
@@ -938,7 +1028,8 @@ export default function ScanClient() {
 
         {variantInfo && (
           <div className="mt-2 text-xs text-white/40">
-            ※ 참고(품목 등록값): ea/box={variantInfo.pack_unit} (현재 화면/저장은 EA만 사용)
+            ※ 참고(품목 등록값): ea/box={variantInfo.pack_unit} (현재 화면/저장은
+            EA만 사용)
           </div>
         )}
       </div>
