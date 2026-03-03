@@ -193,6 +193,9 @@ export default function StatementClient() {
   const [rows, setRows] = useState<StatementRow[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // ✅ 기간 시작 전까지 누적(= 시작 잔액). 기간에 내역이 하나도 없어도 미수/선수금 계산에 필요
+  const [startBalance, setStartBalance] = useState<number>(0);
+
   const OUR = {
     name: "주식회사 보누스메이트",
     business_no: "343-88-03009",
@@ -246,6 +249,7 @@ export default function StatementClient() {
     try {
       if (!pId) {
         setRows([]);
+        setStartBalance(0);
         setMsg("partner_id가 없습니다. (상단에서 거래처/기간 선택 후 조회를 누르세요)");
         return;
       }
@@ -386,6 +390,9 @@ export default function StatementClient() {
           }
         }
       }
+
+      // ✅ 시작 잔액 저장(기간 내 내역이 0건이어도 미수/선수금 계산에 사용)
+      setStartBalance(initialBal);
 
       const list: Omit<StatementRow, "balance">[] = [];
 
@@ -581,6 +588,7 @@ export default function StatementClient() {
     }
   }
 
+  // ✅ 설정된 기간 내 입금/출고 합계(표시용)
   const totals = useMemo(() => {
     let inSum = 0;
     let outSum = 0;
@@ -664,8 +672,7 @@ export default function StatementClient() {
         const biz = (p.business_no ?? "").toLowerCase();
         const key = `${name} ${biz}`;
         const hit = key.includes(q);
-        const score =
-          !q ? 9999 : name.startsWith(q) ? 0 : name.includes(q) ? 1 : biz.includes(q) ? 2 : hit ? 3 : 99;
+        const score = !q ? 9999 : name.startsWith(q) ? 0 : name.includes(q) ? 1 : biz.includes(q) ? 2 : hit ? 3 : 99;
         return { p, score, hit };
       })
       .filter((x) => x.hit)
@@ -718,11 +725,16 @@ export default function StatementClient() {
 
   const canPrint = !!partnerId;
 
-  // ✅ 출고-입금이 음수면(입금이 더 많으면) "선수금"으로 표시
-  const diffOutMinusIn = useMemo(() => totals.outSum - totals.inSum, [totals.outSum, totals.inSum]);
-  const isPrepay = diffOutMinusIn < 0;
+  // ✅ 미수/선수금은 "최초 기록부터 ~ 설정된 기간(to)까지" 누적 기준으로 표시
+  // balance = (입금 - 출고) 누적
+  const endBalance = useMemo(() => {
+    if (rows.length > 0) return Number(rows[rows.length - 1].balance ?? 0);
+    return Number(startBalance ?? 0);
+  }, [rows, startBalance]);
+
+  const isPrepay = endBalance > 0;
   const diffLabel = isPrepay ? "선수금(입금-출고)" : "미수(출고-입금)";
-  const diffValue = Math.abs(diffOutMinusIn);
+  const diffValue = Math.abs(endBalance);
 
   return (
     <div className={`${pageBg} min-h-screen`}>
@@ -1039,7 +1051,8 @@ export default function StatementClient() {
 
                       // ✅ 같은 주문/출고 입력 건 내부 라인 사이(예: 마산고운조/자은초)는 구분선 제거
                       const prev = idx > 0 ? rows[idx - 1] : null;
-                      const sameGroupAsPrev = !!r.groupId && !!prev?.groupId && String(r.groupId) === String(prev.groupId);
+                      const sameGroupAsPrev =
+                        !!r.groupId && !!prev?.groupId && String(r.groupId) === String(prev.groupId);
 
                       return (
                         <tr
@@ -1060,7 +1073,9 @@ export default function StatementClient() {
                           <td className={`px-2 py-2 text-right tabular-nums font-semibold ${supplyClass}`}>
                             {r.supply === null ? "" : formatMoney(r.supply)}
                           </td>
-                          <td className="px-2 py-2 text-right tabular-nums">{r.vat === null ? "" : formatMoney(r.vat)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            {r.vat === null ? "" : formatMoney(r.vat)}
+                          </td>
                           <td className={`px-2 py-2 text-right tabular-nums font-semibold ${tradeClass}`}>
                             {r.tradeAmount === null ? "" : formatMoney(r.tradeAmount)}
                           </td>
