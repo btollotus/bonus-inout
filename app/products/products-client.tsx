@@ -293,6 +293,93 @@ export default function ProductsClient() {
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState("");
 
+  // ✅ 목록에서 "바코드 없는 제품" 바코드 입력/저장용
+  const [rowBarcodeDraft, setRowBarcodeDraft] = useState<Record<string, string>>({});
+
+  const normalizeBarcode = (raw: string) => {
+    let t = raw || "";
+    if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(t)) t = hangulToQwerty(t);
+
+    const cleaned = t
+      .trim()
+      .replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, "-")
+      .toUpperCase()
+      .replace(/\s+/g, "")
+      .replace(/[^0-9A-Z_-]/g, "");
+
+    return cleaned;
+  };
+
+  const saveRowBarcode = async (variant_id: string) => {
+    setMsg(null);
+
+    const draft = rowBarcodeDraft[variant_id] ?? "";
+    const bc = normalizeBarcode(draft);
+
+    if (!bc) {
+      setMsg("바코드를 입력하세요.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // ✅ 1) 바코드 중복 체크 (다른 variant에 이미 있으면 실패)
+      const { data: exist, error: existErr } = await supabase
+        .from("product_barcodes")
+        .select("id, variant_id, is_primary, is_active")
+        .eq("barcode", bc)
+        .maybeSingle();
+
+      if (existErr) throw existErr;
+
+      if (exist && exist.variant_id !== variant_id) {
+        setMsg("❌ 이미 다른 제품에 등록된 바코드입니다.");
+        return;
+      }
+
+      // ✅ 2) 이 variant의 기존 바코드들을 primary 해제
+      const { error: unPrimaryErr } = await supabase.from("product_barcodes").update({ is_primary: false }).eq("variant_id", variant_id);
+      if (unPrimaryErr) throw unPrimaryErr;
+
+      // ✅ 3) product_variants.barcode도 같이 갱신(일관성 유지)
+      const { error: vUpdErr } = await supabase.from("product_variants").update({ barcode: bc }).eq("id", variant_id);
+      if (vUpdErr) throw vUpdErr;
+
+      if (exist?.id) {
+        // ✅ 이미 같은 variant에 있는 barcode면 활성/primary만 켬
+        const { error: bcUpdErr } = await supabase
+          .from("product_barcodes")
+          .update({ is_primary: true, is_active: true })
+          .eq("id", exist.id);
+
+        if (bcUpdErr) throw bcUpdErr;
+      } else {
+        // ✅ 신규 insert
+        const { error: bcInsErr } = await supabase.from("product_barcodes").insert({
+          variant_id,
+          barcode: bc,
+          is_primary: true,
+          is_active: true,
+        });
+
+        if (bcInsErr) throw bcInsErr;
+      }
+
+      setRowBarcodeDraft((prev) => {
+        const next = { ...prev };
+        delete next[variant_id];
+        return next;
+      });
+
+      setMsg("바코드가 저장되었습니다 ✅");
+      await load();
+    } catch (e: any) {
+      setMsg(e?.message ?? "저장 중 오류");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const load = async () => {
     setMsg(null);
 
@@ -837,7 +924,42 @@ export default function ProductsClient() {
                   <tr key={r.variant_id} className="border-t border-slate-200">
                     <td className="p-3">{r.product_name}</td>
                     <td className="p-3">{r.product_food_type ?? "-"}</td>
-                    <td className="p-3 font-mono">{r.barcode}</td>
+                    <td className="p-3 font-mono">
+                      {r.barcode ? (
+                        r.barcode
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <input
+                            className="w-full max-w-xs rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                            value={rowBarcodeDraft[r.variant_id] ?? ""}
+                            onChange={(e) => {
+                              const next = e.target.value;
+                              setRowBarcodeDraft((prev) => ({ ...prev, [r.variant_id]: next }));
+                            }}
+                            placeholder="바코드 입력"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                saveRowBarcode(r.variant_id);
+                              }
+                            }}
+                            onPaste={(e) => {
+                              const text = e.clipboardData.getData("text") || "";
+                              const cleaned = normalizeBarcode(text);
+                              e.preventDefault();
+                              setRowBarcodeDraft((prev) => ({ ...prev, [r.variant_id]: cleaned }));
+                            }}
+                          />
+                          <button
+                            className="rounded-lg bg-blue-600 text-white px-3 py-1 text-xs font-medium hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60"
+                            disabled={loading}
+                            onClick={() => saveRowBarcode(r.variant_id)}
+                          >
+                            저장
+                          </button>
+                        </div>
+                      )}
+                    </td>
                     <td className="p-3 text-right">
                       <button
                         className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 active:bg-slate-200 disabled:opacity-60"
