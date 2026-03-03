@@ -611,44 +611,43 @@ export default function ScanClient() {
 
   const cartTotalLines = cart.length;
 
-  // ✅ 다른 페이지들과 톤 맞추기(공통 클래스)
-  const pageBg = "min-h-screen bg-[#0b0b0b] text-white";
-  const panel = "rounded-2xl border border-white/10 bg-white/5";
-  const inputBase =
-    "mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none placeholder-white/30 focus:border-white/25";
-  const selectBase =
-    "mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none focus:border-white/25";
-  const tableWrap = "mt-3 rounded-2xl border border-white/10 overflow-hidden";
-  const theadBg = "bg-white/5";
-  const trBorder = "border-t border-white/10";
-  const btnPrimary =
-    "rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 px-3 py-2 text-sm font-medium disabled:opacity-60";
-  const btnPrimaryLg =
-    "rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 px-4 py-2 font-medium disabled:opacity-60";
-  const btnGhost =
-    "rounded-xl border border-white/15 bg-transparent hover:bg-white/5 px-3 py-2 text-sm disabled:opacity-60";
-  const btnGhostLg =
-    "rounded-xl border border-white/15 bg-transparent hover:bg-white/5 px-4 py-2 disabled:opacity-60";
-  const msgBox = "rounded-xl border border-white/10 bg-white/5 p-3 text-sm";
+  // ✅ TaxClient(세무) 테마 참고해서 컬러/컴포넌트 톤 맞춤
+  const pageBg = "min-h-screen bg-slate-50 text-slate-900";
+  const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
+  const input =
+    "mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
+  const select =
+    "mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
+  const btn =
+    "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 active:bg-slate-100 disabled:opacity-60";
+  const btnOn =
+    "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60";
+  const btnLg =
+    "rounded-xl border border-slate-200 bg-white px-4 py-2 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-60";
+  const btnOnLg =
+    "rounded-xl border border-blue-600/20 bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60";
+  const tableWrap = "mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white";
+  const thead = "bg-slate-50 text-xs font-semibold text-slate-600";
+  const tr = "border-t border-slate-200";
+  const msgBox = "rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700";
 
   return (
     <div className={`${pageBg} p-6`}>
       <h1 className="text-2xl font-semibold">스캔 입력</h1>
-      <p className="text-white/60 mt-2">
+      <p className="mt-2 text-slate-600">
         - 모든 유형(IN/OUT/GIFT/DISCARD): 수량은 “EA(낱개)” 기준으로 입력
         <br />
         - 입고/폐기: 소비기한 입력 필요 / 출고/증정: FEFO로 소비기한 자동 선택
-        <br />- ✅ 스캐너 입력은 어떤 칸에 커서가 있어도 바코드로 처리됩니다. (비고
-        포함)
+        <br />- ✅ 스캐너 입력은 어떤 칸에 커서가 있어도 바코드로 처리됩니다. (비고 포함)
       </p>
 
-      <div className="mt-6 grid gap-3 max-w-3xl">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="mt-6 grid max-w-3xl gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div className="md:col-span-2">
-            <label className="text-sm text-white/70">바코드</label>
+            <label className="text-sm text-slate-600">바코드</label>
             <input
               ref={barcodeRef}
-              className={inputBase}
+              className={input}
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
               onKeyDown={(e) => {
@@ -661,63 +660,48 @@ export default function ScanClient() {
             />
 
             {normalizeBarcode(barcode) && (
-              <div className={`${panel} mt-2 p-3 text-sm`}>
+              <div className={`${card} mt-2 p-3 text-sm`}>
                 {variantInfo ? (
                   <div className="flex flex-col gap-1">
-                    <div className="text-white/80">
-                      <span className="text-white/50">제품명:</span>{" "}
-                      <span className="font-semibold">
-                        {variantInfo.product_name || "-"}
-                      </span>
+                    <div className="text-slate-800">
+                      <span className="text-slate-500">제품명:</span>{" "}
+                      <span className="font-semibold">{variantInfo.product_name || "-"}</span>
                     </div>
-                    <div className="text-white/70">
-                      <span className="text-white/50">옵션:</span>{" "}
-                      {variantInfo.variant_name || "-"}
+                    <div className="text-slate-700">
+                      <span className="text-slate-500">옵션:</span> {variantInfo.variant_name || "-"}
                     </div>
-                    <div className="text-white/70">
-                      <span className="text-white/50">바코드:</span>{" "}
-                      {variantInfo.barcode}
+                    <div className="text-slate-700">
+                      <span className="text-slate-500">바코드:</span> {variantInfo.barcode}
                     </div>
                     {/* pack_unit은 참고 정보로만 */}
-                    <div className="text-white/70">
-                      <span className="text-white/50">참고(포장단위):</span>{" "}
-                      {variantInfo.pack_unit} EA/BOX
+                    <div className="text-slate-700">
+                      <span className="text-slate-500">참고(포장단위):</span> {variantInfo.pack_unit} EA/BOX
                     </div>
                     {lots.length === 0 && (
-                      <div className="text-white/60 mt-1">
-                        ※ 등록은 되어있지만, 아직 입고(소비기한 LOT)가 없습니다.
-                      </div>
+                      <div className="mt-1 text-slate-500">※ 등록은 되어있지만, 아직 입고(소비기한 LOT)가 없습니다.</div>
                     )}
                   </div>
                 ) : (
-                  <div className="text-white/70">
-                    바코드{" "}
-                    <span className="text-white/90">
-                      {normalizeBarcode(barcode)}
-                    </span>{" "}
-                    조회 중… 또는 등록되지 않았습니다.
+                  <div className="text-slate-600">
+                    바코드 <span className="text-slate-900">{normalizeBarcode(barcode)}</span> 조회 중… 또는 등록되지 않았습니다.
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          <div className={`${panel} p-4`}>
-            <div className="text-sm text-white/70">스캔 목록</div>
+          <div className={`${card} p-4`}>
+            <div className="text-sm text-slate-600">스캔 목록</div>
             <div className="mt-1 text-2xl font-semibold">{cartTotalLines}건</div>
 
             {/* ✅ "총 포장수량" 제거 */}
 
             <div className="mt-3 flex gap-2">
-              <button
-                className={btnPrimary}
-                disabled={loading || cart.length === 0}
-                onClick={commitCart}
-              >
+              <button className={btnOn} disabled={loading || cart.length === 0} onClick={commitCart}>
                 {loading ? "저장 중..." : "일괄 저장"}
               </button>
               <button
-                className={btnGhost}
+                className={btn}
                 disabled={loading || cart.length === 0}
                 onClick={() => {
                   setCart([]);
@@ -731,14 +715,10 @@ export default function ScanClient() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div>
-            <label className="text-sm text-white/70">유형</label>
-            <select
-              className={selectBase}
-              value={type}
-              onChange={(e) => setType(e.target.value as MovementType)}
-            >
+            <label className="text-sm text-slate-600">유형</label>
+            <select className={select} value={type} onChange={(e) => setType(e.target.value as MovementType)}>
               <option value="IN">입고(IN)</option>
               <option value="OUT">출고(OUT)</option>
               <option value="DISCARD">폐기(DISCARD)</option>
@@ -747,39 +727,31 @@ export default function ScanClient() {
           </div>
 
           <div>
-            <label className="text-sm text-white/70">수량(EA)</label>
+            <label className="text-sm text-slate-600">수량(EA)</label>
             <input
               data-top-field="qtyEa"
-              className={inputBase}
+              className={input}
               type="number"
               min={1}
               value={qtyEa}
               onChange={(e) => setQtyEa(parseInt(e.target.value || "1", 10))}
             />
-            <div className="mt-1 text-xs text-white/40">
-              저장/재고 계산 기준:{" "}
-              <span className="text-white/70">EA(낱개)</span>
+            <div className="mt-1 text-xs text-slate-500">
+              저장/재고 계산 기준: <span className="text-slate-900">EA(낱개)</span>
             </div>
           </div>
 
           <div className="md:col-span-2">
-            <label className="text-sm text-white/70">
+            <label className="text-sm text-slate-600">
               소비기한 (YYYY-MM-DD)
-              {expiryDisabled && (
-                <span className="ml-2 text-white/50 text-xs">
-                  (출고/증정은 자동 선택)
-                </span>
-              )}
+              {expiryDisabled && <span className="ml-2 text-xs text-slate-500">(출고/증정은 자동 선택)</span>}
             </label>
 
             <input
               data-top-field="expiry"
               className={[
-                "mt-1 w-full rounded-xl border px-3 py-2 outline-none placeholder-white/30 focus:border-white/25",
-                "bg-white/5",
-                expiryDisabled
-                  ? "border-white/5 text-white/40"
-                  : "border-white/10",
+                "mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
+                expiryDisabled ? "border-slate-200 text-slate-400" : "border-slate-200 focus:border-blue-300",
               ].join(" ")}
               type="text"
               inputMode="numeric"
@@ -799,10 +771,10 @@ export default function ScanClient() {
         </div>
 
         <div>
-          <label className="text-sm text-white/70">비고(선택)</label>
+          <label className="text-sm text-slate-600">비고(선택)</label>
           <input
             data-top-field="note"
-            className={inputBase}
+            className={input}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="예: 샘플 입고/출고"
@@ -812,23 +784,15 @@ export default function ScanClient() {
         {msg && <div className={msgBox}>{msg}</div>}
 
         <div className="flex flex-wrap gap-2">
-          <button
-            className={btnPrimaryLg}
-            disabled={loading}
-            onClick={() => addToCart()}
-          >
+          <button className={btnOnLg} disabled={loading} onClick={() => addToCart()}>
             목록에 추가
           </button>
 
-          <button
-            className={btnGhostLg}
-            onClick={() => searchLotsByCode(barcode)}
-            disabled={loading}
-          >
+          <button className={btnLg} onClick={() => searchLotsByCode(barcode)} disabled={loading}>
             바코드로 재고 조회
           </button>
 
-          <a className={btnGhostLg} href="/">
+          <a className={btnLg} href="/">
             홈
           </a>
         </div>
@@ -836,32 +800,30 @@ export default function ScanClient() {
 
       {/* ✅ 스캔 목록 */}
       <div className="mt-10">
-        <h2 className="text-lg font-semibold">
-          스캔 목록 (최종 확인 후 일괄 저장)
-        </h2>
+        <h2 className="text-lg font-semibold">스캔 목록 (최종 확인 후 일괄 저장)</h2>
 
         <div className={tableWrap}>
           <table className="w-full text-sm">
-            <thead className={theadBg}>
+            <thead className={thead}>
               <tr>
-                <th className="text-left p-3">유형</th>
-                <th className="text-left p-3">제품명</th>
-                <th className="text-left p-3">구분</th>
-                <th className="text-left p-3">옵션</th>
-                <th className="text-left p-3">바코드</th>
+                <th className="p-3 text-left">유형</th>
+                <th className="p-3 text-left">제품명</th>
+                <th className="p-3 text-left">구분</th>
+                <th className="p-3 text-left">옵션</th>
+                <th className="p-3 text-left">바코드</th>
 
                 {/* ✅ 수량(EA) 1번만 (소비기한 앞) */}
-                <th className="text-right p-3">수량(EA)</th>
+                <th className="p-3 text-right">수량(EA)</th>
 
-                <th className="text-left p-3">소비기한</th>
-                <th className="text-left p-3">비고</th>
-                <th className="text-right p-3">삭제</th>
+                <th className="p-3 text-left">소비기한</th>
+                <th className="p-3 text-left">비고</th>
+                <th className="p-3 text-right">삭제</th>
               </tr>
             </thead>
             <tbody>
               {cart.length === 0 ? (
                 <tr>
-                  <td className="p-3 text-white/60" colSpan={9}>
+                  <td className="p-3 text-slate-500" colSpan={9}>
                     스캔한 항목이 없습니다. (Enter 또는 “목록에 추가”로 누적됩니다)
                   </td>
                 </tr>
@@ -871,7 +833,7 @@ export default function ScanClient() {
                   const expiryOk = !needExpiry || isValidDateYYYYMMDD(r.expiry);
 
                   return (
-                    <tr key={r.id} className={`${trBorder} align-top`}>
+                    <tr key={r.id} className={`${tr} align-top`}>
                       <td className="p-3">{r.type}</td>
                       <td className="p-3">{r.variantInfo.product_name}</td>
                       <td className="p-3">{r.variantInfo.product_category ?? "-"}</td>
@@ -883,22 +845,16 @@ export default function ScanClient() {
                         <input
                           data-cart-id={r.id}
                           data-cart-field="qty_ea"
-                          className="w-28 text-right rounded-lg bg-white/5 border border-white/10 px-2 py-1 outline-none placeholder-white/30 focus:border-white/25"
+                          className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
                           type="number"
                           min={1}
                           value={r.qty_ea}
                           onChange={(e) => {
                             const v = parseInt(e.target.value || "1", 10);
-                            setCart((prev) =>
-                              prev.map((x) =>
-                                x.id === r.id ? { ...x, qty_ea: intMin(v, 1) } : x
-                              )
-                            );
+                            setCart((prev) => prev.map((x) => (x.id === r.id ? { ...x, qty_ea: intMin(v, 1) } : x)));
                           }}
                         />
-                        <div className="mt-1 text-xs text-white/50">
-                          {fmtInt(r.qty_ea)} EA
-                        </div>
+                        <div className="mt-1 text-xs text-slate-500">{fmtInt(r.qty_ea)} EA</div>
                       </td>
 
                       <td className="p-3">
@@ -907,8 +863,8 @@ export default function ScanClient() {
                             data-cart-id={r.id}
                             data-cart-field="expiry"
                             className={[
-                              "w-32 rounded-lg bg-white/5 border px-2 py-1 outline-none placeholder-white/30 focus:border-white/25",
-                              expiryOk ? "border-white/10" : "border-red-500/60",
+                              "w-32 rounded-lg border bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
+                              expiryOk ? "border-slate-200 focus:border-blue-300" : "border-red-300 focus:border-red-400",
                             ].join(" ")}
                             value={r.expiry}
                             placeholder="YYYY-MM-DD"
@@ -917,13 +873,11 @@ export default function ScanClient() {
                               let v = e.target.value.replace(/[^0-9]/g, "");
                               if (v.length > 4) v = v.slice(0, 4) + "-" + v.slice(4);
                               if (v.length > 7) v = v.slice(0, 7) + "-" + v.slice(7, 9);
-                              setCart((prev) =>
-                                prev.map((x) => (x.id === r.id ? { ...x, expiry: v } : x))
-                              );
+                              setCart((prev) => prev.map((x) => (x.id === r.id ? { ...x, expiry: v } : x)));
                             }}
                           />
                         ) : (
-                          <span className="text-white/40">자동(FEFO)</span>
+                          <span className="text-slate-400">자동(FEFO)</span>
                         )}
                       </td>
 
@@ -931,13 +885,11 @@ export default function ScanClient() {
                         <input
                           data-cart-id={r.id}
                           data-cart-field="note"
-                          className="w-56 rounded-lg bg-white/5 border border-white/10 px-2 py-1 outline-none placeholder-white/30 focus:border-white/25"
+                          className="w-56 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
                           value={r.note}
                           onChange={(e) => {
                             const v = e.target.value;
-                            setCart((prev) =>
-                              prev.map((x) => (x.id === r.id ? { ...x, note: v } : x))
-                            );
+                            setCart((prev) => prev.map((x) => (x.id === r.id ? { ...x, note: v } : x)));
                           }}
                           placeholder="비고"
                         />
@@ -945,7 +897,7 @@ export default function ScanClient() {
 
                       <td className="p-3 text-right">
                         <button
-                          className="rounded-lg border border-white/15 bg-transparent hover:bg-white/5 px-2 py-1 text-xs"
+                          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs hover:bg-slate-50 active:bg-slate-100"
                           onClick={() => setCart((prev) => prev.filter((x) => x.id !== r.id))}
                         >
                           삭제
@@ -960,16 +912,12 @@ export default function ScanClient() {
         </div>
 
         <div className="mt-3 flex gap-2">
-          <button
-            className={btnPrimaryLg}
-            disabled={loading || cart.length === 0}
-            onClick={commitCart}
-          >
+          <button className={btnOnLg} disabled={loading || cart.length === 0} onClick={commitCart}>
             {loading ? "저장 중..." : "일괄 저장"}
           </button>
 
           <button
-            className={btnGhostLg}
+            className={btnLg}
             disabled={loading || cart.length === 0}
             onClick={() => {
               setCart([]);
@@ -981,10 +929,8 @@ export default function ScanClient() {
           </button>
         </div>
 
-        <div className="mt-2 text-xs text-white/40">
-          ※ 수량/재고/저장 계산은 모두{" "}
-          <span className="text-white/70">EA(낱개)</span> 기준입니다. OUT/GIFT는
-          FEFO로 자동 차감됩니다.
+        <div className="mt-2 text-xs text-slate-500">
+          ※ 수량/재고/저장 계산은 모두 <span className="text-slate-900">EA(낱개)</span> 기준입니다. OUT/GIFT는 FEFO로 자동 차감됩니다.
         </div>
       </div>
 
@@ -994,31 +940,28 @@ export default function ScanClient() {
 
         <div className={tableWrap}>
           <table className="w-full text-sm">
-            <thead className={theadBg}>
+            <thead className={thead}>
               <tr>
-                <th className="text-left p-3">제품명</th>
-                <th className="text-left p-3">구분</th>
-                <th className="text-left p-3">소비기한</th>
-                <th className="text-right p-3">재고(EA)</th>
+                <th className="p-3 text-left">제품명</th>
+                <th className="p-3 text-left">구분</th>
+                <th className="p-3 text-left">소비기한</th>
+                <th className="p-3 text-right">재고(EA)</th>
               </tr>
             </thead>
             <tbody>
               {lots.length === 0 ? (
                 <tr>
-                  <td className="p-3 text-white/60" colSpan={4}>
-                    바코드를 스캔하면 자동으로 조회됩니다. (재고 0 LOT은 표시되지
-                    않습니다)
+                  <td className="p-3 text-slate-500" colSpan={4}>
+                    바코드를 스캔하면 자동으로 조회됩니다. (재고 0 LOT은 표시되지 않습니다)
                   </td>
                 </tr>
               ) : (
                 lots.map((r) => (
-                  <tr key={r.lot_id} className={trBorder}>
+                  <tr key={r.lot_id} className={tr}>
                     <td className="p-3">{r.product_name}</td>
                     <td className="p-3">{r.product_category ?? "-"}</td>
                     <td className="p-3">{r.expiry_date}</td>
-                    <td className="p-3 text-right">
-                      {fmtInt(intMin(r.stock_qty ?? 0, 0))}
-                    </td>
+                    <td className="p-3 text-right">{fmtInt(intMin(r.stock_qty ?? 0, 0))}</td>
                   </tr>
                 ))
               )}
@@ -1027,9 +970,8 @@ export default function ScanClient() {
         </div>
 
         {variantInfo && (
-          <div className="mt-2 text-xs text-white/40">
-            ※ 참고(품목 등록값): ea/box={variantInfo.pack_unit} (현재 화면/저장은
-            EA만 사용)
+          <div className="mt-2 text-xs text-slate-500">
+            ※ 참고(품목 등록값): ea/box={variantInfo.pack_unit} (현재 화면/저장은 EA만 사용)
           </div>
         )}
       </div>
