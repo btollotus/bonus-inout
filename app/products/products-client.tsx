@@ -311,23 +311,25 @@ export default function ProductsClient() {
 
     const variantIds = (vData ?? []).map((r: any) => r.id).filter(Boolean);
 
-    // ✅ 2) barcodes를 따로 로드해서 매핑 (FK/관계명/RLS로 nested select가 안 나오는 케이스 해결)
+    // ✅ 2) barcodes를 따로 로드해서 매핑 (is_active가 NULL인 데이터도 포함되도록)
     let bcMap = new Map<string, string>();
 
     if (variantIds.length > 0) {
       const { data: bData, error: bErr } = await supabase
         .from("product_barcodes")
         .select("variant_id, barcode, is_primary, is_active, created_at")
-        .in("variant_id", variantIds)
-        .eq("is_active", true);
+        .in("variant_id", variantIds);
 
       if (bErr) {
-        // 바코드 조회가 막혀도 variants 목록은 보여줘야 하므로 msg만 띄우고 계속 진행
         setMsg(bErr.message);
       } else {
         const byVariant = new Map<string, any[]>();
         for (const b of bData ?? []) {
           if (!b?.variant_id) continue;
+
+          // ✅ is_active=false는 제외, NULL/true는 포함
+          if (b.is_active === false) continue;
+
           const arr = byVariant.get(b.variant_id) ?? [];
           arr.push(b);
           byVariant.set(b.variant_id, arr);
@@ -467,7 +469,6 @@ export default function ProductsClient() {
         if (pInsErr) throw pInsErr;
         productId = pIns.id;
       } else {
-        // ✅ 기존 제품이면 food_type을 입력값으로 갱신(요청된 "식품유형 맞추기" 목적)
         if ((existingProduct?.food_type ?? "") !== vn) {
           const { error: pUpdErr } = await supabase.from("products").update({ food_type: vn }).eq("id", productId);
           if (pUpdErr) throw pUpdErr;
@@ -478,7 +479,6 @@ export default function ProductsClient() {
          3️⃣ 신규 vs 수정 분기 처리
       ------------------------------------------------- */
       if (existBarcode) {
-        // ✅ 기존 바코드 → 해당 variant 업데이트
         const variantId = existBarcode.variant_id as string;
 
         const { error: updErr } = await supabase
@@ -487,12 +487,12 @@ export default function ProductsClient() {
             product_id: productId,
             variant_name: vn,
             pack_unit: pu,
+            barcode: bc,
           })
           .eq("id", variantId);
 
         if (updErr) throw updErr;
 
-        // ✅ 이 바코드를 대표(primary)로 올림
         const { error: unPrimaryErr } = await supabase.from("product_barcodes").update({ is_primary: false }).eq("variant_id", variantId);
         if (unPrimaryErr) throw unPrimaryErr;
 
@@ -505,13 +505,13 @@ export default function ProductsClient() {
 
         setMsg("기존 바코드 정보가 수정되었습니다 ✏️");
       } else {
-        // ✅ 신규 바코드 → variant 생성 후 product_barcodes에 저장
         const { data: vIns, error: vInsErr } = await supabase
           .from("product_variants")
           .insert({
             product_id: productId,
             variant_name: vn,
             pack_unit: pu,
+            barcode: bc,
           })
           .select("id")
           .single();
@@ -533,7 +533,6 @@ export default function ProductsClient() {
       setVariantName("");
       setBarcode("");
 
-      // 다음 스캔 대비 포커스 유지
       requestAnimationFrame(() => {
         barcodeRef.current?.focus();
         barcodeRef.current?.select();
@@ -604,8 +603,6 @@ export default function ProductsClient() {
                       className="accent-blue-600"
                     />
                     <span className="text-sm font-medium">{c}</span>
-
-                    {/* ✅ 체크 표시(선택되면 보이게) */}
                     <span className={["ml-1 text-xs rounded-md px-2 py-0.5", checked ? "bg-white/20" : "hidden"].join(" ")}>선택됨</span>
                   </label>
                 );
@@ -631,7 +628,6 @@ export default function ProductsClient() {
                 await loadVariantSuggest(variantName);
               }}
               onBlur={() => {
-                // ✅ 클릭 선택을 위해 살짝 지연
                 setTimeout(() => setVnOpen(false), 120);
               }}
               onKeyDown={(e) => {
@@ -667,7 +663,7 @@ export default function ProductsClient() {
                         type="button"
                         className={["w-full text-left px-3 py-2 text-sm", active ? "bg-blue-600 text-white" : "hover:bg-slate-100 text-slate-800"].join(" ")}
                         onMouseEnter={() => setVnActive(idx)}
-                        onMouseDown={(e) => e.preventDefault()} // ✅ blur 방지
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => {
                           setVariantName(item);
                           setVnOpen(false);
@@ -731,21 +727,18 @@ export default function ProductsClient() {
               onKeyDown={(e) => {
                 if (e.repeat) return;
 
-                // Enter면 자동 등록
                 if (e.key === "Enter") {
                   e.preventDefault();
                   upsertProductAndVariant();
                   return;
                 }
 
-                // Backspace
                 if (e.key === "Backspace") {
                   e.preventDefault();
                   setBarcode((prev) => prev.slice(0, -1));
                   return;
                 }
 
-                // 방향키/Tab 등은 통과
                 if (
                   e.key === "Tab" ||
                   e.key === "ArrowLeft" ||
@@ -768,16 +761,12 @@ export default function ProductsClient() {
                 e.preventDefault();
 
                 setBarcode((prev) => {
-                  // ✅ 이전 입력 이후 시간이 벌어졌다면 "새 스캔 시작" → 기존 값 삭제 후 새로 시작
                   const base = prev && gap > SCAN_GAP_MS ? "" : prev;
-
                   const next = (base + ch).toUpperCase().replace(/[^0-9A-Z_-]/g, "");
-
                   return next;
                 });
               }}
               onPaste={(e) => {
-                // 붙여넣기 대응 (붙여넣기는 value 기반이므로 여기서 정제)
                 e.preventDefault();
                 const text = e.clipboardData.getData("text") || "";
                 let raw = text;
