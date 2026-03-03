@@ -296,34 +296,69 @@ export default function ProductsClient() {
   const load = async () => {
     setMsg(null);
 
-    const { data, error } = await supabase
+    // ✅ 1) variants 먼저 로드 (관계 인식 문제 회피)
+    const { data: vData, error: vErr } = await supabase
       .from("product_variants")
-      .select("id, variant_name, pack_unit, product_id, products(name, category, food_type), product_barcodes(barcode, is_primary, is_active, created_at)")
+      .select("id, variant_name, pack_unit, product_id, products(name, category, food_type)")
       .order("created_at", { ascending: false })
       .limit(200);
 
-    if (error) {
-      setMsg(error.message);
+    if (vErr) {
+      setMsg(vErr.message);
       setRows([]);
       return;
     }
 
-    const mapped: VariantRow[] = (data ?? []).map((r: any) => {
-      const bcs = Array.isArray(r.product_barcodes) ? r.product_barcodes : [];
-      const active = bcs.filter((b: any) => b?.is_active !== false);
-      const primary = active.find((b: any) => b?.is_primary === true) ?? active[0] ?? bcs[0];
+    const variantIds = (vData ?? []).map((r: any) => r.id).filter(Boolean);
 
-      return {
-        variant_id: r.id,
-        product_id: r.product_id,
-        product_name: r.products?.name ?? "",
-        product_category: r.products?.category ?? null,
-        product_food_type: r.products?.food_type ?? null,
-        variant_name: r.variant_name,
-        barcode: primary?.barcode ?? "",
-        pack_unit: typeof r.pack_unit === "number" ? r.pack_unit : 1,
-      };
-    });
+    // ✅ 2) barcodes를 따로 로드해서 매핑 (FK/관계명/RLS로 nested select가 안 나오는 케이스 해결)
+    let bcMap = new Map<string, string>();
+
+    if (variantIds.length > 0) {
+      const { data: bData, error: bErr } = await supabase
+        .from("product_barcodes")
+        .select("variant_id, barcode, is_primary, is_active, created_at")
+        .in("variant_id", variantIds)
+        .eq("is_active", true);
+
+      if (bErr) {
+        // 바코드 조회가 막혀도 variants 목록은 보여줘야 하므로 msg만 띄우고 계속 진행
+        setMsg(bErr.message);
+      } else {
+        const byVariant = new Map<string, any[]>();
+        for (const b of bData ?? []) {
+          if (!b?.variant_id) continue;
+          const arr = byVariant.get(b.variant_id) ?? [];
+          arr.push(b);
+          byVariant.set(b.variant_id, arr);
+        }
+
+        for (const [vid, arr] of byVariant.entries()) {
+          const sorted = [...arr].sort((a: any, b: any) => {
+            const ap = a?.is_primary ? 1 : 0;
+            const bp = b?.is_primary ? 1 : 0;
+            if (ap !== bp) return bp - ap;
+            const at = a?.created_at ? new Date(a.created_at).getTime() : 0;
+            const bt = b?.created_at ? new Date(b.created_at).getTime() : 0;
+            return bt - at;
+          });
+
+          const picked = sorted[0];
+          if (picked?.barcode) bcMap.set(vid, String(picked.barcode));
+        }
+      }
+    }
+
+    const mapped: VariantRow[] = (vData ?? []).map((r: any) => ({
+      variant_id: r.id,
+      product_id: r.product_id,
+      product_name: r.products?.name ?? "",
+      product_category: r.products?.category ?? null,
+      product_food_type: r.products?.food_type ?? null,
+      variant_name: r.variant_name,
+      barcode: bcMap.get(r.id) ?? "",
+      pack_unit: typeof r.pack_unit === "number" ? r.pack_unit : 1,
+    }));
 
     setRows(mapped);
   };
@@ -515,11 +550,7 @@ export default function ProductsClient() {
   const filtered = q.trim()
     ? rows.filter((r) => {
         const t = q.trim().toLowerCase();
-        return (
-          r.product_name.toLowerCase().includes(t) ||
-          (r.product_food_type ?? "").toLowerCase().includes(t) ||
-          r.barcode.toLowerCase().includes(t)
-        );
+        return r.product_name.toLowerCase().includes(t) || (r.product_food_type ?? "").toLowerCase().includes(t) || r.barcode.toLowerCase().includes(t);
       })
     : rows;
 
@@ -537,9 +568,7 @@ export default function ProductsClient() {
         </div>
       </div>
 
-      <p className="text-slate-600 mt-2">
-        제품명 + 식품유형 + 바코드 + 수량을 등록합니다. (바코드는 중복 불가)
-      </p>
+      <p className="text-slate-600 mt-2">제품명 + 식품유형 + 바코드 + 수량을 등록합니다. (바코드는 중복 불가)</p>
 
       <div className="mt-6 max-w-2xl grid gap-3">
         <div className="grid grid-cols-2 gap-3">
@@ -577,9 +606,7 @@ export default function ProductsClient() {
                     <span className="text-sm font-medium">{c}</span>
 
                     {/* ✅ 체크 표시(선택되면 보이게) */}
-                    <span className={["ml-1 text-xs rounded-md px-2 py-0.5", checked ? "bg-white/20" : "hidden"].join(" ")}>
-                      선택됨
-                    </span>
+                    <span className={["ml-1 text-xs rounded-md px-2 py-0.5", checked ? "bg-white/20" : "hidden"].join(" ")}>선택됨</span>
                   </label>
                 );
               })}
@@ -754,10 +781,6 @@ export default function ProductsClient() {
                 e.preventDefault();
                 const text = e.clipboardData.getData("text") || "";
                 let raw = text;
-
-                // 한글/자모가 섞여 들어오면 복원(붙여넣기용 fallback)
-                // ⚠️ hangulToQwerty는 붙여넣기/예외 대응용 fallback
-                // 실제 스캐너 입력은 onKeyDown + event.code 기반으로 처리한다
 
                 if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(raw)) raw = hangulToQwerty(raw);
 
