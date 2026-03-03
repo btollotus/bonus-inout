@@ -718,6 +718,12 @@ export default function StatementClient() {
 
   const canPrint = !!partnerId;
 
+  // ✅ 출고-입금이 음수면(입금이 더 많으면) "선수금"으로 표시
+  const diffOutMinusIn = useMemo(() => totals.outSum - totals.inSum, [totals.outSum, totals.inSum]);
+  const isPrepay = diffOutMinusIn < 0;
+  const diffLabel = isPrepay ? "선수금(입금-출고)" : "미수(출고-입금)";
+  const diffValue = Math.abs(diffOutMinusIn);
+
   return (
     <div className={`${pageBg} min-h-screen`}>
       {/* ✅ spec-client.tsx와 동일한 방식: 인쇄 시 "statement-print-area"만 보이게 */}
@@ -965,10 +971,8 @@ export default function StatementClient() {
               <div className="text-sm font-semibold">내역</div>
               <div className="text-sm text-slate-600">
                 입금 합계 <span className="font-semibold tabular-nums">{formatMoney(totals.inSum)}</span> · 출고 합계{" "}
-                <span className="font-semibold tabular-nums">{formatMoney(totals.outSum)}</span> · 미수(출고-입금){" "}
-                <span className="font-semibold tabular-nums">
-                  {formatMoney(Math.max(0, totals.outSum - totals.inSum))}
-                </span>
+                <span className="font-semibold tabular-nums">{formatMoney(totals.outSum)}</span> · {diffLabel}{" "}
+                <span className="font-semibold tabular-nums">{formatMoney(diffValue)}</span>
               </div>
             </div>
 
