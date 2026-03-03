@@ -34,6 +34,7 @@ type VariantRow = {
   product_id: string;
   product_name: string;
   product_category: string | null;
+  product_food_type: string | null;
   variant_name: string;
   barcode: string;
   pack_unit: number;
@@ -248,7 +249,7 @@ export default function ProductsClient() {
     const k = keyword.trim();
     if (k.length < 1) {
       // ✅ 최근 사용(이미 rows에 있음)에서 상위 10개
-      const recent = Array.from(new Set(rows.map((r) => r.variant_name).filter(Boolean))).slice(0, 10);
+      const recent = Array.from(new Set(rows.map((r) => r.product_food_type ?? "").filter(Boolean))).slice(0, 10);
       setVnItems(recent);
       return;
     }
@@ -256,14 +257,14 @@ export default function ProductsClient() {
     // ✅ 2글자 이상이면 DB에서 유사 검색(추천)
     if (k.length >= 2) {
       const { data, error } = await supabase
-        .from("product_variants")
-        .select("variant_name")
-        .ilike("variant_name", `%${k}%`)
+        .from("products")
+        .select("food_type")
+        .ilike("food_type", `%${k}%`)
         .order("created_at", { ascending: false })
         .limit(12);
 
       if (!error) {
-        const list = Array.from(new Set((data ?? []).map((d: any) => d.variant_name).filter(Boolean)));
+        const list = Array.from(new Set((data ?? []).map((d: any) => d.food_type).filter(Boolean)));
         setVnItems(list);
         return;
       }
@@ -273,7 +274,7 @@ export default function ProductsClient() {
     const local = Array.from(
       new Set(
         rows
-          .map((r) => r.variant_name)
+          .map((r) => r.product_food_type ?? "")
           .filter(Boolean)
           .filter((x) => x.toLowerCase().includes(k.toLowerCase()))
       )
@@ -297,7 +298,7 @@ export default function ProductsClient() {
 
     const { data, error } = await supabase
       .from("product_variants")
-      .select("id, variant_name, barcode, pack_unit, product_id, products(name, category)")
+      .select("id, variant_name, pack_unit, product_id, products(name, category, food_type), product_barcodes(barcode, is_primary, is_active, created_at)")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -307,15 +308,22 @@ export default function ProductsClient() {
       return;
     }
 
-    const mapped: VariantRow[] = (data ?? []).map((r: any) => ({
-      variant_id: r.id,
-      product_id: r.product_id,
-      product_name: r.products?.name ?? "",
-      product_category: r.products?.category ?? null,
-      variant_name: r.variant_name,
-      barcode: r.barcode,
-      pack_unit: typeof r.pack_unit === "number" ? r.pack_unit : 1,
-    }));
+    const mapped: VariantRow[] = (data ?? []).map((r: any) => {
+      const bcs = Array.isArray(r.product_barcodes) ? r.product_barcodes : [];
+      const active = bcs.filter((b: any) => b?.is_active !== false);
+      const primary = active.find((b: any) => b?.is_primary === true) ?? active[0] ?? bcs[0];
+
+      return {
+        variant_id: r.id,
+        product_id: r.product_id,
+        product_name: r.products?.name ?? "",
+        product_category: r.products?.category ?? null,
+        product_food_type: r.products?.food_type ?? null,
+        variant_name: r.variant_name,
+        barcode: primary?.barcode ?? "",
+        pack_unit: typeof r.pack_unit === "number" ? r.pack_unit : 1,
+      };
+    });
 
     setRows(mapped);
   };
@@ -367,7 +375,7 @@ export default function ProductsClient() {
 
     const pn = productName.trim();
     const ct = String(category || "").trim();
-    const vn = variantName.trim();
+    const vn = variantName.trim(); // ✅ products.food_type로 저장
     const bc = barcode.trim();
     const pu = Number.isFinite(packUnit) ? Math.floor(packUnit) : 0;
 
@@ -381,17 +389,17 @@ export default function ProductsClient() {
 
     try {
       /* -------------------------------------------------
-         1️⃣ 바코드 중복 여부 먼저 확인
+         1️⃣ 바코드 중복 여부 먼저 확인 (product_barcodes 기준)
       ------------------------------------------------- */
-      const { data: existVariant, error: existErr } = await supabase
-        .from("product_variants")
-        .select("id, product_id")
+      const { data: existBarcode, error: existErr } = await supabase
+        .from("product_barcodes")
+        .select("id, variant_id")
         .eq("barcode", bc)
         .maybeSingle();
 
       if (existErr) throw existErr;
 
-      if (existVariant) {
+      if (existBarcode) {
         const ok = confirm(
           "⚠️ 이미 등록된 바코드입니다.\n\n" +
             "기존 정보를 새로 입력한 내용으로 수정하시겠습니까?\n\n" +
@@ -401,11 +409,11 @@ export default function ProductsClient() {
       }
 
       /* -------------------------------------------------
-         2️⃣ 제품(products) 조회 or 생성
+         2️⃣ 제품(products) 조회 or 생성 (+ food_type 저장/갱신)
       ------------------------------------------------- */
       const { data: existingProduct, error: pSelErr } = await supabase
         .from("products")
-        .select("id")
+        .select("id, food_type")
         .eq("name", pn)
         .eq("category", ct)
         .maybeSingle();
@@ -415,17 +423,29 @@ export default function ProductsClient() {
       let productId = existingProduct?.id as string | undefined;
 
       if (!productId) {
-        const { data: pIns, error: pInsErr } = await supabase.from("products").insert({ name: pn, category: ct }).select("id").single();
+        const { data: pIns, error: pInsErr } = await supabase
+          .from("products")
+          .insert({ name: pn, category: ct, food_type: vn })
+          .select("id")
+          .single();
 
         if (pInsErr) throw pInsErr;
         productId = pIns.id;
+      } else {
+        // ✅ 기존 제품이면 food_type을 입력값으로 갱신(요청된 "식품유형 맞추기" 목적)
+        if ((existingProduct?.food_type ?? "") !== vn) {
+          const { error: pUpdErr } = await supabase.from("products").update({ food_type: vn }).eq("id", productId);
+          if (pUpdErr) throw pUpdErr;
+        }
       }
 
       /* -------------------------------------------------
          3️⃣ 신규 vs 수정 분기 처리
       ------------------------------------------------- */
-      if (existVariant) {
-        // ✅ 기존 바코드 → UPDATE
+      if (existBarcode) {
+        // ✅ 기존 바코드 → 해당 variant 업데이트
+        const variantId = existBarcode.variant_id as string;
+
         const { error: updErr } = await supabase
           .from("product_variants")
           .update({
@@ -433,21 +453,44 @@ export default function ProductsClient() {
             variant_name: vn,
             pack_unit: pu,
           })
-          .eq("id", existVariant.id);
+          .eq("id", variantId);
 
         if (updErr) throw updErr;
 
+        // ✅ 이 바코드를 대표(primary)로 올림
+        const { error: unPrimaryErr } = await supabase.from("product_barcodes").update({ is_primary: false }).eq("variant_id", variantId);
+        if (unPrimaryErr) throw unPrimaryErr;
+
+        const { error: bcUpdErr } = await supabase
+          .from("product_barcodes")
+          .update({ is_primary: true, is_active: true })
+          .eq("id", existBarcode.id);
+
+        if (bcUpdErr) throw bcUpdErr;
+
         setMsg("기존 바코드 정보가 수정되었습니다 ✏️");
       } else {
-        // ✅ 신규 바코드 → INSERT
-        const { error: insErr } = await supabase.from("product_variants").insert({
-          product_id: productId,
-          variant_name: vn,
+        // ✅ 신규 바코드 → variant 생성 후 product_barcodes에 저장
+        const { data: vIns, error: vInsErr } = await supabase
+          .from("product_variants")
+          .insert({
+            product_id: productId,
+            variant_name: vn,
+            pack_unit: pu,
+          })
+          .select("id")
+          .single();
+
+        if (vInsErr) throw vInsErr;
+
+        const { error: bcInsErr } = await supabase.from("product_barcodes").insert({
+          variant_id: vIns.id,
           barcode: bc,
-          pack_unit: pu,
+          is_primary: true,
+          is_active: true,
         });
 
-        if (insErr) throw insErr;
+        if (bcInsErr) throw bcInsErr;
 
         setMsg("신규 바코드가 등록되었습니다 ✅");
       }
@@ -474,10 +517,8 @@ export default function ProductsClient() {
         const t = q.trim().toLowerCase();
         return (
           r.product_name.toLowerCase().includes(t) ||
-          (r.product_category ?? "").toLowerCase().includes(t) ||
-          r.variant_name.toLowerCase().includes(t) ||
-          r.barcode.toLowerCase().includes(t) ||
-          String(r.pack_unit).includes(t)
+          (r.product_food_type ?? "").toLowerCase().includes(t) ||
+          r.barcode.toLowerCase().includes(t)
         );
       })
     : rows;
@@ -522,9 +563,7 @@ export default function ProductsClient() {
                     key={c}
                     className={[
                       "flex items-center gap-2 cursor-pointer select-none rounded-xl px-3 py-2 border",
-                      checked
-                        ? "bg-blue-600 text-white border-blue-600 shadow"
-                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100",
+                      checked ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100",
                     ].join(" ")}
                   >
                     <input
@@ -538,12 +577,7 @@ export default function ProductsClient() {
                     <span className="text-sm font-medium">{c}</span>
 
                     {/* ✅ 체크 표시(선택되면 보이게) */}
-                    <span
-                      className={[
-                        "ml-1 text-xs rounded-md px-2 py-0.5",
-                        checked ? "bg-white/20" : "hidden",
-                      ].join(" ")}
-                    >
+                    <span className={["ml-1 text-xs rounded-md px-2 py-0.5", checked ? "bg-white/20" : "hidden"].join(" ")}>
                       선택됨
                     </span>
                   </label>
@@ -604,10 +638,7 @@ export default function ProductsClient() {
                       <button
                         key={`${item}-${idx}`}
                         type="button"
-                        className={[
-                          "w-full text-left px-3 py-2 text-sm",
-                          active ? "bg-blue-600 text-white" : "hover:bg-slate-100 text-slate-800",
-                        ].join(" ")}
+                        className={["w-full text-left px-3 py-2 text-sm", active ? "bg-blue-600 text-white" : "hover:bg-slate-100 text-slate-800"].join(" ")}
                         onMouseEnter={() => setVnActive(idx)}
                         onMouseDown={(e) => e.preventDefault()} // ✅ blur 방지
                         onClick={() => {
@@ -646,9 +677,7 @@ export default function ProductsClient() {
                 type="button"
                 className={[
                   "text-xs rounded-lg border px-2 py-1 transition",
-                  isScanMode
-                    ? "bg-blue-600 text-white border-blue-600 shadow"
-                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100",
+                  isScanMode ? "bg-blue-600 text-white border-blue-600 shadow" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100",
                 ].join(" ")}
                 onClick={() => {
                   setIsScanMode((v) => !v);
@@ -745,9 +774,7 @@ export default function ProductsClient() {
           </div>
         </div>
 
-        {msg ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{msg}</div>
-        ) : null}
+        {msg ? <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{msg}</div> : null}
 
         <div className="flex gap-2">
           <button
@@ -758,10 +785,7 @@ export default function ProductsClient() {
             {loading ? "저장 중..." : "등록"}
           </button>
 
-          <button
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:bg-slate-100 active:bg-slate-200"
-            onClick={load}
-          >
+          <button className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:bg-slate-100 active:bg-slate-200" onClick={load}>
             새로고침
           </button>
         </div>
@@ -774,7 +798,7 @@ export default function ProductsClient() {
             className="w-full max-w-sm rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="검색(제품명/구분/식품유형/바코드/수량)"
+            placeholder="검색(제품명/식품유형/바코드)"
             onFocus={() => setIsScanMode(false)}
           />
         </div>
@@ -784,17 +808,15 @@ export default function ProductsClient() {
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="text-left p-3">제품명</th>
-                <th className="text-left p-3">구분</th>
                 <th className="text-left p-3">식품유형</th>
                 <th className="text-left p-3">바코드</th>
-                <th className="text-right p-3">수량</th>
                 <th className="text-right p-3">관리</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td className="p-3 text-slate-500" colSpan={6}>
+                  <td className="p-3 text-slate-500" colSpan={4}>
                     등록된 데이터가 없습니다.
                   </td>
                 </tr>
@@ -802,10 +824,8 @@ export default function ProductsClient() {
                 filtered.map((r) => (
                   <tr key={r.variant_id} className="border-t border-slate-200">
                     <td className="p-3">{r.product_name}</td>
-                    <td className="p-3">{r.product_category ?? "-"}</td>
-                    <td className="p-3">{r.variant_name}</td>
+                    <td className="p-3">{r.product_food_type ?? "-"}</td>
                     <td className="p-3 font-mono">{r.barcode}</td>
-                    <td className="p-3 text-right">{r.pack_unit}</td>
                     <td className="p-3 text-right">
                       <button
                         className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 active:bg-slate-200 disabled:opacity-60"
@@ -822,9 +842,7 @@ export default function ProductsClient() {
           </table>
         </div>
 
-        <p className="text-xs text-slate-500 mt-3">
-          ※ 바코드는 유니크입니다. 같은 바코드를 다시 등록하면 해당 바코드의 식품유형/수량이 갱신됩니다.
-        </p>
+        <p className="text-xs text-slate-500 mt-3">※ 바코드는 유니크입니다. 같은 바코드를 다시 등록하면 해당 바코드의 정보가 갱신됩니다.</p>
       </div>
     </div>
   );
