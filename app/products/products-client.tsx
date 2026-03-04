@@ -407,11 +407,13 @@ export default function ProductsClient() {
 
           if (moveErr) throw moveErr;
 
-          // ✅ 1-B) 상대 variant의 product_variants.barcode 도 비움 (NOT NULL이라 ""로)
+          // ✅ 1-B) 상대 variant의 product_variants.barcode 를 UNIQUE/NOT NULL 만족하는 값으로 치환
+          // (빈문자열 "" 쓰면 UNIQUE에 걸릴 수 있음)
           if (existPrimary?.variant_id) {
+            const movedValue = `AUTO-MOVED-${existPrimary.variant_id}`.toUpperCase();
             const { error: vClearErr } = await supabase
               .from("product_variants")
-              .update({ barcode: "" })
+              .update({ barcode: movedValue })
               .eq("id", existPrimary.variant_id);
 
             if (vClearErr) throw vClearErr;
