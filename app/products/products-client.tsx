@@ -310,28 +310,41 @@ export default function ProductsClient() {
     return cleaned;
   };
 
-  // ✅ (핵심 수정) "활성(true) + PRIMARY(true) + 실존 variant" 만을 '등록된 바코드'로 판단
-  // - is_active NULL은 중복으로 보지 않음(과거 잔존데이터로 인한 오탐 방지)
-  // - product_variants!inner 로 고아 product_barcodes 제외
-  const findActivePrimaryBarcodeUsage = async (bc: string) => {
-    const { data, error } = await supabase
+  // ✅ (핵심) 중복체크: product_barcodes(활성+primary) + product_variants(legacy) 둘 다 검사
+  const findAnyBarcodeUsage = async (bc: string) => {
+    // 1) product_barcodes 기준 (활성 true + primary true + 실존 variant)
+    const { data: bData, error: bErr } = await supabase
       .from("product_barcodes")
       .select("id, variant_id, is_active, is_primary, created_at, product_variants!inner(id)")
       .eq("barcode", bc);
 
-    if (error) throw error;
+    if (bErr) throw bErr;
 
-    const activePrimary = (data ?? []).filter((b: any) => b?.is_primary === true && b?.is_active === true);
+    const activePrimary = (bData ?? []).filter((b: any) => b?.is_primary === true && b?.is_active === true);
+    if (activePrimary.length > 0) {
+      const picked = [...activePrimary].sort((a: any, b: any) => {
+        const at = a?.created_at ? new Date(a.created_at).getTime() : 0;
+        const bt = b?.created_at ? new Date(b.created_at).getTime() : 0;
+        return bt - at;
+      })[0];
 
-    if (activePrimary.length === 0) return null;
+      return { source: "product_barcodes" as const, variant_id: picked.variant_id as string };
+    }
 
-    const picked = [...activePrimary].sort((a: any, b: any) => {
-      const at = a?.created_at ? new Date(a.created_at).getTime() : 0;
-      const bt = b?.created_at ? new Date(b.created_at).getTime() : 0;
-      return bt - at;
-    })[0];
+    // 2) legacy: product_variants.barcode 유니크 제약이 있으므로 여기에도 있을 수 있음
+    const { data: vData, error: vErr } = await supabase
+      .from("product_variants")
+      .select("id, barcode")
+      .eq("barcode", bc)
+      .maybeSingle();
 
-    return picked as { id: string; variant_id: string; is_active: any; is_primary: any; created_at: any };
+    if (vErr) throw vErr;
+
+    if (vData?.id && vData?.barcode && !String(vData.barcode).startsWith("AUTO-")) {
+      return { source: "product_variants" as const, variant_id: vData.id as string };
+    }
+
+    return null;
   };
 
   const alertDuplicateBarcode = async (bc: string, existVariantId: string) => {
@@ -371,64 +384,12 @@ export default function ProductsClient() {
 
     setLoading(true);
     try {
-      // ✅ 1) 바코드 중복 체크 (활성(true)+PRIMARY(true)만 중복으로 취급)
-      let existPrimary = await findActivePrimaryBarcodeUsage(bc);
+      // ✅ 1) 바코드 중복 체크 (product_barcodes + product_variants 둘 다)
+      const existAny = await findAnyBarcodeUsage(bc);
 
-      if (existPrimary && existPrimary.variant_id !== variant_id) {
-        // ✅ (핵심 보강) 같은 제품이면 "이관" 허용
-        // - 내 product_id / product_name 은 rows 상태에서 확보(확실)
-        const meRow = rows.find((x) => x.variant_id === variant_id);
-        const myPid = meRow?.product_id ?? null;
-        const myPname = (meRow?.product_name ?? "").trim();
-
-        // - 상대 variant는 DB에서 product_id + products(name) 조회
-        const { data: otherV, error: otherVErr } = await supabase
-          .from("product_variants")
-          .select("id, product_id, products(name)")
-          .eq("id", existPrimary.variant_id)
-          .maybeSingle();
-
-        if (otherVErr) throw otherVErr;
-
-        const otherPid = (otherV as any)?.product_id ?? null;
-        const otherPname = String((otherV as any)?.products?.name ?? "").trim();
-
-        const sameProduct =
-          (myPid && otherPid && myPid === otherPid) ||
-          (!!myPname && !!otherPname && myPname === otherPname);
-
-        if (sameProduct) {
-          // ✅ 1-A) 기존(상대) 쪽 barcode row들을 비활성/비primary 처리
-          const { error: moveErr } = await supabase
-            .from("product_barcodes")
-            .update({ is_active: false, is_primary: false })
-            .eq("barcode", bc)
-            .neq("variant_id", variant_id);
-
-          if (moveErr) throw moveErr;
-
-          // ✅ 1-B) 상대 variant의 product_variants.barcode 를 UNIQUE/NOT NULL 만족하는 값으로 치환
-          // (빈문자열 "" 쓰면 UNIQUE에 걸릴 수 있음)
-          if (existPrimary?.variant_id) {
-            const movedValue = `AUTO-MOVED-${existPrimary.variant_id}`.toUpperCase();
-            const { error: vClearErr } = await supabase
-              .from("product_variants")
-              .update({ barcode: movedValue })
-              .eq("id", existPrimary.variant_id);
-
-            if (vClearErr) throw vClearErr;
-          }
-
-          // ✅ 1-C) 이관 후 재검증: 남아있으면 그때만 중복 alert
-          existPrimary = await findActivePrimaryBarcodeUsage(bc);
-          if (existPrimary && existPrimary.variant_id !== variant_id) {
-            await alertDuplicateBarcode(bc, existPrimary.variant_id);
-            return;
-          }
-        } else {
-          await alertDuplicateBarcode(bc, existPrimary.variant_id);
-          return;
-        }
+      if (existAny && existAny.variant_id !== variant_id) {
+        await alertDuplicateBarcode(bc, existAny.variant_id);
+        return;
       }
 
       // ✅ 2) 이 variant의 기존 바코드들을 primary 해제
@@ -616,12 +577,12 @@ export default function ProductsClient() {
     try {
       /* -------------------------------------------------
          1️⃣ 바코드 중복 여부 먼저 확인
-         ✅ (핵심 수정) 활성(true)+PRIMARY(true)+실존 variant만 중복으로 판단
+         ✅ product_barcodes + product_variants 둘 다 확인
       ------------------------------------------------- */
-      const existPrimary = await findActivePrimaryBarcodeUsage(bc);
+      const existAny = await findAnyBarcodeUsage(bc);
 
-      if (existPrimary) {
-        await alertDuplicateBarcode(bc, existPrimary.variant_id);
+      if (existAny) {
+        await alertDuplicateBarcode(bc, existAny.variant_id);
         return;
       }
 
@@ -867,7 +828,7 @@ export default function ProductsClient() {
               </button>
             </label>
             <input
-              readOnly
+              readOnly={isScanMode}
               ref={barcodeRef}
               className={[
                 "mt-1 w-full rounded-xl bg-white border px-3 py-2 outline-none font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
@@ -875,8 +836,13 @@ export default function ProductsClient() {
               ].join(" ")}
               value={barcode}
               placeholder="스캐너로 찍어도 입력됨"
+              onChange={(e) => {
+                if (isScanMode) return;
+                setBarcode(normalizeBarcode(e.target.value || ""));
+              }}
               onFocus={(e) => e.currentTarget.select()}
               onKeyDown={(e) => {
+                if (!isScanMode) return;
                 if (e.repeat) return;
 
                 if (e.key === "Enter") {
@@ -921,17 +887,7 @@ export default function ProductsClient() {
               onPaste={(e) => {
                 e.preventDefault();
                 const text = e.clipboardData.getData("text") || "";
-                let raw = text;
-
-                if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(raw)) raw = hangulToQwerty(raw);
-
-                const cleaned = raw
-                  .trim()
-                  .replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, "-")
-                  .toUpperCase()
-                  .replace(/\s+/g, "")
-                  .replace(/[^0-9A-Z_-]/g, "");
-
+                const cleaned = normalizeBarcode(text);
                 setBarcode(cleaned);
               }}
             />
