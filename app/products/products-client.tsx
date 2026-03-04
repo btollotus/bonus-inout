@@ -383,11 +383,7 @@ export default function ProductsClient() {
       const { error: unPrimaryErr } = await supabase.from("product_barcodes").update({ is_primary: false }).eq("variant_id", variant_id);
       if (unPrimaryErr) throw unPrimaryErr;
 
-      // ✅ 3) product_variants.barcode도 같이 갱신(일관성 유지)
-      const { error: vUpdErr } = await supabase.from("product_variants").update({ barcode: bc }).eq("id", variant_id);
-      if (vUpdErr) throw vUpdErr;
-
-      // ✅ 4) 동일 variant에 이미 같은 barcode row가 있으면 update, 없으면 insert
+      // ✅ 3) 동일 variant에 이미 같은 barcode row가 있으면 update, 없으면 insert
       const { data: existSame, error: existSameErr } = await supabase
         .from("product_barcodes")
         .select("id, variant_id, is_active, is_primary, created_at")
@@ -605,6 +601,7 @@ export default function ProductsClient() {
 
       /* -------------------------------------------------
          3️⃣ 신규 등록
+         ✅ product_variants.barcode는 더 이상 실바코드 저장용으로 쓰지 않음
       ------------------------------------------------- */
       const { data: vIns, error: vInsErr } = await supabase
         .from("product_variants")
@@ -612,7 +609,6 @@ export default function ProductsClient() {
           product_id: productId,
           variant_name: vn,
           pack_unit: pu,
-          barcode: bc,
         })
         .select("id")
         .single();
