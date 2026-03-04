@@ -245,6 +245,20 @@ export default function ProductsClient() {
   const [vnActive, setVnActive] = useState<number>(-1);
   const vnWrapRef = useRef<HTMLDivElement>(null);
 
+  const [msg, setMsg] = useState<string | null>(null);
+  const [productName, setProductName] = useState("");
+  const [category, setCategory] = useState<(typeof CATEGORIES)[number] | "">("기성");
+  const [variantName, setVariantName] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [packUnit, setPackUnit] = useState<number>(100);
+
+  const [rows, setRows] = useState<VariantRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [q, setQ] = useState("");
+
+  // ✅ 목록에서 "바코드 없는 제품" 바코드 입력/저장용
+  const [rowBarcodeDraft, setRowBarcodeDraft] = useState<Record<string, string>>({});
+
   const loadVariantSuggest = async (keyword: string) => {
     const k = keyword.trim();
     if (k.length < 1) {
@@ -282,20 +296,6 @@ export default function ProductsClient() {
     setVnItems(local);
   };
 
-  const [msg, setMsg] = useState<string | null>(null);
-  const [productName, setProductName] = useState("");
-  const [category, setCategory] = useState<(typeof CATEGORIES)[number] | "">("기성");
-  const [variantName, setVariantName] = useState("");
-  const [barcode, setBarcode] = useState("");
-  const [packUnit, setPackUnit] = useState<number>(100);
-
-  const [rows, setRows] = useState<VariantRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [q, setQ] = useState("");
-
-  // ✅ 목록에서 "바코드 없는 제품" 바코드 입력/저장용
-  const [rowBarcodeDraft, setRowBarcodeDraft] = useState<Record<string, string>>({});
-
   const normalizeBarcode = (raw: string) => {
     let t = raw || "";
     if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(t)) t = hangulToQwerty(t);
@@ -310,16 +310,18 @@ export default function ProductsClient() {
     return cleaned;
   };
 
-  // ✅ (핵심 수정) "활성 + PRIMARY" 만을 '등록된 바코드'로 판단
+  // ✅ (핵심 수정) "활성(true) + PRIMARY(true) + 실존 variant" 만을 '등록된 바코드'로 판단
+  // - is_active NULL은 중복으로 보지 않음(과거 잔존데이터로 인한 오탐 방지)
+  // - product_variants!inner 로 고아 product_barcodes 제외
   const findActivePrimaryBarcodeUsage = async (bc: string) => {
     const { data, error } = await supabase
       .from("product_barcodes")
-      .select("id, variant_id, is_active, is_primary, created_at")
+      .select("id, variant_id, is_active, is_primary, created_at, product_variants!inner(id)")
       .eq("barcode", bc);
 
     if (error) throw error;
 
-    const activePrimary = (data ?? []).filter((b: any) => b?.is_active !== false && b?.is_primary === true);
+    const activePrimary = (data ?? []).filter((b: any) => b?.is_primary === true && b?.is_active === true);
 
     if (activePrimary.length === 0) return null;
 
@@ -369,7 +371,7 @@ export default function ProductsClient() {
 
     setLoading(true);
     try {
-      // ✅ 1) 바코드 중복 체크 (활성+PRIMARY만 중복으로 취급)
+      // ✅ 1) 바코드 중복 체크 (활성(true)+PRIMARY(true)만 중복으로 취급)
       const existPrimary = await findActivePrimaryBarcodeUsage(bc);
 
       if (existPrimary && existPrimary.variant_id !== variant_id) {
@@ -562,7 +564,7 @@ export default function ProductsClient() {
     try {
       /* -------------------------------------------------
          1️⃣ 바코드 중복 여부 먼저 확인
-         ✅ (핵심 수정) 활성+PRIMARY만 중복으로 판단
+         ✅ (핵심 수정) 활성(true)+PRIMARY(true)+실존 variant만 중복으로 판단
       ------------------------------------------------- */
       const existPrimary = await findActivePrimaryBarcodeUsage(bc);
 
