@@ -310,8 +310,8 @@ export default function ProductsClient() {
     return cleaned;
   };
 
-  // ✅ (핵심 수정) barcode 중복 체크 시 is_active=false(비활성) 레코드는 "중복"으로 취급하지 않음
-  const findActiveBarcodeUsage = async (bc: string) => {
+  // ✅ (핵심 수정) "활성 + PRIMARY" 만을 '등록된 바코드'로 판단
+  const findActivePrimaryBarcodeUsage = async (bc: string) => {
     const { data, error } = await supabase
       .from("product_barcodes")
       .select("id, variant_id, is_active, is_primary, created_at")
@@ -319,14 +319,11 @@ export default function ProductsClient() {
 
     if (error) throw error;
 
-    const active = (data ?? []).filter((b: any) => b?.is_active !== false);
+    const activePrimary = (data ?? []).filter((b: any) => b?.is_active !== false && b?.is_primary === true);
 
-    if (active.length === 0) return null;
+    if (activePrimary.length === 0) return null;
 
-    const picked = [...active].sort((a: any, b: any) => {
-      const ap = a?.is_primary ? 1 : 0;
-      const bp = b?.is_primary ? 1 : 0;
-      if (ap !== bp) return bp - ap;
+    const picked = [...activePrimary].sort((a: any, b: any) => {
       const at = a?.created_at ? new Date(a.created_at).getTime() : 0;
       const bt = b?.created_at ? new Date(b.created_at).getTime() : 0;
       return bt - at;
@@ -372,11 +369,11 @@ export default function ProductsClient() {
 
     setLoading(true);
     try {
-      // ✅ 1) 바코드 중복 체크 (is_active=false는 중복 제외)
-      const exist = await findActiveBarcodeUsage(bc);
+      // ✅ 1) 바코드 중복 체크 (활성+PRIMARY만 중복으로 취급)
+      const existPrimary = await findActivePrimaryBarcodeUsage(bc);
 
-      if (exist && exist.variant_id !== variant_id) {
-        await alertDuplicateBarcode(bc, exist.variant_id);
+      if (existPrimary && existPrimary.variant_id !== variant_id) {
+        await alertDuplicateBarcode(bc, existPrimary.variant_id);
         return;
       }
 
@@ -388,16 +385,24 @@ export default function ProductsClient() {
       const { error: vUpdErr } = await supabase.from("product_variants").update({ barcode: bc }).eq("id", variant_id);
       if (vUpdErr) throw vUpdErr;
 
-      if (exist?.id) {
-        // ✅ 이미 같은 variant에 있는 barcode면 활성/primary만 켬
+      // ✅ 4) 동일 variant에 이미 같은 barcode row가 있으면 update, 없으면 insert
+      const { data: existSame, error: existSameErr } = await supabase
+        .from("product_barcodes")
+        .select("id, variant_id, is_active, is_primary, created_at")
+        .eq("barcode", bc)
+        .eq("variant_id", variant_id)
+        .maybeSingle();
+
+      if (existSameErr) throw existSameErr;
+
+      if (existSame?.id) {
         const { error: bcUpdErr } = await supabase
           .from("product_barcodes")
           .update({ is_primary: true, is_active: true })
-          .eq("id", exist.id);
+          .eq("id", existSame.id);
 
         if (bcUpdErr) throw bcUpdErr;
       } else {
-        // ✅ 신규 insert
         const { error: bcInsErr } = await supabase.from("product_barcodes").insert({
           variant_id,
           barcode: bc,
@@ -556,13 +561,13 @@ export default function ProductsClient() {
 
     try {
       /* -------------------------------------------------
-         1️⃣ 바코드 중복 여부 먼저 확인 (product_barcodes 기준)
-         ✅ (핵심 수정) is_active=false는 중복으로 보지 않음
+         1️⃣ 바코드 중복 여부 먼저 확인
+         ✅ (핵심 수정) 활성+PRIMARY만 중복으로 판단
       ------------------------------------------------- */
-      const existBarcode = await findActiveBarcodeUsage(bc);
+      const existPrimary = await findActivePrimaryBarcodeUsage(bc);
 
-      if (existBarcode) {
-        await alertDuplicateBarcode(bc, existBarcode.variant_id);
+      if (existPrimary) {
+        await alertDuplicateBarcode(bc, existPrimary.variant_id);
         return;
       }
 
@@ -597,7 +602,7 @@ export default function ProductsClient() {
       }
 
       /* -------------------------------------------------
-         3️⃣ 신규 등록 (중복이면 위에서 return)
+         3️⃣ 신규 등록
       ------------------------------------------------- */
       const { data: vIns, error: vInsErr } = await supabase
         .from("product_variants")
