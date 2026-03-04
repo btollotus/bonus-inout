@@ -784,7 +784,18 @@ export default function TradeClient() {
   }
   async function loadMasterProducts() {
     // ✅ 지팀장 수정사항: v_tradeclient_products 에서는 is_active 필터를 쓰지 않음 (뷰에서 이미 active만 남김)
-    const { data } = await supabase.from("v_tradeclient_products").select("product_name,food_type,report_no,weight_g,unit_type,pack_ea,barcode").order("product_name", { ascending: true }).limit(10000);
+    const { data } = await supabase
+    .from("v_tradeclient_products")
+    .select("
+      product_name,
+      food_type,
+      report_no,
+      weight_g,
+      unit_type,
+      pack_ea,
+      barcode")
+      .order("product_name", { ascending: true })
+      .limit(10000);
     if (data) setMasterProducts(data as MasterProductRow[]);
   }
 
