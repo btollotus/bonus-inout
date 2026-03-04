@@ -322,21 +322,26 @@ type LineRowProps = {
   l: Line; i: number;
   onUpdate: (i: number, p: Partial<Line>) => void;
   onRemove: (i: number) => void;
+  presetByName: Map<string, PresetProductRow>;
   masterByName: Map<string, MasterProductRow>;
   inputCls: string; inputRightCls: string; btnCls: string;
   gridCols: string; qtyBadgeCls: string;
 };
-function LineRow({ l, i, onUpdate, onRemove, masterByName, inputCls, inputRightCls, btnCls, gridCols, qtyBadgeCls }: LineRowProps) {
+function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCls, inputRightCls, btnCls, gridCols, qtyBadgeCls }: LineRowProps) {
   const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
   const pack = inferPackEaFromName(l.name);
   return (
     <div className={`grid ${gridCols} gap-2`}>
       <input className={inputCls} list="food-types-list" value={l.food_type} onChange={(e) => onUpdate(i, { food_type: e.target.value })} />
-      <input className={inputCls} list="master-product-list" value={l.name}
+      <input className={inputCls} list="preset-products-list" value={l.name}
         onChange={(e) => {
           const v = e.target.value; onUpdate(i, { name: v });
-          const hit = masterByName.get(v);
-          if (hit) onUpdate(i, { food_type: hit.food_type ?? "", weight_g: Number(hit.weight_g ?? 0) });
+          const hitPreset = presetByName.get(v);
+          if (hitPreset) onUpdate(i, { food_type: hitPreset.food_type ?? "", weight_g: toNum(hitPreset.weight_g) });
+          else {
+            const hitMaster = masterByName.get(v);
+            if (hitMaster) onUpdate(i, { food_type: hitMaster.food_type ?? "", weight_g: Number(hitMaster.weight_g ?? 0) });
+          }
         }}
       />
       <input className={inputRightCls} inputMode="decimal"
@@ -480,6 +485,7 @@ export default function TradeClient() {
   const [foodTypes, setFoodTypes] = useState<FoodTypeRow[]>([]);
   const [presetProducts, setPresetProducts] = useState<PresetProductRow[]>([]);
   const [masterProducts, setMasterProducts] = useState<MasterProductRow[]>([]);
+  const presetByName = useMemo(() => { const m = new Map<string, PresetProductRow>(); for (const p of presetProducts) m.set(p.product_name, p); return m; }, [presetProducts]);
   const masterByName = useMemo(() => { const m = new Map<string, MasterProductRow>(); for (const p of masterProducts) m.set(p.product_name, p); return m; }, [masterProducts]);
 
   // Employees (for 급여 연동)
@@ -840,23 +846,52 @@ export default function TradeClient() {
       }
     }
 
-    let oq = supabase.from("orders").select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)").gte("ship_date", f).lte("ship_date", t).order("ship_date", { ascending: false }).limit(500);
-    if (selectedPartnerId) oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
-    const { data: oData, error: oErr } = await oq;
-    if (oErr) return setMsg(oErr.message);
-    setOrders((oData ?? []) as OrderRow[]);
-
-    let lq = supabase.from("ledger_entries").select("id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,status,partner_id,created_at,supply_amount,vat_amount,total_amount").gte("entry_date", f).lte("entry_date", t).order("entry_date", { ascending: false }).limit(1000);
-    if (selectedPartnerId || selectedBusinessNo) {
-      const ors: string[] = [];
-      if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
-      if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
-      if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
-      lq = lq.or(ors.join(","));
+    // ✅ FIX: 기간 내 조회도 LIMIT에 잘려서 러닝잔액/표시가 틀어지지 않도록 페이지네이션으로 전량 조회
+    {
+      const pageSize = 500;
+      let from = 0;
+      const all: any[] = [];
+      while (true) {
+        let oq = supabase.from("orders")
+          .select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)")
+          .gte("ship_date", f).lte("ship_date", t)
+          .order("ship_date", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (selectedPartnerId) oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+        const { data, error } = await oq;
+        if (error) return setMsg(error.message);
+        if (data && data.length) all.push(...data);
+        if (!data || data.length < pageSize) break;
+        from += pageSize;
+      }
+      setOrders((all ?? []) as OrderRow[]);
     }
-    const { data: lData, error: lErr } = await lq;
-    if (lErr) return setMsg(lErr.message);
-    setLedgers(((lData ?? []).map((r: any) => ({ ...r, amount: Number(r.amount ?? 0) }))) as LedgerRow[]);
+
+    {
+      const pageSize = 1000;
+      let from = 0;
+      const all: any[] = [];
+      while (true) {
+        let lq = supabase.from("ledger_entries")
+          .select("id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,status,partner_id,created_at,supply_amount,vat_amount,total_amount")
+          .gte("entry_date", f).lte("entry_date", t)
+          .order("entry_date", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (selectedPartnerId || selectedBusinessNo) {
+          const ors: string[] = [];
+          if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
+          if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
+          if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
+          lq = lq.or(ors.join(","));
+        }
+        const { data, error } = await lq;
+        if (error) return setMsg(error.message);
+        if (data && data.length) all.push(...data);
+        if (!data || data.length < pageSize) break;
+        from += pageSize;
+      }
+      setLedgers(((all ?? []).map((r: any) => ({ ...r, amount: Number(r.amount ?? 0) }))) as LedgerRow[]);
+    }
 
     // Opening balance
     // ✅ FIX: 기간 설정이 바뀌어도 "최초 기록부터 누적"이 깨지지 않도록,
@@ -1247,7 +1282,11 @@ export default function TradeClient() {
   const Datalists = () => (
     <>
       <datalist id="food-types-list">{foodTypes.map((ft) => <option key={ft.id} value={ft.name} />)}</datalist>
-      <datalist id="preset-products-list">{presetProducts.map((p) => <option key={p.id} value={p.product_name} />)}</datalist>
+      {/* ✅ 품목명/식품유형/무게(g) 자동완성 복구: preset + master 모두를 한 datalist에 합쳐서 제공 */}
+      <datalist id="preset-products-list">
+        {presetProducts.map((p) => <option key={`p_${p.id}`} value={p.product_name} />)}
+        {masterProducts.map((p) => <option key={`m_${p.product_name}`} value={p.product_name} />)}
+      </datalist>
       <datalist id="master-product-list">{masterProducts.map((p) => <option key={p.product_name} value={p.product_name} />)}</datalist>
     </>
   );
@@ -1434,7 +1473,7 @@ export default function TradeClient() {
                     </div>
                     <LineHeader gridCols={lineGridCols} />
                     <div className="mt-2 space-y-2">
-                      {eLines.map((l, i) => <LineRow key={i} l={l} i={i} onUpdate={updateEditLine} onRemove={removeEditLine} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} />)}
+                      {eLines.map((l, i) => <LineRow key={i} l={l} i={i} onUpdate={updateEditLine} onRemove={removeEditLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} />)}
                     </div>
                     <div className="mt-4 flex items-center justify-end gap-4 text-sm">
                       <div>공급가 {fmt(editOrderTotals.supply)}</div><div>부가세 {fmt(editOrderTotals.vat)}</div><div className="font-semibold">총액 {fmt(editOrderTotals.total)}</div>
@@ -1607,7 +1646,7 @@ export default function TradeClient() {
                 </div>
                 <LineHeader gridCols={lineGridCols} />
                 <div className="mt-2 space-y-2">
-                  {lines.map((l, i) => <LineRow key={i} l={l} i={i} onUpdate={updateLine} onRemove={removeLine} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} />)}
+                  {lines.map((l, i) => <LineRow key={i} l={l} i={i} onUpdate={updateLine} onRemove={removeLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} />)}
                 </div>
                 <Datalists />
                 <div className="mt-4 flex items-center justify-end gap-4 text-sm">
