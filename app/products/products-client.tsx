@@ -372,25 +372,33 @@ export default function ProductsClient() {
     setLoading(true);
     try {
       // ✅ 1) 바코드 중복 체크 (활성(true)+PRIMARY(true)만 중복으로 취급)
-      const existPrimary = await findActivePrimaryBarcodeUsage(bc);
+      let existPrimary = await findActivePrimaryBarcodeUsage(bc);
 
       if (existPrimary && existPrimary.variant_id !== variant_id) {
-        // ✅ (핵심) 같은 product_id의 "다른 variant"가 잡고 있는 바코드라면 → 이관 처리
-        const { data: a, error: aErr } = await supabase
+        // ✅ (핵심 보강) 같은 제품이면 "이관" 허용
+        // - 내 product_id / product_name 은 rows 상태에서 확보(확실)
+        const meRow = rows.find((x) => x.variant_id === variant_id);
+        const myPid = meRow?.product_id ?? null;
+        const myPname = (meRow?.product_name ?? "").trim();
+
+        // - 상대 variant는 DB에서 product_id + products(name) 조회
+        const { data: otherV, error: otherVErr } = await supabase
           .from("product_variants")
-          .select("id, product_id")
-          .in("id", [variant_id, existPrimary.variant_id]);
+          .select("id, product_id, products(name)")
+          .eq("id", existPrimary.variant_id)
+          .maybeSingle();
 
-        if (aErr) throw aErr;
+        if (otherVErr) throw otherVErr;
 
-        const me = (a ?? []).find((x: any) => x.id === variant_id);
-        const other = (a ?? []).find((x: any) => x.id === existPrimary.variant_id);
+        const otherPid = (otherV as any)?.product_id ?? null;
+        const otherPname = String((otherV as any)?.products?.name ?? "").trim();
 
-        const myPid = me?.product_id ?? null;
-        const otherPid = other?.product_id ?? null;
+        const sameProduct =
+          (myPid && otherPid && myPid === otherPid) ||
+          (!!myPname && !!otherPname && myPname === otherPname);
 
-        if (myPid && otherPid && myPid === otherPid) {
-          // ✅ 같은 제품이면: 기존에 잡고 있던 barcode rows를 비활성/비primary 처리(이관)
+        if (sameProduct) {
+          // ✅ 1-A) 기존(상대) 쪽 barcode row들을 비활성/비primary 처리
           const { error: moveErr } = await supabase
             .from("product_barcodes")
             .update({ is_active: false, is_primary: false })
@@ -398,7 +406,23 @@ export default function ProductsClient() {
             .neq("variant_id", variant_id);
 
           if (moveErr) throw moveErr;
-          // 이제 아래 로직으로 현재 variant에 primary로 세팅됨
+
+          // ✅ 1-B) 상대 variant의 product_variants.barcode 도 비움 (뷰/화면 혼선 방지)
+          if (existPrimary?.variant_id) {
+            const { error: vClearErr } = await supabase
+              .from("product_variants")
+              .update({ barcode: null })
+              .eq("id", existPrimary.variant_id);
+
+            if (vClearErr) throw vClearErr;
+          }
+
+          // ✅ 1-C) 이관 후 재검증: 남아있으면 그때만 중복 alert
+          existPrimary = await findActivePrimaryBarcodeUsage(bc);
+          if (existPrimary && existPrimary.variant_id !== variant_id) {
+            await alertDuplicateBarcode(bc, existPrimary.variant_id);
+            return;
+          }
         } else {
           await alertDuplicateBarcode(bc, existPrimary.variant_id);
           return;
@@ -409,7 +433,11 @@ export default function ProductsClient() {
       const { error: unPrimaryErr } = await supabase.from("product_barcodes").update({ is_primary: false }).eq("variant_id", variant_id);
       if (unPrimaryErr) throw unPrimaryErr;
 
-      // ✅ 3) 동일 variant에 이미 같은 barcode row가 있으면 update, 없으면 insert
+      // ✅ 3) product_variants.barcode도 같이 갱신(일관성 유지)
+      const { error: vUpdErr } = await supabase.from("product_variants").update({ barcode: bc }).eq("id", variant_id);
+      if (vUpdErr) throw vUpdErr;
+
+      // ✅ 4) 동일 variant에 이미 같은 barcode row가 있으면 update, 없으면 insert
       const { data: existSame, error: existSameErr } = await supabase
         .from("product_barcodes")
         .select("id, variant_id, is_active, is_primary, created_at")
@@ -634,6 +662,7 @@ export default function ProductsClient() {
           product_id: productId,
           variant_name: vn,
           pack_unit: pu,
+          barcode: bc,
         })
         .select("id")
         .single();
