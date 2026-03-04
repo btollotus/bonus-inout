@@ -407,11 +407,11 @@ export default function ProductsClient() {
 
           if (moveErr) throw moveErr;
 
-          // ✅ 1-B) 상대 variant의 product_variants.barcode 도 비움 (뷰/화면 혼선 방지)
+          // ✅ 1-B) 상대 variant의 product_variants.barcode 도 비움 (NOT NULL이라 ""로)
           if (existPrimary?.variant_id) {
             const { error: vClearErr } = await supabase
               .from("product_variants")
-              .update({ barcode: null })
+              .update({ barcode: "" })
               .eq("id", existPrimary.variant_id);
 
             if (vClearErr) throw vClearErr;
