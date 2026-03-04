@@ -375,8 +375,34 @@ export default function ProductsClient() {
       const existPrimary = await findActivePrimaryBarcodeUsage(bc);
 
       if (existPrimary && existPrimary.variant_id !== variant_id) {
-        await alertDuplicateBarcode(bc, existPrimary.variant_id);
-        return;
+        // ✅ (핵심) 같은 product_id의 "다른 variant"가 잡고 있는 바코드라면 → 이관 처리
+        const { data: a, error: aErr } = await supabase
+          .from("product_variants")
+          .select("id, product_id")
+          .in("id", [variant_id, existPrimary.variant_id]);
+
+        if (aErr) throw aErr;
+
+        const me = (a ?? []).find((x: any) => x.id === variant_id);
+        const other = (a ?? []).find((x: any) => x.id === existPrimary.variant_id);
+
+        const myPid = me?.product_id ?? null;
+        const otherPid = other?.product_id ?? null;
+
+        if (myPid && otherPid && myPid === otherPid) {
+          // ✅ 같은 제품이면: 기존에 잡고 있던 barcode rows를 비활성/비primary 처리(이관)
+          const { error: moveErr } = await supabase
+            .from("product_barcodes")
+            .update({ is_active: false, is_primary: false })
+            .eq("barcode", bc)
+            .neq("variant_id", variant_id);
+
+          if (moveErr) throw moveErr;
+          // 이제 아래 로직으로 현재 variant에 primary로 세팅됨
+        } else {
+          await alertDuplicateBarcode(bc, existPrimary.variant_id);
+          return;
+        }
       }
 
       // ✅ 2) 이 variant의 기존 바코드들을 primary 해제
@@ -601,7 +627,6 @@ export default function ProductsClient() {
 
       /* -------------------------------------------------
          3️⃣ 신규 등록
-         ✅ product_variants.barcode는 더 이상 실바코드 저장용으로 쓰지 않음
       ------------------------------------------------- */
       const { data: vIns, error: vInsErr } = await supabase
         .from("product_variants")
