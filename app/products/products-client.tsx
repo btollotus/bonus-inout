@@ -264,19 +264,23 @@ export default function ProductsClient() {
   const [rowBarcodeDraft, setRowBarcodeDraft] = useState<Record<string, string>>({});
   const [rowBarcodeEditOpen, setRowBarcodeEditOpen] = useState<Record<string, boolean>>({});
 
-  // ✅ 목록에서 식품유형/제품명/무게/수량 수정용
+  // ✅ 목록에서 식품유형/제품명/구분/무게/수량 수정용
   const [rowMetaEditOpen, setRowMetaEditOpen] = useState<Record<string, boolean>>({});
   const [rowMetaDraft, setRowMetaDraft] = useState<
     Record<
       string,
       {
         product_name: string;
+        category: (typeof CATEGORIES)[number] | "";
         food_type: string;
         weight_g: string;
         pack_ea: string;
       }
     >
   >({});
+
+  // ✅ 구분(기성/업체/전사지) 필터/정렬
+  const [listCategory, setListCategory] = useState<"" | (typeof CATEGORIES)[number]>("");
 
   const loadVariantSuggest = async (keyword: string) => {
     const k = keyword.trim();
@@ -575,6 +579,7 @@ export default function ProductsClient() {
 
     const draft = rowMetaDraft[r.variant_id];
     const pn = (draft?.product_name ?? r.product_name ?? "").trim();
+    const ct = (draft?.category ?? (r.product_category as any) ?? "").trim();
     const ft = (draft?.food_type ?? r.product_food_type ?? "").trim();
     const wgRaw = (draft?.weight_g ?? (r.weight_g ?? "").toString()).trim();
     const peRaw = (draft?.pack_ea ?? (r.pack_ea ?? "").toString()).trim();
@@ -583,14 +588,15 @@ export default function ProductsClient() {
     const pe = peRaw === "" ? null : parseInt(peRaw, 10);
 
     if (!pn) return setMsg("제품명을 입력하세요.");
+    if (!ct) return setMsg("구분을 선택하세요.");
     if (!ft) return setMsg("식품유형을 입력하세요.");
     if (wg !== null && (!Number.isFinite(wg) || wg < 0)) return setMsg("무게는 0 이상 숫자여야 합니다.");
     if (pe !== null && (!Number.isFinite(pe) || pe < 1)) return setMsg("수량(ea)은 1 이상 숫자여야 합니다.");
 
     setLoading(true);
     try {
-      // 1) products 업데이트 (제품명/식품유형)
-      const { error: pUpdErr } = await supabase.from("products").update({ name: pn, food_type: ft }).eq("id", r.product_id);
+      // 1) products 업데이트 (제품명/구분/식품유형)
+      const { error: pUpdErr } = await supabase.from("products").update({ name: pn, category: ct, food_type: ft }).eq("id", r.product_id);
       if (pUpdErr) throw pUpdErr;
 
       // 2) variants 업데이트 (무게/입수)
@@ -728,12 +734,41 @@ export default function ProductsClient() {
     }
   };
 
-  const filtered = q.trim()
-    ? rows.filter((r) => {
-        const t = q.trim().toLowerCase();
+  const categoryOrderIndex = (ct: string | null | undefined) => {
+    const idx = CATEGORIES.indexOf(ct as any);
+    return idx >= 0 ? idx : 999;
+  };
+
+  const filtered = (() => {
+    const t = q.trim().toLowerCase();
+    let base = rows;
+
+    if (listCategory) {
+      base = base.filter((r) => (r.product_category ?? "") === listCategory);
+    }
+
+    if (t) {
+      base = base.filter((r) => {
         return r.product_name.toLowerCase().includes(t) || (r.product_food_type ?? "").toLowerCase().includes(t) || r.barcode.toLowerCase().includes(t);
-      })
-    : rows;
+      });
+    }
+
+    // ✅ "전체"일 때는 구분 기준으로 정렬(기성→업체→전사지), 그 다음 제품명
+    // ✅ 특정 구분 선택 시에도 제품명 기준으로 안정 정렬
+    const sorted = [...base].sort((a, b) => {
+      const ai = categoryOrderIndex(a.product_category);
+      const bi = categoryOrderIndex(b.product_category);
+      if (ai !== bi) return ai - bi;
+
+      const an = (a.product_name ?? "").toLowerCase();
+      const bn = (b.product_name ?? "").toLowerCase();
+      if (an < bn) return -1;
+      if (an > bn) return 1;
+      return 0;
+    });
+
+    return sorted;
+  })();
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 p-6">
@@ -998,6 +1033,36 @@ export default function ProductsClient() {
       <div className="mt-10">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">등록 목록</h2>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={[
+                "rounded-xl border px-3 py-2 text-sm",
+                listCategory === "" ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100",
+              ].join(" ")}
+              onClick={() => setListCategory("")}
+            >
+              전체
+            </button>
+            {CATEGORIES.map((c) => {
+              const on = listCategory === c;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  className={[
+                    "rounded-xl border px-3 py-2 text-sm",
+                    on ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100",
+                  ].join(" ")}
+                  onClick={() => setListCategory(c)}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+
           <input
             className="w-full max-w-sm rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
             value={q}
@@ -1012,6 +1077,7 @@ export default function ProductsClient() {
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="text-left p-3">제품명</th>
+                <th className="text-left p-3">구분</th>
                 <th className="text-left p-3">식품유형</th>
                 <th className="text-right p-3">무게(g)</th>
                 <th className="text-right p-3">수량(ea)</th>
@@ -1022,7 +1088,7 @@ export default function ProductsClient() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td className="p-3 text-slate-500" colSpan={6}>
+                  <td className="p-3 text-slate-500" colSpan={7}>
                     등록된 데이터가 없습니다.
                   </td>
                 </tr>
@@ -1047,6 +1113,7 @@ export default function ProductsClient() {
                                 ...prev,
                                 [r.variant_id]: {
                                   product_name: v,
+                                  category: (prev[r.variant_id]?.category ?? (r.product_category as any) ?? "") as any,
                                   food_type: prev[r.variant_id]?.food_type ?? (r.product_food_type ?? ""),
                                   weight_g: prev[r.variant_id]?.weight_g ?? (r.weight_g ?? "").toString(),
                                   pack_ea: prev[r.variant_id]?.pack_ea ?? (r.pack_ea ?? "").toString(),
@@ -1061,6 +1128,37 @@ export default function ProductsClient() {
 
                       <td className="p-3">
                         {metaEditing ? (
+                          <select
+                            className="rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                            value={metaDraft?.category ?? ((r.product_category as any) ?? "")}
+                            onChange={(e) => {
+                              const v = e.target.value as any;
+                              setRowMetaDraft((prev) => ({
+                                ...prev,
+                                [r.variant_id]: {
+                                  product_name: prev[r.variant_id]?.product_name ?? r.product_name,
+                                  category: v,
+                                  food_type: prev[r.variant_id]?.food_type ?? (r.product_food_type ?? ""),
+                                  weight_g: prev[r.variant_id]?.weight_g ?? (r.weight_g ?? "").toString(),
+                                  pack_ea: prev[r.variant_id]?.pack_ea ?? (r.pack_ea ?? "").toString(),
+                                },
+                              }));
+                            }}
+                          >
+                            <option value="">선택</option>
+                            {CATEGORIES.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          r.product_category ?? "-"
+                        )}
+                      </td>
+
+                      <td className="p-3">
+                        {metaEditing ? (
                           <input
                             className="w-full max-w-xs rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
                             value={metaDraft?.food_type ?? r.product_food_type ?? ""}
@@ -1070,6 +1168,7 @@ export default function ProductsClient() {
                                 ...prev,
                                 [r.variant_id]: {
                                   product_name: prev[r.variant_id]?.product_name ?? r.product_name,
+                                  category: (prev[r.variant_id]?.category ?? (r.product_category as any) ?? "") as any,
                                   food_type: v,
                                   weight_g: prev[r.variant_id]?.weight_g ?? (r.weight_g ?? "").toString(),
                                   pack_ea: prev[r.variant_id]?.pack_ea ?? (r.pack_ea ?? "").toString(),
@@ -1093,6 +1192,7 @@ export default function ProductsClient() {
                                 ...prev,
                                 [r.variant_id]: {
                                   product_name: prev[r.variant_id]?.product_name ?? r.product_name,
+                                  category: (prev[r.variant_id]?.category ?? (r.product_category as any) ?? "") as any,
                                   food_type: prev[r.variant_id]?.food_type ?? (r.product_food_type ?? ""),
                                   weight_g: v,
                                   pack_ea: prev[r.variant_id]?.pack_ea ?? (r.pack_ea ?? "").toString(),
@@ -1117,6 +1217,7 @@ export default function ProductsClient() {
                                 ...prev,
                                 [r.variant_id]: {
                                   product_name: prev[r.variant_id]?.product_name ?? r.product_name,
+                                  category: (prev[r.variant_id]?.category ?? (r.product_category as any) ?? "") as any,
                                   food_type: prev[r.variant_id]?.food_type ?? (r.product_food_type ?? ""),
                                   weight_g: prev[r.variant_id]?.weight_g ?? (r.weight_g ?? "").toString(),
                                   pack_ea: v,
@@ -1270,6 +1371,7 @@ export default function ProductsClient() {
                                   ...prev,
                                   [r.variant_id]: {
                                     product_name: r.product_name ?? "",
+                                    category: ((r.product_category as any) ?? "") as any,
                                     food_type: r.product_food_type ?? "",
                                     weight_g: (r.weight_g ?? "").toString(),
                                     pack_ea: (r.pack_ea ?? "").toString(),
