@@ -245,6 +245,24 @@ export default function ProductsClient() {
   const [vnActive, setVnActive] = useState<number>(-1);
   const vnWrapRef = useRef<HTMLDivElement>(null);
 
+  const [msg, setMsg] = useState<string | null>(null);
+  const [productName, setProductName] = useState("");
+  const [category, setCategory] = useState<(typeof CATEGORIES)[number] | "">("기성");
+  const [variantName, setVariantName] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [packUnit, setPackUnit] = useState<number>(100);
+
+  const [rows, setRows] = useState<VariantRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [q, setQ] = useState("");
+
+  // ✅ 목록에서 "바코드 없는 제품" 바코드 입력/저장용
+  const [rowBarcodeDraft, setRowBarcodeDraft] = useState<Record<string, string>>({});
+
+  // ✅ 정렬
+  const [sortKey, setSortKey] = useState<"product_name" | "product_food_type" | "barcode">("product_name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
   const loadVariantSuggest = async (keyword: string) => {
     const k = keyword.trim();
     if (k.length < 1) {
@@ -281,24 +299,6 @@ export default function ProductsClient() {
     ).slice(0, 12);
     setVnItems(local);
   };
-
-  const [msg, setMsg] = useState<string | null>(null);
-  const [productName, setProductName] = useState("");
-  const [category, setCategory] = useState<(typeof CATEGORIES)[number] | "">("기성");
-  const [variantName, setVariantName] = useState("");
-  const [barcode, setBarcode] = useState("");
-  const [packUnit, setPackUnit] = useState<number>(100);
-
-  const [rows, setRows] = useState<VariantRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [q, setQ] = useState("");
-
-  // ✅ 목록에서 "바코드 없는 제품" 바코드 입력/저장용
-  const [rowBarcodeDraft, setRowBarcodeDraft] = useState<Record<string, string>>({});
-
-  // ✅ 정렬
-  const [sortKey, setSortKey] = useState<"product_name" | "product_food_type" | "barcode">("product_name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const normalizeBarcode = (raw: string) => {
     let t = raw || "";
@@ -358,9 +358,7 @@ export default function ProductsClient() {
       const pn = (r.product_name ?? "").toString().replace(/"/g, '""');
       const ft = (r.product_food_type ?? "").toString().replace(/"/g, '""');
       const bc = (r.barcode ?? "").toString().replace(/"/g, '""');
-      lines.push([`"${pn}"`, `"${
-        ft
-      }"`, `"${bc}"`].join(","));
+      lines.push([`"${pn}"`, `"${ft}"`, `"${bc}"`].join(","));
     }
 
     const csv = "\uFEFF" + lines.join("\n"); // ✅ BOM for Excel
@@ -445,94 +443,13 @@ export default function ProductsClient() {
   };
 
   const findBarcodeOwnerName = async (variantId: string) => {
-    // ✅ product_variants -> products(name) 조회 (가능하면 제품명 노출)
-    const { data: v, error: vErr } = await supabase
-      .from("product_variants")
-      .select("id, product_id")
-      .eq("id", variantId)
-      .maybeSingle();
-
+    const { data: v, error: vErr } = await supabase.from("product_variants").select("id, product_id").eq("id", variantId).maybeSingle();
     if (vErr || !v?.product_id) return null;
 
-    const { data: p, error: pErr } = await supabase
-      .from("products")
-      .select("name")
-      .eq("id", v.product_id)
-      .maybeSingle();
-
+    const { data: p, error: pErr } = await supabase.from("products").select("name").eq("id", v.product_id).maybeSingle();
     if (pErr) return null;
+
     return p?.name ?? null;
-  };
-
-  const saveRowBarcode = async (variant_id: string) => {
-    setMsg(null);
-
-    const draft = rowBarcodeDraft[variant_id] ?? "";
-    const bc = normalizeBarcode(draft);
-
-    if (!bc) {
-      setMsg("바코드를 입력하세요.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // ✅ 1) 바코드 중복 체크 (다른 variant에 이미 있으면 알림창 + 중단)
-      const { data: exist, error: existErr } = await supabase
-        .from("product_barcodes")
-        .select("id, variant_id, is_primary, is_active")
-        .eq("barcode", bc)
-        .maybeSingle();
-
-      if (existErr) throw existErr;
-
-      if (exist && exist.variant_id !== variant_id) {
-        const ownerName = await findBarcodeOwnerName(exist.variant_id as string);
-        alert(`⚠️ 이미 등록된 바코드입니다.\n\n바코드: ${bc}\n기존 제품: ${ownerName ?? "(확인불가)"}\n\n다른 바코드를 입력해 주세요.`);
-        return;
-      }
-
-      // ✅ 2) 이 variant의 기존 바코드들을 primary 해제
-      const { error: unPrimaryErr } = await supabase.from("product_barcodes").update({ is_primary: false }).eq("variant_id", variant_id);
-      if (unPrimaryErr) throw unPrimaryErr;
-
-      // ✅ 3) product_variants.barcode도 같이 갱신(일관성 유지)
-      const { error: vUpdErr } = await supabase.from("product_variants").update({ barcode: bc }).eq("id", variant_id);
-      if (vUpdErr) throw vUpdErr;
-
-      if (exist?.id) {
-        // ✅ 이미 같은 variant에 있는 barcode면 활성/primary만 켬
-        const { error: bcUpdErr } = await supabase
-          .from("product_barcodes")
-          .update({ is_primary: true, is_active: true })
-          .eq("id", exist.id);
-
-        if (bcUpdErr) throw bcUpdErr;
-      } else {
-        // ✅ 신규 insert
-        const { error: bcInsErr } = await supabase.from("product_barcodes").insert({
-          variant_id,
-          barcode: bc,
-          is_primary: true,
-          is_active: true,
-        });
-
-        if (bcInsErr) throw bcInsErr;
-      }
-
-      setRowBarcodeDraft((prev) => {
-        const next = { ...prev };
-        delete next[variant_id];
-        return next;
-      });
-
-      setMsg("바코드가 저장되었습니다 ✅");
-      await load();
-    } catch (e: any) {
-      setMsg(e?.message ?? "저장 중 오류");
-    } finally {
-      setLoading(false);
-    }
   };
 
   const load = async () => {
@@ -621,14 +538,12 @@ export default function ProductsClient() {
       setMsg(null);
 
       const { data: lots, error: lotErr } = await supabase.from("lots").select("id").eq("variant_id", variant_id).limit(50);
-
       if (lotErr) throw lotErr;
 
       const lotIds = (lots ?? []).map((l: any) => l.id);
 
       if (lotIds.length > 0) {
         const { data: mv, error: mvErr } = await supabase.from("movements").select("id").in("lot_id", lotIds).limit(1);
-
         if (mvErr) throw mvErr;
 
         if ((mv ?? []).length > 0) {
@@ -644,6 +559,107 @@ export default function ProductsClient() {
       await load();
     } catch (e: any) {
       setMsg(e?.message ?? "삭제 중 오류");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveRowBarcode = async (variant_id: string) => {
+    setMsg(null);
+
+    const draft = rowBarcodeDraft[variant_id] ?? "";
+    const bc = normalizeBarcode(draft);
+
+    if (!bc) {
+      setMsg("바코드를 입력하세요.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // ✅ 1) 바코드 중복 체크
+      const { data: exist, error: existErr } = await supabase
+        .from("product_barcodes")
+        .select("id, variant_id, is_primary, is_active")
+        .eq("barcode", bc)
+        .maybeSingle();
+
+      if (existErr) throw existErr;
+
+      if (exist && exist.variant_id !== variant_id) {
+        const ownerName = await findBarcodeOwnerName(exist.variant_id as string);
+
+        if (exist.is_active === false) {
+          const ok = confirm(
+            "⚠️ 이미 등록된 바코드입니다. (현재 비활성 상태)\n\n" +
+              `바코드: ${bc}\n` +
+              `기존 제품: ${ownerName ?? "(확인불가)"}\n\n` +
+              "이 바코드를 현재 제품으로 재등록(재할당 + 활성화) 하시겠습니까?\n\n" +
+              "※ 취소를 누르면 아무 변경도 하지 않습니다."
+          );
+          if (!ok) return;
+
+          // ✅ 현재 variant의 기존 바코드들을 primary 해제
+          const { error: unPrimaryErr } = await supabase.from("product_barcodes").update({ is_primary: false }).eq("variant_id", variant_id);
+          if (unPrimaryErr) throw unPrimaryErr;
+
+          // ✅ product_variants.barcode 갱신
+          const { error: vUpdErr } = await supabase.from("product_variants").update({ barcode: bc }).eq("id", variant_id);
+          if (vUpdErr) throw vUpdErr;
+
+          // ✅ 기존(비활성) 바코드 row를 현재 variant로 재할당 + 활성화 + primary
+          const { error: moveErr } = await supabase
+            .from("product_barcodes")
+            .update({ variant_id: variant_id, is_primary: true, is_active: true })
+            .eq("id", exist.id);
+          if (moveErr) throw moveErr;
+
+          setRowBarcodeDraft((prev) => {
+            const next = { ...prev };
+            delete next[variant_id];
+            return next;
+          });
+
+          setMsg("바코드가 재등록(활성화)되었습니다 ✅");
+          await load();
+          return;
+        }
+
+        alert(`⚠️ 이미 등록된 바코드입니다.\n\n바코드: ${bc}\n기존 제품: ${ownerName ?? "(확인불가)"}\n\n다른 바코드를 입력해 주세요.`);
+        return;
+      }
+
+      // ✅ 2) 이 variant의 기존 바코드들을 primary 해제
+      const { error: unPrimaryErr } = await supabase.from("product_barcodes").update({ is_primary: false }).eq("variant_id", variant_id);
+      if (unPrimaryErr) throw unPrimaryErr;
+
+      // ✅ 3) product_variants.barcode도 같이 갱신(일관성 유지)
+      const { error: vUpdErr } = await supabase.from("product_variants").update({ barcode: bc }).eq("id", variant_id);
+      if (vUpdErr) throw vUpdErr;
+
+      if (exist?.id) {
+        const { error: bcUpdErr } = await supabase.from("product_barcodes").update({ is_primary: true, is_active: true }).eq("id", exist.id);
+        if (bcUpdErr) throw bcUpdErr;
+      } else {
+        const { error: bcInsErr } = await supabase.from("product_barcodes").insert({
+          variant_id,
+          barcode: bc,
+          is_primary: true,
+          is_active: true,
+        });
+        if (bcInsErr) throw bcInsErr;
+      }
+
+      setRowBarcodeDraft((prev) => {
+        const next = { ...prev };
+        delete next[variant_id];
+        return next;
+      });
+
+      setMsg("바코드가 저장되었습니다 ✅");
+      await load();
+    } catch (e: any) {
+      setMsg(e?.message ?? "저장 중 오류");
     } finally {
       setLoading(false);
     }
@@ -668,49 +684,26 @@ export default function ProductsClient() {
 
     try {
       /* -------------------------------------------------
-         1️⃣ 바코드 중복 여부 먼저 확인 (product_barcodes 기준)
+         1️⃣ 바코드 존재 확인 (비활성 포함 조회)
       ------------------------------------------------- */
-      const { data: existBarcode, error: existErr } = await supabase
+      const { data: existBarcodeAny, error: existErr } = await supabase
         .from("product_barcodes")
-        .select("id, variant_id")
+        .select("id, variant_id, is_active")
         .eq("barcode", bc)
         .maybeSingle();
 
       if (existErr) throw existErr;
 
-      if (existBarcode) {
-        const ownerName = await findBarcodeOwnerName(existBarcode.variant_id as string);
-        const ok = confirm(
-          "⚠️ 이미 등록된 바코드입니다.\n\n" +
-            `바코드: ${bc}\n` +
-            `기존 제품: ${ownerName ?? "(확인불가)"}\n\n` +
-            "기존 정보를 새로 입력한 내용으로 수정하시겠습니까?\n\n" +
-            "※ 취소를 누르면 아무 변경도 하지 않습니다."
-        );
-        if (!ok) return;
-      }
-
       /* -------------------------------------------------
          2️⃣ 제품(products) 조회 or 생성 (+ food_type 저장/갱신)
       ------------------------------------------------- */
-      const { data: existingProduct, error: pSelErr } = await supabase
-        .from("products")
-        .select("id, food_type")
-        .eq("name", pn)
-        .eq("category", ct)
-        .maybeSingle();
-
+      const { data: existingProduct, error: pSelErr } = await supabase.from("products").select("id, food_type").eq("name", pn).eq("category", ct).maybeSingle();
       if (pSelErr) throw pSelErr;
 
       let productId = existingProduct?.id as string | undefined;
 
       if (!productId) {
-        const { data: pIns, error: pInsErr } = await supabase
-          .from("products")
-          .insert({ name: pn, category: ct, food_type: vn })
-          .select("id")
-          .single();
-
+        const { data: pIns, error: pInsErr } = await supabase.from("products").insert({ name: pn, category: ct, food_type: vn }).select("id").single();
         if (pInsErr) throw pInsErr;
         productId = pIns.id;
       } else {
@@ -721,10 +714,72 @@ export default function ProductsClient() {
       }
 
       /* -------------------------------------------------
-         3️⃣ 신규 vs 수정 분기 처리
+         3️⃣ 바코드가 이미 존재하면 (활성/비활성 분기)
       ------------------------------------------------- */
-      if (existBarcode) {
-        const variantId = existBarcode.variant_id as string;
+      if (existBarcodeAny) {
+        const ownerName = await findBarcodeOwnerName(existBarcodeAny.variant_id as string);
+
+        // ✅ 비활성인 경우: 재할당 + 활성화 가능
+        if (existBarcodeAny.is_active === false) {
+          const ok = confirm(
+            "⚠️ 이미 등록된 바코드입니다. (현재 비활성 상태)\n\n" +
+              `바코드: ${bc}\n` +
+              `기존 제품: ${ownerName ?? "(확인불가)"}\n\n` +
+              "이 바코드를 새로 입력한 제품으로 재등록(재할당 + 활성화) 하시겠습니까?\n\n" +
+              "※ 취소를 누르면 아무 변경도 하지 않습니다."
+          );
+          if (!ok) return;
+
+          // ✅ 새 variant 생성
+          const { data: vIns, error: vInsErr } = await supabase
+            .from("product_variants")
+            .insert({
+              product_id: productId,
+              variant_name: vn,
+              pack_unit: pu,
+              barcode: bc,
+            })
+            .select("id")
+            .single();
+
+          if (vInsErr) throw vInsErr;
+
+          // ✅ 새 variant 바코드들 primary 해제(안전)
+          const { error: unPrimaryErr } = await supabase.from("product_barcodes").update({ is_primary: false }).eq("variant_id", vIns.id);
+          if (unPrimaryErr) throw unPrimaryErr;
+
+          // ✅ 기존(비활성) 바코드 row를 새 variant로 재할당 + 활성화 + primary
+          const { error: moveErr } = await supabase
+            .from("product_barcodes")
+            .update({ variant_id: vIns.id, is_primary: true, is_active: true })
+            .eq("id", existBarcodeAny.id);
+
+          if (moveErr) throw moveErr;
+
+          setMsg("비활성 바코드를 재등록(활성화)했습니다 ✅");
+
+          setVariantName("");
+          setBarcode("");
+          requestAnimationFrame(() => {
+            barcodeRef.current?.focus();
+            barcodeRef.current?.select();
+          });
+
+          await load();
+          return;
+        }
+
+        // ✅ 활성(또는 NULL/true)인 경우: 기존 갱신(confirm) 방식 유지
+        const ok = confirm(
+          "⚠️ 이미 등록된 바코드입니다.\n\n" +
+            `바코드: ${bc}\n` +
+            `기존 제품: ${ownerName ?? "(확인불가)"}\n\n` +
+            "기존 정보를 새로 입력한 내용으로 수정하시겠습니까?\n\n" +
+            "※ 취소를 누르면 아무 변경도 하지 않습니다."
+        );
+        if (!ok) return;
+
+        const variantId = existBarcodeAny.variant_id as string;
 
         const { error: updErr } = await supabase
           .from("product_variants")
@@ -741,43 +796,51 @@ export default function ProductsClient() {
         const { error: unPrimaryErr } = await supabase.from("product_barcodes").update({ is_primary: false }).eq("variant_id", variantId);
         if (unPrimaryErr) throw unPrimaryErr;
 
-        const { error: bcUpdErr } = await supabase
-          .from("product_barcodes")
-          .update({ is_primary: true, is_active: true })
-          .eq("id", existBarcode.id);
-
+        const { error: bcUpdErr } = await supabase.from("product_barcodes").update({ is_primary: true, is_active: true }).eq("id", existBarcodeAny.id);
         if (bcUpdErr) throw bcUpdErr;
 
         setMsg("기존 바코드 정보가 수정되었습니다 ✏️");
-      } else {
-        const { data: vIns, error: vInsErr } = await supabase
-          .from("product_variants")
-          .insert({
-            product_id: productId,
-            variant_name: vn,
-            pack_unit: pu,
-            barcode: bc,
-          })
-          .select("id")
-          .single();
 
-        if (vInsErr) throw vInsErr;
-
-        const { error: bcInsErr } = await supabase.from("product_barcodes").insert({
-          variant_id: vIns.id,
-          barcode: bc,
-          is_primary: true,
-          is_active: true,
+        setVariantName("");
+        setBarcode("");
+        requestAnimationFrame(() => {
+          barcodeRef.current?.focus();
+          barcodeRef.current?.select();
         });
 
-        if (bcInsErr) throw bcInsErr;
-
-        setMsg("신규 바코드가 등록되었습니다 ✅");
+        await load();
+        return;
       }
+
+      /* -------------------------------------------------
+         4️⃣ 신규 등록
+      ------------------------------------------------- */
+      const { data: vIns, error: vInsErr } = await supabase
+        .from("product_variants")
+        .insert({
+          product_id: productId,
+          variant_name: vn,
+          pack_unit: pu,
+          barcode: bc,
+        })
+        .select("id")
+        .single();
+
+      if (vInsErr) throw vInsErr;
+
+      const { error: bcInsErr } = await supabase.from("product_barcodes").insert({
+        variant_id: vIns.id,
+        barcode: bc,
+        is_primary: true,
+        is_active: true,
+      });
+
+      if (bcInsErr) throw bcInsErr;
+
+      setMsg("신규 바코드가 등록되었습니다 ✅");
 
       setVariantName("");
       setBarcode("");
-
       requestAnimationFrame(() => {
         barcodeRef.current?.focus();
         barcodeRef.current?.select();
