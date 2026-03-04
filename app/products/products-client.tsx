@@ -38,6 +38,9 @@ type VariantRow = {
   variant_name: string;
   barcode: string;
   pack_unit: number;
+  pack_ea: number | null;
+  weight_g: number | null;
+  unit_type: string | null;
 };
 
 const CATEGORIES = ["기성", "업체", "전사지"] as const;
@@ -251,6 +254,7 @@ export default function ProductsClient() {
   const [variantName, setVariantName] = useState("");
   const [barcode, setBarcode] = useState("");
   const [packUnit, setPackUnit] = useState<number>(100);
+  const [weightG, setWeightG] = useState<number>(3);
 
   const [rows, setRows] = useState<VariantRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -259,6 +263,20 @@ export default function ProductsClient() {
   // ✅ 목록에서 바코드 입력/수정/저장용
   const [rowBarcodeDraft, setRowBarcodeDraft] = useState<Record<string, string>>({});
   const [rowBarcodeEditOpen, setRowBarcodeEditOpen] = useState<Record<string, boolean>>({});
+
+  // ✅ 목록에서 식품유형/제품명/무게/수량 수정용
+  const [rowMetaEditOpen, setRowMetaEditOpen] = useState<Record<string, boolean>>({});
+  const [rowMetaDraft, setRowMetaDraft] = useState<
+    Record<
+      string,
+      {
+        product_name: string;
+        food_type: string;
+        weight_g: string;
+        pack_ea: string;
+      }
+    >
+  >({});
 
   const loadVariantSuggest = async (keyword: string) => {
     const k = keyword.trim();
@@ -444,7 +462,7 @@ export default function ProductsClient() {
     // ✅ 1) variants 먼저 로드 (관계 인식 문제 회피)
     const { data: vData, error: vErr } = await supabase
       .from("product_variants")
-      .select("id, variant_name, pack_unit, product_id, products(name, category, food_type)")
+      .select("id, variant_name, pack_unit, pack_ea, weight_g, unit_type, product_id, products(name, category, food_type)")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -502,6 +520,9 @@ export default function ProductsClient() {
       variant_name: r.variant_name,
       barcode: bcMap.get(r.id) ?? "",
       pack_unit: typeof r.pack_unit === "number" ? r.pack_unit : 1,
+      pack_ea: typeof r.pack_ea === "number" ? r.pack_ea : r.pack_ea ?? null,
+      weight_g: typeof r.weight_g === "number" ? r.weight_g : r.weight_g ?? null,
+      unit_type: r.unit_type ?? null,
     }));
 
     setRows(mapped);
@@ -549,6 +570,55 @@ export default function ProductsClient() {
     }
   };
 
+  const saveVariantMeta = async (r: VariantRow) => {
+    setMsg(null);
+
+    const draft = rowMetaDraft[r.variant_id];
+    const pn = (draft?.product_name ?? r.product_name ?? "").trim();
+    const ft = (draft?.food_type ?? r.product_food_type ?? "").trim();
+    const wgRaw = (draft?.weight_g ?? (r.weight_g ?? "").toString()).trim();
+    const peRaw = (draft?.pack_ea ?? (r.pack_ea ?? "").toString()).trim();
+
+    const wg = wgRaw === "" ? null : Number(wgRaw);
+    const pe = peRaw === "" ? null : parseInt(peRaw, 10);
+
+    if (!pn) return setMsg("제품명을 입력하세요.");
+    if (!ft) return setMsg("식품유형을 입력하세요.");
+    if (wg !== null && (!Number.isFinite(wg) || wg < 0)) return setMsg("무게는 0 이상 숫자여야 합니다.");
+    if (pe !== null && (!Number.isFinite(pe) || pe < 1)) return setMsg("수량(ea)은 1 이상 숫자여야 합니다.");
+
+    setLoading(true);
+    try {
+      // 1) products 업데이트 (제품명/식품유형)
+      const { error: pUpdErr } = await supabase.from("products").update({ name: pn, food_type: ft }).eq("id", r.product_id);
+      if (pUpdErr) throw pUpdErr;
+
+      // 2) variants 업데이트 (무게/입수)
+      const { error: vUpdErr } = await supabase
+        .from("product_variants")
+        .update({
+          weight_g: wg,
+          pack_ea: pe,
+        })
+        .eq("id", r.variant_id);
+      if (vUpdErr) throw vUpdErr;
+
+      setRowMetaEditOpen((prev) => ({ ...prev, [r.variant_id]: false }));
+      setRowMetaDraft((prev) => {
+        const next = { ...prev };
+        delete next[r.variant_id];
+        return next;
+      });
+
+      setMsg("저장되었습니다 ✅");
+      await load();
+    } catch (e: any) {
+      setMsg(e?.message ?? "저장 중 오류");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const upsertProductAndVariant = async () => {
     setMsg(null);
 
@@ -557,12 +627,14 @@ export default function ProductsClient() {
     const vn = variantName.trim(); // ✅ products.food_type로 저장
     const bc = normalizeBarcode(barcode.trim());
     const pu = Number.isFinite(packUnit) ? Math.floor(packUnit) : 0;
+    const wg = Number.isFinite(weightG) ? Number(weightG) : NaN;
 
     if (!pn) return setMsg("제품명을 입력하세요.");
     if (!ct) return setMsg("구분을 선택하세요.");
     if (!vn) return setMsg("식품유형을 입력하세요.");
     if (!bc) return setMsg("바코드를 입력하세요.");
-    if (!pu || pu < 1) return setMsg("수량은 1 이상 숫자여야 합니다.");
+    if (!pu || pu < 1) return setMsg("수량(ea)은 1 이상 숫자여야 합니다.");
+    if (!Number.isFinite(wg) || wg < 0) return setMsg("무게(g)는 0 이상 숫자여야 합니다.");
 
     setLoading(true);
 
@@ -588,15 +660,26 @@ export default function ProductsClient() {
       let productId = existingProduct?.id as string | undefined;
 
       if (!productId) {
-        const { data: pIns, error: pInsErr } = await supabase.from("products").insert({ name: pn, category: ct, food_type: vn }).select("id").single();
+        const { data: pIns, error: pInsErr } = await supabase
+          .from("products")
+          .insert({
+            name: pn,
+            category: ct,
+            food_type: vn,
+            default_weight_g: wg,
+          })
+          .select("id")
+          .single();
 
         if (pInsErr) throw pInsErr;
         productId = pIns.id;
       } else {
-        if ((existingProduct?.food_type ?? "") !== vn) {
-          const { error: pUpdErr } = await supabase.from("products").update({ food_type: vn }).eq("id", productId);
-          if (pUpdErr) throw pUpdErr;
-        }
+        const upd: any = {};
+        if ((existingProduct?.food_type ?? "") !== vn) upd.food_type = vn;
+        upd.default_weight_g = wg;
+
+        const { error: pUpdErr } = await supabase.from("products").update(upd).eq("id", productId);
+        if (pUpdErr) throw pUpdErr;
       }
 
       /* -------------------------------------------------
@@ -607,7 +690,10 @@ export default function ProductsClient() {
         .insert({
           product_id: productId,
           variant_name: vn,
-          pack_unit: pu,
+          pack_unit: 1,
+          pack_ea: pu,
+          unit_type: "EA",
+          weight_g: wg,
           barcode: bc,
         })
         .select("id")
@@ -663,7 +749,7 @@ export default function ProductsClient() {
         </div>
       </div>
 
-      <p className="text-slate-600 mt-2">제품명 + 식품유형 + 바코드 + 수량을 등록합니다. (바코드는 중복 불가)</p>
+      <p className="text-slate-600 mt-2">제품명 + 식품유형 + 바코드 + 수량 + 무게를 등록합니다. (바코드는 중복 불가)</p>
 
       <div className="mt-6 max-w-2xl grid gap-3">
         <div className="grid grid-cols-2 gap-3">
@@ -707,7 +793,7 @@ export default function ProductsClient() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <div ref={vnWrapRef} className="relative">
             <label className="text-sm text-slate-600">식품유형</label>
             <input
@@ -772,6 +858,21 @@ export default function ProductsClient() {
                 </div>
               </div>
             ) : null}
+          </div>
+
+          <div>
+            <label className="text-sm text-slate-600">무게(g)</label>
+            <input
+              className="mt-1 w-full rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+              type="number"
+              min={0}
+              value={weightG}
+              onChange={(e) => {
+                const n = parseFloat(e.target.value || "0");
+                setWeightG(Number.isFinite(n) ? Math.max(0, n) : 0);
+              }}
+              placeholder="예: 3"
+            />
           </div>
 
           <div>
@@ -912,6 +1013,8 @@ export default function ProductsClient() {
               <tr>
                 <th className="text-left p-3">제품명</th>
                 <th className="text-left p-3">식품유형</th>
+                <th className="text-right p-3">무게(g)</th>
+                <th className="text-right p-3">수량(ea)</th>
                 <th className="text-left p-3">바코드</th>
                 <th className="text-right p-3">관리</th>
               </tr>
@@ -919,7 +1022,7 @@ export default function ProductsClient() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td className="p-3 text-slate-500" colSpan={4}>
+                  <td className="p-3 text-slate-500" colSpan={6}>
                     등록된 데이터가 없습니다.
                   </td>
                 </tr>
@@ -927,10 +1030,106 @@ export default function ProductsClient() {
                 filtered.map((r) => {
                   const isEditing = rowBarcodeEditOpen[r.variant_id] === true;
                   const draft = rowBarcodeDraft[r.variant_id];
+
+                  const metaEditing = rowMetaEditOpen[r.variant_id] === true;
+                  const metaDraft = rowMetaDraft[r.variant_id];
+
                   return (
                     <tr key={r.variant_id} className="border-t border-slate-200">
-                      <td className="p-3">{r.product_name}</td>
-                      <td className="p-3">{r.product_food_type ?? "-"}</td>
+                      <td className="p-3">
+                        {metaEditing ? (
+                          <input
+                            className="w-full max-w-xs rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                            value={metaDraft?.product_name ?? r.product_name ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setRowMetaDraft((prev) => ({
+                                ...prev,
+                                [r.variant_id]: {
+                                  product_name: v,
+                                  food_type: prev[r.variant_id]?.food_type ?? (r.product_food_type ?? ""),
+                                  weight_g: prev[r.variant_id]?.weight_g ?? (r.weight_g ?? "").toString(),
+                                  pack_ea: prev[r.variant_id]?.pack_ea ?? (r.pack_ea ?? "").toString(),
+                                },
+                              }));
+                            }}
+                          />
+                        ) : (
+                          r.product_name
+                        )}
+                      </td>
+
+                      <td className="p-3">
+                        {metaEditing ? (
+                          <input
+                            className="w-full max-w-xs rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                            value={metaDraft?.food_type ?? r.product_food_type ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setRowMetaDraft((prev) => ({
+                                ...prev,
+                                [r.variant_id]: {
+                                  product_name: prev[r.variant_id]?.product_name ?? r.product_name,
+                                  food_type: v,
+                                  weight_g: prev[r.variant_id]?.weight_g ?? (r.weight_g ?? "").toString(),
+                                  pack_ea: prev[r.variant_id]?.pack_ea ?? (r.pack_ea ?? "").toString(),
+                                },
+                              }));
+                            }}
+                          />
+                        ) : (
+                          r.product_food_type ?? "-"
+                        )}
+                      </td>
+
+                      <td className="p-3 text-right">
+                        {metaEditing ? (
+                          <input
+                            className="w-24 rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-right text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                            value={metaDraft?.weight_g ?? (r.weight_g ?? "").toString()}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setRowMetaDraft((prev) => ({
+                                ...prev,
+                                [r.variant_id]: {
+                                  product_name: prev[r.variant_id]?.product_name ?? r.product_name,
+                                  food_type: prev[r.variant_id]?.food_type ?? (r.product_food_type ?? ""),
+                                  weight_g: v,
+                                  pack_ea: prev[r.variant_id]?.pack_ea ?? (r.pack_ea ?? "").toString(),
+                                },
+                              }));
+                            }}
+                            placeholder="0"
+                          />
+                        ) : (
+                          (r.weight_g ?? "-").toString()
+                        )}
+                      </td>
+
+                      <td className="p-3 text-right">
+                        {metaEditing ? (
+                          <input
+                            className="w-24 rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-right text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                            value={metaDraft?.pack_ea ?? (r.pack_ea ?? "").toString()}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setRowMetaDraft((prev) => ({
+                                ...prev,
+                                [r.variant_id]: {
+                                  product_name: prev[r.variant_id]?.product_name ?? r.product_name,
+                                  food_type: prev[r.variant_id]?.food_type ?? (r.product_food_type ?? ""),
+                                  weight_g: prev[r.variant_id]?.weight_g ?? (r.weight_g ?? "").toString(),
+                                  pack_ea: v,
+                                },
+                              }));
+                            }}
+                            placeholder="1"
+                          />
+                        ) : (
+                          (r.pack_ea ?? "-").toString()
+                        )}
+                      </td>
+
                       <td className="p-3 font-mono">
                         {!r.barcode && !isEditing ? (
                           <div className="flex items-center gap-2">
@@ -1034,14 +1233,62 @@ export default function ProductsClient() {
                           </div>
                         )}
                       </td>
+
                       <td className="p-3 text-right">
-                        <button
-                          className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 active:bg-slate-200 disabled:opacity-60"
-                          disabled={loading}
-                          onClick={() => removeVariant(r.variant_id, r.barcode)}
-                        >
-                          삭제
-                        </button>
+                        {metaEditing ? (
+                          <div className="flex justify-end gap-2">
+                            <button
+                              className="rounded-lg bg-blue-600 text-white px-3 py-1 text-xs font-medium hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60"
+                              disabled={loading}
+                              onClick={() => saveVariantMeta(r)}
+                            >
+                              저장
+                            </button>
+                            <button
+                              className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 active:bg-slate-200 disabled:opacity-60"
+                              disabled={loading}
+                              onClick={() => {
+                                setRowMetaEditOpen((prev) => ({ ...prev, [r.variant_id]: false }));
+                                setRowMetaDraft((prev) => {
+                                  const next = { ...prev };
+                                  delete next[r.variant_id];
+                                  return next;
+                                });
+                              }}
+                            >
+                              취소
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex justify-end gap-2">
+                            <button
+                              className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 active:bg-slate-200 disabled:opacity-60"
+                              disabled={loading}
+                              onClick={() => {
+                                setRowMetaEditOpen((prev) => ({ ...prev, [r.variant_id]: true }));
+                                setRowMetaDraft((prev) => ({
+                                  ...prev,
+                                  [r.variant_id]: {
+                                    product_name: r.product_name ?? "",
+                                    food_type: r.product_food_type ?? "",
+                                    weight_g: (r.weight_g ?? "").toString(),
+                                    pack_ea: (r.pack_ea ?? "").toString(),
+                                  },
+                                }));
+                              }}
+                            >
+                              수정
+                            </button>
+
+                            <button
+                              className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 active:bg-slate-200 disabled:opacity-60"
+                              disabled={loading}
+                              onClick={() => removeVariant(r.variant_id, r.barcode)}
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
