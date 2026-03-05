@@ -1084,7 +1084,7 @@ export default function ScanClient() {
 
         {variantInfo && (
           <div className="mt-2 text-xs text-slate-500">
-            ※ 참고(품목 등록값): ea/box={variantInfo.pack_unit} (현재 화면/저장은 EA만 사용)
+            ※ 참고사항(품목 등록값): ea/box={variantInfo.pack_unit} (현재 화면/저장은 EA만 사용)
           </div>
         )}
       </div>
