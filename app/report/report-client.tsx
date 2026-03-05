@@ -99,6 +99,14 @@ function csvEscape(v: any) {
   return s;
 }
 
+function shouldReplaceFoodType(cur: string | null | undefined) {
+  const s = (cur ?? "").trim();
+  if (!s) return true;
+  // ✅ 재고대장에서 식품유형 칸에 EA/BOX 같은 값이 들어오는 케이스 방지
+  if (s === "EA" || s === "BOX") return true;
+  return false;
+}
+
 export default function ReportClient() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -133,6 +141,69 @@ export default function ReportClient() {
       : rows.filter((r) => (r.product_category ?? "") === categoryFilter);
 
   const periodLabel = startDay === endDay ? `${startDay}` : `${startDay} ~ ${endDay}`;
+
+  const enrichFoodTypes = async (listAgg: AggRow[]) => {
+    const barcodes = Array.from(
+      new Set(
+        listAgg
+          .map((r) => safeStr(r.barcode).trim())
+          .filter((b) => b && b.length >= 3)
+      )
+    );
+    if (barcodes.length === 0) return listAgg;
+
+    // ✅ 가능한 소스 2군데를 순서대로 시도 (스키마/뷰 차이 대비)
+    let map = new Map<string, string>();
+
+    // 1) product_variants (가장 가능성 높음)
+    try {
+      const { data, error } = await supabase
+        .from("product_variants")
+        .select("barcode, food_type")
+        .in("barcode", barcodes);
+
+      if (!error && data) {
+        for (const r of data as any[]) {
+          const b = safeStr(r?.barcode).trim();
+          const ft = safeStr(r?.food_type).trim();
+          if (b && ft) map.set(b, ft);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2) v_tradeclient_products (대체)
+    if (map.size === 0) {
+      try {
+        const { data, error } = await supabase
+          .from("v_tradeclient_products")
+          .select("barcode, food_type")
+          .in("barcode", barcodes);
+
+        if (!error && data) {
+          for (const r of data as any[]) {
+            const b = safeStr(r?.barcode).trim();
+            const ft = safeStr(r?.food_type).trim();
+            if (b && ft) map.set(b, ft);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (map.size === 0) return listAgg;
+
+    for (const r of listAgg) {
+      const b = safeStr(r.barcode).trim();
+      const ft = map.get(b);
+      if (ft && shouldReplaceFoodType(r.food_type)) {
+        r.food_type = ft;
+      }
+    }
+    return listAgg;
+  };
 
   const fetchReport = async () => {
     const s = mode === "DAY" ? startDay : startDay;
@@ -235,7 +306,10 @@ export default function ReportClient() {
         }
       }
 
-      const listAgg = Array.from(agg.values());
+      let listAgg = Array.from(agg.values());
+
+      // ✅ 식품유형 표시 보정(바코드 기준으로 제품/바코드 등록 화면과 동일 값 사용)
+      listAgg = await enrichFoodTypes(listAgg);
 
       // 정렬(제품명 -> 소비기한 -> 바코드)
       listAgg.sort((a, b) => {
@@ -340,23 +414,14 @@ export default function ReportClient() {
   const scrollTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
   return (
-    <div className="min-h-screen bg-white text-black p-6 print:bg-white print:text-black">
+    <div className="min-h-screen bg-white text-black p-6 print:bg-white print:text-black print:p-0 print:min-h-0">
       <style jsx global>{`
-        /* ✅ 인쇄/PDF에서 상단 네비(TopNav 등) 같이 찍히는 문제 방지 */
+        /* ✅ 인쇄/PDF에서 상단 네비(TopNav 등) 같이 찍히는 문제 방지 + 2페이지 빈 페이지 방지 */
         @media print {
           /* next/layout 쪽 header/nav가 있으면 통째로 숨김 */
           header,
           nav {
             display: none !important;
-          }
-
-          /* 혹시 고정/스티키로 붙은 topbar가 class로 있으면 방어 */
-          .top-nav,
-          .topbar,
-          .navbar,
-          .sticky,
-          .fixed {
-            position: static !important;
           }
 
           /* 우리 페이지 내부에서만 프린트 대상 지정: 다른 요소 숨김 */
@@ -377,6 +442,14 @@ export default function ReportClient() {
           @page {
             size: A4;
             margin: 10mm;
+          }
+
+          html,
+          body {
+            margin: 0 !important;
+            padding: 0 !important;
+            height: auto !important;
+            min-height: 0 !important;
           }
 
           body {
@@ -426,12 +499,7 @@ export default function ReportClient() {
             display: block !important;
           }
 
-          /* ✅ “2페이지 빈 페이지” 방지용: 공백 영역/여백 제거 */
-          html,
-          body {
-            height: auto !important;
-            min-height: 0 !important;
-          }
+          /* ✅ 추가 여백/공백 방지 */
           #report-print-area {
             padding: 0 !important;
             margin: 0 !important;
@@ -443,7 +511,7 @@ export default function ReportClient() {
         }
       `}</style>
 
-      {/* ✅ 프린트 대상 영역을 명확히 분리 */}
+      {/* ✅ 프린트 대상 영역 */}
       <div id="report-print-area">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -485,7 +553,7 @@ export default function ReportClient() {
             </select>
           </div>
 
-          {/* ✅ 1) 날짜: 스샷처럼 달력 선택 입력(type="date") */}
+          {/* ✅ 날짜: 달력 선택 입력 */}
           <div>
             <label className="text-sm text-black/70">{mode === "DAY" ? "기준일" : "시작일"}</label>
             <input
@@ -559,7 +627,7 @@ export default function ReportClient() {
           {msg && <div className="text-sm text-black/70">{msg}</div>}
         </div>
 
-        {/* ✅ 테이블 (필터 적용된 데이터로 출력/인쇄) */}
+        {/* ✅ 테이블 */}
         <div className="mt-6 rounded-2xl border border-black/10 overflow-hidden print-tight print:border-black/20">
           <table className="w-full text-sm">
             <thead className="bg-black/5 print:bg-black/5">
@@ -653,7 +721,7 @@ export default function ReportClient() {
         </div>
       </div>
 
-      {/* ✅ TOP 버튼 (눈에 잘 보이게) */}
+      {/* ✅ TOP 버튼 */}
       <button
         type="button"
         onClick={scrollTop}
