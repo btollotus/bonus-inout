@@ -1,11 +1,11 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/browser";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Category = "ALL" | "기성" | "업체" | "전사지";
 
-type Row = {
+type RpcRow = {
   product_name: string;
   product_category: string | null; // 구분
   food_type: string | null; // 식품유형
@@ -13,7 +13,23 @@ type Row = {
   today_in_ea: number | null;
   today_out_ea: number | null;
   today_stock_ea: number | null;
-  expiry_date: string; // YYYY-MM-DD (date)
+  expiry_date: string; // YYYY-MM-DD
+  barcode: string;
+  note: string | null;
+  pack_unit?: number | null;
+};
+
+type AggRow = {
+  product_name: string;
+  product_category: string | null;
+  food_type: string | null;
+
+  start_stock_ea: number; // 시작재고(시작일 기준 전일재고)
+  period_in_ea: number; // 기간입고합
+  period_out_ea: number; // 기간출고합
+  end_stock_ea: number; // 종료재고(종료일 기준 당일재고)
+
+  expiry_date: string;
   barcode: string;
   note: string | null;
   pack_unit?: number | null;
@@ -40,6 +56,28 @@ function isYYYYMMDD(s: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
 
+function parseYYYYMMDD(s: string) {
+  // 로컬 타임존 기준 안전 파싱
+  const [y, m, d] = s.split("-").map((v) => Number(v));
+  if (!y || !m || !d) return null;
+  const dt = new Date(y, m - 1, d);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+function addDays(d: Date, days: number) {
+  const nd = new Date(d);
+  nd.setDate(nd.getDate() + days);
+  return nd;
+}
+
+function diffDaysInclusive(a: Date, b: Date) {
+  const aa = new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime();
+  const bb = new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime();
+  const diff = Math.floor((bb - aa) / (24 * 60 * 60 * 1000));
+  return diff + 1;
+}
+
 const nf = new Intl.NumberFormat("ko-KR");
 const fmt = (n: number) => nf.format(intMin(n, 0));
 
@@ -47,7 +85,6 @@ function toBoxAndEa(ea: number, packUnit?: number | null) {
   const u = intMin(packUnit ?? 0, 0);
   const e = intMin(ea, 0);
 
-  // 하이픈(-)이 점처럼 보이는 렌더링 이슈 방지: em dash 사용
   if (!u || u <= 0) return { boxText: "", eaText: `${fmt(e)} EA` };
 
   const box = Math.floor(e / u);
@@ -56,26 +93,74 @@ function toBoxAndEa(ea: number, packUnit?: number | null) {
   return { boxText, eaText: `${fmt(e)} EA` };
 }
 
+function csvEscape(v: any) {
+  const s = safeStr(v);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
 export default function ReportClient() {
   const supabase = useMemo(() => createClient(), []);
 
-  const [day, setDay] = useState<string>(() => formatYYYYMMDD(new Date()));
+  // ✅ 하루/기간 선택
+  const [mode, setMode] = useState<"DAY" | "RANGE">("DAY");
+
+  const [startDay, setStartDay] = useState<string>(() => formatYYYYMMDD(new Date()));
+  const [endDay, setEndDay] = useState<string>(() => formatYYYYMMDD(new Date()));
+
   const [categoryFilter, setCategoryFilter] = useState<Category>("ALL");
 
-  const [rows, setRows] = useState<Row[]>([]);
+  const [rows, setRows] = useState<AggRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const printedAt = formatYYYYMMDD(new Date());
+
+  useEffect(() => {
+    // ✅ 탭 제목
+    document.title = "BONUSMATE ERP 재고대장";
+  }, []);
+
+  // DAY 모드에서는 endDay를 startDay와 동일하게 유지
+  useEffect(() => {
+    if (mode === "DAY") setEndDay(startDay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, startDay]);
 
   const filteredRows =
     categoryFilter === "ALL"
       ? rows
       : rows.filter((r) => (r.product_category ?? "") === categoryFilter);
 
+  const periodLabel =
+    startDay === endDay ? `${startDay}` : `${startDay} ~ ${endDay}`;
+
   const fetchReport = async () => {
-    if (!isYYYYMMDD(day)) {
-      setMsg("기준일 형식은 YYYY-MM-DD 입니다. 예) 2026-02-05");
+    const s = mode === "DAY" ? startDay : startDay;
+    const e = mode === "DAY" ? startDay : endDay;
+
+    if (!isYYYYMMDD(s) || !isYYYYMMDD(e)) {
+      setMsg("날짜 형식은 YYYY-MM-DD 입니다. 예) 2026-02-05");
+      return;
+    }
+
+    const sd = parseYYYYMMDD(s);
+    const ed = parseYYYYMMDD(e);
+    if (!sd || !ed) {
+      setMsg("날짜를 올바르게 입력해주세요.");
+      return;
+    }
+
+    // 시작일 > 종료일 방지
+    if (sd.getTime() > ed.getTime()) {
+      setMsg("기간 설정 오류: 시작일이 종료일보다 늦습니다.");
+      return;
+    }
+
+    const days = diffDaysInclusive(sd, ed);
+    // 너무 긴 기간 방지(서버 RPC 연속 호출)
+    if (days > 62) {
+      setMsg("기간이 너무 깁니다. 62일 이하로 조회해주세요.");
       return;
     }
 
@@ -83,22 +168,94 @@ export default function ReportClient() {
     setMsg(null);
 
     try {
-      const { data, error } = await supabase.rpc("rpc_daily_stock_report", {
-        p_day: day,
+      // ✅ 날짜 리스트 생성
+      const dayList: string[] = [];
+      for (let i = 0; i < days; i++) {
+        dayList.push(formatYYYYMMDD(addDays(sd, i)));
+      }
+
+      // ✅ 기존 rpc_daily_stock_report를 “날짜별로” 호출 후 집계
+      const agg = new Map<string, AggRow>();
+
+      for (let i = 0; i < dayList.length; i++) {
+        const d = dayList[i];
+        const { data, error } = await supabase.rpc("rpc_daily_stock_report", {
+          p_day: d,
+        });
+        if (error) throw new Error(error.message);
+
+        const list = (data ?? []) as RpcRow[];
+
+        const isFirst = i === 0;
+        const isLast = i === dayList.length - 1;
+
+        for (const r of list) {
+          const key = `${safeStr(r.barcode)}__${safeStr(r.expiry_date)}__${safeStr(
+            r.product_name
+          )}`;
+
+          const prevEA = intMin(r.prev_stock_ea ?? 0, 0);
+          const inEA = intMin(r.today_in_ea ?? 0, 0);
+          const outEA = intMin(r.today_out_ea ?? 0, 0);
+          const endEA = intMin(r.today_stock_ea ?? 0, 0);
+
+          const exists = agg.get(key);
+
+          if (!exists) {
+            agg.set(key, {
+              product_name: r.product_name,
+              product_category: r.product_category,
+              food_type: r.food_type,
+
+              start_stock_ea: isFirst ? prevEA : 0,
+              period_in_ea: inEA,
+              period_out_ea: outEA,
+              end_stock_ea: isLast ? endEA : 0,
+
+              expiry_date: r.expiry_date,
+              barcode: r.barcode,
+              note: r.note ?? null,
+              pack_unit: r.pack_unit ?? null,
+            });
+          } else {
+            // 시작재고는 "첫날 prev_stock"만
+            if (isFirst) exists.start_stock_ea = prevEA;
+
+            exists.period_in_ea += inEA;
+            exists.period_out_ea += outEA;
+
+            // 종료재고는 "마지막날 today_stock"
+            if (isLast) exists.end_stock_ea = endEA;
+
+            // 메타 정보는 최신값으로 보정(혹시 변경된 경우 대비)
+            exists.product_category = r.product_category ?? exists.product_category;
+            exists.food_type = r.food_type ?? exists.food_type;
+            exists.note = (r.note ?? exists.note) as any;
+            exists.pack_unit = (r.pack_unit ?? exists.pack_unit) as any;
+          }
+        }
+      }
+
+      const listAgg = Array.from(agg.values());
+
+      // 정렬(제품명 -> 소비기한 -> 바코드)
+      listAgg.sort((a, b) => {
+        const pn = safeStr(a.product_name).localeCompare(safeStr(b.product_name), "ko");
+        if (pn !== 0) return pn;
+        const ex = safeStr(a.expiry_date).localeCompare(safeStr(b.expiry_date));
+        if (ex !== 0) return ex;
+        return safeStr(a.barcode).localeCompare(safeStr(b.barcode));
       });
-      if (error) throw new Error(error.message);
 
-      const list = (data ?? []) as Row[];
-      setRows(list);
+      setRows(listAgg);
 
-      // ✅ 메시지는 “필터 적용된 건수” 기준으로
       const after =
         categoryFilter === "ALL"
-          ? list
-          : list.filter((r) => (r.product_category ?? "") === categoryFilter);
+          ? listAgg
+          : listAgg.filter((r) => (r.product_category ?? "") === categoryFilter);
 
       setMsg(
-        `조회 완료 ✅ ${after.length}건 (${day})` +
+        `조회 완료 ✅ ${after.length}건 (${periodLabel})` +
           (categoryFilter === "ALL" ? "" : ` / 구분: ${categoryFilter}`)
       );
     } catch (e: any) {
@@ -109,7 +266,79 @@ export default function ReportClient() {
     }
   };
 
-  const doPrint = () => window.print();
+  const doPrint = () => {
+    // ✅ 빈 페이지 1장 출력 방지: 데이터 없으면 인쇄 차단
+    if (filteredRows.length === 0) {
+      setMsg("인쇄할 데이터가 없습니다. (날짜/필터 확인 후 조회)");
+      return;
+    }
+    window.print();
+  };
+
+  const downloadExcel = () => {
+    if (filteredRows.length === 0) {
+      setMsg("저장할 데이터가 없습니다. (날짜/필터 확인 후 조회)");
+      return;
+    }
+
+    const header = [
+      "기간",
+      "구분필터",
+      "제품명",
+      "구분",
+      "식품유형",
+      "시작재고(EA)",
+      "기간입고합(EA)",
+      "기간출고합(EA)",
+      "종료재고(EA)",
+      "소비기한",
+      "바코드",
+      "비고",
+    ];
+
+    const lines: string[] = [];
+    lines.push(header.map(csvEscape).join(","));
+
+    for (const r of filteredRows) {
+      lines.push(
+        [
+          periodLabel,
+          categoryFilter === "ALL" ? "전체" : categoryFilter,
+          safeStr(r.product_name),
+          safeStr(r.product_category ?? "-"),
+          safeStr(r.food_type ?? "-"),
+          String(intMin(r.start_stock_ea, 0)),
+          String(intMin(r.period_in_ea, 0)),
+          String(intMin(r.period_out_ea, 0)),
+          String(intMin(r.end_stock_ea, 0)),
+          safeStr(r.expiry_date),
+          safeStr(r.barcode),
+          safeStr(r.note ?? ""),
+        ]
+          .map(csvEscape)
+          .join(",")
+      );
+    }
+
+    // ✅ 엑셀 호환: UTF-8 BOM + CSV
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `재고대장_${periodLabel.replace(/\s/g, "")}_${
+      categoryFilter === "ALL" ? "전체" : categoryFilter
+    }.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    setMsg("엑셀(CSV) 저장 완료 ✅");
+  };
+
+  const scrollTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
   return (
     <div className="min-h-screen bg-white text-black p-6 print:bg-white print:text-black">
@@ -127,6 +356,15 @@ export default function ReportClient() {
           table {
             border-collapse: collapse !important;
             font-size: 10px !important;
+          }
+          thead {
+            display: table-header-group !important;
+          }
+          tfoot {
+            display: table-footer-group !important;
+          }
+          tr {
+            page-break-inside: avoid !important;
           }
           th,
           td {
@@ -156,19 +394,19 @@ export default function ReportClient() {
 
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">일일 재고대장</h1>
+          <h1 className="text-2xl font-semibold">재고대장</h1>
 
           {/* ✅ 인쇄물에만 표시 */}
           <div className="print-only" style={{ marginTop: 6 }}>
             인쇄일: {printedAt}
             <br />
-            기준일: {day}
+            기간: {periodLabel}
             <br />
             구분 필터: {categoryFilter === "ALL" ? "전체" : categoryFilter}
           </div>
 
           <p className="text-black/60 mt-2 print:text-black/70">
-            - 전일재고/당일입고/당일출고/당일재고를 LOT(소비기한) 단위로 표시합니다.
+            - 시작재고/기간입고합/기간출고합/종료재고를 LOT(소비기한) 단위로 표시합니다.
           </p>
         </div>
 
@@ -183,21 +421,52 @@ export default function ReportClient() {
       {/* ✅ 조회/필터 영역 */}
       <div className="mt-6 flex flex-wrap items-end gap-3 no-print">
         <div>
-          <label className="text-sm text-black/70">기준일</label>
+          <label className="text-sm text-black/70">조회 방식</label>
+          <select
+            className="mt-1 w-44 rounded-xl bg-white border border-black/15 px-3 py-2 outline-none"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as any)}
+          >
+            <option value="DAY">하루</option>
+            <option value="RANGE">기간</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-sm text-black/70">{mode === "DAY" ? "기준일" : "시작일"}</label>
           <input
             className="mt-1 w-44 rounded-xl bg-white border border-black/15 px-3 py-2 outline-none font-mono"
             type="text"
             inputMode="numeric"
             placeholder="YYYY-MM-DD"
-            value={day}
-            onChange={(e) => setDay(e.target.value.replace(/[^0-9-]/g, ""))}
+            value={startDay}
+            onChange={(e) => setStartDay(e.target.value.replace(/[^0-9-]/g, ""))}
             onBlur={() => {
-              if (day && !isYYYYMMDD(day)) {
-                setMsg("기준일 형식은 YYYY-MM-DD 입니다. 예) 2026-02-05");
+              if (startDay && !isYYYYMMDD(startDay)) {
+                setMsg("날짜 형식은 YYYY-MM-DD 입니다. 예) 2026-02-05");
               }
             }}
           />
         </div>
+
+        {mode === "RANGE" && (
+          <div>
+            <label className="text-sm text-black/70">종료일</label>
+            <input
+              className="mt-1 w-44 rounded-xl bg-white border border-black/15 px-3 py-2 outline-none font-mono"
+              type="text"
+              inputMode="numeric"
+              placeholder="YYYY-MM-DD"
+              value={endDay}
+              onChange={(e) => setEndDay(e.target.value.replace(/[^0-9-]/g, ""))}
+              onBlur={() => {
+                if (endDay && !isYYYYMMDD(endDay)) {
+                  setMsg("날짜 형식은 YYYY-MM-DD 입니다. 예) 2026-02-05");
+                }
+              }}
+            />
+          </div>
+        )}
 
         <div>
           <label className="text-sm text-black/70">구분 필터</label>
@@ -224,9 +493,17 @@ export default function ReportClient() {
         <button
           className="rounded-xl border border-black/15 px-4 py-2 disabled:opacity-60 hover:bg-black/5"
           disabled={loading || filteredRows.length === 0}
+          onClick={downloadExcel}
+        >
+          엑셀 저장
+        </button>
+
+        <button
+          className="rounded-xl border border-black/15 px-4 py-2 disabled:opacity-60 hover:bg-black/5"
+          disabled={loading || filteredRows.length === 0}
           onClick={doPrint}
         >
-          인쇄
+          PDF/인쇄
         </button>
 
         {msg && <div className="text-sm text-black/70">{msg}</div>}
@@ -241,10 +518,10 @@ export default function ReportClient() {
               <th className="text-left p-3 print:p-2">구분</th>
               <th className="text-left p-3 print:p-2">식품유형</th>
 
-              <th className="text-right p-3 print:p-2">전일재고</th>
-              <th className="text-right p-3 print:p-2">당일입고</th>
-              <th className="text-right p-3 print:p-2">당일출고</th>
-              <th className="text-right p-3 print:p-2">당일재고</th>
+              <th className="text-right p-3 print:p-2">시작재고</th>
+              <th className="text-right p-3 print:p-2">기간입고합</th>
+              <th className="text-right p-3 print:p-2">기간출고합</th>
+              <th className="text-right p-3 print:p-2">종료재고</th>
 
               <th className="text-left p-3 print:p-2">소비기한</th>
               <th className="text-left p-3 print:p-2">바코드</th>
@@ -261,16 +538,16 @@ export default function ReportClient() {
               </tr>
             ) : (
               filteredRows.map((r, idx) => {
-                const prevEA = intMin(r.prev_stock_ea ?? 0, 0);
-                const inEA = intMin(r.today_in_ea ?? 0, 0);
-                const outEA = intMin(r.today_out_ea ?? 0, 0);
-                const todayEA = intMin(r.today_stock_ea ?? 0, 0);
+                const sEA = intMin(r.start_stock_ea ?? 0, 0);
+                const inEA = intMin(r.period_in_ea ?? 0, 0);
+                const outEA = intMin(r.period_out_ea ?? 0, 0);
+                const eEA = intMin(r.end_stock_ea ?? 0, 0);
 
                 const unit = intMin(r.pack_unit ?? 0, 0);
-                const prev = toBoxAndEa(prevEA, unit);
+                const s = toBoxAndEa(sEA, unit);
                 const tin = toBoxAndEa(inEA, unit);
                 const tout = toBoxAndEa(outEA, unit);
-                const tstock = toBoxAndEa(todayEA, unit);
+                const e = toBoxAndEa(eEA, unit);
 
                 return (
                   <tr
@@ -282,9 +559,9 @@ export default function ReportClient() {
                     <td className="p-3 print:p-2">{safeStr(r.food_type ?? "-")}</td>
 
                     <td className="p-3 print:p-2 text-right leading-tight">
-                      <div>{prev.boxText}</div>
+                      <div>{s.boxText}</div>
                       <div className="text-xs text-black/60 print:text-black/60 print-sub">
-                        {prev.eaText}
+                        {s.eaText}
                       </div>
                     </td>
 
@@ -303,9 +580,9 @@ export default function ReportClient() {
                     </td>
 
                     <td className="p-3 print:p-2 text-right leading-tight">
-                      <div>{tstock.boxText}</div>
+                      <div>{e.boxText}</div>
                       <div className="text-xs text-black/60 print:text-black/60 print-sub">
-                        {tstock.eaText}
+                        {e.eaText}
                       </div>
                     </td>
 
@@ -321,8 +598,21 @@ export default function ReportClient() {
       </div>
 
       <div className="mt-2 text-xs text-black/50 no-print">
-        ※ 선택한 “구분 필터”가 화면/인쇄에 동일하게 적용됩니다.
+        ※ 선택한 “구분 필터”가 화면/엑셀/인쇄에 동일하게 적용됩니다. / 기간 조회는 내부적으로 날짜별
+        재고리포트를 집계합니다.
       </div>
+
+      {/* ✅ TOP 버튼 (눈에 잘 보이게) */}
+      <button
+        type="button"
+        onClick={scrollTop}
+        className="no-print fixed bottom-6 right-6 z-50 rounded-2xl bg-black text-white px-5 py-4 shadow-lg hover:bg-black/85 active:scale-[0.99]"
+        aria-label="TOP"
+        title="TOP"
+      >
+        <div className="text-sm font-semibold leading-none">TOP</div>
+        <div className="text-[11px] opacity-80 mt-1 leading-none">맨 위로</div>
+      </button>
     </div>
   );
 }
