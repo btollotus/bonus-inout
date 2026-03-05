@@ -73,9 +73,16 @@ function isEditableInput(
   if (tag !== "input") return false;
   const input = el as HTMLInputElement;
   const t = (input.type || "text").toLowerCase();
-  return ["text", "search", "tel", "url", "email", "number", "password"].includes(
-    t
-  );
+  return [
+    "text",
+    "search",
+    "tel",
+    "url",
+    "email",
+    "number",
+    "password",
+    "date",
+  ].includes(t);
 }
 
 export default function ScanClient() {
@@ -104,6 +111,10 @@ export default function ScanClient() {
 
   const focusBarcode = () =>
     requestAnimationFrame(() => barcodeRef.current?.focus());
+
+  useEffect(() => {
+    document.title = "BONUSMATE ERP 스캔";
+  }, []);
 
   useEffect(() => {
     focusBarcode();
@@ -753,19 +764,10 @@ export default function ScanClient() {
                 "mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
                 expiryDisabled ? "border-slate-200 text-slate-400" : "border-slate-200 focus:border-blue-300",
               ].join(" ")}
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder={expiryDisabled ? "자동 선택됨" : "YYYY-MM-DD"}
-              maxLength={10}
+              type="date"
               disabled={expiryDisabled}
               value={expiry}
-              onChange={(e) => {
-                let v = e.target.value.replace(/[^0-9]/g, "");
-                if (v.length > 4) v = v.slice(0, 4) + "-" + v.slice(4);
-                if (v.length > 7) v = v.slice(0, 7) + "-" + v.slice(7, 9);
-                setExpiry(v);
-              }}
+              onChange={(e) => setExpiry(e.target.value)}
             />
           </div>
         </div>
@@ -863,16 +865,13 @@ export default function ScanClient() {
                             data-cart-id={r.id}
                             data-cart-field="expiry"
                             className={[
-                              "w-32 rounded-lg border bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
+                              "w-40 rounded-lg border bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
                               expiryOk ? "border-slate-200 focus:border-blue-300" : "border-red-300 focus:border-red-400",
                             ].join(" ")}
+                            type="date"
                             value={r.expiry}
-                            placeholder="YYYY-MM-DD"
-                            maxLength={10}
                             onChange={(e) => {
-                              let v = e.target.value.replace(/[^0-9]/g, "");
-                              if (v.length > 4) v = v.slice(0, 4) + "-" + v.slice(4);
-                              if (v.length > 7) v = v.slice(0, 7) + "-" + v.slice(7, 9);
+                              const v = e.target.value;
                               setCart((prev) => prev.map((x) => (x.id === r.id ? { ...x, expiry: v } : x)));
                             }}
                           />
