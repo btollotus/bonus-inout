@@ -107,18 +107,13 @@ export default function ScanClient() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const barcodeRef = useRef<HTMLInputElement | null>(null);
+  const qtyRef = useRef<HTMLInputElement | null>(null);
   const lotsSectionRef = useRef<HTMLDivElement | null>(null);
-
-  // ✅ 실수로 2회 스캔(연속 입력) 방지용
-  const addLockRef = useRef(false);
-  const lastAddRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
 
   const focusBarcode = () =>
     requestAnimationFrame(() => barcodeRef.current?.focus());
-
-  useEffect(() => {
-    document.title = "BONUSMATE ERP 스캔";
-  }, []);
+  const focusQty = () =>
+    requestAnimationFrame(() => qtyRef.current?.focus());
 
   useEffect(() => {
     focusBarcode();
@@ -246,19 +241,6 @@ export default function ScanClient() {
     setMsg(null);
 
     const code = normalizeBarcode(overrideRawBarcode ?? barcode);
-
-    // ✅ 실수로 2회 스캔(연속 입력) 방지
-    const now = Date.now();
-    if (addLockRef.current) {
-      return;
-    }
-    if (code && lastAddRef.current.code === code && now - lastAddRef.current.at < 900) {
-      setMsg(`중복 스캔 무시: ${code}`);
-      focusBarcode();
-      return;
-    }
-
-    addLockRef.current = true;
     try {
       if (!code) throw new Error("바코드를 입력하세요.");
 
@@ -311,19 +293,19 @@ export default function ScanClient() {
 
       setVariantInfo(vInfo);
 
-      setBarcode("");
+      // ✅ OUT/GIFT만 바코드 입력창 비움 (IN/DISCARD는 입력 계속해야 해서 유지)
+      if (type === "OUT" || type === "GIFT") {
+        setBarcode("");
+      }
+
       setQtyEa(1);
       setNote("");
-
-      lastAddRef.current = { code, at: now };
 
       setMsg(`목록에 추가 ✅ (${type}) ${code} / 수량 ${fmtInt(qty)}EA`);
       focusBarcode();
     } catch (e: any) {
       setMsg(e?.message ?? "목록 추가 중 오류");
       focusBarcode();
-    } finally {
-      addLockRef.current = false;
     }
   };
 
@@ -492,6 +474,9 @@ export default function ScanClient() {
     snapshotSelEnd: null,
   });
 
+  // ✅ 실수로 같은 바코드 2회 스캔 방지
+  const lastScanRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
+
   useEffect(() => {
     const RESET_GAP_MS = 120;
     const MAX_TOTAL_MS = 900;
@@ -539,8 +524,10 @@ export default function ScanClient() {
         setCart((prev) =>
           prev.map((x) => {
             if (x.id !== cartId) return x;
-            if (cartField === "note") return { ...x, note: st.snapshotValue ?? "" };
-            if (cartField === "expiry") return { ...x, expiry: st.snapshotValue ?? "" };
+            if (cartField === "note")
+              return { ...x, note: st.snapshotValue ?? "" };
+            if (cartField === "expiry")
+              return { ...x, expiry: st.snapshotValue ?? "" };
             if (cartField === "qty_ea") {
               const n = parseInt(st.snapshotValue || "1", 10);
               return { ...x, qty_ea: intMin(n, 1) };
@@ -576,7 +563,12 @@ export default function ScanClient() {
       if (e.isComposing) return;
 
       const key = e.key;
-      if (key === "Shift" || key === "Alt" || key === "Control" || key === "Meta")
+      if (
+        key === "Shift" ||
+        key === "Alt" ||
+        key === "Control" ||
+        key === "Meta"
+      )
         return;
 
       const now = Date.now();
@@ -606,25 +598,43 @@ export default function ScanClient() {
       }
 
       if (key === "Enter") {
-        if (isBarcodeFocused) {
-          reset();
-          return;
-        }
-
         const code = normalizeBarcode(st.buf);
         const isScan = code && looksLikeScanner(st, now);
 
         if (isScan) {
+          const last = lastScanRef.current;
+          if (last.code === code && now - last.at <= 450) {
+            e.preventDefault();
+            e.stopPropagation();
+            reset();
+            return;
+          }
+          lastScanRef.current = { code, at: now };
+
           e.preventDefault();
           e.stopPropagation();
 
           restoreDomIfNeeded();
           restoreStateIfNeeded();
 
+          // ✅ IN(및 소비기한 필요한 타입)은 “바코드만 채우고” 수량으로 이동
+          const needExpiry = type === "IN" || type === "DISCARD";
           setBarcode(code);
-          void addToCart(code);
 
+          if (needExpiry) {
+            focusQty();
+            reset();
+            return;
+          }
+
+          // ✅ OUT/GIFT는 즉시 목록 추가
+          void addToCart(code);
           focusBarcode();
+          reset();
+          return;
+        }
+
+        if (isBarcodeFocused) {
           reset();
           return;
         }
@@ -683,27 +693,28 @@ export default function ScanClient() {
               ref={barcodeRef}
               className={input}
               value={barcode}
-              lang="en"
-              inputMode="text"
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
               onFocus={() => {
-                // ✅ 바코드 입력창 포커스 시 영어 입력 유도 (IME 강제전환은 브라우저 제한)
-                focusBarcode();
+                // ✅ 바코드 입력칸은 영문/대문자 입력 유도 (OS IME 강제 전환은 불가)
+                requestAnimationFrame(() => barcodeRef.current?.select());
               }}
-              onChange={(e) => setBarcode(normalizeBarcode(e.target.value))}
+              onChange={(e) => setBarcode(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-
-                  // ✅ Enter 시 즉시 값 고정 후 입력칸 비우기(2회 스캔 합쳐짐 방지)
-                  const raw = (e.currentTarget.value ?? "").toString();
-                  setBarcode("");
-                  void addToCart(raw);
+                  const needExpiry = type === "IN" || type === "DISCARD";
+                  if (needExpiry) {
+                    focusQty();
+                    return;
+                  }
+                  addToCart();
                 }
               }}
               placeholder="스캐너로 찍거나 직접 입력 (Enter=목록추가)"
+              lang="en"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              inputMode="text"
             />
 
             {normalizeBarcode(barcode) && (
@@ -795,6 +806,7 @@ export default function ScanClient() {
           <div>
             <label className="text-sm text-slate-600">수량(EA)</label>
             <input
+              ref={qtyRef}
               data-top-field="qtyEa"
               className={input}
               type="number"
@@ -848,7 +860,11 @@ export default function ScanClient() {
         {msg && <div className={msgBox}>{msg}</div>}
 
         <div className="flex flex-wrap gap-2">
-          <button className={btnOnLg} disabled={loading} onClick={() => addToCart()}>
+          <button
+            className={btnOnLg}
+            disabled={loading}
+            onClick={() => addToCart()}
+          >
             목록에 추가
           </button>
 
@@ -868,9 +884,7 @@ export default function ScanClient() {
 
       {/* ✅ 스캔 목록 */}
       <div className="mt-10">
-        <h2 className="text-lg font-semibold">
-          스캔 목록 (최종 확인 후 일괄 저장)
-        </h2>
+        <h2 className="text-lg font-semibold">스캔 목록 (최종 확인 후 일괄 저장)</h2>
 
         <div className={tableWrap}>
           <table className="w-full text-sm">
@@ -949,9 +963,7 @@ export default function ScanClient() {
                             onChange={(e) => {
                               const v = e.target.value;
                               setCart((prev) =>
-                                prev.map((x) =>
-                                  x.id === r.id ? { ...x, expiry: v } : x
-                                )
+                                prev.map((x) => (x.id === r.id ? { ...x, expiry: v } : x))
                               );
                             }}
                           />
