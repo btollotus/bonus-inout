@@ -572,12 +572,19 @@ export default function SpecClient() {
   }, [isChannelCustomer, selectedOrders]);
 
   return (
-    <div className={`min-h-screen ${pageBg} p-6`}>
+    <div className={`print-shell min-h-screen ${pageBg} p-6`}>
       <style jsx global>{`
         .print-only {
           display: none;
         }
         @media print {
+          /* ✅ (수정) 인쇄 시 바깥 래퍼(min-h-screen/padding) 때문에 빈 2페이지가 생기는 문제 방지 */
+          .print-shell {
+            min-height: 0 !important;
+            height: auto !important;
+            padding: 0 !important;
+          }
+
           body * {
             visibility: hidden !important;
           }
