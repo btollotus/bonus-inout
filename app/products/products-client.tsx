@@ -476,9 +476,10 @@ export default function ProductsClient() {
     setMsg(null);
 
     // ✅ 1) variants 먼저 로드 (관계 인식 문제 회피)
+    // ✅ (중요) product_variants.barcode도 같이 로드해서, product_barcodes가 없어도 화면에 바코드가 보이게 함
     const { data: vData, error: vErr } = await supabase
       .from("product_variants")
-      .select("id, variant_name, pack_unit, pack_ea, weight_g, unit_type, product_id, products(name, category, food_type)")
+      .select("id, variant_name, barcode, pack_unit, pack_ea, weight_g, unit_type, product_id, products(name, category, food_type)")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -527,19 +528,24 @@ export default function ProductsClient() {
       }
     }
 
-    const mapped: VariantRow[] = (vData ?? []).map((r: any) => ({
-      variant_id: r.id,
-      product_id: r.product_id,
-      product_name: r.products?.name ?? "",
-      product_category: r.products?.category ?? null,
-      product_food_type: r.products?.food_type ?? null,
-      variant_name: r.variant_name,
-      barcode: bcMap.get(r.id) ?? "",
-      pack_unit: typeof r.pack_unit === "number" ? r.pack_unit : 1,
-      pack_ea: typeof r.pack_ea === "number" ? r.pack_ea : r.pack_ea ?? null,
-      weight_g: typeof r.weight_g === "number" ? r.weight_g : r.weight_g ?? null,
-      unit_type: r.unit_type ?? null,
-    }));
+    const mapped: VariantRow[] = (vData ?? []).map((r: any) => {
+      const legacyBarcode = r?.barcode ? String(r.barcode) : "";
+      const pickedBarcode = bcMap.get(r.id) ?? legacyBarcode ?? "";
+
+      return {
+        variant_id: r.id,
+        product_id: r.product_id,
+        product_name: r.products?.name ?? "",
+        product_category: r.products?.category ?? null,
+        product_food_type: r.products?.food_type ?? null,
+        variant_name: r.variant_name,
+        barcode: pickedBarcode,
+        pack_unit: typeof r.pack_unit === "number" ? r.pack_unit : 1,
+        pack_ea: typeof r.pack_ea === "number" ? r.pack_ea : r.pack_ea ?? null,
+        weight_g: typeof r.weight_g === "number" ? r.weight_g : r.weight_g ?? null,
+        unit_type: r.unit_type ?? null,
+      };
+    });
 
     setRows(mapped);
   };
