@@ -476,7 +476,6 @@ export default function ProductsClient() {
     setMsg(null);
 
     // ✅ 1) variants 먼저 로드 (관계 인식 문제 회피)
-    // ✅ (중요) product_variants.barcode도 같이 로드해서, product_barcodes가 없어도 화면에 바코드가 보이게 함
     const { data: vData, error: vErr } = await supabase
       .from("product_variants")
       .select("id, variant_name, barcode, pack_unit, pack_ea, weight_g, unit_type, product_id, products(name, category, food_type)")
@@ -788,6 +787,54 @@ export default function ProductsClient() {
     return sorted;
   })();
 
+  const exportToExcelCsv = () => {
+    const header = ["제품명", "구분", "식품유형", "무게(g)", "수량(ea)", "바코드"];
+    const lines: string[] = [];
+
+    const esc = (v: any) => {
+      const s = v === null || v === undefined ? "" : String(v);
+      const needQuote = /[",\n\r]/.test(s);
+      const out = s.replace(/"/g, '""');
+      return needQuote ? `"${out}"` : out;
+    };
+
+    lines.push(header.map(esc).join(","));
+
+    for (const r of filtered) {
+      lines.push(
+        [
+          esc(r.product_name ?? ""),
+          esc(r.product_category ?? ""),
+          esc(r.product_food_type ?? ""),
+          esc(r.weight_g ?? ""),
+          esc(r.pack_ea ?? ""),
+          esc(r.barcode ?? ""),
+        ].join(",")
+      );
+    }
+
+    const bom = "\uFEFF"; // ✅ 엑셀 한글 깨짐 방지
+    const csv = bom + lines.join("\n");
+
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    const filename = `products_list_${yyyy}${mm}${dd}.csv`;
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 p-6">
       <div className="flex items-center justify-between gap-3">
@@ -818,14 +865,15 @@ export default function ProductsClient() {
 
           <div>
             <label className="text-sm text-slate-600 block mb-2">구분</label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {CATEGORIES.map((c) => {
                 const checked = category === c;
                 return (
                   <label
                     key={c}
                     className={[
-                      "flex items-center gap-2 cursor-pointer select-none rounded-xl px-3 py-2 border",
+                      "flex items-center justify-center gap-2 cursor-pointer select-none rounded-xl border whitespace-nowrap",
+                      "px-3 py-1.5 min-w-[72px]",
                       checked ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100",
                     ].join(" ")}
                   >
@@ -837,8 +885,8 @@ export default function ProductsClient() {
                       onChange={(e) => setCategory(e.target.value as any)}
                       className="accent-blue-600"
                     />
-                    <span className="text-sm font-medium">{c}</span>
-                    <span className={["ml-1 text-xs rounded-md px-2 py-0.5", checked ? "bg-white/20" : "hidden"].join(" ")}>선택됨</span>
+                    <span className="text-sm font-medium whitespace-nowrap">{c}</span>
+                    <span className={["ml-1 text-xs rounded-md px-2 py-0.5 whitespace-nowrap", checked ? "bg-white/20" : "hidden"].join(" ")}>선택됨</span>
                   </label>
                 );
               })}
@@ -1081,13 +1129,25 @@ export default function ProductsClient() {
             })}
           </div>
 
-          <input
-            className="w-full max-w-sm rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="검색(제품명/식품유형/바코드)"
-            onFocus={() => setIsScanMode(false)}
-          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 active:bg-slate-200 disabled:opacity-60"
+              disabled={filtered.length === 0}
+              onClick={exportToExcelCsv}
+              title="현재 필터/검색된 목록을 CSV(엑셀)로 저장"
+            >
+              엑셀 저장
+            </button>
+
+            <input
+              className="w-full max-w-sm rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="검색(제품명/식품유형/바코드)"
+              onFocus={() => setIsScanMode(false)}
+            />
+          </div>
         </div>
 
         <div className="mt-3 rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
