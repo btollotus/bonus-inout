@@ -788,12 +788,12 @@ export default function TradeClient() {
       .select("product_name,food_type,weight_g,barcode")
       .order("product_name", { ascending: true })
       .limit(10000);
-  
+
     if (error) {
       console.log("v_tradeclient_products error:", error);
       return;
     }
-  
+
     if (data) setMasterProducts(data as MasterProductRow[]);
   }
 
@@ -1058,10 +1058,11 @@ export default function TradeClient() {
     setMsg(null);
     if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
     if (lines.length === 0) return setMsg("품목을 1개 이상 입력하세요.");
-    const isMall = isMallPartner(selectedPartner);
     const cleanLines = lines.map((l) => {
       const name = l.name.trim(), qty = toInt(l.qty), unit = toIntSigned(l.unit), weight_g = toNum(l.weight_g), food_type = (l.food_type || "").trim();
-      const unit_type = isMall ? "BOX" : "EA", pack_ea = isMall ? inferPackEaFromName(name) : 1, actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
+      const pack_ea = inferPackEaFromName(name);
+      const unit_type = pack_ea > 1 ? "BOX" : "EA";
+      const actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
       const r = calcLineAmounts(qty, unit, l.total_incl_vat);
       return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total };
     }).filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) !== 0);
@@ -1199,10 +1200,11 @@ export default function TradeClient() {
   async function saveEdit() {
     if (!editRow) return; setMsg(null);
     if (editRow.kind === "ORDER") {
-      const isMall = selectedPartner ? isMallPartner(selectedPartner) : false;
       const cleanLines = eLines.map((l) => {
         const name = (l.name || "").trim(), qty = toInt(l.qty), unit = toIntSigned(l.unit), weight_g = toNum(l.weight_g), food_type = (l.food_type || "").trim();
-        const unit_type = isMall ? "BOX" : "EA", pack_ea = isMall ? inferPackEaFromName(name) : 1, actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
+        const pack_ea = inferPackEaFromName(name);
+        const unit_type = pack_ea > 1 ? "BOX" : "EA";
+        const actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
         const r = calcLineAmounts(qty, unit, l.total_incl_vat);
         return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total };
       }).filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) !== 0);
