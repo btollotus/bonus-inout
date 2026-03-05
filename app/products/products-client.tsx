@@ -43,7 +43,7 @@ type VariantRow = {
   unit_type: string | null;
 };
 
-const CATEGORIES = ["기성", "업체", "전사지"] as const;
+const CATEGORIES = ["기성", "업체", "전사지", "기타"] as const;
 
 // ✅ 두벌식(한글 IME)로 들어온 문자/자모를 QWERTY 영문으로 복원
 function hangulToQwerty(input: string) {
@@ -281,6 +281,18 @@ export default function ProductsClient() {
 
   // ✅ 구분(기성/업체/전사지) 필터/정렬
   const [listCategory, setListCategory] = useState<"" | (typeof CATEGORIES)[number]>("");
+
+  // ✅ TOP 버튼 노출
+  const [showTop, setShowTop] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => {
+      setShowTop(window.scrollY > 400);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll as any);
+  }, []);
 
   const loadVariantSuggest = async (keyword: string) => {
     const k = keyword.trim();
@@ -1402,6 +1414,18 @@ export default function ProductsClient() {
 
         <p className="text-xs text-slate-500 mt-3">※ 바코드는 유니크입니다. 목록에서 바코드가 있어도 “수정”으로 변경할 수 있습니다.</p>
       </div>
+
+      {showTop ? (
+        <button
+          type="button"
+          className="fixed right-6 bottom-6 z-50 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 shadow hover:bg-slate-100 active:bg-slate-200"
+          onClick={() => {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
+          TOP
+        </button>
+      ) : null}
     </div>
   );
 }
