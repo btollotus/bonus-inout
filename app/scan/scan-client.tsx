@@ -85,6 +85,21 @@ function isEditableInput(
   ].includes(t);
 }
 
+function barcodeCandidates(code: string) {
+  const c = normalizeBarcode(code);
+  const list: string[] = [];
+  if (c) list.push(c);
+
+  // ✅ 스캐너가 숫자만 보내는 경우(예: 202602090007) → BO 접두어 폴백
+  // BO + 12자리 숫자 형태를 많이 쓰므로, 숫자만 12자리면 "BO"를 붙여서도 조회
+  if (/^\d{12}$/.test(c) && !c.startsWith("BO")) {
+    list.push(`BO${c}`);
+  }
+
+  // 중복 제거
+  return Array.from(new Set(list));
+}
+
 export default function ScanClient() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -112,8 +127,20 @@ export default function ScanClient() {
 
   const focusBarcode = () =>
     requestAnimationFrame(() => barcodeRef.current?.focus());
+
   const focusQty = () =>
-    requestAnimationFrame(() => qtyRef.current?.focus());
+    requestAnimationFrame(() => {
+      qtyRef.current?.focus();
+      try {
+        qtyRef.current?.select();
+      } catch {
+        // ignore
+      }
+    });
+
+  useEffect(() => {
+    document.title = "BONUSMATE ERP 스캔";
+  }, []);
 
   useEffect(() => {
     focusBarcode();
@@ -157,25 +184,44 @@ export default function ScanClient() {
     };
   };
 
+  // ✅ 바코드 후보(원본/BO접두어)로 등록여부를 찾아 "정답 바코드"를 확정
+  const resolveVariantInfo = async (
+    raw: string
+  ): Promise<{ code: string; vInfo: VariantInfo } | null> => {
+    const cands = barcodeCandidates(raw);
+    for (const c of cands) {
+      const vInfo = await fetchVariantInfo(c);
+      if (vInfo) return { code: c, vInfo };
+    }
+    return null;
+  };
+
   // 재고 조회(LOT 표시) + LOT 없으면 variants로 fallback
   const searchLotsByCode = async (raw: string) => {
     setMsg(null);
 
-    const code = normalizeBarcode(raw);
-    if (!code) {
+    const cands = barcodeCandidates(raw);
+    if (cands.length === 0) {
       setLots([]);
       setVariantInfo(null);
       return;
     }
 
-    try {
-      const vInfo = await fetchVariantInfo(code);
-      setVariantInfo(vInfo);
+    let resolved: { code: string; vInfo: VariantInfo } | null = null;
 
-      if (!vInfo) {
+    try {
+      resolved = await resolveVariantInfo(raw);
+      if (!resolved) {
         setLots([]);
-        setMsg(`바코드 ${code} 는 등록되지 않았습니다.`);
+        setVariantInfo(null);
+        setMsg(`바코드 ${cands[0]} 는 등록되지 않았습니다.`);
         return;
+      }
+
+      // ✅ 숫자만 들어온 경우라도, 등록된 "정답 바코드(BO...)"로 입력값을 교정
+      setVariantInfo(resolved.vInfo);
+      if (normalizeBarcode(barcode) !== resolved.code) {
+        setBarcode(resolved.code);
       }
     } catch (e: any) {
       setLots([]);
@@ -187,7 +233,7 @@ export default function ScanClient() {
     const { data, error } = await supabase
       .from("v_stock_by_lot")
       .select("*")
-      .eq("barcode", code)
+      .eq("barcode", resolved.code)
       .gt("stock_qty", 0)
       .order("expiry_date", { ascending: true });
 
@@ -201,9 +247,9 @@ export default function ScanClient() {
     setLots(rows);
 
     if (rows.length === 0) {
-      setMsg(`등록됨 ✅ (입고/소비기한 LOT 없음) : ${code}`);
+      setMsg(`등록됨 ✅ (입고/소비기한 LOT 없음) : ${resolved.code}`);
     } else {
-      setMsg(`조회 완료 ✅ ${rows.length}건 (${code})`);
+      setMsg(`조회 완료 ✅ ${rows.length}건 (${resolved.code})`);
     }
 
     scrollToLots();
@@ -240,14 +286,20 @@ export default function ScanClient() {
   const addToCart = async (overrideRawBarcode?: string) => {
     setMsg(null);
 
-    const code = normalizeBarcode(overrideRawBarcode ?? barcode);
+    const raw = overrideRawBarcode ?? barcode;
+    const cands = barcodeCandidates(raw);
+    const inputCode = cands[0] ?? "";
     try {
-      if (!code) throw new Error("바코드를 입력하세요.");
+      if (!inputCode) throw new Error("바코드를 입력하세요.");
 
       const qty = intMin(qtyEa, 1);
-      const vInfo = await fetchVariantInfo(code);
-      if (!vInfo)
+
+      const resolved = await resolveVariantInfo(raw);
+      if (!resolved)
         throw new Error("등록되지 않은 바코드입니다. (품목관리에서 먼저 등록)");
+
+      const code = resolved.code;
+      const vInfo = resolved.vInfo;
 
       const needExpiry = type === "IN" || type === "DISCARD";
       const exp = needExpiry ? expiry : "";
@@ -293,11 +345,7 @@ export default function ScanClient() {
 
       setVariantInfo(vInfo);
 
-      // ✅ OUT/GIFT만 바코드 입력창 비움 (IN/DISCARD는 입력 계속해야 해서 유지)
-      if (type === "OUT" || type === "GIFT") {
-        setBarcode("");
-      }
-
+      setBarcode("");
       setQtyEa(1);
       setNote("");
 
@@ -474,9 +522,6 @@ export default function ScanClient() {
     snapshotSelEnd: null,
   });
 
-  // ✅ 실수로 같은 바코드 2회 스캔 방지
-  const lastScanRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
-
   useEffect(() => {
     const RESET_GAP_MS = 120;
     const MAX_TOTAL_MS = 900;
@@ -563,12 +608,7 @@ export default function ScanClient() {
       if (e.isComposing) return;
 
       const key = e.key;
-      if (
-        key === "Shift" ||
-        key === "Alt" ||
-        key === "Control" ||
-        key === "Meta"
-      )
+      if (key === "Shift" || key === "Alt" || key === "Control" || key === "Meta")
         return;
 
       const now = Date.now();
@@ -598,43 +638,38 @@ export default function ScanClient() {
       }
 
       if (key === "Enter") {
-        const code = normalizeBarcode(st.buf);
+        if (isBarcodeFocused) {
+          reset();
+          return;
+        }
+
+        const rawCode = st.buf;
+        const code = normalizeBarcode(rawCode);
         const isScan = code && looksLikeScanner(st, now);
 
         if (isScan) {
-          const last = lastScanRef.current;
-          if (last.code === code && now - last.at <= 450) {
-            e.preventDefault();
-            e.stopPropagation();
-            reset();
-            return;
-          }
-          lastScanRef.current = { code, at: now };
-
           e.preventDefault();
           e.stopPropagation();
 
           restoreDomIfNeeded();
           restoreStateIfNeeded();
 
-          // ✅ IN(및 소비기한 필요한 타입)은 “바코드만 채우고” 수량으로 이동
-          const needExpiry = type === "IN" || type === "DISCARD";
-          setBarcode(code);
+          // ✅ 입고(IN)/폐기(DISCARD)는 "바코드만 채우고" → 커서를 수량으로 이동
+          // ✅ 출고/증정은 바로 목록에 추가(기존 동작 유지)
+          const cands = barcodeCandidates(code);
+          const first = cands[0] ?? code;
 
-          if (needExpiry) {
+          if (type === "IN" || type === "DISCARD") {
+            setBarcode(first);
             focusQty();
             reset();
             return;
           }
 
-          // ✅ OUT/GIFT는 즉시 목록 추가
-          void addToCart(code);
-          focusBarcode();
-          reset();
-          return;
-        }
+          setBarcode(first);
+          void addToCart(first);
 
-        if (isBarcodeFocused) {
+          focusBarcode();
           reset();
           return;
         }
@@ -682,7 +717,8 @@ export default function ScanClient() {
         - 모든 유형(IN/OUT/GIFT/DISCARD): 수량은 “EA(낱개)” 기준으로 입력
         <br />
         - 입고/폐기: 소비기한 입력 필요 / 출고/증정: FEFO로 소비기한 자동 선택
-        <br />- ✅ 스캐너 입력은 어떤 칸에 커서가 있어도 바코드로 처리됩니다. (비고 포함)
+        <br />- ✅ 스캐너 입력은 어떤 칸에 커서가 있어도 바코드로 처리됩니다.
+        (비고 포함)
       </p>
 
       <div className="mt-6 grid max-w-3xl gap-3">
@@ -693,28 +729,14 @@ export default function ScanClient() {
               ref={barcodeRef}
               className={input}
               value={barcode}
-              onFocus={() => {
-                // ✅ 바코드 입력칸은 영문/대문자 입력 유도 (OS IME 강제 전환은 불가)
-                requestAnimationFrame(() => barcodeRef.current?.select());
-              }}
               onChange={(e) => setBarcode(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  const needExpiry = type === "IN" || type === "DISCARD";
-                  if (needExpiry) {
-                    focusQty();
-                    return;
-                  }
                   addToCart();
                 }
               }}
               placeholder="스캐너로 찍거나 직접 입력 (Enter=목록추가)"
-              lang="en"
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
-              inputMode="text"
             />
 
             {normalizeBarcode(barcode) && (
@@ -860,11 +882,7 @@ export default function ScanClient() {
         {msg && <div className={msgBox}>{msg}</div>}
 
         <div className="flex flex-wrap gap-2">
-          <button
-            className={btnOnLg}
-            disabled={loading}
-            onClick={() => addToCart()}
-          >
+          <button className={btnOnLg} disabled={loading} onClick={() => addToCart()}>
             목록에 추가
           </button>
 
@@ -963,7 +981,9 @@ export default function ScanClient() {
                             onChange={(e) => {
                               const v = e.target.value;
                               setCart((prev) =>
-                                prev.map((x) => (x.id === r.id ? { ...x, expiry: v } : x))
+                                prev.map((x) =>
+                                  x.id === r.id ? { ...x, expiry: v } : x
+                                )
                               );
                             }}
                           />
@@ -1005,11 +1025,7 @@ export default function ScanClient() {
         </div>
 
         <div className="mt-3 flex gap-2">
-          <button
-            className={btnOnLg}
-            disabled={loading || cart.length === 0}
-            onClick={commitCart}
-          >
+          <button className={btnOnLg} disabled={loading || cart.length === 0} onClick={commitCart}>
             {loading ? "저장 중..." : "일괄 저장"}
           </button>
 
@@ -1027,9 +1043,7 @@ export default function ScanClient() {
         </div>
 
         <div className="mt-2 text-xs text-slate-500">
-          ※ 수량/재고/저장 계산은 모두{" "}
-          <span className="text-slate-900">EA(낱개)</span> 기준입니다. OUT/GIFT는
-          FEFO로 자동 차감됩니다.
+          ※ 수량/재고/저장 계산은 모두 <span className="text-slate-900">EA(낱개)</span> 기준입니다. OUT/GIFT는 FEFO로 자동 차감됩니다.
         </div>
       </div>
 
@@ -1060,9 +1074,7 @@ export default function ScanClient() {
                     <td className="p-3">{r.product_name}</td>
                     <td className="p-3">{r.product_category ?? "-"}</td>
                     <td className="p-3">{r.expiry_date}</td>
-                    <td className="p-3 text-right">
-                      {fmtInt(intMin(r.stock_qty ?? 0, 0))}
-                    </td>
+                    <td className="p-3 text-right">{fmtInt(intMin(r.stock_qty ?? 0, 0))}</td>
                   </tr>
                 ))
               )}
