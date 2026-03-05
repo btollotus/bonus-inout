@@ -112,7 +112,7 @@ export default function ReportClient() {
   const doPrint = () => window.print();
 
   return (
-    <div className="min-h-screen bg-black text-white p-6 print:bg-white print:text-black">
+    <div className="min-h-screen bg-white text-black p-6 print:bg-white print:text-black">
       <style jsx global>{`
         @media print {
           @page {
@@ -167,14 +167,14 @@ export default function ReportClient() {
             구분 필터: {categoryFilter === "ALL" ? "전체" : categoryFilter}
           </div>
 
-          <p className="text-white/60 mt-2 print:text-black/70">
+          <p className="text-black/60 mt-2 print:text-black/70">
             - 전일재고/당일입고/당일출고/당일재고를 LOT(소비기한) 단위로 표시합니다.
           </p>
         </div>
 
         <a
           href="/"
-          className="no-print inline-flex rounded-xl border border-white/15 px-4 py-2 hover:bg-white/5 print:hidden"
+          className="no-print inline-flex rounded-xl border border-black/15 px-4 py-2 hover:bg-black/5 print:hidden"
         >
           홈
         </a>
@@ -183,9 +183,9 @@ export default function ReportClient() {
       {/* ✅ 조회/필터 영역 */}
       <div className="mt-6 flex flex-wrap items-end gap-3 no-print">
         <div>
-          <label className="text-sm text-white/70">기준일</label>
+          <label className="text-sm text-black/70">기준일</label>
           <input
-            className="mt-1 w-44 rounded-xl bg-black/40 border border-white/10 px-3 py-2 outline-none font-mono"
+            className="mt-1 w-44 rounded-xl bg-white border border-black/15 px-3 py-2 outline-none font-mono"
             type="text"
             inputMode="numeric"
             placeholder="YYYY-MM-DD"
@@ -200,9 +200,9 @@ export default function ReportClient() {
         </div>
 
         <div>
-          <label className="text-sm text-white/70">구분 필터</label>
+          <label className="text-sm text-black/70">구분 필터</label>
           <select
-            className="mt-1 w-44 rounded-xl bg-black/40 border border-white/10 px-3 py-2 outline-none"
+            className="mt-1 w-44 rounded-xl bg-white border border-black/15 px-3 py-2 outline-none"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value as Category)}
           >
@@ -214,7 +214,7 @@ export default function ReportClient() {
         </div>
 
         <button
-          className="rounded-xl bg-white text-black px-4 py-2 font-medium disabled:opacity-60"
+          className="rounded-xl bg-blue-600 text-white px-4 py-2 font-medium disabled:opacity-60 hover:bg-blue-700"
           disabled={loading}
           onClick={fetchReport}
         >
@@ -222,20 +222,20 @@ export default function ReportClient() {
         </button>
 
         <button
-          className="rounded-xl border border-white/15 px-4 py-2 disabled:opacity-60"
+          className="rounded-xl border border-black/15 px-4 py-2 disabled:opacity-60 hover:bg-black/5"
           disabled={loading || filteredRows.length === 0}
           onClick={doPrint}
         >
           인쇄
         </button>
 
-        {msg && <div className="text-sm text-white/70">{msg}</div>}
+        {msg && <div className="text-sm text-black/70">{msg}</div>}
       </div>
 
       {/* ✅ 테이블 (필터 적용된 데이터로 출력/인쇄) */}
-      <div className="mt-6 rounded-2xl border border-white/10 overflow-hidden print-tight print:border-black/20">
+      <div className="mt-6 rounded-2xl border border-black/10 overflow-hidden print-tight print:border-black/20">
         <table className="w-full text-sm">
-          <thead className="bg-white/5 print:bg-black/5">
+          <thead className="bg-black/5 print:bg-black/5">
             <tr>
               <th className="text-left p-3 print:p-2">제품명</th>
               <th className="text-left p-3 print:p-2">구분</th>
@@ -255,7 +255,7 @@ export default function ReportClient() {
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td className="p-3 text-white/60 print:text-black/60" colSpan={10}>
+                <td className="p-3 text-black/60 print:text-black/60" colSpan={10}>
                   데이터가 없습니다. (날짜/필터 확인 후 조회)
                 </td>
               </tr>
@@ -275,7 +275,7 @@ export default function ReportClient() {
                 return (
                   <tr
                     key={`${r.barcode}-${r.expiry_date}-${idx}`}
-                    className="border-t border-white/10 print:border-black/15"
+                    className="border-t border-black/10 print:border-black/15"
                   >
                     <td className="p-3 print:p-2 font-medium">{safeStr(r.product_name)}</td>
                     <td className="p-3 print:p-2">{safeStr(r.product_category ?? "-")}</td>
@@ -283,22 +283,30 @@ export default function ReportClient() {
 
                     <td className="p-3 print:p-2 text-right leading-tight">
                       <div>{prev.boxText}</div>
-                      <div className="text-xs text-white/60 print:text-black/60 print-sub">{prev.eaText}</div>
+                      <div className="text-xs text-black/60 print:text-black/60 print-sub">
+                        {prev.eaText}
+                      </div>
                     </td>
 
                     <td className="p-3 print:p-2 text-right leading-tight">
                       <div>{tin.boxText}</div>
-                      <div className="text-xs text-white/60 print:text-black/60 print-sub">{tin.eaText}</div>
+                      <div className="text-xs text-black/60 print:text-black/60 print-sub">
+                        {tin.eaText}
+                      </div>
                     </td>
 
                     <td className="p-3 print:p-2 text-right leading-tight">
                       <div>{tout.boxText}</div>
-                      <div className="text-xs text-white/60 print:text-black/60 print-sub">{tout.eaText}</div>
+                      <div className="text-xs text-black/60 print:text-black/60 print-sub">
+                        {tout.eaText}
+                      </div>
                     </td>
 
                     <td className="p-3 print:p-2 text-right leading-tight">
                       <div>{tstock.boxText}</div>
-                      <div className="text-xs text-white/60 print:text-black/60 print-sub">{tstock.eaText}</div>
+                      <div className="text-xs text-black/60 print:text-black/60 print-sub">
+                        {tstock.eaText}
+                      </div>
                     </td>
 
                     <td className="p-3 print:p-2">{safeStr(r.expiry_date)}</td>
@@ -312,7 +320,7 @@ export default function ReportClient() {
         </table>
       </div>
 
-      <div className="mt-2 text-xs text-white/40 no-print">
+      <div className="mt-2 text-xs text-black/50 no-print">
         ※ 선택한 “구분 필터”가 화면/인쇄에 동일하게 적용됩니다.
       </div>
     </div>
