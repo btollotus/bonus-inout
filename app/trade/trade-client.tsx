@@ -1293,7 +1293,20 @@ export default function TradeClient() {
   // ─── Datalists (shared) ───
   const Datalists = () => (
     <>
-      <datalist id="food-types-list">{foodTypes.map((ft) => <option key={ft.id} value={ft.name} />)}</datalist>
+      {/* ✅ 식품유형 자동완성 강화: food_types + preset/master의 food_type까지 합쳐서 제안 */}
+      <datalist id="food-types-list">
+        {(() => {
+          const base = (foodTypes ?? []).map((ft) => String(ft.name ?? "").trim()).filter(Boolean);
+          const baseSet = new Set(base);
+          const extra = [
+            ...(presetProducts ?? []).map((p) => String(p.food_type ?? "").trim()).filter(Boolean),
+            ...(masterProducts ?? []).map((p) => String(p.food_type ?? "").trim()).filter(Boolean),
+          ].filter((x) => !baseSet.has(x));
+          const merged = [...base, ...Array.from(new Set(extra)).sort((a, b) => a.localeCompare(b, "ko"))];
+          return merged.map((name) => <option key={`ft_${name}`} value={name} />);
+        })()}
+      </datalist>
+
       {/* ✅ 품목명/식품유형/무게(g) 자동완성 복구: preset + master 모두를 한 datalist에 합쳐서 제공 */}
       <datalist id="preset-products-list">
         {presetProducts.map((p) => <option key={`p_${p.id}`} value={p.product_name} />)}
