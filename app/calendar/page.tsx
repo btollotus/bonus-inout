@@ -173,6 +173,33 @@ export default function CalendarPage() {
   const [bulkPrintSelected, setBulkPrintSelected] = useState<Set<string>>(new Set());
   const [bulkPrinting, setBulkPrinting] = useState(false);
 
+  // ✅ 인쇄용 명세서 데이터
+  type SpecLine = { itemName: string; qty: number; unitPrice: number; supply: number; vat: number; total: number };
+  type BulkSpecPartner = {
+    partnerId: string;
+    partnerName: string;
+    businessNo: string;
+    ceoName: string;
+    address1: string;
+    bizType: string;
+    bizItem: string;
+    lines: SpecLine[];
+    sumSupply: number;
+    sumVat: number;
+    sumTotal: number;
+  };
+  const [bulkSpecData, setBulkSpecData] = useState<BulkSpecPartner[]>([]);
+  const [bulkSpecLoading, setBulkSpecLoading] = useState(false);
+  const [bulkSpecDate, setBulkSpecDate] = useState("");
+
+  const OUR = {
+    name: "주식회사 보누스메이트",
+    business_no: "343-88-03009",
+    ceo: "조대성",
+    address1: "경기도 파주시 광탄면 장지산로 250-90 1층",
+    biz: "제조업 / 업태: 식품제조가공업",
+  };
+
   const range = useMemo(() => {
     const yyyy = curMonthDate.getFullYear();
     const mm = curMonthDate.getMonth();
@@ -359,29 +386,117 @@ export default function CalendarPage() {
     }
   }
 
-  // ✅ 일괄출력 실행: <a target="_blank"> 클릭 방식으로 팝업차단 우회
-  function doBulkPrint() {
+  // ✅ 일괄출력: 선택 거래처 데이터 로드 후 캘린더 페이지에서 직접 window.print()
+  async function doBulkPrint() {
     if (bulkPrintSelected.size === 0) {
       setMsg("출력할 거래처를 1개 이상 선택하세요.");
       return;
     }
 
-    const ids = Array.from(bulkPrintSelected);
+    setBulkPrinting(true);
+    setBulkSpecLoading(true);
+    setBulkSpecDate(selShipDate);
+    setBulkSpecData([]);
 
-    // 팝업차단 우회: 숨겨진 <a> 태그를 생성해서 순차 클릭
-    ids.forEach((partnerId, idx) => {
-      const url = `/tax/spec?partnerId=${encodeURIComponent(partnerId)}&from=${encodeURIComponent(selShipDate)}&to=${encodeURIComponent(selShipDate)}&autoprint=1`;
-      const a = document.createElement("a");
-      a.href = url;
-      a.target = "_blank";
-      a.rel = "noopener,noreferrer";
-      document.body.appendChild(a);
-      // 각 링크를 약간의 딜레이로 순차 클릭 (브라우저가 팝업으로 인식하지 않도록)
-      window.setTimeout(() => {
-        a.click();
-        document.body.removeChild(a);
-      }, idx * 600);
-    });
+    try {
+      const ids = Array.from(bulkPrintSelected);
+
+      // 1) 거래처 정보 조회
+      const { data: partnerData, error: pErr } = await supabase
+        .from("partners")
+        .select("id,name,business_no,ceo_name,address1,biz_type,biz_item")
+        .in("id", ids);
+      if (pErr) throw pErr;
+
+      const partnerMap = new Map<string, any>();
+      for (const p of (partnerData ?? [])) partnerMap.set(String(p.id), p);
+
+      // 2) 주문 조회
+      const { data: orderData, error: oErr } = await supabase
+        .from("orders")
+        .select("id,customer_id,customer_name")
+        .eq("ship_date", selShipDate)
+        .in("customer_id", ids);
+      if (oErr) throw oErr;
+
+      const orderIds = (orderData ?? []).map((o: any) => String(o.id));
+      const orderToPartner = new Map<string, string>();
+      for (const o of (orderData ?? [])) orderToPartner.set(String(o.id), String(o.customer_id));
+
+      // 3) 주문 라인 조회
+      const { data: lineData, error: lErr } = await supabase
+        .from("order_lines")
+        .select("*")
+        .in("order_id", orderIds)
+        .order("order_id", { ascending: true });
+      if (lErr) throw lErr;
+
+      // 4) 거래처별 집계
+      const partnerLines = new Map<string, SpecLine[]>();
+      for (const id of ids) partnerLines.set(id, []);
+
+      for (const row of (lineData ?? []) as any[]) {
+        const pid = orderToPartner.get(String(row.order_id));
+        if (!pid) continue;
+        // spec-client.tsx의 pickString/pickNumber 동일 로직
+        const name = String(row.item_name ?? row.product_name ?? row.variant_name ?? row.name ?? row.title ?? "").trim();
+        if (!name) continue;
+        const qty = Number(row.qty ?? row.quantity ?? row.ea ?? 0);
+        const supply = Number(row.supply_amount ?? row.supply ?? 0);
+        const vat = Number(row.vat_amount ?? row.vat ?? 0);
+        const total = Number(row.total_amount ?? row.total ?? row.line_total ?? 0);
+        let unitPrice = Number(row.unit_price ?? row.price ?? row.unitPrice ?? 0);
+        if (unitPrice === 0 && qty > 0 && supply > 0) unitPrice = Math.round(supply / qty);
+
+        const arr = partnerLines.get(pid) ?? [];
+        // 같은 품목+단가 합산
+        const existing = arr.find(l => l.itemName === name && l.unitPrice === unitPrice);
+        if (existing) {
+          existing.qty += qty;
+          existing.supply += supply;
+          existing.vat += vat;
+          existing.total += total;
+        } else {
+          arr.push({ itemName: name, qty, unitPrice, supply, vat, total });
+        }
+        partnerLines.set(pid, arr);
+      }
+
+      // 5) 최종 데이터 조합
+      const result: BulkSpecPartner[] = ids
+        .filter(id => (partnerLines.get(id) ?? []).length > 0)
+        .map(id => {
+          const p = partnerMap.get(id) ?? {};
+          const lines = partnerLines.get(id) ?? [];
+          const sumSupply = lines.reduce((a, l) => a + l.supply, 0);
+          const sumVat = lines.reduce((a, l) => a + l.vat, 0);
+          const sumTotal = lines.reduce((a, l) => a + l.total, 0);
+          return {
+            partnerId: id,
+            partnerName: String(p.name ?? ""),
+            businessNo: String(p.business_no ?? ""),
+            ceoName: String(p.ceo_name ?? ""),
+            address1: String(p.address1 ?? ""),
+            bizType: String(p.biz_type ?? ""),
+            bizItem: String(p.biz_item ?? ""),
+            lines,
+            sumSupply,
+            sumVat,
+            sumTotal,
+          };
+        });
+
+      setBulkSpecData(result);
+
+      // 데이터 렌더링 후 인쇄
+      await new Promise(r => setTimeout(r, 300));
+      window.print();
+    } catch (e: any) {
+      setMsg(e?.message ?? "일괄출력 오류");
+    } finally {
+      setBulkPrinting(false);
+      setBulkSpecLoading(false);
+    }
   }
 
   const shipSummary = useMemo(() => {
@@ -516,8 +631,100 @@ export default function CalendarPage() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   }, [curMonthDate]);
 
+  const fmtMoney = (n: number) => Number(n ?? 0).toLocaleString("ko-KR");
+
   return (
     <div className={`${pageBg} min-h-screen`}>
+      {/* ✅ 인쇄용 CSS */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #bulk-print-area, #bulk-print-area * { visibility: visible !important; }
+          #bulk-print-area {
+            position: absolute !important;
+            left: 0 !important; top: 0 !important;
+            width: 100% !important;
+          }
+          body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .bulk-print-page { page-break-after: always; }
+          .bulk-print-page:last-child { page-break-after: auto; }
+        }
+        #bulk-print-area { display: none; }
+        @media print { #bulk-print-area { display: block !important; } }
+      `}</style>
+
+      {/* ✅ 인쇄용 숨김 영역 - 거래처별 명세서 */}
+      <div id="bulk-print-area">
+        {bulkSpecData.map((p) => (
+          <div key={p.partnerId} className="bulk-print-page" style={{ padding: "24px", fontFamily: "sans-serif" }}>
+            <div style={{ fontSize: "18px", fontWeight: "bold", marginBottom: "16px" }}>
+              거래명세서 {bulkSpecDate.replaceAll("-", "/")}
+            </div>
+
+            {/* 양측 정보 */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "16px" }}>
+              <div style={{ fontSize: "13px", lineHeight: "1.8" }}>
+                <div style={{ fontWeight: "bold" }}>{p.partnerName}</div>
+                <div>{p.businessNo}</div>
+                <div>대표: {p.ceoName}</div>
+                <div>주소: {p.address1}</div>
+                <div>업종: {p.bizType} / 업태: {p.bizItem}</div>
+              </div>
+              <div style={{ fontSize: "13px", lineHeight: "1.8", textAlign: "right" }}>
+                <div style={{ fontWeight: "bold" }}>{OUR.name}</div>
+                <div>{OUR.business_no}</div>
+                <div>대표: {OUR.ceo}</div>
+                <div>주소: {OUR.address1}</div>
+                <div>{OUR.biz}</div>
+              </div>
+            </div>
+
+            {/* 품목 테이블 */}
+            <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", overflow: "hidden", marginBottom: "16px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc" }}>
+                    {["품목", "수량", "단가", "공급가", "부가세", "합계"].map((h, i) => (
+                      <th key={h} style={{ padding: "8px 12px", textAlign: i === 0 ? "left" : "right", fontWeight: "600", color: "#64748b", borderBottom: "1px solid #e2e8f0" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {p.lines.map((l, idx) => (
+                    <tr key={idx} style={{ borderTop: "1px solid #f1f5f9" }}>
+                      <td style={{ padding: "8px 12px" }}>{l.itemName}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right" }}>{fmtMoney(l.qty)}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right" }}>{fmtMoney(l.unitPrice)}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: "600" }}>{fmtMoney(l.supply)}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right" }}>{fmtMoney(l.vat)}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: "600" }}>{fmtMoney(l.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 합계 */}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <div style={{ border: "1px solid #e2e8f0", borderRadius: "12px", padding: "16px", minWidth: "260px", fontSize: "13px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
+                  <span style={{ color: "#64748b" }}>공급가</span>
+                  <span style={{ fontWeight: "600" }}>{fmtMoney(p.sumSupply)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
+                  <span style={{ color: "#64748b" }}>부가세</span>
+                  <span style={{ fontWeight: "600" }}>{fmtMoney(p.sumVat)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderTop: "1px solid #e2e8f0", marginTop: "4px" }}>
+                  <span style={{ fontWeight: "bold" }}>합계</span>
+                  <span style={{ fontWeight: "bold", fontSize: "15px" }}>{fmtMoney(p.sumTotal)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
       <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
         {msg ? (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{msg}</div>
@@ -709,7 +916,7 @@ export default function CalendarPage() {
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">출고 목록 · {selShipDate}</div>
-                  <div className="mt-1 text-xs text-slate-500">거래처를 체크하고 일괄출력하면 명세서가 거래처별로 순서대로 열립니다.</div>
+                  <div className="mt-1 text-xs text-slate-500">거래처를 선택 후 일괄출력 버튼을 누르면 이 페이지에서 바로 인쇄창이 열립니다.</div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -768,12 +975,12 @@ export default function CalendarPage() {
                         >
                           {bulkPrinting
                             ? `출력중... (${bulkPrintSelected.size}건)`
-                            : `선택 ${bulkPrintSelected.size}건 일괄출력`}
+                            : bulkSpecLoading ? "데이터 로딩중..." : `선택 ${bulkPrintSelected.size}건 일괄출력`}
                         </button>
                       </div>
                     </div>
                     <div className="text-xs text-blue-700">
-                      ※ 팝업 차단이 설정된 경우 브라우저에서 팝업 허용 후 다시 시도하세요. · 거래처별로 명세서가 순서대로 열립니다.
+                      ※ 거래처별 명세서가 한 번에 로드된 후 인쇄창이 열립니다. 거래처가 많으면 잠시 기다려주세요.
                     </div>
                   </div>
                 ) : null}
