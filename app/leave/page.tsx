@@ -21,15 +21,15 @@ type LeaveRequest = {
 }
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
-  annual: '연차 (1일)',
-  half_am: '반차 - 오전 (0.5일)',
-  half_pm: '반차 - 오후 (0.5일)',
-  sick: '병가 (1일)',
-  special: '특별휴가 (1일)',
+  ANNUAL: '연차 (1일)',
+  HALF_AM: '반차 - 오전 (0.5일)',
+  HALF_PM: '반차 - 오후 (0.5일)',
+  SICK: '병가 (1일)',
+  FRIDAY_OFF: '금요일 휴무 (1일)',
 }
 
 const LEAVE_TYPE_DAYS: Record<string, number> = {
-  annual: 1, half_am: 0.5, half_pm: 0.5, sick: 1, special: 1,
+  ANNUAL: 1, HALF_AM: 0.5, HALF_PM: 0.5, SICK: 1, FRIDAY_OFF: 1,
 }
 
 const STATUS_LABEL: Record<string, { label: string; className: string }> = {
@@ -42,7 +42,7 @@ export default function LeavePage() {
   const supabase = createClient()
   const [myRequests, setMyRequests] = useState<LeaveRequest[]>([])
   const [balance, setBalance] = useState<{ granted: number; used: number; remaining: number } | null>(null)
-  const [form, setForm] = useState({ leave_date: '', leave_type: 'annual', note: '' })
+  const [form, setForm] = useState({ leave_date: '', leave_type: 'ANNUAL', note: '' })
   const [loading, setLoading] = useState(false)
   const [fetchLoading, setFetchLoading] = useState(true)
   const [error, setError] = useState('')
@@ -107,7 +107,7 @@ export default function LeavePage() {
     if (error) setError(error.message)
     else {
       setSuccess('신청이 완료되었습니다. 관리자 승인 후 확정됩니다.')
-      setForm({ leave_date: '', leave_type: 'annual', note: '' })
+      setForm({ leave_date: '', leave_type: 'ANNUAL', note: '' })
       fetchMyData()
       setTab('history')
     }

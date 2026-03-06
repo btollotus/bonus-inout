@@ -8,7 +8,6 @@ type Employee = {
   auth_user_id: string | null
   employee_code: string
   name: string
-  rm: string | null
   mobile: string | null
   address: string | null
   hire_date: string | null
@@ -17,7 +16,7 @@ type Employee = {
 }
 
 const EMPTY_FORM = {
-  auth_user_id: '', employee_code: '', name: '', rm: '', mobile: '', address: '', hire_date: '', resign_date: '',
+  auth_user_id: '', employee_code: '', name: '', mobile: '', address: '', hire_date: '', resign_date: '',
 }
 
 export default function EmployeesPage() {
@@ -48,7 +47,7 @@ export default function EmployeesPage() {
 
   function handleEdit(emp: Employee) {
     setEditingId(emp.id)
-    setForm({ auth_user_id: emp.auth_user_id || '', employee_code: emp.employee_code, name: emp.name, rm: emp.rm || '', mobile: emp.mobile || '', address: emp.address || '', hire_date: emp.hire_date || '', resign_date: emp.resign_date || '' })
+    setForm({ auth_user_id: emp.auth_user_id || '', employee_code: emp.employee_code, name: emp.name, mobile: emp.mobile || '', address: emp.address || '', hire_date: emp.hire_date || '', resign_date: emp.resign_date || '' })
     setShowForm(true); setError(''); setSuccess('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -61,7 +60,7 @@ export default function EmployeesPage() {
     if (!form.name.trim()) return setError('이름은 필수입니다.')
     if (!form.employee_code.trim()) return setError('사번은 필수입니다.')
     setLoading(true); setError(''); setSuccess('')
-    const payload = { auth_user_id: form.auth_user_id || null, employee_code: form.employee_code, name: form.name, rm: form.rm || null, mobile: form.mobile || null, address: form.address || null, hire_date: form.hire_date || null, resign_date: form.resign_date || null }
+    const payload = { auth_user_id: form.auth_user_id || null, employee_code: form.employee_code, name: form.name, mobile: form.mobile || null, address: form.address || null, hire_date: form.hire_date || null, resign_date: form.resign_date || null }
     if (editingId) {
       const { error } = await supabase.from('employees').update(payload).eq('id', editingId)
       if (error) setError(error.message)
@@ -117,27 +116,6 @@ export default function EmployeesPage() {
                   <input name="auth_user_id" value={form.auth_user_id} onChange={handleChange} placeholder="예: 2c1d... (Supabase Auth Users의 id)" className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   <p className="text-xs text-gray-400 mt-1">여기에 사번(20240301_0001)을 입력하면 안 됩니다. uuid만 입력하세요.</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">주민번호(rm)</label>
-                  <input name="rm" value={form.rm} onChange={handleChange} placeholder="민감정보. 운영에선 마스킹/암호화 권장" className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">휴대폰(mobile)</label>
-                  <input name="mobile" value={form.mobile} onChange={handleChange} placeholder="010-0000-0000" className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">주소(address)</label>
-                  <input name="address" value={form.address} onChange={handleChange} placeholder="주소" className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">입사일(hire_date)</label>
-                  <input type="date" name="hire_date" value={form.hire_date} onChange={handleChange} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">퇴사일(resign_date)</label>
-                  <input type="date" name="resign_date" value={form.resign_date} onChange={handleChange} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-              </div>
               <div className="flex gap-3 mt-6">
                 <button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-md transition-colors">{loading ? '저장 중...' : editingId ? '수정 완료' : '등록'}</button>
                 <button type="button" onClick={handleCancel} className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-5 py-2 rounded-md transition-colors">취소</button>

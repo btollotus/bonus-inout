@@ -17,19 +17,19 @@ type LeaveRequest = {
 }
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
-  annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', sick: '병가', special: '특별',
+  ANNUAL: '연차', HALF_AM: '반차(오전)', HALF_PM: '반차(오후)', SICK: '병가', FRIDAY_OFF: '금요일휴무',
 }
 
 const LEAVE_TYPE_SHORT: Record<string, string> = {
-  annual: '연', half_am: '반↑', half_pm: '반↓', sick: '병', special: '특',
+  ANNUAL: '연', half_am: '반↑', half_pm: '반↓', sick: '병', special: '특',
 }
 
 const LEAVE_COLORS: Record<string, string> = {
-  annual:   'bg-blue-100 text-blue-800 border-blue-200',
-  half_am:  'bg-sky-100 text-sky-800 border-sky-200',
-  half_pm:  'bg-cyan-100 text-cyan-800 border-cyan-200',
-  sick:     'bg-red-100 text-red-700 border-red-200',
-  special:  'bg-purple-100 text-purple-800 border-purple-200',
+  ANNUAL:   'bg-blue-100 text-blue-800 border-blue-200',
+  HALF_AM:  'bg-sky-100 text-sky-800 border-sky-200',
+  HALF_PM:  'bg-cyan-100 text-cyan-800 border-cyan-200',
+  SICK:     'bg-red-100 text-red-700 border-red-200',
+  FRIDAY_OFF: 'bg-purple-100 text-purple-800 border-purple-200',
 }
 
 const STATUS_LABEL: Record<string, { label: string; className: string }> = {
