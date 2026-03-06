@@ -47,7 +47,15 @@ export default function EmployeesPage() {
 
   function handleEdit(emp: Employee) {
     setEditingId(emp.id)
-    setForm({ auth_user_id: emp.auth_user_id || '', employee_code: emp.employee_code, name: emp.name, mobile: emp.mobile || '', address: emp.address || '', hire_date: emp.hire_date || '', resign_date: emp.resign_date || '' })
+    setForm({
+      auth_user_id: emp.auth_user_id || '',
+      employee_code: emp.employee_code,
+      name: emp.name,
+      mobile: emp.mobile || '',
+      address: emp.address || '',
+      hire_date: emp.hire_date || '',
+      resign_date: emp.resign_date || '',
+    })
     setShowForm(true); setError(''); setSuccess('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -60,7 +68,17 @@ export default function EmployeesPage() {
     if (!form.name.trim()) return setError('이름은 필수입니다.')
     if (!form.employee_code.trim()) return setError('사번은 필수입니다.')
     setLoading(true); setError(''); setSuccess('')
-    const payload = { auth_user_id: form.auth_user_id || null, employee_code: form.employee_code, name: form.name, mobile: form.mobile || null, address: form.address || null, hire_date: form.hire_date || null, resign_date: form.resign_date || null }
+
+    const payload = {
+      auth_user_id: form.auth_user_id || null,
+      employee_code: form.employee_code,
+      name: form.name,
+      mobile: form.mobile || null,
+      address: form.address || null,
+      hire_date: form.hire_date || null,
+      resign_date: form.resign_date || null,
+    }
+
     if (editingId) {
       const { error } = await supabase.from('employees').update(payload).eq('id', editingId)
       if (error) setError(error.message)
@@ -80,7 +98,9 @@ export default function EmployeesPage() {
     else { setSuccess('삭제되었습니다.'); fetchEmployees() }
   }
 
-  const filtered = employees.filter((e) => e.name.includes(searchQuery) || e.employee_code.includes(searchQuery) || (e.mobile || '').includes(searchQuery))
+  const filtered = employees.filter(
+    (e) => e.name.includes(searchQuery) || e.employee_code.includes(searchQuery) || (e.mobile || '').includes(searchQuery)
+  )
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -88,46 +108,127 @@ export default function EmployeesPage() {
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">직원 관리 (관리자)</h1>
-            <p className="text-xs text-gray-500 mt-0.5">employees.auth_user_id에는 직원의 로그인 UID(auth.users.id, uuid)만 매핑하세요. 사번/코드는 employee_code에 입력합니다.</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              auth_user_id에는 Supabase Auth Users의 uuid만 입력하세요. 사번은 employee_code에 입력합니다.
+            </p>
           </div>
-          <button onClick={handleNew} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors">+ 새로 등록</button>
+          <button
+            onClick={handleNew}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
+          >
+            + 새로 등록
+          </button>
         </div>
       </div>
+
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm flex justify-between">{error}<button onClick={() => setError('')}>✕</button></div>}
-        {success && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md text-sm flex justify-between">{success}<button onClick={() => setSuccess('')}>✕</button></div>}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm flex justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError('')} className="ml-4 text-red-400 hover:text-red-600">✕</button>
+          </div>
+        )}
+        {success && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md text-sm flex justify-between">
+            <span>{success}</span>
+            <button onClick={() => setSuccess('')} className="ml-4 text-green-400 hover:text-green-600">✕</button>
+          </div>
+        )}
+
         {showForm && (
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
             <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-base font-semibold text-gray-800">{editingId ? '직원 정보 수정' : '새 직원 등록'}</h2>
+              <h2 className="text-base font-semibold text-gray-800">
+                {editingId ? '직원 정보 수정' : '새 직원 등록'}
+              </h2>
             </div>
             <form onSubmit={handleSubmit} className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">이름(name) <span className="text-red-500">*</span></label>
-                  <input name="name" value={form.name} onChange={handleChange} placeholder="예: 홍길동" className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    이름(name) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    name="name" value={form.name} onChange={handleChange} placeholder="예: 홍길동"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">사번(employee_code) <span className="text-red-500">*</span></label>
-                  <input name="employee_code" value={form.employee_code} onChange={handleChange} placeholder="예: 20240301_0001" className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    사번(employee_code) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    name="employee_code" value={form.employee_code} onChange={handleChange} placeholder="예: 20240301-0001"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">auth_user_id (직원 UID, uuid)</label>
-                  <input name="auth_user_id" value={form.auth_user_id} onChange={handleChange} placeholder="예: 2c1d... (Supabase Auth Users의 id)" className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <p className="text-xs text-gray-400 mt-1">여기에 사번(20240301_0001)을 입력하면 안 됩니다. uuid만 입력하세요.</p>
+                  <input
+                    name="auth_user_id" value={form.auth_user_id} onChange={handleChange} placeholder="Supabase Auth Users의 uuid"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">사번이 아닌 uuid를 입력하세요.</p>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">휴대폰(mobile)</label>
+                  <input
+                    name="mobile" value={form.mobile} onChange={handleChange} placeholder="010-0000-0000"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">주소(address)</label>
+                  <input
+                    name="address" value={form.address} onChange={handleChange} placeholder="주소"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">입사일(hire_date)</label>
+                  <input
+                    type="date" name="hire_date" value={form.hire_date} onChange={handleChange}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">퇴사일(resign_date)</label>
+                  <input
+                    type="date" name="resign_date" value={form.resign_date} onChange={handleChange}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
               <div className="flex gap-3 mt-6">
-                <button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-md transition-colors">{loading ? '저장 중...' : editingId ? '수정 완료' : '등록'}</button>
-                <button type="button" onClick={handleCancel} className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-5 py-2 rounded-md transition-colors">취소</button>
+                <button
+                  type="submit" disabled={loading}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-md transition-colors"
+                >
+                  {loading ? '저장 중...' : editingId ? '수정 완료' : '등록'}
+                </button>
+                <button
+                  type="button" onClick={handleCancel}
+                  className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-5 py-2 rounded-md transition-colors"
+                >
+                  취소
+                </button>
               </div>
             </form>
           </div>
         )}
+
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-gray-800">직원 목록 <span className="text-gray-400 font-normal text-sm">({filtered.length}명)</span></h2>
-            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="이름, 사번, 전화번호 검색..." className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <h2 className="text-base font-semibold text-gray-800">
+              직원 목록 <span className="text-gray-400 font-normal text-sm">({filtered.length}명)</span>
+            </h2>
+            <input
+              value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="이름, 사번, 전화번호 검색..."
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
+
           {fetchLoading ? (
             <div className="py-12 text-center text-gray-400 text-sm">불러오는 중...</div>
           ) : filtered.length === 0 ? (
@@ -151,10 +252,17 @@ export default function EmployeesPage() {
                     <tr key={emp.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-medium text-gray-900">{emp.name}</td>
                       <td className="px-4 py-3 text-gray-600">{emp.employee_code}</td>
-                      <td className="px-4 py-3 text-gray-400 font-mono text-xs">{emp.auth_user_id ? emp.auth_user_id.substring(0, 12) + '...' : '-'}</td>
+                      <td className="px-4 py-3 text-gray-400 font-mono text-xs">
+                        {emp.auth_user_id ? emp.auth_user_id.substring(0, 12) + '...' : '-'}
+                      </td>
                       <td className="px-4 py-3 text-gray-600">{emp.mobile || '-'}</td>
                       <td className="px-4 py-3 text-gray-600">{emp.hire_date || '-'}</td>
-                      <td className="px-4 py-3 text-gray-600">{emp.resign_date ? <span className="text-red-500">{emp.resign_date}</span> : <span className="text-green-600">재직중</span>}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {emp.resign_date
+                          ? <span className="text-red-500">{emp.resign_date}</span>
+                          : <span className="text-green-600">재직중</span>
+                        }
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button onClick={() => handleEdit(emp)} className="text-blue-600 hover:text-blue-800 text-xs font-medium">수정</button>
@@ -167,7 +275,9 @@ export default function EmployeesPage() {
               </table>
             </div>
           )}
-          <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-400">※ employees는 RLS로 관리자만 접근하게 되어 있어, 직원이 자기 인사정보를 볼 수 없습니다(요구사항 충족).</div>
+          <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-400">
+            ※ employees는 RLS로 관리자만 접근 가능합니다.
+          </div>
         </div>
       </div>
     </div>
