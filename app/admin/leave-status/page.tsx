@@ -1,298 +1,223 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import type { LeaveRequest, LeaveType } from '@/types'
+import { createClient } from '@/lib/supabase/browser'
 
-const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
-  annual: '연차 (1일)',
-  half_am: '반차 - 오전 (0.5일)',
-  half_pm: '반차 - 오후 (0.5일)',
-  sick: '병가 (1일)',
-  special: '특별휴가 (1일)',
+type LeaveRequest = {
+  id: string
+  user_id: string
+  employee_id: string | null
+  employee_name: string
+  leave_date: string
+  leave_type: string
+  note: string | null
+  status: string
+  days_used: number
+  attended: boolean
+  year: number
 }
 
-const LEAVE_TYPE_DAYS: Record<LeaveType, number> = {
-  annual: 1,
-  half_am: 0.5,
-  half_pm: 0.5,
-  sick: 1,
-  special: 1,
+const LEAVE_TYPE_LABELS: Record<string, string> = {
+  annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', sick: '병가', special: '특별',
 }
 
 const STATUS_LABEL: Record<string, { label: string; className: string }> = {
   pending: { label: '검토중', className: 'bg-yellow-100 text-yellow-700' },
-  approved: { label: '승인됨', className: 'bg-green-100 text-green-700' },
-  rejected: { label: '반려됨', className: 'bg-red-100 text-red-700' },
+  approved: { label: '승인', className: 'bg-green-100 text-green-700' },
+  rejected: { label: '반려', className: 'bg-red-100 text-red-700' },
 }
 
-export default function LeavePage() {
-  const [myRequests, setMyRequests] = useState<LeaveRequest[]>([])
-  const [balance, setBalance] = useState<{ granted: number; used: number; remaining: number } | null>(null)
-  const [form, setForm] = useState({
-    leave_date: '',
-    leave_type: 'annual' as LeaveType,
-    note: '',
-  })
-  const [loading, setLoading] = useState(false)
-  const [fetchLoading, setFetchLoading] = useState(true)
+type EmployeeSummary = {
+  employee_name: string
+  employee_id: string | null
+  granted: number
+  used: number
+  remaining: number
+  requests: LeaveRequest[]
+}
+
+export default function LeaveStatusPage() {
+  const supabase = createClient()
+  const [summaries, setSummaries] = useState<EmployeeSummary[]>([])
+  const [allRequests, setAllRequests] = useState<LeaveRequest[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+  const [tab, setTab] = useState<'summary' | 'requests'>('summary')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  const [tab, setTab] = useState<'apply' | 'history'>('apply')
-  const currentYear = new Date().getFullYear()
+  const years = [new Date().getFullYear(), new Date().getFullYear() - 1]
 
-  useEffect(() => {
-    fetchMyData()
-  }, [])
+  useEffect(() => { fetchLeaveData() }, [selectedYear])
 
-  async function fetchMyData() {
-    setFetchLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setFetchLoading(false); return }
+  async function fetchLeaveData() {
+    setLoading(true); setError('')
+    const { data: requests, error } = await supabase.from('leave_requests').select('*').eq('year', selectedYear).order('leave_date', { ascending: false })
+    if (error) { setError(error.message); setLoading(false); return }
 
-    // 내 연차 신청 목록
-    const { data: requests } = await supabase
-      .from('leave_requests')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('leave_date', { ascending: false })
+    const allReqs = requests || []
+    setAllRequests(allReqs)
 
-    setMyRequests(requests || [])
-
-    // 연차 잔여 계산 (현재 연도 기준)
-    const yearRequests = (requests || []).filter(
-      (r) => r.year === currentYear && r.status !== 'rejected'
-    )
-    const used = yearRequests.reduce((sum, r) => sum + Number(r.days_used), 0)
-
-    // leave_balance 테이블이 있으면 거기서, 없으면 기본 15일로 계산
-    const { data: balanceData } = await supabase
-      .from('leave_balance')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('year', currentYear)
-      .maybeSingle()
-
-    const granted = balanceData?.total_granted ?? 15
-    setBalance({ granted, used, remaining: granted - used })
-    setFetchLoading(false)
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!form.leave_date) return setError('날짜를 선택해주세요.')
-
-    setLoading(true)
-    setError('')
-    setSuccess('')
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setError('로그인이 필요합니다.'); setLoading(false); return }
-
-    // employees에서 employee_id, employee_name 조회
-    const { data: emp } = await supabase
-      .from('employees')
-      .select('id, name')
-      .eq('auth_user_id', user.id)
-      .maybeSingle()
-
-    const daysUsed = LEAVE_TYPE_DAYS[form.leave_type]
-
-    const payload = {
-      user_id: user.id,
-      employee_id: emp?.id ?? null,
-      employee_name: emp?.name ?? user.email ?? '미등록',
-      leave_date: form.leave_date,
-      leave_type: form.leave_type,
-      note: form.note || null,
-      status: 'pending',
-      days_used: daysUsed,
-      attended: false,
-      year: new Date(form.leave_date).getFullYear(),
+    const byEmployee: Record<string, EmployeeSummary> = {}
+    for (const req of allReqs) {
+      if (!byEmployee[req.employee_name]) {
+        byEmployee[req.employee_name] = { employee_name: req.employee_name, employee_id: req.employee_id, granted: 15, used: 0, remaining: 15, requests: [] }
+      }
+      byEmployee[req.employee_name].requests.push(req)
+      if (req.status !== 'rejected') byEmployee[req.employee_name].used += Number(req.days_used)
     }
 
-    const { error } = await supabase.from('leave_requests').insert([payload])
-    if (error) setError(error.message)
-    else {
-      setSuccess('신청이 완료되었습니다. 관리자 승인 후 확정됩니다.')
-      setForm({ leave_date: '', leave_type: 'annual', note: '' })
-      fetchMyData()
-      setTab('history')
+    const { data: balances } = await supabase.from('leave_balance').select('*').eq('year', selectedYear)
+    if (balances) {
+      for (const b of balances) {
+        const match = Object.values(byEmployee).find((s) => s.employee_id === b.employee_id)
+        if (match) match.granted = b.total_granted
+      }
     }
+    for (const s of Object.values(byEmployee)) s.remaining = s.granted - s.used
+
+    setSummaries(Object.values(byEmployee).sort((a, b) => a.employee_name.localeCompare(b.employee_name)))
     setLoading(false)
   }
 
-  async function handleCancel(id: string) {
-    if (!confirm('이 신청을 취소하시겠습니까?')) return
-    const { error } = await supabase
-      .from('leave_requests')
-      .delete()
-      .eq('id', id)
-      .eq('status', 'pending') // 검토중인 것만 취소 가능
-
-    if (error) setError('취소 실패: 이미 처리된 신청은 취소할 수 없습니다.')
-    else {
-      setSuccess('신청이 취소되었습니다.')
-      fetchMyData()
-    }
+  async function handleApprove(id: string) {
+    const { error } = await supabase.from('leave_requests').update({ status: 'approved' }).eq('id', id)
+    if (error) setError(error.message)
+    else fetchLeaveData()
   }
+
+  async function handleReject(id: string) {
+    const reason = prompt('반려 사유를 입력하세요 (선택):')
+    if (reason === null) return
+    const { error } = await supabase.from('leave_requests').update({ status: 'rejected', ...(reason ? { note: reason } : {}) }).eq('id', id)
+    if (error) setError(error.message)
+    else fetchLeaveData()
+  }
+
+  const filteredRequests = filterStatus === 'all' ? allRequests : allRequests.filter((r) => r.status === filterStatus)
+  const pendingCount = allRequests.filter((r) => r.status === 'pending').length
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-3xl mx-auto">
-          <h1 className="text-xl font-bold text-gray-900">연차 / 반차 / 병가 신청</h1>
-          <p className="text-xs text-gray-500 mt-0.5">전 직원 접근 가능 · 신청 후 관리자 승인 절차</p>
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">연차 현황 조회</h1>
+            <p className="text-xs text-gray-500 mt-0.5">관리자 전용 · 전직원 연차 부여/사용/잔여 현황</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {pendingCount > 0 && <span className="bg-red-100 text-red-700 text-xs font-bold px-2.5 py-1 rounded-full animate-pulse">승인 대기 {pendingCount}건</span>}
+            <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              {years.map((y) => <option key={y} value={y}>{y}년</option>)}
+            </select>
+          </div>
         </div>
       </div>
-
-      <div className="max-w-3xl mx-auto px-6 py-6 space-y-5">
-        {/* Balance Card */}
-        {!fetchLoading && balance && (
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: '부여 연차', value: balance.granted, unit: '일', color: 'text-blue-600' },
-              { label: '사용 연차', value: balance.used, unit: '일', color: 'text-orange-500' },
-              { label: '잔여 연차', value: balance.remaining, unit: '일', color: balance.remaining <= 3 ? 'text-red-600' : 'text-green-600' },
-            ].map((item) => (
-              <div key={item.label} className="bg-white border border-gray-200 rounded-lg p-4 text-center shadow-sm">
-                <p className="text-xs text-gray-500 mb-1">{currentYear}년 {item.label}</p>
-                <p className={`text-3xl font-bold ${item.color}`}>{item.value}<span className="text-base font-normal text-gray-400 ml-1">{item.unit}</span></p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Alerts */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm flex justify-between">
-            {error}<button onClick={() => setError('')}>✕</button>
-          </div>
-        )}
-        {success && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md text-sm flex justify-between">
-            {success}<button onClick={() => setSuccess('')}>✕</button>
-          </div>
-        )}
-
-        {/* Tabs */}
+      <div className="max-w-6xl mx-auto px-6 py-6 space-y-5">
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">{error}</div>}
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
           <div className="flex border-b border-gray-200">
-            {(['apply', 'history'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                  tab === t ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                {t === 'apply' ? '📋 신청하기' : '📅 신청 내역'}
+            {(['summary', 'requests'] as const).map((t) => (
+              <button key={t} onClick={() => setTab(t)}
+                className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === t ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>
+                {t === 'summary' ? '👥 직원별 연차 현황' : `📋 전체 신청 내역${pendingCount > 0 ? ` (대기 ${pendingCount})` : ''}`}
               </button>
             ))}
           </div>
-
-          {tab === 'apply' ? (
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  휴가 유형 <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {(Object.keys(LEAVE_TYPE_LABELS) as LeaveType[]).map((type) => (
-                    <label
-                      key={type}
-                      className={`flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
-                        form.leave_type === type
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="leave_type"
-                        value={type}
-                        checked={form.leave_type === type}
-                        onChange={() => setForm({ ...form, leave_type: type })}
-                        className="accent-blue-600"
-                      />
-                      <span className="text-sm text-gray-700">{LEAVE_TYPE_LABELS[type]}</span>
-                    </label>
-                  ))}
-                </div>
+          {tab === 'summary' ? (
+            loading ? <div className="py-12 text-center text-gray-400 text-sm">불러오는 중...</div>
+            : summaries.length === 0 ? <div className="py-12 text-center text-gray-400 text-sm">{selectedYear}년 데이터가 없습니다.</div>
+            : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium">직원명</th>
+                      <th className="px-4 py-3 text-center font-medium">부여 연차</th>
+                      <th className="px-4 py-3 text-center font-medium">사용</th>
+                      <th className="px-4 py-3 text-center font-medium">잔여</th>
+                      <th className="px-4 py-3 text-center font-medium">사용률</th>
+                      <th className="px-4 py-3 text-left font-medium">최근 신청</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {summaries.map((s) => {
+                      const usageRate = s.granted > 0 ? Math.round((s.used / s.granted) * 100) : 0
+                      const lastReq = s.requests[0]
+                      return (
+                        <tr key={s.employee_name} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900">{s.employee_name}</td>
+                          <td className="px-4 py-3 text-center text-blue-600 font-semibold">{s.granted}일</td>
+                          <td className="px-4 py-3 text-center text-orange-500 font-semibold">{s.used}일</td>
+                          <td className={`px-4 py-3 text-center font-bold ${s.remaining <= 3 ? 'text-red-600' : 'text-green-600'}`}>{s.remaining}일</td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center gap-2 justify-center">
+                              <div className="w-20 bg-gray-200 rounded-full h-1.5">
+                                <div className={`h-1.5 rounded-full ${usageRate >= 80 ? 'bg-red-500' : usageRate >= 50 ? 'bg-orange-400' : 'bg-green-500'}`} style={{ width: `${Math.min(usageRate, 100)}%` }} />
+                              </div>
+                              <span className="text-xs text-gray-500 w-8">{usageRate}%</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-500">
+                            {lastReq ? <>{lastReq.leave_date} · <span className={`px-1.5 py-0.5 rounded text-xs ${STATUS_LABEL[lastReq.status]?.className ?? ''}`}>{STATUS_LABEL[lastReq.status]?.label ?? lastReq.status}</span></> : '-'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  날짜 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={form.leave_date}
-                  onChange={(e) => setForm({ ...form, leave_date: e.target.value })}
-                  min={new Date().toISOString().split('T')[0]}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">사유 (선택)</label>
-                <textarea
-                  value={form.note}
-                  onChange={(e) => setForm({ ...form, note: e.target.value })}
-                  placeholder="병원 방문, 가족 행사 등 사유를 입력하세요."
-                  rows={3}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-2">
-                <p className="text-xs text-gray-400">
-                  신청 시 <strong>{LEAVE_TYPE_DAYS[form.leave_type]}일</strong>이 차감됩니다.
-                </p>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-6 py-2 rounded-md transition-colors"
-                >
-                  {loading ? '신청 중...' : '신청하기'}
-                </button>
-              </div>
-            </form>
+            )
           ) : (
             <div>
-              {fetchLoading ? (
-                <div className="py-10 text-center text-gray-400 text-sm">불러오는 중...</div>
-              ) : myRequests.length === 0 ? (
-                <div className="py-10 text-center text-gray-400 text-sm">신청 내역이 없습니다.</div>
-              ) : (
-                <div className="divide-y divide-gray-100">
-                  {myRequests.map((req) => {
-                    const statusInfo = STATUS_LABEL[req.status]
-                    return (
-                      <div key={req.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-gray-900">{req.leave_date}</span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusInfo.className}`}>
-                              {statusInfo.label}
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-500">
-                            {LEAVE_TYPE_LABELS[req.leave_type as LeaveType]} · {req.days_used}일 차감
-                          </p>
-                          {req.note && <p className="text-xs text-gray-400">{req.note}</p>}
-                        </div>
-                        {req.status === 'pending' && (
-                          <button
-                            onClick={() => handleCancel(req.id)}
-                            className="text-xs text-red-500 hover:text-red-700 font-medium"
-                          >
-                            취소
-                          </button>
-                        )}
-                      </div>
-                    )
-                  })}
+              <div className="px-4 py-3 border-b border-gray-100 flex gap-2">
+                {(['all', 'pending', 'approved', 'rejected'] as const).map((s) => (
+                  <button key={s} onClick={() => setFilterStatus(s)}
+                    className={`text-xs px-3 py-1 rounded-full transition-colors ${filterStatus === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                    {s === 'all' ? '전체' : STATUS_LABEL[s].label}{s === 'pending' && pendingCount > 0 ? ` (${pendingCount})` : ''}
+                  </button>
+                ))}
+              </div>
+              {loading ? <div className="py-10 text-center text-gray-400 text-sm">불러오는 중...</div>
+              : filteredRequests.length === 0 ? <div className="py-10 text-center text-gray-400 text-sm">해당하는 신청이 없습니다.</div>
+              : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-medium">직원</th>
+                        <th className="px-4 py-3 text-left font-medium">날짜</th>
+                        <th className="px-4 py-3 text-left font-medium">유형</th>
+                        <th className="px-4 py-3 text-center font-medium">차감</th>
+                        <th className="px-4 py-3 text-left font-medium">사유</th>
+                        <th className="px-4 py-3 text-center font-medium">상태</th>
+                        <th className="px-4 py-3 text-center font-medium">처리</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredRequests.map((req) => {
+                        const statusInfo = STATUS_LABEL[req.status] ?? { label: req.status, className: 'bg-gray-100 text-gray-600' }
+                        return (
+                          <tr key={req.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 font-medium text-gray-900">{req.employee_name}</td>
+                            <td className="px-4 py-3 text-gray-600">{req.leave_date}</td>
+                            <td className="px-4 py-3 text-gray-600">{LEAVE_TYPE_LABELS[req.leave_type] ?? req.leave_type}</td>
+                            <td className="px-4 py-3 text-center text-orange-500 font-medium">{req.days_used}일</td>
+                            <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{req.note || '-'}</td>
+                            <td className="px-4 py-3 text-center"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusInfo.className}`}>{statusInfo.label}</span></td>
+                            <td className="px-4 py-3 text-center">
+                              {req.status === 'pending' ? (
+                                <div className="flex gap-1 justify-center">
+                                  <button onClick={() => handleApprove(req.id)} className="text-xs bg-green-600 hover:bg-green-700 text-white px-2.5 py-1 rounded transition-colors">승인</button>
+                                  <button onClick={() => handleReject(req.id)} className="text-xs bg-red-500 hover:bg-red-600 text-white px-2.5 py-1 rounded transition-colors">반려</button>
+                                </div>
+                              ) : <span className="text-xs text-gray-300">처리완료</span>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
