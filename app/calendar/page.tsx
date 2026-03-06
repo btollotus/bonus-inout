@@ -39,9 +39,8 @@ function monthKey(date: Date) {
   return `${yyyy}-${mm}`;
 }
 function startOfCalendarGrid(monthDate: Date) {
-  // 달력은 "일요일 시작" 기준
   const first = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-  const dow = first.getDay(); // 0=일
+  const dow = first.getDay();
   const start = new Date(first);
   start.setDate(first.getDate() - dow);
   return start;
@@ -55,13 +54,6 @@ function build42Days(monthDate: Date) {
   });
 }
 
-/**
- * 대한민국 공휴일(간단 버전) + 회사 내부 고정 기념일
- * - 고정(양력): 1/1, 3/1, 5/5, 6/6, 8/15, 10/3, 10/9, 12/25
- * - ✅ 회사 고정 기념일: 1/2 창립기념일
- * - 2026년 음력 기반(하드코딩): 설날(2/16~2/18), 부처님오신날(5/24), 추석(9/24~9/26)
- * - 대체공휴일(간단): 2026년 기준으로 필요한 것만 반영
- */
 function getKoreaHolidaysMap(year: number): Record<string, string> {
   const map: Record<string, string> = {};
 
@@ -74,8 +66,6 @@ function getKoreaHolidaysMap(year: number): Record<string, string> {
     [`${year}-10-03`, "개천절"],
     [`${year}-10-09`, "한글날"],
     [`${year}-12-25`, "성탄절"],
-
-    // ✅ 회사 고정 기념일(공휴일이 아니라 사내 휴무/표시용)
     [`${year}-01-02`, "창립기념일"],
   ];
   for (const [d, name] of fixed) map[d] = name;
@@ -84,13 +74,10 @@ function getKoreaHolidaysMap(year: number): Record<string, string> {
     map["2026-02-16"] = "설날(연휴)";
     map["2026-02-17"] = "설날";
     map["2026-02-18"] = "설날(연휴)";
-
     map["2026-05-24"] = "부처님오신날";
     map["2026-09-24"] = "추석(연휴)";
     map["2026-09-25"] = "추석";
     map["2026-09-26"] = "추석(연휴)";
-
-    // ✅ 라벨 문구 개선: “삼일절 대체” → “대체공휴일(삼일절)”
     map["2026-03-02"] = "대체공휴일(삼일절)";
     map["2026-05-25"] = "대체공휴일(부처님오신날)";
     map["2026-08-17"] = "대체공휴일(광복절)";
@@ -103,29 +90,22 @@ function getKoreaHolidaysMap(year: number): Record<string, string> {
 function normalizeShipMethod(v: any): ShipMethod {
   const s = String(v ?? "").trim();
   if (!s) return "기타";
-
-  // ✅ 5종 우선 매핑
   if (s.includes("택배")) return "택배";
   if (s.includes("퀵") && (s.includes("착불") || s.includes("후불"))) return "퀵-착불";
   if (s.includes("퀵") && (s.includes("신용") || s.includes("선불") || s.includes("카드"))) return "퀵-신용";
-  if (s.includes("퀵")) return "퀵-신용"; // 퀵만 있으면 기본 신용으로 처리(기존 데이터 호환)
+  if (s.includes("퀵")) return "퀵-신용";
   if (s.includes("방문")) return "방문";
-
   return "기타";
 }
 
-// ✅ 네이버/쿠팡/카카오플러스 판매 채널
-// - 요청사항: 이 채널들은 "택배"만 숨기고, 퀵-신용/퀵-착불/방문/기타는 다이어리에 표시
 const HIDE_CUSTOMERS = new Set(["카카오플러스-판매", "네이버-판매", "쿠팡-판매"]);
 
 export default function CalendarPage() {
   const supabase = useMemo(() => createClient(), []);
   const todayStr = useMemo(() => ymd(new Date()), []);
 
-  // ✅ 오늘 날짜 셀 포커싱
   const didFocusRef = useRef(false);
 
-  // 테마: TradeClient와 동일 톤
   const pageBg = "bg-slate-50 text-slate-900";
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const input =
@@ -136,10 +116,8 @@ export default function CalendarPage() {
     "rounded-xl border border-blue-600/20 bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 active:bg-blue-800";
   const pill =
     "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700";
-
   const badge =
     "inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700";
-
   const badgeShip =
     "inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700";
   const badgeQuickCredit =
@@ -150,20 +128,16 @@ export default function CalendarPage() {
     "inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700";
   const badgeEtc =
     "inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700";
-
-  // ✅ 날짜 셀에서도 바로 쓰는 “송장엑셀” 버튼 스타일(추가)
   const btnMini =
     "rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-50";
 
   const [msg, setMsg] = useState<string | null>(null);
-  const [curMonth, setCurMonth] = useState(() => monthKey(new Date())); // ✅ 기본: 오늘이 속한 월
+  const [curMonth, setCurMonth] = useState(() => monthKey(new Date()));
 
   const curMonthDate = useMemo(() => firstOfMonth(curMonth), [curMonth]);
   const days42 = useMemo(() => build42Days(curMonthDate), [curMonthDate]);
-
   const holidays = useMemo(() => getKoreaHolidaysMap(curMonthDate.getFullYear()), [curMonthDate]);
 
-  // 메모(월 범위)
   const [memos, setMemos] = useState<CalendarMemoRow[]>([]);
 
   type ShipLine = {
@@ -174,30 +148,18 @@ export default function CalendarPage() {
     text: string;
   };
 
-  // ✅ 출고 집계(월 범위) : date -> { total, methods, lines }
   const [shipAgg, setShipAgg] = useState<
-    Map<
-      string,
-      {
-        total: number;
-        byMethod: Record<ShipMethod, number>;
-        lines: ShipLine[]; // ✅ 셀에 표시할 출고 라인(줄단위)
-      }
-    >
+    Map<string, { total: number; byMethod: Record<ShipMethod, number>; lines: ShipLine[] }>
   >(new Map());
 
-  // 모달(날짜 클릭 - 메모)
   const [open, setOpen] = useState(false);
   const [selDate, setSelDate] = useState<string>("");
-
   const [publicText, setPublicText] = useState("");
   const [adminText, setAdminText] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // ✅ 모달(출고 클릭 - 출고 목록: 업체명-택배 형태)
   const [openShip, setOpenShip] = useState(false);
   const [selShipDate, setSelShipDate] = useState<string>("");
-
   const [shipListLoading, setShipListLoading] = useState(false);
   const [shipListErr, setShipListErr] = useState<string | null>(null);
 
@@ -205,13 +167,17 @@ export default function CalendarPage() {
   const [shipRows, setShipRows] = useState<ShipRow[]>([]);
 
   const [downloadingExcel, setDownloadingExcel] = useState(false);
-  const [downloadingExcelDate, setDownloadingExcelDate] = useState<string | null>(null); // ✅ 추가(해당 날짜 버튼만 로딩)
+  const [downloadingExcelDate, setDownloadingExcelDate] = useState<string | null>(null);
+
+  // ✅ 일괄출력 관련 상태
+  const [bulkPrintSelected, setBulkPrintSelected] = useState<Set<string>>(new Set());
+  const [bulkPrinting, setBulkPrinting] = useState(false);
 
   const range = useMemo(() => {
     const yyyy = curMonthDate.getFullYear();
-    const mm = curMonthDate.getMonth(); // 0-based
+    const mm = curMonthDate.getMonth();
     const from = new Date(yyyy, mm, 1);
-    const to = new Date(yyyy, mm + 1, 1); // 다음달 1일(미포함)
+    const to = new Date(yyyy, mm + 1, 1);
     return { from: ymd(from), to: ymd(to) };
   }, [curMonthDate]);
 
@@ -225,25 +191,20 @@ export default function CalendarPage() {
     return map;
   }, [memos]);
 
-  // ✅ 탭(브라우저 타이틀) 변경
   useEffect(() => {
     document.title = "BONUSMATE ERP 출고캘린더";
   }, []);
 
-  // ✅ 거래명세서 열기 + 인쇄 다이얼로그(= PDF 인쇄 화면) 자동 호출용 파라미터 추가
   function openSpec(partnerId: string | null, date: string) {
     if (!partnerId) return;
     if (!date) return;
-    const url = `/tax/spec?partnerId=${encodeURIComponent(partnerId)}&from=${encodeURIComponent(
-      date
-    )}&to=${encodeURIComponent(date)}&autoprint=1`;
+    const url = `/tax/spec?partnerId=${encodeURIComponent(partnerId)}&from=${encodeURIComponent(date)}&to=${encodeURIComponent(date)}&autoprint=1`;
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
   async function loadAll() {
     setMsg(null);
 
-    // 1) calendar_memos (PUBLIC은 전원, ADMIN은 RLS로 관리자만 내려옴)
     {
       const { data, error } = await supabase
         .from("calendar_memos")
@@ -256,8 +217,6 @@ export default function CalendarPage() {
       setMemos((data ?? []) as CalendarMemoRow[]);
     }
 
-    // 2) orders 출고 집계 + ✅ 셀용 "출고 라인" 생성
-    //    - 네이버/쿠팡/카카오플러스 채널은 "택배"만 숨기고, 나머지 출고방식은 표시
     {
       const { data, error } = await supabase
         .from("orders")
@@ -269,7 +228,6 @@ export default function CalendarPage() {
       if (error) return setMsg(error.message);
 
       const map = new Map<string, { total: number; byMethod: Record<ShipMethod, number>; lines: ShipLine[] }>();
-
       const lineMapByDate = new Map<
         string,
         Map<string, { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }>
@@ -282,7 +240,6 @@ export default function CalendarPage() {
         const customerName = String(r?.customer_name ?? "").trim() || "(거래처 미지정)";
         const method = normalizeShipMethod(r?.ship_method);
 
-        // ✅ (핵심) 판매채널은 택배만 숨김
         if (HIDE_CUSTOMERS.has(customerName) && method === "택배") continue;
 
         const partnerId = r?.customer_id == null ? null : String(r.customer_id);
@@ -298,10 +255,7 @@ export default function CalendarPage() {
         map.set(d, cur);
 
         const key = `${partnerId ?? ""}__${customerName}__${method}`;
-        const lm =
-          lineMapByDate.get(d) ??
-          new Map<string, { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }>();
-
+        const lm = lineMapByDate.get(d) ?? new Map();
         const prev = lm.get(key);
         if (prev) {
           prev.cnt += 1;
@@ -347,45 +301,34 @@ export default function CalendarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curMonth]);
 
-  // ✅ 월이 바뀌거나 처음 로드되면 "오늘" 셀에 포커싱
   useEffect(() => {
     if (didFocusRef.current) return;
-
     const isSameMonth = curMonth === monthKey(new Date());
     if (!isSameMonth) return;
-
     const t = window.setTimeout(() => {
       const el = document.querySelector<HTMLButtonElement>(`button[data-date="${todayStr}"]`);
-      if (el) {
-        el.focus();
-        didFocusRef.current = true;
-      }
+      if (el) { el.focus(); didFocusRef.current = true; }
     }, 0);
-
     return () => window.clearTimeout(t);
   }, [curMonth, todayStr]);
 
   function openDayModal(date: string) {
     setMsg(null);
     setSelDate(date);
-
-    const pub = memoMap.get(memoKey(date, "PUBLIC"))?.content ?? "";
-    const adm = memoMap.get(memoKey(date, "ADMIN"))?.content ?? "";
-
-    setPublicText(pub);
-    setAdminText(adm);
-
+    setPublicText(memoMap.get(memoKey(date, "PUBLIC"))?.content ?? "");
+    setAdminText(memoMap.get(memoKey(date, "ADMIN"))?.content ?? "");
     setOpen(true);
   }
 
   async function openShipModal(date: string) {
     setMsg(null);
     setSelShipDate(date);
-
     setShipListErr(null);
     setShipListLoading(true);
     setShipRows([]);
     setOpenShip(true);
+    // ✅ 모달 열릴 때 기본적으로 전체 선택
+    setBulkPrintSelected(new Set());
 
     try {
       const { data, error } = await supabase
@@ -395,22 +338,44 @@ export default function CalendarPage() {
 
       if (error) throw error;
 
-      const rowsAll: ShipRow[] = ((data ?? []) as any[]).map((r) => {
-        const customerName = String(r?.customer_name ?? "").trim() || "(거래처 미지정)";
-        const method = normalizeShipMethod(r?.ship_method);
-        const partnerId = r?.customer_id == null ? null : String(r.customer_id);
-        return { partner_id: partnerId, partner_name: customerName, ship_method: method };
-      });
+      const rowsAll: ShipRow[] = ((data ?? []) as any[]).map((r) => ({
+        partner_id: r?.customer_id == null ? null : String(r.customer_id),
+        partner_name: String(r?.customer_name ?? "").trim() || "(거래처 미지정)",
+        ship_method: normalizeShipMethod(r?.ship_method),
+      }));
 
-      // ✅ (핵심) 판매채널은 택배만 숨김
       const rows = rowsAll.filter((r) => !(HIDE_CUSTOMERS.has(r.partner_name) && r.ship_method === "택배"));
-
       setShipRows(rows);
+
+      // ✅ partner_id가 있는 거래처만 일괄출력 대상 → 기본 전체 선택
+      const printableIds = new Set(
+        rows.filter((r) => r.partner_id).map((r) => r.partner_id as string)
+      );
+      setBulkPrintSelected(printableIds);
     } catch (e: any) {
       setShipListErr(e?.message ?? "출고 목록 조회 중 오류");
     } finally {
       setShipListLoading(false);
     }
+  }
+
+  // ✅ 일괄출력 실행: 선택된 거래처를 순차 팝업으로 열기
+  function doBulkPrint() {
+    if (bulkPrintSelected.size === 0) {
+      setMsg("출력할 거래처를 1개 이상 선택하세요.");
+      return;
+    }
+
+    setBulkPrinting(true);
+
+    const ids = Array.from(bulkPrintSelected);
+    ids.forEach((partnerId, idx) => {
+      // 팝업 차단 방지: 약간의 딜레이를 주며 순차 오픈
+      window.setTimeout(() => {
+        openSpec(partnerId, selShipDate);
+        if (idx === ids.length - 1) setBulkPrinting(false);
+      }, idx * 400);
+    });
   }
 
   const shipSummary = useMemo(() => {
@@ -421,29 +386,29 @@ export default function CalendarPage() {
   }, [shipRows]);
 
   const shipLines = useMemo(() => {
-    const m = new Map<string, { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }>(); // key -> cnt
+    const m = new Map<string, { partner_id: string | null; partner: string; method: ShipMethod; cnt: number }>();
     for (const r of shipRows) {
       const key = `${r.partner_id ?? ""}__${r.partner_name}__${r.ship_method}`;
       const prev = m.get(key);
       if (prev) prev.cnt += 1;
       else m.set(key, { partner_id: r.partner_id, partner: r.partner_name, method: r.ship_method, cnt: 1 });
     }
-
-    const lines = Array.from(m.values()).map((x) => {
-      return { partner_id: x.partner_id, partner: x.partner, method: x.method, cnt: x.cnt };
-    });
-
+    const lines = Array.from(m.values());
     const order: Record<ShipMethod, number> = { 택배: 0, "퀵-신용": 1, "퀵-착불": 2, 방문: 3, 기타: 4 };
     lines.sort((a, b) => {
       const nameCmp = a.partner.localeCompare(b.partner, "ko");
       if (nameCmp !== 0) return nameCmp;
       return (order[a.method] ?? 9) - (order[b.method] ?? 9);
     });
-
     return lines;
   }, [shipRows]);
 
-  // ✅ “해당 날짜 전체 출고”를 송장(택배 양식) 엑셀로 다운로드
+  // ✅ 일괄출력 가능한 거래처(partner_id 있는 것만)
+  const printableLines = useMemo(
+    () => shipLines.filter((x) => x.partner_id),
+    [shipLines]
+  );
+
   async function downloadShipExcel(date: string) {
     if (!date) return;
     setDownloadingExcel(true);
@@ -461,23 +426,19 @@ export default function CalendarPage() {
             const j = JSON.parse(txt);
             if (j?.error) errText = j.error;
             else if (txt) errText = txt;
-          } catch {
-            if (txt) errText = txt;
-          }
+          } catch { if (txt) errText = txt; }
         } catch {}
         throw new Error(errText);
       }
 
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
-
       const a = document.createElement("a");
       a.href = url;
       a.download = `송장_${date}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
-
       window.URL.revokeObjectURL(url);
     } catch (e: any) {
       setMsg(e?.message ?? "엑셀 다운로드 중 오류");
@@ -487,7 +448,6 @@ export default function CalendarPage() {
     }
   }
 
-  // ✅ (핵심 수정) 메모 저장 실패 시 서버 응답을 최대한 그대로 표시
   async function upsertMemo(date: string, vis: Visibility, content: string) {
     const existing = memoMap.get(memoKey(date, vis));
     const trimmed = content.trim();
@@ -500,8 +460,7 @@ export default function CalendarPage() {
     }
 
     if (!existing) {
-      const payload: any = { memo_date: date, visibility: vis, content: trimmed, created_by: null };
-      const { error } = await supabase.from("calendar_memos").insert(payload);
+      const { error } = await supabase.from("calendar_memos").insert({ memo_date: date, visibility: vis, content: trimmed, created_by: null });
       if (error) throw new Error(error.message);
       return;
     }
@@ -517,14 +476,11 @@ export default function CalendarPage() {
 
     try {
       await upsertMemo(selDate, "PUBLIC", publicText);
-
-      // ✅ ADMIN 메모 저장 실패가 “메모 저장 실패”로만 보이지 않게, 오류 메시지를 그대로 띄움
       try {
         await upsertMemo(selDate, "ADMIN", adminText);
       } catch (e: any) {
         throw new Error(e?.message ?? "관리자 메모 저장 실패");
       }
-
       setOpen(false);
       await loadAll();
     } catch (e: any) {
@@ -535,11 +491,9 @@ export default function CalendarPage() {
   }
 
   function dayColor(dateObj: Date) {
-    const dow = dateObj.getDay(); // 0=일, 6=토
+    const dow = dateObj.getDay();
     const dateStr = ymd(dateObj);
-    const isHoliday = !!holidays[dateStr];
-
-    if (isHoliday) return "text-red-600";
+    if (!!holidays[dateStr]) return "text-red-600";
     if (dow === 0) return "text-red-600";
     if (dow === 6) return "text-blue-600";
     return "text-slate-900";
@@ -574,39 +528,17 @@ export default function CalendarPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <button
-                className={btn}
-                onClick={() => {
-                  const prev = addMonths(curMonthDate, -1);
-                  setCurMonth(monthKey(prev));
-                }}
-              >
-                ◀ 이전달
-              </button>
-              <button className={btn} onClick={() => setCurMonth(monthKey(new Date()))}>
-                오늘
-              </button>
-              <button
-                className={btn}
-                onClick={() => {
-                  const next = addMonths(curMonthDate, 1);
-                  setCurMonth(monthKey(next));
-                }}
-              >
-                다음달 ▶
-              </button>
-              <button className={btnOn} onClick={loadAll}>
-                새로고침
-              </button>
+              <button className={btn} onClick={() => setCurMonth(monthKey(addMonths(curMonthDate, -1)))}>◀ 이전달</button>
+              <button className={btn} onClick={() => setCurMonth(monthKey(new Date()))}>오늘</button>
+              <button className={btn} onClick={() => setCurMonth(monthKey(addMonths(curMonthDate, 1)))}>다음달 ▶</button>
+              <button className={btnOn} onClick={loadAll}>새로고침</button>
             </div>
           </div>
 
           <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
             <div className="grid grid-cols-7 bg-slate-50 text-xs font-semibold">
               {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
-                <div key={w} className={`px-3 py-2 ${weekdayHeaderColor(i)}`}>
-                  {w}
-                </div>
+                <div key={w} className={`px-3 py-2 ${weekdayHeaderColor(i)}`}>{w}</div>
               ))}
             </div>
 
@@ -620,31 +552,16 @@ export default function CalendarPage() {
                 }
 
                 const dayNum = d.getDate();
-
                 const pub = memoMap.get(memoKey(ds, "PUBLIC"))?.content?.trim() ?? "";
                 const adm = memoMap.get(memoKey(ds, "ADMIN"))?.content?.trim() ?? "";
-
-                // ✅ 메모를 줄/건 단위로 표시
-                const pubItems = pub
-                  ? pub
-                      .split(/\r?\n/)
-                      .map((x) => x.trim())
-                      .filter(Boolean)
-                  : [];
-                const admItems = adm
-                  ? adm
-                      .split(/\r?\n/)
-                      .map((x) => x.trim())
-                      .filter(Boolean)
-                  : [];
+                const pubItems = pub ? pub.split(/\r?\n/).map((x) => x.trim()).filter(Boolean) : [];
+                const admItems = adm ? adm.split(/\r?\n/).map((x) => x.trim()).filter(Boolean) : [];
 
                 const shipInfo = shipAgg.get(ds);
                 const shipCnt = shipInfo?.total ?? 0;
                 const shipLinesInCell = shipInfo?.lines ?? [];
-
                 const holidayName = holidays[ds] ?? "";
                 const isToday = ds === todayStr;
-
                 const isDownloadingThisDay = downloadingExcel && downloadingExcelDate === ds;
 
                 return (
@@ -657,7 +574,6 @@ export default function CalendarPage() {
                     onClick={() => openDayModal(ds)}
                     title="클릭해서 메모 추가/수정"
                   >
-                    {/* ✅ 날짜(일자 숫자) 좌상단 고정 + ✅ 공휴일/기념일 배지를 날짜 옆에 바로 붙임 */}
                     <div className="absolute left-3 top-2 flex items-center gap-1">
                       <div className={`text-sm font-semibold ${dayColor(d)}`}>{dayNum}</div>
                       {holidayName ? (
@@ -667,36 +583,26 @@ export default function CalendarPage() {
                       ) : null}
                     </div>
 
-                    {/* 우상단 배지(오늘) */}
                     <div className="absolute right-3 top-2 flex flex-wrap items-center justify-end gap-1">
                       {isToday ? <span className={badge}>오늘</span> : null}
                     </div>
 
-                    {/* ✅ 출고가 제일 위(메모보다 위), 줄단위 */}
                     {shipCnt > 0 ? (
                       <div
                         className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openShipModal(ds);
-                        }}
-                        title="클릭해서 출고 목록(업체명-출고방식) 확인"
+                        onClick={(e) => { e.stopPropagation(); openShipModal(ds); }}
                         role="button"
+                        title="클릭해서 출고 목록 확인"
                       >
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <div className="text-[11px] font-semibold text-slate-800">
                             출고 <span className="tabular-nums">{shipCnt}</span>건
                           </div>
-
                           <button
                             type="button"
                             className={btnMini}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              downloadShipExcel(ds);
-                            }}
+                            onClick={(e) => { e.stopPropagation(); downloadShipExcel(ds); }}
                             disabled={isDownloadingThisDay}
-                            title="해당 날짜 출고 예정 전체를 송장(택배 양식) 엑셀로 다운로드"
                           >
                             {isDownloadingThisDay ? "생성중..." : "송장엑셀"}
                           </button>
@@ -708,11 +614,8 @@ export default function CalendarPage() {
                               key={`${ds}__shipline__${idx}`}
                               type="button"
                               className="block w-full truncate text-left text-[11px] text-slate-800 hover:underline"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openSpec(x.partner_id, ds);
-                              }}
-                              title="클릭하면 당일 거래명세서(인쇄창까지) 출력"
+                              onClick={(e) => { e.stopPropagation(); openSpec(x.partner_id, ds); }}
+                              title="클릭하면 당일 거래명세서 출력"
                             >
                               {x.text}
                             </button>
@@ -724,17 +627,10 @@ export default function CalendarPage() {
                       </div>
                     ) : null}
 
-                    {/* 메모는 출고 아래 (건/줄 단위 표시) */}
                     {pubItems.length > 0 ? (
                       <div className="mt-2 space-y-1">
                         {pubItems.map((t, i) => (
-                          <div
-                            key={`${ds}__pub__${i}`}
-                            className="truncate rounded-md border border-yellow-200 bg-yellow-50 px-2 py-1 text-[11px] text-slate-900"
-                            title={t}
-                          >
-                            {t}
-                          </div>
+                          <div key={`${ds}__pub__${i}`} className="truncate rounded-md border border-yellow-200 bg-yellow-50 px-2 py-1 text-[11px] text-slate-900" title={t}>{t}</div>
                         ))}
                       </div>
                     ) : null}
@@ -742,13 +638,7 @@ export default function CalendarPage() {
                     {admItems.length > 0 ? (
                       <div className="mt-2 space-y-1">
                         {admItems.map((t, i) => (
-                          <div
-                            key={`${ds}__adm__${i}`}
-                            className="truncate rounded-md border border-purple-200 bg-purple-50 px-2 py-1 text-[11px] text-slate-900"
-                            title={t}
-                          >
-                            {t}
-                          </div>
+                          <div key={`${ds}__adm__${i}`} className="truncate rounded-md border border-purple-200 bg-purple-50 px-2 py-1 text-[11px] text-slate-900" title={t}>{t}</div>
                         ))}
                       </div>
                     ) : null}
@@ -759,116 +649,117 @@ export default function CalendarPage() {
           </div>
 
           <div className="mt-2 text-xs text-slate-500">
-            ※ 메모가 비어 있으면 표시하지 않습니다. · 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다. · 출고는{" "}
-            <span className="font-semibold">orders.ship_date</span> + <span className="font-semibold">orders.ship_method</span>{" "}
-            기준이며, <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는{" "}
-            <span className="font-semibold">택배만 숨김</span> 처리하고, 퀵/방문/기타는 표시합니다.
+            ※ 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다. · 출고는 <span className="font-semibold">orders.ship_date</span> 기준이며, <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 <span className="font-semibold">택배만 숨김</span> 처리합니다.
           </div>
         </div>
 
         {/* 모달: 메모 */}
         {open ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-            <div
-              className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <div className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">메모 · {selDate}</div>
                   <div className="mt-1 text-xs text-slate-500">비우고 저장하면 삭제됩니다.</div>
                 </div>
                 <div className="flex gap-2">
-                  <button className={btn} onClick={() => setOpen(false)} disabled={saving}>
-                    닫기
-                  </button>
-                  <button className={btnOn} onClick={saveModal} disabled={saving}>
-                    {saving ? "저장중..." : "저장"}
-                  </button>
+                  <button className={btn} onClick={() => setOpen(false)} disabled={saving}>닫기</button>
+                  <button className={btnOn} onClick={saveModal} disabled={saving}>{saving ? "저장중..." : "저장"}</button>
                 </div>
               </div>
-
               <div className="space-y-4 px-5 py-4">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <div className="mb-2 text-sm font-semibold">공개 메모 (전원)</div>
-                  <textarea
-                    className={`${input} min-h-[110px] resize-y`}
-                    value={publicText}
-                    onChange={(e) => setPublicText(e.target.value)}
-                    placeholder="예: 2/2 대량 출고 / 택배 마감 16시"
-                  />
+                  <textarea className={`${input} min-h-[110px] resize-y`} value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="예: 2/2 대량 출고 / 택배 마감 16시" />
                 </div>
-
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <div className="mb-2 text-sm font-semibold">관리자 메모 (관리자만)</div>
-                  <textarea
-                    className={`${input} min-h-[110px] resize-y`}
-                    value={adminText}
-                    onChange={(e) => setAdminText(e.target.value)}
-                    placeholder="예: 내부 생산/인원 배치/특이사항"
-                  />
+                  <textarea className={`${input} min-h-[110px] resize-y`} value={adminText} onChange={(e) => setAdminText(e.target.value)} placeholder="예: 내부 생산/인원 배치/특이사항" />
                   <div className="mt-2 text-xs text-slate-500">※ 권한이 없으면 RLS로 인해 ADMIN 메모는 저장/조회되지 않습니다.</div>
-                </div>
-
-                <div className="text-xs text-slate-500">
-                  출고 건수는 <span className="font-semibold">orders.ship_date</span> 기준으로 자동 표시됩니다.
                 </div>
               </div>
             </div>
           </div>
         ) : null}
 
-        {/* 모달: 출고 목록 */}
+        {/* ✅ 모달: 출고 목록 + 일괄출력 */}
         {openShip ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setOpenShip(false)}>
-            <div
-              className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <div className="w-full max-w-[900px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <div className="text-base font-semibold">출고 목록 · {selShipDate}</div>
-                  <div className="mt-1 text-xs text-slate-500">업체명-출고방식(택배/퀵-신용/퀵-착불/방문/기타) 형태로 표시합니다.</div>
+                  <div className="mt-1 text-xs text-slate-500">거래처를 체크하고 일괄출력하면 명세서가 거래처별로 순서대로 열립니다.</div>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     className={btnOn}
                     onClick={() => downloadShipExcel(selShipDate)}
                     disabled={downloadingExcel || !selShipDate}
-                    title="해당 날짜 출고 목록을 엑셀로 다운로드"
                   >
                     {downloadingExcel ? "엑셀 생성중..." : "엑셀 다운로드"}
                   </button>
-                  <button className={btn} onClick={() => setOpenShip(false)} disabled={downloadingExcel}>
-                    닫기
-                  </button>
+                  <button className={btn} onClick={() => setOpenShip(false)} disabled={downloadingExcel || bulkPrinting}>닫기</button>
                 </div>
               </div>
 
               <div className="px-5 py-4">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <span className={badge}>
-                      총 <span className="tabular-nums">{shipSummary.total}</span>건
-                    </span>
-                    <span className={badgeShip}>
-                      택배 <span className="tabular-nums">{shipSummary.byMethod["택배"]}</span>
-                    </span>
-                    <span className={badgeQuickCredit}>
-                      퀵-신용 <span className="tabular-nums">{shipSummary.byMethod["퀵-신용"]}</span>
-                    </span>
-                    <span className={badgeQuickCod}>
-                      퀵-착불 <span className="tabular-nums">{shipSummary.byMethod["퀵-착불"]}</span>
-                    </span>
-                    <span className={badgeVisit}>
-                      방문 <span className="tabular-nums">{shipSummary.byMethod["방문"]}</span>
-                    </span>
-                    <span className={badgeEtc}>
-                      기타 <span className="tabular-nums">{shipSummary.byMethod["기타"]}</span>
-                    </span>
-                  </div>
+                {/* 출고 통계 배지 */}
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <span className={badge}>총 <span className="tabular-nums">{shipSummary.total}</span>건</span>
+                  <span className={badgeShip}>택배 <span className="tabular-nums">{shipSummary.byMethod["택배"]}</span></span>
+                  <span className={badgeQuickCredit}>퀵-신용 <span className="tabular-nums">{shipSummary.byMethod["퀵-신용"]}</span></span>
+                  <span className={badgeQuickCod}>퀵-착불 <span className="tabular-nums">{shipSummary.byMethod["퀵-착불"]}</span></span>
+                  <span className={badgeVisit}>방문 <span className="tabular-nums">{shipSummary.byMethod["방문"]}</span></span>
+                  <span className={badgeEtc}>기타 <span className="tabular-nums">{shipSummary.byMethod["기타"]}</span></span>
+                </div>
 
+                {/* ✅ 일괄출력 컨트롤 영역 */}
+                {printableLines.length > 0 && !shipListLoading ? (
+                  <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm font-semibold text-blue-900">
+                        거래명세서 일괄출력
+                        <span className="ml-2 text-xs font-normal text-blue-700">
+                          ({bulkPrintSelected.size}/{printableLines.length}개 선택)
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className="rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                          onClick={() => setBulkPrintSelected(new Set(printableLines.map((x) => x.partner_id as string)))}
+                        >
+                          전체선택
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                          onClick={() => setBulkPrintSelected(new Set())}
+                        >
+                          전체해제
+                        </button>
+                        <button
+                          type="button"
+                          className={`rounded-xl border border-blue-600/20 bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50`}
+                          onClick={doBulkPrint}
+                          disabled={bulkPrinting || bulkPrintSelected.size === 0}
+                        >
+                          {bulkPrinting
+                            ? `출력중... (${bulkPrintSelected.size}건)`
+                            : `선택 ${bulkPrintSelected.size}건 일괄출력`}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-xs text-blue-700">
+                      ※ 팝업 차단이 설정된 경우 브라우저에서 팝업 허용 후 다시 시도하세요. · 거래처별로 명세서가 순서대로 열립니다.
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* 거래처 목록 */}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   {shipListLoading ? (
                     <div className="text-sm text-slate-600">불러오는 중...</div>
                   ) : shipListErr ? (
@@ -877,30 +768,66 @@ export default function CalendarPage() {
                     <div className="text-sm text-slate-600">출고 건이 없습니다.</div>
                   ) : (
                     <div className="space-y-2">
-                      {shipLines.map((x) => (
-                        <div
-                          key={`${x.partner_id ?? ""}__${x.partner}__${x.method}`}
-                          className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                        >
-                          <button
-                            type="button"
-                            className="text-left text-sm font-semibold text-slate-900 hover:underline"
-                            onClick={() => openSpec(x.partner_id, selShipDate)}
-                            title="클릭하면 당일 거래명세서(인쇄창까지) 출력"
+                      {shipLines.map((x) => {
+                        const key = `${x.partner_id ?? ""}__${x.partner}__${x.method}`;
+                        const hasPrintId = !!x.partner_id;
+                        const isChecked = hasPrintId && bulkPrintSelected.has(x.partner_id as string);
+
+                        return (
+                          <div
+                            key={key}
+                            className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${
+                              isChecked ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white"
+                            }`}
                           >
-                            {x.partner} - {x.method}
-                            {x.cnt > 1 ? ` (${x.cnt})` : ""}
-                          </button>
-                        </div>
-                      ))}
+                            {/* ✅ 일괄출력 체크박스 */}
+                            {hasPrintId ? (
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded accent-blue-600"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  setBulkPrintSelected((prev) => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(x.partner_id as string);
+                                    else next.delete(x.partner_id as string);
+                                    return next;
+                                  });
+                                }}
+                              />
+                            ) : (
+                              <div className="h-4 w-4 rounded border border-slate-200 bg-slate-100" title="거래처 ID 없음" />
+                            )}
+
+                            {/* 거래처명 클릭 → 개별 명세서 출력 */}
+                            <button
+                              type="button"
+                              className="flex-1 text-left text-sm font-semibold text-slate-900 hover:underline"
+                              onClick={() => openSpec(x.partner_id, selShipDate)}
+                              title="클릭하면 당일 거래명세서(인쇄창까지) 출력"
+                            >
+                              {x.partner} - {x.method}
+                              {x.cnt > 1 ? ` (${x.cnt})` : ""}
+                            </button>
+
+                            {/* 개별 출력 버튼 */}
+                            {hasPrintId ? (
+                              <button
+                                type="button"
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                                onClick={() => openSpec(x.partner_id, selShipDate)}
+                              >
+                                개별출력
+                              </button>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
                   <div className="mt-3 text-xs text-slate-500">
-                    ※ 엑셀 다운로드는 <span className="font-semibold">order_shipments 기준</span>으로 생성됩니다. (배송지 2개면 2줄) · 제품명은{" "}
-                    <span className="font-semibold">order_lines를 합쳐 1칸</span>에 출력합니다. ·{" "}
-                    <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는{" "}
-                    <span className="font-semibold">택배만 숨김</span> 처리하고, 퀵/방문/기타는 표시합니다.
+                    ※ 체크박스를 선택한 후 <span className="font-semibold">일괄출력</span> 버튼을 누르면 명세서가 거래처별로 순서대로 열립니다. · 거래처 ID가 없는 항목(회색 박스)은 일괄출력에서 제외됩니다.
                   </div>
                 </div>
               </div>
