@@ -480,7 +480,7 @@ export default function ProductsClient() {
       .from("product_variants")
       .select("id, variant_name, barcode, pack_unit, pack_ea, weight_g, unit_type, product_id, products(name, category, food_type)")
       .order("created_at", { ascending: false })
-      .limit(200);
+     
 
     if (vErr) {
       setMsg(vErr.message);
