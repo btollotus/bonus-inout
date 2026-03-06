@@ -8,7 +8,7 @@ export default function LoginPage() {
   const supabase = createClient()
   const router = useRouter()
 
-  const [mode, setMode] = useState<'login' | 'set-password'>('login')
+  const [mode, setMode] = useState<'login' | 'set-password' | 'checking'>('checking')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -17,16 +17,37 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('')
 
   useEffect(() => {
-    // URL 해시에 access_token이 있으면 초대/비밀번호재설정 링크
-    const hash = window.location.hash
-    if (hash && (hash.includes('type=invite') || hash.includes('type=recovery') || hash.includes('access_token'))) {
-      // Supabase가 해시를 자동으로 세션으로 교환함
-      supabase.auth.getSession().then(({ data }) => {
-        if (data.session) {
+    const hash = window.location.hash.slice(1)
+    const params = new URLSearchParams(hash)
+    const errorCode = params.get('error_code')
+    const type = params.get('type')
+    const accessToken = params.get('access_token')
+    const refreshToken = params.get('refresh_token')
+
+    if (errorCode) {
+      setError('링크가 만료되었습니다. 관리자에게 재발송을 요청하세요.')
+      setMode('login')
+      return
+    }
+
+    if (accessToken && refreshToken && (type === 'invite' || type === 'recovery')) {
+      // 토큰을 직접 세션으로 설정
+      supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      }).then(({ data, error }) => {
+        if (error || !data.session) {
+          setError('링크가 만료되었습니다. 관리자에게 재발송을 요청하세요.')
+          setMode('login')
+        } else {
           setEmail(data.session.user.email || '')
           setMode('set-password')
+          // 해시 제거 (보안)
+          window.history.replaceState(null, '', window.location.pathname)
         }
       })
+    } else {
+      setMode('login')
     }
   }, [])
 
@@ -51,10 +72,18 @@ export default function LoginPage() {
     }
   }
 
+  // 토큰 확인 중
+  if (mode === 'checking') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="text-white text-sm">확인 중...</div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900">
       <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
-        {/* 헤더 */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-600 rounded-full mb-3">
             <span className="text-white text-2xl font-bold">B</span>
@@ -65,7 +94,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* 초대/재설정 안내 */}
         {mode === 'set-password' && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-5">
             <p className="text-sm text-blue-800 font-medium">✅ 계정 확인 완료</p>
@@ -85,57 +113,43 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* 로그인 폼 */}
         {mode === 'login' && (
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
-              <input
-                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="이메일 입력" required
-                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
-              <input
-                type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                 placeholder="비밀번호 입력" required
-                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-            <button
-              type="submit" disabled={loading}
-              className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-semibold py-2.5 rounded-md transition-colors"
-            >
+            <button type="submit" disabled={loading}
+              className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-semibold py-2.5 rounded-md transition-colors">
               {loading ? '로그인 중...' : '로그인'}
             </button>
           </form>
         )}
 
-        {/* 비밀번호 설정 폼 */}
         {mode === 'set-password' && (
           <form onSubmit={handleSetPassword} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">새 비밀번호</label>
-              <input
-                type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                 placeholder="6자 이상 입력" required
-                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호 확인</label>
-              <input
-                type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
+              <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
                 placeholder="동일한 비밀번호 재입력" required
-                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-            <button
-              type="submit" disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-md transition-colors"
-            >
+            <button type="submit" disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-md transition-colors">
               {loading ? '설정 중...' : '등록 완료 및 로그인'}
             </button>
           </form>
