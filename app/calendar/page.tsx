@@ -359,22 +359,28 @@ export default function CalendarPage() {
     }
   }
 
-  // ✅ 일괄출력 실행: 선택된 거래처를 순차 팝업으로 열기
+  // ✅ 일괄출력 실행: <a target="_blank"> 클릭 방식으로 팝업차단 우회
   function doBulkPrint() {
     if (bulkPrintSelected.size === 0) {
       setMsg("출력할 거래처를 1개 이상 선택하세요.");
       return;
     }
 
-    setBulkPrinting(true);
-
     const ids = Array.from(bulkPrintSelected);
+
+    // 팝업차단 우회: 숨겨진 <a> 태그를 생성해서 순차 클릭
     ids.forEach((partnerId, idx) => {
-      // 팝업 차단 방지: 약간의 딜레이를 주며 순차 오픈
+      const url = `/tax/spec?partnerId=${encodeURIComponent(partnerId)}&from=${encodeURIComponent(selShipDate)}&to=${encodeURIComponent(selShipDate)}&autoprint=1`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener,noreferrer";
+      document.body.appendChild(a);
+      // 각 링크를 약간의 딜레이로 순차 클릭 (브라우저가 팝업으로 인식하지 않도록)
       window.setTimeout(() => {
-        openSpec(partnerId, selShipDate);
-        if (idx === ids.length - 1) setBulkPrinting(false);
-      }, idx * 400);
+        a.click();
+        document.body.removeChild(a);
+      }, idx * 600);
     });
   }
 
@@ -594,18 +600,32 @@ export default function CalendarPage() {
                         role="button"
                         title="클릭해서 출고 목록 확인"
                       >
-                        <div className="mb-1 flex items-center justify-between gap-2">
+                        <div className="mb-1 flex items-center justify-between gap-1 flex-wrap">
                           <div className="text-[11px] font-semibold text-slate-800">
                             출고 <span className="tabular-nums">{shipCnt}</span>건
                           </div>
-                          <button
-                            type="button"
-                            className={btnMini}
-                            onClick={(e) => { e.stopPropagation(); downloadShipExcel(ds); }}
-                            disabled={isDownloadingThisDay}
-                          >
-                            {isDownloadingThisDay ? "생성중..." : "송장엑셀"}
-                          </button>
+                          <div className="flex gap-1">
+                            {/* ✅ 명세서 일괄출력 버튼 - 눈에 잘 띄게 */}
+                            <button
+                              type="button"
+                              className="rounded-lg border border-blue-400 bg-blue-500 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-blue-600 active:bg-blue-700"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openShipModal(ds);
+                              }}
+                              title="거래명세서 일괄출력"
+                            >
+                              명세서
+                            </button>
+                            <button
+                              type="button"
+                              className={btnMini}
+                              onClick={(e) => { e.stopPropagation(); downloadShipExcel(ds); }}
+                              disabled={isDownloadingThisDay}
+                            >
+                              {isDownloadingThisDay ? "생성중..." : "송장엑셀"}
+                            </button>
+                          </div>
                         </div>
 
                         <div className="space-y-0.5">
