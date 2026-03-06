@@ -13,29 +13,55 @@ type Employee = {
   address: string | null
   hire_date: string | null
   resign_date: string | null
+  position: string | null
+  car_type: string | null
+  fuel_type: string | null
+  commute_distance: number | null
+  emergency_contact: string | null
+  encrypted_rrn: string | null
   created_at: string
-  // 주민번호는 encrypted_rrn으로 저장, 표시용 마스킹
-  encrypted_rrn?: string | null
 }
+
+const POSITIONS = ['대표', '부장', '과장', '대리', '주임', '사원', '수습']
+const FUEL_TYPES = ['휘발유', '경유', 'LPG', '전기', '하이브리드', '없음']
 
 const EMPTY_FORM = {
   employee_code: '', name: '', email: '', mobile: '',
-  address: '', hire_date: '', resign_date: '', rrn: '',
+  address: '', hire_date: '', resign_date: '',
+  position: '', car_type: '', fuel_type: '', commute_distance: '',
+  emergency_contact: '', rrn: '',
 }
 
-// 주민번호 표시 마스킹: 730228-1168160 → 730228-1******
-function maskRRN(raw: string) {
-  if (!raw) return ''
-  const clean = raw.replace(/-/g, '')
-  if (clean.length < 7) return raw
-  return clean.slice(0, 6) + '-' + clean[6] + '******'
+// 주민번호 자동 하이픈
+function formatRRN(v: string) {
+  const c = v.replace(/[^0-9]/g, '').slice(0, 13)
+  return c.length > 6 ? c.slice(0, 6) + '-' + c.slice(6) : c
+}
+// 전화번호 자동 하이픈
+function formatPhone(v: string) {
+  const c = v.replace(/[^0-9]/g, '').slice(0, 11)
+  if (c.length <= 3) return c
+  if (c.length <= 7) return c.slice(0, 3) + '-' + c.slice(3)
+  return c.slice(0, 3) + '-' + c.slice(3, 7) + '-' + c.slice(7)
 }
 
-// 주민번호 형식 자동 하이픈: 7302281168160 → 730228-1168160
-function formatRRN(value: string) {
-  const clean = value.replace(/[^0-9]/g, '').slice(0, 13)
-  if (clean.length > 6) return clean.slice(0, 6) + '-' + clean.slice(6)
-  return clean
+// 변경사항 감지
+function detectChanges(original: Employee, newForm: typeof EMPTY_FORM) {
+  const fieldMap: Record<string, string> = {
+    employee_code: '사번', name: '이름', email: '이메일', mobile: '휴대폰',
+    address: '주소', hire_date: '입사일', resign_date: '퇴사일',
+    position: '직책', car_type: '차종', fuel_type: '유종',
+    commute_distance: '출퇴근거리', emergency_contact: '비상연락처',
+  }
+  const changes: Record<string, { before: unknown; after: unknown }> = {}
+  for (const [key, label] of Object.entries(fieldMap)) {
+    const before = (original as Record<string, unknown>)[key] ?? ''
+    const after = (newForm as Record<string, unknown>)[key] ?? ''
+    if (String(before) !== String(after)) {
+      changes[label] = { before, after }
+    }
+  }
+  return changes
 }
 
 export default function EmployeesPage() {
@@ -43,6 +69,7 @@ export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [form, setForm] = useState(EMPTY_FORM)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
   const [editingAuthId, setEditingAuthId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [fetchLoading, setFetchLoading] = useState(true)
@@ -51,30 +78,31 @@ export default function EmployeesPage() {
   const [showForm, setShowForm] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showRRN, setShowRRN] = useState<Record<string, boolean>>({})
+  const [decryptedRRN, setDecryptedRRN] = useState<Record<string, string>>({})
+  const [historyEmpId, setHistoryEmpId] = useState<string | null>(null)
+  const [history, setHistory] = useState<Record<string, unknown>[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   useEffect(() => { fetchEmployees() }, [])
 
   async function fetchEmployees() {
     setFetchLoading(true)
-    const { data, error } = await supabase
-      .from('employees')
-      .select('*')
-      .order('created_at', { ascending: false })
+    const { data, error } = await supabase.from('employees').select('*').order('created_at', { ascending: false })
     if (error) setError(error.message)
     else setEmployees(data || [])
     setFetchLoading(false)
   }
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.name === 'rrn') {
-      setForm({ ...form, rrn: formatRRN(e.target.value) })
-    } else {
-      setForm({ ...form, [e.target.name]: e.target.value })
-    }
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+    const { name, value } = e.target
+    if (name === 'rrn') { setForm({ ...form, rrn: formatRRN(value) }); return }
+    if (name === 'mobile') { setForm({ ...form, mobile: formatPhone(value) }); return }
+    setForm({ ...form, [name]: value })
   }
 
   function handleEdit(emp: Employee) {
     setEditingId(emp.id)
+    setEditingEmployee(emp)
     setEditingAuthId(emp.auth_user_id)
     setForm({
       employee_code: emp.employee_code,
@@ -84,19 +112,24 @@ export default function EmployeesPage() {
       address: emp.address || '',
       hire_date: emp.hire_date || '',
       resign_date: emp.resign_date || '',
-      rrn: '', // 수정 시 주민번호는 비워둠 (재입력 시에만 변경)
+      position: emp.position || '',
+      car_type: emp.car_type || '',
+      fuel_type: emp.fuel_type || '',
+      commute_distance: emp.commute_distance?.toString() || '',
+      emergency_contact: emp.emergency_contact || '',
+      rrn: '',
     })
     setShowForm(true); setError(''); setSuccess('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function handleNew() {
-    setEditingId(null); setEditingAuthId(null)
+    setEditingId(null); setEditingEmployee(null); setEditingAuthId(null)
     setForm(EMPTY_FORM); setShowForm(true); setError(''); setSuccess('')
   }
 
   function handleCancel() {
-    setEditingId(null); setEditingAuthId(null)
+    setEditingId(null); setEditingEmployee(null); setEditingAuthId(null)
     setForm(EMPTY_FORM); setShowForm(false); setError('')
   }
 
@@ -105,13 +138,12 @@ export default function EmployeesPage() {
     if (!form.name.trim()) return setError('이름은 필수입니다.')
     if (!form.employee_code.trim()) return setError('사번은 필수입니다.')
     if (!editingId && !form.email.trim()) return setError('신규 등록 시 이메일은 필수입니다.')
-
     setLoading(true); setError(''); setSuccess('')
 
     try {
       let authUserId = editingAuthId
 
-      // 신규 등록 → Supabase Auth 계정 생성 + 초대 메일
+      // 신규 등록 → 초대 메일
       if (!editingId && form.email.trim()) {
         const res = await fetch('/api/admin/invite-employee', {
           method: 'POST',
@@ -123,7 +155,7 @@ export default function EmployeesPage() {
         authUserId = json.userId
       }
 
-      // 주민번호 암호화는 서버에서 처리
+      // 주민번호 암호화
       let encryptedRrn: string | null = null
       if (form.rrn.trim()) {
         const rrnRes = await fetch('/api/admin/encrypt-rrn', {
@@ -145,13 +177,32 @@ export default function EmployeesPage() {
         address: form.address || null,
         hire_date: form.hire_date || null,
         resign_date: form.resign_date || null,
+        position: form.position || null,
+        car_type: form.car_type || null,
+        fuel_type: form.fuel_type || null,
+        commute_distance: form.commute_distance ? Number(form.commute_distance) : null,
+        emergency_contact: form.emergency_contact || null,
       }
-      // 주민번호 입력된 경우만 업데이트
       if (encryptedRrn) payload.encrypted_rrn = encryptedRrn
 
       if (editingId) {
         const { error } = await supabase.from('employees').update(payload).eq('id', editingId)
         if (error) throw new Error(error.message)
+
+        // 수정 이력 저장
+        if (editingEmployee) {
+          const changes = detectChanges(editingEmployee, form)
+          if (Object.keys(changes).length > 0) {
+            const { data: { user } } = await supabase.auth.getUser()
+            await supabase.from('employee_history').insert([{
+              employee_id: editingId,
+              employee_name: form.name,
+              changed_by: user?.id ?? null,
+              changed_by_email: user?.email ?? null,
+              changes,
+            }])
+          }
+        }
         setSuccess('직원 정보가 수정되었습니다.')
       } else {
         const { error } = await supabase.from('employees').insert([payload])
@@ -167,13 +218,12 @@ export default function EmployeesPage() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`"${name}" 직원을 삭제하시겠습니까?\n(Auth 계정은 별도 삭제 필요)`)) return
+    if (!confirm(`"${name}" 직원을 삭제하시겠습니까?`)) return
     const { error } = await supabase.from('employees').delete().eq('id', id)
     if (error) setError(error.message)
     else { setSuccess('삭제되었습니다.'); fetchEmployees() }
   }
 
-  // 주민번호 복호화해서 표시
   async function handleRevealRRN(empId: string) {
     if (showRRN[empId]) { setShowRRN((p) => ({ ...p, [empId]: false })); return }
     const res = await fetch('/api/admin/decrypt-rrn', {
@@ -183,32 +233,42 @@ export default function EmployeesPage() {
     })
     const json = await res.json()
     if (res.ok) {
-      // 복호화된 값을 employees 상태에 임시 저장
-      setEmployees((prev) => prev.map((e) => e.id === empId ? { ...e, _decryptedRrn: json.rrn } as Employee & { _decryptedRrn: string } : e))
+      setDecryptedRRN((p) => ({ ...p, [empId]: json.rrn }))
       setShowRRN((p) => ({ ...p, [empId]: true }))
-      // 10초 후 자동 숨김
       setTimeout(() => setShowRRN((p) => ({ ...p, [empId]: false })), 10000)
     } else {
       setError(json.error || '복호화 실패')
     }
   }
 
+  async function handleShowHistory(empId: string, empName: string) {
+    if (historyEmpId === empId) { setHistoryEmpId(null); return }
+    setHistoryEmpId(empId); setHistoryLoading(true)
+    const { data } = await supabase
+      .from('employee_history')
+      .select('*')
+      .eq('employee_id', empId)
+      .order('changed_at', { ascending: false })
+      .limit(20)
+    setHistory(data || [])
+    setHistoryLoading(false)
+  }
+
   const filtered = employees.filter(
     (e) => e.name.includes(searchQuery) ||
       e.employee_code.includes(searchQuery) ||
       (e.mobile || '').includes(searchQuery) ||
-      (e.email || '').includes(searchQuery)
+      (e.email || '').includes(searchQuery) ||
+      (e.position || '').includes(searchQuery)
   )
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">직원 관리 (관리자)</h1>
-            <p className="text-xs text-gray-500 mt-0.5">
-              이메일 입력 시 로그인 계정이 자동 생성되고 초대 메일이 발송됩니다. 주민번호는 암호화 저장됩니다.
-            </p>
+            <p className="text-xs text-gray-500 mt-0.5">이메일 입력 시 로그인 계정 자동 생성 + 초대 메일 발송 · 주민번호 AES-256 암호화 저장</p>
           </div>
           <button onClick={handleNew} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors">
             + 새로 등록
@@ -216,7 +276,7 @@ export default function EmployeesPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm flex justify-between">
             <span>{error}</span>
@@ -233,12 +293,12 @@ export default function EmployeesPage() {
         {showForm && (
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
             <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-base font-semibold text-gray-800">
-                {editingId ? '직원 정보 수정' : '새 직원 등록'}
-              </h2>
+              <h2 className="text-base font-semibold text-gray-800">{editingId ? '직원 정보 수정' : '새 직원 등록'}</h2>
             </div>
             <form onSubmit={handleSubmit} className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 기본 정보 */}
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">기본 정보</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">이름 <span className="text-red-500">*</span></label>
                   <input name="name" value={form.name} onChange={handleChange} placeholder="홍길동"
@@ -250,6 +310,14 @@ export default function EmployeesPage() {
                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">직책</label>
+                  <select name="position" value={form.position} onChange={handleChange}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">선택</option>
+                    {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     이메일 {!editingId && <span className="text-red-500">*</span>}
                     {!editingId && <span className="text-xs text-blue-600 ml-1">→ 초대 메일 자동 발송</span>}
@@ -258,26 +326,27 @@ export default function EmployeesPage() {
                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    주민번호
-                    <span className="text-xs text-gray-400 ml-2">
-                      {editingId ? '(재입력 시에만 변경)' : ''} · AES-256 암호화 저장
-                    </span>
-                  </label>
-                  <input
-                    name="rrn" value={form.rrn} onChange={handleChange}
-                    placeholder="730228-1168160" maxLength={14}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono tracking-wider"
-                  />
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">휴대폰</label>
                   <input name="mobile" value={form.mobile} onChange={handleChange} placeholder="010-0000-0000"
                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    주민번호
+                    <span className="text-xs text-gray-400 ml-1">{editingId ? '재입력시만 변경' : ''} · AES-256 암호화</span>
+                  </label>
+                  <input name="rrn" value={form.rrn} onChange={handleChange} placeholder="730228-1168160" maxLength={14}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono tracking-wider" />
+                </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">주소</label>
                   <input name="address" value={form.address} onChange={handleChange} placeholder="주소"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">비상연락처</label>
+                  <input name="emergency_contact" value={form.emergency_contact} onChange={handleChange}
+                    placeholder="홍아버지 010-0000-0000 (부)"
                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
@@ -291,6 +360,31 @@ export default function EmployeesPage() {
                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
+
+              {/* 차량/통근 정보 */}
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">차량 / 통근 정보</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">차종</label>
+                  <input name="car_type" value={form.car_type} onChange={handleChange} placeholder="예: 현대 아반떼"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">유종</label>
+                  <select name="fuel_type" value={form.fuel_type} onChange={handleChange}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">선택</option>
+                    {FUEL_TYPES.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">출퇴근 거리 (km)</label>
+                  <input type="number" name="commute_distance" value={form.commute_distance} onChange={handleChange}
+                    placeholder="편도 km" min="0" step="0.1"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+
               <div className="flex gap-3 mt-6">
                 <button type="submit" disabled={loading}
                   className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-md transition-colors">
@@ -305,13 +399,14 @@ export default function EmployeesPage() {
           </div>
         )}
 
+        {/* 직원 목록 */}
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-base font-semibold text-gray-800">
               직원 목록 <span className="text-gray-400 font-normal text-sm">({filtered.length}명)</span>
             </h2>
             <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="이름, 사번, 이메일, 전화번호..."
+              placeholder="이름, 사번, 이메일, 직책..."
               className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
@@ -325,43 +420,52 @@ export default function EmployeesPage() {
                 <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                   <tr>
                     <th className="px-4 py-3 text-left font-medium">이름</th>
+                    <th className="px-4 py-3 text-left font-medium">직책</th>
                     <th className="px-4 py-3 text-left font-medium">사번</th>
                     <th className="px-4 py-3 text-left font-medium">이메일</th>
                     <th className="px-4 py-3 text-left font-medium">휴대폰</th>
                     <th className="px-4 py-3 text-left font-medium">주민번호</th>
-                    <th className="px-4 py-3 text-left font-medium">입사일</th>
+                    <th className="px-4 py-3 text-left font-medium">차량</th>
+                    <th className="px-4 py-3 text-left font-medium">통근</th>
                     <th className="px-4 py-3 text-center font-medium">상태</th>
                     <th className="px-4 py-3 text-center font-medium">계정</th>
                     <th className="px-4 py-3 text-left font-medium">작업</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filtered.map((emp) => {
-                    const empAny = emp as Employee & { _decryptedRrn?: string }
-                    return (
+                  {filtered.map((emp) => (
+                    <>
                       <tr key={emp.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 font-medium text-gray-900">{emp.name}</td>
-                        <td className="px-4 py-3 text-gray-600">{emp.employee_code}</td>
+                        <td className="px-4 py-3">
+                          {emp.position
+                            ? <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{emp.position}</span>
+                            : <span className="text-gray-300 text-xs">-</span>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 text-xs">{emp.employee_code}</td>
                         <td className="px-4 py-3 text-gray-600 text-xs">{emp.email || '-'}</td>
-                        <td className="px-4 py-3 text-gray-600">{emp.mobile || '-'}</td>
+                        <td className="px-4 py-3 text-gray-600 text-xs">{emp.mobile || '-'}</td>
                         <td className="px-4 py-3">
                           {emp.encrypted_rrn ? (
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1">
                               <span className="font-mono text-xs text-gray-700">
-                                {showRRN[emp.id] && empAny._decryptedRrn
-                                  ? maskRRN(empAny._decryptedRrn)
-                                  : '●●●●●●-●●●●●●●'}
+                                {showRRN[emp.id] && decryptedRRN[emp.id]
+                                  ? decryptedRRN[emp.id].slice(0, 8) + '******'
+                                  : '●●●●●●-●'}
                               </span>
                               <button onClick={() => handleRevealRRN(emp.id)}
-                                className="text-xs text-blue-500 hover:text-blue-700 underline">
+                                className="text-xs text-blue-500 hover:text-blue-700 underline ml-1">
                                 {showRRN[emp.id] ? '숨김' : '확인'}
                               </button>
                             </div>
-                          ) : (
-                            <span className="text-xs text-gray-300">미입력</span>
-                          )}
+                          ) : <span className="text-xs text-gray-300">미입력</span>}
                         </td>
-                        <td className="px-4 py-3 text-gray-600 text-xs">{emp.hire_date || '-'}</td>
+                        <td className="px-4 py-3 text-gray-600 text-xs">
+                          {emp.car_type ? `${emp.car_type}${emp.fuel_type ? ` (${emp.fuel_type})` : ''}` : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 text-xs">
+                          {emp.commute_distance ? `${emp.commute_distance}km` : '-'}
+                        </td>
                         <td className="px-4 py-3 text-center">
                           {emp.resign_date
                             ? <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">퇴사</span>
@@ -373,20 +477,57 @@ export default function EmployeesPage() {
                             : <span className="text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">미연동</span>}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
                             <button onClick={() => handleEdit(emp)} className="text-blue-600 hover:text-blue-800 text-xs font-medium">수정</button>
+                            <button onClick={() => handleShowHistory(emp.id, emp.name)} className="text-gray-500 hover:text-gray-700 text-xs font-medium">이력</button>
                             <button onClick={() => handleDelete(emp.id, emp.name)} className="text-red-500 hover:text-red-700 text-xs font-medium">삭제</button>
                           </div>
                         </td>
                       </tr>
-                    )
-                  })}
+
+                      {/* 수정 이력 인라인 표시 */}
+                      {historyEmpId === emp.id && (
+                        <tr key={emp.id + '-history'}>
+                          <td colSpan={11} className="px-4 py-3 bg-gray-50 border-t border-gray-100">
+                            <div className="text-xs font-semibold text-gray-500 mb-2">📋 {emp.name} 수정 이력</div>
+                            {historyLoading ? (
+                              <div className="text-xs text-gray-400">불러오는 중...</div>
+                            ) : history.length === 0 ? (
+                              <div className="text-xs text-gray-400">수정 이력이 없습니다.</div>
+                            ) : (
+                              <div className="space-y-2">
+                                {history.map((h: Record<string, unknown>, i) => (
+                                  <div key={i} className="bg-white border border-gray-200 rounded p-2.5">
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      <span className="text-xs text-gray-500">{new Date(h.changed_at as string).toLocaleString('ko-KR')}</span>
+                                      <span className="text-xs text-blue-600">{h.changed_by_email as string || '관리자'}</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {Object.entries(h.changes as Record<string, { before: unknown; after: unknown }>).map(([field, val]) => (
+                                        <div key={field} className="text-xs bg-yellow-50 border border-yellow-200 rounded px-2 py-1">
+                                          <span className="font-medium text-gray-700">{field}</span>
+                                          <span className="text-gray-400 mx-1">:</span>
+                                          <span className="text-red-500 line-through">{String(val.before || '-')}</span>
+                                          <span className="mx-1 text-gray-400">→</span>
+                                          <span className="text-green-600">{String(val.after || '-')}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
           <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-400">
-            ※ 주민번호는 AES-256 암호화 저장 · 확인 버튼 클릭 후 10초 뒤 자동 숨김 · RLS로 관리자만 접근 가능
+            ※ 주민번호 AES-256 암호화 · 확인 후 10초 자동 숨김 · RLS 관리자 전용
           </div>
         </div>
       </div>
