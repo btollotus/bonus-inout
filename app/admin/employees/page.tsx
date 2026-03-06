@@ -79,6 +79,7 @@ export default function EmployeesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showRRN, setShowRRN] = useState<Record<string, boolean>>({})
   const [decryptedRRN, setDecryptedRRN] = useState<Record<string, string>>({})
+  const [resendingId, setResendingId] = useState<string | null>(null)
   const [historyEmpId, setHistoryEmpId] = useState<string | null>(null)
   const [history, setHistory] = useState<Record<string, unknown>[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -241,6 +242,21 @@ export default function EmployeesPage() {
     }
   }
 
+  async function handleResendInvite(email: string, name: string, empId: string) {
+    if (!email) return setError('이메일이 없어 초대 메일을 보낼 수 없습니다.')
+    if (!confirm(`${name} (${email})에게 초대 메일을 다시 발송할까요?`)) return
+    setResendingId(empId)
+    const res = await fetch('/api/admin/invite-employee', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name }),
+    })
+    const json = await res.json()
+    setResendingId(null)
+    if (!res.ok) setError(json.error || '발송 실패')
+    else setSuccess(`${email}로 초대 메일을 재발송했습니다.`)
+  }
+
   async function handleShowHistory(empId: string, empName: string) {
     if (historyEmpId === empId) { setHistoryEmpId(null); return }
     setHistoryEmpId(empId); setHistoryLoading(true)
@@ -385,11 +401,19 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-6">
+              <div className="flex gap-3 mt-6 flex-wrap">
                 <button type="submit" disabled={loading}
                   className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-md transition-colors">
                   {loading ? '처리 중...' : editingId ? '수정 완료' : '등록 + 초대 메일 발송'}
                 </button>
+                {editingId && form.email && (
+                  <button type="button"
+                    onClick={() => handleResendInvite(form.email, form.name, editingId)}
+                    disabled={resendingId === editingId}
+                    className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-md transition-colors">
+                    {resendingId === editingId ? '발송 중...' : '📧 초대 메일 재발송'}
+                  </button>
+                )}
                 <button type="button" onClick={handleCancel}
                   className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-5 py-2 rounded-md transition-colors">
                   취소
@@ -479,6 +503,13 @@ export default function EmployeesPage() {
                         <td className="px-4 py-3">
                           <div className="flex gap-2 flex-wrap">
                             <button onClick={() => handleEdit(emp)} className="text-blue-600 hover:text-blue-800 text-xs font-medium">수정</button>
+                            {emp.email && (
+                              <button onClick={() => handleResendInvite(emp.email!, emp.name, emp.id)}
+                                disabled={resendingId === emp.id}
+                                className="text-orange-500 hover:text-orange-700 text-xs font-medium">
+                                {resendingId === emp.id ? '발송중' : '재초대'}
+                              </button>
+                            )}
                             <button onClick={() => handleShowHistory(emp.id, emp.name)} className="text-gray-500 hover:text-gray-700 text-xs font-medium">이력</button>
                             <button onClick={() => handleDelete(emp.id, emp.name)} className="text-red-500 hover:text-red-700 text-xs font-medium">삭제</button>
                           </div>
