@@ -2,6 +2,7 @@ import "../globals.css";
 
 import type { Metadata } from "next";
 export const metadata: Metadata = { title: "로그인 | BONUSMATE ERP" };
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
