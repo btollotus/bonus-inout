@@ -2,7 +2,7 @@ import "./globals.css";
 import TopNav from "@/components/TopNav";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-
+import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: {
     default: "BONUSMATE ERP",        // 제목 없을 때 기본값
