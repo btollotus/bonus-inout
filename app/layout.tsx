@@ -3,9 +3,11 @@ import TopNav from "@/components/TopNav";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
-export const metadata = {
-  title: "BONUSMATE ERP",
-  description: "BONUS In/Out",
+export const metadata: Metadata = {
+  title: {
+    default: "BONUSMATE ERP",        // 제목 없을 때 기본값
+    template: "%s | BONUSMATE ERP",  // %s 자리에 각 페이지 제목이 들어감
+  },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
