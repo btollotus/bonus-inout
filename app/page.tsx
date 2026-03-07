@@ -1,3 +1,6 @@
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "홈 | BONUSMATE ERP" };
+
 import AuthGate from "@/components/AuthGate";
 import LogoutButton from "@/components/LogoutButton";
 

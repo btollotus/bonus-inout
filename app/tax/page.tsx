@@ -1,12 +1,11 @@
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "세무 | BONUSMATE ERP" };
+
 // app/tax/page.tsx
 import TaxClient from "./tax-client";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-
-export const metadata = {
-  title: "세무사",
-};
 
 export default async function Page() {
   const supabase = await createClient();

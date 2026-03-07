@@ -1,5 +1,8 @@
 "use client";
 
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "재고대장 | BONUSMATE ERP" };
+
 import { createClient } from "@/lib/supabase/browser";
 import { useEffect, useMemo, useState } from "react";
 

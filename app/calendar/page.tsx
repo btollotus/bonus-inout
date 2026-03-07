@@ -1,6 +1,9 @@
 // app/calendar/page.tsx
 "use client";
 
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "출고 캘린더 | BONUSMATE ERP" };
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 

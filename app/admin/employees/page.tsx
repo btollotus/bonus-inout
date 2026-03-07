@@ -1,5 +1,8 @@
 'use client'
 
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "인사관리 | BONUSMATE ERP" };
+
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/browser'
 
@@ -22,6 +25,12 @@ type Employee = {
   created_at: string
 }
 
+type AuthUser = {
+  id: string
+  email: string
+  display_name: string | null
+}
+
 const POSITIONS = ['대표', '부장', '과장', '대리', '주임', '사원', '수습']
 const FUEL_TYPES = ['휘발유', '경유', 'LPG', '전기', '하이브리드', '없음']
 
@@ -32,12 +41,10 @@ const EMPTY_FORM = {
   emergency_contact: '', rrn: '',
 }
 
-// 주민번호 자동 하이픈
 function formatRRN(v: string) {
   const c = v.replace(/[^0-9]/g, '').slice(0, 13)
   return c.length > 6 ? c.slice(0, 6) + '-' + c.slice(6) : c
 }
-// 전화번호 자동 하이픈
 function formatPhone(v: string) {
   const c = v.replace(/[^0-9]/g, '').slice(0, 11)
   if (c.length <= 3) return c
@@ -45,7 +52,6 @@ function formatPhone(v: string) {
   return c.slice(0, 3) + '-' + c.slice(3, 7) + '-' + c.slice(7)
 }
 
-// 변경사항 감지
 function detectChanges(original: Employee, newForm: typeof EMPTY_FORM) {
   const fieldMap: Record<string, string> = {
     employee_code: '사번', name: '이름', email: '이메일', mobile: '휴대폰',
@@ -84,6 +90,13 @@ export default function EmployeesPage() {
   const [history, setHistory] = useState<Record<string, unknown>[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
+  // ── UID 매핑 모달 상태 ──────────────────────
+  const [showMappingModal, setShowMappingModal] = useState(false)
+  const [mappingTarget, setMappingTarget] = useState<Employee | null>(null)
+  const [authUsers, setAuthUsers] = useState<AuthUser[]>([])
+  const [mappingUid, setMappingUid] = useState('')
+  const [mappingLoading, setMappingLoading] = useState(false)
+
   useEffect(() => { fetchEmployees() }, [])
 
   async function fetchEmployees() {
@@ -92,6 +105,47 @@ export default function EmployeesPage() {
     if (error) setError(error.message)
     else setEmployees(data || [])
     setFetchLoading(false)
+  }
+
+  // Auth Users 목록 로드 (매핑 모달 열 때)
+  async function fetchAuthUsers() {
+    try {
+      const res = await fetch('/api/admin/list-auth-users')
+      if (res.ok) {
+        const data = await res.json()
+        setAuthUsers(data.users || [])
+      }
+    } catch {
+      console.error('Auth users 로드 실패')
+    }
+  }
+
+  // UID 매핑 모달 열기
+  function openMappingModal(emp: Employee) {
+    setMappingTarget(emp)
+    setMappingUid(emp.auth_user_id || '')
+    setShowMappingModal(true)
+    fetchAuthUsers()
+  }
+
+  // UID 매핑 저장
+  async function handleSaveMapping() {
+    if (!mappingTarget) return
+    setMappingLoading(true)
+    const { error } = await supabase
+      .from('employees')
+      .update({ auth_user_id: mappingUid || null })
+      .eq('id', mappingTarget.id)
+    setMappingLoading(false)
+    if (error) {
+      setError(error.message)
+    } else {
+      setSuccess(`${mappingTarget.name}님의 UID 매핑이 완료됐습니다.`)
+      setShowMappingModal(false)
+      setMappingTarget(null)
+      setMappingUid('')
+      fetchEmployees()
+    }
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
@@ -144,7 +198,6 @@ export default function EmployeesPage() {
     try {
       let authUserId = editingAuthId
 
-      // 신규 등록 → 초대 메일
       if (!editingId && form.email.trim()) {
         const res = await fetch('/api/admin/invite-employee', {
           method: 'POST',
@@ -156,7 +209,6 @@ export default function EmployeesPage() {
         authUserId = json.userId
       }
 
-      // 주민번호 암호화
       let encryptedRrn: string | null = null
       if (form.rrn.trim()) {
         const rrnRes = await fetch('/api/admin/encrypt-rrn', {
@@ -190,7 +242,6 @@ export default function EmployeesPage() {
         const { error } = await supabase.from('employees').update(payload).eq('id', editingId)
         if (error) throw new Error(error.message)
 
-        // 수정 이력 저장
         if (editingEmployee) {
           const changes = detectChanges(editingEmployee, form)
           if (Object.keys(changes).length > 0) {
@@ -278,6 +329,8 @@ export default function EmployeesPage() {
       (e.position || '').includes(searchQuery)
   )
 
+  const unmappedEmployees = employees.filter((e) => !e.auth_user_id && e.email)
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200 px-6 py-4">
@@ -306,13 +359,36 @@ export default function EmployeesPage() {
           </div>
         )}
 
+        {/* ⚠️ UID 미매핑 경고 배너 */}
+        {unmappedEmployees.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <p className="text-sm font-semibold text-amber-800 mb-1">
+              ⚠️ Auth UID 매핑 필요 ({unmappedEmployees.length}명)
+            </p>
+            <p className="text-xs text-amber-700 mb-2">
+              아래 직원들은 Supabase Auth 계정과 연결이 안 되어 있습니다.
+              연차신청 등 기능을 사용하려면 UID 매핑이 필요합니다.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {unmappedEmployees.map((emp) => (
+                <button
+                  key={emp.id}
+                  onClick={() => openMappingModal(emp)}
+                  className="bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs px-3 py-1.5 rounded-full font-medium transition-colors"
+                >
+                  {emp.name} ({emp.email}) → UID 연결
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {showForm && (
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
             <div className="px-6 py-4 border-b border-gray-100">
               <h2 className="text-base font-semibold text-gray-800">{editingId ? '직원 정보 수정' : '새 직원 등록'}</h2>
             </div>
             <form onSubmit={handleSubmit} className="p-6">
-              {/* 기본 정보 */}
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">기본 정보</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div>
@@ -377,7 +453,6 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              {/* 차량/통근 정보 */}
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">차량 / 통근 정보</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -496,9 +571,16 @@ export default function EmployeesPage() {
                             : <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full">재직</span>}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          {emp.auth_user_id
-                            ? <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">✓ 연동</span>
-                            : <span className="text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">미연동</span>}
+                          {emp.auth_user_id ? (
+                            <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">✓ 연동</span>
+                          ) : (
+                            <button
+                              onClick={() => openMappingModal(emp)}
+                              className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full transition-colors"
+                            >
+                              미연동 →연결
+                            </button>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2 flex-wrap">
@@ -516,7 +598,6 @@ export default function EmployeesPage() {
                         </td>
                       </tr>
 
-                      {/* 수정 이력 인라인 표시 */}
                       {historyEmpId === emp.id && (
                         <tr key={emp.id + '-history'}>
                           <td colSpan={11} className="px-4 py-3 bg-gray-50 border-t border-gray-100">
@@ -562,6 +643,96 @@ export default function EmployeesPage() {
           </div>
         </div>
       </div>
+
+      {/* ===== UID 매핑 모달 ===== */}
+      {showMappingModal && mappingTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Auth UID 연결</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              <strong>{mappingTarget.name}</strong> ({mappingTarget.email})
+            </p>
+
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
+              Supabase Auth에 등록된 계정과 직원을 연결합니다.
+              동일 이메일 계정을 선택하거나, UID를 직접 입력하세요.
+            </div>
+
+            {/* Auth Users 목록 */}
+            {authUsers.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-medium text-gray-600 mb-2">Auth 계정 선택:</p>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {authUsers.map((u) => {
+                    const alreadyMapped = employees.some(
+                      (e) => e.auth_user_id === u.id && e.id !== mappingTarget.id
+                    )
+                    return (
+                      <button
+                        key={u.id}
+                        onClick={() => !alreadyMapped && setMappingUid(u.id)}
+                        disabled={alreadyMapped}
+                        className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
+                          alreadyMapped
+                            ? 'border-gray-100 bg-gray-50 opacity-40 cursor-not-allowed'
+                            : mappingUid === u.id
+                            ? 'border-blue-500 bg-blue-50 text-blue-800'
+                            : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{u.email}</span>
+                          {u.email === mappingTarget.email && (
+                            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
+                              이메일 일치 ✓
+                            </span>
+                          )}
+                          {alreadyMapped && (
+                            <span className="text-xs text-gray-400">이미 연결됨</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-400 font-mono mt-0.5">{u.id}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 직접 입력 */}
+            <div className="mb-5">
+              <label className="block text-xs font-medium text-gray-600 mb-1">또는 UID 직접 입력</label>
+              <input
+                type="text"
+                value={mappingUid}
+                onChange={(e) => setMappingUid(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowMappingModal(false)
+                  setMappingTarget(null)
+                  setMappingUid('')
+                }}
+                className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveMapping}
+                disabled={mappingLoading || !mappingUid}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+              >
+                {mappingLoading ? '저장 중...' : 'UID 연결 저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
