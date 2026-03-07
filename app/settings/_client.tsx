@@ -4,6 +4,19 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import { useRouter, useSearchParams } from "next/navigation";
 
+// Supabase 영문 에러 → 한글 변환
+function translateError(msg: string): string {
+  if (msg.includes("New password should be different from the old password"))
+    return "새 비밀번호는 기존 비밀번호와 달라야 합니다.";
+  if (msg.includes("Password should be at least"))
+    return "비밀번호는 6자 이상이어야 합니다.";
+  if (msg.includes("Auth session missing"))
+    return "세션이 만료됐습니다. 다시 로그인해주세요.";
+  if (msg.includes("Invalid login credentials"))
+    return "이메일 또는 비밀번호가 올바르지 않습니다.";
+  return msg;
+}
+
 export default function SettingsPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -42,11 +55,10 @@ export default function SettingsPage() {
     setPwSubmitting(true);
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) {
-      setPwMessage({ type: "error", text: error.message });
+      setPwMessage({ type: "error", text: translateError(error.message) });
     } else {
       setPwMessage({ type: "success", text: "비밀번호가 성공적으로 변경됐습니다." });
       setNewPassword(""); setConfirmPassword("");
-      // 재설정 모드였으면 홈으로 이동
       if (isResetMode) setTimeout(() => router.replace("/"), 1500);
     }
     setPwSubmitting(false);
@@ -58,7 +70,7 @@ export default function SettingsPage() {
       redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/confirm?type=recovery`,
     });
     if (error) {
-      setEmailMessage({ type: "error", text: error.message });
+      setEmailMessage({ type: "error", text: translateError(error.message) });
     } else {
       setEmailMessage({
         type: "success",
@@ -72,7 +84,7 @@ export default function SettingsPage() {
     return <div className="flex items-center justify-center h-64 text-gray-500 text-sm">로딩 중...</div>;
   }
 
-  // ── 재설정 링크로 들어온 경우 - 비밀번호 설정 화면만 표시 ──
+  // ── 재설정 링크로 들어온 경우 ──
   if (isResetMode) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
