@@ -1,8 +1,5 @@
 "use client";
 
-import type { Metadata } from "next";
-export const metadata: Metadata = { title: "출고 캘린더 | BONUSMATE ERP" };
-
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import Holidays from "date-holidays";

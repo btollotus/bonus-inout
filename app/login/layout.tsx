@@ -1,8 +1,10 @@
 import "../globals.css";
 
-export const metadata = {
-  title: "BONUSMATE ERP-로그인",
-};
+import type { Metadata } from "next";
+export const metadata: Metadata = { title: "로그인 | BONUSMATE ERP" };
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
 
 export default function LoginLayout({ children }: { children: React.ReactNode }) {
   return (
