@@ -14,7 +14,7 @@ function translateError(msg: string): string {
   return msg;
 }
 
-const maskedInput: React.CSSProperties = { WebkitTextSecurity: "disc" as any };
+const maskedInput = { WebkitTextSecurity: "disc" } as React.CSSProperties;
 
 export default function ResetPasswordPage() {
   const supabase = createClient();
