@@ -101,7 +101,7 @@ export default function LoginPage() {
     if (!email.trim()) return setError('이메일을 입력해주세요.')
     setLoading(true); setError('')
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/settings`,
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/confirm?type=recovery`,
     })
     setLoading(false)
     if (error) setError(error.message)
