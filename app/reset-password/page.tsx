@@ -87,10 +87,11 @@ export default function ResetPasswordPage() {
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">새 비밀번호</label>
-            <input type="password" value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="6자 이상" autoComplete="new-password"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="password" value={confirmPassword}
+  onChange={(e) => setConfirmPassword(e.target.value)}
+  placeholder="비밀번호 재입력" autoComplete="off"
+  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호 확인</label>
