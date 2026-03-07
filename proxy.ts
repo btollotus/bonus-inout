@@ -1,4 +1,3 @@
-// middleware.ts (proxy.ts)
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
@@ -9,9 +8,10 @@ export async function proxy(req: NextRequest) {
   // ✅ 공개 경로 (로그인 없이 허용)
   const isPublic =
     pathname.startsWith("/login") ||
+    pathname.startsWith("/auth/") ||         // ← 비밀번호 재설정 콜백
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/api/") ||          // ← API 라우트 전체 허용
-    pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|webp)$/) !== null || // ← 정적 이미지
+    pathname.startsWith("/api/") ||
+    pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|webp)$/) !== null ||
     pathname === "/favicon.ico";
 
   if (isPublic) return NextResponse.next();
@@ -37,7 +37,6 @@ export async function proxy(req: NextRequest) {
 
   const { data, error } = await supabase.auth.getUser();
 
-  // ✅ 미인증 → /login 리다이렉트
   if (error || !data?.user) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
