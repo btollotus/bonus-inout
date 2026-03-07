@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/browser'
+import Image from 'next/image'
+
+type Mode = 'checking' | 'login' | 'set-password' | 'forgot-password' | 'forgot-sent'
 
 export default function LoginPage() {
   const supabase = createClient()
   const router = useRouter()
 
-  const [mode, setMode] = useState<'login' | 'set-password' | 'checking'>('checking')
+  const [mode, setMode] = useState<Mode>('checking')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -31,7 +34,6 @@ export default function LoginPage() {
     }
 
     if (accessToken && refreshToken && (type === 'invite' || type === 'recovery')) {
-      // 토큰을 직접 세션으로 설정
       supabase.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken,
@@ -42,7 +44,6 @@ export default function LoginPage() {
         } else {
           setEmail(data.session.user.email || '')
           setMode('set-password')
-          // 해시 제거 (보안)
           window.history.replaceState(null, '', window.location.pathname)
         }
       })
@@ -72,7 +73,22 @@ export default function LoginPage() {
     }
   }
 
-  // 토큰 확인 중
+  // 비밀번호 재설정 이메일 발송
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (!email.trim()) return setError('이메일을 입력해주세요.')
+    setLoading(true); setError('')
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/login`,
+    })
+    setLoading(false)
+    if (error) {
+      setError(error.message)
+    } else {
+      setMode('forgot-sent')
+    }
+  }
+
   if (mode === 'checking') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
@@ -83,17 +99,27 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900">
-      <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-600 rounded-full mb-3">
-            <span className="text-white text-2xl font-bold">B</span>
-          </div>
-          <h1 className="text-xl font-bold text-gray-900">BONUSMATE ERP</h1>
+      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+
+        {/* 로고 */}
+        <div className="flex flex-col items-center mb-6">
+          <Image
+            src="/bonusmate-logo.png"
+            alt="BONUSMATE"
+            width={120}
+            height={120}
+            className="object-contain mb-3"
+            priority
+          />
           <p className="text-sm text-gray-500 mt-1">
-            {mode === 'set-password' ? '비밀번호 설정' : '로그인'}
+            {mode === 'set-password' ? '비밀번호 설정'
+              : mode === 'forgot-password' ? '비밀번호 재설정'
+              : mode === 'forgot-sent' ? '이메일 발송 완료'
+              : '로그인'}
           </p>
         </div>
 
+        {/* set-password 안내 배너 */}
         {mode === 'set-password' && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-5">
             <p className="text-sm text-blue-800 font-medium">✅ 계정 확인 완료</p>
@@ -102,6 +128,7 @@ export default function LoginPage() {
           </div>
         )}
 
+        {/* 에러 / 성공 메시지 */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 rounded-md mb-4">
             {error}
@@ -113,27 +140,93 @@ export default function LoginPage() {
           </div>
         )}
 
+        {/* ── 로그인 폼 ── */}
         {mode === 'login' && (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="이메일 입력" required
-                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder="이메일 입력" required
+                  className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                  placeholder="비밀번호 입력" required
+                  className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <button type="submit" disabled={loading}
+                className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-semibold py-2.5 rounded-md transition-colors">
+                {loading ? '로그인 중...' : '로그인'}
+              </button>
+            </form>
+
+            {/* 비밀번호 찾기 링크 */}
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={() => { setMode('forgot-password'); setError(''); setSuccess('') }}
+                className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+              >
+                비밀번호를 잊으셨나요?
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="비밀번호 입력" required
-                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <button type="submit" disabled={loading}
-              className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-semibold py-2.5 rounded-md transition-colors">
-              {loading ? '로그인 중...' : '로그인'}
-            </button>
-          </form>
+          </>
         )}
 
+        {/* ── 비밀번호 재설정 폼 ── */}
+        {mode === 'forgot-password' && (
+          <>
+            <p className="text-sm text-gray-600 mb-4">
+              가입하신 이메일 주소를 입력하시면 비밀번호 재설정 링크를 보내드립니다.
+            </p>
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder="가입한 이메일 입력" required
+                  className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <button type="submit" disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-md transition-colors">
+                {loading ? '발송 중...' : '재설정 링크 보내기'}
+              </button>
+            </form>
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={() => { setMode('login'); setError('') }}
+                className="text-sm text-gray-500 hover:text-gray-700 hover:underline"
+              >
+                ← 로그인으로 돌아가기
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── 이메일 발송 완료 화면 ── */}
+        {mode === 'forgot-sent' && (
+          <div className="text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-gray-800 mb-1">재설정 링크를 발송했습니다</p>
+            <p className="text-xs text-gray-500 mb-1">{email}</p>
+            <p className="text-xs text-gray-400 mb-6">메일함을 확인해주세요. 스팸함도 확인해보세요.</p>
+            <button
+              type="button"
+              onClick={() => { setMode('login'); setEmail(''); setError('') }}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              ← 로그인으로 돌아가기
+            </button>
+          </div>
+        )}
+
+        {/* ── 비밀번호 설정 폼 (초대/재설정 링크) ── */}
         {mode === 'set-password' && (
           <form onSubmit={handleSetPassword} className="space-y-4">
             <div>
@@ -155,7 +248,7 @@ export default function LoginPage() {
           </form>
         )}
 
-        <p className="text-xs text-center text-gray-400 mt-5">(주)보누스메이트 ERP</p>
+        <p className="text-xs text-center text-gray-400 mt-6">(주)보누스메이트 ERP</p>
       </div>
     </div>
   )
