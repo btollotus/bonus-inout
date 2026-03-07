@@ -14,6 +14,8 @@ function translateError(msg: string): string {
   return msg;
 }
 
+const maskedInput: React.CSSProperties = { WebkitTextSecurity: "disc" as any };
+
 export default function ResetPasswordPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -53,7 +55,6 @@ export default function ResetPasswordPage() {
       setSubmitting(false);
     } else {
       setMessage({ type: "success", text: "비밀번호가 변경됐습니다! 로그인 페이지로 이동합니다..." });
-      // 세션 종료 후 로그인 페이지로
       await supabase.auth.signOut();
       setTimeout(() => router.replace("/login"), 1500);
     }
@@ -87,19 +88,28 @@ export default function ResetPasswordPage() {
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">새 비밀번호</label>
-            <input type="password" value={confirmPassword}
-  onChange={(e) => setConfirmPassword(e.target.value)}
-  placeholder="비밀번호 재입력" autoComplete="off"
-  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input
+              type="text"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="6자 이상"
+              autoComplete="off"
+              style={maskedInput}
+              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호 확인</label>
-            <input type="password" value={confirmPassword}
+            <input
+              type="text"
+              value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="비밀번호 재입력" autoComplete="new-password"
+              placeholder="비밀번호 재입력"
+              autoComplete="off"
+              style={maskedInput}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
         </div>
 
