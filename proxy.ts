@@ -8,7 +8,8 @@ export async function proxy(req: NextRequest) {
   // ✅ 공개 경로 (로그인 없이 허용)
   const isPublic =
     pathname.startsWith("/login") ||
-    pathname.startsWith("/auth/") ||         // ← 비밀번호 재설정 콜백
+    pathname.startsWith("/reset-password") ||   // ← 비밀번호 재설정 페이지
+    pathname.startsWith("/auth/") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/") ||
     pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|webp)$/) !== null ||
@@ -23,9 +24,7 @@ export async function proxy(req: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return req.cookies.getAll();
-        },
+        getAll() { return req.cookies.getAll(); },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
             res.cookies.set(name, value, options);

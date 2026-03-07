@@ -28,21 +28,20 @@ export async function GET(req: NextRequest) {
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(new URL("/settings?mode=reset-password", req.url));
+      return NextResponse.redirect(new URL("/reset-password", req.url));
     }
   }
 
-  // token_hash 방식 (이메일 OTP)
+  // token_hash 방식
   if (token_hash && type) {
     const { error } = await supabase.auth.verifyOtp({
       token_hash,
       type: type as "recovery" | "invite",
     });
     if (!error) {
-      return NextResponse.redirect(new URL("/settings?mode=reset-password", req.url));
+      return NextResponse.redirect(new URL("/reset-password", req.url));
     }
   }
 
-  // 실패 시
   return NextResponse.redirect(new URL("/login?error=link_expired", req.url));
 }
