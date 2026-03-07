@@ -13,6 +13,9 @@ function formatPhone(v: string) {
   return c.slice(0, 3) + '-' + c.slice(3, 7) + '-' + c.slice(7)
 }
 
+// 입력창 공통 스타일 - 한글 IME 충돌 방지를 위해 controlled 방식 통일
+const inputClass = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900"
+
 export default function LoginPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -119,238 +122,283 @@ export default function LoginPage() {
 
   function goBack() { setMode('login'); setError(''); setSuccess('') }
 
-  // ── 공통 카드 래퍼 ──
-  const Card = ({ title, children }: { title?: string; children: React.ReactNode }) => (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-md border border-gray-200 p-8 w-full max-w-md">
-        {/* 로고: Next.js Image 대신 일반 img 태그 사용 (layout 구조 무관하게 동작) */}
-        <div className="flex flex-col items-center mb-5">
-          <img
-            src="/bonusmate-logo.png"
-            alt="BONUSMATE"
-            style={{ width: 110, height: 'auto', objectFit: 'contain', marginBottom: 8 }}
-            onError={(e) => {
-              // 로고 로드 실패 시 텍스트로 대체
-              const target = e.currentTarget as HTMLImageElement
-              target.style.display = 'none'
-              const next = target.nextElementSibling as HTMLElement | null
-              if (next) next.style.display = 'flex'
-            }}
-          />
-          {/* 로고 실패 시 폴백 */}
-          <div style={{ display: 'none' }}
-            className="w-14 h-14 bg-purple-900 rounded-full items-center justify-center mb-2">
-            <span className="text-white text-2xl font-bold">B</span>
-          </div>
-          {title && <p className="text-sm text-gray-500 mt-1">{title}</p>}
-        </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 rounded-md mb-4">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2.5 rounded-md mb-4">
-            {success}
-          </div>
-        )}
-
-        {children}
-        <p className="text-xs text-center text-gray-400 mt-6">(주)보누스메이트 ERP</p>
-      </div>
+  // ── 로고 컴포넌트 ──
+  const Logo = () => (
+    <div className="flex flex-col items-center mb-5">
+      <img
+        src="/bonusmate-logo.png"
+        alt="BONUSMATE"
+        width={110}
+        style={{ height: 'auto', objectFit: 'contain', marginBottom: 8 }}
+      />
     </div>
   )
 
+  // ── 에러/성공 메시지 ──
+  const ErrorMsg = () => error ? (
+    <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 rounded-md mb-4">{error}</div>
+  ) : null
+  const SuccessMsg = () => success ? (
+    <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2.5 rounded-md mb-4">{success}</div>
+  ) : null
+
+  // ── 공통 카드 ──
+  const cardStyle = "bg-white rounded-2xl shadow-md border border-gray-200 p-8 w-full max-w-md"
+  const wrapStyle = "flex items-center justify-center px-4 py-12"
+
   if (mode === 'checking') return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className={wrapStyle}>
       <div className="text-gray-500 text-sm">확인 중...</div>
     </div>
   )
 
   // ── 로그인 ──
   if (mode === 'login') return (
-    <Card title="로그인">
-      <form onSubmit={handleLogin} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="이메일 입력" required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    <div className={wrapStyle}>
+      <div className={cardStyle}>
+        <Logo />
+        <p className="text-center text-sm text-gray-500 mb-5">로그인</p>
+        <ErrorMsg />
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="이메일 입력"
+              required
+              autoComplete="email"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="비밀번호 입력"
+              required
+              autoComplete="current-password"
+              className={inputClass}
+            />
+          </div>
+          <button type="submit" disabled={loading}
+            className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors">
+            {loading ? '로그인 중...' : '로그인'}
+          </button>
+        </form>
+        <div className="mt-5 flex justify-center gap-4 text-sm">
+          <button onClick={() => { setMode('forgot-password'); setError('') }}
+            className="text-blue-600 hover:underline">비밀번호 찾기</button>
+          <span className="text-gray-300">|</span>
+          <button onClick={() => { setMode('find-email'); setError('') }}
+            className="text-blue-600 hover:underline">이메일 찾기</button>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-            placeholder="비밀번호 입력" required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <button type="submit" disabled={loading}
-          className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors">
-          {loading ? '로그인 중...' : '로그인'}
-        </button>
-      </form>
-      <div className="mt-5 flex justify-center gap-4 text-sm">
-        <button onClick={() => { setMode('forgot-password'); setError('') }}
-          className="text-blue-600 hover:underline">비밀번호 찾기</button>
-        <span className="text-gray-300">|</span>
-        <button onClick={() => { setMode('find-email'); setError('') }}
-          className="text-blue-600 hover:underline">이메일 찾기</button>
+        <p className="text-xs text-center text-gray-400 mt-6">(주)보누스메이트 ERP</p>
       </div>
-    </Card>
+    </div>
   )
 
   // ── 비밀번호 찾기 ──
   if (mode === 'forgot-password') return (
-    <Card title="비밀번호 재설정">
-      <p className="text-center text-sm text-gray-500 mb-5">가입한 이메일로 재설정 링크를 보내드립니다.</p>
-      <form onSubmit={handleForgotPassword} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="가입한 이메일 입력" required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <button type="submit" disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors">
-          {loading ? '발송 중...' : '재설정 링크 보내기'}
+    <div className={wrapStyle}>
+      <div className={cardStyle}>
+        <Logo />
+        <p className="text-center text-base font-bold text-gray-800 mb-1">비밀번호 재설정</p>
+        <p className="text-center text-sm text-gray-500 mb-5">가입한 이메일로 재설정 링크를 보내드립니다.</p>
+        <ErrorMsg />
+        <form onSubmit={handleForgotPassword} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="가입한 이메일 입력"
+              required
+              autoComplete="email"
+              className={inputClass}
+            />
+          </div>
+          <button type="submit" disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors">
+            {loading ? '발송 중...' : '재설정 링크 보내기'}
+          </button>
+        </form>
+        <button onClick={goBack} className="mt-4 w-full text-center text-sm text-gray-500 hover:text-gray-700">
+          ← 로그인으로 돌아가기
         </button>
-      </form>
-      <button onClick={goBack} className="mt-4 w-full text-center text-sm text-gray-500 hover:text-gray-700">
-        ← 로그인으로 돌아가기
-      </button>
-    </Card>
+        <p className="text-xs text-center text-gray-400 mt-6">(주)보누스메이트 ERP</p>
+      </div>
+    </div>
   )
 
   // ── 재설정 메일 발송 완료 ──
   if (mode === 'forgot-sent') return (
-    <Card>
-      <div className="text-center">
-        <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-          </svg>
+    <div className={wrapStyle}>
+      <div className={cardStyle}>
+        <Logo />
+        <div className="text-center">
+          <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <p className="text-base font-bold text-gray-800 mb-1">이메일을 확인해주세요</p>
+          <p className="text-sm text-blue-600 font-medium mb-1">{email}</p>
+          <p className="text-xs text-gray-500 mb-1">비밀번호 재설정 링크를 발송했습니다.</p>
+          <p className="text-xs text-gray-400 mb-5">스팸함도 확인해보세요.</p>
+          <button onClick={goBack} className="text-sm text-blue-600 hover:underline">← 로그인으로 돌아가기</button>
         </div>
-        <p className="text-base font-bold text-gray-800 mb-1">이메일을 확인해주세요</p>
-        <p className="text-sm text-blue-600 font-medium mb-1">{email}</p>
-        <p className="text-xs text-gray-500 mb-1">비밀번호 재설정 링크를 발송했습니다.</p>
-        <p className="text-xs text-gray-400 mb-5">스팸함도 확인해보세요.</p>
-        <button onClick={goBack} className="text-sm text-blue-600 hover:underline">← 로그인으로 돌아가기</button>
+        <p className="text-xs text-center text-gray-400 mt-6">(주)보누스메이트 ERP</p>
       </div>
-    </Card>
+    </div>
   )
 
   // ── 이메일 찾기 ──
   if (mode === 'find-email') return (
-    <Card title="이메일 찾기">
-      <p className="text-center text-sm text-gray-500 mb-5">
-        등록된 정보로 가입 이메일을 확인합니다.
-      </p>
-      <form onSubmit={handleFindEmail} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">이름 *</label>
-          <input type="text" value={findName} onChange={(e) => setFindName(e.target.value)}
-            placeholder="홍길동" required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            생년월일 (주민번호 앞 6자리) *
-          </label>
-          <input
-            type="text"
-            value={findBirthdate}
-            onChange={(e) => {
-              const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 6)
-              setFindBirthdate(v)
-            }}
-            placeholder="901225"
-            maxLength={6}
-            required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">휴대폰 번호 *</label>
-          <input
-            type="tel"
-            value={findMobile}
-            onChange={(e) => setFindMobile(formatPhone(e.target.value))}
-            placeholder="010-0000-0000"
-            required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <button type="submit" disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors">
-          {loading ? '조회 중...' : '이메일 찾기'}
+    <div className={wrapStyle}>
+      <div className={cardStyle}>
+        <Logo />
+        <p className="text-center text-base font-bold text-gray-800 mb-1">이메일 찾기</p>
+        <p className="text-center text-sm text-gray-500 mb-5">등록된 정보로 가입 이메일을 확인합니다.</p>
+        <ErrorMsg />
+        <form onSubmit={handleFindEmail} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">이름 *</label>
+            <input
+              type="text"
+              value={findName}
+              onChange={(e) => setFindName(e.target.value)}
+              placeholder="홍길동"
+              required
+              autoComplete="name"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              생년월일 (주민번호 앞 6자리) *
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={findBirthdate}
+              onChange={(e) => setFindBirthdate(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+              placeholder="901225"
+              maxLength={6}
+              required
+              className={inputClass + " font-mono tracking-widest"}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">휴대폰 번호 *</label>
+            <input
+              type="tel"
+              value={findMobile}
+              onChange={(e) => setFindMobile(formatPhone(e.target.value))}
+              placeholder="010-0000-0000"
+              required
+              autoComplete="tel"
+              className={inputClass}
+            />
+          </div>
+          <button type="submit" disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors">
+            {loading ? '조회 중...' : '이메일 찾기'}
+          </button>
+        </form>
+        <button onClick={goBack} className="mt-4 w-full text-center text-sm text-gray-500 hover:text-gray-700">
+          ← 로그인으로 돌아가기
         </button>
-      </form>
-      <button onClick={goBack} className="mt-4 w-full text-center text-sm text-gray-500 hover:text-gray-700">
-        ← 로그인으로 돌아가기
-      </button>
-    </Card>
+        <p className="text-xs text-center text-gray-400 mt-6">(주)보누스메이트 ERP</p>
+      </div>
+    </div>
   )
 
   // ── 이메일 찾기 결과 ──
   if (mode === 'find-email-result') return (
-    <Card>
-      <div className="text-center">
-        <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
+    <div className={wrapStyle}>
+      <div className={cardStyle}>
+        <Logo />
+        <div className="text-center">
+          <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <p className="text-base font-bold text-gray-800 mb-3">이메일을 찾았습니다</p>
+          <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-2">
+            <p className="text-lg font-mono font-semibold text-blue-700">{foundEmail}</p>
+          </div>
+          <p className="text-xs text-gray-400 mb-6">보안을 위해 일부가 가려져 있습니다.</p>
+          <button
+            onClick={() => { setMode('login'); setEmail(''); setError('') }}
+            className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm mb-3">
+            로그인하러 가기
+          </button>
+          <button
+            onClick={() => { setMode('forgot-password'); setError('') }}
+            className="w-full border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50 transition-colors">
+            비밀번호도 재설정하기
+          </button>
         </div>
-        <p className="text-base font-bold text-gray-800 mb-2">이메일을 찾았습니다</p>
-        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-2 inline-block">
-          <p className="text-lg font-mono font-semibold text-blue-700">{foundEmail}</p>
-        </div>
-        <p className="text-xs text-gray-400 mb-6">보안을 위해 일부가 가려져 있습니다.</p>
-        <button
-          onClick={() => { setMode('login'); setEmail(''); setError('') }}
-          className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
-        >
-          로그인하러 가기
-        </button>
-        <button
-          onClick={() => { setMode('forgot-password'); setError('') }}
-          className="mt-3 w-full border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50 transition-colors"
-        >
-          비밀번호도 재설정하기
-        </button>
+        <p className="text-xs text-center text-gray-400 mt-6">(주)보누스메이트 ERP</p>
       </div>
-    </Card>
+    </div>
   )
 
   // ── 비밀번호 설정 (초대/재설정 링크) ──
   if (mode === 'set-password') return (
-    <Card title="비밀번호 설정">
-      {email && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-5">
-          <p className="text-sm text-blue-800 font-medium">✅ 계정 확인 완료</p>
-          <p className="text-xs text-blue-600 mt-0.5">{email}</p>
-          <p className="text-xs text-blue-700 mt-1">사용하실 비밀번호를 설정하면 등록이 완료됩니다.</p>
-        </div>
-      )}
-      <form onSubmit={handleSetPassword} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">새 비밀번호</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-            placeholder="6자 이상 입력" required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호 확인</label>
-          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
-            placeholder="동일한 비밀번호 재입력" required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <button type="submit" disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors">
-          {loading ? '설정 중...' : '등록 완료 및 로그인'}
-        </button>
-      </form>
-    </Card>
+    <div className={wrapStyle}>
+      <div className={cardStyle}>
+        <Logo />
+        <p className="text-center text-base font-bold text-gray-800 mb-1">비밀번호 설정</p>
+        {email && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-5">
+            <p className="text-sm text-blue-800 font-medium">✅ 계정 확인 완료</p>
+            <p className="text-xs text-blue-600 mt-0.5">{email}</p>
+            <p className="text-xs text-blue-700 mt-1">사용하실 비밀번호를 설정하면 등록이 완료됩니다.</p>
+          </div>
+        )}
+        <ErrorMsg />
+        <SuccessMsg />
+        <form onSubmit={handleSetPassword} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">새 비밀번호</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="6자 이상 입력"
+              required
+              autoComplete="new-password"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호 확인</label>
+            <input
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="동일한 비밀번호 재입력"
+              required
+              autoComplete="new-password"
+              className={inputClass}
+            />
+          </div>
+          <button type="submit" disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors">
+            {loading ? '설정 중...' : '등록 완료 및 로그인'}
+          </button>
+        </form>
+        <p className="text-xs text-center text-gray-400 mt-6">(주)보누스메이트 ERP</p>
+      </div>
+    </div>
   )
 
   return null
