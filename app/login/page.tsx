@@ -4,7 +4,14 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/browser'
 
-type Mode = 'checking' | 'login' | 'set-password' | 'forgot-password' | 'forgot-sent' | 'find-email'
+type Mode = 'checking' | 'login' | 'set-password' | 'forgot-password' | 'forgot-sent' | 'find-email' | 'find-email-result'
+
+function formatPhone(v: string) {
+  const c = v.replace(/[^0-9]/g, '').slice(0, 11)
+  if (c.length <= 3) return c
+  if (c.length <= 7) return c.slice(0, 3) + '-' + c.slice(3)
+  return c.slice(0, 3) + '-' + c.slice(3, 7) + '-' + c.slice(7)
+}
 
 export default function LoginPage() {
   const supabase = createClient()
@@ -18,6 +25,12 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+  // 이메일 찾기 폼
+  const [findName, setFindName] = useState('')
+  const [findBirthdate, setFindBirthdate] = useState('')
+  const [findMobile, setFindMobile] = useState('')
+  const [foundEmail, setFoundEmail] = useState('')
+
   useEffect(() => {
     const hash = window.location.hash.slice(1)
     const params = new URLSearchParams(hash)
@@ -28,24 +41,21 @@ export default function LoginPage() {
 
     if (errorCode) {
       setError('링크가 만료되었습니다. 관리자에게 재발송을 요청하세요.')
-      setMode('login')
-      return
+      setMode('login'); return
     }
 
     if (accessToken && refreshToken && (type === 'invite' || type === 'recovery')) {
-      supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      }).then(({ data, error }) => {
-        if (error || !data.session) {
-          setError('링크가 만료되었습니다. 관리자에게 재발송을 요청하세요.')
-          setMode('login')
-        } else {
-          setEmail(data.session.user.email || '')
-          setMode('set-password')
-          window.history.replaceState(null, '', window.location.pathname)
-        }
-      })
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        .then(({ data, error }) => {
+          if (error || !data.session) {
+            setError('링크가 만료되었습니다. 관리자에게 재발송을 요청하세요.')
+            setMode('login')
+          } else {
+            setEmail(data.session.user.email || '')
+            setMode('set-password')
+            window.history.replaceState(null, '', window.location.pathname)
+          }
+        })
     } else {
       setMode('login')
     }
@@ -84,43 +94,83 @@ export default function LoginPage() {
     else setMode('forgot-sent')
   }
 
+  async function handleFindEmail(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true); setError('')
+    try {
+      const res = await fetch('/api/auth/find-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: findName.trim(),
+          birthdate: findBirthdate.replace(/[^0-9]/g, ''),
+          mobile: findMobile,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || '조회 실패'); setLoading(false); return }
+      setFoundEmail(data.maskedEmail)
+      setMode('find-email-result')
+    } catch {
+      setError('서버 오류가 발생했습니다.')
+    }
+    setLoading(false)
+  }
+
   function goBack() { setMode('login'); setError(''); setSuccess('') }
 
-  // ── 공통 카드 래퍼 ──────────────────────────
-  const Card = ({ children }: { children: React.ReactNode }) => (
+  // ── 공통 카드 래퍼 ──
+  const Card = ({ title, children }: { title?: string; children: React.ReactNode }) => (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="bg-white rounded-2xl shadow-md border border-gray-200 p-8 w-full max-w-md">
-        {/* 로고 */}
-        <div className="flex flex-col items-center mb-6">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+        {/* 로고: Next.js Image 대신 일반 img 태그 사용 (layout 구조 무관하게 동작) */}
+        <div className="flex flex-col items-center mb-5">
           <img
             src="/bonusmate-logo.png"
             alt="BONUSMATE"
-            width={110}
-            height={110}
-            className="object-contain mb-2"
+            style={{ width: 110, height: 'auto', objectFit: 'contain', marginBottom: 8 }}
+            onError={(e) => {
+              // 로고 로드 실패 시 텍스트로 대체
+              const target = e.currentTarget as HTMLImageElement
+              target.style.display = 'none'
+              const next = target.nextElementSibling as HTMLElement | null
+              if (next) next.style.display = 'flex'
+            }}
           />
+          {/* 로고 실패 시 폴백 */}
+          <div style={{ display: 'none' }}
+            className="w-14 h-14 bg-purple-900 rounded-full items-center justify-center mb-2">
+            <span className="text-white text-2xl font-bold">B</span>
+          </div>
+          {title && <p className="text-sm text-gray-500 mt-1">{title}</p>}
         </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 rounded-md mb-4">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2.5 rounded-md mb-4">
+            {success}
+          </div>
+        )}
+
         {children}
         <p className="text-xs text-center text-gray-400 mt-6">(주)보누스메이트 ERP</p>
       </div>
     </div>
   )
 
-  // ── 확인 중 ──
-  if (mode === 'checking') {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-500 text-sm">확인 중...</div>
-      </div>
-    )
-  }
+  if (mode === 'checking') return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-gray-500 text-sm">확인 중...</div>
+    </div>
+  )
 
   // ── 로그인 ──
   if (mode === 'login') return (
-    <Card>
-      <h2 className="text-center text-lg font-bold text-gray-800 mb-5">로그인</h2>
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 rounded-md mb-4">{error}</div>}
+    <Card title="로그인">
       <form onSubmit={handleLogin} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
@@ -139,28 +189,20 @@ export default function LoginPage() {
           {loading ? '로그인 중...' : '로그인'}
         </button>
       </form>
-
-      {/* 계정 찾기 링크 */}
       <div className="mt-5 flex justify-center gap-4 text-sm">
         <button onClick={() => { setMode('forgot-password'); setError('') }}
-          className="text-blue-600 hover:underline">
-          비밀번호 찾기
-        </button>
+          className="text-blue-600 hover:underline">비밀번호 찾기</button>
         <span className="text-gray-300">|</span>
         <button onClick={() => { setMode('find-email'); setError('') }}
-          className="text-blue-600 hover:underline">
-          이메일 찾기
-        </button>
+          className="text-blue-600 hover:underline">이메일 찾기</button>
       </div>
     </Card>
   )
 
   // ── 비밀번호 찾기 ──
   if (mode === 'forgot-password') return (
-    <Card>
-      <h2 className="text-center text-lg font-bold text-gray-800 mb-1">비밀번호 재설정</h2>
+    <Card title="비밀번호 재설정">
       <p className="text-center text-sm text-gray-500 mb-5">가입한 이메일로 재설정 링크를 보내드립니다.</p>
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 rounded-md mb-4">{error}</div>}
       <form onSubmit={handleForgotPassword} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
@@ -179,70 +221,110 @@ export default function LoginPage() {
     </Card>
   )
 
-  // ── 비밀번호 재설정 링크 발송 완료 ──
+  // ── 재설정 메일 발송 완료 ──
   if (mode === 'forgot-sent') return (
     <Card>
       <div className="text-center">
-        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
         </div>
-        <h2 className="text-base font-bold text-gray-800 mb-1">이메일을 확인해주세요</h2>
+        <p className="text-base font-bold text-gray-800 mb-1">이메일을 확인해주세요</p>
         <p className="text-sm text-blue-600 font-medium mb-1">{email}</p>
         <p className="text-xs text-gray-500 mb-1">비밀번호 재설정 링크를 발송했습니다.</p>
-        <p className="text-xs text-gray-400 mb-6">스팸함도 확인해보세요.</p>
-        <button onClick={goBack} className="text-sm text-blue-600 hover:underline">
-          ← 로그인으로 돌아가기
-        </button>
+        <p className="text-xs text-gray-400 mb-5">스팸함도 확인해보세요.</p>
+        <button onClick={goBack} className="text-sm text-blue-600 hover:underline">← 로그인으로 돌아가기</button>
       </div>
     </Card>
   )
 
   // ── 이메일 찾기 ──
   if (mode === 'find-email') return (
-    <Card>
-      <h2 className="text-center text-lg font-bold text-gray-800 mb-1">이메일 찾기</h2>
-      <p className="text-center text-sm text-gray-500 mb-5">가입 시 사용한 이메일을 잊으신 경우</p>
-
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-5">
-        <p className="text-sm font-semibold text-amber-800 mb-2">📌 이메일 확인 방법</p>
-        <ul className="text-sm text-amber-700 space-y-2">
-          <li className="flex items-start gap-2">
-            <span className="font-bold mt-0.5">1.</span>
-            <span>관리자(<strong>bonusmate@naver.com</strong>)에게 문의하세요.</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="font-bold mt-0.5">2.</span>
-            <span>입사 시 받은 초대 메일 제목을 검색해보세요.<br/>
-              <span className="text-xs text-amber-600">검색어: "BONUSMATE" 또는 "Supabase"</span>
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="font-bold mt-0.5">3.</span>
-            <span>회사 업무용 이메일로 시도해보세요.</span>
-          </li>
-        </ul>
-      </div>
-
-      <a
-        href="mailto:bonusmate@naver.com?subject=이메일 찾기 요청&body=이름: %0A연락처: "
-        className="w-full block text-center bg-gray-800 hover:bg-gray-900 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
-      >
-        📧 관리자에게 이메일 문의
-      </a>
-
+    <Card title="이메일 찾기">
+      <p className="text-center text-sm text-gray-500 mb-5">
+        등록된 정보로 가입 이메일을 확인합니다.
+      </p>
+      <form onSubmit={handleFindEmail} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">이름 *</label>
+          <input type="text" value={findName} onChange={(e) => setFindName(e.target.value)}
+            placeholder="홍길동" required
+            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            생년월일 (주민번호 앞 6자리) *
+          </label>
+          <input
+            type="text"
+            value={findBirthdate}
+            onChange={(e) => {
+              const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 6)
+              setFindBirthdate(v)
+            }}
+            placeholder="901225"
+            maxLength={6}
+            required
+            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">휴대폰 번호 *</label>
+          <input
+            type="tel"
+            value={findMobile}
+            onChange={(e) => setFindMobile(formatPhone(e.target.value))}
+            placeholder="010-0000-0000"
+            required
+            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <button type="submit" disabled={loading}
+          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors">
+          {loading ? '조회 중...' : '이메일 찾기'}
+        </button>
+      </form>
       <button onClick={goBack} className="mt-4 w-full text-center text-sm text-gray-500 hover:text-gray-700">
         ← 로그인으로 돌아가기
       </button>
     </Card>
   )
 
+  // ── 이메일 찾기 결과 ──
+  if (mode === 'find-email-result') return (
+    <Card>
+      <div className="text-center">
+        <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <p className="text-base font-bold text-gray-800 mb-2">이메일을 찾았습니다</p>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-2 inline-block">
+          <p className="text-lg font-mono font-semibold text-blue-700">{foundEmail}</p>
+        </div>
+        <p className="text-xs text-gray-400 mb-6">보안을 위해 일부가 가려져 있습니다.</p>
+        <button
+          onClick={() => { setMode('login'); setEmail(''); setError('') }}
+          className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
+        >
+          로그인하러 가기
+        </button>
+        <button
+          onClick={() => { setMode('forgot-password'); setError('') }}
+          className="mt-3 w-full border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+        >
+          비밀번호도 재설정하기
+        </button>
+      </div>
+    </Card>
+  )
+
   // ── 비밀번호 설정 (초대/재설정 링크) ──
   if (mode === 'set-password') return (
-    <Card>
-      <h2 className="text-center text-lg font-bold text-gray-800 mb-1">비밀번호 설정</h2>
+    <Card title="비밀번호 설정">
       {email && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-5">
           <p className="text-sm text-blue-800 font-medium">✅ 계정 확인 완료</p>
@@ -250,8 +332,6 @@ export default function LoginPage() {
           <p className="text-xs text-blue-700 mt-1">사용하실 비밀번호를 설정하면 등록이 완료됩니다.</p>
         </div>
       )}
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 rounded-md mb-4">{error}</div>}
-      {success && <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2.5 rounded-md mb-4">{success}</div>}
       <form onSubmit={handleSetPassword} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">새 비밀번호</label>
