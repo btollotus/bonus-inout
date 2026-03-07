@@ -104,7 +104,15 @@ export default function LoginPage() {
       redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/confirm?type=recovery`,
     })
     setLoading(false)
-    if (error) setError(error.message)
+    if (error) {
+      const msg = error.message
+      if (msg.includes("For security purposes, you can only request this after")) {
+        const sec = msg.match(/\d+/)?.[0] ?? ""
+        setError(`보안을 위해 ${sec}초 후에 다시 요청할 수 있습니다.`)
+      } else {
+        setError(msg)
+      }
+    }
     else setMode('forgot-sent')
   }
 
