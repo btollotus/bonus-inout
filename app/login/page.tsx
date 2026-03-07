@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/browser'
-import Image from 'next/image'
 
 type Mode = 'checking' | 'login' | 'set-password' | 'forgot-password' | 'forgot-sent' | 'find-email' | 'find-email-result'
 
@@ -22,14 +21,11 @@ const wrapClass = "flex items-center justify-center px-4 py-12"
 function Logo() {
   return (
     <div className="flex justify-center mb-5">
-      <Image
+      <img
         src="/bonusmate-logo.png"
         alt="BONUSMATE"
         width={110}
-        height={110}
-        style={{ objectFit: 'contain' }}
-        priority
-        unoptimized
+        style={{ height: 'auto' }}
       />
     </div>
   )
