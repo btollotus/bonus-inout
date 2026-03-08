@@ -25,12 +25,13 @@ function canSee(userRole: string, allowedRoles: string[]) {
 const HR_MENUS = ["/leave", "/admin/employees"];
 
 const linkBase: React.CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: 12,
+  padding: "5px 8px",
+  borderRadius: 8,
   borderWidth: 1,
   borderStyle: "solid",
   textDecoration: "none",
-  fontWeight: 800,
+  fontWeight: 700,
+  fontSize: 12,
   whiteSpace: "nowrap",
 };
 
@@ -62,7 +63,8 @@ function HRDropdown({ pathname, active }: { pathname: string; active: boolean })
           borderColor: active ? "rgba(255,255,255,0.40)" : "rgba(96,165,250,0.40)",
           backgroundColor: active ? "rgba(255,255,255,0.16)" : "rgba(96,165,250,0.10)",
           color: "white",
-          display: "flex", alignItems: "center", gap: 4,
+          display: "flex", alignItems: "center", gap: 3,
+          fontSize: 12,
         }}
       >
         인사관리 <span style={{ fontSize: 10, opacity: 0.7 }}>{open ? "▲" : "▼"}</span>
@@ -132,15 +134,15 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
         }}
       >
         {!!email && (
-          <div style={{ position: "fixed", top: 10, right: 16, zIndex: 9999, display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ position: "fixed", top: 8, right: 16, zIndex: 9999, display: "flex", gap: 6, alignItems: "center" }}>
             <Link
               href="/settings"
               style={{
-                padding: "8px 10px", borderRadius: 12,
+                padding: "5px 8px", borderRadius: 8,
                 border: "1px solid rgba(255,255,255,0.16)",
                 backgroundColor: "rgba(255,255,255,0.04)",
                 color: "rgba(255,255,255,0.70)",
-                fontWeight: 800, fontSize: 12,
+                fontWeight: 700, fontSize: 11,
                 textDecoration: "none", whiteSpace: "nowrap",
               }}
             >
@@ -150,10 +152,10 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
               type="button"
               onClick={onLogout}
               style={{
-                padding: "8px 10px", borderRadius: 12,
+                padding: "5px 8px", borderRadius: 8,
                 border: "1px solid rgba(255,255,255,0.16)",
                 backgroundColor: "rgba(255,255,255,0.04)",
-                color: "white", fontWeight: 900, cursor: "pointer",
+                color: "white", fontWeight: 700, fontSize: 11, cursor: "pointer",
               }}
             >
               로그아웃
@@ -161,13 +163,9 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
           </div>
         )}
 
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "10px 16px" }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ color: "white", fontWeight: 900, marginRight: 8 }}>BONUSMATE ERP</span>
-
-            <Link href="/" style={{ ...linkBase, borderColor: "rgba(255,255,255,0.16)", backgroundColor: "rgba(255,255,255,0.04)", color: "white", marginRight: 8 }}>
-              홈
-            </Link>
+        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "8px 16px" }}>
+          <div style={{ display: "flex", gap: 5, flexWrap: "nowrap", alignItems: "center", overflowX: "auto" }}>
+            <span style={{ color: "white", fontWeight: 900, fontSize: 13, marginRight: 6, whiteSpace: "nowrap" }}>BONUSMATE ERP</span>
 
             {nav
               .filter((x) => canSee(userRole, x.allowedRoles))
