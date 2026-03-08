@@ -364,7 +364,7 @@ export default function LeavePage() {
         .from('leave_balance')
         .select('employee_id, total_granted, remaining_days, manual_override, override_reason')
         .eq('year', leaveYear)
-      const balMap: Record<string, {total_granted:number, remaining_days:number, manual_override:boolean, override_reason:string}> = {}
+      const balMap: Record<string, {total_granted:number, total_days:number, remaining_days:number, manual_override:boolean, override_reason:string}> = {}
       for (const b of (balList || [])) balMap[b.employee_id] = { ...b, total_days: b.total_granted }
 
       // 3) leave_requests에서 올해 사용일수 집계 (leave_balance 없는 직원 보완)
