@@ -75,7 +75,8 @@ function getKoreanErrorMessage(message: string): string {
 
 type ModalMode = 'create' | 'edit'
 
-export default function LeavePage({ role }: { role?: string }) {
+export default function LeavePage() {
+  const [role, setRole] = useState<string>('')
   const isAdmin = role === 'ADMIN'
   const supabase = createClient()
   const year = new Date().getFullYear()
@@ -112,6 +113,13 @@ export default function LeavePage({ role }: { role?: string }) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
+    // role 조회
+    const { data: roleData } = await supabase
+      .from('user_roles').select('role').eq('user_id', user.id).single()
+    const currentRole = roleData?.role ?? ''
+    setRole(currentRole)
+    const currentIsAdmin = currentRole === 'ADMIN'
+
     // 전체 직원 목록 (ADMIN용)
     const { data: empList } = await supabase.from('employees').select('id, name').eq('is_active', true).order('name')
     setEmployees(empList || [])
@@ -120,7 +128,7 @@ export default function LeavePage({ role }: { role?: string }) {
       .from('employees').select('id').eq('auth_user_id', user.id).single()
 
     if (!emp) {
-      if (role !== 'ADMIN') { setError('직원 정보가 없습니다. 관리자에게 직원등록을 요청하세요.'); return }
+      if (!currentIsAdmin) { setError('직원 정보가 없습니다. 관리자에게 직원등록을 요청하세요.'); return }
       // ADMIN은 직원 연동 없어도 전체 일정만 표시
     } else {
       setEmpId(emp.id)
