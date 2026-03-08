@@ -14,8 +14,7 @@ const nav = [
   { href: "/tax/spec",           label: "거래명세서",     allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/tax/statement",      label: "거래원장",       allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/calendar",           label: "출고 캘린더",    allowedRoles: ["ADMIN", "SUBADMIN", "USER"] },
-  { href: "/leave",              label: "연차신청",       allowedRoles: ["ADMIN", "USER"]     },
-  { href: "/admin/leave-status", label: "연차현황",       allowedRoles: ["ADMIN", "SUBADMIN", "USER"] },
+  { href: "/leave",              label: "연차관리",       allowedRoles: ["ADMIN", "USER"]     },
   { href: "/admin/employees",    label: "인사관리",       allowedRoles: ["ADMIN"]             },
   { href: "/admin/payroll",      label: "급여",           allowedRoles: ["ADMIN"]             },
 ];
@@ -24,7 +23,7 @@ function canSee(userRole: string, allowedRoles: string[]) {
   return allowedRoles.includes(userRole);
 }
 
-const HR_MENUS = ["/leave", "/admin/leave-status", "/admin/employees", "/admin/payroll"];
+const HR_MENUS = ["/leave", "/admin/employees", "/admin/payroll"];
 
 const linkBase: React.CSSProperties = {
   padding: "8px 10px",
