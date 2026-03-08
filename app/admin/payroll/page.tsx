@@ -683,54 +683,84 @@ export default function PayrollPage() {
                     className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     {years.map(y => <option key={y} value={y}>{y}년</option>)}
                   </select>
+                  <span className="text-xs text-gray-400 ml-2">* 가로 스크롤로 전체 항목 확인 가능</span>
                 </div>
                 {fetchLoading ? <div className="py-16 text-center text-gray-400">불러오는 중...</div>
                 : savedRows.length === 0 ? <div className="py-16 text-center text-gray-400">급여 데이터가 없습니다.</div>
                 : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 text-gray-500 text-xs">
+                    <table className="text-xs border-collapse" style={{minWidth:'1400px'}}>
+                      <thead>
                         <tr>
-                          <th className="px-4 py-3 text-left font-medium">월</th>
-                          <th className="px-4 py-3 text-left font-medium">직원</th>
-                          <th className="px-4 py-3 text-right font-medium">기본급</th>
-                          <th className="px-4 py-3 text-right font-medium">식대</th>
-                          <th className="px-4 py-3 text-right font-medium">유류</th>
-                          <th className="px-4 py-3 text-right font-medium">상여</th>
-                          <th className="px-4 py-3 text-right font-medium">공제</th>
-                          <th className="px-4 py-3 text-right font-medium text-blue-700">실지급</th>
-                          <th className="px-4 py-3 text-center font-medium">상태</th>
-                          <th className="px-4 py-3 text-center font-medium">출력</th>
+                          <th className="px-2 py-2 text-left bg-gray-100 border border-gray-300 sticky left-0 z-10" rowSpan={2}>월</th>
+                          <th className="px-2 py-2 text-left bg-gray-100 border border-gray-300 sticky left-12 z-10" rowSpan={2}>직원</th>
+                          <th className="px-2 py-2 text-center bg-blue-50 text-blue-700 border border-blue-200 font-semibold" colSpan={6}>지급 항목</th>
+                          <th className="px-2 py-2 text-center bg-red-50 text-red-700 border border-red-200 font-semibold" colSpan={6}>공제 항목</th>
+                          <th className="px-2 py-2 text-center bg-purple-50 text-purple-700 border border-purple-200 font-semibold" colSpan={3}>연말정산</th>
+                          <th className="px-2 py-2 text-center bg-green-50 text-green-800 border border-green-200 font-semibold" rowSpan={2}>실지급</th>
+                          <th className="px-2 py-2 text-center bg-gray-100 border border-gray-300" rowSpan={2}>상태</th>
+                          <th className="px-2 py-2 text-center bg-gray-100 border border-gray-300" rowSpan={2}>출력</th>
+                        </tr>
+                        <tr>
+                          <th className="px-2 py-1.5 text-right bg-blue-50 text-blue-600 border border-blue-200 whitespace-nowrap">기본급</th>
+                          <th className="px-2 py-1.5 text-right bg-blue-50 text-blue-600 border border-blue-200 whitespace-nowrap">식대</th>
+                          <th className="px-2 py-1.5 text-right bg-blue-50 text-blue-600 border border-blue-200 whitespace-nowrap">유류</th>
+                          <th className="px-2 py-1.5 text-right bg-blue-50 text-blue-600 border border-blue-200 whitespace-nowrap">상여</th>
+                          <th className="px-2 py-1.5 text-right bg-blue-50 text-blue-600 border border-blue-200 whitespace-nowrap">기타수당</th>
+                          <th className="px-2 py-1.5 text-right bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap font-semibold">지급계</th>
+                          <th className="px-2 py-1.5 text-right bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">국민연금</th>
+                          <th className="px-2 py-1.5 text-right bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">건강보험</th>
+                          <th className="px-2 py-1.5 text-right bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">고용보험</th>
+                          <th className="px-2 py-1.5 text-right bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">장기요양</th>
+                          <th className="px-2 py-1.5 text-right bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">소득세</th>
+                          <th className="px-2 py-1.5 text-right bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">지방세</th>
+                          <th className="px-2 py-1.5 text-right bg-purple-50 text-purple-600 border border-purple-200 whitespace-nowrap">소득세정산</th>
+                          <th className="px-2 py-1.5 text-right bg-purple-50 text-purple-600 border border-purple-200 whitespace-nowrap">지방세정산</th>
+                          <th className="px-2 py-1.5 text-right bg-purple-50 text-purple-600 border border-purple-200 whitespace-nowrap">농특세</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
+                      <tbody>
                         {savedRows.map((row, idx) => {
-                          const totalDed = row.national_pension + row.health_insurance + row.employment_insurance
-                            + row.long_term_care + row.income_tax + row.local_income_tax
-                            + row.income_tax_settle + row.local_tax_settle + row.special_tax_settle
+                          const otherSum = (row.other_allowances||[]).reduce((s:number,a:any)=>s+a.amount,0)
+                          const totalInc = (row.base_pay||0)+(row.meal_pay||0)+(row.fuel_pay||0)+(row.bonus_pay||0)+otherSum
+                          const fmtSettle = (v:number) => {
+                            if (!v) return <span className="text-gray-300">-</span>
+                            return <span className={v<0?'text-blue-600 font-medium':'text-red-500'}>{v<0?'환급 '+formatKRW(Math.abs(v)):formatKRW(v)}</span>
+                          }
+                          const tdBase = "px-2 py-2 border border-gray-200 whitespace-nowrap"
                           return (
-                            <tr key={idx} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 font-medium text-gray-700">{row.pay_month}</td>
-                              <td className="px-4 py-3 text-gray-900 font-medium">{row.employee_name}</td>
-                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.base_pay||0)}</td>
-                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.meal_pay||0)}</td>
-                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.fuel_pay||0)}</td>
-                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.bonus_pay||0)}</td>
-                              <td className="px-4 py-3 text-right text-red-500">-{formatKRW(totalDed)}</td>
-                              <td className="px-4 py-3 text-right font-bold text-blue-700">{formatKRW(calcNet(row))}원</td>
-                              <td className="px-4 py-3 text-center">
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${row.status === 'final' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                  {row.status === 'final' ? '확정' : '초안'}
+                            <tr key={idx} className={idx%2===0?'bg-white hover:bg-blue-50/30':'bg-gray-50/60 hover:bg-blue-50/30'}>
+                              <td className={`${tdBase} font-medium text-gray-700 sticky left-0 bg-inherit`}>{row.pay_month}</td>
+                              <td className={`${tdBase} font-semibold text-gray-900 sticky left-12 bg-inherit`}>{row.employee_name}</td>
+                              <td className={`${tdBase} text-right text-gray-800`}>{formatKRW(row.base_pay||0)}</td>
+                              <td className={`${tdBase} text-right text-gray-600`}>{row.meal_pay ? formatKRW(row.meal_pay) : <span className="text-gray-300">-</span>}</td>
+                              <td className={`${tdBase} text-right text-gray-600`}>{row.fuel_pay ? formatKRW(row.fuel_pay) : <span className="text-gray-300">-</span>}</td>
+                              <td className={`${tdBase} text-right text-gray-600`}>{row.bonus_pay ? formatKRW(row.bonus_pay) : <span className="text-gray-300">-</span>}</td>
+                              <td className={`${tdBase} text-right text-gray-600`}>{otherSum ? formatKRW(otherSum) : <span className="text-gray-300">-</span>}</td>
+                              <td className={`${tdBase} text-right font-bold text-blue-700 bg-blue-50/40`}>{formatKRW(totalInc)}</td>
+                              <td className={`${tdBase} text-right text-red-500`}>{row.national_pension ? formatKRW(row.national_pension) : <span className="text-gray-300">-</span>}</td>
+                              <td className={`${tdBase} text-right text-red-500`}>{row.health_insurance ? formatKRW(row.health_insurance) : <span className="text-gray-300">-</span>}</td>
+                              <td className={`${tdBase} text-right text-red-500`}>{row.employment_insurance ? formatKRW(row.employment_insurance) : <span className="text-gray-300">-</span>}</td>
+                              <td className={`${tdBase} text-right text-red-500`}>{row.long_term_care ? formatKRW(row.long_term_care) : <span className="text-gray-300">-</span>}</td>
+                              <td className={`${tdBase} text-right text-red-500`}>{row.income_tax ? formatKRW(row.income_tax) : <span className="text-gray-300">-</span>}</td>
+                              <td className={`${tdBase} text-right text-red-500`}>{row.local_income_tax ? formatKRW(row.local_income_tax) : <span className="text-gray-300">-</span>}</td>
+                              <td className={`${tdBase} text-right`}>{fmtSettle(row.income_tax_settle||0)}</td>
+                              <td className={`${tdBase} text-right`}>{fmtSettle(row.local_tax_settle||0)}</td>
+                              <td className={`${tdBase} text-right`}>{fmtSettle(row.special_tax_settle||0)}</td>
+                              <td className={`${tdBase} text-right font-bold text-green-700 text-sm bg-green-50/40`}>{formatKRW(calcNet(row))}원</td>
+                              <td className={`${tdBase} text-center`}>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${row.status==='final'?'bg-green-100 text-green-700':'bg-yellow-100 text-yellow-700'}`}>
+                                  {row.status==='final'?'확정':'초안'}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 text-center">
+                              <td className={`${tdBase} text-center`}>
                                 <div className="flex gap-1 justify-center">
                                   <button onClick={() => handlePrint(row, 'print')}
-                                    className="text-xs text-gray-600 hover:text-gray-900 border border-gray-300 hover:border-gray-400 px-2 py-1 rounded-lg transition-colors">
+                                    className="text-[10px] text-gray-600 hover:text-gray-900 border border-gray-300 px-1.5 py-0.5 rounded transition-colors whitespace-nowrap">
                                     🖨️ 인쇄
                                   </button>
                                   <button onClick={() => handlePrint(row, 'pdf')}
-                                    className="text-xs text-red-600 hover:text-red-800 border border-red-300 hover:border-red-400 px-2 py-1 rounded-lg transition-colors">
+                                    className="text-[10px] text-red-600 hover:text-red-800 border border-red-300 px-1.5 py-0.5 rounded transition-colors whitespace-nowrap">
                                     📄 PDF
                                   </button>
                                 </div>
