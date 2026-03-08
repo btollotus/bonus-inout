@@ -732,261 +732,245 @@ export default function EmployeesPage() {
           ) : filtered.length === 0 ? (
             <div className="py-12 text-center text-gray-400 text-sm">직원 데이터가 없습니다.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-medium">이름</th>
-                    <th className="px-4 py-3 text-left font-medium">직책</th>
-                    <th className="px-4 py-3 text-left font-medium">사번</th>
-                    <th className="px-4 py-3 text-left font-medium">이메일</th>
-                    <th className="px-4 py-3 text-left font-medium">휴대폰</th>
-                    <th className="px-4 py-3 text-left font-medium">주민번호</th>
-                    <th className="px-4 py-3 text-left font-medium">생일</th>
-                    <th className="px-4 py-3 text-left font-medium">차량</th>
-                    <th className="px-4 py-3 text-left font-medium">통근</th>
-                    <th className="px-4 py-3 text-center font-medium">상태</th>
-                    <th className="px-4 py-3 text-center font-medium">계정</th>
-                    <th className="px-4 py-3 text-left font-medium">작업</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filtered.map((emp) => (
-                    <React.Fragment key={emp.id}>
-                      <tr className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3 font-medium text-gray-900">{emp.name}</td>
-                        <td className="px-4 py-3">
-                          {emp.position
-                            ? <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{emp.position}</span>
-                            : <span className="text-gray-300 text-xs">-</span>}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 text-xs">{emp.employee_code}</td>
-                        <td className="px-4 py-3 text-gray-600 text-xs">{emp.email || '-'}</td>
-                        <td className="px-4 py-3 text-gray-600 text-xs">{emp.mobile || '-'}</td>
-
-                        {/* 주민번호 - 확인 클릭 시 전체 표시 */}
-                        <td className="px-4 py-3">
-                          {emp.encrypted_rrn ? (
-                            <div className="flex items-center gap-1">
-                              <span className="font-mono text-xs text-gray-700">
-                                {showRRN[emp.id] && decryptedRRN[emp.id]
-                                  ? decryptedRRN[emp.id]  // ← 전체 번호 표시
-                                  : '●●●●●●-●●●●●●●'}
-                              </span>
-                              <button
-                                onClick={() => handleRevealRRN(emp.id)}
-                                className="text-xs text-blue-500 hover:text-blue-700 underline ml-1 shrink-0"
-                              >
-                                {showRRN[emp.id] ? '숨김' : '확인'}
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-300">미입력</span>
+            <div className="divide-y divide-gray-100">
+              {filtered.map((emp) => {
+                const latestHealth = healthRecords[emp.id]?.[0]
+                const healthBadge = latestHealth ? expiryBadge(latestHealth.exam_date) : null
+                return (
+                  <React.Fragment key={emp.id}>
+                    {/* ── 직원 카드 ── */}
+                    <div className="px-6 py-4 hover:bg-gray-50 transition-colors">
+                      {/* 상단: 이름 + 뱃지 + 작업버튼 */}
+                      <div className="flex items-start justify-between gap-4 mb-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* 이름 + 직책 */}
+                          <span className="text-base font-bold text-gray-900">{emp.name}</span>
+                          {emp.position && (
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">{emp.position}</span>
                           )}
-                        </td>
-
-                        {/* 생일 */}
-                        <td className="px-4 py-3 text-gray-600 text-xs">
-                          {emp.birthday ? (
-                            <span className="flex items-center gap-1">
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                                emp.birthday_type === 'lunar'
-                                  ? 'bg-orange-100 text-orange-700'
-                                  : 'bg-blue-100 text-blue-700'
-                              }`}>
-                                {emp.birthday_type === 'lunar' ? '음력' : '양력'}
-                              </span>
-                              {emp.birthday}
-                            </span>
-                          ) : (
-                            <span className="text-gray-300">-</span>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3 text-gray-600 text-xs">
-                          {emp.car_type ? `${emp.car_type}${emp.fuel_type ? ` (${emp.fuel_type})` : ''}` : '-'}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 text-xs">
-                          {emp.commute_distance ? `${emp.commute_distance}km` : '-'}
-                        </td>
-                        <td className="px-4 py-3 text-center">
+                          {/* 재직/퇴사 */}
                           {emp.resign_date
                             ? <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">퇴사</span>
                             : <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full">재직</span>}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {emp.auth_user_id ? (
-                            <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">✓ 연동</span>
-                          ) : (
-                            <button
-                              onClick={() => openMappingModal(emp)}
-                              className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full"
-                            >
-                              미연동 →연결
+                          {/* 계정 연동 */}
+                          {emp.auth_user_id
+                            ? <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">✓ 계정연동</span>
+                            : <button onClick={() => openMappingModal(emp)}
+                                className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full">
+                                미연동 →연결
+                              </button>}
+                          {/* 보건증 만료 뱃지 (최신 기록 있을 때) */}
+                          {healthBadge && (
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${healthBadge.cls}`}>
+                              🏥 {healthBadge.label}
+                            </span>
+                          )}
+                        </div>
+                        {/* 작업 버튼 */}
+                        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                          <button onClick={() => handleEdit(emp)}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-semibold">수정</button>
+                          {emp.email && (
+                            <button onClick={() => handleResendInvite(emp.email!, emp.name, emp.id)}
+                              disabled={resendingId === emp.id}
+                              className="text-xs text-orange-500 hover:text-orange-700 font-medium">
+                              {resendingId === emp.id ? '발송중...' : '재초대'}
                             </button>
                           )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-2 flex-wrap">
-                            <button onClick={() => handleEdit(emp)} className="text-blue-600 hover:text-blue-800 text-xs font-medium">수정</button>
-                            {emp.email && (
-                              <button
-                                onClick={() => handleResendInvite(emp.email!, emp.name, emp.id)}
-                                disabled={resendingId === emp.id}
-                                className="text-orange-500 hover:text-orange-700 text-xs font-medium"
-                              >
-                                {resendingId === emp.id ? '발송중' : '재초대'}
+                          <button onClick={() => toggleHealthPanel(emp.id)}
+                            className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
+                              showHealthEmpId === emp.id
+                                ? 'bg-teal-600 text-white border-teal-600'
+                                : 'text-teal-600 border-teal-300 hover:bg-teal-50'
+                            }`}>
+                            🏥 보건증
+                          </button>
+                          <button onClick={() => handleShowHistory(emp.id)}
+                            className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
+                              historyEmpId === emp.id
+                                ? 'bg-gray-600 text-white border-gray-600'
+                                : 'text-gray-500 border-gray-300 hover:bg-gray-50'
+                            }`}>
+                            📋 이력
+                          </button>
+                          <button onClick={() => handleDelete(emp.id, emp.name)}
+                            className="text-xs text-red-400 hover:text-red-600 font-medium">삭제</button>
+                        </div>
+                      </div>
+
+                      {/* 하단: 정보 그리드 */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-1.5 text-xs">
+                        <div className="flex gap-1.5">
+                          <span className="text-gray-400 shrink-0">사번</span>
+                          <span className="text-gray-700 font-medium">{emp.employee_code}</span>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <span className="text-gray-400 shrink-0">이메일</span>
+                          <span className="text-gray-700 truncate">{emp.email || '-'}</span>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <span className="text-gray-400 shrink-0">휴대폰</span>
+                          <span className="text-gray-700">{emp.mobile || '-'}</span>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <span className="text-gray-400 shrink-0">입사일</span>
+                          <span className="text-gray-700">{emp.hire_date || '-'}</span>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <span className="text-gray-400 shrink-0">생일</span>
+                          {emp.birthday ? (
+                            <span className="flex items-center gap-1">
+                              <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${
+                                emp.birthday_type === 'lunar' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
+                              }`}>{emp.birthday_type === 'lunar' ? '음' : '양'}</span>
+                              <span className="text-gray-700">{emp.birthday}</span>
+                            </span>
+                          ) : <span className="text-gray-300">-</span>}
+                        </div>
+                        <div className="flex gap-1.5">
+                          <span className="text-gray-400 shrink-0">차량</span>
+                          <span className="text-gray-700">
+                            {emp.car_type ? `${emp.car_type}${emp.fuel_type ? ` (${emp.fuel_type})` : ''}` : '-'}
+                          </span>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <span className="text-gray-400 shrink-0">통근</span>
+                          <span className="text-gray-700">{emp.commute_distance ? `${emp.commute_distance}km` : '-'}</span>
+                        </div>
+                        <div className="flex gap-1.5 items-center">
+                          <span className="text-gray-400 shrink-0">주민번호</span>
+                          {emp.encrypted_rrn ? (
+                            <span className="flex items-center gap-1">
+                              <span className="font-mono text-gray-700">
+                                {showRRN[emp.id] && decryptedRRN[emp.id] ? decryptedRRN[emp.id] : '●●●●●●-●●●●●●●'}
+                              </span>
+                              <button onClick={() => handleRevealRRN(emp.id)}
+                                className="text-blue-500 hover:text-blue-700 underline ml-0.5">
+                                {showRRN[emp.id] ? '숨김' : '확인'}
                               </button>
-                            )}
-                            {/* 보건증 버튼 */}
-                            <button
-                              onClick={() => toggleHealthPanel(emp.id)}
-                              className="text-teal-600 hover:text-teal-800 text-xs font-medium"
-                            >
-                              {showHealthEmpId === emp.id ? '보건증 ▲' : '보건증 ▼'}
-                            </button>
-                            <button onClick={() => handleShowHistory(emp.id)} className="text-gray-500 hover:text-gray-700 text-xs font-medium">이력</button>
-                            <button onClick={() => handleDelete(emp.id, emp.name)} className="text-red-500 hover:text-red-700 text-xs font-medium">삭제</button>
-                          </div>
-                        </td>
-                      </tr>
+                            </span>
+                          ) : <span className="text-gray-300">미입력</span>}
+                        </div>
+                      </div>
+                    </div>
 
-                      {/* 🏥 보건증 패널 */}
-                      {showHealthEmpId === emp.id && (
-                        <tr key={emp.id + '-health'}>
-                          <td colSpan={12} className="px-4 py-0 bg-teal-50">
-                            <div className="py-3 border-t border-teal-100">
-                              <div className="flex items-center justify-between mb-2">
-                                <p className="text-xs font-semibold text-teal-800">🏥 {emp.name} 보건증 검사 이력</p>
-                                <button
-                                  onClick={() => setHealthFormEmpId(healthFormEmpId === emp.id ? null : emp.id)}
-                                  className="text-xs bg-teal-600 hover:bg-teal-700 text-white px-3 py-1 rounded-full font-medium"
-                                >
-                                  + 검사일 추가
-                                </button>
-                              </div>
+                    {/* 🏥 보건증 패널 */}
+                    {showHealthEmpId === emp.id && (
+                      <div className="px-6 py-4 bg-teal-50 border-t border-teal-100">
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-sm font-semibold text-teal-800">🏥 {emp.name} · 보건증 검사 이력</p>
+                          <button
+                            onClick={() => setHealthFormEmpId(healthFormEmpId === emp.id ? null : emp.id)}
+                            className="text-xs bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg font-medium"
+                          >
+                            + 검사일 추가
+                          </button>
+                        </div>
 
-                              {/* 추가 폼 */}
-                              {healthFormEmpId === emp.id && (
-                                <div className="flex gap-2 items-end mb-3 flex-wrap bg-white border border-teal-200 rounded-lg p-3">
-                                  <div>
-                                    <label className="block text-xs text-gray-600 mb-1">검사일</label>
-                                    <input
-                                      type="date"
-                                      value={healthDate}
-                                      onChange={(e) => setHealthDate(e.target.value)}
-                                      className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                    />
-                                  </div>
-                                  <div className="flex-1 min-w-[160px]">
-                                    <label className="block text-xs text-gray-600 mb-1">메모 (선택)</label>
-                                    <input
-                                      type="text"
-                                      value={healthNote}
-                                      onChange={(e) => setHealthNote(e.target.value)}
-                                      placeholder="예: 정기검사, 신규입사"
-                                      className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                    />
-                                  </div>
-                                  <button
-                                    onClick={() => handleAddHealthRecord(emp.id)}
-                                    disabled={healthLoading || !healthDate}
-                                    className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-medium px-4 py-1.5 rounded-md"
-                                  >
-                                    {healthLoading ? '저장 중...' : '저장'}
-                                  </button>
-                                  <button
-                                    onClick={() => { setHealthFormEmpId(null); setHealthDate(''); setHealthNote('') }}
-                                    className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5"
-                                  >
-                                    취소
-                                  </button>
-                                </div>
-                              )}
-
-                              {/* 이력 목록 */}
-                              {!healthRecords[emp.id] ? (
-                                <p className="text-xs text-gray-400">불러오는 중...</p>
-                              ) : healthRecords[emp.id].length === 0 ? (
-                                <p className="text-xs text-gray-400">보건증 검사 기록이 없습니다.</p>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {healthRecords[emp.id].map((rec, idx) => {
-                                    const badge = expiryBadge(rec.exam_date)
-                                    const isLatest = idx === 0
-                                    return (
-                                      <div
-                                        key={rec.id}
-                                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs ${
-                                          isLatest ? 'bg-white border border-teal-200 shadow-sm' : 'bg-white border border-gray-100'
-                                        }`}
-                                      >
-                                        {isLatest && (
-                                          <span className="text-[10px] bg-teal-600 text-white px-1.5 py-0.5 rounded font-bold shrink-0">최신</span>
-                                        )}
-                                        <span className="font-medium text-gray-800 shrink-0">검사일: {rec.exam_date}</span>
-                                        <span className="text-gray-400 shrink-0">→ 만료: {healthExpiry(rec.exam_date)}</span>
-                                        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-medium shrink-0 ${badge.cls}`}>
-                                          {badge.label}
-                                        </span>
-                                        {rec.note && <span className="text-gray-500">{rec.note}</span>}
-                                        <button
-                                          onClick={() => handleDeleteHealthRecord(rec.id, emp.id)}
-                                          className="ml-auto text-red-400 hover:text-red-600 shrink-0"
-                                        >
-                                          삭제
-                                        </button>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              )}
+                        {/* 추가 폼 */}
+                        {healthFormEmpId === emp.id && (
+                          <div className="flex gap-3 items-end mb-4 flex-wrap bg-white border border-teal-200 rounded-xl p-4">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">검사일</label>
+                              <input type="date" value={healthDate}
+                                onChange={(e) => setHealthDate(e.target.value)}
+                                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
                             </div>
-                          </td>
-                        </tr>
-                      )}
+                            <div className="flex-1 min-w-[180px]">
+                              <label className="block text-xs font-medium text-gray-600 mb-1">메모 (선택)</label>
+                              <input type="text" value={healthNote}
+                                onChange={(e) => setHealthNote(e.target.value)}
+                                placeholder="예: 정기검사, 신규입사"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => handleAddHealthRecord(emp.id)}
+                                disabled={healthLoading || !healthDate}
+                                className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
+                                {healthLoading ? '저장 중...' : '저장'}
+                              </button>
+                              <button onClick={() => { setHealthFormEmpId(null); setHealthDate(''); setHealthNote('') }}
+                                className="text-sm text-gray-500 hover:text-gray-700 px-3 py-2 border border-gray-300 rounded-lg">
+                                취소
+                              </button>
+                            </div>
+                          </div>
+                        )}
 
-                      {/* 수정 이력 */}
-                      {historyEmpId === emp.id && (
-                        <tr key={emp.id + '-history'}>
-                          <td colSpan={12} className="px-4 py-3 bg-gray-50 border-t border-gray-100">
-                            <div className="text-xs font-semibold text-gray-500 mb-2">📋 {emp.name} 수정 이력</div>
-                            {historyLoading ? (
-                              <div className="text-xs text-gray-400">불러오는 중...</div>
-                            ) : history.length === 0 ? (
-                              <div className="text-xs text-gray-400">수정 이력이 없습니다.</div>
-                            ) : (
-                              <div className="space-y-2">
-                                {history.map((h, i) => (
-                                  <div key={i} className="bg-white border border-gray-200 rounded p-2.5">
-                                    <div className="flex items-center gap-2 mb-1.5">
-                                      <span className="text-xs text-gray-500">
-                                        {new Date(h.changed_at as string).toLocaleString('ko-KR')}
-                                      </span>
-                                      <span className="text-xs text-blue-600">{(h.changed_by_email as string) || '관리자'}</span>
+                        {/* 이력 목록 */}
+                        {!healthRecords[emp.id] ? (
+                          <p className="text-xs text-gray-400">불러오는 중...</p>
+                        ) : healthRecords[emp.id].length === 0 ? (
+                          <div className="text-center py-6 text-sm text-gray-400 bg-white rounded-xl border border-teal-100">
+                            보건증 검사 기록이 없습니다. 위 버튼으로 추가하세요.
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {healthRecords[emp.id].map((rec, idx) => {
+                              const badge = expiryBadge(rec.exam_date)
+                              const isLatest = idx === 0
+                              return (
+                                <div key={rec.id}
+                                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm ${
+                                    isLatest ? 'bg-white border-2 border-teal-300 shadow-sm' : 'bg-white border border-gray-200'
+                                  }`}>
+                                  {isLatest && (
+                                    <span className="text-[10px] bg-teal-600 text-white px-2 py-0.5 rounded-full font-bold shrink-0">최신</span>
+                                  )}
+                                  <span className="font-medium text-gray-800 shrink-0">📅 검사일: <strong>{rec.exam_date}</strong></span>
+                                  <span className="text-gray-400 text-xs shrink-0">만료: {healthExpiry(rec.exam_date)}</span>
+                                  <span className={`px-2.5 py-0.5 rounded-full border text-xs font-semibold shrink-0 ${badge.cls}`}>
+                                    {badge.label}
+                                  </span>
+                                  {rec.note && <span className="text-gray-500 text-xs">{rec.note}</span>}
+                                  <button onClick={() => handleDeleteHealthRecord(rec.id, emp.id)}
+                                    className="ml-auto text-red-400 hover:text-red-600 text-xs font-medium shrink-0">
+                                    삭제
+                                  </button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 📋 수정 이력 패널 */}
+                    {historyEmpId === emp.id && (
+                      <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+                        <p className="text-sm font-semibold text-gray-600 mb-3">📋 {emp.name} · 수정 이력</p>
+                        {historyLoading ? (
+                          <p className="text-xs text-gray-400">불러오는 중...</p>
+                        ) : history.length === 0 ? (
+                          <p className="text-xs text-gray-400">수정 이력이 없습니다.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {history.map((h, i) => (
+                              <div key={i} className="bg-white border border-gray-200 rounded-xl p-3">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-xs text-gray-500">{new Date(h.changed_at as string).toLocaleString('ko-KR')}</span>
+                                  <span className="text-xs text-blue-600 font-medium">{(h.changed_by_email as string) || '관리자'}</span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {Object.entries(h.changes as Record<string, { before: unknown; after: unknown }>).map(([field, val]) => (
+                                    <div key={field} className="text-xs bg-yellow-50 border border-yellow-200 rounded-lg px-2.5 py-1.5">
+                                      <span className="font-semibold text-gray-700">{field}</span>
+                                      <span className="text-gray-400 mx-1">:</span>
+                                      <span className="text-red-500 line-through">{String(val.before || '-')}</span>
+                                      <span className="mx-1 text-gray-400">→</span>
+                                      <span className="text-green-600 font-medium">{String(val.after || '-')}</span>
                                     </div>
-                                    <div className="flex flex-wrap gap-2">
-                                      {Object.entries(h.changes as Record<string, { before: unknown; after: unknown }>).map(([field, val]) => (
-                                        <div key={field} className="text-xs bg-yellow-50 border border-yellow-200 rounded px-2 py-1">
-                                          <span className="font-medium text-gray-700">{field}</span>
-                                          <span className="text-gray-400 mx-1">:</span>
-                                          <span className="text-red-500 line-through">{String(val.before || '-')}</span>
-                                          <span className="mx-1 text-gray-400">→</span>
-                                          <span className="text-green-600">{String(val.after || '-')}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
+                                  ))}
+                                </div>
                               </div>
-                            )}
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </React.Fragment>
+                )
+              })}
             </div>
           )}
           <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-400">
