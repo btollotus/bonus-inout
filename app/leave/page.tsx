@@ -281,21 +281,28 @@ export default function LeavePage() {
     if (!emp) return
     const used = emp.used_days
     const total = editDraft.total_days
-    const { data: existing } = await supabase.from('leave_balance')
+    const { data: existing, error: selErr } = await supabase.from('leave_balance')
       .select('id').eq('employee_id', empId).eq('year', leaveYear).maybeSingle()
+    if (selErr) { alert('조회 오류: ' + selErr.message); return }
     if (existing) {
-      await supabase.from('leave_balance').update({
-        total_days: total, remaining_days: Math.max(0, total - used),
-        manual_override: true, override_reason: editDraft.override_reason,
-        updated_at: new Date().toISOString()
+      const { error: updErr } = await supabase.from('leave_balance').update({
+        total_days: total,
+        remaining_days: Math.max(0, total - used),
+        manual_override: true,
+        override_reason: editDraft.override_reason,
       }).eq('id', existing.id)
+      if (updErr) { alert('저장 오류: ' + updErr.message); return }
     } else {
-      const empRow = allBalances.find(b => b.employee_id === empId)
-      await supabase.from('leave_balance').insert({
-        employee_id: empId, year: leaveYear,
-        total_days: total, used_days: used, remaining_days: Math.max(0, total - used),
-        manual_override: true, override_reason: editDraft.override_reason,
+      const { error: insErr } = await supabase.from('leave_balance').insert({
+        employee_id: empId,
+        year: leaveYear,
+        total_days: total,
+        used_days: used,
+        remaining_days: Math.max(0, total - used),
+        manual_override: true,
+        override_reason: editDraft.override_reason,
       })
+      if (insErr) { alert('저장 오류: ' + insErr.message); return }
     }
     setEditingBalance(null)
     await fetchAllBalances()
