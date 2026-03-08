@@ -19,6 +19,7 @@ const SUBADMIN_PATHS = [
 
 const USER_ONLY_PATHS = [
   "/leave",
+  "/calendar",
 ];
 
 export async function proxy(req: NextRequest) {
