@@ -1,29 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 
-// ADMIN 전용
-const ADMIN_ONLY_PATHS = [
-  "/admin/employees",
-  "/admin/payroll",
-];
-
-// SUBADMIN 이상 (USER 접근 불가)
-const SUBADMIN_PATHS = [
-  "/scan",
-  "/products",
-  "/report",
-  "/trade",
-  "/tax",
-  "/calendar",
-  "/orders",
-  "/ledger",
-];
+const ADMIN_ONLY_PATHS = ["/admin/employees", "/admin/payroll"];
+const SUBADMIN_PATHS = ["/scan", "/products", "/report", "/trade", "/tax", "/calendar", "/orders", "/ledger"];
 
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
-  // ✅ 공개 경로
   const isPublic =
     pathname.startsWith("/login") ||
     pathname.startsWith("/reset-password") ||
@@ -36,7 +21,6 @@ export async function proxy(req: NextRequest) {
 
   if (isPublic) return NextResponse.next();
 
-  // ✅ 세션 확인
   let res = NextResponse.next();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,7 +38,6 @@ export async function proxy(req: NextRequest) {
   );
 
   const { data, error } = await supabase.auth.getUser();
-
   if (error || !data?.user) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
@@ -62,34 +45,29 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ✅ /api/me 호출해서 role 가져오기
-  const host = req.headers.get("host") ?? "";
-  const protocol = host.includes("localhost") ? "http" : "https";
-  const cookieHeader = req.cookies.getAll()
-    .map(({ name, value }) => `${name}=${value}`)
-    .join("; ");
-
+  // ✅ /api/me 대신 직접 Admin Client로 role 조회
   let role = "USER";
   try {
-    const meRes = await fetch(`${protocol}://${host}/api/me`, {
-      headers: { cookie: cookieHeader },
-      cache: "no-store",
-    });
-    if (meRes.ok) {
-      const me = await meRes.json();
-      role = me.role ?? "USER";
-    }
+    const admin = createSupabaseAdmin(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false, autoRefreshToken: false } }
+    );
+    const { data: roleData } = await admin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", data.user.id)
+      .single();
+    role = roleData?.role ?? "USER";
   } catch {
-    // role 조회 실패 시 USER로 처리
+    // role 조회 실패 시 USER 유지
   }
 
-  // ADMIN 전용 경로
   const isAdminOnly = ADMIN_ONLY_PATHS.some((p) => pathname.startsWith(p));
   if (isAdminOnly && role !== "ADMIN") {
     return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
 
-  // SUBADMIN 이상 경로
   const isSubadminPath = SUBADMIN_PATHS.some((p) => pathname.startsWith(p));
   if (isSubadminPath && role === "USER") {
     return NextResponse.redirect(new URL("/unauthorized", req.url));
