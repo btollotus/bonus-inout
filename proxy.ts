@@ -27,6 +27,7 @@ export async function proxy(req: NextRequest) {
   const isPublic =
     pathname.startsWith("/login") ||
     pathname.startsWith("/reset-password") ||
+    pathname.startsWith("/unauthorized") ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/") ||
@@ -85,13 +86,13 @@ export async function proxy(req: NextRequest) {
   // ADMIN 전용 경로
   const isAdminOnly = ADMIN_ONLY_PATHS.some((p) => pathname.startsWith(p));
   if (isAdminOnly && role !== "ADMIN") {
-    return NextResponse.redirect(new URL("/", req.url));
+    return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
 
   // SUBADMIN 이상 경로
   const isSubadminPath = SUBADMIN_PATHS.some((p) => pathname.startsWith(p));
   if (isSubadminPath && role === "USER") {
-    return NextResponse.redirect(new URL("/", req.url));
+    return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
 
   return res;
