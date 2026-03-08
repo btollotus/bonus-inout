@@ -19,6 +19,8 @@ type Employee = {
   fuel_type: string | null
   commute_distance: number | null
   emergency_contact: string | null
+  bank_name: string | null
+  bank_account: string | null
   encrypted_rrn: string | null
   // 신규 필드
   birthday: string | null          // YYYY-MM-DD
@@ -48,7 +50,7 @@ const EMPTY_FORM = {
   employee_code: '', name: '', email: '', mobile: '',
   address: '', hire_date: '', resign_date: '',
   position: '', car_type: '', fuel_type: '', commute_distance: '',
-  emergency_contact: '', rrn: '',
+  emergency_contact: '', bank_name: '', bank_account: '', rrn: '',
   birthday: '', birthday_type: 'solar' as 'solar' | 'lunar',
 }
 
@@ -109,7 +111,7 @@ function detectChanges(original: Employee, newForm: typeof EMPTY_FORM) {
     employee_code: '사번', name: '이름', email: '이메일', mobile: '휴대폰',
     address: '주소', hire_date: '입사일', resign_date: '퇴사일',
     position: '직책', car_type: '차종', fuel_type: '유종',
-    commute_distance: '출퇴근거리', emergency_contact: '비상연락처',
+    commute_distance: '출퇴근거리', emergency_contact: '비상연락처', bank_name: '은행명', bank_account: '계좌번호',
     birthday: '생일', birthday_type: '생일구분',
   }
   const changes: Record<string, { before: unknown; after: unknown }> = {}
@@ -308,6 +310,8 @@ export default function EmployeesPage() {
       fuel_type: emp.fuel_type || '',
       commute_distance: emp.commute_distance?.toString() || '',
       emergency_contact: emp.emergency_contact || '',
+      bank_name: emp.bank_name || '',
+      bank_account: emp.bank_account || '',
       rrn: '',
       birthday: emp.birthday || '',
       birthday_type: emp.birthday_type || 'solar',
@@ -387,6 +391,8 @@ export default function EmployeesPage() {
         fuel_type: form.fuel_type || null,
         commute_distance: form.commute_distance ? Number(form.commute_distance) : null,
         emergency_contact: form.emergency_contact || null,
+        bank_name: form.bank_name || null,
+        bank_account: form.bank_account || null,
       }
       if (encryptedRrn) basePayload.encrypted_rrn = encryptedRrn
 
@@ -611,6 +617,18 @@ export default function EmployeesPage() {
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">💳 급여 은행</label>
+                    <input name="bank_name" value={form.bank_name} onChange={handleChange}
+                      placeholder="예: 국민, 신한, 하나"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">💳 급여 계좌번호</label>
+                    <input name="bank_account" value={form.bank_account} onChange={handleChange}
+                      placeholder="예: 438902-01-505309"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">입사일</label>
                     <input type="date" name="hire_date" value={form.hire_date} onChange={handleChange}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -815,6 +833,14 @@ export default function EmployeesPage() {
                         <div className="flex gap-1.5">
                           <span className="text-gray-400 shrink-0">입사일</span>
                           <span className="text-gray-700">{emp.hire_date || '-'}</span>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <span className="text-gray-400 shrink-0">급여계좌</span>
+                          <span className="text-gray-700">
+                            {emp.bank_name && emp.bank_account
+                              ? `[${emp.bank_name}] ${emp.bank_account}`
+                              : emp.bank_name || emp.bank_account || '-'}
+                          </span>
                         </div>
                         <div className="flex gap-1.5">
                           <span className="text-gray-400 shrink-0">생일</span>
