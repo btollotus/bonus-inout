@@ -5,10 +5,17 @@ import { createClient } from '@/lib/supabase/browser'
 
 type LeaveRequest = {
   id: string
+  employee_id: string
   leave_type: 'ANNUAL' | 'HALF_AM' | 'HALF_PM' | 'SICK' | 'FRIDAY_OFF'
   leave_date: string
   note: string | null
   created_at: string
+}
+
+// 전체 직원 신청 내역 (이름 포함)
+type AllLeaveRequest = LeaveRequest & {
+  employee_name: string
+  is_mine: boolean
 }
 
 type LeaveBalance = {
@@ -37,12 +44,31 @@ const LEAVE_TYPE_DAYS: Record<string, number> = {
   ANNUAL: 1, HALF_AM: 0.5, HALF_PM: 0.5, SICK: 1, FRIDAY_OFF: 1,
 }
 
+// 내 신청 - 진한 색
 const LEAVE_TYPE_BG: Record<string, string> = {
   ANNUAL: 'bg-blue-500',
   HALF_AM: 'bg-indigo-400',
   HALF_PM: 'bg-purple-400',
   SICK: 'bg-red-400',
   FRIDAY_OFF: 'bg-orange-400',
+}
+
+// 타인 신청 - 연한 색
+const LEAVE_TYPE_BG_OTHER: Record<string, string> = {
+  ANNUAL: 'bg-blue-200',
+  HALF_AM: 'bg-indigo-200',
+  HALF_PM: 'bg-purple-200',
+  SICK: 'bg-red-200',
+  FRIDAY_OFF: 'bg-orange-200',
+}
+
+// 타인 신청 - 텍스트 색
+const LEAVE_TYPE_TEXT_OTHER: Record<string, string> = {
+  ANNUAL: 'text-blue-700',
+  HALF_AM: 'text-indigo-700',
+  HALF_PM: 'text-purple-700',
+  SICK: 'text-red-700',
+  FRIDAY_OFF: 'text-orange-700',
 }
 
 function getKoreanErrorMessage(message: string): string {
@@ -69,7 +95,8 @@ export default function LeavePage() {
   const today = new Date().toISOString().split('T')[0]
 
   const [balance, setBalance] = useState<LeaveBalance | null>(null)
-  const [requests, setRequests] = useState<LeaveRequest[]>([])
+  const [myRequests, setMyRequests] = useState<LeaveRequest[]>([])
+  const [allRequests, setAllRequests] = useState<AllLeaveRequest[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -86,6 +113,9 @@ export default function LeavePage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [leaveType, setLeaveType] = useState('ANNUAL')
   const [note, setNote] = useState('')
+
+  // 타인 일정 툴팁
+  const [tooltipDate, setTooltipDate] = useState<string | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
@@ -105,6 +135,7 @@ export default function LeavePage() {
     }
     setEmpId(emp.id)
 
+    // 내 잔여 연차
     const { data: bal } = await supabase
       .from('leave_balance')
       .select('total_days, used_days, remaining_days')
@@ -113,20 +144,39 @@ export default function LeavePage() {
       .single()
     setBalance(bal)
 
+    // 내 신청 내역
     const { data: reqs } = await supabase
       .from('leave_requests')
       .select('*')
       .eq('employee_id', emp.id)
       .order('leave_date', { ascending: false })
-    setRequests(reqs || [])
+    setMyRequests(reqs || [])
+
+    // 전체 직원 신청 내역 (employees 테이블 join)
+    const { data: allReqs } = await supabase
+      .from('leave_requests')
+      .select(`
+        *,
+        employees!inner(name)
+      `)
+      .order('leave_date', { ascending: false })
+
+    if (allReqs) {
+      const mapped: AllLeaveRequest[] = allReqs.map((r: any) => ({
+        ...r,
+        employee_name: r.employees?.name ?? '알 수 없음',
+        is_mine: r.employee_id === emp.id,
+      }))
+      setAllRequests(mapped)
+    }
   }
 
   const isFuture = (dateStr: string) => dateStr >= today
 
-  // 달력 날짜 클릭 → 신청 or 수정 모달
+  // 달력 날짜 클릭
   function openCreateModal(dateStr: string) {
     if (!isFuture(dateStr)) return
-    const existing = requests.find((r) => r.leave_date === dateStr)
+    const existing = myRequests.find((r) => r.leave_date === dateStr)
     if (existing) {
       openEditModal(existing)
     } else {
@@ -139,7 +189,6 @@ export default function LeavePage() {
     }
   }
 
-  // 신청 내역에서 수정 버튼 클릭
   function openEditModal(req: LeaveRequest) {
     setModalMode('edit')
     setModalDate(req.leave_date)
@@ -163,21 +212,45 @@ export default function LeavePage() {
       if (balance && days > balance.remaining_days) {
         setError('잔여 연차가 부족합니다.'); setLoading(false); return
       }
-      const { error } = await supabase.from('leave_requests').insert([{
+      const { error: insertError } = await supabase.from('leave_requests').insert([{
         employee_id: empId,
         leave_type: leaveType,
         leave_date: modalDate,
         note: note || null,
       }])
-      if (error) { setError(getKoreanErrorMessage(error.message)); setLoading(false); return }
+      if (insertError) { setError(getKoreanErrorMessage(insertError.message)); setLoading(false); return }
+
+      // 즉시 balance 반영 (낙관적 업데이트)
+      if (balance) {
+        setBalance({
+          ...balance,
+          used_days: balance.used_days + days,
+          remaining_days: balance.remaining_days - days,
+        })
+      }
       setSuccess(`${modalDate} 휴가 신청이 완료되었습니다.`)
 
     } else {
-      const { error } = await supabase
+      // 수정 시 기존 타입과 새 타입 차이 반영
+      const oldReq = myRequests.find((r) => r.id === editingId)
+      const oldDays = oldReq ? LEAVE_TYPE_DAYS[oldReq.leave_type] : 0
+      const newDays = LEAVE_TYPE_DAYS[leaveType]
+      const diff = newDays - oldDays
+
+      const { error: updateError } = await supabase
         .from('leave_requests')
         .update({ leave_type: leaveType, note: note || null })
         .eq('id', editingId)
-      if (error) { setError(getKoreanErrorMessage(error.message)); setLoading(false); return }
+      if (updateError) { setError(getKoreanErrorMessage(updateError.message)); setLoading(false); return }
+
+      // 즉시 balance 반영
+      if (balance) {
+        setBalance({
+          ...balance,
+          used_days: balance.used_days + diff,
+          remaining_days: balance.remaining_days - diff,
+        })
+      }
       setSuccess(`${modalDate} 휴가 신청이 수정되었습니다.`)
     }
 
@@ -186,9 +259,19 @@ export default function LeavePage() {
     fetchData()
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: string, leaveType: string) {
     if (!confirm('신청을 삭제하시겠습니까?')) return
     await supabase.from('leave_requests').delete().eq('id', id)
+
+    // 즉시 balance 반영
+    const days = LEAVE_TYPE_DAYS[leaveType]
+    if (balance) {
+      setBalance({
+        ...balance,
+        used_days: balance.used_days - days,
+        remaining_days: balance.remaining_days + days,
+      })
+    }
     fetchData()
   }
 
@@ -196,7 +279,7 @@ export default function LeavePage() {
     const firstDay = new Date(calYear, calMonth, 1).getDay()
     const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
     const monthStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`
-    const monthLeaves = requests.filter((r) => r.leave_date.startsWith(monthStr))
+    const monthAllLeaves = allRequests.filter((r) => r.leave_date.startsWith(monthStr))
 
     const cells: React.ReactNode[] = []
     for (let i = 0; i < firstDay; i++) {
@@ -205,19 +288,24 @@ export default function LeavePage() {
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-      const dayLeaves = monthLeaves.filter((r) => r.leave_date === dateStr)
+      const dayLeaves = monthAllLeaves.filter((r) => r.leave_date === dateStr)
+      const myDayLeaves = dayLeaves.filter((r) => r.is_mine)
+      const otherDayLeaves = dayLeaves.filter((r) => !r.is_mine)
       const isToday = dateStr === today
       const dow = new Date(calYear, calMonth, d).getDay()
       const isSun = dow === 0
       const isSat = dow === 6
       const isPast = !isFuture(dateStr)
       const clickable = isFuture(dateStr)
+      const showTooltip = tooltipDate === dateStr && dayLeaves.length > 0
 
       cells.push(
         <div
           key={d}
           onClick={() => clickable && openCreateModal(dateStr)}
-          className={`min-h-[64px] p-1 border rounded-lg transition-colors
+          onMouseEnter={() => dayLeaves.length > 0 && setTooltipDate(dateStr)}
+          onMouseLeave={() => setTooltipDate(null)}
+          className={`relative min-h-[64px] p-1 border rounded-lg transition-colors
             ${isToday ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-100'}
             ${clickable ? 'cursor-pointer hover:bg-gray-50' : 'opacity-40 cursor-default'}
           `}
@@ -226,16 +314,44 @@ export default function LeavePage() {
             {d}
           </span>
           <div className="mt-0.5 space-y-0.5">
-            {dayLeaves.map((lv) => (
+            {/* 내 신청 - 진한 색 + 이름 */}
+            {myDayLeaves.map((lv) => (
               <div
                 key={lv.id}
                 className={`text-white text-[9px] px-1 py-0.5 rounded truncate ${LEAVE_TYPE_BG[lv.leave_type]} ${isPast ? 'opacity-70' : ''}`}
-                title={LEAVE_TYPE_LABEL[lv.leave_type]}
+                title={`${lv.employee_name} - ${LEAVE_TYPE_LABEL[lv.leave_type]}`}
               >
-                {LEAVE_TYPE_SHORT[lv.leave_type]}
+                {lv.employee_name.length > 3 ? lv.employee_name.slice(0, 3) : lv.employee_name}
+              </div>
+            ))}
+            {/* 타인 신청 - 연한 색 + 이름 */}
+            {otherDayLeaves.map((lv) => (
+              <div
+                key={lv.id}
+                className={`text-[9px] px-1 py-0.5 rounded truncate ${LEAVE_TYPE_BG_OTHER[lv.leave_type]} ${LEAVE_TYPE_TEXT_OTHER[lv.leave_type]}`}
+                title={`${lv.employee_name} - ${LEAVE_TYPE_LABEL[lv.leave_type]}`}
+              >
+                {lv.employee_name.length > 3 ? lv.employee_name.slice(0, 3) : lv.employee_name}
               </div>
             ))}
           </div>
+
+          {/* 전체 툴팁 (내 일정 + 타인 일정) */}
+          {showTooltip && (
+            <div className="absolute z-30 left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-800 text-white text-xs rounded-lg shadow-lg px-2 py-1.5 min-w-[130px] pointer-events-none">
+              <p className="font-semibold text-gray-300 mb-1 text-[10px]">{dateStr}</p>
+              {myDayLeaves.map((lv) => (
+                <p key={lv.id} className="whitespace-nowrap text-blue-300">
+                  ★ {lv.employee_name}: {LEAVE_TYPE_SHORT[lv.leave_type]}
+                </p>
+              ))}
+              {otherDayLeaves.map((lv) => (
+                <p key={lv.id} className="whitespace-nowrap text-gray-200">
+                  {lv.employee_name}: {LEAVE_TYPE_SHORT[lv.leave_type]}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )
     }
@@ -259,7 +375,10 @@ export default function LeavePage() {
           ].map((item) => (
             <div key={item.label} className="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
               <p className="text-xs text-gray-500 mb-1">{item.label}</p>
-              <p className={`text-2xl font-bold ${item.color}`}>{item.value}<span className="text-sm font-normal text-gray-400 ml-0.5">일</span></p>
+              <p className={`text-2xl font-bold ${item.color}`}>
+                {item.value}
+                <span className="text-sm font-normal text-gray-400 ml-0.5">일</span>
+              </p>
             </div>
           ))}
         </div>
@@ -313,23 +432,31 @@ export default function LeavePage() {
               {renderCalendar()}
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-500 inline-block" />연차</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-indigo-400 inline-block" />오전반차</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-400 inline-block" />오후반차</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-400 inline-block" />병가</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-400 inline-block" />금휴</span>
+            {/* 범례 */}
+            <div className="mt-3 space-y-1.5">
+              <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+                <span className="text-gray-400 font-medium">내 일정:</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-500 inline-block" />연차</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-indigo-400 inline-block" />오전반차</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-400 inline-block" />오후반차</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-400 inline-block" />병가</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-400 inline-block" />금휴</span>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+                <span className="text-gray-400 font-medium">팀원 일정:</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-200 inline-block" /><span className="text-blue-700">이름 표시, 호버시 상세</span></span>
+              </div>
             </div>
           </div>
 
           {/* 신청 내역 */}
           <div className="px-4 pb-4 border-t border-gray-100">
-            <h4 className="text-sm font-semibold text-gray-700 mt-3 mb-2">신청 내역</h4>
-            {requests.length === 0 ? (
+            <h4 className="text-sm font-semibold text-gray-700 mt-3 mb-2">내 신청 내역</h4>
+            {myRequests.length === 0 ? (
               <div className="text-center text-gray-400 text-sm py-6">신청 내역이 없습니다.</div>
             ) : (
               <div className="space-y-2">
-                {requests.map((req) => {
+                {myRequests.map((req) => {
                   const canEdit = isFuture(req.leave_date)
                   return (
                     <div
@@ -356,7 +483,7 @@ export default function LeavePage() {
                           </button>
                           <span className="text-gray-200 text-sm">|</span>
                           <button
-                            onClick={() => handleDelete(req.id)}
+                            onClick={() => handleDelete(req.id, req.leave_type)}
                             className="text-xs text-red-400 hover:text-red-600 font-medium"
                           >
                             삭제
@@ -386,6 +513,22 @@ export default function LeavePage() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-4">
               <p className="text-sm font-semibold text-blue-700">📅 {modalDate}</p>
             </div>
+
+            {/* 해당 날짜 팀원 일정 미리보기 */}
+            {(() => {
+              const othersOnDay = allRequests.filter((r) => r.leave_date === modalDate && !r.is_mine)
+              if (othersOnDay.length === 0) return null
+              return (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                  <p className="text-xs font-semibold text-amber-700 mb-1">⚠️ 같은 날 팀원 휴가</p>
+                  {othersOnDay.map((r) => (
+                    <p key={r.id} className="text-xs text-amber-600">
+                      {r.employee_name}: {LEAVE_TYPE_SHORT[r.leave_type]}
+                    </p>
+                  ))}
+                </div>
+              )
+            })()}
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">휴가 유형</label>
