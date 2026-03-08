@@ -15,7 +15,6 @@ const SUBADMIN_PATHS = [
   "/tax/spec",
   "/tax/statement",
   "/calendar",
-  "/admin/leave-status",
 ];
 
 const USER_ONLY_PATHS = [

@@ -15,7 +15,7 @@ const nav = [
   { href: "/tax/statement",      label: "거래원장",       allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/calendar",           label: "출고 캘린더",    allowedRoles: ["ADMIN", "SUBADMIN", "USER"] },
   { href: "/leave",              label: "연차신청",       allowedRoles: ["ADMIN", "USER"]     },
-  { href: "/admin/leave-status", label: "연차현황",       allowedRoles: ["ADMIN", "SUBADMIN"] },
+  { href: "/admin/leave-status", label: "연차현황",       allowedRoles: ["ADMIN", "SUBADMIN", "USER"] },
   { href: "/admin/employees",    label: "인사관리",       allowedRoles: ["ADMIN"]             },
   { href: "/admin/payroll",      label: "급여",           allowedRoles: ["ADMIN"]             },
 ];
