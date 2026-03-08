@@ -429,9 +429,10 @@ export default function PayrollPage() {
 
                       const totalIncome = (row.base_pay||0) + (row.meal_pay||0) + (row.fuel_pay||0) + (row.bonus_pay||0)
                         + row.other_allowances.reduce((s, a) => s + a.amount, 0)
-                      const totalDeduction = row.national_pension + row.health_insurance + row.employment_insurance
-                        + row.long_term_care + row.income_tax + row.local_income_tax
-                        + row.income_tax_settle + row.local_tax_settle + row.special_tax_settle
+                      const totalDeduction = (row.national_pension||0) + (row.health_insurance||0) + (row.employment_insurance||0)
+                        + (row.long_term_care||0) + (row.income_tax||0) + (row.local_income_tax||0)
+                        + (row.income_tax_settle||0) + (row.local_tax_settle||0) + (row.special_tax_settle||0)
+                      const totalDeductionAbs = Math.abs(totalDeduction)
 
                       return (
                         <div key={row.employee_id}>
@@ -582,7 +583,7 @@ export default function PayrollPage() {
 
                                     <div className="border-t border-gray-100 pt-2 flex justify-between text-sm font-bold">
                                       <span className="text-gray-600">공제 합계</span>
-                                      <span className="text-red-600">-{formatKRW(totalDeduction)}원</span>
+                                      <span className="text-red-600">{totalDeduction < 0 ? '+' : '-'}{formatKRW(totalDeductionAbs)}원</span>
                                     </div>
                                   </div>
                                 </div>
@@ -759,6 +760,8 @@ const PRINT_STYLES = [
   '  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }',
   '  .print-block { display: block !important; }',
   '  .print-hidden { display: none !important; }',
+  '  .app-topnav { display: none !important; }',
+  '  nav, header { display: none !important; }',
   '}',
   '.slip-table { width: 100%; border-collapse: collapse; }',
   '.slip-table th, .slip-table td { border: 1px solid #999; padding: 4px 6px; }',
@@ -784,9 +787,12 @@ const PrintSlip = forwardRef<HTMLDivElement, {
   const periodStart = `${pyear}.${String(pmonth).padStart(2,'0')}.01`
   const periodEnd = `${pyear}.${String(pmonth).padStart(2,'0')}.${new Date(pyear, pmonth, 0).getDate()}`
 
-  // 급여지급일: 매월 10일, 휴일이면 이전 평일
+  // 급여지급일: 익월 10일, 토·일이면 이전 평일
   function getPayDate(year: number, month: number): string {
-    let d = new Date(year, month - 1, 10)
+    // 익월 계산
+    const nextMonth = month === 12 ? 1 : month + 1
+    const nextYear = month === 12 ? year + 1 : year
+    let d = new Date(nextYear, nextMonth - 1, 10)
     while (d.getDay() === 0 || d.getDay() === 6) {
       d.setDate(d.getDate() - 1)
     }
@@ -838,7 +844,7 @@ const PrintSlip = forwardRef<HTMLDivElement, {
             <th className="label-col">소득합계</th>
             <td className="amount" style={{ width: '18%' }}>{formatKRW(totalIncome)}</td>
             <th className="label-col">공제합계</th>
-            <td className="amount" style={{ width: '18%' }}>-{formatKRW(totalDeduction)}</td>
+            <td className="amount" style={{ width: '18%' }}>{totalDeduction < 0 ? '+' : '-'}{formatKRW(Math.abs(totalDeduction))}</td>
             <th style={{ background: '#1a3a6b', color: 'white', width: '90px' }}>실수령액</th>
             <td className="amount font-bold" style={{ width: '18%', background: '#e8f0fe' }}>{formatKRW(net)}</td>
           </tr>
@@ -890,7 +896,7 @@ const PrintSlip = forwardRef<HTMLDivElement, {
               </>}
               <tr style={{ background: '#fee2e2', fontWeight: 'bold' }}>
                 <td className="label-col">공제합계</td>
-                <td className="amount">-{formatKRW(totalDeduction)}</td>
+                <td className="amount">{totalDeduction < 0 ? '+' : '-'}{formatKRW(Math.abs(totalDeduction))}</td>
               </tr>
             </tbody>
           </table>

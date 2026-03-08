@@ -71,12 +71,12 @@ function HRDropdown({ pathname, active }: { pathname: string; active: boolean })
       </button>
       {open && (
         <div style={{
-          position: "absolute", top: "calc(100% + 6px)", left: 0,
+          position: "absolute", top: 0, left: "calc(100% + 6px)",
           backgroundColor: "rgba(15,15,20,0.97)",
           border: "1px solid rgba(255,255,255,0.15)",
           borderRadius: 10, overflow: "hidden",
-          minWidth: 120, zIndex: 9999,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+          minWidth: 110, zIndex: 9999,
+          boxShadow: "8px 8px 24px rgba(0,0,0,0.4)",
         }}>
           {HR_SUB_MENUS.map((m) => {
             const isActive = pathname === m.href || pathname.startsWith(m.href + "/");
