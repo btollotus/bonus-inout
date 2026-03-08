@@ -210,18 +210,31 @@ export default function PayrollPage() {
 
   async function handleSaveDraft() {
     setLoading(true); setError(''); setSuccess('')
-    for (const row of rows) {
-      const payload = { ...buildPayload(row), status: row.status }
-      if (row.id) await supabase.from('payroll_draft').update(payload).eq('id', row.id)
-      else { const { data } = await supabase.from('payroll_draft').insert([payload]).select().single(); if (data) row.id = data.id }
+    try {
+      const updatedRows = [...rows]
+      for (let i = 0; i < updatedRows.length; i++) {
+        const row = updatedRows[i]
+        const payload = { ...buildPayload(row), status: row.status }
+        if (row.id) {
+          const { error } = await supabase.from('payroll_draft').update(payload).eq('id', row.id)
+          if (error) throw new Error(`${row.employee_name} 저장 실패: ${error.message}`)
+        } else {
+          const { data, error } = await supabase.from('payroll_draft').insert([payload]).select().single()
+          if (error) throw new Error(`${row.employee_name} 저장 실패: ${error.message}`)
+          if (data) updatedRows[i] = { ...row, id: data.id }
+        }
+      }
+      setRows(updatedRows)
+      // 확정 상태라면 payroll_final도 동기화
+      if (updatedRows.some(r => r.status === 'final')) {
+        const finalPayloads = updatedRows.filter(r => r.status === 'final').map(r => ({ ...buildPayload(r), status: 'final' }))
+        await supabase.from('payroll_final').upsert(finalPayloads, { onConflict: 'employee_id,year,month' })
+      }
+      setSuccess('저장 완료되었습니다.')
+      fetchPayrollForMonth()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '저장 중 오류가 발생했습니다.')
     }
-    // 확정 상태라면 payroll_final도 동기화
-    if (rows.some(r => r.status === 'final')) {
-      const finalPayloads = rows.filter(r => r.status === 'final').map(row => ({ ...buildPayload(row), status: 'final' }))
-      await supabase.from('payroll_final').upsert(finalPayloads, { onConflict: 'employee_id,year,month' })
-    }
-    setSuccess('저장 완료되었습니다.')
-    fetchPayrollForMonth()
     setLoading(false)
   }
 
