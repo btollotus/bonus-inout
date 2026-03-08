@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/browser'
 
+// ── 타입 ────────────────────────────────────────────────
 type Employee = {
   id: string
   auth_user_id: string | null
@@ -19,6 +20,17 @@ type Employee = {
   commute_distance: number | null
   emergency_contact: string | null
   encrypted_rrn: string | null
+  // 신규 필드
+  birthday: string | null          // YYYY-MM-DD
+  birthday_type: 'solar' | 'lunar' | null  // 양력/음력
+  created_at: string
+}
+
+type HealthCertRecord = {
+  id: string
+  employee_id: string
+  exam_date: string       // YYYY-MM-DD
+  note: string | null
   created_at: string
 }
 
@@ -28,6 +40,7 @@ type AuthUser = {
   display_name: string | null
 }
 
+// ── 상수 ────────────────────────────────────────────────
 const POSITIONS = ['대표', '부장', '과장', '대리', '주임', '사원', '수습']
 const FUEL_TYPES = ['휘발유', '경유', 'LPG', '전기', '하이브리드', '없음']
 
@@ -36,8 +49,10 @@ const EMPTY_FORM = {
   address: '', hire_date: '', resign_date: '',
   position: '', car_type: '', fuel_type: '', commute_distance: '',
   emergency_contact: '', rrn: '',
+  birthday: '', birthday_type: 'solar' as 'solar' | 'lunar',
 }
 
+// ── 유틸 ────────────────────────────────────────────────
 function formatRRN(v: string) {
   const c = v.replace(/[^0-9]/g, '').slice(0, 13)
   return c.length > 6 ? c.slice(0, 6) + '-' + c.slice(6) : c
@@ -49,26 +64,48 @@ function formatPhone(v: string) {
   return c.slice(0, 3) + '-' + c.slice(3, 7) + '-' + c.slice(7)
 }
 
+// 보건증 만료일 = 검사일 + 1년
+function healthExpiry(examDate: string) {
+  const d = new Date(examDate)
+  d.setFullYear(d.getFullYear() + 1)
+  return d.toISOString().split('T')[0]
+}
+function daysUntilExpiry(examDate: string) {
+  const expiry = new Date(healthExpiry(examDate))
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.ceil((expiry.getTime() - today.getTime()) / 86400000)
+}
+function expiryBadge(examDate: string) {
+  const days = daysUntilExpiry(examDate)
+  if (days < 0) return { label: '만료됨', cls: 'bg-red-100 text-red-700 border-red-200' }
+  if (days <= 7) return { label: `D-${days} (1주일 이내)`, cls: 'bg-red-100 text-red-700 border-red-200' }
+  if (days <= 14) return { label: `D-${days} (2주 이내)`, cls: 'bg-orange-100 text-orange-700 border-orange-200' }
+  if (days <= 30) return { label: `D-${days} (1개월 이내)`, cls: 'bg-yellow-100 text-yellow-700 border-yellow-200' }
+  return { label: `D-${days}`, cls: 'bg-green-100 text-green-700 border-green-200' }
+}
+
 function detectChanges(original: Employee, newForm: typeof EMPTY_FORM) {
   const fieldMap: Record<string, string> = {
     employee_code: '사번', name: '이름', email: '이메일', mobile: '휴대폰',
     address: '주소', hire_date: '입사일', resign_date: '퇴사일',
     position: '직책', car_type: '차종', fuel_type: '유종',
     commute_distance: '출퇴근거리', emergency_contact: '비상연락처',
+    birthday: '생일', birthday_type: '생일구분',
   }
   const changes: Record<string, { before: unknown; after: unknown }> = {}
   for (const [key, label] of Object.entries(fieldMap)) {
     const before = (original as Record<string, unknown>)[key] ?? ''
     const after = (newForm as Record<string, unknown>)[key] ?? ''
-    if (String(before) !== String(after)) {
-      changes[label] = { before, after }
-    }
+    if (String(before) !== String(after)) changes[label] = { before, after }
   }
   return changes
 }
 
+// ── 컴포넌트 ────────────────────────────────────────────
 export default function EmployeesPage() {
   const supabase = createClient()
+
   const [employees, setEmployees] = useState<Employee[]>([])
   const [form, setForm] = useState(EMPTY_FORM)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -80,31 +117,118 @@ export default function EmployeesPage() {
   const [success, setSuccess] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+
+  // 주민번호
   const [showRRN, setShowRRN] = useState<Record<string, boolean>>({})
   const [decryptedRRN, setDecryptedRRN] = useState<Record<string, string>>({})
+
+  // 재초대
   const [resendingId, setResendingId] = useState<string | null>(null)
+
+  // 수정 이력
   const [historyEmpId, setHistoryEmpId] = useState<string | null>(null)
   const [history, setHistory] = useState<Record<string, unknown>[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
-  // ── UID 매핑 모달 상태 ──────────────────────
+  // UID 매핑 모달
   const [showMappingModal, setShowMappingModal] = useState(false)
   const [mappingTarget, setMappingTarget] = useState<Employee | null>(null)
   const [authUsers, setAuthUsers] = useState<AuthUser[]>([])
   const [mappingUid, setMappingUid] = useState('')
   const [mappingLoading, setMappingLoading] = useState(false)
 
+  // 보건증
+  const [healthRecords, setHealthRecords] = useState<Record<string, HealthCertRecord[]>>({})
+  const [showHealthEmpId, setShowHealthEmpId] = useState<string | null>(null)
+  const [healthFormEmpId, setHealthFormEmpId] = useState<string | null>(null)
+  const [healthDate, setHealthDate] = useState('')
+  const [healthNote, setHealthNote] = useState('')
+  const [healthLoading, setHealthLoading] = useState(false)
+
   useEffect(() => { fetchEmployees() }, [])
 
+  // ── 직원 목록 ─────────────────────────────────────────
   async function fetchEmployees() {
     setFetchLoading(true)
-    const { data, error } = await supabase.from('employees').select('*').order('created_at', { ascending: false })
+    const { data, error } = await supabase
+      .from('employees')
+      .select('*')
+      .order('created_at', { ascending: false })
     if (error) setError(error.message)
     else setEmployees(data || [])
     setFetchLoading(false)
   }
 
-  // Auth Users 목록 로드 (매핑 모달 열 때)
+  // ── 보건증 이력 로드 ──────────────────────────────────
+  async function fetchHealthRecords(empId: string) {
+    const { data } = await supabase
+      .from('employee_health_certs')
+      .select('*')
+      .eq('employee_id', empId)
+      .order('exam_date', { ascending: false })
+    setHealthRecords((prev) => ({ ...prev, [empId]: data || [] }))
+  }
+
+  async function handleAddHealthRecord(empId: string) {
+    if (!healthDate) return
+    setHealthLoading(true)
+    const { error } = await supabase.from('employee_health_certs').insert([{
+      employee_id: empId,
+      exam_date: healthDate,
+      note: healthNote || null,
+    }])
+    if (error) setError(error.message)
+    else {
+      setSuccess('보건증 검사일이 등록되었습니다.')
+      setHealthDate('')
+      setHealthNote('')
+      setHealthFormEmpId(null)
+      await fetchHealthRecords(empId)
+    }
+    setHealthLoading(false)
+  }
+
+  async function handleDeleteHealthRecord(recordId: string, empId: string) {
+    if (!confirm('이 보건증 기록을 삭제하시겠습니까?')) return
+    const { error } = await supabase.from('employee_health_certs').delete().eq('id', recordId)
+    if (error) setError(error.message)
+    else await fetchHealthRecords(empId)
+  }
+
+  function toggleHealthPanel(empId: string) {
+    if (showHealthEmpId === empId) {
+      setShowHealthEmpId(null)
+    } else {
+      setShowHealthEmpId(empId)
+      fetchHealthRecords(empId)
+    }
+    setHealthFormEmpId(null)
+  }
+
+  // ── 주민번호 (전체 표시) ──────────────────────────────
+  async function handleRevealRRN(empId: string) {
+    if (showRRN[empId]) {
+      setShowRRN((p) => ({ ...p, [empId]: false }))
+      return
+    }
+    const res = await fetch('/api/admin/decrypt-rrn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empId }),
+    })
+    const json = await res.json()
+    if (res.ok) {
+      // 전체 번호 표시 (마스킹 없음)
+      setDecryptedRRN((p) => ({ ...p, [empId]: json.rrn }))
+      setShowRRN((p) => ({ ...p, [empId]: true }))
+      // 30초 후 자동 숨김
+      setTimeout(() => setShowRRN((p) => ({ ...p, [empId]: false })), 30000)
+    } else {
+      setError(json.error || '복호화 실패')
+    }
+  }
+
+  // ── Auth Users 로드 ────────────────────────────────────
   async function fetchAuthUsers() {
     try {
       const res = await fetch('/api/admin/list-auth-users')
@@ -112,12 +236,9 @@ export default function EmployeesPage() {
         const data = await res.json()
         setAuthUsers(data.users || [])
       }
-    } catch {
-      console.error('Auth users 로드 실패')
-    }
+    } catch { console.error('Auth users 로드 실패') }
   }
 
-  // UID 매핑 모달 열기
   function openMappingModal(emp: Employee) {
     setMappingTarget(emp)
     setMappingUid(emp.auth_user_id || '')
@@ -125,7 +246,6 @@ export default function EmployeesPage() {
     fetchAuthUsers()
   }
 
-  // UID 매핑 저장
   async function handleSaveMapping() {
     if (!mappingTarget) return
     setMappingLoading(true)
@@ -134,9 +254,8 @@ export default function EmployeesPage() {
       .update({ auth_user_id: mappingUid || null })
       .eq('id', mappingTarget.id)
     setMappingLoading(false)
-    if (error) {
-      setError(error.message)
-    } else {
+    if (error) setError(error.message)
+    else {
       setSuccess(`${mappingTarget.name}님의 UID 매핑이 완료됐습니다.`)
       setShowMappingModal(false)
       setMappingTarget(null)
@@ -145,6 +264,7 @@ export default function EmployeesPage() {
     }
   }
 
+  // ── 폼 핸들러 ─────────────────────────────────────────
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target
     if (name === 'rrn') { setForm({ ...form, rrn: formatRRN(value) }); return }
@@ -170,19 +290,32 @@ export default function EmployeesPage() {
       commute_distance: emp.commute_distance?.toString() || '',
       emergency_contact: emp.emergency_contact || '',
       rrn: '',
+      birthday: emp.birthday || '',
+      birthday_type: emp.birthday_type || 'solar',
     })
-    setShowForm(true); setError(''); setSuccess('')
+    setShowForm(true)
+    setError('')
+    setSuccess('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function handleNew() {
-    setEditingId(null); setEditingEmployee(null); setEditingAuthId(null)
-    setForm(EMPTY_FORM); setShowForm(true); setError(''); setSuccess('')
+    setEditingId(null)
+    setEditingEmployee(null)
+    setEditingAuthId(null)
+    setForm(EMPTY_FORM)
+    setShowForm(true)
+    setError('')
+    setSuccess('')
   }
 
   function handleCancel() {
-    setEditingId(null); setEditingEmployee(null); setEditingAuthId(null)
-    setForm(EMPTY_FORM); setShowForm(false); setError('')
+    setEditingId(null)
+    setEditingEmployee(null)
+    setEditingAuthId(null)
+    setForm(EMPTY_FORM)
+    setShowForm(false)
+    setError('')
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -190,7 +323,9 @@ export default function EmployeesPage() {
     if (!form.name.trim()) return setError('이름은 필수입니다.')
     if (!form.employee_code.trim()) return setError('사번은 필수입니다.')
     if (!editingId && !form.email.trim()) return setError('신규 등록 시 이메일은 필수입니다.')
-    setLoading(true); setError(''); setSuccess('')
+    setLoading(true)
+    setError('')
+    setSuccess('')
 
     try {
       let authUserId = editingAuthId
@@ -232,6 +367,8 @@ export default function EmployeesPage() {
         fuel_type: form.fuel_type || null,
         commute_distance: form.commute_distance ? Number(form.commute_distance) : null,
         emergency_contact: form.emergency_contact || null,
+        birthday: form.birthday || null,
+        birthday_type: form.birthday || form.birthday_type ? form.birthday_type : null,
       }
       if (encryptedRrn) payload.encrypted_rrn = encryptedRrn
 
@@ -259,7 +396,8 @@ export default function EmployeesPage() {
         setSuccess(`등록 완료. ${form.email}으로 초대 메일이 발송되었습니다.`)
       }
 
-      handleCancel(); fetchEmployees()
+      handleCancel()
+      fetchEmployees()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
     }
@@ -271,23 +409,6 @@ export default function EmployeesPage() {
     const { error } = await supabase.from('employees').delete().eq('id', id)
     if (error) setError(error.message)
     else { setSuccess('삭제되었습니다.'); fetchEmployees() }
-  }
-
-  async function handleRevealRRN(empId: string) {
-    if (showRRN[empId]) { setShowRRN((p) => ({ ...p, [empId]: false })); return }
-    const res = await fetch('/api/admin/decrypt-rrn', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ empId }),
-    })
-    const json = await res.json()
-    if (res.ok) {
-      setDecryptedRRN((p) => ({ ...p, [empId]: json.rrn }))
-      setShowRRN((p) => ({ ...p, [empId]: true }))
-      setTimeout(() => setShowRRN((p) => ({ ...p, [empId]: false })), 10000)
-    } else {
-      setError(json.error || '복호화 실패')
-    }
   }
 
   async function handleResendInvite(email: string, name: string, empId: string) {
@@ -305,9 +426,10 @@ export default function EmployeesPage() {
     else setSuccess(`${email}로 초대 메일을 재발송했습니다.`)
   }
 
-  async function handleShowHistory(empId: string, empName: string) {
+  async function handleShowHistory(empId: string) {
     if (historyEmpId === empId) { setHistoryEmpId(null); return }
-    setHistoryEmpId(empId); setHistoryLoading(true)
+    setHistoryEmpId(empId)
+    setHistoryLoading(true)
     const { data } = await supabase
       .from('employee_history')
       .select('*')
@@ -319,7 +441,8 @@ export default function EmployeesPage() {
   }
 
   const filtered = employees.filter(
-    (e) => e.name.includes(searchQuery) ||
+    (e) =>
+      e.name.includes(searchQuery) ||
       e.employee_code.includes(searchQuery) ||
       (e.mobile || '').includes(searchQuery) ||
       (e.email || '').includes(searchQuery) ||
@@ -328,21 +451,29 @@ export default function EmployeesPage() {
 
   const unmappedEmployees = employees.filter((e) => !e.auth_user_id && e.email)
 
+  // ── 렌더 ─────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* 헤더 */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">직원 관리 (관리자)</h1>
-            <p className="text-xs text-gray-500 mt-0.5">이메일 입력 시 로그인 계정 자동 생성 + 초대 메일 발송 · 주민번호 AES-256 암호화 저장</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              이메일 입력 시 로그인 계정 자동 생성 + 초대 메일 발송 · 주민번호 AES-256 암호화 저장
+            </p>
           </div>
-          <button onClick={handleNew} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors">
+          <button
+            onClick={handleNew}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
+          >
             + 새로 등록
           </button>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* 알림 */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm flex justify-between">
             <span>{error}</span>
@@ -356,7 +487,7 @@ export default function EmployeesPage() {
           </div>
         )}
 
-        {/* ⚠️ UID 미매핑 경고 배너 */}
+        {/* UID 미매핑 경고 */}
         {unmappedEmployees.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
             <p className="text-sm font-semibold text-amber-800 mb-1">
@@ -364,14 +495,13 @@ export default function EmployeesPage() {
             </p>
             <p className="text-xs text-amber-700 mb-2">
               아래 직원들은 Supabase Auth 계정과 연결이 안 되어 있습니다.
-              연차신청 등 기능을 사용하려면 UID 매핑이 필요합니다.
             </p>
             <div className="flex flex-wrap gap-2">
               {unmappedEmployees.map((emp) => (
                 <button
                   key={emp.id}
                   onClick={() => openMappingModal(emp)}
-                  className="bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs px-3 py-1.5 rounded-full font-medium transition-colors"
+                  className="bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs px-3 py-1.5 rounded-full font-medium"
                 >
                   {emp.name} ({emp.email}) → UID 연결
                 </button>
@@ -380,114 +510,166 @@ export default function EmployeesPage() {
           </div>
         )}
 
+        {/* 등록/수정 폼 */}
         {showForm && (
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
             <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-base font-semibold text-gray-800">{editingId ? '직원 정보 수정' : '새 직원 등록'}</h2>
+              <h2 className="text-base font-semibold text-gray-800">
+                {editingId ? '직원 정보 수정' : '새 직원 등록'}
+              </h2>
             </div>
-            <form onSubmit={handleSubmit} className="p-6">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">기본 정보</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">이름 <span className="text-red-500">*</span></label>
-                  <input name="name" value={form.name} onChange={handleChange} placeholder="홍길동"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">사번 <span className="text-red-500">*</span></label>
-                  <input name="employee_code" value={form.employee_code} onChange={handleChange} placeholder="20240301-0001"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">직책</label>
-                  <select name="position" value={form.position} onChange={handleChange}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">선택</option>
-                    {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    이메일 {!editingId && <span className="text-red-500">*</span>}
-                    {!editingId && <span className="text-xs text-blue-600 ml-1">→ 초대 메일 자동 발송</span>}
-                  </label>
-                  <input type="email" name="email" value={form.email} onChange={handleChange} placeholder="hong@company.com"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">휴대폰</label>
-                  <input name="mobile" value={form.mobile} onChange={handleChange} placeholder="010-0000-0000"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    주민번호
-                    <span className="text-xs text-gray-400 ml-1">{editingId ? '재입력시만 변경' : ''} · AES-256 암호화</span>
-                  </label>
-                  <input name="rrn" value={form.rrn} onChange={handleChange} placeholder="730228-1168160" maxLength={14}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono tracking-wider" />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">주소</label>
-                  <input name="address" value={form.address} onChange={handleChange} placeholder="주소"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">비상연락처</label>
-                  <input name="emergency_contact" value={form.emergency_contact} onChange={handleChange}
-                    placeholder="홍아버지 010-0000-0000 (부)"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">입사일</label>
-                  <input type="date" name="hire_date" value={form.hire_date} onChange={handleChange}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">퇴사일</label>
-                  <input type="date" name="resign_date" value={form.resign_date} onChange={handleChange}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+
+              {/* 기본 정보 */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">기본 정보</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">이름 <span className="text-red-500">*</span></label>
+                    <input name="name" value={form.name} onChange={handleChange} placeholder="홍길동"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">사번 <span className="text-red-500">*</span></label>
+                    <input name="employee_code" value={form.employee_code} onChange={handleChange} placeholder="20240301-0001"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">직책</label>
+                    <select name="position" value={form.position} onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">선택</option>
+                      {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      이메일 {!editingId && <span className="text-red-500">*</span>}
+                      {!editingId && <span className="text-xs text-blue-600 ml-1">→ 초대 메일 자동 발송</span>}
+                    </label>
+                    <input type="email" name="email" value={form.email} onChange={handleChange} placeholder="hong@company.com"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">휴대폰</label>
+                    <input name="mobile" value={form.mobile} onChange={handleChange} placeholder="010-0000-0000"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      주민번호
+                      <span className="text-xs text-gray-400 ml-1">{editingId ? '재입력시만 변경' : ''} · AES-256 암호화</span>
+                    </label>
+                    <input name="rrn" value={form.rrn} onChange={handleChange} placeholder="730228-1168160" maxLength={14}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono tracking-wider" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">주소</label>
+                    <input name="address" value={form.address} onChange={handleChange} placeholder="주소"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">비상연락처</label>
+                    <input name="emergency_contact" value={form.emergency_contact} onChange={handleChange}
+                      placeholder="홍아버지 010-0000-0000 (부)"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">입사일</label>
+                    <input type="date" name="hire_date" value={form.hire_date} onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">퇴사일</label>
+                    <input type="date" name="resign_date" value={form.resign_date} onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+
+                  {/* 🎂 생일 (양력/음력) */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">생일</label>
+                    <div className="flex gap-2">
+                      {/* 양력/음력 토글 */}
+                      <div className="flex rounded-md border border-gray-300 overflow-hidden shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, birthday_type: 'solar' })}
+                          className={`px-2.5 py-2 text-xs font-medium transition-colors ${
+                            form.birthday_type === 'solar'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-white text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          양력
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, birthday_type: 'lunar' })}
+                          className={`px-2.5 py-2 text-xs font-medium transition-colors border-l border-gray-300 ${
+                            form.birthday_type === 'lunar'
+                              ? 'bg-orange-500 text-white'
+                              : 'bg-white text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          음력
+                        </button>
+                      </div>
+                      <input
+                        type="date"
+                        name="birthday"
+                        value={form.birthday}
+                        onChange={handleChange}
+                        className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {form.birthday_type === 'lunar' ? '🌙 음력 날짜를 입력하세요' : '☀️ 양력 날짜를 입력하세요'}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">차량 / 통근 정보</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">차종</label>
-                  <input name="car_type" value={form.car_type} onChange={handleChange} placeholder="예: 현대 아반떼"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">유종</label>
-                  <select name="fuel_type" value={form.fuel_type} onChange={handleChange}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">선택</option>
-                    {FUEL_TYPES.map((f) => <option key={f} value={f}>{f}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">출퇴근 거리 (km)</label>
-                  <input type="number" name="commute_distance" value={form.commute_distance} onChange={handleChange}
-                    placeholder="편도 km" min="0" step="0.1"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              {/* 차량/통근 정보 */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">차량 / 통근 정보</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">차종</label>
+                    <input name="car_type" value={form.car_type} onChange={handleChange} placeholder="예: 현대 아반떼"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">유종</label>
+                    <select name="fuel_type" value={form.fuel_type} onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">선택</option>
+                      {FUEL_TYPES.map((f) => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">출퇴근 거리 (km)</label>
+                    <input type="number" name="commute_distance" value={form.commute_distance} onChange={handleChange}
+                      placeholder="편도 km" min="0" step="0.1"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-6 flex-wrap">
+              <div className="flex gap-3 flex-wrap">
                 <button type="submit" disabled={loading}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-md transition-colors">
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-md">
                   {loading ? '처리 중...' : editingId ? '수정 완료' : '등록 + 초대 메일 발송'}
                 </button>
                 {editingId && form.email && (
                   <button type="button"
                     onClick={() => handleResendInvite(form.email, form.name, editingId)}
                     disabled={resendingId === editingId}
-                    className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-md transition-colors">
+                    className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-md">
                     {resendingId === editingId ? '발송 중...' : '📧 초대 메일 재발송'}
                   </button>
                 )}
                 <button type="button" onClick={handleCancel}
-                  className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-5 py-2 rounded-md transition-colors">
+                  className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-5 py-2 rounded-md">
                   취소
                 </button>
               </div>
@@ -501,9 +683,12 @@ export default function EmployeesPage() {
             <h2 className="text-base font-semibold text-gray-800">
               직원 목록 <span className="text-gray-400 font-normal text-sm">({filtered.length}명)</span>
             </h2>
-            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="이름, 사번, 이메일, 직책..."
-              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
 
           {fetchLoading ? (
@@ -521,6 +706,7 @@ export default function EmployeesPage() {
                     <th className="px-4 py-3 text-left font-medium">이메일</th>
                     <th className="px-4 py-3 text-left font-medium">휴대폰</th>
                     <th className="px-4 py-3 text-left font-medium">주민번호</th>
+                    <th className="px-4 py-3 text-left font-medium">생일</th>
                     <th className="px-4 py-3 text-left font-medium">차량</th>
                     <th className="px-4 py-3 text-left font-medium">통근</th>
                     <th className="px-4 py-3 text-center font-medium">상태</th>
@@ -530,8 +716,8 @@ export default function EmployeesPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filtered.map((emp) => (
-                    <>
-                      <tr key={emp.id} className="hover:bg-gray-50 transition-colors">
+                    <React.Fragment key={emp.id}>
+                      <tr className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 font-medium text-gray-900">{emp.name}</td>
                         <td className="px-4 py-3">
                           {emp.position
@@ -541,21 +727,46 @@ export default function EmployeesPage() {
                         <td className="px-4 py-3 text-gray-600 text-xs">{emp.employee_code}</td>
                         <td className="px-4 py-3 text-gray-600 text-xs">{emp.email || '-'}</td>
                         <td className="px-4 py-3 text-gray-600 text-xs">{emp.mobile || '-'}</td>
+
+                        {/* 주민번호 - 확인 클릭 시 전체 표시 */}
                         <td className="px-4 py-3">
                           {emp.encrypted_rrn ? (
                             <div className="flex items-center gap-1">
                               <span className="font-mono text-xs text-gray-700">
                                 {showRRN[emp.id] && decryptedRRN[emp.id]
-                                  ? decryptedRRN[emp.id].slice(0, 8) + '******'
-                                  : '●●●●●●-●'}
+                                  ? decryptedRRN[emp.id]  // ← 전체 번호 표시
+                                  : '●●●●●●-●●●●●●●'}
                               </span>
-                              <button onClick={() => handleRevealRRN(emp.id)}
-                                className="text-xs text-blue-500 hover:text-blue-700 underline ml-1">
+                              <button
+                                onClick={() => handleRevealRRN(emp.id)}
+                                className="text-xs text-blue-500 hover:text-blue-700 underline ml-1 shrink-0"
+                              >
                                 {showRRN[emp.id] ? '숨김' : '확인'}
                               </button>
                             </div>
-                          ) : <span className="text-xs text-gray-300">미입력</span>}
+                          ) : (
+                            <span className="text-xs text-gray-300">미입력</span>
+                          )}
                         </td>
+
+                        {/* 생일 */}
+                        <td className="px-4 py-3 text-gray-600 text-xs">
+                          {emp.birthday ? (
+                            <span className="flex items-center gap-1">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                                emp.birthday_type === 'lunar'
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {emp.birthday_type === 'lunar' ? '음력' : '양력'}
+                              </span>
+                              {emp.birthday}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+
                         <td className="px-4 py-3 text-gray-600 text-xs">
                           {emp.car_type ? `${emp.car_type}${emp.fuel_type ? ` (${emp.fuel_type})` : ''}` : '-'}
                         </td>
@@ -573,7 +784,7 @@ export default function EmployeesPage() {
                           ) : (
                             <button
                               onClick={() => openMappingModal(emp)}
-                              className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full transition-colors"
+                              className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full"
                             >
                               미연동 →연결
                             </button>
@@ -583,21 +794,126 @@ export default function EmployeesPage() {
                           <div className="flex gap-2 flex-wrap">
                             <button onClick={() => handleEdit(emp)} className="text-blue-600 hover:text-blue-800 text-xs font-medium">수정</button>
                             {emp.email && (
-                              <button onClick={() => handleResendInvite(emp.email!, emp.name, emp.id)}
+                              <button
+                                onClick={() => handleResendInvite(emp.email!, emp.name, emp.id)}
                                 disabled={resendingId === emp.id}
-                                className="text-orange-500 hover:text-orange-700 text-xs font-medium">
+                                className="text-orange-500 hover:text-orange-700 text-xs font-medium"
+                              >
                                 {resendingId === emp.id ? '발송중' : '재초대'}
                               </button>
                             )}
-                            <button onClick={() => handleShowHistory(emp.id, emp.name)} className="text-gray-500 hover:text-gray-700 text-xs font-medium">이력</button>
+                            {/* 보건증 버튼 */}
+                            <button
+                              onClick={() => toggleHealthPanel(emp.id)}
+                              className="text-teal-600 hover:text-teal-800 text-xs font-medium"
+                            >
+                              {showHealthEmpId === emp.id ? '보건증 ▲' : '보건증 ▼'}
+                            </button>
+                            <button onClick={() => handleShowHistory(emp.id)} className="text-gray-500 hover:text-gray-700 text-xs font-medium">이력</button>
                             <button onClick={() => handleDelete(emp.id, emp.name)} className="text-red-500 hover:text-red-700 text-xs font-medium">삭제</button>
                           </div>
                         </td>
                       </tr>
 
+                      {/* 🏥 보건증 패널 */}
+                      {showHealthEmpId === emp.id && (
+                        <tr key={emp.id + '-health'}>
+                          <td colSpan={12} className="px-4 py-0 bg-teal-50">
+                            <div className="py-3 border-t border-teal-100">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs font-semibold text-teal-800">🏥 {emp.name} 보건증 검사 이력</p>
+                                <button
+                                  onClick={() => setHealthFormEmpId(healthFormEmpId === emp.id ? null : emp.id)}
+                                  className="text-xs bg-teal-600 hover:bg-teal-700 text-white px-3 py-1 rounded-full font-medium"
+                                >
+                                  + 검사일 추가
+                                </button>
+                              </div>
+
+                              {/* 추가 폼 */}
+                              {healthFormEmpId === emp.id && (
+                                <div className="flex gap-2 items-end mb-3 flex-wrap bg-white border border-teal-200 rounded-lg p-3">
+                                  <div>
+                                    <label className="block text-xs text-gray-600 mb-1">검사일</label>
+                                    <input
+                                      type="date"
+                                      value={healthDate}
+                                      onChange={(e) => setHealthDate(e.target.value)}
+                                      className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                    />
+                                  </div>
+                                  <div className="flex-1 min-w-[160px]">
+                                    <label className="block text-xs text-gray-600 mb-1">메모 (선택)</label>
+                                    <input
+                                      type="text"
+                                      value={healthNote}
+                                      onChange={(e) => setHealthNote(e.target.value)}
+                                      placeholder="예: 정기검사, 신규입사"
+                                      className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                    />
+                                  </div>
+                                  <button
+                                    onClick={() => handleAddHealthRecord(emp.id)}
+                                    disabled={healthLoading || !healthDate}
+                                    className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-medium px-4 py-1.5 rounded-md"
+                                  >
+                                    {healthLoading ? '저장 중...' : '저장'}
+                                  </button>
+                                  <button
+                                    onClick={() => { setHealthFormEmpId(null); setHealthDate(''); setHealthNote('') }}
+                                    className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5"
+                                  >
+                                    취소
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* 이력 목록 */}
+                              {!healthRecords[emp.id] ? (
+                                <p className="text-xs text-gray-400">불러오는 중...</p>
+                              ) : healthRecords[emp.id].length === 0 ? (
+                                <p className="text-xs text-gray-400">보건증 검사 기록이 없습니다.</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {healthRecords[emp.id].map((rec, idx) => {
+                                    const badge = expiryBadge(rec.exam_date)
+                                    const isLatest = idx === 0
+                                    return (
+                                      <div
+                                        key={rec.id}
+                                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs ${
+                                          isLatest ? 'bg-white border border-teal-200 shadow-sm' : 'bg-white border border-gray-100'
+                                        }`}
+                                      >
+                                        {isLatest && (
+                                          <span className="text-[10px] bg-teal-600 text-white px-1.5 py-0.5 rounded font-bold shrink-0">최신</span>
+                                        )}
+                                        <span className="font-medium text-gray-800 shrink-0">검사일: {rec.exam_date}</span>
+                                        <span className="text-gray-400 shrink-0">→ 만료: {healthExpiry(rec.exam_date)}</span>
+                                        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-medium shrink-0 ${badge.cls}`}>
+                                          {badge.label}
+                                        </span>
+                                        {rec.note && <span className="text-gray-500">{rec.note}</span>}
+                                        <button
+                                          onClick={() => handleDeleteHealthRecord(rec.id, emp.id)}
+                                          className="ml-auto text-red-400 hover:text-red-600 shrink-0"
+                                        >
+                                          삭제
+                                        </button>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+
+                      {/* 수정 이력 */}
                       {historyEmpId === emp.id && (
                         <tr key={emp.id + '-history'}>
-                          <td colSpan={11} className="px-4 py-3 bg-gray-50 border-t border-gray-100">
+                          <td colSpan={12} className="px-4 py-3 bg-gray-50 border-t border-gray-100">
                             <div className="text-xs font-semibold text-gray-500 mb-2">📋 {emp.name} 수정 이력</div>
                             {historyLoading ? (
                               <div className="text-xs text-gray-400">불러오는 중...</div>
@@ -605,11 +921,13 @@ export default function EmployeesPage() {
                               <div className="text-xs text-gray-400">수정 이력이 없습니다.</div>
                             ) : (
                               <div className="space-y-2">
-                                {history.map((h: Record<string, unknown>, i) => (
+                                {history.map((h, i) => (
                                   <div key={i} className="bg-white border border-gray-200 rounded p-2.5">
                                     <div className="flex items-center gap-2 mb-1.5">
-                                      <span className="text-xs text-gray-500">{new Date(h.changed_at as string).toLocaleString('ko-KR')}</span>
-                                      <span className="text-xs text-blue-600">{h.changed_by_email as string || '관리자'}</span>
+                                      <span className="text-xs text-gray-500">
+                                        {new Date(h.changed_at as string).toLocaleString('ko-KR')}
+                                      </span>
+                                      <span className="text-xs text-blue-600">{(h.changed_by_email as string) || '관리자'}</span>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
                                       {Object.entries(h.changes as Record<string, { before: unknown; after: unknown }>).map(([field, val]) => (
@@ -629,19 +947,19 @@ export default function EmployeesPage() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
           <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-400">
-            ※ 주민번호 AES-256 암호화 · 확인 후 10초 자동 숨김 · RLS 관리자 전용
+            ※ 주민번호 AES-256 암호화 · 확인 후 30초 자동 숨김 · RLS 관리자 전용
           </div>
         </div>
       </div>
 
-      {/* ===== UID 매핑 모달 ===== */}
+      {/* UID 매핑 모달 */}
       {showMappingModal && mappingTarget && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
@@ -649,21 +967,15 @@ export default function EmployeesPage() {
             <p className="text-sm text-gray-500 mb-4">
               <strong>{mappingTarget.name}</strong> ({mappingTarget.email})
             </p>
-
             <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
               Supabase Auth에 등록된 계정과 직원을 연결합니다.
-              동일 이메일 계정을 선택하거나, UID를 직접 입력하세요.
             </div>
-
-            {/* Auth Users 목록 */}
             {authUsers.length > 0 && (
               <div className="mb-4">
                 <p className="text-xs font-medium text-gray-600 mb-2">Auth 계정 선택:</p>
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
                   {authUsers.map((u) => {
-                    const alreadyMapped = employees.some(
-                      (e) => e.auth_user_id === u.id && e.id !== mappingTarget.id
-                    )
+                    const alreadyMapped = employees.some((e) => e.auth_user_id === u.id && e.id !== mappingTarget.id)
                     return (
                       <button
                         key={u.id}
@@ -680,13 +992,9 @@ export default function EmployeesPage() {
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{u.email}</span>
                           {u.email === mappingTarget.email && (
-                            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
-                              이메일 일치 ✓
-                            </span>
+                            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">이메일 일치 ✓</span>
                           )}
-                          {alreadyMapped && (
-                            <span className="text-xs text-gray-400">이미 연결됨</span>
-                          )}
+                          {alreadyMapped && <span className="text-xs text-gray-400">이미 연결됨</span>}
                         </div>
                         <p className="text-xs text-gray-400 font-mono mt-0.5">{u.id}</p>
                       </button>
@@ -695,8 +1003,6 @@ export default function EmployeesPage() {
                 </div>
               </div>
             )}
-
-            {/* 직접 입력 */}
             <div className="mb-5">
               <label className="block text-xs font-medium text-gray-600 mb-1">또는 UID 직접 입력</label>
               <input
@@ -707,22 +1013,17 @@ export default function EmployeesPage() {
                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
               />
             </div>
-
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  setShowMappingModal(false)
-                  setMappingTarget(null)
-                  setMappingUid('')
-                }}
-                className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                onClick={() => { setShowMappingModal(false); setMappingTarget(null); setMappingUid('') }}
+                className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50"
               >
                 취소
               </button>
               <button
                 onClick={handleSaveMapping}
                 disabled={mappingLoading || !mappingUid}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50"
               >
                 {mappingLoading ? '저장 중...' : 'UID 연결 저장'}
               </button>
