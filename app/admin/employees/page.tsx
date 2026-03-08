@@ -52,6 +52,25 @@ const EMPTY_FORM = {
   birthday: '', birthday_type: 'solar' as 'solar' | 'lunar',
 }
 
+// ── 에러 한글화 ──────────────────────────────────────────
+function translateError(msg: string): string {
+  if (msg.includes("column") && msg.includes("schema cache"))
+    return `DB 컬럼이 아직 없습니다. Supabase SQL Editor에서 마이그레이션을 먼저 실행해 주세요.\n(${msg.match(/'([^']+)'/)?.[1] ?? ''} 컬럼 누락)`
+  if (msg.includes("duplicate key") || msg.includes("already exists"))
+    return '이미 존재하는 데이터입니다. (중복 오류)'
+  if (msg.includes("violates foreign key"))
+    return '연결된 데이터가 없어 저장할 수 없습니다. (외래키 오류)'
+  if (msg.includes("violates not-null"))
+    return '필수 항목이 비어 있습니다.'
+  if (msg.includes("permission denied") || msg.includes("policy"))
+    return '접근 권한이 없습니다. 관리자 계정으로 로그인하세요.'
+  if (msg.includes("JWT") || msg.includes("session"))
+    return '로그인 세션이 만료되었습니다. 다시 로그인해 주세요.'
+  if (msg.includes("network") || msg.includes("fetch"))
+    return '네트워크 오류가 발생했습니다. 인터넷 연결을 확인해 주세요.'
+  return `저장 중 오류가 발생했습니다: ${msg}`
+}
+
 // ── 유틸 ────────────────────────────────────────────────
 function formatRRN(v: string) {
   const c = v.replace(/[^0-9]/g, '').slice(0, 13)
@@ -154,7 +173,7 @@ export default function EmployeesPage() {
       .from('employees')
       .select('*')
       .order('created_at', { ascending: false })
-    if (error) setError(error.message)
+    if (error) setError(translateError(error.message))
     else setEmployees(data || [])
     setFetchLoading(false)
   }
@@ -177,7 +196,7 @@ export default function EmployeesPage() {
       exam_date: healthDate,
       note: healthNote || null,
     }])
-    if (error) setError(error.message)
+    if (error) setError(translateError(error.message))
     else {
       setSuccess('보건증 검사일이 등록되었습니다.')
       setHealthDate('')
@@ -191,7 +210,7 @@ export default function EmployeesPage() {
   async function handleDeleteHealthRecord(recordId: string, empId: string) {
     if (!confirm('이 보건증 기록을 삭제하시겠습니까?')) return
     const { error } = await supabase.from('employee_health_certs').delete().eq('id', recordId)
-    if (error) setError(error.message)
+    if (error) setError(translateError(error.message))
     else await fetchHealthRecords(empId)
   }
 
@@ -254,7 +273,7 @@ export default function EmployeesPage() {
       .update({ auth_user_id: mappingUid || null })
       .eq('id', mappingTarget.id)
     setMappingLoading(false)
-    if (error) setError(error.message)
+    if (error) setError(translateError(error.message))
     else {
       setSuccess(`${mappingTarget.name}님의 UID 매핑이 완료됐습니다.`)
       setShowMappingModal(false)
@@ -353,7 +372,8 @@ export default function EmployeesPage() {
         encryptedRrn = rrnJson.encrypted
       }
 
-      const payload: Record<string, unknown> = {
+      // birthday 컬럼이 DB에 없을 경우를 대비해 기본 payload와 분리
+      const basePayload: Record<string, unknown> = {
         auth_user_id: authUserId || null,
         employee_code: form.employee_code,
         name: form.name,
@@ -367,14 +387,25 @@ export default function EmployeesPage() {
         fuel_type: form.fuel_type || null,
         commute_distance: form.commute_distance ? Number(form.commute_distance) : null,
         emergency_contact: form.emergency_contact || null,
-        birthday: form.birthday || null,
-        birthday_type: form.birthday || form.birthday_type ? form.birthday_type : null,
       }
-      if (encryptedRrn) payload.encrypted_rrn = encryptedRrn
+      if (encryptedRrn) basePayload.encrypted_rrn = encryptedRrn
+
+      // birthday 포함 payload (컬럼이 있을 때)
+      const fullPayload: Record<string, unknown> = {
+        ...basePayload,
+        birthday: form.birthday || null,
+        birthday_type: form.birthday ? form.birthday_type : null,
+      }
 
       if (editingId) {
-        const { error } = await supabase.from('employees').update(payload).eq('id', editingId)
-        if (error) throw new Error(error.message)
+        // birthday 포함 먼저 시도 → 컬럼 없으면 base로 재시도
+        let { error } = await supabase.from('employees').update(fullPayload).eq('id', editingId)
+        if (error?.message?.includes('schema cache')) {
+          const retry = await supabase.from('employees').update(basePayload).eq('id', editingId)
+          error = retry.error
+          if (!error) setError('⚠️ 생일 항목은 DB 마이그레이션 후 저장됩니다. (나머지는 저장됨)')
+        }
+        if (error) throw new Error(translateError(error.message))
 
         if (editingEmployee) {
           const changes = detectChanges(editingEmployee, form)
@@ -391,15 +422,20 @@ export default function EmployeesPage() {
         }
         setSuccess('직원 정보가 수정되었습니다.')
       } else {
-        const { error } = await supabase.from('employees').insert([payload])
-        if (error) throw new Error(error.message)
+        let { error } = await supabase.from('employees').insert([fullPayload])
+        if (error?.message?.includes('schema cache')) {
+          const retry = await supabase.from('employees').insert([basePayload])
+          error = retry.error
+          if (!error) setError('⚠️ 생일 항목은 DB 마이그레이션 후 저장됩니다. (나머지는 저장됨)')
+        }
+        if (error) throw new Error(translateError(error.message))
         setSuccess(`등록 완료. ${form.email}으로 초대 메일이 발송되었습니다.`)
       }
 
       handleCancel()
       fetchEmployees()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
+      setError(err instanceof Error ? err.message : '저장 중 오류가 발생했습니다.')
     }
     setLoading(false)
   }
@@ -407,7 +443,7 @@ export default function EmployeesPage() {
   async function handleDelete(id: string, name: string) {
     if (!confirm(`"${name}" 직원을 삭제하시겠습니까?`)) return
     const { error } = await supabase.from('employees').delete().eq('id', id)
-    if (error) setError(error.message)
+    if (error) setError(translateError(error.message))
     else { setSuccess('삭제되었습니다.'); fetchEmployees() }
   }
 
