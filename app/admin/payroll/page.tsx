@@ -263,7 +263,15 @@ export default function PayrollPage() {
   async function handleUnfinalize() {
     if (!confirm(`${selectedYear}년 ${selectedMonth}월 최종 확정을 해제하고 수정 모드로 전환하시겠습니까?`)) return
     setLoading(true)
-    await supabase.from('payroll_draft').update({ status: 'draft' }).eq('year', selectedYear).eq('month', selectedMonth)
+    async function handleUnfinalize() {
+        if (!confirm(`${selectedYear}년 ${selectedMonth}월 최종 확정을 해제하고 수정 모드로 전환하시겠습니까?`)) return
+        setLoading(true)
+        const pm = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`
+        await supabase.from('payroll_draft').update({ status: 'draft' }).eq('pay_month', pm)
+        setSuccess('수정 모드로 전환되었습니다. 수정 후 다시 최종 확정하세요.')
+        fetchPayrollForMonth()
+        setLoading(false)
+      }
     setSuccess('수정 모드로 전환되었습니다. 수정 후 다시 최종 확정하세요.')
     fetchPayrollForMonth()
     setLoading(false)
