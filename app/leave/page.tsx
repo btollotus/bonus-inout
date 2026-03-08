@@ -103,6 +103,7 @@ export default function LeavePage() {
 
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
+  const [holidays, setHolidays] = useState<Record<string, string>>({}) // 'YYYY-MM-DD' -> 공휴일명
 
   const [modalOpen, setModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<ModalMode>('create')
@@ -112,6 +113,57 @@ export default function LeavePage() {
   const [note, setNote] = useState('')
 
   useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchHolidays(calYear) }, [calYear])
+
+
+  // 한국 공휴일 (법정공휴일 + 대체공휴일, 2024~2028 하드코딩)
+  function fetchHolidays(year: number) {
+    const ALL_HOLIDAYS: Record<string, string> = {
+      // 2024
+      '2024-01-01': '신정', '2024-02-09': '설날 연휴', '2024-02-10': '설날',
+      '2024-02-11': '설날 연휴', '2024-02-12': '설날 대체공휴일',
+      '2024-03-01': '삼일절', '2024-04-10': '국회의원 선거일',
+      '2024-05-05': '어린이날', '2024-05-06': '어린이날 대체공휴일',
+      '2024-05-15': '부처님오신날', '2024-06-06': '현충일',
+      '2024-08-15': '광복절', '2024-09-16': '추석 연휴',
+      '2024-09-17': '추석', '2024-09-18': '추석 연휴',
+      '2024-10-03': '개천절', '2024-10-09': '한글날',
+      '2024-12-25': '크리스마스',
+      // 2025
+      '2025-01-01': '신정', '2025-01-28': '설날 연휴',
+      '2025-01-29': '설날', '2025-01-30': '설날 연휴',
+      '2025-03-01': '삼일절', '2025-03-03': '삼일절 대체공휴일',
+      '2025-05-05': '어린이날', '2025-05-06': '부처님오신날',
+      '2025-06-06': '현충일', '2025-08-15': '광복절',
+      '2025-10-03': '개천절', '2025-10-05': '추석 연휴',
+      '2025-10-06': '추석', '2025-10-07': '추석 연휴',
+      '2025-10-08': '추석 대체공휴일', '2025-10-09': '한글날',
+      '2025-12-25': '크리스마스',
+      // 2026
+      '2026-01-01': '신정', '2026-02-17': '설날 연휴',
+      '2026-02-18': '설날', '2026-02-19': '설날 연휴',
+      '2026-03-01': '삼일절', '2026-03-02': '삼일절 대체공휴일',
+      '2026-05-05': '어린이날', '2026-05-24': '부처님오신날',
+      '2026-06-06': '현충일', '2026-08-15': '광복절',
+      '2026-09-24': '추석 연휴', '2026-09-25': '추석',
+      '2026-09-26': '추석 연휴', '2026-10-03': '개천절',
+      '2026-10-09': '한글날', '2026-12-25': '크리스마스',
+      // 2027
+      '2027-01-01': '신정', '2027-02-06': '설날 연휴',
+      '2027-02-07': '설날', '2027-02-08': '설날 연휴',
+      '2027-03-01': '삼일절', '2027-05-05': '어린이날',
+      '2027-05-13': '부처님오신날', '2027-06-06': '현충일',
+      '2027-08-15': '광복절', '2027-09-14': '추석 연휴',
+      '2027-09-15': '추석', '2027-09-16': '추석 연휴',
+      '2027-10-03': '개천절', '2027-10-04': '개천절 대체공휴일',
+      '2027-10-09': '한글날', '2027-12-25': '크리스마스',
+    }
+    const yearHolidays: Record<string, string> = {}
+    Object.entries(ALL_HOLIDAYS).forEach(([date, name]) => {
+      if (date.startsWith(String(year))) yearHolidays[date] = name
+    })
+    setHolidays(yearHolidays)
+  }
 
   async function fetchData() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -260,6 +312,9 @@ export default function LeavePage() {
       const dow = new Date(calYear, calMonth, d).getDay()
       const isSun = dow === 0
       const isSat = dow === 6
+      const isHoliday = !!holidays[dateStr]
+      const holidayName = holidays[dateStr] || ''
+      const isRed = isSun || isHoliday
       const clickable = isFuture(dateStr)
 
       cells.push(
@@ -270,6 +325,8 @@ export default function LeavePage() {
             'rounded-xl border min-h-[110px] p-2 flex flex-col gap-1 transition-all duration-150',
             isToday
               ? 'border-blue-400 bg-blue-50 shadow-sm ring-1 ring-blue-300'
+              : isHoliday
+              ? 'border-red-200 bg-red-50/40'
               : 'border-gray-200 bg-white',
             clickable
               ? 'cursor-pointer hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30'
@@ -282,17 +339,24 @@ export default function LeavePage() {
               'text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full shrink-0',
               isToday
                 ? 'bg-blue-500 text-white'
-                : isSun ? 'text-red-500'
+                : isRed ? 'text-red-500'
                 : isSat ? 'text-blue-500'
                 : 'text-gray-700',
             ].join(' ')}>
               {d}
             </span>
-            {dayLeaves.length > 0 && (
-              <span className="text-[10px] font-medium text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">
-                {dayLeaves.length}명
-              </span>
-            )}
+            <div className="flex items-center gap-1">
+              {holidayName && (
+                <span className="text-[9px] font-medium text-red-500 bg-red-100 rounded px-1 py-0.5 truncate max-w-[60px]" title={holidayName}>
+                  {holidayName}
+                </span>
+              )}
+              {dayLeaves.length > 0 && (
+                <span className="text-[10px] font-medium text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">
+                  {dayLeaves.length}명
+                </span>
+              )}
+            </div>
           </div>
 
           {/* 일정 뱃지 목록 */}
