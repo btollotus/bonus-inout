@@ -8,7 +8,6 @@ type LeaveRequest = {
   leave_type: 'ANNUAL' | 'HALF_AM' | 'HALF_PM' | 'SICK' | 'FRIDAY_OFF'
   leave_date: string
   note: string | null
-  status: 'PENDING' | 'APPROVED' | 'REJECTED'
   created_at: string
 }
 
@@ -26,17 +25,16 @@ const LEAVE_TYPE_LABEL: Record<string, string> = {
   FRIDAY_OFF: '금요일 휴무 (1일)',
 }
 
-const LEAVE_TYPE_DAYS: Record<string, number> = {
-  ANNUAL: 1, HALF_AM: 0.5, HALF_PM: 0.5, SICK: 1, FRIDAY_OFF: 1,
+const LEAVE_TYPE_SHORT: Record<string, string> = {
+  ANNUAL: '연차',
+  HALF_AM: '오전반차',
+  HALF_PM: '오후반차',
+  SICK: '병가',
+  FRIDAY_OFF: '금휴',
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: '검토중', APPROVED: '승인', REJECTED: '반려',
-}
-const STATUS_COLOR: Record<string, string> = {
-  PENDING: 'bg-yellow-100 text-yellow-700',
-  APPROVED: 'bg-green-100 text-green-700',
-  REJECTED: 'bg-red-100 text-red-600',
+const LEAVE_TYPE_DAYS: Record<string, number> = {
+  ANNUAL: 1, HALF_AM: 0.5, HALF_PM: 0.5, SICK: 1, FRIDAY_OFF: 1,
 }
 
 const LEAVE_TYPE_BG: Record<string, string> = {
@@ -47,7 +45,6 @@ const LEAVE_TYPE_BG: Record<string, string> = {
   FRIDAY_OFF: 'bg-orange-400',
 }
 
-// ✅ 에러 메시지 한글 변환 함수
 function getKoreanErrorMessage(message: string): string {
   if (message.includes('uq_leave_requests_user_date_type') || message.includes('duplicate key')) {
     return '해당 날짜에 이미 동일한 유형의 휴가 신청이 존재합니다.'
@@ -64,25 +61,31 @@ function getKoreanErrorMessage(message: string): string {
   return '오류가 발생했습니다. 다시 시도해주세요.'
 }
 
+type ModalMode = 'create' | 'edit'
+
 export default function LeavePage() {
   const supabase = createClient()
   const year = new Date().getFullYear()
+  const today = new Date().toISOString().split('T')[0]
 
   const [balance, setBalance] = useState<LeaveBalance | null>(null)
   const [requests, setRequests] = useState<LeaveRequest[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [empId, setEmpId] = useState<string | null>(null)
 
   // 달력 상태
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
 
   // 모달 상태
-  const [modalDate, setModalDate] = useState<string | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalMode, setModalMode] = useState<ModalMode>('create')
+  const [modalDate, setModalDate] = useState<string>('')
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [leaveType, setLeaveType] = useState('ANNUAL')
   const [note, setNote] = useState('')
-  const [empId, setEmpId] = useState<string | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
@@ -118,36 +121,73 @@ export default function LeavePage() {
     setRequests(reqs || [])
   }
 
+  const isFuture = (dateStr: string) => dateStr >= today
+
+  // 달력 날짜 클릭 → 신청 or 수정 모달
+  function openCreateModal(dateStr: string) {
+    if (!isFuture(dateStr)) return
+    const existing = requests.find((r) => r.leave_date === dateStr)
+    if (existing) {
+      openEditModal(existing)
+    } else {
+      setModalMode('create')
+      setModalDate(dateStr)
+      setLeaveType('ANNUAL')
+      setNote('')
+      setEditingId(null)
+      setModalOpen(true)
+    }
+  }
+
+  // 신청 내역에서 수정 버튼 클릭
+  function openEditModal(req: LeaveRequest) {
+    setModalMode('edit')
+    setModalDate(req.leave_date)
+    setLeaveType(req.leave_type)
+    setNote(req.note || '')
+    setEditingId(req.id)
+    setModalOpen(true)
+  }
+
+  function closeModal() {
+    setModalOpen(false)
+    setEditingId(null)
+  }
+
   async function handleSubmit() {
     if (!modalDate || !empId) return
     setLoading(true); setError(''); setSuccess('')
 
-    const days = LEAVE_TYPE_DAYS[leaveType]
-    if (balance && days > balance.remaining_days) {
-      setError('잔여 연차가 부족합니다.'); setLoading(false); return
+    if (modalMode === 'create') {
+      const days = LEAVE_TYPE_DAYS[leaveType]
+      if (balance && days > balance.remaining_days) {
+        setError('잔여 연차가 부족합니다.'); setLoading(false); return
+      }
+      const { error } = await supabase.from('leave_requests').insert([{
+        employee_id: empId,
+        leave_type: leaveType,
+        leave_date: modalDate,
+        note: note || null,
+      }])
+      if (error) { setError(getKoreanErrorMessage(error.message)); setLoading(false); return }
+      setSuccess(`${modalDate} 휴가 신청이 완료되었습니다.`)
+
+    } else {
+      const { error } = await supabase
+        .from('leave_requests')
+        .update({ leave_type: leaveType, note: note || null })
+        .eq('id', editingId)
+      if (error) { setError(getKoreanErrorMessage(error.message)); setLoading(false); return }
+      setSuccess(`${modalDate} 휴가 신청이 수정되었습니다.`)
     }
 
-    const { error } = await supabase.from('leave_requests').insert([{
-      employee_id: empId,
-      leave_type: leaveType,
-      leave_date: modalDate,
-      note: note || null,
-      status: 'PENDING',
-    }])
-
-    // ✅ 에러 메시지 한글로 변환
-    if (error) { setError(getKoreanErrorMessage(error.message)); setLoading(false); return }
-
-    setSuccess(`${modalDate} 신청이 완료되었습니다.`)
-    setModalDate(null)
-    setNote('')
-    setLeaveType('ANNUAL')
+    closeModal()
     setLoading(false)
     fetchData()
   }
 
-  async function handleCancel(id: string) {
-    if (!confirm('신청을 취소하시겠습니까?')) return
+  async function handleDelete(id: string) {
+    if (!confirm('신청을 삭제하시겠습니까?')) return
     await supabase.from('leave_requests').delete().eq('id', id)
     fetchData()
   }
@@ -155,11 +195,8 @@ export default function LeavePage() {
   function renderCalendar() {
     const firstDay = new Date(calYear, calMonth, 1).getDay()
     const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
-    const today = new Date().toISOString().split('T')[0]
     const monthStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`
-    const monthLeaves = requests.filter(
-      (r) => r.leave_date.startsWith(monthStr) && r.status !== 'REJECTED'
-    )
+    const monthLeaves = requests.filter((r) => r.leave_date.startsWith(monthStr))
 
     const cells: React.ReactNode[] = []
     for (let i = 0; i < firstDay; i++) {
@@ -173,22 +210,16 @@ export default function LeavePage() {
       const dow = new Date(calYear, calMonth, d).getDay()
       const isSun = dow === 0
       const isSat = dow === 6
-      const isPast = dateStr < today
+      const isPast = !isFuture(dateStr)
+      const clickable = isFuture(dateStr)
 
       cells.push(
         <div
           key={d}
-          onClick={() => {
-            if (!isPast) {
-              setModalDate(dateStr)
-              setLeaveType('ANNUAL')
-              setNote('')
-            }
-          }}
+          onClick={() => clickable && openCreateModal(dateStr)}
           className={`min-h-[64px] p-1 border rounded-lg transition-colors
             ${isToday ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-100'}
-            ${!isPast ? 'cursor-pointer hover:bg-gray-50' : ''}
-            ${isPast ? 'opacity-50' : ''}
+            ${clickable ? 'cursor-pointer hover:bg-gray-50' : 'opacity-40 cursor-default'}
           `}
         >
           <span className={`text-xs font-semibold ${isToday ? 'text-blue-600' : isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-700'}`}>
@@ -198,14 +229,10 @@ export default function LeavePage() {
             {dayLeaves.map((lv) => (
               <div
                 key={lv.id}
-                className={`text-white text-[9px] px-1 py-0.5 rounded truncate ${LEAVE_TYPE_BG[lv.leave_type]} ${lv.status === 'PENDING' ? 'opacity-60' : ''}`}
-                title={`${LEAVE_TYPE_LABEL[lv.leave_type]} (${STATUS_LABEL[lv.status]})`}
+                className={`text-white text-[9px] px-1 py-0.5 rounded truncate ${LEAVE_TYPE_BG[lv.leave_type]} ${isPast ? 'opacity-70' : ''}`}
+                title={LEAVE_TYPE_LABEL[lv.leave_type]}
               >
-                {lv.leave_type === 'ANNUAL' ? '연차'
-                  : lv.leave_type === 'HALF_AM' ? '오전반차'
-                  : lv.leave_type === 'HALF_PM' ? '오후반차'
-                  : lv.leave_type === 'SICK' ? '병가' : '금휴'}
-                {lv.status === 'PENDING' && ' (검토중)'}
+                {LEAVE_TYPE_SHORT[lv.leave_type]}
               </div>
             ))}
           </div>
@@ -220,7 +247,7 @@ export default function LeavePage() {
       <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">연차 / 반차 / 병가 신청</h1>
-          <p className="text-sm text-gray-500 mt-1">신청 후 관리자 승인 절차</p>
+          <p className="text-sm text-gray-500 mt-1">날짜를 클릭하여 신청하거나 수정할 수 있습니다</p>
         </div>
 
         {/* 연차 현황 */}
@@ -250,7 +277,6 @@ export default function LeavePage() {
           </div>
         )}
 
-        {/* ✅ 탭 제거 - 달력 + 신청내역 통합 */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
 
           {/* 달력 */}
@@ -273,7 +299,7 @@ export default function LeavePage() {
               >▶</button>
             </div>
 
-            <p className="text-xs text-blue-600 text-center mb-2">📌 날짜를 클릭하면 신청할 수 있습니다</p>
+            <p className="text-xs text-blue-600 text-center mb-2">📌 오늘 이후 날짜를 클릭하면 신청 / 수정할 수 있습니다</p>
 
             <div className="grid grid-cols-7 mb-1">
               {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
@@ -293,50 +319,68 @@ export default function LeavePage() {
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-400 inline-block" />오후반차</span>
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-400 inline-block" />병가</span>
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-400 inline-block" />금휴</span>
-              <span className="text-gray-400 ml-2">※ 반투명 = 검토중</span>
             </div>
           </div>
 
-          {/* ✅ 신청 내역 - 항상 표시 */}
+          {/* 신청 내역 */}
           <div className="px-4 pb-4 border-t border-gray-100">
             <h4 className="text-sm font-semibold text-gray-700 mt-3 mb-2">신청 내역</h4>
             {requests.length === 0 ? (
               <div className="text-center text-gray-400 text-sm py-6">신청 내역이 없습니다.</div>
             ) : (
               <div className="space-y-2">
-                {requests.map((req) => (
-                  <div key={req.id} className="flex items-start justify-between p-3 rounded-lg border border-gray-100 bg-gray-50">
-                    <div>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-sm font-medium text-gray-800">{req.leave_date}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[req.status]}`}>
-                          {STATUS_LABEL[req.status]}
-                        </span>
+                {requests.map((req) => {
+                  const canEdit = isFuture(req.leave_date)
+                  return (
+                    <div
+                      key={req.id}
+                      className={`flex items-start justify-between p-3 rounded-lg border border-gray-100 ${canEdit ? 'bg-gray-50' : 'bg-gray-50 opacity-50'}`}
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-sm font-medium text-gray-800">{req.leave_date}</span>
+                          {!canEdit && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-400">지난 날짜</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500">{LEAVE_TYPE_LABEL[req.leave_type]}</p>
+                        {req.note && <p className="text-xs text-gray-400 mt-0.5">{req.note}</p>}
                       </div>
-                      <p className="text-xs text-gray-500">{LEAVE_TYPE_LABEL[req.leave_type]}</p>
-                      {req.note && <p className="text-xs text-gray-400 mt-0.5">{req.note}</p>}
+                      {canEdit && (
+                        <div className="flex gap-3 ml-4 flex-shrink-0 items-center">
+                          <button
+                            onClick={() => openEditModal(req)}
+                            className="text-xs text-blue-500 hover:text-blue-700 font-medium"
+                          >
+                            수정
+                          </button>
+                          <span className="text-gray-200 text-sm">|</span>
+                          <button
+                            onClick={() => handleDelete(req.id)}
+                            className="text-xs text-red-400 hover:text-red-600 font-medium"
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {req.status === 'PENDING' && (
-                      <button onClick={() => handleCancel(req.id)}
-                        className="text-xs text-red-500 hover:text-red-700 font-medium ml-4 flex-shrink-0">
-                        취소
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* 신청 모달 */}
-      {modalDate && (
+      {/* 신청 / 수정 모달 */}
+      {modalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-gray-900">휴가 신청</h3>
-              <button onClick={() => setModalDate(null)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+              <h3 className="text-base font-bold text-gray-900">
+                {modalMode === 'create' ? '휴가 신청' : '휴가 수정'}
+              </h3>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-4">
@@ -366,13 +410,18 @@ export default function LeavePage() {
             </div>
 
             <div className="flex gap-2">
-              <button onClick={() => setModalDate(null)}
+              <button onClick={closeModal}
                 className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50">
                 취소
               </button>
               <button onClick={handleSubmit} disabled={loading}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm">
-                {loading ? '신청 중...' : `${LEAVE_TYPE_DAYS[leaveType]}일 신청`}
+                {loading
+                  ? (modalMode === 'create' ? '신청 중...' : '수정 중...')
+                  : modalMode === 'create'
+                    ? `${LEAVE_TYPE_DAYS[leaveType]}일 신청`
+                    : '수정 완료'
+                }
               </button>
             </div>
           </div>
