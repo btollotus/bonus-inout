@@ -37,14 +37,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="ko">
-      <body
-        style={{
-          margin: 0,
-          backgroundColor: "black",
-          color: "white",
-          minHeight: "100vh",
-        }}
-      >
+<body
+  style={{
+    margin: 0,
+    backgroundColor: "#f9fafb",
+    color: "#111",
+    minHeight: "100vh",
+  }}
+>
         {/* 로그인 페이지에서는 TopNav 숨김 */}
         <TopNavWrapper role={role} email={email} />
         <main style={{ width: "100%" }}>{children}</main>
