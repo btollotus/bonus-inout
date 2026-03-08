@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, forwardRef } from 'react'
+import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/browser'
 
 // ── 타입 ────────────────────────────────────────────────
@@ -58,6 +59,10 @@ function formatKRW(n: number) {
   return n.toLocaleString('ko-KR')
 }
 function parseNum(v: string) { return parseInt(v.replace(/,/g, ''), 10) || 0 }
+function formatSignedKRW(n: number) {
+  if (n === 0) return '0'
+  return `${n < 0 ? '-' : ''}${formatKRW(Math.abs(n))}`
+}
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 const LEAVE_TYPE_LABEL: Record<string, string> = {
@@ -110,15 +115,28 @@ export default function PayrollPage() {
   const [printTarget, setPrintTarget] = useState<PayrollRow | null>(null)
   const [leaveUsage, setLeaveUsage] = useState<Record<string, LeaveUsage[]>>({})
   const [empMap, setEmpMap] = useState<Record<string, Employee>>({})
+  const [mounted, setMounted] = useState(false)
   // 연말정산 모달
   const [settleModal, setSettleModal] = useState<{ empId: string; idx: number } | null>(null)
   const [settleDraft, setSettleDraft] = useState({ income_tax_settle: 0, local_tax_settle: 0, special_tax_settle: 0 })
   const printRef = useRef<HTMLDivElement>(null)
   const years = [new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2]
 
+  useEffect(() => { setMounted(true) }, [])
   useEffect(() => { fetchEmployees() }, [])
   useEffect(() => { if (employees.length > 0) { fetchPayrollForMonth(); fetchLeaveUsage() } }, [selectedYear, selectedMonth, employees])
   useEffect(() => { if (tab === 'history') fetchHistory() }, [tab, historyYear])
+
+  useEffect(() => {
+    if (!printTarget) return
+
+    const afterPrint = () => setPrintTarget(null)
+    window.addEventListener('afterprint', afterPrint)
+
+    return () => {
+      window.removeEventListener('afterprint', afterPrint)
+    }
+  }, [printTarget])
 
   async function fetchEmployees() {
     const { data } = await supabase.from('employees').select('id, name, position, employee_code, hire_date, email, bank_name, bank_account').is('resign_date', null).order('name')
@@ -263,15 +281,8 @@ export default function PayrollPage() {
   async function handleUnfinalize() {
     if (!confirm(`${selectedYear}년 ${selectedMonth}월 최종 확정을 해제하고 수정 모드로 전환하시겠습니까?`)) return
     setLoading(true)
-    async function handleUnfinalize() {
-        if (!confirm(`${selectedYear}년 ${selectedMonth}월 최종 확정을 해제하고 수정 모드로 전환하시겠습니까?`)) return
-        setLoading(true)
-        const pm = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`
-        await supabase.from('payroll_draft').update({ status: 'draft' }).eq('pay_month', pm)
-        setSuccess('수정 모드로 전환되었습니다. 수정 후 다시 최종 확정하세요.')
-        fetchPayrollForMonth()
-        setLoading(false)
-      }
+    const pm = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`
+    await supabase.from('payroll_draft').update({ status: 'draft' }).eq('pay_month', pm)
     setSuccess('수정 모드로 전환되었습니다. 수정 후 다시 최종 확정하세요.')
     fetchPayrollForMonth()
     setLoading(false)
@@ -325,7 +336,15 @@ export default function PayrollPage() {
   return (
     <div className="min-h-screen bg-gray-50 print:bg-white">
       {/* 인쇄 영역 */}
-      {printTarget && <PrintSlip row={printTarget} emp={empMap[printTarget.employee_id]} leaveUsage={leaveUsage[printTarget.employee_id] || []} ref={printRef} />}
+      {mounted && printTarget && createPortal(
+        <PrintSlip
+          row={printTarget}
+          emp={empMap[printTarget.employee_id]}
+          leaveUsage={leaveUsage[printTarget.employee_id] || []}
+          ref={printRef}
+        />,
+        document.body
+      )}
 
       {/* 연말정산 입력 모달 */}
       {settleModal && (
@@ -466,7 +485,7 @@ export default function PayrollPage() {
                               </div>
                               <div className="flex items-center gap-6 text-xs text-gray-500">
                                 <span>지급 <strong className="text-gray-800">{formatKRW(totalIncome)}</strong></span>
-                                <span>공제 <strong className="text-red-500">{formatKRW(totalDeduction)}</strong></span>
+                                <span>공제 <strong className="text-red-500">{formatSignedKRW(totalDeduction)}</strong></span>
                                 <span className="text-base font-bold text-blue-700">{formatKRW(net)}원</span>
                                 <span className="text-gray-300">{isOpen ? '▲' : '▼'}</span>
                               </div>
@@ -566,7 +585,7 @@ export default function PayrollPage() {
                                           ◆ 연말정산
                                           {(row.income_tax_settle !== 0 || row.local_tax_settle !== 0 || row.special_tax_settle !== 0) && (
                                             <span className="ml-2 font-bold text-amber-900">
-                                              ({formatKRW(row.income_tax_settle + row.local_tax_settle + row.special_tax_settle)}원 입력됨)
+                                              ({formatSignedKRW(row.income_tax_settle + row.local_tax_settle + row.special_tax_settle)}원 입력됨)
                                             </span>
                                           )}
                                         </div>
@@ -590,7 +609,7 @@ export default function PayrollPage() {
 
                                     <div className="border-t border-gray-100 pt-2 flex justify-between text-sm font-bold">
                                       <span className="text-gray-600">공제 합계</span>
-                                      <span className="text-red-600">-{formatKRW(totalDeduction)}원</span>
+                                      <span className="text-red-600">{formatSignedKRW(totalDeduction)}원</span>
                                     </div>
                                   </div>
                                 </div>
@@ -695,36 +714,67 @@ export default function PayrollPage() {
                 : savedRows.length === 0 ? <div className="py-16 text-center text-gray-400">급여 데이터가 없습니다.</div>
                 : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 text-gray-500 text-xs">
-                        <tr>
-                          <th className="px-4 py-3 text-left font-medium">월</th>
-                          <th className="px-4 py-3 text-left font-medium">직원</th>
-                          <th className="px-4 py-3 text-right font-medium">기본급</th>
-                          <th className="px-4 py-3 text-right font-medium">식대</th>
-                          <th className="px-4 py-3 text-right font-medium">유류</th>
-                          <th className="px-4 py-3 text-right font-medium">상여</th>
-                          <th className="px-4 py-3 text-right font-medium">공제</th>
-                          <th className="px-4 py-3 text-right font-medium text-blue-700">실지급</th>
-                          <th className="px-4 py-3 text-center font-medium">상태</th>
-                          <th className="px-4 py-3 text-center font-medium">출력</th>
+                    <table className="w-full text-sm min-w-[1800px]">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs">
+                          <th rowSpan={2} className="px-4 py-3 text-left font-medium border-b border-gray-200">월</th>
+                          <th rowSpan={2} className="px-4 py-3 text-left font-medium border-b border-gray-200">직원</th>
+                          <th colSpan={6} className="px-4 py-3 text-center font-semibold border-b border-gray-200">지급 항목</th>
+                          <th colSpan={9} className="px-4 py-3 text-center font-semibold border-b border-gray-200">공제 항목</th>
+                          <th rowSpan={2} className="px-4 py-3 text-right font-medium border-b border-gray-200 text-blue-700">실지급</th>
+                          <th rowSpan={2} className="px-4 py-3 text-center font-medium border-b border-gray-200">상태</th>
+                          <th rowSpan={2} className="px-4 py-3 text-center font-medium border-b border-gray-200">출력</th>
+                        </tr>
+                        <tr className="bg-gray-50 text-gray-500 text-xs">
+                          <th className="px-4 py-2 text-right font-medium">기본급</th>
+                          <th className="px-4 py-2 text-right font-medium">식대</th>
+                          <th className="px-4 py-2 text-right font-medium">유류</th>
+                          <th className="px-4 py-2 text-right font-medium">상여</th>
+                          <th className="px-4 py-2 text-right font-medium">기타수당</th>
+                          <th className="px-4 py-2 text-right font-medium bg-blue-50 text-blue-700">지급합계</th>
+
+                          <th className="px-4 py-2 text-right font-medium">국민연금</th>
+                          <th className="px-4 py-2 text-right font-medium">건강보험</th>
+                          <th className="px-4 py-2 text-right font-medium">고용보험</th>
+                          <th className="px-4 py-2 text-right font-medium">장기요양</th>
+                          <th className="px-4 py-2 text-right font-medium">소득세</th>
+                          <th className="px-4 py-2 text-right font-medium">지방소득세</th>
+                          <th className="px-4 py-2 text-right font-medium">연말정산 소득세</th>
+                          <th className="px-4 py-2 text-right font-medium">연말정산 지방세</th>
+                          <th className="px-4 py-2 text-right font-medium">연말정산 농특세</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {savedRows.map((row, idx) => {
-                          const totalDed = row.national_pension + row.health_insurance + row.employment_insurance
-                            + row.long_term_care + row.income_tax + row.local_income_tax
-                            + row.income_tax_settle + row.local_tax_settle + row.special_tax_settle
+                          const otherAllowanceSum = (row.other_allowances || []).reduce((s, a) => s + (a.amount || 0), 0)
+                          const totalIncome = (row.base_pay || 0) + (row.meal_pay || 0) + (row.fuel_pay || 0) + (row.bonus_pay || 0) + otherAllowanceSum
+                          const totalDed = (row.national_pension || 0) + (row.health_insurance || 0) + (row.employment_insurance || 0)
+                            + (row.long_term_care || 0) + (row.income_tax || 0) + (row.local_income_tax || 0)
+                            + (row.income_tax_settle || 0) + (row.local_tax_settle || 0) + (row.special_tax_settle || 0)
+
                           return (
                             <tr key={idx} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 font-medium text-gray-700">{row.pay_month}</td>
-                              <td className="px-4 py-3 text-gray-900 font-medium">{row.employee_name}</td>
+                              <td className="px-4 py-3 font-medium text-gray-700 whitespace-nowrap">{row.pay_month}</td>
+                              <td className="px-4 py-3 text-gray-900 font-medium whitespace-nowrap">{row.employee_name}</td>
+
                               <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.base_pay||0)}</td>
                               <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.meal_pay||0)}</td>
                               <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.fuel_pay||0)}</td>
                               <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.bonus_pay||0)}</td>
-                              <td className="px-4 py-3 text-right text-red-500">-{formatKRW(totalDed)}</td>
-                              <td className="px-4 py-3 text-right font-bold text-blue-700">{formatKRW(calcNet(row))}원</td>
+                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(otherAllowanceSum)}</td>
+                              <td className="px-4 py-3 text-right font-bold text-blue-700 bg-blue-50/40">{formatKRW(totalIncome)}</td>
+
+                              <td className="px-4 py-3 text-right text-red-500">{formatSignedKRW(row.national_pension||0)}</td>
+                              <td className="px-4 py-3 text-right text-red-500">{formatSignedKRW(row.health_insurance||0)}</td>
+                              <td className="px-4 py-3 text-right text-red-500">{formatSignedKRW(row.employment_insurance||0)}</td>
+                              <td className="px-4 py-3 text-right text-red-500">{formatSignedKRW(row.long_term_care||0)}</td>
+                              <td className="px-4 py-3 text-right text-red-500">{formatSignedKRW(row.income_tax||0)}</td>
+                              <td className="px-4 py-3 text-right text-red-500">{formatSignedKRW(row.local_income_tax||0)}</td>
+                              <td className="px-4 py-3 text-right text-red-500">{formatSignedKRW(row.income_tax_settle||0)}</td>
+                              <td className="px-4 py-3 text-right text-red-500">{formatSignedKRW(row.local_tax_settle||0)}</td>
+                              <td className="px-4 py-3 text-right text-red-500">{formatSignedKRW(row.special_tax_settle||0)}</td>
+
+                              <td className="px-4 py-3 text-right font-bold text-blue-700 whitespace-nowrap">{formatKRW(calcNet(row))}원</td>
                               <td className="px-4 py-3 text-center">
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${row.status === 'final' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                                   {row.status === 'final' ? '확정' : '초안'}
@@ -733,11 +783,11 @@ export default function PayrollPage() {
                               <td className="px-4 py-3 text-center">
                                 <div className="flex gap-1 justify-center">
                                   <button onClick={() => handlePrint(row, 'print')}
-                                    className="text-xs text-gray-600 hover:text-gray-900 border border-gray-300 hover:border-gray-400 px-2 py-1 rounded-lg transition-colors">
+                                    className="text-xs text-gray-600 hover:text-gray-900 border border-gray-300 hover:border-gray-400 px-2 py-1 rounded-lg transition-colors whitespace-nowrap">
                                     🖨️ 인쇄
                                   </button>
                                   <button onClick={() => handlePrint(row, 'pdf')}
-                                    className="text-xs text-red-600 hover:text-red-800 border border-red-300 hover:border-red-400 px-2 py-1 rounded-lg transition-colors">
+                                    className="text-xs text-red-600 hover:text-red-800 border border-red-300 hover:border-red-400 px-2 py-1 rounded-lg transition-colors whitespace-nowrap">
                                     📄 PDF
                                   </button>
                                 </div>
@@ -746,6 +796,24 @@ export default function PayrollPage() {
                           )
                         })}
                       </tbody>
+                      <tfoot className="bg-gray-50 border-t border-gray-200 text-xs">
+                        <tr>
+                          <td colSpan={8} className="px-4 py-3 text-right font-semibold text-gray-600">공제합계 참고</td>
+                          <td colSpan={9} className="px-4 py-3 text-right font-bold text-red-600">
+                            {formatSignedKRW(
+                              savedRows.reduce((sum, row) => sum + (
+                                (row.national_pension || 0) + (row.health_insurance || 0) + (row.employment_insurance || 0)
+                                + (row.long_term_care || 0) + (row.income_tax || 0) + (row.local_income_tax || 0)
+                                + (row.income_tax_settle || 0) + (row.local_tax_settle || 0) + (row.special_tax_settle || 0)
+                              ), 0)
+                            )}원
+                          </td>
+                          <td className="px-4 py-3 text-right font-bold text-blue-700">
+                            {formatKRW(savedRows.reduce((sum, row) => sum + calcNet(row), 0))}원
+                          </td>
+                          <td colSpan={2}></td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 )}
@@ -759,8 +827,6 @@ export default function PayrollPage() {
 }
 
 // ── 급여명세서 출력 컴포넌트 ─────────────────────────────
-import { forwardRef } from 'react'
-
 const PrintSlip = forwardRef<HTMLDivElement, {
   row: PayrollRow
   emp: Employee | undefined
@@ -779,175 +845,220 @@ const PrintSlip = forwardRef<HTMLDivElement, {
   const periodEnd = `${pyear}.${String(pmonth).padStart(2,'0')}.${new Date(pyear, pmonth, 0).getDate()}`
 
   return (
-    <div ref={ref} className="hidden print:block p-8 text-xs font-sans text-gray-900" style={{ fontFamily: 'Malgun Gothic, 맑은 고딕, sans-serif' }}>
+    <div
+      id="payroll-print-host"
+      ref={ref}
+      className="hidden print:block"
+      style={{ fontFamily: 'Malgun Gothic, 맑은 고딕, sans-serif' }}
+    >
       <style>{`
         @media print {
-          @page { size: A4; margin: 15mm; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          @page { size: A4; margin: 10mm; }
+          html, body {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            background: white !important;
+            overflow: visible !important;
+          }
+
+          body > * {
+            display: none !important;
+          }
+
+          body > #payroll-print-host {
+            display: block !important;
+            position: static !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          #payroll-print-host,
+          #payroll-print-host * {
+            visibility: visible !important;
+          }
+
           .print\\:block { display: block !important; }
           .print\\:hidden { display: none !important; }
+
+          .print-sheet {
+            width: 100%;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+            break-after: avoid-page;
+            page-break-after: avoid;
+          }
         }
-        .slip-table { width: 100%; border-collapse: collapse; }
+
+        .slip-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .slip-table th, .slip-table td { border: 1px solid #999; padding: 4px 6px; }
         .slip-table th { background: #f0f0f0; text-align: center; font-weight: bold; }
-        .section-header { background: #222; color: white; padding: 4px 8px; font-weight: bold; margin: 10px 0 4px; font-size: 11px; }
+        .section-header { background: #222; color: white; padding: 4px 8px; font-weight: bold; margin: 8px 0 4px; font-size: 11px; }
         .amount { text-align: right; }
         .label-col { background: #f5f5f5; font-weight: 600; width: 120px; }
       `}</style>
 
-      {/* 제목 */}
-      <div className="text-center mb-4">
-        <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{row.pay_month} (주)보누스메이트 급여명세서</div>
-      </div>
-
-      {/* 기본 정보 */}
-      <table className="slip-table mb-3">
-        <tbody>
-          <tr>
-            <th className="label-col">근무기간</th>
-            <td colSpan={3}>{periodStart} ~ {periodEnd}</td>
-          </tr>
-          <tr>
-            <th className="label-col">소속코드</th><td></td>
-            <th className="label-col">개인코드</th><td>{emp?.employee_code || ''}</td>
-          </tr>
-          <tr>
-            <th className="label-col">성명</th><td>{row.employee_name}</td>
-            <th className="label-col">직위</th><td>{emp?.position || ''}</td>
-          </tr>
-          <tr>
-            <th className="label-col">급여지급일</th><td>{payDate}</td>
-            <th className="label-col">급여지급일</th><td></td>
-          </tr>
-          <tr>
-            <th className="label-col">직무</th><td></td>
-            <th className="label-col">직책</th><td>{emp?.position || ''}</td>
-          </tr>
-          <tr>
-            <th className="label-col">급여계좌</th>
-            <td colSpan={3}>{emp?.bank_name ? `[${emp.bank_name}] ${emp.bank_account || ''}` : ''}</td>
-          </tr>
-          <tr>
-            <th className="label-col">입사일</th><td>{emp?.hire_date || ''}</td>
-            <th className="label-col"></th><td></td>
-          </tr>
-        </tbody>
-      </table>
-
-      {/* 요약 */}
-      <table className="slip-table mb-3">
-        <tbody>
-          <tr>
-            <th className="label-col">소득합계</th>
-            <td className="amount" style={{ width: '18%' }}>{formatKRW(totalIncome)}</td>
-            <th className="label-col">공제합계</th>
-            <td className="amount" style={{ width: '18%' }}>-{formatKRW(totalDeduction)}</td>
-            <th style={{ background: '#1a3a6b', color: 'white', width: '90px' }}>실수령액</th>
-            <td className="amount font-bold" style={{ width: '18%', background: '#e8f0fe' }}>{formatKRW(net)}</td>
-            <th className="label-col">지급일</th>
-            <td>{payDate}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      {/* 소득/공제 상세 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-        {/* 소득 세부 */}
-        <div>
-          <div className="section-header">▶ 소득 세부내역</div>
-          <table className="slip-table">
-            <thead><tr><th>항목</th><th>금액</th></tr></thead>
-            <tbody>
-              <tr><td className="label-col">기본급</td><td className="amount">{formatKRW(row.base_pay||0)}</td></tr>
-              <tr><td className="label-col">식대</td><td className="amount">{formatKRW(row.meal_pay||0)}</td></tr>
-              <tr><td className="label-col">유류지원비</td><td className="amount">{formatKRW(row.fuel_pay||0)}</td></tr>
-              <tr><td className="label-col">상여금</td><td className="amount">{formatKRW(row.bonus_pay||0)}</td></tr>
-              {row.other_allowances.map((a, i) => (
-                <tr key={i}><td className="label-col">{a.label || '기타'}</td><td className="amount">{formatKRW(a.amount)}</td></tr>
-              ))}
-              <tr style={{ background: '#e8f0fe', fontWeight: 'bold' }}>
-                <td className="label-col">소득합계</td>
-                <td className="amount">{formatKRW(totalIncome)}</td>
-              </tr>
-            </tbody>
-          </table>
+      <div className="print-sheet text-[11px] text-gray-900">
+        {/* 제목 */}
+        <div className="text-center mb-3">
+          <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{row.pay_month} (주)보누스메이트 급여명세서</div>
         </div>
 
-        {/* 공제 세부 */}
-        <div>
-          <div className="section-header">▶ 공제 세부내역</div>
-          <table className="slip-table">
-            <thead><tr><th>항목</th><th>금액</th></tr></thead>
-            <tbody>
-              <tr><td className="label-col">국민연금</td><td className="amount">{formatKRW(row.national_pension)}</td></tr>
-              <tr><td className="label-col">건강보험</td><td className="amount">{formatKRW(row.health_insurance)}</td></tr>
-              <tr><td className="label-col">고용보험</td><td className="amount">{formatKRW(row.employment_insurance)}</td></tr>
-              <tr><td className="label-col">장기요양보험료</td><td className="amount">{formatKRW(row.long_term_care)}</td></tr>
-              <tr><td className="label-col">소득세</td><td className="amount">{formatKRW(row.income_tax)}</td></tr>
-              <tr><td className="label-col">지방소득세</td><td className="amount">{formatKRW(row.local_income_tax)}</td></tr>
-              {hasSettle && <>
-                <tr style={{ background: '#fffbeb' }}><td className="label-col" colSpan={2} style={{ fontWeight: 'bold', color: '#92400e' }}>◆ 연말정산</td></tr>
-                {row.income_tax_settle !== 0 && <tr><td className="label-col">연말정산소득세</td><td className="amount">{formatKRW(row.income_tax_settle)}</td></tr>}
-                {row.local_tax_settle !== 0 && <tr><td className="label-col">연말정산지방소득세</td><td className="amount">{formatKRW(row.local_tax_settle)}</td></tr>}
-                {row.special_tax_settle !== 0 && <tr><td className="label-col">연말정산농특세</td><td className="amount">{formatKRW(row.special_tax_settle)}</td></tr>}
-              </>}
-              <tr style={{ background: '#fee2e2', fontWeight: 'bold' }}>
-                <td className="label-col">공제합계</td>
-                <td className="amount">-{formatKRW(totalDeduction)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {/* 기본 정보 */}
+        <table className="slip-table mb-2">
+          <tbody>
+            <tr>
+              <th className="label-col">근무기간</th>
+              <td colSpan={3}>{periodStart} ~ {periodEnd}</td>
+            </tr>
+            <tr>
+              <th className="label-col">소속코드</th><td></td>
+              <th className="label-col">개인코드</th><td>{emp?.employee_code || ''}</td>
+            </tr>
+            <tr>
+              <th className="label-col">성명</th><td>{row.employee_name}</td>
+              <th className="label-col">직위</th><td>{emp?.position || ''}</td>
+            </tr>
+            <tr>
+              <th className="label-col">급여지급일</th><td>{payDate}</td>
+              <th className="label-col">급여지급일</th><td></td>
+            </tr>
+            <tr>
+              <th className="label-col">직무</th><td></td>
+              <th className="label-col">직책</th><td>{emp?.position || ''}</td>
+            </tr>
+            <tr>
+              <th className="label-col">급여계좌</th>
+              <td colSpan={3}>{emp?.bank_name ? `[${emp.bank_name}] ${emp.bank_account || ''}` : ''}</td>
+            </tr>
+            <tr>
+              <th className="label-col">입사일</th><td>{emp?.hire_date || ''}</td>
+              <th className="label-col"></th><td></td>
+            </tr>
+          </tbody>
+        </table>
 
-      {/* 연차 사용 내역 */}
-      {leaveUsage.length > 0 && (
-        <div className="mt-3">
-          <div className="section-header">▶ {row.pay_month} 연차 사용 내역</div>
-          <table className="slip-table">
-            <thead><tr><th>구분</th><th>사용 횟수</th></tr></thead>
-            <tbody>
-              {leaveUsage.map(u => (
-                <tr key={u.leave_type}>
-                  <td className="label-col">{leaveLabel(u.leave_type)}</td>
-                  <td className="amount">{u.count}회</td>
+        {/* 요약 */}
+        <table className="slip-table mb-2">
+          <tbody>
+            <tr>
+              <th className="label-col">소득합계</th>
+              <td className="amount" style={{ width: '18%' }}>{formatKRW(totalIncome)}</td>
+              <th className="label-col">공제합계</th>
+              <td className="amount" style={{ width: '18%' }}>{formatSignedKRW(totalDeduction)}</td>
+              <th style={{ background: '#1a3a6b', color: 'white', width: '90px' }}>실수령액</th>
+              <td className="amount font-bold" style={{ width: '18%', background: '#e8f0fe' }}>{formatKRW(net)}</td>
+              <th className="label-col">지급일</th>
+              <td>{payDate}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* 소득/공제 상세 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          {/* 소득 세부 */}
+          <div>
+            <div className="section-header">▶ 소득 세부내역</div>
+            <table className="slip-table">
+              <thead><tr><th>항목</th><th>금액</th></tr></thead>
+              <tbody>
+                <tr><td className="label-col">기본급</td><td className="amount">{formatKRW(row.base_pay||0)}</td></tr>
+                <tr><td className="label-col">식대</td><td className="amount">{formatKRW(row.meal_pay||0)}</td></tr>
+                <tr><td className="label-col">유류지원비</td><td className="amount">{formatKRW(row.fuel_pay||0)}</td></tr>
+                <tr><td className="label-col">상여금</td><td className="amount">{formatKRW(row.bonus_pay||0)}</td></tr>
+                {row.other_allowances.map((a, i) => (
+                  <tr key={i}><td className="label-col">{a.label || '기타'}</td><td className="amount">{formatKRW(a.amount)}</td></tr>
+                ))}
+                <tr style={{ background: '#e8f0fe', fontWeight: 'bold' }}>
+                  <td className="label-col">소득합계</td>
+                  <td className="amount">{formatKRW(totalIncome)}</td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </tbody>
+            </table>
+          </div>
 
-      {/* 메모 */}
-      {row.memo && (
-        <div className="mt-3">
-          <div className="section-header">▶ 메모</div>
-          <div style={{ border: '1px solid #999', padding: '6px 8px', minHeight: '32px', whiteSpace: 'pre-wrap' }}>{row.memo}</div>
+          {/* 공제 세부 */}
+          <div>
+            <div className="section-header">▶ 공제 세부내역</div>
+            <table className="slip-table">
+              <thead><tr><th>항목</th><th>금액</th></tr></thead>
+              <tbody>
+                <tr><td className="label-col">국민연금</td><td className="amount">{formatSignedKRW(row.national_pension)}</td></tr>
+                <tr><td className="label-col">건강보험</td><td className="amount">{formatSignedKRW(row.health_insurance)}</td></tr>
+                <tr><td className="label-col">고용보험</td><td className="amount">{formatSignedKRW(row.employment_insurance)}</td></tr>
+                <tr><td className="label-col">장기요양보험료</td><td className="amount">{formatSignedKRW(row.long_term_care)}</td></tr>
+                <tr><td className="label-col">소득세</td><td className="amount">{formatSignedKRW(row.income_tax)}</td></tr>
+                <tr><td className="label-col">지방소득세</td><td className="amount">{formatSignedKRW(row.local_income_tax)}</td></tr>
+                {hasSettle && <>
+                  <tr style={{ background: '#fffbeb' }}><td className="label-col" colSpan={2} style={{ fontWeight: 'bold', color: '#92400e' }}>◆ 연말정산</td></tr>
+                  {row.income_tax_settle !== 0 && <tr><td className="label-col">연말정산소득세</td><td className="amount">{formatSignedKRW(row.income_tax_settle)}</td></tr>}
+                  {row.local_tax_settle !== 0 && <tr><td className="label-col">연말정산지방소득세</td><td className="amount">{formatSignedKRW(row.local_tax_settle)}</td></tr>}
+                  {row.special_tax_settle !== 0 && <tr><td className="label-col">연말정산농특세</td><td className="amount">{formatSignedKRW(row.special_tax_settle)}</td></tr>}
+                </>}
+                <tr style={{ background: '#fee2e2', fontWeight: 'bold' }}>
+                  <td className="label-col">공제합계</td>
+                  <td className="amount">{formatSignedKRW(totalDeduction)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      )}
 
-      {/* 비고/계산식 */}
-      <div className="mt-3">
-        <div className="section-header">▶ 항목별 산출식 (참고)</div>
-        <div style={{ border: '1px solid #ccc', padding: '6px 8px', fontSize: '9px', lineHeight: '1.6', background: '#fafafa' }}>
-          <div>*시급 계산 = 기본급 ÷ 209시간</div>
-          <div>*일급 계산(8시간 기준) = 시급 × 8시간</div>
-          <div>*연장근로수당(1일 8시간 초과 근로) = 연장근로시간 × 시급 × 1.5</div>
-          <div>*야간근로수당(밤 10시~새벽 6시 근로) = 야간근로시간 × 시급 × 0.5배 가산</div>
-          <div>*연장근로와 야간근로가 겹칠 경우 = 겹치는 근로시간 × 시급 × 2.0</div>
-          <div>*휴일근로수당 = 휴일근로시간 × 시급 × 1.5</div>
-          <div>*휴일연장근로수당(휴일에 8시간 초과 근로) = 휴일연장근로시간 × 시급 × 2.0</div>
-          <div>*휴일야간근로수당(휴일 밤 10시~새벽 6시 근로) = 0.5배 가산</div>
-          <div>*주휴수당(정상) = 출근예정일만 받을 수 있기 때문에 다음주에도 계속 출근예정이어야만 지급 가능</div>
-          <div>*주휴수당(휴무) = 주중 출근일이 없을 경우 70% 지급함</div>
-          <div>*유류비 = 출근일수 × 1일 유류비(최대 10만원)</div>
-          {row.note && <div className="mt-1" style={{ borderTop: '1px dashed #ccc', paddingTop: '4px' }}>*비고: {row.note}</div>}
+        {/* 연차 사용 내역 */}
+        {leaveUsage.length > 0 && (
+          <div className="mt-2">
+            <div className="section-header">▶ {row.pay_month} 연차 사용 내역</div>
+            <table className="slip-table">
+              <thead><tr><th>구분</th><th>사용 횟수</th></tr></thead>
+              <tbody>
+                {leaveUsage.map(u => (
+                  <tr key={u.leave_type}>
+                    <td className="label-col">{leaveLabel(u.leave_type)}</td>
+                    <td className="amount">{u.count}회</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 메모 */}
+        {row.memo && (
+          <div className="mt-2">
+            <div className="section-header">▶ 메모</div>
+            <div style={{ border: '1px solid #999', padding: '6px 8px', minHeight: '32px', whiteSpace: 'pre-wrap' }}>{row.memo}</div>
+          </div>
+        )}
+
+        {/* 비고/계산식 */}
+        <div className="mt-2">
+          <div className="section-header">▶ 항목별 산출식 (참고)</div>
+          <div style={{ border: '1px solid #ccc', padding: '6px 8px', fontSize: '9px', lineHeight: '1.5', background: '#fafafa' }}>
+            <div>*시급 계산 = 기본급 ÷ 209시간</div>
+            <div>*일급 계산(8시간 기준) = 시급 × 8시간</div>
+            <div>*연장근로수당(1일 8시간 초과 근로) = 연장근로시간 × 시급 × 1.5</div>
+            <div>*야간근로수당(밤 10시~새벽 6시 근로) = 야간근로시간 × 시급 × 0.5배 가산</div>
+            <div>*연장근로와 야간근로가 겹칠 경우 = 겹치는 근로시간 × 시급 × 2.0</div>
+            <div>*휴일근로수당 = 휴일근로시간 × 시급 × 1.5</div>
+            <div>*휴일연장근로수당(휴일에 8시간 초과 근로) = 휴일연장근로시간 × 시급 × 2.0</div>
+            <div>*휴일야간근로수당(휴일 밤 10시~새벽 6시 근로) = 0.5배 가산</div>
+            <div>*주휴수당(정상) = 출근예정일만 받을 수 있기 때문에 다음주에도 계속 출근예정이어야만 지급 가능</div>
+            <div>*주휴수당(휴무) = 주중 출근일이 없을 경우 70% 지급함</div>
+            <div>*유류비 = 출근일수 × 1일 유류비(최대 10만원)</div>
+            {row.note && <div className="mt-1" style={{ borderTop: '1px dashed #ccc', paddingTop: '4px' }}>*비고: {row.note}</div>}
+          </div>
         </div>
-      </div>
 
-      {/* 감사 문구 */}
-      <div className="mt-4 text-center" style={{ fontSize: '11px', fontWeight: 'bold' }}>
-        {row.employee_name} 님의 노고에 감사 드립니다.
+        {/* 감사 문구 */}
+        <div className="mt-3 text-center" style={{ fontSize: '11px', fontWeight: 'bold' }}>
+          {row.employee_name} 님의 노고에 감사 드립니다.
+        </div>
       </div>
     </div>
   )
