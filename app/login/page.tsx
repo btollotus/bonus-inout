@@ -80,7 +80,7 @@ export default function LoginPage() {
     e.preventDefault(); setLoading(true); setError('')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError('이메일 또는 비밀번호가 올바르지 않습니다.'); setLoading(false) }
-    else router.replace('/')
+    else window.location.href = '/'  // ← router.replace('/') 에서 변경
   }
 
   async function handleSetPassword(e: React.FormEvent) {
@@ -92,7 +92,7 @@ export default function LoginPage() {
     if (error) { setError(error.message); setLoading(false) }
     else {
       setSuccess('비밀번호가 설정되었습니다! 잠시 후 이동합니다...')
-      setTimeout(() => router.replace('/'), 1500)
+      setTimeout(() => { window.location.href = '/' }, 1500)  // ← router.replace('/') 에서 변경
     }
   }
 

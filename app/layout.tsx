@@ -5,6 +5,9 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 
+export const revalidate = 0;
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: { default: "BONUSMATE ERP", template: "%s | BONUSMATE ERP" },
 };
