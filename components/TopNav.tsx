@@ -11,25 +11,22 @@ import { createClient } from "@/lib/supabase/browser";
 // USER     : 일반직원 - 노란박스(연차신청, 연차현황)만
 
 const nav = [
-  { href: "/scan",               label: "스캔",          role: "SUBADMIN" },
-  { href: "/products",           label: "품목/바코드",    role: "SUBADMIN" },
-  { href: "/report",             label: "재고대장",       role: "SUBADMIN" },
-  { href: "/trade",              label: "거래내역(통합)", role: "SUBADMIN" },
-  { href: "/tax",                label: "세무사",         role: "SUBADMIN" },
-  { href: "/tax/spec",           label: "거래명세서",     role: "SUBADMIN" },
-  { href: "/tax/statement",      label: "거래원장",       role: "SUBADMIN" },
-  { href: "/calendar",           label: "출고 캘린더",    role: "SUBADMIN" },
-  { href: "/leave",              label: "연차신청",       role: "USER"     },
-  { href: "/admin/leave-status", label: "연차현황",       role: "USER"     },
-  { href: "/admin/employees",    label: "인사관리",       role: "ADMIN"    },
-  { href: "/admin/payroll",      label: "급여",           role: "ADMIN"    },
+  { href: "/scan",               label: "스캔",          allowedRoles: ["ADMIN", "SUBADMIN"] },
+  { href: "/products",           label: "품목/바코드",    allowedRoles: ["ADMIN"]             },
+  { href: "/report",             label: "재고대장",       allowedRoles: ["ADMIN", "SUBADMIN"] },
+  { href: "/trade",              label: "거래내역(통합)", allowedRoles: ["ADMIN"]             },
+  { href: "/tax",                label: "세무사",         allowedRoles: ["ADMIN"]             },
+  { href: "/tax/spec",           label: "거래명세서",     allowedRoles: ["ADMIN", "SUBADMIN"] },
+  { href: "/tax/statement",      label: "거래원장",       allowedRoles: ["ADMIN", "SUBADMIN"] },
+  { href: "/calendar",           label: "출고 캘린더",    allowedRoles: ["ADMIN", "SUBADMIN", "USER"] },
+  { href: "/leave",              label: "연차신청",       allowedRoles: ["ADMIN", "USER"]     },
+  { href: "/admin/leave-status", label: "연차현황",       allowedRoles: ["ADMIN", "SUBADMIN"] },
+  { href: "/admin/employees",    label: "인사관리",       allowedRoles: ["ADMIN"]             },
+  { href: "/admin/payroll",      label: "급여",           allowedRoles: ["ADMIN"]             },
 ];
 
-// 해당 role 이상이면 메뉴 표시
-function canSee(userRole: string, menuRole: string) {
-  if (userRole === "ADMIN") return true;
-  if (userRole === "SUBADMIN") return menuRole === "SUBADMIN" || menuRole === "USER";
-  return menuRole === "USER"; // 일반직원
+function canSee(userRole: string, allowedRoles: string[]) {
+  return allowedRoles.includes(userRole);
 }
 
 const HR_MENUS = ["/leave", "/admin/leave-status", "/admin/employees", "/admin/payroll"];
@@ -109,8 +106,8 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
             </Link>
 
             {nav
-              .filter((x) => canSee(userRole, x.role))
-              .map((x) => {
+  .filter((x) => canSee(userRole, x.allowedRoles))
+  .map((x) => { ... })}
                 const active = pathname === x.href || pathname.startsWith(x.href + "/");
                 const isHR = HR_MENUS.includes(x.href);
                 return (

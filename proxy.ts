@@ -3,8 +3,24 @@ import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 
-const ADMIN_ONLY_PATHS = ["/admin/employees", "/admin/payroll"];
-const SUBADMIN_PATHS = ["/scan", "/products", "/report", "/trade", "/tax", "/calendar", "/orders", "/ledger"];
+const ADMIN_ONLY_PATHS = [
+  "/admin/employees",
+  "/admin/payroll",
+  "/products",
+  "/trade",
+];
+const SUBADMIN_PATHS = [
+  "/scan",
+  "/report",
+  "/tax/spec",
+  "/tax/statement",
+  "/calendar",
+  "/admin/leave-status",
+];
+
+const USER_ONLY_PATHS = [
+  "/leave",
+];
 
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
@@ -63,13 +79,22 @@ export async function proxy(req: NextRequest) {
     // role 조회 실패 시 USER 유지
   }
 
-  const isAdminOnly = ADMIN_ONLY_PATHS.some((p) => pathname.startsWith(p));
+  const isAdminOnly = 
+  ADMIN_ONLY_PATHS.some((p) => pathname.startsWith(p)) ||
+  (pathname.startsWith("/tax") && !pathname.startsWith("/tax/spec") && !pathname.startsWith("/tax/statement"));
   if (isAdminOnly && role !== "ADMIN") {
     return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
-
+  
+  // SUBADMIN 이상 경로
   const isSubadminPath = SUBADMIN_PATHS.some((p) => pathname.startsWith(p));
   if (isSubadminPath && role === "USER") {
+    return NextResponse.redirect(new URL("/unauthorized", req.url));
+  }
+  
+  // USER 전용 경로 (SUBADMIN 차단)
+  const isUserOnly = USER_ONLY_PATHS.some((p) => pathname.startsWith(p));
+  if (isUserOnly && role === "SUBADMIN") {
     return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
 
