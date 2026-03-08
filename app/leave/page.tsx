@@ -75,7 +75,8 @@ function getKoreanErrorMessage(message: string): string {
 
 type ModalMode = 'create' | 'edit'
 
-export default function LeavePage() {
+export default function LeavePage({ role }: { role?: string }) {
+  const isAdmin = role === 'ADMIN'
   const supabase = createClient()
   const year = new Date().getFullYear()
   const today = new Date().toISOString().split('T')[0]
@@ -87,6 +88,13 @@ export default function LeavePage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [empId, setEmpId] = useState<string | null>(null)
+  const [employees, setEmployees] = useState<{id: string, name: string}[]>([])
+  // ADMIN용 직원 선택 입력 모달
+  const [adminModalOpen, setAdminModalOpen] = useState(false)
+  const [adminEmpId, setAdminEmpId] = useState('')
+  const [adminDate, setAdminDate] = useState('')
+  const [adminLeaveType, setAdminLeaveType] = useState('ANNUAL')
+  const [adminNote, setAdminNote] = useState('')
 
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
@@ -104,11 +112,19 @@ export default function LeavePage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
+    // 전체 직원 목록 (ADMIN용)
+    const { data: empList } = await supabase.from('employees').select('id, name').eq('is_active', true).order('name')
+    setEmployees(empList || [])
+
     const { data: emp } = await supabase
       .from('employees').select('id').eq('auth_user_id', user.id).single()
 
-    if (!emp) { setError('직원 정보가 없습니다. 관리자에게 직원등록을 요청하세요.'); return }
-    setEmpId(emp.id)
+    if (!emp) {
+      if (role !== 'ADMIN') { setError('직원 정보가 없습니다. 관리자에게 직원등록을 요청하세요.'); return }
+      // ADMIN은 직원 연동 없어도 계속 진행
+    } else {
+      setEmpId(emp.id)
+    }
 
     const { data: bal } = await supabase
       .from('leave_balance')
@@ -135,10 +151,16 @@ export default function LeavePage() {
     }
   }
 
-  const isFuture = (d: string) => d >= today
+  const isFuture = (d: string) => isAdmin || d >= today
 
   function openCreateModal(dateStr: string) {
     if (!isFuture(dateStr)) return
+    if (isAdmin) {
+      // ADMIN: 직원 선택 모달 열기
+      setAdminDate(dateStr); setAdminEmpId(employees[0]?.id || '')
+      setAdminLeaveType('ANNUAL'); setAdminNote(''); setAdminModalOpen(true)
+      return
+    }
     const existing = myRequests.find((r) => r.leave_date === dateStr)
     if (existing) { openEditModal(existing); return }
     setModalMode('create'); setModalDate(dateStr)
@@ -178,6 +200,25 @@ export default function LeavePage() {
       setSuccess(`${modalDate} 휴가 신청이 수정되었습니다.`)
     }
     closeModal(); setLoading(false); fetchData()
+  }
+
+
+  async function handleAdminSubmit() {
+    if (!adminDate || !adminEmpId) return
+    setLoading(true); setError(''); setSuccess('')
+    const { error: e } = await supabase.from('leave_requests').insert([{
+      employee_id: adminEmpId, leave_type: adminLeaveType,
+      leave_date: adminDate, note: adminNote || null,
+    }])
+    if (e) { setError(getKoreanErrorMessage(e.message)); setLoading(false); return }
+    setSuccess(`${adminDate} 휴가 입력이 완료되었습니다.`)
+    setAdminModalOpen(false); setLoading(false); fetchData()
+  }
+
+  async function handleAdminDelete(id: string) {
+    if (!confirm('이 휴가 기록을 삭제하시겠습니까?')) return
+    await supabase.from('leave_requests').delete().eq('id', id)
+    fetchData()
   }
 
   async function handleDelete(id: string, type: string) {
@@ -260,7 +301,7 @@ export default function LeavePage() {
                   <span className="shrink-0 text-white/90">{LEAVE_TYPE_SHORT[lv.leave_type]}</span>
                 </div>
               ) : (
-                /* 타인 일정 - 연한 색 */
+                /* 타인 일정 - 연한 색, ADMIN은 삭제 버튼 포함 */
                 <div
                   key={lv.id}
                   className={`flex items-center gap-1 px-1.5 py-[3px] rounded-md text-[11px] font-medium leading-tight ${OTHER_STYLE[lv.leave_type]}`}
@@ -269,6 +310,13 @@ export default function LeavePage() {
                   <span className="truncate min-w-0">{lv.employee_name}</span>
                   <span className="shrink-0 opacity-40 text-[9px]">·</span>
                   <span className="shrink-0">{LEAVE_TYPE_SHORT[lv.leave_type]}</span>
+                  {isAdmin && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleAdminDelete(lv.id) }}
+                      className="shrink-0 text-red-400 hover:text-red-600 text-[9px] ml-0.5 font-bold"
+                      title="삭제"
+                    >✕</button>
+                  )}
                 </div>
               )
             )}
@@ -363,7 +411,11 @@ export default function LeavePage() {
             >▶</button>
           </div>
 
-          <p className="text-xs text-blue-500 text-center mb-4">📌 오늘 이후 날짜를 클릭하면 신청 / 수정할 수 있습니다</p>
+          <p className="text-xs text-blue-500 text-center mb-4">
+            {isAdmin
+              ? '📌 날짜를 클릭하여 직원 휴가를 입력할 수 있습니다 (관리자)'
+              : '📌 오늘 이후 날짜를 클릭하면 신청 / 수정할 수 있습니다'}
+          </p>
 
           {/* 요일 헤더 */}
           <div className="grid grid-cols-7 mb-2">
@@ -389,7 +441,7 @@ export default function LeavePage() {
           ) : (
             <div className="space-y-2">
               {myRequests.map((req) => {
-                const canEdit = isFuture(req.leave_date)
+                const canEdit = isAdmin || isFuture(req.leave_date)
                 return (
                   <div
                     key={req.id}
@@ -401,7 +453,7 @@ export default function LeavePage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-gray-800">{req.leave_date}</span>
-                          {!canEdit && (
+                          {!isAdmin && !isFuture(req.leave_date) && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-400">지난 날짜</span>
                           )}
                         </div>
@@ -426,6 +478,65 @@ export default function LeavePage() {
         </div>
       </div>
 
+
+      {/* ADMIN 직원 휴가 입력 모달 */}
+      {adminModalOpen && isAdmin && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-gray-900">👑 관리자 - 휴가 입력</h3>
+              <button onClick={() => setAdminModalOpen(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 mb-4">
+              <p className="text-sm font-semibold text-blue-700">📅 {adminDate}</p>
+            </div>
+
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">직원 선택</label>
+              <select value={adminEmpId} onChange={(e) => setAdminEmpId(e.target.value)}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                {employees.map(emp => (
+                  <option key={emp.id} value={emp.id}>{emp.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-700 mb-2">휴가 유형</label>
+              <div className="space-y-1.5">
+                {Object.entries(LEAVE_TYPE_LABEL).map(([key, label]) => (
+                  <label key={key} className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-colors ${
+                    adminLeaveType === key ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <input type="radio" name="adminLeaveType" value={key} checked={adminLeaveType === key}
+                      onChange={() => setAdminLeaveType(key)} className="text-blue-600" />
+                    <span className="text-sm">{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-gray-700 mb-1">사유 (선택)</label>
+              <textarea value={adminNote} onChange={(e) => setAdminNote(e.target.value)} rows={2}
+                placeholder="관리자 입력"
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => setAdminModalOpen(false)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-xl text-sm hover:bg-gray-50 transition-colors">
+                취소
+              </button>
+              <button onClick={handleAdminSubmit} disabled={loading || !adminEmpId}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
+                {loading ? '입력 중...' : '휴가 입력'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* 신청 / 수정 모달 */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">

@@ -16,13 +16,14 @@ const nav = [
   { href: "/calendar",           label: "출고 캘린더",    allowedRoles: ["ADMIN", "SUBADMIN", "USER"] },
   { href: "/leave",              label: "연차신청",       allowedRoles: ["ADMIN", "USER"]     },
   { href: "/admin/employees",    label: "인사관리",       allowedRoles: ["ADMIN"]             },
+  { href: "/admin/payroll",      label: "급여관리",       allowedRoles: ["ADMIN"]             },
 ];
 
 function canSee(userRole: string, allowedRoles: string[]) {
   return allowedRoles.includes(userRole);
 }
 
-const HR_MENUS = ["/leave", "/admin/employees"];
+const HR_MENUS = ["/leave", "/admin/employees", "/admin/payroll"];
 
 const linkBase: React.CSSProperties = {
   padding: "5px 8px",
@@ -35,77 +36,6 @@ const linkBase: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-
-const HR_SUB_MENUS = [
-  { href: "/admin/employees", label: "인사관리" },
-  { href: "/admin/payroll",   label: "급여관리" },
-];
-
-function HRDropdown({ pathname, active }: { pathname: string; active: boolean }) {
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          ...linkBase,
-          cursor: "pointer",
-          borderColor: active ? "rgba(255,255,255,0.40)" : "rgba(96,165,250,0.40)",
-          backgroundColor: active ? "rgba(255,255,255,0.16)" : "rgba(96,165,250,0.10)",
-          color: "white",
-          display: "flex", alignItems: "center", gap: 3,
-          fontSize: 12,
-        }}
-      >
-        인사관리 <span style={{ fontSize: 10, opacity: 0.7 }}>{open ? "▲" : "▼"}</span>
-      </button>
-      {open && (
-        <div style={{
-          position: "absolute", top: 0, left: "calc(100% + 6px)",
-          backgroundColor: "rgba(15,15,20,0.97)",
-          border: "1px solid rgba(255,255,255,0.15)",
-          borderRadius: 10, overflow: "hidden",
-          minWidth: 110, zIndex: 9999,
-          boxShadow: "8px 8px 24px rgba(0,0,0,0.4)",
-        }}>
-          {HR_SUB_MENUS.map((m) => {
-            const isActive = pathname === m.href || pathname.startsWith(m.href + "/");
-            return (
-              <Link
-                key={m.href}
-                href={m.href}
-                onClick={() => setOpen(false)}
-                style={{
-                  display: "block",
-                  padding: "10px 16px",
-                  color: "white",
-                  textDecoration: "none",
-                  fontWeight: 700,
-                  fontSize: 13,
-                  backgroundColor: isActive ? "rgba(96,165,250,0.20)" : "transparent",
-                  borderLeft: isActive ? "3px solid rgba(96,165,250,0.8)" : "3px solid transparent",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {m.label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function TopNav({ role, email }: { role?: string; email?: string }) {
   const pathname = usePathname();
@@ -173,15 +103,6 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
                 const active = pathname === x.href || pathname.startsWith(x.href + "/");
                 const isHR = HR_MENUS.includes(x.href);
 
-                // 인사관리 → 드롭다운 그룹
-                if (x.href === "/admin/employees" && userRole === "ADMIN") {
-                  const isHRActive = ["/admin/employees", "/admin/payroll", "/leave"].some(
-                    (p) => pathname === p || pathname.startsWith(p + "/")
-                  );
-                  return (
-                    <HRDropdown key={x.href} pathname={pathname} active={isHRActive} />
-                  );
-                }
                 return (
                   <Link
                     key={x.href}
