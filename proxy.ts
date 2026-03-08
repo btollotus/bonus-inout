@@ -61,19 +61,37 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ✅ 쿠키에서 role 읽기
-  const role = req.cookies.get("user_role")?.value ?? "USER";
+  // ✅ /api/me 호출해서 role 가져오기
+  const host = req.headers.get("host") ?? "";
+  const protocol = host.includes("localhost") ? "http" : "https";
+  const cookieHeader = req.cookies.getAll()
+    .map(({ name, value }) => `${name}=${value}`)
+    .join("; ");
+
+  let role = "USER";
+  try {
+    const meRes = await fetch(`${protocol}://${host}/api/me`, {
+      headers: { cookie: cookieHeader },
+      cache: "no-store",
+    });
+    if (meRes.ok) {
+      const me = await meRes.json();
+      role = me.role ?? "USER";
+    }
+  } catch {
+    // role 조회 실패 시 USER로 처리
+  }
 
   // ADMIN 전용 경로
   const isAdminOnly = ADMIN_ONLY_PATHS.some((p) => pathname.startsWith(p));
   if (isAdminOnly && role !== "ADMIN") {
-    return NextResponse.redirect(new URL("/?blocked=1", req.url));
+    return NextResponse.redirect(new URL("/", req.url));
   }
 
   // SUBADMIN 이상 경로
   const isSubadminPath = SUBADMIN_PATHS.some((p) => pathname.startsWith(p));
   if (isSubadminPath && role === "USER") {
-    return NextResponse.redirect(new URL("/?blocked=1", req.url));
+    return NextResponse.redirect(new URL("/", req.url));
   }
 
   return res;

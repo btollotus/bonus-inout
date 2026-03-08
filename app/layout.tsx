@@ -1,47 +1,36 @@
 import "./globals.css";
 import TopNavWrapper from "@/components/TopNavWrapper";
-import { createClient } from "@/lib/supabase/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
 import type { Metadata } from "next";
+import { cookies, headers } from "next/headers";
 
 export const metadata: Metadata = {
   title: { default: "BONUSMATE ERP", template: "%s | BONUSMATE ERP" },
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  let role: string = "USER";
-  const email: string = user?.email ?? "";
-
-  if (user) {
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (serviceKey) {
-      const supabaseAdmin = createSupabaseClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        serviceKey,
-        { auth: { persistSession: false, autoRefreshToken: false } }
-      );
-      const { data } = await supabaseAdmin
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .single();
-      role = data?.role ?? "USER";
-    }
-
-    // role을 쿠키에 저장 → proxy.ts에서 읽을 수 있게
+async function getMe(): Promise<{ role: string; email: string }> {
+  try {
+    const headerStore = await headers();
+    const host = headerStore.get("host") ?? "";
+    const protocol = host.includes("localhost") ? "http" : "https";
     const cookieStore = await cookies();
-    cookieStore.set("user_role", role, {
-      path: "/",
-      httpOnly: false,
-      secure: true,
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24, // 24시간
+    const cookieHeader = cookieStore.getAll()
+      .map(({ name, value }) => `${name}=${value}`)
+      .join("; ");
+
+    const res = await fetch(`${protocol}://${host}/api/me`, {
+      headers: { cookie: cookieHeader },
+      cache: "no-store",
     });
+
+    if (!res.ok) return { role: "USER", email: "" };
+    return await res.json();
+  } catch {
+    return { role: "USER", email: "" };
   }
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const { role, email } = await getMe();
 
   return (
     <html lang="ko">
