@@ -21,26 +21,27 @@ type PayrollRow = {
   id?: string
   employee_id: string
   employee_name: string
-  year: number
-  month: number
-  // 지급 항목
-  base_salary: number
+  pay_month: string        // "2026-02" 형식
+  year: number             // UI용 (pay_month에서 파싱)
+  month: number            // UI용 (pay_month에서 파싱)
+  // 지급 항목 (DB 컬럼명)
+  base_pay: number
+  meal_pay: number
+  fuel_pay: number
+  bonus_pay: number
+  other_allowances: OtherAllowance[]
+  // 추가 공제 컬럼 (새로 추가된)
   meal_allowance: number
   fuel_allowance: number
-  bonus: number
-  other_allowances: OtherAllowance[]  // 변동 기타임금
-  // 공제 항목
   national_pension: number
   health_insurance: number
   employment_insurance: number
   long_term_care: number
   income_tax: number
   local_income_tax: number
-  // 연말정산 (해당 월만 입력)
   income_tax_settle: number
   local_tax_settle: number
   special_tax_settle: number
-  // 메모
   memo: string
   note: string
   status: 'draft' | 'final'
@@ -67,12 +68,14 @@ function leaveLabel(type: string) { return LEAVE_TYPE_LABEL[type] || LEAVE_TYPE_
 
 // ── 빈 행 생성 ──────────────────────────────────────────
 function emptyRow(emp: Employee, year: number, month: number): PayrollRow {
+  const pay_month = `${year}-${String(month).padStart(2, '0')}`
   return {
     employee_id: emp.id,
     employee_name: emp.name,
-    year, month,
-    base_salary: 0, meal_allowance: 0, fuel_allowance: 0, bonus: 0,
+    pay_month, year, month,
+    base_pay: 0, meal_pay: 0, fuel_pay: 0, bonus_pay: 0,
     other_allowances: [],
+    meal_allowance: 0, fuel_allowance: 0,
     national_pension: 0, health_insurance: 0, employment_insurance: 0,
     long_term_care: 0, income_tax: 0, local_income_tax: 0,
     income_tax_settle: 0, local_tax_settle: 0, special_tax_settle: 0,
@@ -81,11 +84,11 @@ function emptyRow(emp: Employee, year: number, month: number): PayrollRow {
 }
 
 function calcNet(row: PayrollRow) {
-  const income = row.base_salary + row.meal_allowance + row.fuel_allowance + row.bonus
-    + row.other_allowances.reduce((s, a) => s + a.amount, 0)
-  const deduction = row.national_pension + row.health_insurance + row.employment_insurance
-    + row.long_term_care + row.income_tax + row.local_income_tax
-    + row.income_tax_settle + row.local_tax_settle + row.special_tax_settle
+  const income = (row.base_pay||0) + (row.meal_pay||0) + (row.fuel_pay||0) + (row.bonus_pay||0)
+    + (row.other_allowances||[]).reduce((s, a) => s + a.amount, 0)
+  const deduction = (row.national_pension||0) + (row.health_insurance||0) + (row.employment_insurance||0)
+    + (row.long_term_care||0) + (row.income_tax||0) + (row.local_income_tax||0)
+    + (row.income_tax_settle||0) + (row.local_tax_settle||0) + (row.special_tax_settle||0)
   return income - deduction
 }
 
@@ -142,11 +145,21 @@ export default function PayrollPage() {
 
   async function fetchPayrollForMonth() {
     setFetchLoading(true)
-    const { data: existing } = await supabase.from('payroll_draft').select('*').eq('year', selectedYear).eq('month', selectedMonth)
+    const pay_month = `${selectedYear}-${String(selectedMonth).padStart(2,'0')}`
+    const { data: existing } = await supabase.from('payroll_draft').select('*').eq('pay_month', pay_month)
     const existingMap = new Map((existing || []).map((r: PayrollRow) => [r.employee_id, r]))
     const newRows: PayrollRow[] = employees.map((emp) => {
       const ex = existingMap.get(emp.id)
-      if (ex) return { ...emptyRow(emp, selectedYear, selectedMonth), ...ex, other_allowances: ex.other_allowances || [] }
+      if (ex) {
+        const [y, m] = (ex.pay_month || '').split('-').map(Number)
+        return {
+          ...emptyRow(emp, selectedYear, selectedMonth),
+          ...ex,
+          year: y || selectedYear,
+          month: m || selectedMonth,
+          other_allowances: ex.other_allowances || [],
+        }
+      }
       return emptyRow(emp, selectedYear, selectedMonth)
     })
     setRows(newRows)
@@ -155,7 +168,7 @@ export default function PayrollPage() {
 
   async function fetchHistory() {
     setFetchLoading(true)
-    const { data } = await supabase.from('payroll_draft').select('*').eq('year', historyYear).order('month').order('employee_name')
+    const { data } = await supabase.from('payroll_draft').select('*').like('pay_month', `${historyYear}-%`).order('pay_month').order('employee_name')
     setSavedRows((data || []).map((r: PayrollRow) => ({ ...r, other_allowances: r.other_allowances || [] })))
     setFetchLoading(false)
   }
@@ -169,7 +182,7 @@ export default function PayrollPage() {
   }
 
   function handleFieldChange(idx: number, field: keyof PayrollRow, value: string) {
-    const numFields = ['base_salary','meal_allowance','fuel_allowance','bonus','national_pension','health_insurance','employment_insurance','long_term_care','income_tax','local_income_tax','income_tax_settle','local_tax_settle','special_tax_settle']
+    const numFields = ['base_pay','meal_pay','fuel_pay','bonus_pay','meal_allowance','fuel_allowance','national_pension','health_insurance','employment_insurance','long_term_care','income_tax','local_income_tax','income_tax_settle','local_tax_settle','special_tax_settle']
     if (numFields.includes(field)) updateRow(idx, { [field]: parseNum(value) } as Partial<PayrollRow>)
     else updateRow(idx, { [field]: value } as Partial<PayrollRow>)
   }
@@ -193,17 +206,26 @@ export default function PayrollPage() {
 
   function buildPayload(row: PayrollRow) {
     return {
-      employee_id: row.employee_id, employee_name: row.employee_name,
-      year: row.year, month: row.month,
-      base_salary: row.base_salary, meal_allowance: row.meal_allowance,
-      fuel_allowance: row.fuel_allowance, bonus: row.bonus,
+      employee_id: row.employee_id,
+      employee_name: row.employee_name,
+      pay_month: row.pay_month,
+      base_pay: row.base_pay,
+      meal_pay: row.meal_pay,
+      fuel_pay: row.fuel_pay,
+      bonus_pay: row.bonus_pay,
       other_allowances: row.other_allowances,
-      national_pension: row.national_pension, health_insurance: row.health_insurance,
-      employment_insurance: row.employment_insurance, long_term_care: row.long_term_care,
-      income_tax: row.income_tax, local_income_tax: row.local_income_tax,
-      income_tax_settle: row.income_tax_settle, local_tax_settle: row.local_tax_settle,
+      meal_allowance: row.meal_allowance,
+      fuel_allowance: row.fuel_allowance,
+      national_pension: row.national_pension,
+      health_insurance: row.health_insurance,
+      employment_insurance: row.employment_insurance,
+      long_term_care: row.long_term_care,
+      income_tax: row.income_tax,
+      local_income_tax: row.local_income_tax,
+      income_tax_settle: row.income_tax_settle,
+      local_tax_settle: row.local_tax_settle,
       special_tax_settle: row.special_tax_settle,
-      net_salary: calcNet(row), memo: row.memo || null, note: row.note || null,
+      memo: row.memo || null,
       status: row.status,
     }
   }
@@ -228,7 +250,7 @@ export default function PayrollPage() {
       // 확정 상태라면 payroll_final도 동기화
       if (updatedRows.some(r => r.status === 'final')) {
         const finalPayloads = updatedRows.filter(r => r.status === 'final').map(r => ({ ...buildPayload(r), status: 'final' }))
-        await supabase.from('payroll_final').upsert(finalPayloads, { onConflict: 'employee_id,year,month' })
+        await supabase.from('payroll_final').upsert(finalPayloads, { onConflict: 'employee_id,pay_month' })
       }
       setSuccess('저장 완료되었습니다.')
       fetchPayrollForMonth()
@@ -252,10 +274,11 @@ export default function PayrollPage() {
     setLoading(true); setError('')
     await handleSaveDraft()
     const finalPayloads = rows.map(row => ({ ...buildPayload(row), status: 'final' }))
-    const { error: finalError } = await supabase.from('payroll_final').upsert(finalPayloads, { onConflict: 'employee_id,year,month' })
+    const { error: finalError } = await supabase.from('payroll_final').upsert(finalPayloads, { onConflict: 'employee_id,pay_month' })
     if (finalError) { setError('최종 확정 실패: ' + finalError.message) }
     else {
-      await supabase.from('payroll_draft').update({ status: 'final' }).eq('year', selectedYear).eq('month', selectedMonth)
+      const pm2 = `${selectedYear}-${String(selectedMonth).padStart(2,'0')}`
+      await supabase.from('payroll_draft').update({ status: 'final' }).eq('pay_month', pm2)
       setSuccess(`${selectedYear}년 ${selectedMonth}월 급여가 최종 확정되었습니다!`)
       fetchPayrollForMonth()
     }
@@ -267,7 +290,7 @@ export default function PayrollPage() {
     setTimeout(() => {
       if (mode === 'pdf') {
         const orig = document.title
-        document.title = `${row.year}년${row.month}월_${row.employee_name}_급여명세서`
+        document.title = `${row.pay_month}_${row.employee_name}_급여명세서`
         window.print()
         setTimeout(() => { document.title = orig }, 1000)
       } else {
@@ -287,7 +310,7 @@ export default function PayrollPage() {
     setSettleModal(null)
   }
 
-  const totalBase = rows.reduce((s, r) => s + r.base_salary, 0)
+  const totalBase = rows.reduce((s, r) => s + (r.base_pay||0), 0)
   const totalNet = rows.reduce((s, r) => s + calcNet(r), 0)
   const isFinalized = rows.length > 0 && rows.every(r => r.status === 'final')
 
@@ -404,7 +427,7 @@ export default function PayrollPage() {
                       const empLeave = leaveUsage[row.employee_id] || []
                       const isF = row.status === 'final'
 
-                      const totalIncome = row.base_salary + row.meal_allowance + row.fuel_allowance + row.bonus
+                      const totalIncome = (row.base_pay||0) + (row.meal_pay||0) + (row.fuel_pay||0) + (row.bonus_pay||0)
                         + row.other_allowances.reduce((s, a) => s + a.amount, 0)
                       const totalDeduction = row.national_pension + row.health_insurance + row.employment_insurance
                         + row.long_term_care + row.income_tax + row.local_income_tax
@@ -452,10 +475,10 @@ export default function PayrollPage() {
                                   <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">▶ 지급 항목</p>
                                   <div className="space-y-2.5">
                                     {([
-                                      ['base_salary', '기본급'],
-                                      ['meal_allowance', '식대'],
-                                      ['fuel_allowance', '유류지원비'],
-                                      ['bonus', '상여금'],
+                                      ['base_pay', '기본급'],
+                                      ['meal_pay', '식대'],
+                                      ['fuel_pay', '유류지원비'],
+                                      ['bonus_pay', '상여금'],
                                     ] as const).map(([field, label]) => (
                                       <div key={field} className="flex items-center gap-3">
                                         <label className="w-24 text-sm text-gray-600 shrink-0">{label}</label>
@@ -686,12 +709,12 @@ export default function PayrollPage() {
                             + row.income_tax_settle + row.local_tax_settle + row.special_tax_settle
                           return (
                             <tr key={idx} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 font-medium text-gray-700">{row.month}월</td>
+                              <td className="px-4 py-3 font-medium text-gray-700">{row.pay_month}</td>
                               <td className="px-4 py-3 text-gray-900 font-medium">{row.employee_name}</td>
-                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.base_salary)}</td>
-                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.meal_allowance)}</td>
-                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.fuel_allowance)}</td>
-                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.bonus)}</td>
+                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.base_pay||0)}</td>
+                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.meal_pay||0)}</td>
+                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.fuel_pay||0)}</td>
+                              <td className="px-4 py-3 text-right text-gray-600">{formatKRW(row.bonus_pay||0)}</td>
                               <td className="px-4 py-3 text-right text-red-500">-{formatKRW(totalDed)}</td>
                               <td className="px-4 py-3 text-right font-bold text-blue-700">{formatKRW(calcNet(row))}원</td>
                               <td className="px-4 py-3 text-center">
@@ -736,15 +759,16 @@ const PrintSlip = forwardRef<HTMLDivElement, {
   leaveUsage: LeaveUsage[]
 }>(({ row, emp, leaveUsage }, ref) => {
   const net = calcNet(row)
-  const totalIncome = row.base_salary + row.meal_allowance + row.fuel_allowance + row.bonus
+  const totalIncome = (row.base_pay||0) + (row.meal_pay||0) + (row.fuel_pay||0) + (row.bonus_pay||0)
     + row.other_allowances.reduce((s, a) => s + a.amount, 0)
   const totalDeduction = row.national_pension + row.health_insurance + row.employment_insurance
     + row.long_term_care + row.income_tax + row.local_income_tax
     + row.income_tax_settle + row.local_tax_settle + row.special_tax_settle
   const hasSettle = row.income_tax_settle !== 0 || row.local_tax_settle !== 0 || row.special_tax_settle !== 0
-  const payDate = `${row.year}-${String(row.month).padStart(2,'0')}-10`
-  const periodStart = `${row.year}.${String(row.month).padStart(2,'0')}.01`
-  const periodEnd = `${row.year}.${String(row.month).padStart(2,'0')}.${new Date(row.year, row.month, 0).getDate()}`
+  const [pyear, pmonth] = (row.pay_month||'').split('-').map(Number)
+  const payDate = `${row.pay_month}-10`
+  const periodStart = `${pyear}.${String(pmonth).padStart(2,'0')}.01`
+  const periodEnd = `${pyear}.${String(pmonth).padStart(2,'0')}.${new Date(pyear, pmonth, 0).getDate()}`
 
   return (
     <div ref={ref} className="hidden print:block p-8 text-xs font-sans text-gray-900" style={{ fontFamily: 'Malgun Gothic, 맑은 고딕, sans-serif' }}>
@@ -765,7 +789,7 @@ const PrintSlip = forwardRef<HTMLDivElement, {
 
       {/* 제목 */}
       <div className="text-center mb-4">
-        <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{row.month.toString().padStart(2,'0')}월 (주)보누스메이트 급여명세서</div>
+        <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{row.pay_month} (주)보누스메이트 급여명세서</div>
       </div>
 
       {/* 기본 정보 */}
@@ -826,10 +850,10 @@ const PrintSlip = forwardRef<HTMLDivElement, {
           <table className="slip-table">
             <thead><tr><th>항목</th><th>금액</th></tr></thead>
             <tbody>
-              <tr><td className="label-col">기본급</td><td className="amount">{formatKRW(row.base_salary)}</td></tr>
-              <tr><td className="label-col">식대</td><td className="amount">{formatKRW(row.meal_allowance)}</td></tr>
-              <tr><td className="label-col">유류지원비</td><td className="amount">{formatKRW(row.fuel_allowance)}</td></tr>
-              <tr><td className="label-col">상여금</td><td className="amount">{formatKRW(row.bonus)}</td></tr>
+              <tr><td className="label-col">기본급</td><td className="amount">{formatKRW(row.base_pay||0)}</td></tr>
+              <tr><td className="label-col">식대</td><td className="amount">{formatKRW(row.meal_pay||0)}</td></tr>
+              <tr><td className="label-col">유류지원비</td><td className="amount">{formatKRW(row.fuel_pay||0)}</td></tr>
+              <tr><td className="label-col">상여금</td><td className="amount">{formatKRW(row.bonus_pay||0)}</td></tr>
               {row.other_allowances.map((a, i) => (
                 <tr key={i}><td className="label-col">{a.label || '기타'}</td><td className="amount">{formatKRW(a.amount)}</td></tr>
               ))}
@@ -871,7 +895,7 @@ const PrintSlip = forwardRef<HTMLDivElement, {
       {/* 연차 사용 내역 */}
       {leaveUsage.length > 0 && (
         <div className="mt-3">
-          <div className="section-header">▶ {row.month}월 연차 사용 내역</div>
+          <div className="section-header">▶ {row.pay_month} 연차 사용 내역</div>
           <table className="slip-table">
             <thead><tr><th>구분</th><th>사용 횟수</th></tr></thead>
             <tbody>
