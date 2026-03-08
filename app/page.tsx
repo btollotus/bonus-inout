@@ -1,69 +1,20 @@
 import type { Metadata } from "next";
 export const metadata: Metadata = { title: "홈 | BONUSMATE ERP" };
 
-import AuthGate from "@/components/AuthGate";
-import LogoutButton from "@/components/LogoutButton";
-
 export default function HomePage() {
   return (
-    <AuthGate>
-      <main className="min-h-screen bg-black text-white p-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">BONUSMATE ERP</h1>
-          <LogoutButton />
+    <main className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+          <div className="flex items-center gap-3 mb-2">
+            <img src="/bonusmate-logo.png" alt="BONUSMATE" style={{ height: 40, width: "auto" }} />
+            <h1 className="text-xl font-bold text-gray-900">BONUSMATE ERP</h1>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">
+            로그인되었습니다. 상단 메뉴에서 원하는 기능을 선택하세요.
+          </p>
         </div>
-
-        <p className="text-white/60 mt-2">
-          로그인 성공. 아래 메뉴에서 원하는 기능을 선택하세요.
-        </p>
-
-        {/* ✅ 버튼 영역 */}
-        <div className="mt-6 flex flex-wrap gap-3">
-          <a
-            href="/scan"
-            className="inline-flex rounded-xl bg-white text-black px-4 py-2 font-medium"
-          >
-            스캔 화면으로
-          </a>
-
-          <a
-            href="/products"
-            className="inline-flex rounded-xl border border-white/15 px-4 py-2"
-          >
-            품목/바코드 등록
-          </a>
-
-          <a
-            href="/report"
-            className="inline-flex rounded-xl border border-white/15 px-4 py-2"
-          >
-            재고대장(리포트)
-          </a>
-
-          {/* ✅ 새 구조: 주문/출고 */}
-          <a
-            href="/orders"
-            className="inline-flex rounded-xl border border-white/15 px-4 py-2"
-          >
-            주문/출고
-          </a>
-
-          {/* ✅ 새 구조: 경리장부(통합장부) */}
-          <a
-            href="/ledger"
-            className="inline-flex rounded-xl border border-white/15 px-4 py-2"
-          >
-            거래내역(통합)
-          </a>
-
-          <a
-            href="/calendar"
-            className="inline-flex rounded-xl border border-white/15 px-4 py-2"
-          >
-            출고 캘린더
-          </a>
-        </div>
-      </main>
-    </AuthGate>
+      </div>
+    </main>
   );
 }
