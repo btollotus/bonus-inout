@@ -167,8 +167,6 @@ export default function EmployeesPage() {
   const [showLeaveEmpId, setShowLeaveEmpId] = useState<string | null>(null)
   const [leaveEditDraft, setLeaveEditDraft] = useState<{total_days:number; override_reason:string}>({total_days:0, override_reason:''})
   const [leaveSaving, setLeaveSaving] = useState(false)
-  const [autoGrantLoading, setAutoGrantLoading] = useState(false)
-  const [autoGrantMsg, setAutoGrantMsg] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   const [showHealthEmpId, setShowHealthEmpId] = useState<string | null>(null)
   const [healthFormEmpId, setHealthFormEmpId] = useState<string | null>(null)
@@ -204,15 +202,18 @@ export default function EmployeesPage() {
   async function fetchLeaveBalances() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    // isAdmin 체크
     const { data: roleData } = await supabase.from('user_roles').select('role').eq('user_id', user.id).maybeSingle()
-    setIsAdmin(roleData?.role === 'ADMIN')
+    const admin = roleData?.role === 'ADMIN'
+    setIsAdmin(admin)
 
     const yearStart = `${leaveYear}-01-01`
     const yearEnd = `${leaveYear}-12-31`
     const { data: balList } = await supabase.from('leave_balance')
       .select('employee_id, total_days, used_days, remaining_days, manual_override, override_reason')
       .eq('year', leaveYear)
+    const balMap: Record<string, any> = {}
+    for (const b of (balList || [])) balMap[b.employee_id] = b
+
     const { data: reqList } = await supabase.from('leave_requests')
       .select('employee_id, leave_type').gte('leave_date', yearStart).lte('leave_date', yearEnd)
     const usedMap: Record<string, number> = {}
@@ -221,50 +222,44 @@ export default function EmployeesPage() {
       const days = (t==='ANNUAL'||t==='FRIDAY_OFF') ? 1 : (t==='HALF_AM'||t==='HALF_PM') ? 0.5 : 0
       usedMap[r.employee_id] = (usedMap[r.employee_id] || 0) + days
     }
+
+    // 입사일 기준 자동부여 (manual_override=false이거나 미존재 시)
+    if (admin) {
+      for (const e of employees) {
+        if (!e.hire_date) continue
+        const legalDays = calcLegalLeaveDays(e.hire_date, leaveYear)
+        const bal = balMap[e.id]
+        const usedNow = bal?.used_days ?? usedMap[e.id] ?? 0
+        if (!bal) {
+          const { data: ins } = await supabase.from('leave_balance').insert({
+            employee_id: e.id, user_id: e.auth_user_id, year: leaveYear,
+            total_days: legalDays, used_days: usedNow,
+            remaining_days: Math.max(0, legalDays - usedNow), manual_override: false,
+          }).select().maybeSingle()
+          if (ins) balMap[e.id] = ins
+        } else if (!bal.manual_override && bal.total_days !== legalDays) {
+          await supabase.from('leave_balance').update({
+            total_days: legalDays, remaining_days: Math.max(0, legalDays - usedNow)
+          }).eq('employee_id', e.id).eq('year', leaveYear)
+          balMap[e.id] = { ...bal, total_days: legalDays, remaining_days: Math.max(0, legalDays - usedNow) }
+        }
+      }
+    }
+
     const map: Record<string, any> = {}
     for (const e of employees) {
-      const bal = (balList || []).find((b: any) => b.employee_id === e.id)
-      const used = bal?.used_days ?? usedMap[e.id] ?? 0
+      const bal = balMap[e.id]
+      const legalDays = calcLegalLeaveDays(e.hire_date, leaveYear)
+      const total = bal?.total_days ?? legalDays
+      const used = bal?.used_days ?? (usedMap[e.id] || 0)
       map[e.id] = {
-        total_days: bal?.total_days ?? 0,
-        used_days: used,
-        remaining_days: bal?.remaining_days ?? Math.max(0, (bal?.total_days ?? 0) - used),
+        total_days: total, used_days: used,
+        remaining_days: bal?.remaining_days ?? Math.max(0, total - used),
         manual_override: bal?.manual_override ?? false,
         override_reason: bal?.override_reason ?? '',
       }
     }
     setLeaveBalances(map)
-  }
-
-  async function handleAutoGrant() {
-    setAutoGrantLoading(true)
-    setAutoGrantMsg('')
-    try {
-      const { error: rpcErr } = await supabase.rpc('upsert_leave_balance_for_year', { target_year: leaveYear })
-      if (rpcErr) {
-        // JS fallback
-        let cnt = 0
-        for (const e of employees) {
-          const total = calcLegalLeaveDays(e.hire_date, leaveYear)
-          const { data: ex } = await supabase.from('leave_balance')
-            .select('id, manual_override, used_days').eq('employee_id', e.id).eq('year', leaveYear).maybeSingle()
-          if (ex?.manual_override) { cnt++; continue }
-          const used = ex?.used_days ?? 0
-          if (ex) {
-            await supabase.from('leave_balance').update({ total_days: total, remaining_days: Math.max(0, total-used) }).eq('id', ex.id)
-          } else {
-            await supabase.from('leave_balance').insert({ employee_id: e.id, user_id: e.auth_user_id, year: leaveYear, total_days: total, used_days: 0, remaining_days: total })
-          }
-          cnt++
-        }
-        setAutoGrantMsg(`✅ ${cnt}명 자동부여 완료`)
-      } else {
-        setAutoGrantMsg(`✅ 자동부여 완료`)
-      }
-      await fetchLeaveBalances()
-    } catch(err:any) { setAutoGrantMsg(`❌ 오류: ${err.message}`) }
-    setAutoGrantLoading(false)
-    setTimeout(() => setAutoGrantMsg(''), 4000)
   }
 
   async function saveLeaveOverride(empId: string, authUserId: string | null) {
@@ -628,21 +623,15 @@ export default function EmployeesPage() {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {isAdmin && (
-              <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 flex-wrap">
-                <span className="text-xs font-semibold text-indigo-700">🗓️ 연차</span>
+              <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5">
+                <span className="text-xs font-semibold text-indigo-700">🗓️ 연차 기준 연도</span>
                 <select value={leaveYear} onChange={e => setLeaveYear(Number(e.target.value))}
                   className="border border-indigo-200 rounded px-2 py-0.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400">
                   {[new Date().getFullYear()+1, new Date().getFullYear(), new Date().getFullYear()-1].map(y =>
                     <option key={y} value={y}>{y}년</option>
                   )}
                 </select>
-                <button onClick={handleAutoGrant} disabled={autoGrantLoading}
-                  className="text-xs bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-3 py-1 rounded-lg font-semibold transition-colors">
-                  {autoGrantLoading ? '⏳...' : '⚡ 전체 자동부여'}
-                </button>
-                {autoGrantMsg && (
-                  <span className={`text-xs font-medium ${autoGrantMsg.startsWith('✅') ? 'text-green-700' : 'text-red-600'}`}>{autoGrantMsg}</span>
-                )}
+                <span className="text-[10px] text-indigo-400">입사일 기준 자동계산</span>
               </div>
             )}
             <button onClick={handleNew}
