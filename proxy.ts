@@ -3,23 +3,27 @@ import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 
+// ADMIN만 접근 가능
 const ADMIN_ONLY_PATHS = [
   "/admin/employees",
   "/admin/payroll",
   "/products",
   "/trade",
 ];
+
+// ADMIN + SUBADMIN만 접근 가능 (USER 차단)
 const SUBADMIN_PATHS = [
   "/scan",
   "/report",
   "/tax/spec",
   "/tax/statement",
-  "/calendar",
+  // "/calendar" 제거 → 모든 로그인 사용자 허용
 ];
 
+// SUBADMIN 차단 (ADMIN + USER만)
 const USER_ONLY_PATHS = [
   "/leave",
-  "/calendar",
+  // "/calendar" 제거 → 모든 로그인 사용자 허용
 ];
 
 export async function proxy(req: NextRequest) {
@@ -38,6 +42,7 @@ export async function proxy(req: NextRequest) {
   if (isPublic) return NextResponse.next();
 
   let res = NextResponse.next();
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -61,7 +66,7 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ✅ /api/me 대신 직접 Admin Client로 role 조회
+  // Admin Client로 role 조회
   let role = "USER";
   try {
     const admin = createSupabaseAdmin(
@@ -79,20 +84,24 @@ export async function proxy(req: NextRequest) {
     // role 조회 실패 시 USER 유지
   }
 
-  const isAdminOnly = 
-  ADMIN_ONLY_PATHS.some((p) => pathname.startsWith(p)) ||
-  (pathname.startsWith("/tax") && !pathname.startsWith("/tax/spec") && !pathname.startsWith("/tax/statement"));
+  // ADMIN 전용 경로
+  const isAdminOnly =
+    ADMIN_ONLY_PATHS.some((p) => pathname.startsWith(p)) ||
+    (pathname.startsWith("/tax") &&
+      !pathname.startsWith("/tax/spec") &&
+      !pathname.startsWith("/tax/statement"));
+
   if (isAdminOnly && role !== "ADMIN") {
     return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
-  
-  // SUBADMIN 이상 경로
+
+  // ADMIN + SUBADMIN 전용 경로 (USER 차단)
   const isSubadminPath = SUBADMIN_PATHS.some((p) => pathname.startsWith(p));
   if (isSubadminPath && role === "USER") {
     return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
-  
-  // USER 전용 경로 (SUBADMIN 차단)
+
+  // USER + ADMIN 전용 경로 (SUBADMIN 차단)
   const isUserOnly = USER_ONLY_PATHS.some((p) => pathname.startsWith(p));
   if (isUserOnly && role === "SUBADMIN") {
     return NextResponse.redirect(new URL("/unauthorized", req.url));
