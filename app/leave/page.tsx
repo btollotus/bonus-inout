@@ -209,21 +209,64 @@ export default function LeavePage() {
       setMyRequests(reqs || [])
     }
 
-    // ADMIN: 전체 직원 연차 현황
+    // ADMIN: 전체 직원 연차 현황 (leave_balance 우선, 없으면 leave_requests 집계)
     if (currentIsAdmin) {
+      const thisYear = new Date().getFullYear()
+      // 1) employees 전체 조회
+      const { data: empList } = await supabase
+        .from('employees')
+        .select('id, name')
+        .is('resign_date', null)
+        .order('name')
+
+      // 2) leave_balance에서 올해 데이터
       const { data: balList } = await supabase
         .from('leave_balance')
-        .select('employee_id, total_days, used_days, remaining_days, employees!inner(name)')
-        .eq('year', new Date().getFullYear())
-      if (balList) {
-        setAllBalances(balList.map((b: any) => ({
-          employee_id: b.employee_id,
-          employee_name: b.employees?.name ?? '알 수 없음',
-          total_days: b.total_days ?? 0,
-          used_days: b.used_days ?? 0,
-          remaining_days: b.remaining_days ?? 0,
-        })))
+        .select('employee_id, total_days, used_days, remaining_days')
+        .eq('year', thisYear)
+      const balMap: Record<string, {total_days:number, used_days:number, remaining_days:number}> = {}
+      for (const b of (balList || [])) balMap[b.employee_id] = b
+
+      // 3) leave_requests에서 올해 사용일수 집계 (leave_balance 없는 직원 보완)
+      const yearStart = `${thisYear}-01-01`
+      const yearEnd = `${thisYear}-12-31`
+      const { data: reqList } = await supabase
+        .from('leave_requests')
+        .select('employee_id, leave_type')
+        .gte('leave_date', yearStart)
+        .lte('leave_date', yearEnd)
+      // 유형별 차감: ANNUAL=1, HALF=0.5, SICK/SPECIAL=0, FRIDAY_OFF=1
+      const usedMap: Record<string, number> = {}
+      for (const r of (reqList || [])) {
+        const t = r.leave_type?.toUpperCase()
+        const days = (t === 'ANNUAL' || t === 'FRIDAY_OFF') ? 1
+          : (t === 'HALF_AM' || t === 'HALF_PM') ? 0.5 : 0
+        usedMap[r.employee_id] = (usedMap[r.employee_id] || 0) + days
       }
+
+      // 4) 합산
+      const result: EmpLeaveBalance[] = (empList || []).map((e: any) => {
+        const bal = balMap[e.id]
+        const usedFromReq = usedMap[e.id] || 0
+        if (bal) {
+          return {
+            employee_id: e.id,
+            employee_name: e.name,
+            total_days: bal.total_days ?? 0,
+            used_days: bal.used_days ?? usedFromReq,
+            remaining_days: bal.remaining_days ?? Math.max(0, (bal.total_days ?? 0) - usedFromReq),
+          }
+        }
+        // leave_balance 없는 경우: 법정 연차 계산 생략, 사용일수만 표시
+        return {
+          employee_id: e.id,
+          employee_name: e.name,
+          total_days: 0,
+          used_days: usedFromReq,
+          remaining_days: 0,
+        }
+      })
+      setAllBalances(result)
     }
 
     const { data: allReqs } = await supabase
@@ -507,9 +550,9 @@ export default function LeavePage() {
                             return (
                               <tr key={b.employee_id} className="hover:bg-gray-50">
                                 <td className="py-2.5 px-3 font-semibold text-gray-800">{b.employee_name}</td>
-                                <td className="py-2.5 px-3 text-center font-bold text-blue-600">{b.total_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></td>
-                                <td className="py-2.5 px-3 text-center font-bold text-orange-500">{b.used_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></td>
-                                <td className="py-2.5 px-3 text-center font-bold text-emerald-600">{b.remaining_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></td>
+                                <td className="py-2.5 px-3 text-center font-bold text-blue-600">{b.total_days > 0 ? <>{b.total_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></> : <span className="text-xs text-gray-300">미설정</span>}</td>
+                                <td className="py-2.5 px-3 text-center font-bold text-orange-500">{b.used_days > 0 ? <>{b.used_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></> : <span className="text-gray-300">-</span>}</td>
+                                <td className="py-2.5 px-3 text-center font-bold text-emerald-600">{b.total_days > 0 ? <>{b.remaining_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></> : <span className="text-xs text-gray-300">-</span>}</td>
                                 <td className="py-2.5 px-3">
                                   <div className="flex items-center gap-2">
                                     <div className="flex-1 bg-gray-100 rounded-full h-2 min-w-[80px]">
