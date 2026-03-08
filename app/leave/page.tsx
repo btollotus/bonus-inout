@@ -121,21 +121,19 @@ export default function LeavePage({ role }: { role?: string }) {
 
     if (!emp) {
       if (role !== 'ADMIN') { setError('직원 정보가 없습니다. 관리자에게 직원등록을 요청하세요.'); return }
-      // ADMIN은 직원 연동 없어도 계속 진행
+      // ADMIN은 직원 연동 없어도 전체 일정만 표시
     } else {
       setEmpId(emp.id)
+      const { data: bal } = await supabase
+        .from('leave_balance')
+        .select('total_days, used_days, remaining_days')
+        .eq('employee_id', emp.id).eq('year', year).single()
+      setBalance(bal)
+      const { data: reqs } = await supabase
+        .from('leave_requests').select('*')
+        .eq('employee_id', emp.id).order('leave_date', { ascending: false })
+      setMyRequests(reqs || [])
     }
-
-    const { data: bal } = await supabase
-      .from('leave_balance')
-      .select('total_days, used_days, remaining_days')
-      .eq('employee_id', emp.id).eq('year', year).single()
-    setBalance(bal)
-
-    const { data: reqs } = await supabase
-      .from('leave_requests').select('*')
-      .eq('employee_id', emp.id).order('leave_date', { ascending: false })
-    setMyRequests(reqs || [])
 
     const { data: allReqs } = await supabase
       .from('leave_requests')
@@ -146,7 +144,7 @@ export default function LeavePage({ role }: { role?: string }) {
       setAllRequests(allReqs.map((r: any) => ({
         ...r,
         employee_name: r.employees?.name ?? '알 수 없음',
-        is_mine: r.employee_id === emp.id,
+        is_mine: r.employee_id === emp?.id,
       })))
     }
   }
