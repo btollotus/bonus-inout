@@ -220,10 +220,10 @@ export default function LeavePage() {
     const { data: empList } = await supabase.from('employees')
       .select('id, name, hire_date, auth_user_id').is('resign_date', null).order('name')
     const { data: balList } = await supabase.from('leave_balance')
-      .select('employee_id, total_days, used_days, remaining_days, manual_override, override_reason')
+      .select('employee_id, total_granted, remaining_days, manual_override, override_reason')
       .eq('year', thisYear)
     const balMap: Record<string, any> = {}
-    for (const b of (balList || [])) balMap[b.employee_id] = b
+    for (const b of (balList || [])) balMap[b.employee_id] = { ...b, total_days: b.total_granted }
 
     // leave_requests에서 사용일수 집계
     const yearStart = `${thisYear}-01-01`
@@ -253,9 +253,9 @@ export default function LeavePage() {
         if (ins) balMap[e.id] = ins
       } else if (!bal.manual_override && bal.total_days !== legalDays) {
         await supabase.from('leave_balance').update({
-          total_days: legalDays, remaining_days: Math.max(0, legalDays - usedNow)
+          total_granted: legalDays, remaining_days: Math.max(0, legalDays - usedNow)
         }).eq('employee_id', e.id).eq('year', thisYear)
-        balMap[e.id] = { ...bal, total_days: legalDays, remaining_days: Math.max(0, legalDays - usedNow) }
+        balMap[e.id] = { ...bal, total_days: legalDays, total_granted: legalDays, remaining_days: Math.max(0, legalDays - usedNow) }
       }
     }
 
@@ -263,7 +263,7 @@ export default function LeavePage() {
       const bal = balMap[e.id]
       const legalDays = calcLegalLeaveDays(e.hire_date, thisYear)
       const total = bal?.total_days ?? legalDays
-      const used = bal?.used_days ?? (usedMap[e.id] || 0)
+      const used = usedMap[e.id] || 0  // leave_requests에서 집계 (DB 컬럼 없음)
       return {
         employee_id: e.id, employee_name: e.name, hire_date: e.hire_date,
         total_days: total, used_days: used,
@@ -286,7 +286,7 @@ export default function LeavePage() {
     if (selErr) { alert('조회 오류: ' + selErr.message); return }
     if (existing) {
       const { error: updErr } = await supabase.from('leave_balance').update({
-        total_days: total,
+        total_granted: total,
         remaining_days: Math.max(0, total - used),
         manual_override: true,
         override_reason: editDraft.override_reason,
@@ -296,11 +296,10 @@ export default function LeavePage() {
       const { error: insErr } = await supabase.from('leave_balance').insert({
         employee_id: empId,
         year: leaveYear,
-        total_days: total,
-        used_days: used,
+        total_granted: total,
         remaining_days: Math.max(0, total - used),
         manual_override: true,
-        override_reason: editDraft.override_reason,
+        override_reason: editDraft.override_reason || null,
       })
       if (insErr) { alert('저장 오류: ' + insErr.message); return }
     }
@@ -333,13 +332,21 @@ export default function LeavePage() {
       setEmpId(emp.id)
       const { data: bal } = await supabase
         .from('leave_balance')
-        .select('total_days, used_days, remaining_days')
+        .select('total_granted, remaining_days')
         .eq('employee_id', emp.id).eq('year', year).single()
-      setBalance(bal)
+      setBalance(bal ? { total_days: bal.total_granted ?? 0, used_days: 0, remaining_days: bal.remaining_days ?? 0 } : null)
       const { data: reqs } = await supabase
         .from('leave_requests').select('*')
         .eq('employee_id', emp.id).order('leave_date', { ascending: false })
       setMyRequests(reqs || [])
+      // used_days: leave_requests에서 해당 연도 집계
+      const used = (reqs || [])
+        .filter((r: any) => r.leave_date?.startsWith(String(year)))
+        .reduce((s: number, r: any) => {
+          const t = r.leave_type?.toUpperCase()
+          return s + ((t==='ANNUAL'||t==='FRIDAY_OFF') ? 1 : (t==='HALF_AM'||t==='HALF_PM') ? 0.5 : 0)
+        }, 0)
+      setBalance((prev) => prev ? { ...prev, used_days: used, remaining_days: Math.max(0, prev.total_days - used) } : null)
     }
 
     // ADMIN: 전체 직원 연차 현황 (leave_balance 우선, 없으면 leave_requests 집계)
@@ -355,10 +362,10 @@ export default function LeavePage() {
       // 2) leave_balance에서 올해 데이터
       const { data: balList } = await supabase
         .from('leave_balance')
-        .select('employee_id, total_days, used_days, remaining_days, manual_override, override_reason')
+        .select('employee_id, total_granted, remaining_days, manual_override, override_reason')
         .eq('year', leaveYear)
-      const balMap: Record<string, {total_days:number, used_days:number, remaining_days:number, manual_override:boolean, override_reason:string}> = {}
-      for (const b of (balList || [])) balMap[b.employee_id] = b
+      const balMap: Record<string, {total_granted:number, remaining_days:number, manual_override:boolean, override_reason:string}> = {}
+      for (const b of (balList || [])) balMap[b.employee_id] = { ...b, total_days: b.total_granted }
 
       // 3) leave_requests에서 올해 사용일수 집계 (leave_balance 없는 직원 보완)
       const yearStart = `${thisYear}-01-01`
