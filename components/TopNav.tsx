@@ -5,11 +5,6 @@ import { usePathname } from "next/navigation";
 import React from "react";
 import { createClient } from "@/lib/supabase/browser";
 
-// role 정의
-// ADMIN    : 마스터관리자 - 모든 메뉴
-// SUBADMIN : 부관리자 - 빨간박스 메뉴만
-// USER     : 일반직원 - 노란박스(연차신청, 연차현황)만
-
 const nav = [
   { href: "/scan",               label: "스캔",          allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/products",           label: "품목/바코드",    allowedRoles: ["ADMIN"]             },
@@ -106,8 +101,8 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
             </Link>
 
             {nav
-  .filter((x) => canSee(userRole, x.allowedRoles))
-  .map((x) => { ... })}
+              .filter((x) => canSee(userRole, x.allowedRoles))
+              .map((x) => {
                 const active = pathname === x.href || pathname.startsWith(x.href + "/");
                 const isHR = HR_MENUS.includes(x.href);
                 return (
