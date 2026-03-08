@@ -47,6 +47,23 @@ const LEAVE_TYPE_BG: Record<string, string> = {
   FRIDAY_OFF: 'bg-orange-400',
 }
 
+// ✅ 에러 메시지 한글 변환 함수
+function getKoreanErrorMessage(message: string): string {
+  if (message.includes('uq_leave_requests_user_date_type') || message.includes('duplicate key')) {
+    return '해당 날짜에 이미 동일한 유형의 휴가 신청이 존재합니다.'
+  }
+  if (message.includes('not found') || message.includes('No rows')) {
+    return '데이터를 찾을 수 없습니다.'
+  }
+  if (message.includes('permission') || message.includes('policy')) {
+    return '접근 권한이 없습니다. 관리자에게 문의하세요.'
+  }
+  if (message.includes('network') || message.includes('fetch')) {
+    return '네트워크 오류가 발생했습니다. 다시 시도해주세요.'
+  }
+  return '오류가 발생했습니다. 다시 시도해주세요.'
+}
+
 export default function LeavePage() {
   const supabase = createClient()
   const year = new Date().getFullYear()
@@ -56,7 +73,6 @@ export default function LeavePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [activeTab, setActiveTab] = useState<'apply' | 'history'>('apply')
 
   // 달력 상태
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
@@ -119,7 +135,8 @@ export default function LeavePage() {
       status: 'PENDING',
     }])
 
-    if (error) { setError(error.message); setLoading(false); return }
+    // ✅ 에러 메시지 한글로 변환
+    if (error) { setError(getKoreanErrorMessage(error.message)); setLoading(false); return }
 
     setSuccess(`${modalDate} 신청이 완료되었습니다.`)
     setModalDate(null)
@@ -162,7 +179,7 @@ export default function LeavePage() {
         <div
           key={d}
           onClick={() => {
-            if (activeTab === 'apply' && !isPast) {
+            if (!isPast) {
               setModalDate(dateStr)
               setLeaveType('ANNUAL')
               setNote('')
@@ -170,7 +187,7 @@ export default function LeavePage() {
           }}
           className={`min-h-[64px] p-1 border rounded-lg transition-colors
             ${isToday ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-100'}
-            ${activeTab === 'apply' && !isPast ? 'cursor-pointer hover:bg-gray-50' : ''}
+            ${!isPast ? 'cursor-pointer hover:bg-gray-50' : ''}
             ${isPast ? 'opacity-50' : ''}
           `}
         >
@@ -233,28 +250,10 @@ export default function LeavePage() {
           </div>
         )}
 
-        {/* 탭 */}
+        {/* ✅ 탭 제거 - 달력 + 신청내역 통합 */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="flex border-b border-gray-200">
-            {[
-              { key: 'apply', label: '📋 신청하기' },
-              { key: 'history', label: '📅 신청 내역' },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                  activeTab === tab.key
-                    ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
 
-          {/* 달력 (두 탭 공통) */}
+          {/* 달력 */}
           <div className="p-4">
             <div className="flex items-center justify-between mb-3">
               <button
@@ -274,9 +273,7 @@ export default function LeavePage() {
               >▶</button>
             </div>
 
-            {activeTab === 'apply' && (
-              <p className="text-xs text-blue-600 text-center mb-2">📌 날짜를 클릭하면 신청할 수 있습니다</p>
-            )}
+            <p className="text-xs text-blue-600 text-center mb-2">📌 날짜를 클릭하면 신청할 수 있습니다</p>
 
             <div className="grid grid-cols-7 mb-1">
               {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
@@ -300,38 +297,36 @@ export default function LeavePage() {
             </div>
           </div>
 
-          {/* 신청 내역 탭 */}
-          {activeTab === 'history' && (
-            <div className="px-4 pb-4 border-t border-gray-100">
-              <h4 className="text-sm font-semibold text-gray-700 mt-3 mb-2">신청 내역</h4>
-              {requests.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm py-6">신청 내역이 없습니다.</div>
-              ) : (
-                <div className="space-y-2">
-                  {requests.map((req) => (
-                    <div key={req.id} className="flex items-start justify-between p-3 rounded-lg border border-gray-100 bg-gray-50">
-                      <div>
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-sm font-medium text-gray-800">{req.leave_date}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[req.status]}`}>
-                            {STATUS_LABEL[req.status]}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500">{LEAVE_TYPE_LABEL[req.leave_type]}</p>
-                        {req.note && <p className="text-xs text-gray-400 mt-0.5">{req.note}</p>}
+          {/* ✅ 신청 내역 - 항상 표시 */}
+          <div className="px-4 pb-4 border-t border-gray-100">
+            <h4 className="text-sm font-semibold text-gray-700 mt-3 mb-2">신청 내역</h4>
+            {requests.length === 0 ? (
+              <div className="text-center text-gray-400 text-sm py-6">신청 내역이 없습니다.</div>
+            ) : (
+              <div className="space-y-2">
+                {requests.map((req) => (
+                  <div key={req.id} className="flex items-start justify-between p-3 rounded-lg border border-gray-100 bg-gray-50">
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-sm font-medium text-gray-800">{req.leave_date}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[req.status]}`}>
+                          {STATUS_LABEL[req.status]}
+                        </span>
                       </div>
-                      {req.status === 'PENDING' && (
-                        <button onClick={() => handleCancel(req.id)}
-                          className="text-xs text-red-500 hover:text-red-700 font-medium ml-4 flex-shrink-0">
-                          취소
-                        </button>
-                      )}
+                      <p className="text-xs text-gray-500">{LEAVE_TYPE_LABEL[req.leave_type]}</p>
+                      {req.note && <p className="text-xs text-gray-400 mt-0.5">{req.note}</p>}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                    {req.status === 'PENDING' && (
+                      <button onClick={() => handleCancel(req.id)}
+                        className="text-xs text-red-500 hover:text-red-700 font-medium ml-4 flex-shrink-0">
+                        취소
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
