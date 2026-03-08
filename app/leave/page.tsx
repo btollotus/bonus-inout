@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/browser'
 type LeaveRequest = {
   id: string
   employee_id: string
-  leave_type: 'ANNUAL' | 'HALF_AM' | 'HALF_PM' | 'SICK' | 'FRIDAY_OFF'
+  leave_type: 'ANNUAL' | 'HALF_AM' | 'HALF_PM' | 'SICK' | 'FRIDAY_OFF' | 'SPECIAL'
   leave_date: string
   note: string | null
   created_at: string
@@ -29,6 +29,7 @@ const LEAVE_TYPE_LABEL: Record<string, string> = {
   HALF_PM: '반차 - 오후 (0.5일)',
   SICK: '병가 (1일)',
   FRIDAY_OFF: '금요일 휴무 (1일)',
+  SPECIAL: '경조사 휴가 (유급)',
 }
 
 const LEAVE_TYPE_SHORT: Record<string, string> = {
@@ -37,10 +38,11 @@ const LEAVE_TYPE_SHORT: Record<string, string> = {
   HALF_PM: '오후반차',
   SICK: '병가',
   FRIDAY_OFF: '금휴',
+  SPECIAL: '경조사',
 }
 
 const LEAVE_TYPE_DAYS: Record<string, number> = {
-  ANNUAL: 1, HALF_AM: 0.5, HALF_PM: 0.5, SICK: 1, FRIDAY_OFF: 1,
+  ANNUAL: 1, HALF_AM: 0.5, HALF_PM: 0.5, SICK: 1, FRIDAY_OFF: 1, SPECIAL: 0,
 }
 
 // 내 일정 - 진한 색 (흰 글자)
@@ -50,6 +52,7 @@ const MY_BG: Record<string, string> = {
   HALF_PM: 'bg-violet-500',
   SICK: 'bg-rose-500',
   FRIDAY_OFF: 'bg-orange-500',
+  SPECIAL: 'bg-yellow-500',
 }
 
 // 타인 일정 - 연한 색 (진한 글자)
@@ -59,6 +62,7 @@ const OTHER_STYLE: Record<string, string> = {
   HALF_PM: 'bg-violet-100 text-violet-800',
   SICK: 'bg-rose-100 text-rose-800',
   FRIDAY_OFF: 'bg-orange-100 text-orange-800',
+  SPECIAL: 'bg-yellow-100 text-yellow-800',
 }
 
 function getKoreanErrorMessage(message: string): string {
@@ -402,6 +406,7 @@ export default function LeavePage() {
                   { color: 'bg-violet-500', label: '오후반차' },
                   { color: 'bg-rose-500', label: '병가' },
                   { color: 'bg-orange-500', label: '금휴' },
+                  { color: 'bg-yellow-500', label: '경조사' },
                 ].map(({ color, label }) => (
                   <span key={label} className="flex items-center gap-1">
                     <span className={`w-2.5 h-2.5 rounded-full inline-block ${color}`} />
@@ -524,9 +529,14 @@ export default function LeavePage() {
             </div>
 
             <div className="mb-5">
-              <label className="block text-sm font-medium text-gray-700 mb-1">사유 (선택)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                사유 {adminLeaveType === 'SPECIAL' ? <span className="text-red-500">* (경조사는 필수)</span> : '(선택)'}
+              </label>
+              {adminLeaveType === 'SPECIAL' && (
+                <p className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mb-2">⭐ 경조사 휴가는 연차 차감 없이 유급 처리됩니다.</p>
+              )}
               <textarea value={adminNote} onChange={(e) => setAdminNote(e.target.value)} rows={2}
-                placeholder="관리자 입력"
+                placeholder={adminLeaveType === 'SPECIAL' ? "예: 본인결혼, 부모상, 자녀출산 등" : "관리자 입력"}
                 className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
             </div>
 
