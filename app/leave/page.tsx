@@ -12,7 +12,6 @@ type LeaveRequest = {
   created_at: string
 }
 
-// 전체 직원 신청 내역 (이름 포함)
 type AllLeaveRequest = LeaveRequest & {
   employee_name: string
   is_mine: boolean
@@ -44,46 +43,33 @@ const LEAVE_TYPE_DAYS: Record<string, number> = {
   ANNUAL: 1, HALF_AM: 0.5, HALF_PM: 0.5, SICK: 1, FRIDAY_OFF: 1,
 }
 
-// 내 신청 - 진한 색
-const LEAVE_TYPE_BG: Record<string, string> = {
+// 내 일정 - 진한 색 (흰 글자)
+const MY_BG: Record<string, string> = {
   ANNUAL: 'bg-blue-500',
-  HALF_AM: 'bg-indigo-400',
-  HALF_PM: 'bg-purple-400',
-  SICK: 'bg-red-400',
-  FRIDAY_OFF: 'bg-orange-400',
+  HALF_AM: 'bg-indigo-500',
+  HALF_PM: 'bg-violet-500',
+  SICK: 'bg-rose-500',
+  FRIDAY_OFF: 'bg-orange-500',
 }
 
-// 타인 신청 - 연한 색
-const LEAVE_TYPE_BG_OTHER: Record<string, string> = {
-  ANNUAL: 'bg-blue-200',
-  HALF_AM: 'bg-indigo-200',
-  HALF_PM: 'bg-purple-200',
-  SICK: 'bg-red-200',
-  FRIDAY_OFF: 'bg-orange-200',
-}
-
-// 타인 신청 - 텍스트 색
-const LEAVE_TYPE_TEXT_OTHER: Record<string, string> = {
-  ANNUAL: 'text-blue-700',
-  HALF_AM: 'text-indigo-700',
-  HALF_PM: 'text-purple-700',
-  SICK: 'text-red-700',
-  FRIDAY_OFF: 'text-orange-700',
+// 타인 일정 - 연한 색 (진한 글자)
+const OTHER_STYLE: Record<string, string> = {
+  ANNUAL: 'bg-blue-100 text-blue-800',
+  HALF_AM: 'bg-indigo-100 text-indigo-800',
+  HALF_PM: 'bg-violet-100 text-violet-800',
+  SICK: 'bg-rose-100 text-rose-800',
+  FRIDAY_OFF: 'bg-orange-100 text-orange-800',
 }
 
 function getKoreanErrorMessage(message: string): string {
-  if (message.includes('uq_leave_requests_user_date_type') || message.includes('duplicate key')) {
+  if (message.includes('uq_leave_requests_user_date_type') || message.includes('duplicate key'))
     return '해당 날짜에 이미 동일한 유형의 휴가 신청이 존재합니다.'
-  }
-  if (message.includes('not found') || message.includes('No rows')) {
+  if (message.includes('not found') || message.includes('No rows'))
     return '데이터를 찾을 수 없습니다.'
-  }
-  if (message.includes('permission') || message.includes('policy')) {
+  if (message.includes('permission') || message.includes('policy'))
     return '접근 권한이 없습니다. 관리자에게 문의하세요.'
-  }
-  if (message.includes('network') || message.includes('fetch')) {
+  if (message.includes('network') || message.includes('fetch'))
     return '네트워크 오류가 발생했습니다. 다시 시도해주세요.'
-  }
   return '오류가 발생했습니다. 다시 시도해주세요.'
 }
 
@@ -102,20 +88,15 @@ export default function LeavePage() {
   const [success, setSuccess] = useState('')
   const [empId, setEmpId] = useState<string | null>(null)
 
-  // 달력 상태
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
 
-  // 모달 상태
   const [modalOpen, setModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<ModalMode>('create')
-  const [modalDate, setModalDate] = useState<string>('')
+  const [modalDate, setModalDate] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [leaveType, setLeaveType] = useState('ANNUAL')
   const [note, setNote] = useState('')
-
-  // 타인 일정 툴팁
-  const [tooltipDate, setTooltipDate] = useState<string | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
@@ -124,84 +105,53 @@ export default function LeavePage() {
     if (!user) return
 
     const { data: emp } = await supabase
-      .from('employees')
-      .select('id')
-      .eq('auth_user_id', user.id)
-      .single()
+      .from('employees').select('id').eq('auth_user_id', user.id).single()
 
-    if (!emp) {
-      setError('직원 정보가 없습니다. 관리자에게 직원등록을 요청하세요.')
-      return
-    }
+    if (!emp) { setError('직원 정보가 없습니다. 관리자에게 직원등록을 요청하세요.'); return }
     setEmpId(emp.id)
 
-    // 내 잔여 연차
     const { data: bal } = await supabase
       .from('leave_balance')
       .select('total_days, used_days, remaining_days')
-      .eq('employee_id', emp.id)
-      .eq('year', year)
-      .single()
+      .eq('employee_id', emp.id).eq('year', year).single()
     setBalance(bal)
 
-    // 내 신청 내역
     const { data: reqs } = await supabase
-      .from('leave_requests')
-      .select('*')
-      .eq('employee_id', emp.id)
-      .order('leave_date', { ascending: false })
+      .from('leave_requests').select('*')
+      .eq('employee_id', emp.id).order('leave_date', { ascending: false })
     setMyRequests(reqs || [])
 
-    // 전체 직원 신청 내역 (employees 테이블 join)
     const { data: allReqs } = await supabase
       .from('leave_requests')
-      .select(`
-        *,
-        employees!inner(name)
-      `)
+      .select('*, employees!inner(name)')
       .order('leave_date', { ascending: false })
 
     if (allReqs) {
-      const mapped: AllLeaveRequest[] = allReqs.map((r: any) => ({
+      setAllRequests(allReqs.map((r: any) => ({
         ...r,
         employee_name: r.employees?.name ?? '알 수 없음',
         is_mine: r.employee_id === emp.id,
-      }))
-      setAllRequests(mapped)
+      })))
     }
   }
 
-  const isFuture = (dateStr: string) => dateStr >= today
+  const isFuture = (d: string) => d >= today
 
-  // 달력 날짜 클릭
   function openCreateModal(dateStr: string) {
     if (!isFuture(dateStr)) return
     const existing = myRequests.find((r) => r.leave_date === dateStr)
-    if (existing) {
-      openEditModal(existing)
-    } else {
-      setModalMode('create')
-      setModalDate(dateStr)
-      setLeaveType('ANNUAL')
-      setNote('')
-      setEditingId(null)
-      setModalOpen(true)
-    }
+    if (existing) { openEditModal(existing); return }
+    setModalMode('create'); setModalDate(dateStr)
+    setLeaveType('ANNUAL'); setNote(''); setEditingId(null); setModalOpen(true)
   }
 
   function openEditModal(req: LeaveRequest) {
-    setModalMode('edit')
-    setModalDate(req.leave_date)
-    setLeaveType(req.leave_type)
-    setNote(req.note || '')
-    setEditingId(req.id)
-    setModalOpen(true)
+    setModalMode('edit'); setModalDate(req.leave_date)
+    setLeaveType(req.leave_type); setNote(req.note || '')
+    setEditingId(req.id); setModalOpen(true)
   }
 
-  function closeModal() {
-    setModalOpen(false)
-    setEditingId(null)
-  }
+  function closeModal() { setModalOpen(false); setEditingId(null) }
 
   async function handleSubmit() {
     if (!modalDate || !empId) return
@@ -212,66 +162,29 @@ export default function LeavePage() {
       if (balance && days > balance.remaining_days) {
         setError('잔여 연차가 부족합니다.'); setLoading(false); return
       }
-      const { error: insertError } = await supabase.from('leave_requests').insert([{
-        employee_id: empId,
-        leave_type: leaveType,
-        leave_date: modalDate,
-        note: note || null,
+      const { error: e } = await supabase.from('leave_requests').insert([{
+        employee_id: empId, leave_type: leaveType, leave_date: modalDate, note: note || null,
       }])
-      if (insertError) { setError(getKoreanErrorMessage(insertError.message)); setLoading(false); return }
-
-      // 즉시 balance 반영 (낙관적 업데이트)
-      if (balance) {
-        setBalance({
-          ...balance,
-          used_days: balance.used_days + days,
-          remaining_days: balance.remaining_days - days,
-        })
-      }
+      if (e) { setError(getKoreanErrorMessage(e.message)); setLoading(false); return }
+      if (balance) setBalance({ ...balance, used_days: balance.used_days + days, remaining_days: balance.remaining_days - days })
       setSuccess(`${modalDate} 휴가 신청이 완료되었습니다.`)
-
     } else {
-      // 수정 시 기존 타입과 새 타입 차이 반영
       const oldReq = myRequests.find((r) => r.id === editingId)
-      const oldDays = oldReq ? LEAVE_TYPE_DAYS[oldReq.leave_type] : 0
-      const newDays = LEAVE_TYPE_DAYS[leaveType]
-      const diff = newDays - oldDays
-
-      const { error: updateError } = await supabase
-        .from('leave_requests')
-        .update({ leave_type: leaveType, note: note || null })
-        .eq('id', editingId)
-      if (updateError) { setError(getKoreanErrorMessage(updateError.message)); setLoading(false); return }
-
-      // 즉시 balance 반영
-      if (balance) {
-        setBalance({
-          ...balance,
-          used_days: balance.used_days + diff,
-          remaining_days: balance.remaining_days - diff,
-        })
-      }
+      const diff = LEAVE_TYPE_DAYS[leaveType] - (oldReq ? LEAVE_TYPE_DAYS[oldReq.leave_type] : 0)
+      const { error: e } = await supabase.from('leave_requests')
+        .update({ leave_type: leaveType, note: note || null }).eq('id', editingId)
+      if (e) { setError(getKoreanErrorMessage(e.message)); setLoading(false); return }
+      if (balance) setBalance({ ...balance, used_days: balance.used_days + diff, remaining_days: balance.remaining_days - diff })
       setSuccess(`${modalDate} 휴가 신청이 수정되었습니다.`)
     }
-
-    closeModal()
-    setLoading(false)
-    fetchData()
+    closeModal(); setLoading(false); fetchData()
   }
 
-  async function handleDelete(id: string, leaveType: string) {
+  async function handleDelete(id: string, type: string) {
     if (!confirm('신청을 삭제하시겠습니까?')) return
     await supabase.from('leave_requests').delete().eq('id', id)
-
-    // 즉시 balance 반영
-    const days = LEAVE_TYPE_DAYS[leaveType]
-    if (balance) {
-      setBalance({
-        ...balance,
-        used_days: balance.used_days - days,
-        remaining_days: balance.remaining_days + days,
-      })
-    }
+    const days = LEAVE_TYPE_DAYS[type]
+    if (balance) setBalance({ ...balance, used_days: balance.used_days - days, remaining_days: balance.remaining_days + days })
     fetchData()
   }
 
@@ -279,79 +192,87 @@ export default function LeavePage() {
     const firstDay = new Date(calYear, calMonth, 1).getDay()
     const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
     const monthStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`
-    const monthAllLeaves = allRequests.filter((r) => r.leave_date.startsWith(monthStr))
+    const monthLeaves = allRequests.filter((r) => r.leave_date.startsWith(monthStr))
 
     const cells: React.ReactNode[] = []
+
     for (let i = 0; i < firstDay; i++) {
-      cells.push(<div key={`empty-${i}`} />)
+      cells.push(
+        <div key={`e${i}`} className="rounded-xl border border-gray-100 bg-gray-50/60 min-h-[110px]" />
+      )
     }
 
     for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-      const dayLeaves = monthAllLeaves.filter((r) => r.leave_date === dateStr)
-      const myDayLeaves = dayLeaves.filter((r) => r.is_mine)
-      const otherDayLeaves = dayLeaves.filter((r) => !r.is_mine)
+      const dateStr = `${monthStr}-${String(d).padStart(2, '0')}`
+      const dayLeaves = monthLeaves.filter((r) => r.leave_date === dateStr)
       const isToday = dateStr === today
       const dow = new Date(calYear, calMonth, d).getDay()
       const isSun = dow === 0
       const isSat = dow === 6
-      const isPast = !isFuture(dateStr)
       const clickable = isFuture(dateStr)
-      const showTooltip = tooltipDate === dateStr && dayLeaves.length > 0
 
       cells.push(
         <div
           key={d}
           onClick={() => clickable && openCreateModal(dateStr)}
-          onMouseEnter={() => dayLeaves.length > 0 && setTooltipDate(dateStr)}
-          onMouseLeave={() => setTooltipDate(null)}
-          className={`relative min-h-[64px] p-1 border rounded-lg transition-colors
-            ${isToday ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-100'}
-            ${clickable ? 'cursor-pointer hover:bg-gray-50' : 'opacity-40 cursor-default'}
-          `}
+          className={[
+            'rounded-xl border min-h-[110px] p-2 flex flex-col gap-1 transition-all duration-150',
+            isToday
+              ? 'border-blue-400 bg-blue-50 shadow-sm ring-1 ring-blue-300'
+              : 'border-gray-200 bg-white',
+            clickable
+              ? 'cursor-pointer hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30'
+              : 'opacity-45 cursor-default',
+          ].join(' ')}
         >
-          <span className={`text-xs font-semibold ${isToday ? 'text-blue-600' : isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-700'}`}>
-            {d}
-          </span>
-          <div className="mt-0.5 space-y-0.5">
-            {/* 내 신청 - 진한 색 + 이름 */}
-            {myDayLeaves.map((lv) => (
-              <div
-                key={lv.id}
-                className={`text-white text-[9px] px-1 py-0.5 rounded truncate ${LEAVE_TYPE_BG[lv.leave_type]} ${isPast ? 'opacity-70' : ''}`}
-                title={`${lv.employee_name} - ${LEAVE_TYPE_LABEL[lv.leave_type]}`}
-              >
-                {lv.employee_name.length > 3 ? lv.employee_name.slice(0, 3) : lv.employee_name}
-              </div>
-            ))}
-            {/* 타인 신청 - 연한 색 + 이름 */}
-            {otherDayLeaves.map((lv) => (
-              <div
-                key={lv.id}
-                className={`text-[9px] px-1 py-0.5 rounded truncate ${LEAVE_TYPE_BG_OTHER[lv.leave_type]} ${LEAVE_TYPE_TEXT_OTHER[lv.leave_type]}`}
-                title={`${lv.employee_name} - ${LEAVE_TYPE_LABEL[lv.leave_type]}`}
-              >
-                {lv.employee_name.length > 3 ? lv.employee_name.slice(0, 3) : lv.employee_name}
-              </div>
-            ))}
+          {/* 날짜 숫자 행 */}
+          <div className="flex items-center justify-between">
+            <span className={[
+              'text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full shrink-0',
+              isToday
+                ? 'bg-blue-500 text-white'
+                : isSun ? 'text-red-500'
+                : isSat ? 'text-blue-500'
+                : 'text-gray-700',
+            ].join(' ')}>
+              {d}
+            </span>
+            {dayLeaves.length > 0 && (
+              <span className="text-[10px] font-medium text-gray-400 bg-gray-100 rounded-full px-1.5 py-0.5">
+                {dayLeaves.length}명
+              </span>
+            )}
           </div>
 
-          {/* 전체 툴팁 (내 일정 + 타인 일정) */}
-          {showTooltip && (
-            <div className="absolute z-30 left-1/2 -translate-x-1/2 top-full mt-1 bg-gray-800 text-white text-xs rounded-lg shadow-lg px-2 py-1.5 min-w-[130px] pointer-events-none">
-              <p className="font-semibold text-gray-300 mb-1 text-[10px]">{dateStr}</p>
-              {myDayLeaves.map((lv) => (
-                <p key={lv.id} className="whitespace-nowrap text-blue-300">
-                  ★ {lv.employee_name}: {LEAVE_TYPE_SHORT[lv.leave_type]}
-                </p>
-              ))}
-              {otherDayLeaves.map((lv) => (
-                <p key={lv.id} className="whitespace-nowrap text-gray-200">
-                  {lv.employee_name}: {LEAVE_TYPE_SHORT[lv.leave_type]}
-                </p>
-              ))}
-            </div>
-          )}
+          {/* 일정 뱃지 목록 */}
+          <div className="flex flex-col gap-0.5 mt-0.5">
+            {dayLeaves.map((lv) =>
+              lv.is_mine ? (
+                /* 내 일정 - 진한 색 + ★ */
+                <div
+                  key={lv.id}
+                  className={`flex items-center gap-1 px-1.5 py-[3px] rounded-md text-white text-[11px] font-semibold leading-tight ${MY_BG[lv.leave_type]}`}
+                  title={`${lv.employee_name} · ${LEAVE_TYPE_LABEL[lv.leave_type]}${lv.note ? ` · ${lv.note}` : ''}`}
+                >
+                  <span className="shrink-0 text-[9px]">★</span>
+                  <span className="truncate min-w-0">{lv.employee_name}</span>
+                  <span className="shrink-0 text-white/60 text-[9px]">·</span>
+                  <span className="shrink-0 text-white/90">{LEAVE_TYPE_SHORT[lv.leave_type]}</span>
+                </div>
+              ) : (
+                /* 타인 일정 - 연한 색 */
+                <div
+                  key={lv.id}
+                  className={`flex items-center gap-1 px-1.5 py-[3px] rounded-md text-[11px] font-medium leading-tight ${OTHER_STYLE[lv.leave_type]}`}
+                  title={`${lv.employee_name} · ${LEAVE_TYPE_LABEL[lv.leave_type]}${lv.note ? ` · ${lv.note}` : ''}`}
+                >
+                  <span className="truncate min-w-0">{lv.employee_name}</span>
+                  <span className="shrink-0 opacity-40 text-[9px]">·</span>
+                  <span className="shrink-0">{LEAVE_TYPE_SHORT[lv.leave_type]}</span>
+                </div>
+              )
+            )}
+          </div>
         </div>
       )
     }
@@ -360,142 +281,148 @@ export default function LeavePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">연차 / 반차 / 병가 신청</h1>
-          <p className="text-sm text-gray-500 mt-1">날짜를 클릭하여 신청하거나 수정할 수 있습니다</p>
-        </div>
 
-        {/* 연차 현황 */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          {[
-            { label: `${year}년 부여 연차`, value: balance?.total_days ?? 0, color: 'text-blue-600' },
-            { label: `${year}년 사용 연차`, value: balance?.used_days ?? 0, color: 'text-orange-500' },
-            { label: `${year}년 잔여 연차`, value: balance?.remaining_days ?? 0, color: 'text-green-600' },
-          ].map((item) => (
-            <div key={item.label} className="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
-              <p className="text-xs text-gray-500 mb-1">{item.label}</p>
-              <p className={`text-2xl font-bold ${item.color}`}>
-                {item.value}
-                <span className="text-sm font-normal text-gray-400 ml-0.5">일</span>
-              </p>
-            </div>
-          ))}
+      {/* 상단 헤더 */}
+      <div className="max-w-screen-xl mx-auto px-6 pt-8 pb-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">연차 / 반차 / 병가 신청</h1>
+            <p className="text-sm text-gray-400 mt-0.5">날짜를 클릭하여 신청하거나 수정할 수 있습니다</p>
+          </div>
+
+          {/* 연차 현황 */}
+          <div className="flex gap-3 shrink-0">
+            {[
+              { label: '부여 연차', value: balance?.total_days ?? 0, color: 'text-blue-600', ring: 'ring-blue-200 bg-blue-50' },
+              { label: '사용 연차', value: balance?.used_days ?? 0, color: 'text-orange-500', ring: 'ring-orange-200 bg-orange-50' },
+              { label: '잔여 연차', value: balance?.remaining_days ?? 0, color: 'text-emerald-600', ring: 'ring-emerald-200 bg-emerald-50' },
+            ].map((item) => (
+              <div key={item.label} className={`rounded-2xl ring-1 px-5 py-3 text-center ${item.ring}`}>
+                <p className="text-[11px] text-gray-400 mb-0.5">{item.label}</p>
+                <p className={`text-2xl font-bold ${item.color}`}>
+                  {item.value}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span>
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-4 flex justify-between">
-            <span>{error}</span>
-            <button onClick={() => setError('')}>✕</button>
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mb-4 flex justify-between items-center">
+            <span>{error}</span><button onClick={() => setError('')} className="text-red-400 hover:text-red-600 ml-4">✕</button>
           </div>
         )}
         {success && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm mb-4 flex justify-between">
-            <span>{success}</span>
-            <button onClick={() => setSuccess('')}>✕</button>
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm mb-4 flex justify-between items-center">
+            <span>{success}</span><button onClick={() => setSuccess('')} className="text-green-400 hover:text-green-600 ml-4">✕</button>
           </div>
         )}
+      </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      {/* 달력 - 풀 와이드 */}
+      <div className="max-w-screen-xl mx-auto px-6 pb-8">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
 
-          {/* 달력 */}
-          <div className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <button
-                onClick={() => {
-                  if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1) }
-                  else setCalMonth(calMonth - 1)
-                }}
-                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"
-              >◀</button>
-              <h3 className="text-base font-bold text-gray-800">{calYear}년 {calMonth + 1}월</h3>
-              <button
-                onClick={() => {
-                  if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1) }
-                  else setCalMonth(calMonth + 1)
-                }}
-                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"
-              >▶</button>
-            </div>
+          {/* 달력 네비 + 범례 */}
+          <div className="flex items-center justify-between mb-2">
+            <button
+              onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1) } else setCalMonth(calMonth - 1) }}
+              className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-gray-100 text-gray-500 transition-colors"
+            >◀</button>
 
-            <p className="text-xs text-blue-600 text-center mb-2">📌 오늘 이후 날짜를 클릭하면 신청 / 수정할 수 있습니다</p>
-
-            <div className="grid grid-cols-7 mb-1">
-              {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
-                <div key={d} className={`text-center text-xs font-semibold py-1 ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-gray-500'}`}>
-                  {d}
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-7 gap-0.5">
-              {renderCalendar()}
-            </div>
-
-            {/* 범례 */}
-            <div className="mt-3 space-y-1.5">
-              <div className="flex flex-wrap gap-2 text-xs text-gray-500">
-                <span className="text-gray-400 font-medium">내 일정:</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-500 inline-block" />연차</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-indigo-400 inline-block" />오전반차</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-400 inline-block" />오후반차</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-400 inline-block" />병가</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-400 inline-block" />금휴</span>
-              </div>
-              <div className="flex flex-wrap gap-2 text-xs text-gray-500">
-                <span className="text-gray-400 font-medium">팀원 일정:</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-200 inline-block" /><span className="text-blue-700">이름 표시, 호버시 상세</span></span>
+            <div className="flex flex-col items-center gap-2">
+              <h3 className="text-xl font-bold text-gray-800">{calYear}년 {calMonth + 1}월</h3>
+              <div className="flex flex-wrap justify-center items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+                <span className="flex items-center gap-1 font-medium text-gray-400">
+                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 text-white text-[8px]">★</span>
+                  내 일정
+                </span>
+                <span className="flex items-center gap-1 font-medium text-gray-400">
+                  <span className="w-3 h-3 rounded-sm bg-blue-100 border border-blue-300 inline-block" />
+                  팀원 일정
+                </span>
+                <span className="w-px h-3 bg-gray-200" />
+                {[
+                  { color: 'bg-blue-500', label: '연차' },
+                  { color: 'bg-indigo-500', label: '오전반차' },
+                  { color: 'bg-violet-500', label: '오후반차' },
+                  { color: 'bg-rose-500', label: '병가' },
+                  { color: 'bg-orange-500', label: '금휴' },
+                ].map(({ color, label }) => (
+                  <span key={label} className="flex items-center gap-1">
+                    <span className={`w-2.5 h-2.5 rounded-full inline-block ${color}`} />
+                    {label}
+                  </span>
+                ))}
               </div>
             </div>
+
+            <button
+              onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1) } else setCalMonth(calMonth + 1) }}
+              className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-gray-100 text-gray-500 transition-colors"
+            >▶</button>
           </div>
 
-          {/* 신청 내역 */}
-          <div className="px-4 pb-4 border-t border-gray-100">
-            <h4 className="text-sm font-semibold text-gray-700 mt-3 mb-2">내 신청 내역</h4>
-            {myRequests.length === 0 ? (
-              <div className="text-center text-gray-400 text-sm py-6">신청 내역이 없습니다.</div>
-            ) : (
-              <div className="space-y-2">
-                {myRequests.map((req) => {
-                  const canEdit = isFuture(req.leave_date)
-                  return (
-                    <div
-                      key={req.id}
-                      className={`flex items-start justify-between p-3 rounded-lg border border-gray-100 ${canEdit ? 'bg-gray-50' : 'bg-gray-50 opacity-50'}`}
-                    >
+          <p className="text-xs text-blue-500 text-center mb-4">📌 오늘 이후 날짜를 클릭하면 신청 / 수정할 수 있습니다</p>
+
+          {/* 요일 헤더 */}
+          <div className="grid grid-cols-7 mb-2">
+            {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
+              <div key={d} className={`text-center text-xs font-semibold py-2 tracking-wide
+                ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-gray-400'}`}>
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {/* 날짜 셀 그리드 */}
+          <div className="grid grid-cols-7 gap-1.5">
+            {renderCalendar()}
+          </div>
+        </div>
+
+        {/* 내 신청 내역 */}
+        <div className="mt-5 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+          <h4 className="text-sm font-semibold text-gray-700 mb-3">내 신청 내역</h4>
+          {myRequests.length === 0 ? (
+            <p className="text-center text-gray-400 text-sm py-8">신청 내역이 없습니다.</p>
+          ) : (
+            <div className="space-y-2">
+              {myRequests.map((req) => {
+                const canEdit = isFuture(req.leave_date)
+                return (
+                  <div
+                    key={req.id}
+                    className={`flex items-center justify-between px-4 py-3 rounded-xl border
+                      ${canEdit ? 'border-gray-200 bg-gray-50' : 'border-gray-100 bg-gray-50 opacity-50'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${MY_BG[req.leave_type]}`} />
                       <div>
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-sm font-medium text-gray-800">{req.leave_date}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-800">{req.leave_date}</span>
                           {!canEdit && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-400">지난 날짜</span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500">{LEAVE_TYPE_LABEL[req.leave_type]}</p>
-                        {req.note && <p className="text-xs text-gray-400 mt-0.5">{req.note}</p>}
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {LEAVE_TYPE_LABEL[req.leave_type]}
+                          {req.note && <span className="text-gray-400"> · {req.note}</span>}
+                        </p>
                       </div>
-                      {canEdit && (
-                        <div className="flex gap-3 ml-4 flex-shrink-0 items-center">
-                          <button
-                            onClick={() => openEditModal(req)}
-                            className="text-xs text-blue-500 hover:text-blue-700 font-medium"
-                          >
-                            수정
-                          </button>
-                          <span className="text-gray-200 text-sm">|</span>
-                          <button
-                            onClick={() => handleDelete(req.id, req.leave_type)}
-                            className="text-xs text-red-400 hover:text-red-600 font-medium"
-                          >
-                            삭제
-                          </button>
-                        </div>
-                      )}
                     </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+                    {canEdit && (
+                      <div className="flex items-center gap-3 shrink-0">
+                        <button onClick={() => openEditModal(req)} className="text-xs text-blue-500 hover:text-blue-700 font-medium">수정</button>
+                        <span className="text-gray-200 text-sm">|</span>
+                        <button onClick={() => handleDelete(req.id, req.leave_type)} className="text-xs text-red-400 hover:text-red-600 font-medium">삭제</button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -507,24 +434,22 @@ export default function LeavePage() {
               <h3 className="text-base font-bold text-gray-900">
                 {modalMode === 'create' ? '휴가 신청' : '휴가 수정'}
               </h3>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 mb-4">
               <p className="text-sm font-semibold text-blue-700">📅 {modalDate}</p>
             </div>
 
-            {/* 해당 날짜 팀원 일정 미리보기 */}
+            {/* 같은 날 팀원 휴가 경고 */}
             {(() => {
-              const othersOnDay = allRequests.filter((r) => r.leave_date === modalDate && !r.is_mine)
-              if (othersOnDay.length === 0) return null
+              const others = allRequests.filter((r) => r.leave_date === modalDate && !r.is_mine)
+              if (!others.length) return null
               return (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4">
                   <p className="text-xs font-semibold text-amber-700 mb-1">⚠️ 같은 날 팀원 휴가</p>
-                  {othersOnDay.map((r) => (
-                    <p key={r.id} className="text-xs text-amber-600">
-                      {r.employee_name}: {LEAVE_TYPE_SHORT[r.leave_type]}
-                    </p>
+                  {others.map((r) => (
+                    <p key={r.id} className="text-xs text-amber-600">{r.employee_name}: {LEAVE_TYPE_SHORT[r.leave_type]}</p>
                   ))}
                 </div>
               )
@@ -534,7 +459,7 @@ export default function LeavePage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">휴가 유형</label>
               <div className="space-y-1.5">
                 {Object.entries(LEAVE_TYPE_LABEL).map(([key, label]) => (
-                  <label key={key} className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                  <label key={key} className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-colors ${
                     leaveType === key ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
                   }`}>
                     <input type="radio" name="leaveType" value={key} checked={leaveType === key}
@@ -549,22 +474,19 @@ export default function LeavePage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">사유 (선택)</label>
               <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
                 placeholder="개인사정"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
             </div>
 
             <div className="flex gap-2">
               <button onClick={closeModal}
-                className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50">
+                className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-xl text-sm hover:bg-gray-50 transition-colors">
                 취소
               </button>
               <button onClick={handleSubmit} disabled={loading}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm">
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
                 {loading
                   ? (modalMode === 'create' ? '신청 중...' : '수정 중...')
-                  : modalMode === 'create'
-                    ? `${LEAVE_TYPE_DAYS[leaveType]}일 신청`
-                    : '수정 완료'
-                }
+                  : modalMode === 'create' ? `${LEAVE_TYPE_DAYS[leaveType]}일 신청` : '수정 완료'}
               </button>
             </div>
           </div>
