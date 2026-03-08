@@ -23,6 +23,14 @@ type LeaveBalance = {
   remaining_days: number
 }
 
+type EmpLeaveBalance = {
+  employee_id: string
+  employee_name: string
+  total_days: number
+  used_days: number
+  remaining_days: number
+}
+
 const LEAVE_TYPE_LABEL: Record<string, string> = {
   ANNUAL: '연차 (1일)',
   HALF_AM: '반차 - 오전 (0.5일)',
@@ -94,6 +102,8 @@ export default function LeavePage() {
   const [success, setSuccess] = useState('')
   const [empId, setEmpId] = useState<string | null>(null)
   const [employees, setEmployees] = useState<{id: string, name: string}[]>([])
+  const [allBalances, setAllBalances] = useState<EmpLeaveBalance[]>([])
+  const [showAllBalances, setShowAllBalances] = useState(false)
   // ADMIN용 직원 선택 입력 모달
   const [adminModalOpen, setAdminModalOpen] = useState(false)
   const [adminEmpId, setAdminEmpId] = useState('')
@@ -197,6 +207,23 @@ export default function LeavePage() {
         .from('leave_requests').select('*')
         .eq('employee_id', emp.id).order('leave_date', { ascending: false })
       setMyRequests(reqs || [])
+    }
+
+    // ADMIN: 전체 직원 연차 현황
+    if (currentIsAdmin) {
+      const { data: balList } = await supabase
+        .from('leave_balance')
+        .select('employee_id, total_days, used_days, remaining_days, employees!inner(name)')
+        .eq('year', new Date().getFullYear())
+      if (balList) {
+        setAllBalances(balList.map((b: any) => ({
+          employee_id: b.employee_id,
+          employee_name: b.employees?.name ?? '알 수 없음',
+          total_days: b.total_days ?? 0,
+          used_days: b.used_days ?? 0,
+          remaining_days: b.remaining_days ?? 0,
+        })))
+      }
     }
 
     const { data: allReqs } = await supabase
@@ -440,6 +467,80 @@ export default function LeavePage() {
           </div>
         )}
       </div>
+
+      {/* ADMIN 전체 직원 연차 현황 */}
+      {isAdmin && (
+        <div className="max-w-screen-xl mx-auto px-6 pb-4">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+            <button
+              onClick={() => setShowAllBalances(!showAllBalances)}
+              className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors rounded-2xl"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-gray-800">👑 전체 직원 연차 현황</span>
+                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{allBalances.length}명</span>
+              </div>
+              <span className="text-gray-400 text-sm">{showAllBalances ? '▲ 접기' : '▼ 펼치기'}</span>
+            </button>
+            {showAllBalances && (
+              <div className="border-t border-gray-100 px-5 py-4">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">직원</th>
+                        <th className="text-center py-2 px-3 text-xs font-semibold text-blue-600">부여 연차</th>
+                        <th className="text-center py-2 px-3 text-xs font-semibold text-orange-500">사용 연차</th>
+                        <th className="text-center py-2 px-3 text-xs font-semibold text-emerald-600">잔여 연차</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-gray-400">사용률</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {allBalances.length === 0 ? (
+                        <tr><td colSpan={5} className="text-center py-6 text-gray-400 text-xs">연차 데이터가 없습니다. leave_balance 테이블을 확인하세요.</td></tr>
+                      ) : (
+                        [...allBalances]
+                          .sort((a, b) => a.employee_name.localeCompare(b.employee_name, 'ko'))
+                          .map((b) => {
+                            const pct = b.total_days > 0 ? Math.round(b.used_days / b.total_days * 100) : 0
+                            const barColor = pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-orange-400' : 'bg-emerald-400'
+                            return (
+                              <tr key={b.employee_id} className="hover:bg-gray-50">
+                                <td className="py-2.5 px-3 font-semibold text-gray-800">{b.employee_name}</td>
+                                <td className="py-2.5 px-3 text-center font-bold text-blue-600">{b.total_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></td>
+                                <td className="py-2.5 px-3 text-center font-bold text-orange-500">{b.used_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></td>
+                                <td className="py-2.5 px-3 text-center font-bold text-emerald-600">{b.remaining_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></td>
+                                <td className="py-2.5 px-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 bg-gray-100 rounded-full h-2 min-w-[80px]">
+                                      <div className={`${barColor} h-2 rounded-full transition-all`} style={{width: `${Math.min(pct,100)}%`}} />
+                                    </div>
+                                    <span className={`text-xs font-medium w-8 ${pct>=90?'text-red-500':pct>=70?'text-orange-500':'text-gray-500'}`}>{pct}%</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })
+                      )}
+                    </tbody>
+                    {allBalances.length > 0 && (
+                      <tfoot className="border-t-2 border-gray-200">
+                        <tr className="bg-gray-50">
+                          <td className="py-2.5 px-3 text-xs font-bold text-gray-600">합계</td>
+                          <td className="py-2.5 px-3 text-center text-xs font-bold text-blue-600">{allBalances.reduce((s,b)=>s+b.total_days,0)}일</td>
+                          <td className="py-2.5 px-3 text-center text-xs font-bold text-orange-500">{allBalances.reduce((s,b)=>s+b.used_days,0)}일</td>
+                          <td className="py-2.5 px-3 text-center text-xs font-bold text-emerald-600">{allBalances.reduce((s,b)=>s+b.remaining_days,0)}일</td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 달력 - 풀 와이드 */}
       <div className="max-w-screen-xl mx-auto px-6 pb-8">
