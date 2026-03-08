@@ -115,7 +115,7 @@ export default function LeavePage() {
 
     // role 조회
     const { data: roleData } = await supabase
-      .from('user_roles').select('role').eq('user_id', user.id).single()
+      .from('user_roles').select('role').eq('user_id', user.id).maybeSingle()
     const currentRole = roleData?.role ?? ''
     setRole(currentRole)
     const currentIsAdmin = currentRole === 'ADMIN'
