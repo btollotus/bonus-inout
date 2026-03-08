@@ -63,7 +63,7 @@ function translateError(msg: string): string {
   if (msg.includes("violates not-null"))
     return '필수 항목이 비어 있습니다.'
   if (msg.includes("permission denied") || msg.includes("policy"))
-    return '접근 권한이 없습니다. 관리자 계정으로 로그인하세요.'
+    return `접근 권한 오류: ${msg}`
   if (msg.includes("JWT") || msg.includes("session"))
     return '로그인 세션이 만료되었습니다. 다시 로그인해 주세요.'
   if (msg.includes("network") || msg.includes("fetch"))
@@ -196,7 +196,7 @@ export default function EmployeesPage() {
       exam_date: healthDate,
       note: healthNote || null,
     }])
-    if (error) setError(translateError(error.message))
+    if (error) { console.error('health_cert insert error:', error); setError(translateError(error.message)) }
     else {
       setSuccess('보건증 검사일이 등록되었습니다.')
       setHealthDate('')
