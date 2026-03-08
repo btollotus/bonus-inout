@@ -7,7 +7,7 @@ type LeaveRequest = {
   id: string
   leave_type: 'ANNUAL' | 'HALF_AM' | 'HALF_PM' | 'SICK' | 'FRIDAY_OFF'
   leave_date: string
-  reason: string | null
+  note: string | null
   status: 'PENDING' | 'APPROVED' | 'REJECTED'
   created_at: string
 }
@@ -39,7 +39,6 @@ const STATUS_COLOR: Record<string, string> = {
   REJECTED: 'bg-red-100 text-red-600',
 }
 
-// 달력에 표시할 색상
 const LEAVE_TYPE_BG: Record<string, string> = {
   ANNUAL: 'bg-blue-500',
   HALF_AM: 'bg-indigo-400',
@@ -54,20 +53,20 @@ export default function LeavePage() {
 
   const [balance, setBalance] = useState<LeaveBalance | null>(null)
   const [requests, setRequests] = useState<LeaveRequest[]>([])
-  const [leaveType, setLeaveType] = useState<string>('ANNUAL')
-  const [leaveDate, setLeaveDate] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() + 1)
-    return d.toISOString().split('T')[0]
-  })
-  const [reason, setReason] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [activeTab, setActiveTab] = useState<'apply' | 'history' | 'calendar'>('apply')
+  const [activeTab, setActiveTab] = useState<'apply' | 'history'>('apply')
 
   // 달력 상태
-  const [calMonth, setCalMonth] = useState(new Date().getMonth()) // 0-based
+  const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
+
+  // 모달 상태
+  const [modalDate, setModalDate] = useState<string | null>(null)
+  const [leaveType, setLeaveType] = useState('ANNUAL')
+  const [note, setNote] = useState('')
+  const [empId, setEmpId] = useState<string | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
@@ -75,7 +74,6 @@ export default function LeavePage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    // employees에서 auth_user_id로 employee id 조회
     const { data: emp } = await supabase
       .from('employees')
       .select('id')
@@ -83,11 +81,11 @@ export default function LeavePage() {
       .single()
 
     if (!emp) {
-      setError('employees에 auth_user_id 매핑이 없습니다. 관리자에게 직원등록/uid매핑을 요청하세요.')
+      setError('직원 정보가 없습니다. 관리자에게 직원등록을 요청하세요.')
       return
     }
+    setEmpId(emp.id)
 
-    // 연차 잔여
     const { data: bal } = await supabase
       .from('leave_balance')
       .select('total_days, used_days, remaining_days')
@@ -96,7 +94,6 @@ export default function LeavePage() {
       .single()
     setBalance(bal)
 
-    // 신청 내역
     const { data: reqs } = await supabase
       .from('leave_requests')
       .select('*')
@@ -105,20 +102,9 @@ export default function LeavePage() {
     setRequests(reqs || [])
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleSubmit() {
+    if (!modalDate || !empId) return
     setLoading(true); setError(''); setSuccess('')
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setError('로그인이 필요합니다.'); setLoading(false); return }
-
-    const { data: emp } = await supabase
-      .from('employees')
-      .select('id')
-      .eq('auth_user_id', user.id)
-      .single()
-
-    if (!emp) { setError('직원 정보를 찾을 수 없습니다.'); setLoading(false); return }
 
     const days = LEAVE_TYPE_DAYS[leaveType]
     if (balance && days > balance.remaining_days) {
@@ -126,17 +112,19 @@ export default function LeavePage() {
     }
 
     const { error } = await supabase.from('leave_requests').insert([{
-      employee_id: emp.id,
+      employee_id: empId,
       leave_type: leaveType,
-      leave_date: leaveDate,
-      reason: reason || null,
+      leave_date: modalDate,
+      note: note || null,
       status: 'PENDING',
     }])
 
     if (error) { setError(error.message); setLoading(false); return }
 
-    setSuccess('신청이 완료되었습니다. 관리자 승인 후 확정됩니다.')
-    setReason('')
+    setSuccess(`${modalDate} 신청이 완료되었습니다.`)
+    setModalDate(null)
+    setNote('')
+    setLeaveType('ANNUAL')
     setLoading(false)
     fetchData()
   }
@@ -147,26 +135,20 @@ export default function LeavePage() {
     fetchData()
   }
 
-  // ── 달력 렌더링 ──────────────────────────────
   function renderCalendar() {
-    const firstDay = new Date(calYear, calMonth, 1).getDay() // 0=일
+    const firstDay = new Date(calYear, calMonth, 1).getDay()
     const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
     const today = new Date().toISOString().split('T')[0]
-
-    // 이번 달 승인된 휴가만 필터
     const monthStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`
     const monthLeaves = requests.filter(
       (r) => r.leave_date.startsWith(monthStr) && r.status !== 'REJECTED'
     )
 
     const cells: React.ReactNode[] = []
-
-    // 앞 빈칸
     for (let i = 0; i < firstDay; i++) {
       cells.push(<div key={`empty-${i}`} />)
     }
 
-    // 날짜 셀
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
       const dayLeaves = monthLeaves.filter((r) => r.leave_date === dateStr)
@@ -174,11 +156,23 @@ export default function LeavePage() {
       const dow = new Date(calYear, calMonth, d).getDay()
       const isSun = dow === 0
       const isSat = dow === 6
+      const isPast = dateStr < today
 
       cells.push(
         <div
           key={d}
-          className={`min-h-[60px] p-1 border border-gray-100 rounded-lg ${isToday ? 'bg-blue-50 border-blue-300' : 'bg-white'}`}
+          onClick={() => {
+            if (activeTab === 'apply' && !isPast) {
+              setModalDate(dateStr)
+              setLeaveType('ANNUAL')
+              setNote('')
+            }
+          }}
+          className={`min-h-[64px] p-1 border rounded-lg transition-colors
+            ${isToday ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-100'}
+            ${activeTab === 'apply' && !isPast ? 'cursor-pointer hover:bg-gray-50' : ''}
+            ${isPast ? 'opacity-50' : ''}
+          `}
         >
           <span className={`text-xs font-semibold ${isToday ? 'text-blue-600' : isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-700'}`}>
             {d}
@@ -187,14 +181,13 @@ export default function LeavePage() {
             {dayLeaves.map((lv) => (
               <div
                 key={lv.id}
-                className={`text-white text-[10px] px-1 py-0.5 rounded truncate ${LEAVE_TYPE_BG[lv.leave_type]} ${lv.status === 'PENDING' ? 'opacity-60' : ''}`}
+                className={`text-white text-[9px] px-1 py-0.5 rounded truncate ${LEAVE_TYPE_BG[lv.leave_type]} ${lv.status === 'PENDING' ? 'opacity-60' : ''}`}
                 title={`${LEAVE_TYPE_LABEL[lv.leave_type]} (${STATUS_LABEL[lv.status]})`}
               >
                 {lv.leave_type === 'ANNUAL' ? '연차'
                   : lv.leave_type === 'HALF_AM' ? '오전반차'
                   : lv.leave_type === 'HALF_PM' ? '오후반차'
-                  : lv.leave_type === 'SICK' ? '병가'
-                  : '금휴'}
+                  : lv.leave_type === 'SICK' ? '병가' : '금휴'}
                 {lv.status === 'PENDING' && ' (검토중)'}
               </div>
             ))}
@@ -202,19 +195,18 @@ export default function LeavePage() {
         </div>
       )
     }
-
     return cells
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">연차 / 반차 / 병가 신청</h1>
-          <p className="text-sm text-gray-500 mt-1">전 직원 접근 가능 · 신청 후 관리자 승인 절차</p>
+          <p className="text-sm text-gray-500 mt-1">신청 후 관리자 승인 절차</p>
         </div>
 
-        {/* 연차 현황 카드 */}
+        {/* 연차 현황 */}
         <div className="grid grid-cols-3 gap-3 mb-6">
           {[
             { label: `${year}년 부여 연차`, value: balance?.total_days ?? 0, color: 'text-blue-600' },
@@ -228,17 +220,16 @@ export default function LeavePage() {
           ))}
         </div>
 
-        {/* 에러 / 성공 */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-4 flex justify-between">
             <span>{error}</span>
-            <button onClick={() => setError('')} className="text-red-400 hover:text-red-600">✕</button>
+            <button onClick={() => setError('')}>✕</button>
           </div>
         )}
         {success && (
           <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm mb-4 flex justify-between">
             <span>{success}</span>
-            <button onClick={() => setSuccess('')} className="text-green-400 hover:text-green-600">✕</button>
+            <button onClick={() => setSuccess('')}>✕</button>
           </div>
         )}
 
@@ -248,7 +239,6 @@ export default function LeavePage() {
             {[
               { key: 'apply', label: '📋 신청하기' },
               { key: 'history', label: '📅 신청 내역' },
-              { key: 'calendar', label: '🗓️ 달력 보기' },
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -264,54 +254,60 @@ export default function LeavePage() {
             ))}
           </div>
 
-          {/* ── 신청하기 탭 ── */}
-          {activeTab === 'apply' && (
-            <form onSubmit={handleSubmit} className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">휴가 유형 *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(LEAVE_TYPE_LABEL).map(([key, label]) => (
-                    <label key={key} className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      leaveType === key ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                    }`}>
-                      <input type="radio" name="leaveType" value={key} checked={leaveType === key}
-                        onChange={() => setLeaveType(key)} className="text-blue-600" />
-                      <span className="text-sm">{label}</span>
-                    </label>
-                  ))}
+          {/* 달력 (두 탭 공통) */}
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <button
+                onClick={() => {
+                  if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1) }
+                  else setCalMonth(calMonth - 1)
+                }}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"
+              >◀</button>
+              <h3 className="text-base font-bold text-gray-800">{calYear}년 {calMonth + 1}월</h3>
+              <button
+                onClick={() => {
+                  if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1) }
+                  else setCalMonth(calMonth + 1)
+                }}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"
+              >▶</button>
+            </div>
+
+            {activeTab === 'apply' && (
+              <p className="text-xs text-blue-600 text-center mb-2">📌 날짜를 클릭하면 신청할 수 있습니다</p>
+            )}
+
+            <div className="grid grid-cols-7 mb-1">
+              {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
+                <div key={d} className={`text-center text-xs font-semibold py-1 ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-gray-500'}`}>
+                  {d}
                 </div>
-              </div>
+              ))}
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">날짜 *</label>
-                <input type="date" value={leaveDate} onChange={(e) => setLeaveDate(e.target.value)} required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
+            <div className="grid grid-cols-7 gap-0.5">
+              {renderCalendar()}
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">사유 (선택)</label>
-                <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
-                  placeholder="개인사정"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-              </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-500 inline-block" />연차</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-indigo-400 inline-block" />오전반차</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-400 inline-block" />오후반차</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-400 inline-block" />병가</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-400 inline-block" />금휴</span>
+              <span className="text-gray-400 ml-2">※ 반투명 = 검토중</span>
+            </div>
+          </div>
 
-              <div className="flex items-center justify-between pt-1">
-                <p className="text-xs text-gray-500">신청 시 <strong>{LEAVE_TYPE_DAYS[leaveType]}일</strong>이 차감됩니다.</p>
-                <button type="submit" disabled={loading}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium px-6 py-2 rounded-lg text-sm transition-colors">
-                  {loading ? '신청 중...' : '신청하기'}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* ── 신청 내역 탭 ── */}
+          {/* 신청 내역 탭 */}
           {activeTab === 'history' && (
-            <div className="p-5">
+            <div className="px-4 pb-4 border-t border-gray-100">
+              <h4 className="text-sm font-semibold text-gray-700 mt-3 mb-2">신청 내역</h4>
               {requests.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm py-8">신청 내역이 없습니다.</div>
+                <div className="text-center text-gray-400 text-sm py-6">신청 내역이 없습니다.</div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {requests.map((req) => (
                     <div key={req.id} className="flex items-start justify-between p-3 rounded-lg border border-gray-100 bg-gray-50">
                       <div>
@@ -322,7 +318,7 @@ export default function LeavePage() {
                           </span>
                         </div>
                         <p className="text-xs text-gray-500">{LEAVE_TYPE_LABEL[req.leave_type]}</p>
-                        {req.reason && <p className="text-xs text-gray-400 mt-0.5">{req.reason}</p>}
+                        {req.note && <p className="text-xs text-gray-400 mt-0.5">{req.note}</p>}
                       </div>
                       {req.status === 'PENDING' && (
                         <button onClick={() => handleCancel(req.id)}
@@ -336,62 +332,57 @@ export default function LeavePage() {
               )}
             </div>
           )}
-
-          {/* ── 달력 보기 탭 ── */}
-          {activeTab === 'calendar' && (
-            <div className="p-5">
-              {/* 월 네비게이션 */}
-              <div className="flex items-center justify-between mb-4">
-                <button
-                  onClick={() => {
-                    if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1) }
-                    else setCalMonth(calMonth - 1)
-                  }}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"
-                >
-                  ◀
-                </button>
-                <h3 className="text-base font-bold text-gray-800">
-                  {calYear}년 {calMonth + 1}월
-                </h3>
-                <button
-                  onClick={() => {
-                    if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1) }
-                    else setCalMonth(calMonth + 1)
-                  }}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"
-                >
-                  ▶
-                </button>
-              </div>
-
-              {/* 요일 헤더 */}
-              <div className="grid grid-cols-7 mb-1">
-                {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
-                  <div key={d} className={`text-center text-xs font-semibold py-1 ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-gray-500'}`}>
-                    {d}
-                  </div>
-                ))}
-              </div>
-
-              {/* 날짜 그리드 */}
-              <div className="grid grid-cols-7 gap-0.5">
-                {renderCalendar()}
-              </div>
-
-              {/* 범례 */}
-              <div className="mt-4 flex flex-wrap gap-2 text-xs text-gray-500">
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-500 inline-block" />연차</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-indigo-400 inline-block" />오전반차</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-400 inline-block" />오후반차</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-400 inline-block" />병가</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-400 inline-block" />금휴</span>
-                <span className="text-gray-400 ml-2">※ 반투명 = 검토중</span>
-              </div>
-            </div>
-          )}
         </div>
       </div>
+
+      {/* 신청 모달 */}
+      {modalDate && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-gray-900">휴가 신청</h3>
+              <button onClick={() => setModalDate(null)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-4">
+              <p className="text-sm font-semibold text-blue-700">📅 {modalDate}</p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">휴가 유형</label>
+              <div className="space-y-1.5">
+                {Object.entries(LEAVE_TYPE_LABEL).map(([key, label]) => (
+                  <label key={key} className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                    leaveType === key ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <input type="radio" name="leaveType" value={key} checked={leaveType === key}
+                      onChange={() => setLeaveType(key)} className="text-blue-600" />
+                    <span className="text-sm">{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-gray-700 mb-1">사유 (선택)</label>
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
+                placeholder="개인사정"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => setModalDate(null)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50">
+                취소
+              </button>
+              <button onClick={handleSubmit} disabled={loading}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm">
+                {loading ? '신청 중...' : `${LEAVE_TYPE_DAYS[leaveType]}일 신청`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
