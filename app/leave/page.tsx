@@ -215,47 +215,6 @@ export default function LeavePage() {
     }
   }
 
-  // 연차 자동부여 (ADMIN: 전체 직원 upsert)
-  async function handleAutoGrant() {
-    setAutoGrantLoading(true)
-    setAutoGrantMsg('')
-    try {
-      // rpc 시도, 없으면 JS에서 직접 upsert
-      const { error: rpcErr } = await supabase.rpc('upsert_leave_balance_for_year', { target_year: leaveYear })
-      if (rpcErr) {
-        // rpc 없는 경우 JS fallback
-        const { data: empList } = await supabase.from('employees')
-          .select('id, name, hire_date, auth_user_id').is('resign_date', null)
-        let success = 0
-        for (const e of (empList || [])) {
-          const total = calcLegalLeaveDays(e.hire_date, leaveYear)
-          const { data: existing } = await supabase.from('leave_balance')
-            .select('id, manual_override, used_days').eq('employee_id', e.id).eq('year', leaveYear).maybeSingle()
-          if (existing?.manual_override) { success++; continue } // 수동조정 보호
-          const used = existing?.used_days ?? 0
-          if (existing) {
-            await supabase.from('leave_balance').update({
-              total_days: total, remaining_days: Math.max(0, total - used), updated_at: new Date().toISOString()
-            }).eq('id', existing.id)
-          } else {
-            await supabase.from('leave_balance').insert({
-              employee_id: e.id, user_id: e.auth_user_id, year: leaveYear,
-              total_days: total, used_days: 0, remaining_days: total
-            })
-          }
-          success++
-        }
-        setAutoGrantMsg(`✅ ${success}명 자동부여 완료 (${leaveYear}년)`)
-      } else {
-        setAutoGrantMsg(`✅ 자동부여 완료 (${leaveYear}년)`)
-      }
-      await fetchAllBalances()
-    } catch (e: any) {
-      setAutoGrantMsg(`❌ 오류: ${e.message}`)
-    }
-    setAutoGrantLoading(false)
-  }
-
   async function fetchAllBalances() {
     const thisYear = leaveYear
     const { data: empList } = await supabase.from('employees')
