@@ -687,10 +687,53 @@ export default function LeavePage() {
                           .map((b) => {
                             const pct = b.total_days > 0 ? Math.round(b.used_days / b.total_days * 100) : 0
                             const barColor = pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-orange-400' : 'bg-emerald-400'
+                            const isEditing = editingBalance === b.employee_id
                             return (
-                              <tr key={b.employee_id} className="hover:bg-gray-50">
-                                <td className="py-2.5 px-3 font-semibold text-gray-800">{b.employee_name}</td>
-                                <td className="py-2.5 px-3 text-center font-bold text-blue-600">{b.total_days > 0 ? <>{b.total_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></> : <span className="text-xs text-gray-300">미설정</span>}</td>
+                              <tr key={b.employee_id} className="hover:bg-gray-50 align-top">
+                                {/* 직원명 + 입사일 */}
+                                <td className="py-2.5 px-3">
+                                  <div className="font-semibold text-gray-800">{b.employee_name}</div>
+                                  {b.hire_date && (
+                                    <div className="text-[10px] text-gray-400 mt-0.5">
+                                      입사 {b.hire_date?.slice(0,10)} · 법정 {calcLegalLeaveDays(b.hire_date, leaveYear)}일
+                                    </div>
+                                  )}
+                                </td>
+                                {/* 부여 연차 + 수정 */}
+                                <td className="py-2 px-3 text-center">
+                                  {isEditing ? (
+                                    <div className="flex flex-col gap-1.5 items-center">
+                                      <input type="number" value={editDraft.total_days} min={0} max={365} autoFocus
+                                        onChange={e => setEditDraft(d => ({...d, total_days: Number(e.target.value)}))}
+                                        className="w-16 text-center border-2 border-blue-400 rounded-lg px-2 py-1 text-sm font-bold focus:outline-none"
+                                      />
+                                      <input type="text" value={editDraft.override_reason} placeholder="사유 (선택)"
+                                        onChange={e => setEditDraft(d => ({...d, override_reason: e.target.value}))}
+                                        className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-300"
+                                      />
+                                      <div className="flex gap-1">
+                                        <button onClick={() => saveManualOverride(b.employee_id)}
+                                          className="text-[10px] bg-blue-600 text-white px-2.5 py-1 rounded-lg hover:bg-blue-700 font-medium">저장</button>
+                                        <button onClick={() => setEditingBalance(null)}
+                                          className="text-[10px] bg-gray-100 text-gray-600 px-2.5 py-1 rounded-lg hover:bg-gray-200">취소</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <span className="font-bold text-blue-600">
+                                        {b.total_days > 0 ? <>{b.total_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></> : <span className="text-xs text-gray-300">미설정</span>}
+                                      </span>
+                                      {b.manual_override
+                                        ? <span title={b.override_reason||'수동조정'} className="text-[9px] text-amber-600 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded cursor-help">🔒수동</span>
+                                        : <span className="text-[9px] text-indigo-400 bg-indigo-50 px-1.5 py-0.5 rounded">자동</span>
+                                      }
+                                      <button
+                                        onClick={() => { setEditingBalance(b.employee_id); setEditDraft({ total_days: b.total_days, override_reason: b.override_reason||'' }) }}
+                                        className="text-[11px] text-gray-400 hover:text-blue-600 hover:bg-blue-50 px-1.5 py-0.5 rounded transition-colors"
+                                      >✏️</button>
+                                    </div>
+                                  )}
+                                </td>
                                 <td className="py-2.5 px-3 text-center font-bold text-orange-500">{b.used_days > 0 ? <>{b.used_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></> : <span className="text-gray-300">-</span>}</td>
                                 <td className="py-2.5 px-3 text-center font-bold text-emerald-600">{b.total_days > 0 ? <>{b.remaining_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></> : <span className="text-xs text-gray-300">-</span>}</td>
                                 <td className="py-2.5 px-3">
