@@ -45,6 +45,7 @@ type PayrollRow = {
   income_tax_settle: number
   local_tax_settle: number
   special_tax_settle: number
+  work_days: number
   memo: string
   note: string
   status: 'draft' | 'final'
@@ -82,7 +83,7 @@ function emptyRow(emp: Employee, year: number, month: number): PayrollRow {
     national_pension: 0, health_insurance: 0, employment_insurance: 0,
     long_term_care: 0, income_tax: 0, local_income_tax: 0,
     income_tax_settle: 0, local_tax_settle: 0, special_tax_settle: 0,
-    memo: '', note: '', status: 'draft',
+    work_days: 22, memo: '', note: '', status: 'draft',
   }
 }
 
