@@ -60,8 +60,10 @@ function parseNum(v: string) { return parseInt(v.replace(/,/g, ''), 10) || 0 }
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 const LEAVE_TYPE_LABEL: Record<string, string> = {
-  annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', sick: '병가', special: '경조사'
+  annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', sick: '병가', special: '경조사',
+  ANNUAL: '연차', HALF_AM: '반차(오전)', HALF_PM: '반차(오후)', SICK: '병가', SPECIAL: '경조사'
 }
+function leaveLabel(type: string) { return LEAVE_TYPE_LABEL[type] || LEAVE_TYPE_LABEL[type.toLowerCase()] || type }
 
 // ── 빈 행 생성 ──────────────────────────────────────────
 function emptyRow(emp: Employee, year: number, month: number): PayrollRow {
@@ -209,11 +211,25 @@ export default function PayrollPage() {
   async function handleSaveDraft() {
     setLoading(true); setError(''); setSuccess('')
     for (const row of rows) {
-      const payload = { ...buildPayload(row), status: 'draft' }
+      const payload = { ...buildPayload(row), status: row.status }
       if (row.id) await supabase.from('payroll_draft').update(payload).eq('id', row.id)
       else { const { data } = await supabase.from('payroll_draft').insert([payload]).select().single(); if (data) row.id = data.id }
     }
-    setSuccess('임시저장 완료되었습니다.')
+    // 확정 상태라면 payroll_final도 동기화
+    if (rows.some(r => r.status === 'final')) {
+      const finalPayloads = rows.filter(r => r.status === 'final').map(row => ({ ...buildPayload(row), status: 'final' }))
+      await supabase.from('payroll_final').upsert(finalPayloads, { onConflict: 'employee_id,year,month' })
+    }
+    setSuccess('저장 완료되었습니다.')
+    fetchPayrollForMonth()
+    setLoading(false)
+  }
+
+  async function handleUnfinalize() {
+    if (!confirm(`${selectedYear}년 ${selectedMonth}월 최종 확정을 해제하고 수정 모드로 전환하시겠습니까?`)) return
+    setLoading(true)
+    await supabase.from('payroll_draft').update({ status: 'draft' }).eq('year', selectedYear).eq('month', selectedMonth)
+    setSuccess('수정 모드로 전환되었습니다. 수정 후 다시 최종 확정하세요.')
     fetchPayrollForMonth()
     setLoading(false)
   }
@@ -398,7 +414,7 @@ export default function PayrollPage() {
                                   <div className="flex gap-1">
                                     {empLeave.map(u => (
                                       <span key={u.leave_type} className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">
-                                        {LEAVE_TYPE_LABEL[u.leave_type] || u.leave_type} {u.count}회
+                                        {leaveLabel(u.leave_type)} {u.count}회
                                       </span>
                                     ))}
                                   </div>
@@ -543,7 +559,7 @@ export default function PayrollPage() {
                                   <div className="flex gap-3 flex-wrap">
                                     {empLeave.map(u => (
                                       <span key={u.leave_type} className="text-sm text-purple-800 bg-white border border-purple-200 px-3 py-1 rounded-lg">
-                                        {LEAVE_TYPE_LABEL[u.leave_type] || u.leave_type}: <strong>{u.count}회</strong>
+                                        {leaveLabel(u.leave_type)}: <strong>{u.count}회</strong>
                                       </span>
                                     ))}
                                   </div>
@@ -568,12 +584,13 @@ export default function PayrollPage() {
                                 <div className="flex items-center gap-3">
                                   <span className="text-sm text-gray-500">실지급액</span>
                                   <span className="text-2xl font-black text-blue-700">{formatKRW(net)}원</span>
+                                  {isF && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">확정됨 — 하단 수정하기 버튼으로 편집</span>}
                                 </div>
                                 <div className="flex gap-2">
                                   {!isF && (
-                                    <button onClick={() => { handleSaveDraft() }}
+                                    <button onClick={() => handleSaveDraft()}
                                       className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg">
-                                      💾 임시저장
+                                      💾 저장
                                     </button>
                                   )}
                                   <button onClick={() => handlePrint(row, 'print')}
@@ -592,19 +609,31 @@ export default function PayrollPage() {
                       )
                     })}
 
-                    {/* 전체 저장 버튼 */}
-                    {!isFinalized && (
-                      <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end bg-white">
-                        <button onClick={handleSaveDraft} disabled={loading}
-                          className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-5 py-2 rounded-lg disabled:opacity-50">
-                          {loading ? '저장 중...' : '💾 전체 임시저장'}
-                        </button>
-                        <button onClick={handleFinalize} disabled={loading}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2 rounded-lg disabled:opacity-50">
-                          ✓ 최종 확정
-                        </button>
-                      </div>
-                    )}
+                    {/* 하단 버튼 */}
+                    <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end bg-white">
+                      {isFinalized ? (
+                        <>
+                          <span className="flex items-center text-sm text-green-700 font-medium gap-1.5">
+                            <span className="bg-green-100 text-green-700 text-xs px-2.5 py-1 rounded-full">✓ 최종 확정됨</span>
+                          </span>
+                          <button onClick={handleUnfinalize} disabled={loading}
+                            className="border border-orange-300 hover:bg-orange-50 text-orange-600 text-sm font-medium px-5 py-2 rounded-lg disabled:opacity-50">
+                            ✏️ 수정하기
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={handleSaveDraft} disabled={loading}
+                            className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-5 py-2 rounded-lg disabled:opacity-50">
+                            {loading ? '저장 중...' : '💾 전체 저장'}
+                          </button>
+                          <button onClick={handleFinalize} disabled={loading}
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2 rounded-lg disabled:opacity-50">
+                            ✓ 최종 확정
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -835,7 +864,7 @@ const PrintSlip = forwardRef<HTMLDivElement, {
             <tbody>
               {leaveUsage.map(u => (
                 <tr key={u.leave_type}>
-                  <td className="label-col">{LEAVE_TYPE_LABEL[u.leave_type] || u.leave_type}</td>
+                  <td className="label-col">{leaveLabel(u.leave_type)}</td>
                   <td className="amount">{u.count}회</td>
                 </tr>
               ))}
