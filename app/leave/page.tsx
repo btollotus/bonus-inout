@@ -323,17 +323,33 @@ export default function LeavePage() {
     setEmployees(empList || [])
 
     const { data: emp } = await supabase
-      .from('employees').select('id').eq('auth_user_id', user.id).single()
+      .from('employees').select('id, hire_date').eq('auth_user_id', user.id).single()
 
     if (!emp) {
       if (!currentIsAdmin) { setError('직원 정보가 없습니다. 관리자에게 직원등록을 요청하세요.'); return }
       // ADMIN은 직원 연동 없어도 전체 일정만 표시
     } else {
       setEmpId(emp.id)
-      const { data: bal } = await supabase
+      const year_str = String(year)
+      let { data: bal } = await supabase
         .from('leave_balance')
         .select('total_granted, remaining_days')
-        .eq('employee_id', emp.id).eq('year', year).single()
+        .eq('employee_id', emp.id).eq('year', year).maybeSingle()
+
+      // leave_balance 없으면 입사일 기준 자동 생성
+      if (!bal && emp.hire_date) {
+        const legalDays = calcLegalLeaveDays(emp.hire_date, year)
+        const { data: inserted } = await supabase.from('leave_balance').insert({
+          employee_id: emp.id,
+          user_id: user.id,
+          year: year,
+          total_granted: legalDays,
+          remaining_days: legalDays,
+          manual_override: false,
+        }).select('total_granted, remaining_days').maybeSingle()
+        bal = inserted
+      }
+
       setBalance(bal ? { total_days: bal.total_granted ?? 0, used_days: 0, remaining_days: bal.remaining_days ?? 0 } : null)
       const { data: reqs } = await supabase
         .from('leave_requests').select('*')
@@ -341,7 +357,7 @@ export default function LeavePage() {
       setMyRequests(reqs || [])
       // used_days: leave_requests에서 해당 연도 집계
       const used = (reqs || [])
-        .filter((r: any) => r.leave_date?.startsWith(String(year)))
+        .filter((r: any) => r.leave_date?.startsWith(year_str))
         .reduce((s: number, r: any) => {
           const t = r.leave_type?.toUpperCase()
           return s + ((t==='ANNUAL'||t==='FRIDAY_OFF') ? 1 : (t==='HALF_AM'||t==='HALF_PM') ? 0.5 : 0)
