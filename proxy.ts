@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-// ADMIN 전용 경로 (SUBADMIN, USER 접근 불가)
+// ADMIN 전용
 const ADMIN_ONLY_PATHS = [
   "/admin/employees",
   "/admin/payroll",
 ];
 
-// SUBADMIN 이상 경로 (USER 접근 불가)
+// SUBADMIN 이상 (USER 접근 불가)
 const SUBADMIN_PATHS = [
   "/scan",
   "/products",
@@ -18,7 +18,6 @@ const SUBADMIN_PATHS = [
   "/calendar",
   "/orders",
   "/ledger",
-  "/admin/leave-status", // SUBADMIN은 승인 가능, USER는 읽기만 → 일단 접근은 허용
 ];
 
 export async function proxy(req: NextRequest) {
@@ -36,7 +35,7 @@ export async function proxy(req: NextRequest) {
 
   if (isPublic) return NextResponse.next();
 
-  // ✅ Supabase 세션 확인
+  // ✅ 세션 확인
   let res = NextResponse.next();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -62,25 +61,19 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ✅ role 조회
-  const { data: roleData } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", data.user.id)
-    .single();
+  // ✅ 쿠키에서 role 읽기
+  const role = req.cookies.get("user_role")?.value ?? "USER";
 
-  const role = roleData?.role ?? "USER";
-
-  // ADMIN 전용 경로 체크
+  // ADMIN 전용 경로
   const isAdminOnly = ADMIN_ONLY_PATHS.some((p) => pathname.startsWith(p));
   if (isAdminOnly && role !== "ADMIN") {
-    return NextResponse.redirect(new URL("/", req.url));
+    return NextResponse.redirect(new URL("/?blocked=1", req.url));
   }
 
-  // SUBADMIN 이상 경로 체크
+  // SUBADMIN 이상 경로
   const isSubadminPath = SUBADMIN_PATHS.some((p) => pathname.startsWith(p));
   if (isSubadminPath && role === "USER") {
-    return NextResponse.redirect(new URL("/", req.url));
+    return NextResponse.redirect(new URL("/?blocked=1", req.url));
   }
 
   return res;
