@@ -160,6 +160,16 @@ export default function EmployeesPage() {
 
   // 보건증
   const [healthRecords, setHealthRecords] = useState<Record<string, HealthCertRecord[]>>({})
+
+  // ── 연차 관리 ──────────────────────────────────────────
+  const [leaveBalances, setLeaveBalances] = useState<Record<string, {total_days:number; used_days:number; remaining_days:number; manual_override:boolean; override_reason:string}>>({})
+  const [leaveYear, setLeaveYear] = useState(new Date().getFullYear())
+  const [showLeaveEmpId, setShowLeaveEmpId] = useState<string | null>(null)
+  const [leaveEditDraft, setLeaveEditDraft] = useState<{total_days:number; override_reason:string}>({total_days:0, override_reason:''})
+  const [leaveSaving, setLeaveSaving] = useState(false)
+  const [autoGrantLoading, setAutoGrantLoading] = useState(false)
+  const [autoGrantMsg, setAutoGrantMsg] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
   const [showHealthEmpId, setShowHealthEmpId] = useState<string | null>(null)
   const [healthFormEmpId, setHealthFormEmpId] = useState<string | null>(null)
   const [healthDate, setHealthDate] = useState('')
@@ -167,8 +177,119 @@ export default function EmployeesPage() {
   const [healthLoading, setHealthLoading] = useState(false)
 
   useEffect(() => { fetchEmployees() }, [])
+  useEffect(() => { if (employees.length > 0) fetchLeaveBalances() }, [leaveYear, employees])
 
   // ── 직원 목록 ─────────────────────────────────────────
+  // ── 근로기준법 연차 계산 ──────────────────────────────
+  function calcLegalLeaveDays(hireDateStr: string | null | undefined, targetYear: number): number {
+    if (!hireDateStr) return 0
+    const hire = new Date(hireDateStr)
+    const yearStart = new Date(targetYear, 0, 1)
+    const yearEnd = new Date(targetYear, 11, 31)
+    if (hire > yearEnd) return 0
+    const diffDays = (yearStart.getTime() - hire.getTime()) / (1000*60*60*24)
+    const monthsWorked = Math.floor(diffDays / 30.44)
+    const yearsWorked = Math.floor(monthsWorked / 12)
+    if (yearsWorked < 1) {
+      const hireYear = hire.getFullYear()
+      const hireMonth = hire.getMonth()
+      return hireYear < targetYear ? 11 : Math.min(11 - hireMonth, 11)
+    } else if (yearsWorked < 3) {
+      return 15
+    } else {
+      return Math.min(15 + Math.floor((yearsWorked - 1) / 2), 25)
+    }
+  }
+
+  async function fetchLeaveBalances() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    // isAdmin 체크
+    const { data: roleData } = await supabase.from('user_roles').select('role').eq('user_id', user.id).maybeSingle()
+    setIsAdmin(roleData?.role === 'ADMIN')
+
+    const yearStart = `${leaveYear}-01-01`
+    const yearEnd = `${leaveYear}-12-31`
+    const { data: balList } = await supabase.from('leave_balance')
+      .select('employee_id, total_days, used_days, remaining_days, manual_override, override_reason')
+      .eq('year', leaveYear)
+    const { data: reqList } = await supabase.from('leave_requests')
+      .select('employee_id, leave_type').gte('leave_date', yearStart).lte('leave_date', yearEnd)
+    const usedMap: Record<string, number> = {}
+    for (const r of (reqList || [])) {
+      const t = r.leave_type?.toUpperCase()
+      const days = (t==='ANNUAL'||t==='FRIDAY_OFF') ? 1 : (t==='HALF_AM'||t==='HALF_PM') ? 0.5 : 0
+      usedMap[r.employee_id] = (usedMap[r.employee_id] || 0) + days
+    }
+    const map: Record<string, any> = {}
+    for (const e of employees) {
+      const bal = (balList || []).find((b: any) => b.employee_id === e.id)
+      const used = bal?.used_days ?? usedMap[e.id] ?? 0
+      map[e.id] = {
+        total_days: bal?.total_days ?? 0,
+        used_days: used,
+        remaining_days: bal?.remaining_days ?? Math.max(0, (bal?.total_days ?? 0) - used),
+        manual_override: bal?.manual_override ?? false,
+        override_reason: bal?.override_reason ?? '',
+      }
+    }
+    setLeaveBalances(map)
+  }
+
+  async function handleAutoGrant() {
+    setAutoGrantLoading(true)
+    setAutoGrantMsg('')
+    try {
+      const { error: rpcErr } = await supabase.rpc('upsert_leave_balance_for_year', { target_year: leaveYear })
+      if (rpcErr) {
+        // JS fallback
+        let cnt = 0
+        for (const e of employees) {
+          const total = calcLegalLeaveDays(e.hire_date, leaveYear)
+          const { data: ex } = await supabase.from('leave_balance')
+            .select('id, manual_override, used_days').eq('employee_id', e.id).eq('year', leaveYear).maybeSingle()
+          if (ex?.manual_override) { cnt++; continue }
+          const used = ex?.used_days ?? 0
+          if (ex) {
+            await supabase.from('leave_balance').update({ total_days: total, remaining_days: Math.max(0, total-used) }).eq('id', ex.id)
+          } else {
+            await supabase.from('leave_balance').insert({ employee_id: e.id, user_id: e.auth_user_id, year: leaveYear, total_days: total, used_days: 0, remaining_days: total })
+          }
+          cnt++
+        }
+        setAutoGrantMsg(`✅ ${cnt}명 자동부여 완료`)
+      } else {
+        setAutoGrantMsg(`✅ 자동부여 완료`)
+      }
+      await fetchLeaveBalances()
+    } catch(err:any) { setAutoGrantMsg(`❌ 오류: ${err.message}`) }
+    setAutoGrantLoading(false)
+    setTimeout(() => setAutoGrantMsg(''), 4000)
+  }
+
+  async function saveLeaveOverride(empId: string, authUserId: string | null) {
+    setLeaveSaving(true)
+    const used = leaveBalances[empId]?.used_days ?? 0
+    const total = leaveEditDraft.total_days
+    const { data: ex } = await supabase.from('leave_balance')
+      .select('id').eq('employee_id', empId).eq('year', leaveYear).maybeSingle()
+    if (ex) {
+      await supabase.from('leave_balance').update({
+        total_days: total, remaining_days: Math.max(0, total-used),
+        manual_override: true, override_reason: leaveEditDraft.override_reason
+      }).eq('id', ex.id)
+    } else {
+      await supabase.from('leave_balance').insert({
+        employee_id: empId, user_id: authUserId, year: leaveYear,
+        total_days: total, used_days: used, remaining_days: Math.max(0, total-used),
+        manual_override: true, override_reason: leaveEditDraft.override_reason
+      })
+    }
+    setLeaveSaving(false)
+    setShowLeaveEmpId(null)
+    await fetchLeaveBalances()
+  }
+
   async function fetchEmployees() {
     setFetchLoading(true)
     const { data, error } = await supabase
@@ -505,12 +626,30 @@ export default function EmployeesPage() {
               이메일 입력 시 로그인 계정 자동 생성 + 초대 메일 발송 · 주민번호 AES-256 암호화 저장
             </p>
           </div>
-          <button
-            onClick={handleNew}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-          >
-            + 새로 등록
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {isAdmin && (
+              <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 flex-wrap">
+                <span className="text-xs font-semibold text-indigo-700">🗓️ 연차</span>
+                <select value={leaveYear} onChange={e => setLeaveYear(Number(e.target.value))}
+                  className="border border-indigo-200 rounded px-2 py-0.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400">
+                  {[new Date().getFullYear()+1, new Date().getFullYear(), new Date().getFullYear()-1].map(y =>
+                    <option key={y} value={y}>{y}년</option>
+                  )}
+                </select>
+                <button onClick={handleAutoGrant} disabled={autoGrantLoading}
+                  className="text-xs bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-3 py-1 rounded-lg font-semibold transition-colors">
+                  {autoGrantLoading ? '⏳...' : '⚡ 전체 자동부여'}
+                </button>
+                {autoGrantMsg && (
+                  <span className={`text-xs font-medium ${autoGrantMsg.startsWith('✅') ? 'text-green-700' : 'text-red-600'}`}>{autoGrantMsg}</span>
+                )}
+              </div>
+            )}
+            <button onClick={handleNew}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors">
+              + 새로 등록
+            </button>
+          </div>
         </div>
       </div>
 
@@ -879,6 +1018,98 @@ export default function EmployeesPage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* 🗓️ 연차 현황 패널 */}
+                    {showLeaveEmpId === emp.id && (
+                      <div className="px-6 py-5 bg-indigo-50 border-t border-indigo-100">
+                        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                          <p className="text-sm font-semibold text-indigo-800">🗓️ {emp.name} · 연차 현황 ({leaveYear}년)</p>
+                          {isAdmin && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs text-indigo-500">법정 연차: <strong>{calcLegalLeaveDays(emp.hire_date, leaveYear)}일</strong></span>
+                              <button
+                                onClick={() => setLeaveEditDraft({ total_days: leaveBalances[emp.id]?.total_days ?? calcLegalLeaveDays(emp.hire_date, leaveYear), override_reason: leaveBalances[emp.id]?.override_reason ?? '' })}
+                                className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-medium"
+                              >✏️ 수동 조정</button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 요약 카드 3개 */}
+                        <div className="grid grid-cols-3 gap-3 mb-4">
+                          {[
+                            { label: '부여 연차', value: leaveBalances[emp.id]?.total_days ?? 0, color: 'blue', icon: '📅' },
+                            { label: '사용 연차', value: leaveBalances[emp.id]?.used_days ?? 0, color: 'orange', icon: '✈️' },
+                            { label: '잔여 연차', value: leaveBalances[emp.id]?.remaining_days ?? 0, color: 'emerald', icon: '✅' },
+                          ].map(({ label, value, color, icon }) => (
+                            <div key={label} className={`bg-white rounded-xl border border-${color}-100 p-3 text-center`}>
+                              <div className="text-lg mb-0.5">{icon}</div>
+                              <div className={`text-xl font-black text-${color}-600`}>{value}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></div>
+                              <div className="text-[10px] text-gray-500">{label}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* 사용률 바 */}
+                        {(leaveBalances[emp.id]?.total_days ?? 0) > 0 && (() => {
+                          const total = leaveBalances[emp.id].total_days
+                          const used = leaveBalances[emp.id].used_days
+                          const pct = Math.round(used / total * 100)
+                          const barColor = pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-orange-400' : 'bg-emerald-400'
+                          return (
+                            <div className="flex items-center gap-3 mb-4">
+                              <div className="flex-1 bg-white rounded-full h-2.5 border border-indigo-100">
+                                <div className={`${barColor} h-2.5 rounded-full transition-all`} style={{width:`${Math.min(pct,100)}%`}} />
+                              </div>
+                              <span className={`text-xs font-bold ${pct>=90?'text-red-500':pct>=70?'text-orange-500':'text-emerald-600'}`}>{pct}%</span>
+                            </div>
+                          )
+                        })()}
+
+                        {/* 수동 조정 뱃지 */}
+                        {leaveBalances[emp.id]?.manual_override && (
+                          <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                            🔒 <strong>수동 조정됨</strong>{leaveBalances[emp.id].override_reason ? ` · ${leaveBalances[emp.id].override_reason}` : ''}
+                          </div>
+                        )}
+
+                        {/* ADMIN 수동 조정 폼 */}
+                        {isAdmin && leaveEditDraft.total_days !== undefined && showLeaveEmpId === emp.id && (
+                          <div className="bg-white border-2 border-indigo-200 rounded-xl p-4 flex flex-col gap-3">
+                            <p className="text-xs font-semibold text-indigo-700">✏️ 부여 연차 수동 조정</p>
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <label className="text-xs text-gray-600 shrink-0">부여일수</label>
+                                <input type="number" value={leaveEditDraft.total_days} min={0} max={365}
+                                  onChange={e => setLeaveEditDraft(d => ({...d, total_days: Number(e.target.value)}))}
+                                  className="w-20 text-center border-2 border-indigo-300 rounded-lg px-2 py-1.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                />
+                                <span className="text-xs text-gray-400">일</span>
+                              </div>
+                              <div className="flex-1 min-w-[160px] flex items-center gap-2">
+                                <label className="text-xs text-gray-600 shrink-0">조정 사유</label>
+                                <input type="text" value={leaveEditDraft.override_reason} placeholder="예: 연봉계약 특약"
+                                  onChange={e => setLeaveEditDraft(d => ({...d, override_reason: e.target.value}))}
+                                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                />
+                              </div>
+                              <div className="flex gap-2">
+                                <button onClick={() => saveLeaveOverride(emp.id, emp.auth_user_id)}
+                                  disabled={leaveSaving}
+                                  className="text-sm bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg font-medium">
+                                  {leaveSaving ? '저장중...' : '저장'}
+                                </button>
+                                <button onClick={() => setLeaveEditDraft({total_days:0, override_reason:''})}
+                                  className="text-sm text-gray-500 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50">
+                                  취소
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-indigo-400">※ 저장 후 자동부여 실행 시 수동조정 값이 보호됩니다.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* 🏥 보건증 패널 */}
                     {showHealthEmpId === emp.id && (
