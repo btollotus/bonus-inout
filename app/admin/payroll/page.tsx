@@ -13,6 +13,9 @@ type Employee = {
   email: string | null
   bank_name: string | null
   bank_account: string | null
+  car_type: string | null
+  fuel_type: string | null
+  commute_distance: number | null
 }
 
 type OtherAllowance = { label: string; amount: number }
@@ -83,6 +86,36 @@ function emptyRow(emp: Employee, year: number, month: number): PayrollRow {
   }
 }
 
+
+// ── 오피넷 전년도 평균 단가 (수동 업데이트) ──────────────
+// 출처: 오피넷 전국 월평균 판매가격 (원/L)
+const OPIINET_PRICE: Record<string, number> = {
+  '휘발유': 1650,   // 2025년 전국 평균 (업데이트 필요 시 수정)
+  '경유': 1480,
+  'LPG': 910,
+  '전기': 0,
+  '하이브리드': 1650,
+  '없음': 0,
+}
+// 연비 기본값 (km/L)
+const DEFAULT_FUEL_EFFICIENCY: Record<string, number> = {
+  '휘발유': 12,
+  '경유': 14,
+  'LPG': 10,
+  '전기': 0,
+  '하이브리드': 18,
+  '없음': 0,
+}
+
+// 유류비 자동계산: 출퇴근거리(편도) × 2 × 출근일수 / 연비 × 단가
+function calcFuelPay(emp: Employee, workDays: number, efficiency: number): number {
+  const dist = emp.commute_distance || 0
+  const fuelType = emp.fuel_type || '없음'
+  const price = OPIINET_PRICE[fuelType] || 0
+  if (!dist || !price || !workDays || !efficiency) return 0
+  return Math.round(dist * 2 * workDays / efficiency * price)
+}
+
 function calcNet(row: PayrollRow) {
   const income = (row.base_pay||0) + (row.meal_pay||0) + (row.fuel_pay||0) + (row.bonus_pay||0)
     + (row.other_allowances||[]).reduce((s, a) => s + a.amount, 0)
@@ -112,6 +145,8 @@ export default function PayrollPage() {
   const [empMap, setEmpMap] = useState<Record<string, Employee>>({})
   // 연말정산 모달
   const [settleModal, setSettleModal] = useState<{ empId: string; idx: number } | null>(null)
+  // 직원별 연비 (수동 수정용)
+  const [fuelEfficiency, setFuelEfficiency] = useState<Record<string, number>>({})
   const [settleDraft, setSettleDraft] = useState({ income_tax_settle: 0, local_tax_settle: 0, special_tax_settle: 0 })
   const printRef = useRef<HTMLDivElement>(null)
   const years = [new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2]
@@ -121,12 +156,17 @@ export default function PayrollPage() {
   useEffect(() => { if (tab === 'history') fetchHistory() }, [tab, historyYear])
 
   async function fetchEmployees() {
-    const { data } = await supabase.from('employees').select('id, name, position, employee_code, hire_date, email, bank_name, bank_account').is('resign_date', null).order('name')
+    const { data } = await supabase.from('employees').select('id, name, position, employee_code, hire_date, email, bank_name, bank_account, car_type, fuel_type, commute_distance').is('resign_date', null).order('name')
     const emps = data || []
     setEmployees(emps)
     const map: Record<string, Employee> = {}
-    emps.forEach((e: Employee) => { map[e.id] = e })
+    const effMap: Record<string, number> = {}
+    emps.forEach((e: Employee) => {
+      map[e.id] = e
+      effMap[e.id] = DEFAULT_FUEL_EFFICIENCY[e.fuel_type || '없음'] || 12
+    })
     setEmpMap(map)
+    setFuelEfficiency(effMap)
   }
 
   async function fetchLeaveUsage() {
@@ -444,9 +484,9 @@ export default function PayrollPage() {
                             <div className="flex items-center justify-between gap-4">
                               <div className="flex items-center gap-3">
                                 <span className="text-sm font-bold text-gray-900 w-20">{row.employee_name}</span>
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isF ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                  {isF ? '확정' : '초안'}
-                                </span>
+                                {isF && (
+                                  <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700">확정</span>
+                                )}
                                 {empLeave.length > 0 && (
                                   <div className="flex gap-1">
                                     {empLeave.map(u => (
@@ -478,7 +518,6 @@ export default function PayrollPage() {
                                     {([
                                       ['base_pay', '기본급'],
                                       ['meal_pay', '식대'],
-                                      ['fuel_pay', '유류지원비'],
                                       ['bonus_pay', '상여금'],
                                     ] as const).map(([field, label]) => (
                                       <div key={field} className="flex items-center gap-3">
@@ -493,6 +532,67 @@ export default function PayrollPage() {
                                         <span className="text-xs text-gray-400 w-4">원</span>
                                       </div>
                                     ))}
+
+                                    {/* ── 유류지원비 (자동계산) ── */}
+                                    {(() => {
+                                      const emp = empMap[row.employee_id]
+                                      const fuelType = emp?.fuel_type || '없음'
+                                      const dist = emp?.commute_distance || 0
+                                      const eff = fuelEfficiency[row.employee_id] || 12
+                                      const price = OPIINET_PRICE[fuelType] || 0
+                                      const autoCalc = calcFuelPay(emp || {} as Employee, row.work_days || 22, eff)
+                                      return (
+                                        <div className="space-y-1.5">
+                                          {/* 차량 정보 표시 */}
+                                          <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg border border-amber-200">
+                                            <span className="text-xs text-amber-700 font-medium">🚗</span>
+                                            <span className="text-xs text-amber-800">
+                                              {emp?.car_type || '차량미등록'} / {fuelType}
+                                              {dist ? ` / 편도 ${dist}km` : ''}
+                                              {price ? ` / ℓ당 ${formatKRW(price)}원 (오피넷 전년 평균)` : ''}
+                                            </span>
+                                          </div>
+                                          {/* 연비 + 출근일수 + 자동계산 */}
+                                          <div className="flex items-center gap-2">
+                                            <label className="w-24 text-sm text-gray-600 shrink-0">유류지원비</label>
+                                            <input
+                                              type="text"
+                                              value={row.fuel_pay === 0 ? '' : formatKRW(row.fuel_pay)}
+                                              onChange={e => handleFieldChange(idx, 'fuel_pay', e.target.value)}
+                                              disabled={isF} placeholder="0"
+                                              className="flex-1 text-right border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-50 disabled:text-gray-400"
+                                            />
+                                            <span className="text-xs text-gray-400 w-4">원</span>
+                                          </div>
+                                          <div className="flex items-center gap-2 pl-24">
+                                            <span className="text-xs text-gray-500">연비</span>
+                                            <input
+                                              type="number" value={eff} min={1} max={50} step={0.5}
+                                              onChange={e => setFuelEfficiency(prev => ({ ...prev, [row.employee_id]: Number(e.target.value) }))}
+                                              disabled={isF}
+                                              className="w-16 text-center border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:bg-gray-50"
+                                            />
+                                            <span className="text-xs text-gray-400">km/L</span>
+                                            <span className="text-xs text-gray-500 ml-2">출근일수</span>
+                                            <input
+                                              type="number" value={row.work_days || 22} min={1} max={31}
+                                              onChange={e => updateRow(idx, { work_days: Number(e.target.value) })}
+                                              disabled={isF}
+                                              className="w-14 text-center border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:bg-gray-50"
+                                            />
+                                            <span className="text-xs text-gray-400">일</span>
+                                            {!isF && price > 0 && dist > 0 && (
+                                              <button
+                                                onClick={() => handleFieldChange(idx, 'fuel_pay', String(autoCalc))}
+                                                className="ml-2 text-xs bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 rounded-lg font-medium transition-colors"
+                                              >
+                                                자동계산 ({formatKRW(autoCalc)}원)
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )
+                                    })()}
 
                                     {/* 기타 변동 수당 */}
                                     {row.other_allowances.map((a, aIdx) => (
