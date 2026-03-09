@@ -55,8 +55,8 @@ const LEAVE_TYPE_LABEL: Record<string, string> = {
   HALF_PM: '반차 - 오후 (0.5일)',
   SICK: '병가 (1일)',
   FRIDAY_OFF: '금요일 휴무 (1일)',
-  SPECIAL: '경조사 휴가',
-  REMOTE: '재택근무',
+  SPECIAL: '경조사 휴가 (유급)',
+  REMOTE: '재택근무 (유급)',
 }
 const LEAVE_TYPE_SHORT: Record<string, string> = {
   ANNUAL: '연차', HALF_AM: '오전반차', HALF_PM: '오후반차',
@@ -169,13 +169,23 @@ interface LunarYearInfo {
 }
 
 const LUNAR_DATA: LunarYearInfo[] = [
+  // 2023 계묘년: 윤2월 포함 (384일) → 2024-02-10 ✓
   { start:'2023-01-22', leapMonth:2, months:[29,30,29,30,29,30,29,30,30,29,30,29,30] },
-  { start:'2024-02-10', leapMonth:0, months:[29,30,29,29,30,29,30,29,30,30,29,30,30] },
+  // 2024 갑진년: 윤달 없음 (354일) → 2025-01-29 ✓
+  { start:'2024-02-10', leapMonth:0, months:[29,30,29,29,30,29,30,29,30,30,29,30] },
+  // 2025 을사년: 윤6월 포함 (384일) → 2026-02-17 ✓
+  // 6월(29)→윤6월(30)→7월(29) 순서
   { start:'2025-01-29', leapMonth:6, months:[30,29,30,29,30,29,30,29,30,29,30,29,30] },
-  { start:'2026-02-17', leapMonth:0, months:[29,30,29,30,29,30,30,29,30,29,30,29,30] },
-  { start:'2027-02-07', leapMonth:0, months:[30,29,30,29,30,29,30,30,29,30,29,30,29] },
-  { start:'2028-01-27', leapMonth:5, months:[30,29,30,29,30,29,30,29,30,30,29,30,29] },
-  { start:'2029-02-13', leapMonth:0, months:[30,29,30,29,30,29,30,29,30,29,30,30,29] },
+  // 2026 병오년: 윤달 없음 (355일) → 2027-02-07 ✓  [네이버 2월 달력 검증완료]
+  // 1월=30(2/17~3/18), 2월=29(3/19~4/16), 12월=30
+  { start:'2026-02-17', leapMonth:0, months:[30,29,30,29,30,29,30,29,30,29,30,30] },
+  // 2027 정미년: 윤달 없음 (354일) → 2028-01-27 ✓
+  { start:'2027-02-07', leapMonth:0, months:[29,29,30,29,30,29,30,30,30,29,30,29] },
+  // 2028 무신년: 윤5월 포함 (383일) → 2029-02-13 ✓
+  // 5월(30)→윤5월(29)→6월(29) 순서
+  { start:'2028-01-27', leapMonth:5, months:[30,29,30,29,30,29,29,30,29,30,29,30,29] },
+  // 2029 기유년: 윤달 없음 (355일) → 2030-02-03 ✓
+  { start:'2029-02-13', leapMonth:0, months:[30,30,29,30,29,30,29,30,29,30,29,30] },
 ]
 
 function getLunarDate(dateStr: string): { month: number; day: number; isLeap: boolean; lunarYear: number } | null {
@@ -191,25 +201,34 @@ function getLunarDate(dateStr: string): { month: number; day: number; isLeap: bo
     const diffMs = date.getTime() - startDate.getTime()
     let remaining = Math.floor(diffMs / 86400000)
 
-    let month = 0
-    let isLeap = false
     const leapMonth = cur.leapMonth
+    const lunarYear = new Date(cur.start).getFullYear()
 
+    // 윤달 있는 경우: months 배열에서 leapMonth 번째 달(0-based: leapMonth) 다음이 윤달
+    // 예) leapMonth=6: 인덱스 0~5 = 1~6월, 인덱스 6 = 윤6월, 인덱스 7~12 = 7~12월
     for (let m = 0; m < cur.months.length; m++) {
       if (remaining < cur.months[m]) {
-        // 월 번호 계산 (윤달 고려)
+        let month: number
+        let isLeap = false
+
         if (leapMonth === 0) {
+          // 윤달 없음: 그냥 순서대로
           month = m + 1
-        } else if (m < leapMonth) {
-          month = m + 1
-        } else if (m === leapMonth) {
-          // 윤달 자체
-          month = leapMonth
-          isLeap = true
         } else {
-          month = m  // 윤달 이후는 한 칸 당겨짐
+          // leapMonth가 있을 때:
+          // 인덱스 0 ~ leapMonth-1 → 음력 1 ~ leapMonth 월
+          // 인덱스 leapMonth       → 윤 leapMonth 월 (isLeap=true)
+          // 인덱스 leapMonth+1 ~ 끝 → 음력 leapMonth+1 ~ 12월
+          if (m < leapMonth) {
+            month = m + 1
+          } else if (m === leapMonth) {
+            month = leapMonth
+            isLeap = true
+          } else {
+            month = m  // leapMonth+1 이후는 m (leapMonth 자리가 윤달로 소비됐으므로)
+          }
         }
-        const lunarYear = new Date(cur.start).getFullYear()
+
         return { month, day: remaining + 1, isLeap, lunarYear }
       }
       remaining -= cur.months[m]
@@ -615,7 +634,7 @@ export default function LeavePage() {
       if (lunar) {
         lunarIsMonthStart = lunar.day === 1
         if (lunarIsMonthStart) {
-          lunarStr = lunar.isLeap ? `윤${lunar.month}월` : `음${lunar.month}월`
+          lunarStr = lunar.isLeap ? `윤${lunar.month}` : `음${lunar.month}월`
         } else {
           lunarStr = `${lunar.day}`
         }
