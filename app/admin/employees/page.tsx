@@ -18,20 +18,20 @@ type Employee = {
   car_type: string | null
   fuel_type: string | null
   commute_distance: number | null
+  fuel_efficiency: number | null
   emergency_contact: string | null
   bank_name: string | null
   bank_account: string | null
   encrypted_rrn: string | null
-  // 신규 필드
-  birthday: string | null          // YYYY-MM-DD
-  birthday_type: 'solar' | 'lunar' | null  // 양력/음력
+  birthday: string | null
+  birthday_type: 'solar' | 'lunar' | null
   created_at: string
 }
 
 type HealthCertRecord = {
   id: string
   employee_id: string
-  exam_date: string       // YYYY-MM-DD
+  exam_date: string
   note: string | null
   created_at: string
 }
@@ -50,6 +50,7 @@ const EMPTY_FORM = {
   employee_code: '', name: '', email: '', mobile: '',
   address: '', hire_date: '', resign_date: '',
   position: '', car_type: '', fuel_type: '', commute_distance: '',
+  fuel_efficiency: '',
   emergency_contact: '', bank_name: '', bank_account: '', rrn: '',
   birthday: '', birthday_type: 'solar' as 'solar' | 'lunar',
 }
@@ -85,7 +86,6 @@ function formatPhone(v: string) {
   return c.slice(0, 3) + '-' + c.slice(3, 7) + '-' + c.slice(7)
 }
 
-// 보건증 만료일 = 검사일 + 1년
 function healthExpiry(examDate: string) {
   const d = new Date(examDate)
   d.setFullYear(d.getFullYear() + 1)
@@ -111,7 +111,8 @@ function detectChanges(original: Employee, newForm: typeof EMPTY_FORM) {
     employee_code: '사번', name: '이름', email: '이메일', mobile: '휴대폰',
     address: '주소', hire_date: '입사일', resign_date: '퇴사일',
     position: '직책', car_type: '차종', fuel_type: '유종',
-    commute_distance: '출퇴근거리', emergency_contact: '비상연락처', bank_name: '은행명', bank_account: '계좌번호',
+    commute_distance: '출퇴근거리', fuel_efficiency: '연비',
+    emergency_contact: '비상연락처', bank_name: '은행명', bank_account: '계좌번호',
     birthday: '생일', birthday_type: '생일구분',
   }
   const changes: Record<string, { before: unknown; after: unknown }> = {}
@@ -139,29 +140,23 @@ export default function EmployeesPage() {
   const [showForm, setShowForm] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
-  // 주민번호
   const [showRRN, setShowRRN] = useState<Record<string, boolean>>({})
   const [decryptedRRN, setDecryptedRRN] = useState<Record<string, string>>({})
 
-  // 재초대
   const [resendingId, setResendingId] = useState<string | null>(null)
 
-  // 수정 이력
   const [historyEmpId, setHistoryEmpId] = useState<string | null>(null)
   const [history, setHistory] = useState<Record<string, unknown>[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
-  // UID 매핑 모달
   const [showMappingModal, setShowMappingModal] = useState(false)
   const [mappingTarget, setMappingTarget] = useState<Employee | null>(null)
   const [authUsers, setAuthUsers] = useState<AuthUser[]>([])
   const [mappingUid, setMappingUid] = useState('')
   const [mappingLoading, setMappingLoading] = useState(false)
 
-  // 보건증
   const [healthRecords, setHealthRecords] = useState<Record<string, HealthCertRecord[]>>({})
 
-  // ── 연차 관리 ──────────────────────────────────────────
   const [leaveBalances, setLeaveBalances] = useState<Record<string, {total_days:number; used_days:number; remaining_days:number; manual_override:boolean; override_reason:string}>>({})
   const [leaveYear, setLeaveYear] = useState(new Date().getFullYear())
   const [showLeaveEmpId, setShowLeaveEmpId] = useState<string | null>(null)
@@ -177,8 +172,6 @@ export default function EmployeesPage() {
   useEffect(() => { fetchEmployees() }, [])
   useEffect(() => { if (employees.length > 0) fetchLeaveBalances() }, [leaveYear, employees])
 
-  // ── 직원 목록 ─────────────────────────────────────────
-  // ── 근로기준법 연차 계산 ──────────────────────────────
   function calcLegalLeaveDays(hireDateStr: string | null | undefined, targetYear: number): number {
     if (!hireDateStr) return 0
     const hire = new Date(hireDateStr)
@@ -223,7 +216,6 @@ export default function EmployeesPage() {
       usedMap[r.employee_id] = (usedMap[r.employee_id] || 0) + days
     }
 
-    // 입사일 기준 자동부여 (manual_override=false이거나 미존재 시)
     if (admin) {
       for (const e of employees) {
         if (!e.hire_date) continue
@@ -296,7 +288,6 @@ export default function EmployeesPage() {
     setFetchLoading(false)
   }
 
-  // ── 보건증 이력 로드 ──────────────────────────────────
   async function fetchHealthRecords(empId: string) {
     const { data } = await supabase
       .from('employee_health_certs')
@@ -342,7 +333,6 @@ export default function EmployeesPage() {
     setHealthFormEmpId(null)
   }
 
-  // ── 주민번호 (전체 표시) ──────────────────────────────
   async function handleRevealRRN(empId: string) {
     if (showRRN[empId]) {
       setShowRRN((p) => ({ ...p, [empId]: false }))
@@ -355,17 +345,14 @@ export default function EmployeesPage() {
     })
     const json = await res.json()
     if (res.ok) {
-      // 전체 번호 표시 (마스킹 없음)
       setDecryptedRRN((p) => ({ ...p, [empId]: json.rrn }))
       setShowRRN((p) => ({ ...p, [empId]: true }))
-      // 30초 후 자동 숨김
       setTimeout(() => setShowRRN((p) => ({ ...p, [empId]: false })), 30000)
     } else {
       setError(json.error || '복호화 실패')
     }
   }
 
-  // ── Auth Users 로드 ────────────────────────────────────
   async function fetchAuthUsers() {
     try {
       const res = await fetch('/api/admin/list-auth-users')
@@ -401,7 +388,6 @@ export default function EmployeesPage() {
     }
   }
 
-  // ── 폼 핸들러 ─────────────────────────────────────────
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target
     if (name === 'rrn') { setForm({ ...form, rrn: formatRRN(value) }); return }
@@ -425,6 +411,7 @@ export default function EmployeesPage() {
       car_type: emp.car_type || '',
       fuel_type: emp.fuel_type || '',
       commute_distance: emp.commute_distance?.toString() || '',
+      fuel_efficiency: emp.fuel_efficiency?.toString() || '',
       emergency_contact: emp.emergency_contact || '',
       bank_name: emp.bank_name || '',
       bank_account: emp.bank_account || '',
@@ -492,7 +479,6 @@ export default function EmployeesPage() {
         encryptedRrn = rrnJson.encrypted
       }
 
-      // birthday 컬럼이 DB에 없을 경우를 대비해 기본 payload와 분리
       const basePayload: Record<string, unknown> = {
         auth_user_id: authUserId || null,
         employee_code: form.employee_code,
@@ -506,13 +492,13 @@ export default function EmployeesPage() {
         car_type: form.car_type || null,
         fuel_type: form.fuel_type || null,
         commute_distance: form.commute_distance ? Number(form.commute_distance) : null,
+        fuel_efficiency: form.fuel_efficiency ? Number(form.fuel_efficiency) : null,
         emergency_contact: form.emergency_contact || null,
         bank_name: form.bank_name || null,
         bank_account: form.bank_account || null,
       }
       if (encryptedRrn) basePayload.encrypted_rrn = encryptedRrn
 
-      // birthday 포함 payload (컬럼이 있을 때)
       const fullPayload: Record<string, unknown> = {
         ...basePayload,
         birthday: form.birthday || null,
@@ -520,12 +506,11 @@ export default function EmployeesPage() {
       }
 
       if (editingId) {
-        // birthday 포함 먼저 시도 → 컬럼 없으면 base로 재시도
         let { error } = await supabase.from('employees').update(fullPayload).eq('id', editingId)
         if (error?.message?.includes('schema cache')) {
           const retry = await supabase.from('employees').update(basePayload).eq('id', editingId)
           error = retry.error
-          if (!error) setError('⚠️ 생일 항목은 DB 마이그레이션 후 저장됩니다. (나머지는 저장됨)')
+          if (!error) setError('⚠️ 일부 항목은 DB 마이그레이션 후 저장됩니다. (나머지는 저장됨)')
         }
         if (error) throw new Error(translateError(error.message))
 
@@ -548,7 +533,7 @@ export default function EmployeesPage() {
         if (error?.message?.includes('schema cache')) {
           const retry = await supabase.from('employees').insert([basePayload])
           error = retry.error
-          if (!error) setError('⚠️ 생일 항목은 DB 마이그레이션 후 저장됩니다. (나머지는 저장됨)')
+          if (!error) setError('⚠️ 일부 항목은 DB 마이그레이션 후 저장됩니다. (나머지는 저장됨)')
         }
         if (error) throw new Error(translateError(error.message))
         setSuccess(`등록 완료. ${form.email}으로 초대 메일이 발송되었습니다.`)
@@ -609,7 +594,6 @@ export default function EmployeesPage() {
 
   const unmappedEmployees = employees.filter((e) => !e.auth_user_id && e.email)
 
-  // ── 렌더 ─────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
       {/* 헤더 */}
@@ -643,7 +627,6 @@ export default function EmployeesPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        {/* 알림 */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm flex justify-between">
             <span>{error}</span>
@@ -657,7 +640,6 @@ export default function EmployeesPage() {
           </div>
         )}
 
-        {/* UID 미매핑 경고 */}
         {unmappedEmployees.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
             <p className="text-sm font-semibold text-amber-800 mb-1">
@@ -730,7 +712,7 @@ export default function EmployeesPage() {
                       주민번호
                       <span className="text-xs text-gray-400 ml-1">{editingId ? '재입력시만 변경' : ''} · AES-256 암호화</span>
                     </label>
-                    <input name="rrn" value={form.rrn} onChange={handleChange} placeholder="730228-1168160" maxLength={14}
+                    <input name="rrn" value={form.rrn} onChange={handleChange} placeholder="XXXXXX-XXXXXXX" maxLength={14}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono tracking-wider" />
                   </div>
                   <div className="md:col-span-2">
@@ -753,7 +735,7 @@ export default function EmployeesPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">💳 급여 계좌번호</label>
                     <input name="bank_account" value={form.bank_account} onChange={handleChange}
-                      placeholder="예: 438902-01-505309"
+                      placeholder="계좌번호 입력"
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
@@ -767,11 +749,10 @@ export default function EmployeesPage() {
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
 
-                  {/* 🎂 생일 (양력/음력) */}
+                  {/* 생일 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">생일</label>
                     <div className="flex gap-2">
-                      {/* 양력/음력 토글 */}
                       <div className="flex rounded-md border border-gray-300 overflow-hidden shrink-0">
                         <button
                           type="button"
@@ -814,7 +795,7 @@ export default function EmployeesPage() {
               {/* 차량/통근 정보 */}
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">차량 / 통근 정보</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">차종</label>
                     <input name="car_type" value={form.car_type} onChange={handleChange} placeholder="예: 현대 아반떼"
@@ -833,6 +814,13 @@ export default function EmployeesPage() {
                     <input type="number" name="commute_distance" value={form.commute_distance} onChange={handleChange}
                       placeholder="편도 km" min="0" step="0.1"
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">연비 (km/L)</label>
+                    <input type="number" name="fuel_efficiency" value={form.fuel_efficiency} onChange={handleChange}
+                      placeholder="예: 12.5" min="1" max="50" step="0.1"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <p className="text-xs text-gray-400 mt-1">급여 유류비 자동계산에 사용</p>
                   </div>
                 </div>
               </div>
@@ -884,35 +872,28 @@ export default function EmployeesPage() {
                 const healthBadge = latestHealth ? expiryBadge(latestHealth.exam_date) : null
                 return (
                   <React.Fragment key={emp.id}>
-                    {/* ── 직원 카드 ── */}
                     <div className="px-6 py-4 hover:bg-gray-50 transition-colors">
-                      {/* 상단: 이름 + 뱃지 + 작업버튼 */}
                       <div className="flex items-start justify-between gap-4 mb-3">
                         <div className="flex items-center gap-2 flex-wrap">
-                          {/* 이름 + 직책 */}
                           <span className="text-base font-bold text-gray-900">{emp.name}</span>
                           {emp.position && (
                             <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">{emp.position}</span>
                           )}
-                          {/* 재직/퇴사 */}
                           {emp.resign_date
                             ? <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">퇴사</span>
                             : <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full">재직</span>}
-                          {/* 계정 연동 */}
                           {emp.auth_user_id
                             ? <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">✓ 계정연동</span>
                             : <button onClick={() => openMappingModal(emp)}
                                 className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full">
                                 미연동 →연결
                               </button>}
-                          {/* 보건증 만료 뱃지 (최신 기록 있을 때) */}
                           {healthBadge && (
                             <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${healthBadge.cls}`}>
                               🏥 {healthBadge.label}
                             </span>
                           )}
                         </div>
-                        {/* 작업 버튼 */}
                         <div className="flex items-center gap-3 shrink-0 flex-wrap">
                           <button onClick={() => handleEdit(emp)}
                             className="text-xs text-blue-600 hover:text-blue-800 font-semibold">수정</button>
@@ -944,7 +925,6 @@ export default function EmployeesPage() {
                         </div>
                       </div>
 
-                      {/* 하단: 정보 그리드 */}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-1.5 text-xs">
                         <div className="flex gap-1.5">
                           <span className="text-gray-400 shrink-0">사번</span>
@@ -989,7 +969,10 @@ export default function EmployeesPage() {
                         </div>
                         <div className="flex gap-1.5">
                           <span className="text-gray-400 shrink-0">통근</span>
-                          <span className="text-gray-700">{emp.commute_distance ? `${emp.commute_distance}km` : '-'}</span>
+                          <span className="text-gray-700">
+                            {emp.commute_distance ? `편도 ${emp.commute_distance}km` : '-'}
+                            {emp.fuel_efficiency ? ` / 연비 ${emp.fuel_efficiency}km/L` : ''}
+                          </span>
                         </div>
                         <div className="flex gap-1.5 items-center">
                           <span className="text-gray-400 shrink-0">주민번호</span>
@@ -1008,7 +991,7 @@ export default function EmployeesPage() {
                       </div>
                     </div>
 
-                    {/* 🗓️ 연차 현황 패널 */}
+                    {/* 연차 현황 패널 */}
                     {showLeaveEmpId === emp.id && (
                       <div className="px-6 py-5 bg-indigo-50 border-t border-indigo-100">
                         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -1023,8 +1006,6 @@ export default function EmployeesPage() {
                             </div>
                           )}
                         </div>
-
-                        {/* 요약 카드 3개 */}
                         <div className="grid grid-cols-3 gap-3 mb-4">
                           {[
                             { label: '부여 연차', value: leaveBalances[emp.id]?.total_days ?? 0, color: 'blue', icon: '📅' },
@@ -1038,8 +1019,6 @@ export default function EmployeesPage() {
                             </div>
                           ))}
                         </div>
-
-                        {/* 사용률 바 */}
                         {(leaveBalances[emp.id]?.total_days ?? 0) > 0 && (() => {
                           const total = leaveBalances[emp.id].total_days
                           const used = leaveBalances[emp.id].used_days
@@ -1054,15 +1033,11 @@ export default function EmployeesPage() {
                             </div>
                           )
                         })()}
-
-                        {/* 수동 조정 뱃지 */}
                         {leaveBalances[emp.id]?.manual_override && (
                           <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
                             🔒 <strong>수동 조정됨</strong>{leaveBalances[emp.id].override_reason ? ` · ${leaveBalances[emp.id].override_reason}` : ''}
                           </div>
                         )}
-
-                        {/* ADMIN 수동 조정 폼 */}
                         {isAdmin && leaveEditDraft.total_days !== undefined && showLeaveEmpId === emp.id && (
                           <div className="bg-white border-2 border-indigo-200 rounded-xl p-4 flex flex-col gap-3">
                             <p className="text-xs font-semibold text-indigo-700">✏️ 부여 연차 수동 조정</p>
@@ -1100,7 +1075,7 @@ export default function EmployeesPage() {
                       </div>
                     )}
 
-                    {/* 🏥 보건증 패널 */}
+                    {/* 보건증 패널 */}
                     {showHealthEmpId === emp.id && (
                       <div className="px-6 py-4 bg-teal-50 border-t border-teal-100">
                         <div className="flex items-center justify-between mb-3">
@@ -1112,8 +1087,6 @@ export default function EmployeesPage() {
                             + 검사일 추가
                           </button>
                         </div>
-
-                        {/* 추가 폼 */}
                         {healthFormEmpId === emp.id && (
                           <div className="flex gap-3 items-end mb-4 flex-wrap bg-white border border-teal-200 rounded-xl p-4">
                             <div>
@@ -1142,8 +1115,6 @@ export default function EmployeesPage() {
                             </div>
                           </div>
                         )}
-
-                        {/* 이력 목록 */}
                         {!healthRecords[emp.id] ? (
                           <p className="text-xs text-gray-400">불러오는 중...</p>
                         ) : healthRecords[emp.id].length === 0 ? (
@@ -1181,7 +1152,7 @@ export default function EmployeesPage() {
                       </div>
                     )}
 
-                    {/* 📋 수정 이력 패널 */}
+                    {/* 수정 이력 패널 */}
                     {historyEmpId === emp.id && (
                       <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
                         <p className="text-sm font-semibold text-gray-600 mb-3">📋 {emp.name} · 수정 이력</p>
