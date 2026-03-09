@@ -16,7 +16,7 @@ type Employee = {
   car_type: string | null
   fuel_type: string | null
   commute_distance: number | null
-  auth_user_id: string | null   // leave_requests.user_id 와 매칭
+  auth_user_id: string | null
 }
 
 type OtherAllowance = { label: string; amount: number }
@@ -50,11 +50,10 @@ type PayrollRow = {
   status: 'draft' | 'final'
 }
 
-// ✅ dates 추가
 type LeaveUsage = {
   leave_type: string
   count: number
-  dates: string[]   // ["2026-02-05", "2026-02-17"]
+  dates: string[]
 }
 
 type SendStatus = 'idle' | 'pending' | 'done' | 'error'
@@ -66,7 +65,6 @@ function formatKRW(n: number) {
 }
 function parseNum(v: string) { return parseInt(v.replace(/,/g, ''), 10) || 0 }
 
-// "2026-02-05" → "2/5"
 function fmtDate(d: string): string {
   const [, m, day] = d.split('-')
   return `${parseInt(m)}/${parseInt(day)}`
@@ -157,7 +155,7 @@ function buildSlipHTML(row: PayrollRow, emp: Employee | undefined, leaveUsages: 
   function getPayDate(y:number,m:number){const nm=m===12?1:m+1,ny=m===12?y+1:y;let d=new Date(ny,nm-1,10);while(d.getDay()===0||d.getDay()===6)d.setDate(d.getDate()-1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
   const leaveRows = leaveUsages.length>0 ? leaveUsages.map(u=>{
     const sorted=[...u.dates].sort()
-    const dateStr=sorted.map(fmtDate).join(', ')
+    const dateStr=sorted.map(fmtDate).join(' · ')
     return `<tr><td style="${lbl}">${leaveLabel(u.leave_type)}</td><td style="${amt}"><strong>${u.count}회</strong><span style="color:#666;font-size:10px;margin-left:8px;">(${dateStr})</span></td></tr>`
   }).join('') : `<tr><td colspan="2" style="${td}text-align:center;color:#888;">해당 월 연차·휴가 사용 내역 없음</td></tr>`
   return `<div style="text-align:center;font-size:18px;font-weight:bold;margin-bottom:14px;">${row.pay_month} (주)보누스메이트 급여명세서</div>
@@ -186,7 +184,7 @@ ${(row.other_allowances||[]).map(a=>`<tr><td style="${lbl}">${a.label||'기타'}
 <tr><td style="${lbl}">장기요양보험료</td><td style="${amt}">${formatKRW(row.long_term_care||0)}</td></tr>
 <tr><td style="${lbl}">소득세</td><td style="${amt}">${formatKRW(row.income_tax||0)}</td></tr>
 <tr><td style="${lbl}">지방소득세</td><td style="${amt}">${formatKRW(row.local_income_tax||0)}</td></tr>
-${hasSettle?`<tr style="background:#fffbeb;"><td style="${td}font-weight:bold;color:#92400e;" colspan="2">◆ 연말정산</td></tr>${row.income_tax_settle!==0?`<tr><td style="${lbl}">연말정산소득세</td><td style="${amt}">${formatKRW(row.income_tax_settle)}</td></tr>`:''} ${row.local_tax_settle!==0?`<tr><td style="${lbl}">연말정산지방소득세</td><td style="${amt}">${formatKRW(row.local_tax_settle)}</td></tr>`:''} ${row.special_tax_settle!==0?`<tr><td style="${lbl}">연말정산농특세</td><td style="${amt}">${formatKRW(row.special_tax_settle)}</td></tr>`:'`'}`:''} 
+${hasSettle?`<tr style="background:#fffbeb;"><td style="${td}font-weight:bold;color:#92400e;" colspan="2">◆ 연말정산</td></tr>${row.income_tax_settle!==0?`<tr><td style="${lbl}">연말정산소득세</td><td style="${amt}">${formatKRW(row.income_tax_settle)}</td></tr>`:''} ${row.local_tax_settle!==0?`<tr><td style="${lbl}">연말정산지방소득세</td><td style="${amt}">${formatKRW(row.local_tax_settle)}</td></tr>`:''} ${row.special_tax_settle!==0?`<tr><td style="${lbl}">연말정산농특세</td><td style="${amt}">${formatKRW(row.special_tax_settle)}</td></tr>`:''}`:''} 
 <tr style="background:#fee2e2;font-weight:bold;"><td style="${lbl}">공제합계</td><td style="${amt}">${totalDeduction<0?'+':'-'}${formatKRW(Math.abs(totalDeduction))}</td></tr>
 </tbody></table></div></div>
 <div style="margin-top:10px;"><div style="${sh}">▶ ${row.pay_month} 연차·휴가 사용 내역</div>
@@ -222,7 +220,6 @@ export default function PayrollPage() {
   const printRef = useRef<HTMLDivElement>(null)
   const years = [new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2]
 
-  // ✅ 이메일 발송 state
   const [emailModal, setEmailModal] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [sendStatus, setSendStatus] = useState<Record<string, SendStatus>>({})
@@ -247,7 +244,6 @@ export default function PayrollPage() {
     setFuelEfficiency(effMap)
   }
 
-  // leave_requests.user_id = employees.auth_user_id 로 매칭 (SQL 확인 완료)
   async function fetchLeaveUsage() {
     const firstDay = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
     const lastDay = new Date(selectedYear, selectedMonth, 0).toISOString().slice(0, 10)
@@ -257,7 +253,6 @@ export default function PayrollPage() {
       .gte('leave_date', firstDay)
       .lte('leave_date', lastDay)
 
-    // auth_user_id → employee.id 역매핑
     const authToEmpId: Record<string, string> = {}
     for (const emp of employees) {
       if (emp.auth_user_id) authToEmpId[emp.auth_user_id] = emp.id
@@ -389,7 +384,6 @@ export default function PayrollPage() {
     setSettleModal(null)
   }
 
-  // ✅ 이메일 발송 로직
   function openEmailModal() {
     setSelectedIds(new Set(employees.filter(e => e.email).map(e => e.id)))
     setSendStatus({}); setSendProgress({ done: 0, total: 0 }); setEmailModal(true)
@@ -477,7 +471,7 @@ export default function PayrollPage() {
         </div>
       )}
 
-      {/* ✅ 이메일 발송 모달 */}
+      {/* 이메일 발송 모달 */}
       {emailModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
@@ -525,7 +519,6 @@ export default function PayrollPage() {
                 })}
               </div>
 
-              {/* 진행률 */}
               {isSending&&(
                 <div className="mt-4">
                   <div className="flex justify-between text-xs text-gray-500 mb-1">
@@ -538,7 +531,6 @@ export default function PayrollPage() {
                 </div>
               )}
 
-              {/* 완료 요약 */}
               {!isSending&&Object.keys(sendStatus).length>0&&(
                 <div className="mt-3 flex gap-4 text-sm justify-center">
                   <span className="text-emerald-600 font-medium">✓ 성공 {Object.values(sendStatus).filter(s=>s==='done').length}건</span>
@@ -600,7 +592,6 @@ export default function PayrollPage() {
                     </select>
                   </div>
                   {isFinalized&&<span className="bg-green-100 text-green-700 text-xs font-medium px-2.5 py-1 rounded-full">✓ 최종 확정됨</span>}
-                  {/* ✅ 이메일 발송 버튼 */}
                   <div className="ml-auto">
                     <button onClick={openEmailModal}
                       className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm">
@@ -640,12 +631,11 @@ export default function PayrollPage() {
                               <div className="flex items-center gap-3 min-w-0">
                                 <span className="text-sm font-bold text-gray-900 w-20 shrink-0">{row.employee_name}</span>
                                 {isF&&<span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700 shrink-0">확정</span>}
-                                {/* ✅ 연차 태그 - 날짜 포함 */}
                                 {empLeave.length>0&&(
                                   <div className="flex flex-wrap gap-1">
                                     {empLeave.map(u=>{
                                       const sorted=[...u.dates].sort()
-                                      const dateStr=sorted.map(fmtDate).join(', ')
+                                      const dateStr=sorted.map(fmtDate).join(' · ')
                                       return (
                                         <span key={u.leave_type} title={`날짜: ${sorted.join(', ')}`}
                                           className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full cursor-help whitespace-nowrap">
@@ -764,7 +754,6 @@ export default function PayrollPage() {
                                 </div>
                               </div>
 
-                              {/* ✅ 연차 사용 내역 - 날짜 뱃지 포함 */}
                               {empLeave.length>0&&(
                                 <div className="mt-4 bg-purple-50 rounded-xl border border-purple-100 p-4">
                                   <p className="text-xs font-bold text-purple-700 mb-3">📅 {selectedMonth}월 연차·휴가 사용 내역</p>
@@ -914,12 +903,14 @@ export default function PayrollPage() {
 // ── 인쇄용 명세서 컴포넌트 ──────────────────────────────
 import { forwardRef } from 'react'
 
+// ✅ 수정 1: nav/header 숨기기 셀렉터 강화, date-badge 제거
 const PRINT_STYLES = [
   '@media print {',
   '  @page { size: A4; margin: 15mm; }',
   '  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }',
   '  .print-block { display: block !important; }',
-  '  nav, header { display: none !important; }',
+  '  nav, header, [class*="nav"], [class*="header"], [class*="sidebar"],',
+  '  [role="navigation"], [role="banner"], .print\\:hidden { display: none !important; }',
   '}',
   '.slip-table { width: 100%; border-collapse: collapse; }',
   '.slip-table th, .slip-table td { border: 1px solid #999; padding: 4px 6px; }',
@@ -927,7 +918,6 @@ const PRINT_STYLES = [
   '.section-header { background: #222; color: white; padding: 4px 8px; font-weight: bold; margin: 10px 0 4px; font-size: 11px; }',
   '.amount { text-align: right; }',
   '.label-col { background: #f5f5f5; font-weight: 600; width: 120px; }',
-  '.date-badge { display:inline-block; font-size:10px; color:#555; background:#f0f0f0; border:1px solid #ddd; padding:1px 5px; border-radius:3px; margin:1px; }',
 ].join('\n')
 
 const PrintSlip = forwardRef<HTMLDivElement, { row: PayrollRow; emp: Employee | undefined; leaveUsage: LeaveUsage[] }>(
@@ -991,7 +981,7 @@ const PrintSlip = forwardRef<HTMLDivElement, { row: PayrollRow; emp: Employee | 
           </div>
         </div>
 
-        {/* ✅ 연차 사용 내역 - 횟수 + 날짜 표시 */}
+        {/* ✅ 수정 2: 연차 날짜 한 줄로 표시 — date-badge div 제거 */}
         <div className="mt-3">
           <div className="section-header">▶ {row.pay_month} 연차·휴가 사용 내역</div>
           <table className="slip-table">
@@ -1000,15 +990,13 @@ const PrintSlip = forwardRef<HTMLDivElement, { row: PayrollRow; emp: Employee | 
               {leaveUsage.length>0
                 ?leaveUsage.map(u=>{
                     const sorted=[...u.dates].sort()
+                    const dateStr = sorted.map(fmtDate).join(' · ')
                     return(
                       <tr key={u.leave_type}>
                         <td className="label-col">{leaveLabel(u.leave_type)}</td>
-                        <td className="amount">
+                        <td style={{padding:'4px 6px', border:'1px solid #999'}}>
                           <span style={{fontWeight:'bold'}}>{u.count}회</span>
-                          <span style={{color:'#555',fontSize:'10px',marginLeft:'8px'}}>({sorted.map(fmtDate).join(', ')})</span>
-                          <div style={{marginTop:'3px'}}>
-                            {sorted.map(d=><span key={d} className="date-badge">{d}</span>)}
-                          </div>
+                          <span style={{color:'#555', fontSize:'10px', marginLeft:'8px'}}>({dateStr})</span>
                         </td>
                       </tr>
                     )
