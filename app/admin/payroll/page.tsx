@@ -94,17 +94,19 @@ function emptyRow(emp: Employee, year: number, month: number): PayrollRow {
   }
 }
 
-const OPIINET_PRICE: Record<string, number> = {
+// OPIINET_PRICE는 DB에서 로드 — 폴백용 기본값만 유지
+const DEFAULT_FUEL_PRICE: Record<string, number> = {
   '휘발유': 1650, '경유': 1480, 'LPG': 910, '전기': 0, '하이브리드': 1650, '없음': 0,
 }
 const DEFAULT_FUEL_EFFICIENCY: Record<string, number> = {
   '휘발유': 12, '경유': 14, 'LPG': 10, '전기': 0, '하이브리드': 18, '없음': 0,
 }
+const FUEL_TYPES_PRICED = ['휘발유', '경유', 'LPG', '하이브리드']
 
-function calcFuelPay(emp: Employee, workDays: number, efficiency: number): number {
+function calcFuelPay(emp: Employee, workDays: number, efficiency: number, priceMap: Record<string, number>): number {
   const dist = emp.commute_distance || 0
   const fuelType = emp.fuel_type || '없음'
-  const price = OPIINET_PRICE[fuelType] || 0
+  const price = priceMap[fuelType] ?? DEFAULT_FUEL_PRICE[fuelType] ?? 0
   if (!dist || !price || !workDays || !efficiency) return 0
   return Math.round(dist * 2 * workDays / efficiency * price)
 }
@@ -217,6 +219,10 @@ export default function PayrollPage() {
   const [empMap, setEmpMap] = useState<Record<string, Employee>>({})
   const [settleModal, setSettleModal] = useState<{ empId: string; idx: number } | null>(null)
   const [fuelEfficiency, setFuelEfficiency] = useState<Record<string, number>>({})
+  const [fuelPriceMap, setFuelPriceMap] = useState<Record<string, number>>({...DEFAULT_FUEL_PRICE})
+  const [fuelPriceSaving, setFuelPriceSaving] = useState(false)
+  const [fuelPriceEdit, setFuelPriceEdit] = useState<Record<string, number>>({})
+  const [showFuelPanel, setShowFuelPanel] = useState(false)
   const [settleDraft, setSettleDraft] = useState({ income_tax_settle: 0, local_tax_settle: 0, special_tax_settle: 0 })
   const printRef = useRef<HTMLDivElement>(null)
   const years = [new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2]
@@ -227,8 +233,8 @@ export default function PayrollPage() {
   const [isSending, setIsSending] = useState(false)
   const [sendProgress, setSendProgress] = useState({ done: 0, total: 0 })
 
-  useEffect(() => { fetchEmployees() }, [])
-  useEffect(() => { if (employees.length > 0) { fetchPayrollForMonth(); fetchLeaveUsage() } }, [selectedYear, selectedMonth, employees])
+  useEffect(() => { fetchEmployees(); fetchFuelPrices() }, [])
+  useEffect(() => { if (employees.length > 0) { fetchPayrollForMonth(); fetchLeaveUsage() } fetchFuelPrices(selectedYear) }, [selectedYear, selectedMonth, employees])
   useEffect(() => { if (tab === 'history') fetchHistory() }, [tab, historyYear])
 
   async function fetchEmployees() {
@@ -243,6 +249,39 @@ export default function PayrollPage() {
     })
     setEmpMap(map)
     setFuelEfficiency(effMap)
+  }
+
+  async function fetchFuelPrices(year?: number) {
+    const y = year || selectedYear
+    const { data } = await supabase.from('fuel_price_settings').select('fuel_type, price_per_liter').eq('year', y)
+    if (data && data.length > 0) {
+      const map: Record<string, number> = { ...DEFAULT_FUEL_PRICE }
+      data.forEach((r: { fuel_type: string; price_per_liter: number }) => { map[r.fuel_type] = r.price_per_liter })
+      setFuelPriceMap(map)
+      setFuelPriceEdit(map)
+    } else {
+      setFuelPriceMap({ ...DEFAULT_FUEL_PRICE })
+      setFuelPriceEdit({ ...DEFAULT_FUEL_PRICE })
+    }
+  }
+
+  async function saveFuelPrices() {
+    setFuelPriceSaving(true)
+    const upserts = FUEL_TYPES_PRICED.map(ft => ({
+      year: selectedYear,
+      fuel_type: ft,
+      price_per_liter: fuelPriceEdit[ft] || 0,
+    }))
+    const { error } = await supabase.from('fuel_price_settings').upsert(upserts, { onConflict: 'year,fuel_type' })
+    if (!error) {
+      const map = { ...fuelPriceMap, ...Object.fromEntries(FUEL_TYPES_PRICED.map(ft => [ft, fuelPriceEdit[ft] || 0])) }
+      setFuelPriceMap(map)
+      setSuccess('유가 설정이 저장되었습니다.')
+      setShowFuelPanel(false)
+    } else {
+      setError('유가 저장 실패: ' + error.message)
+    }
+    setFuelPriceSaving(false)
   }
 
   async function fetchLeaveUsage() {
@@ -605,7 +644,11 @@ export default function PayrollPage() {
                     </select>
                   </div>
                   {isFinalized&&<span className="bg-green-100 text-green-700 text-xs font-medium px-2.5 py-1 rounded-full">✓ 최종 확정됨</span>}
-                  <div className="ml-auto">
+                  <div className="ml-auto flex items-center gap-2">
+                    <button onClick={()=>setShowFuelPanel(v=>!v)}
+                      className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm">
+                      ⛽ {selectedYear}년 유가 설정
+                    </button>
                     <button onClick={openEmailModal}
                       className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -615,6 +658,37 @@ export default function PayrollPage() {
                     </button>
                   </div>
                 </div>
+
+                {showFuelPanel&&(
+                  <div className="px-6 py-4 border-b border-amber-100 bg-amber-50">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <span className="text-sm font-bold text-amber-800">⛽ {selectedYear}년 유종별 ℓ당 유가 설정</span>
+                        <span className="text-xs text-amber-600 ml-2">(전년도 평균 유가 기준으로 1월에 1회 입력)</span>
+                      </div>
+                      <button onClick={()=>setShowFuelPanel(false)} className="text-amber-400 hover:text-amber-600 text-lg">✕</button>
+                    </div>
+                    <div className="flex flex-wrap gap-4 items-end">
+                      {FUEL_TYPES_PRICED.map(ft=>(
+                        <div key={ft} className="flex flex-col gap-1">
+                          <label className="text-xs font-semibold text-amber-700">{ft}</label>
+                          <div className="flex items-center gap-1">
+                            <input type="number" value={fuelPriceEdit[ft]||''} min={0} step={10}
+                              onChange={e=>setFuelPriceEdit(p=>({...p,[ft]:parseInt(e.target.value)||0}))}
+                              className="w-24 text-right border border-amber-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                              placeholder="0" />
+                            <span className="text-xs text-amber-600">원/L</span>
+                          </div>
+                        </div>
+                      ))}
+                      <button onClick={saveFuelPrices} disabled={fuelPriceSaving}
+                        className="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-bold px-5 py-2 rounded-lg h-fit">
+                        {fuelPriceSaving ? '저장 중...' : '💾 저장'}
+                      </button>
+                    </div>
+                    <p className="text-xs text-amber-600 mt-2">※ 현재 적용 중: {FUEL_TYPES_PRICED.map(ft=>).join(' · ')}</p>
+                  </div>
+                )}
 
                 {rows.length>0&&(
                   <div className="px-6 py-3 bg-blue-50 border-b border-blue-100 flex gap-6 text-sm flex-wrap">
@@ -689,8 +763,8 @@ export default function PayrollPage() {
                                       const fuelType=emp?.fuel_type||'없음'
                                       const dist=emp?.commute_distance||0
                                       const eff=fuelEfficiency[row.employee_id]||12
-                                      const price=OPIINET_PRICE[fuelType]||0
-                                      const autoCalc=calcFuelPay(emp||{} as Employee,row.work_days||22,eff)
+                                      const price=fuelPriceMap[fuelType]??DEFAULT_FUEL_PRICE[fuelType]??0
+                                      const autoCalc=calcFuelPay(emp||{} as Employee,row.work_days||22,eff,fuelPriceMap)
                                       return (
                                         <div className="space-y-1.5">
                                           <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg border border-amber-200">
