@@ -55,8 +55,8 @@ const LEAVE_TYPE_LABEL: Record<string, string> = {
   HALF_PM: '반차 - 오후 (0.5일)',
   SICK: '병가 (1일)',
   FRIDAY_OFF: '금요일 휴무 (1일)',
-  SPECIAL: '경조사 휴가 (유급)',
-  REMOTE: '재택근무 (유급)',
+  SPECIAL: '경조사 휴가',
+  REMOTE: '재택근무',
 }
 const LEAVE_TYPE_SHORT: Record<string, string> = {
   ANNUAL: '연차', HALF_AM: '오전반차', HALF_PM: '오후반차',
