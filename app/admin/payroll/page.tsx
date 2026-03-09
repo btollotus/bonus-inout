@@ -129,11 +129,11 @@ async function buildPDFBlob(html: string): Promise<Blob> {
   wrap.innerHTML = html
   document.body.appendChild(wrap)
   try {
-    const canvas = await html2canvas(wrap, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#fff' })
+    const canvas = await html2canvas(wrap, { scale: 1.5, useCORS: true, allowTaint: true, backgroundColor: '#fff' })
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
     const pw = pdf.internal.pageSize.getWidth()
     const ph = (canvas.height * pw) / canvas.width
-    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pw, ph)
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.85), 'JPEG', 0, 0, pw, ph)
     return pdf.output('blob')
   } finally {
     document.body.removeChild(wrap)
