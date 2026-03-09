@@ -88,51 +88,68 @@ async function sendInviteEmail(email: string, name: string, inviteLink: string) 
   return data
 }
 
+// ── 초대 링크 생성 후 Resend 발송 (공통) ─────────────────
+async function generateAndSendInvite(email: string, name: string, userId: string) {
+  const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+    type: 'invite',
+    email,
+    options: {
+      data: { name },
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/accept-invite`,
+    },
+  })
+
+  if (linkError) throw new Error(linkError.message)
+
+  const inviteLink = linkData?.properties?.action_link
+  if (!inviteLink) throw new Error('초대 링크 생성 실패')
+
+  await sendInviteEmail(email, name, inviteLink)
+  return userId
+}
+
 // ── 메인 핸들러 ────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
     const { email, name } = await req.json()
     if (!email) return NextResponse.json({ error: '이메일이 필요합니다.' }, { status: 400 })
 
-    // 1. 기존 사용자 여부 먼저 확인
-    const { data: list } = await supabaseAdmin.auth.admin.listUsers()
-    const existingUser = list?.users.find((u) => u.email === email)
+    // 1. 이메일로 기존 사용자 직접 조회 (페이지네이션 문제 없음)
+    const { data: { users }, error: searchError } = await supabaseAdmin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    })
+
+    if (searchError) {
+      console.error('[invite-employee] listUsers 오류:', searchError)
+      return NextResponse.json({ error: searchError.message }, { status: 500 })
+    }
+
+    const existingUser = users?.find((u) => u.email === email)
 
     if (existingUser) {
       // ── 이미 가입된 계정 → 초대 링크 재생성 후 Resend로 직접 발송 ──
-      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-        type: 'invite',
-        email,
-        options: {
-          data: { name },
-          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/accept-invite`,
-        },
-      })
-
-      if (linkError) {
-        console.error('[invite-employee] generateLink 오류:', linkError)
-        return NextResponse.json({ error: linkError.message }, { status: 400 })
-      }
-
-      const inviteLink = linkData?.properties?.action_link
-      if (!inviteLink) {
-        return NextResponse.json({ error: '초대 링크 생성 실패' }, { status: 500 })
-      }
-
-      // Resend로 직접 발송 (로그 남음)
-      await sendInviteEmail(email, name, inviteLink)
-
+      await generateAndSendInvite(email, name, existingUser.id)
       console.log(`[invite-employee] 재초대 발송 완료 → ${email}`)
       return NextResponse.json({ userId: existingUser.id, alreadyExists: true, reinvited: true })
 
     } else {
-      // ── 신규 계정 → 기존 방식 (Supabase inviteUserByEmail) ──
+      // ── 신규 계정 → inviteUserByEmail 시도 ──
       const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
         data: { name },
         redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/accept-invite`,
       })
 
       if (error) {
+        // 혹시라도 already registered 에러가 오면 동일하게 처리
+        if (error.message.includes('already been registered') || error.message.includes('already exists')) {
+          const found = users?.find((u) => u.email === email)
+          if (found) {
+            await generateAndSendInvite(email, name, found.id)
+            console.log(`[invite-employee] 재초대(fallback) 발송 완료 → ${email}`)
+            return NextResponse.json({ userId: found.id, alreadyExists: true, reinvited: true })
+          }
+        }
         console.error('[invite-employee] inviteUserByEmail 오류:', error)
         return NextResponse.json({ error: error.message }, { status: 400 })
       }
