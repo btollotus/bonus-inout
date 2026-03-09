@@ -90,7 +90,7 @@ function emptyRow(emp: Employee, year: number, month: number): PayrollRow {
     national_pension: 0, health_insurance: 0, employment_insurance: 0,
     long_term_care: 0, income_tax: 0, local_income_tax: 0,
     income_tax_settle: 0, local_tax_settle: 0, special_tax_settle: 0,
-    work_days: 22, memo: '', note: '', status: 'draft',
+    work_days: calcWorkingDays(year, month), memo: '', note: '', status: 'draft',
   }
 }
 
@@ -103,12 +103,93 @@ const DEFAULT_FUEL_EFFICIENCY: Record<string, number> = {
 }
 const FUEL_TYPES_PRICED = ['휘발유', '경유', 'LPG', '하이브리드']
 
-function calcFuelPay(emp: Employee, workDays: number, efficiency: number, priceMap: Record<string, number>): number {
+// ── 한국 공휴일 (2024~2027) ─────────────────────────────
+const KR_HOLIDAYS: Set<string> = new Set([
+  // 2024
+  '2024-01-01','2024-02-09','2024-02-10','2024-02-11','2024-02-12',
+  '2024-03-01','2024-04-10','2024-05-05','2024-05-06','2024-05-15',
+  '2024-06-06','2024-08-15','2024-09-16','2024-09-17','2024-09-18',
+  '2024-10-03','2024-10-09','2024-12-25',
+  // 2025
+  '2025-01-01','2025-01-28','2025-01-29','2025-01-30',
+  '2025-03-01','2025-03-03','2025-05-05','2025-05-06',
+  '2025-06-06','2025-08-15','2025-10-03','2025-10-05','2025-10-06','2025-10-07','2025-10-08','2025-10-09',
+  '2025-12-25',
+  // 2026
+  '2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19',
+  '2026-03-01','2026-03-02','2026-05-05','2026-05-06','2026-05-25','2026-05-26',
+  '2026-06-06','2026-08-17','2026-09-24','2026-09-25',
+  '2026-10-09','2026-12-25',
+  // 2027
+  '2027-01-01','2027-02-08','2027-02-09','2027-02-10','2027-02-11',
+  '2027-03-01','2027-05-05','2027-05-13',
+  '2027-06-06','2027-06-07','2027-08-16',
+  '2027-09-15','2027-09-16','2027-09-17',
+  '2027-10-04','2027-10-09','2027-10-11','2027-12-25','2027-12-27',
+])
+
+// 해당 월의 실제 출근 가능일수 계산 (월~금, 공휴일 제외)
+function calcWorkingDays(year: number, month: number): number {
+  const daysInMonth = new Date(year, month, 0).getDate()
+  let count = 0
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, month - 1, d)
+    const dow = date.getDay() // 0=일, 6=토
+    if (dow === 0 || dow === 6) continue
+    const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+    if (KR_HOLIDAYS.has(dateStr)) continue
+    count++
+  }
+  return count
+}
+
+// 10원 단위 올림
+function ceil10(n: number): number {
+  return Math.ceil(n / 10) * 10
+}
+
+// 유류지원비 상세 계산
+type FuelCalcDetail = {
+  dailyFuel: number        // 1일 유류비 (10원 올림 전)
+  dailyFuelCeiled: number  // 1일 유류비 (10원 올림)
+  workDays: number         // 실제출근일수 (연차 차감 후)
+  annualDaysOff: number    // 연차 차감일수
+  rawTotal: number         // 차감 전 총액
+  capped: number           // 10만원 캡 적용
+  final: number            // 최종 (수습 50% 반영)
+  isTrial: boolean         // 수습 여부
+  distKm: number
+  efficiency: number
+  pricePerL: number
+  fuelType: string
+}
+
+function calcFuelPayDetail(
+  emp: Employee,
+  workDays: number,
+  efficiency: number,
+  priceMap: Record<string, number>,
+  annualDaysOff: number,   // 연차 사용일수 (반차 제외)
+  isTrial: boolean,
+): FuelCalcDetail {
   const dist = emp.commute_distance || 0
   const fuelType = emp.fuel_type || '없음'
   const price = priceMap[fuelType] ?? DEFAULT_FUEL_PRICE[fuelType] ?? 0
-  if (!dist || !price || !workDays || !efficiency) return 0
-  return Math.round(dist * 2 * workDays / efficiency * price)
+  const effectiveWorkDays = Math.max(0, workDays - annualDaysOff)
+
+  const dailyFuel = dist > 0 && price > 0 && efficiency > 0
+    ? (dist * 2) / efficiency * price
+    : 0
+  const dailyFuelCeiled = ceil10(dailyFuel)
+  const rawTotal = dailyFuelCeiled * effectiveWorkDays
+  const capped = Math.min(rawTotal, 100000)
+  const final = isTrial ? Math.floor(capped / 2 / 10) * 10 : capped
+
+  return { dailyFuel, dailyFuelCeiled, workDays, annualDaysOff, rawTotal, capped, final, isTrial, distKm: dist, efficiency, pricePerL: price, fuelType }
+}
+
+function calcFuelPay(emp: Employee, workDays: number, efficiency: number, priceMap: Record<string, number>, annualDaysOff = 0, isTrial = false): number {
+  return calcFuelPayDetail(emp, workDays, efficiency, priceMap, annualDaysOff, isTrial).final
 }
 
 function calcNet(row: PayrollRow) {
@@ -764,34 +845,57 @@ export default function PayrollPage() {
                                       const dist=emp?.commute_distance||0
                                       const eff=fuelEfficiency[row.employee_id]||12
                                       const price=fuelPriceMap[fuelType]??DEFAULT_FUEL_PRICE[fuelType]??0
-                                      const autoCalc=calcFuelPay(emp||{} as Employee,row.work_days||22,eff,fuelPriceMap)
+                                      // 연차 사용일수 (반차 제외 — annual만 차감)
+                                      const annualDaysOff=(leaveUsage[row.employee_id]||[])
+                                        .filter(u=>u.leave_type==='annual'||u.leave_type==='ANNUAL')
+                                        .reduce((s,u)=>s+u.count,0)
+                                      const isTrial=emp?.position==='수습'
+                                      const detail=calcFuelPayDetail(emp||{} as Employee,row.work_days||22,eff,fuelPriceMap,annualDaysOff,isTrial)
+                                      const canCalc=price>0&&dist>0&&eff>0
                                       return (
                                         <div className="space-y-1.5">
-                                          <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg border border-amber-200">
+                                          {/* 차량 정보 배지 */}
+                                          <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg border border-amber-200 flex-wrap">
                                             <span className="text-xs text-amber-700 font-medium">🚗</span>
                                             <span className="text-xs text-amber-800">{emp?.car_type||'차량미등록'} / {fuelType}{dist?` / 편도 ${dist}km`:''}{price?` / ℓ당 ${formatKRW(price)}원`:''}</span>
+                                            {isTrial&&<span className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full font-bold">수습 50%</span>}
+                                            {annualDaysOff>0&&<span className="text-[10px] bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded-full">연차 -{annualDaysOff}일</span>}
                                           </div>
+                                          {/* 유류지원비 입력 */}
                                           <div className="flex items-center gap-2">
                                             <label className="w-24 text-sm text-gray-600 shrink-0">유류지원비</label>
                                             <input type="text" value={row.fuel_pay===0?'':formatKRW(row.fuel_pay)} onChange={e=>handleFieldChange(idx,'fuel_pay',e.target.value)} disabled={isF} placeholder="0"
                                               className="flex-1 text-right border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-50 disabled:text-gray-400"/>
                                             <span className="text-xs text-gray-400 w-4">원</span>
                                           </div>
-                                          <div className="flex items-center gap-2 pl-24">
+                                          {/* 연비 / 출근일수 / 자동계산 */}
+                                          <div className="flex items-center gap-2 pl-24 flex-wrap">
                                             <span className="text-xs text-gray-500">연비</span>
                                             <input type="number" value={eff} min={1} max={50} step={0.5} onChange={e=>setFuelEfficiency(prev=>({...prev,[row.employee_id]:Number(e.target.value)}))} disabled={isF}
                                               className="w-16 text-center border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:bg-gray-50"/>
                                             <span className="text-xs text-gray-400">km/L</span>
-                                            <span className="text-xs text-gray-500 ml-2">출근일수</span>
-                                            <input type="number" value={row.work_days||22} min={1} max={31} onChange={e=>updateRow(idx,{work_days:Number(e.target.value)})} disabled={isF}
+                                            <span className="text-xs text-gray-500 ml-1">출근일수</span>
+                                            <input type="number" value={row.work_days||0} min={0} max={31} onChange={e=>updateRow(idx,{work_days:Number(e.target.value)})} disabled={isF}
                                               className="w-14 text-center border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:bg-gray-50"/>
                                             <span className="text-xs text-gray-400">일</span>
-                                            {!isF&&price>0&&dist>0&&(
-                                              <button onClick={()=>handleFieldChange(idx,'fuel_pay',String(autoCalc))} className="ml-2 text-xs bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 rounded-lg font-medium">
-                                                자동계산 ({formatKRW(autoCalc)}원)
+                                            <span className="text-[10px] text-gray-400">(기준 {calcWorkingDays(selectedYear,selectedMonth)}일·공휴일제외)</span>
+                                            {!isF&&canCalc&&(
+                                              <button onClick={()=>handleFieldChange(idx,'fuel_pay',String(detail.final))}
+                                                className="ml-1 text-xs bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 rounded-lg font-bold">
+                                                자동계산 적용 → {formatKRW(detail.final)}원
                                               </button>
                                             )}
                                           </div>
+                                          {/* 계산 상세 박스 */}
+                                          {canCalc&&(
+                                            <div className="ml-24 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[11px] text-gray-600 space-y-0.5">
+                                              <div>① 1일 유류비 = 왕복 {dist*2}km ÷ {eff}km/L × {formatKRW(price)}원 = <strong>{formatKRW(Math.round(detail.dailyFuel))}원</strong> → 10원 올림 = <strong className="text-amber-700">{formatKRW(detail.dailyFuelCeiled)}원</strong></div>
+                                              <div>② 출근일수 {detail.workDays}일{detail.annualDaysOff>0?` - 연차 ${detail.annualDaysOff}일 = ${detail.workDays - detail.annualDaysOff}일`:''} × {formatKRW(detail.dailyFuelCeiled)}원 = <strong>{formatKRW(detail.rawTotal)}원</strong></div>
+                                              {detail.rawTotal>100000&&<div className="text-red-500">③ 월 최대 100,000원 한도 적용 → <strong>100,000원</strong></div>}
+                                              {detail.isTrial&&<div className="text-orange-600">④ 수습 50% 적용 → <strong>{formatKRW(detail.final)}원</strong></div>}
+                                              <div className="pt-0.5 border-t border-gray-200 font-bold text-gray-800">최종 지급액: <span className="text-amber-700">{formatKRW(detail.final)}원</span></div>
+                                            </div>
+                                          )}
                                         </div>
                                       )
                                     })()}

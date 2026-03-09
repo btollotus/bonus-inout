@@ -56,7 +56,7 @@ const LEAVE_TYPE_LABEL: Record<string, string> = {
   SICK: '병가 (1일)',
   FRIDAY_OFF: '금요일 휴무 (1일)',
   SPECIAL: '경조사 휴가 (유급)',
-  REMOTE: '재택근무 (유급)',
+  REMOTE: '재택근무',
 }
 const LEAVE_TYPE_SHORT: Record<string, string> = {
   ANNUAL: '연차', HALF_AM: '오전반차', HALF_PM: '오후반차',
@@ -83,6 +83,7 @@ const OTHER_STYLE: Record<string, string> = {
 const ALL_HOLIDAYS: Record<string, string> = {
   // 2024
   '2024-01-01':'신정','2024-02-09':'설날 연휴','2024-02-10':'설날',
+  '2024-01-02':'창립기념일',
   '2024-02-11':'설날 연휴','2024-02-12':'설날 대체공휴일',
   '2024-03-01':'삼일절','2024-04-10':'국회의원 선거일',
   '2024-05-05':'어린이날','2024-05-06':'어린이날 대체공휴일',
@@ -92,6 +93,7 @@ const ALL_HOLIDAYS: Record<string, string> = {
   '2024-12-25':'크리스마스',
   // 2025
   '2025-01-01':'신정','2025-01-28':'설날 연휴','2025-01-29':'설날',
+  '2025-01-02':'창립기념일',
   '2025-01-30':'설날 연휴','2025-03-01':'삼일절','2025-03-03':'삼일절 대체공휴일',
   '2025-05-05':'어린이날','2025-05-06':'부처님오신날','2025-06-06':'현충일',
   '2025-08-15':'광복절','2025-10-03':'개천절','2025-10-05':'추석 연휴',
@@ -100,6 +102,7 @@ const ALL_HOLIDAYS: Record<string, string> = {
   // 2026 - 설날: 2/17(화) 당일만 공휴일 (네이버 달력 기준)
   // 2/15(일)~2/18(수) 연휴는 관공서 공휴일이나 법정공휴일 아님
   '2026-01-01':'신정',
+  '2026-01-02':'창립기념일',
   '2026-02-17':'설날',
   '2026-03-01':'삼일절','2026-03-02':'삼일절 대체공휴일',
   '2026-05-05':'어린이날','2026-05-24':'부처님오신날','2026-06-06':'현충일',
@@ -108,6 +111,7 @@ const ALL_HOLIDAYS: Record<string, string> = {
   '2026-12-25':'크리스마스',
   // 2027
   '2027-01-01':'신정','2027-02-06':'설날 연휴','2027-02-07':'설날',
+  '2027-01-02':'창립기념일',
   '2027-02-08':'설날 연휴','2027-03-01':'삼일절','2027-05-05':'어린이날',
   '2027-05-13':'부처님오신날','2027-06-06':'현충일','2027-08-15':'광복절',
   '2027-09-14':'추석 연휴','2027-09-15':'추석','2027-09-16':'추석 연휴',
@@ -115,6 +119,7 @@ const ALL_HOLIDAYS: Record<string, string> = {
   '2027-10-09':'한글날','2027-12-25':'크리스마스',
   // 2028
   '2028-01-01':'신정','2028-01-26':'설날 연휴','2028-01-27':'설날',
+  '2028-01-02':'창립기념일',
   '2028-01-28':'설날 연휴','2028-03-01':'삼일절','2028-05-02':'부처님오신날',
   '2028-05-05':'어린이날','2028-06-06':'현충일','2028-08-15':'광복절',
   '2028-10-03':'개천절','2028-10-09':'한글날','2028-12-25':'크리스마스',
@@ -1050,7 +1055,7 @@ export default function LeavePage() {
                 <p className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mb-2">⭐ 경조사 휴가는 연차 차감 없이 유급 처리됩니다.</p>
               )}
               {adminLeaveType==='REMOTE' && (
-                <p className="text-xs text-teal-600 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 mb-2">🏠 재택근무는 연차 차감 없이 유급 처리됩니다.</p>
+                <p className="text-xs text-teal-600 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 mb-2">🏠 재택근무는 연차 차감 없이 처리됩니다.</p>
               )}
               <textarea value={adminNote} onChange={e => setAdminNote(e.target.value)} rows={2}
                 placeholder={adminLeaveType==='SPECIAL' ? '예: 본인결혼, 부모상, 자녀출산 등' : '관리자 입력'}
@@ -1105,7 +1110,7 @@ export default function LeavePage() {
                 <p className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mt-2">⭐ 경조사 휴가는 연차 차감 없이 유급 처리됩니다.</p>
               )}
               {leaveType==='REMOTE' && (
-                <p className="text-xs text-teal-600 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 mt-2">🏠 재택근무는 연차 차감 없이 유급 처리됩니다.</p>
+                <p className="text-xs text-teal-600 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 mt-2">🏠 재택근무는 연차 차감 없이 처리됩니다.</p>
               )}
             </div>
             <div className="mb-5">
