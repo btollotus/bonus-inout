@@ -686,7 +686,7 @@ export default function PayrollPage() {
                         {fuelPriceSaving ? '저장 중...' : '💾 저장'}
                       </button>
                     </div>
-                    <p className="text-xs text-amber-600 mt-2">※ 현재 적용 중: {FUEL_TYPES_PRICED.map(ft=>).join(' · ')}</p>
+                    <p className="text-xs text-amber-600 mt-2">※ 현재 적용 중: {FUEL_TYPES_PRICED.map(ft => ft + ' ' + (fuelPriceMap[ft]||0).toLocaleString() + '원').join(' · ')}</p>
                   </div>
                 )}
 
