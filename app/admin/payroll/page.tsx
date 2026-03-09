@@ -16,6 +16,7 @@ type Employee = {
   car_type: string | null
   fuel_type: string | null
   commute_distance: number | null
+  fuel_efficiency: number | null   // 인사관리에서 입력한 연비 (km/L)
   auth_user_id: string | null
 }
 
@@ -90,7 +91,7 @@ function emptyRow(emp: Employee, year: number, month: number): PayrollRow {
     national_pension: 0, health_insurance: 0, employment_insurance: 0,
     long_term_care: 0, income_tax: 0, local_income_tax: 0,
     income_tax_settle: 0, local_tax_settle: 0, special_tax_settle: 0,
-    work_days: calcWorkingDays(year, month), memo: '', note: '', status: 'draft',
+    work_days: 0, memo: '', note: '', status: 'draft',
   }
 }
 
@@ -319,14 +320,15 @@ export default function PayrollPage() {
   useEffect(() => { if (tab === 'history') fetchHistory() }, [tab, historyYear])
 
   async function fetchEmployees() {
-    const { data } = await supabase.from('employees').select('id, name, position, employee_code, hire_date, email, bank_name, bank_account, car_type, fuel_type, commute_distance, auth_user_id').is('resign_date', null).order('name')
+    const { data } = await supabase.from('employees').select('id, name, position, employee_code, hire_date, email, bank_name, bank_account, car_type, fuel_type, commute_distance, fuel_efficiency, auth_user_id').is('resign_date', null).order('name')
     const emps = data || []
     setEmployees(emps)
     const map: Record<string, Employee> = {}
     const effMap: Record<string, number> = {}
     emps.forEach((e: Employee) => {
       map[e.id] = e
-      effMap[e.id] = DEFAULT_FUEL_EFFICIENCY[e.fuel_type || '없음'] || 12
+      // 인사관리에서 입력한 연비가 있으면 우선 사용, 없으면 유종별 기본값
+      effMap[e.id] = e.fuel_efficiency ?? DEFAULT_FUEL_EFFICIENCY[e.fuel_type || '없음'] ?? 12
     })
     setEmpMap(map)
     setFuelEfficiency(effMap)
@@ -436,7 +438,7 @@ export default function PayrollPage() {
   function removeOtherAllowance(idx: number, aIdx: number) { updateRow(idx, { other_allowances: rows[idx].other_allowances.filter((_, i) => i !== aIdx) }) }
 
   function buildPayload(row: PayrollRow) {
-    return { employee_id: row.employee_id, employee_name: row.employee_name, pay_month: row.pay_month, base_pay: row.base_pay, meal_pay: row.meal_pay, fuel_pay: row.fuel_pay, bonus_pay: row.bonus_pay, other_allowances: row.other_allowances, meal_allowance: row.meal_allowance, fuel_allowance: row.fuel_allowance, national_pension: row.national_pension, health_insurance: row.health_insurance, employment_insurance: row.employment_insurance, long_term_care: row.long_term_care, income_tax: row.income_tax, local_income_tax: row.local_income_tax, income_tax_settle: row.income_tax_settle, local_tax_settle: row.local_tax_settle, special_tax_settle: row.special_tax_settle, memo: row.memo||null, status: row.status }
+    return { employee_id: row.employee_id, employee_name: row.employee_name, pay_month: row.pay_month, base_pay: row.base_pay, meal_pay: row.meal_pay, fuel_pay: row.fuel_pay, bonus_pay: row.bonus_pay, other_allowances: row.other_allowances, meal_allowance: row.meal_allowance, fuel_allowance: row.fuel_allowance, national_pension: row.national_pension, health_insurance: row.health_insurance, employment_insurance: row.employment_insurance, long_term_care: row.long_term_care, income_tax: row.income_tax, local_income_tax: row.local_income_tax, income_tax_settle: row.income_tax_settle, local_tax_settle: row.local_tax_settle, special_tax_settle: row.special_tax_settle, work_days: row.work_days||0, memo: row.memo||null, status: row.status }
   }
 
   async function handleSaveDraft() {
@@ -850,8 +852,12 @@ export default function PayrollPage() {
                                         .filter(u=>u.leave_type==='annual'||u.leave_type==='ANNUAL')
                                         .reduce((s,u)=>s+u.count,0)
                                       const isTrial=emp?.position==='수습'
-                                      const detail=calcFuelPayDetail(emp||{} as Employee,row.work_days||22,eff,fuelPriceMap,annualDaysOff,isTrial)
-                                      const canCalc=price>0&&dist>0&&eff>0
+                                      const detail=calcFuelPayDetail(emp||{} as Employee,row.work_days||0,eff,fuelPriceMap,annualDaysOff,isTrial)
+                                      const canCalc=price>0&&dist>0&&eff>0&&(row.work_days||0)>0
+                                      // 인사관리 연비 여부
+                                      const hasDbEfficiency=!!emp?.fuel_efficiency
+                                      // 이 달 기준 출근일수 (달력 참고용)
+                                      const refDays=calcWorkingDays(selectedYear,selectedMonth)
                                       return (
                                         <div className="space-y-1.5">
                                           {/* 차량 정보 배지 */}
@@ -871,26 +877,34 @@ export default function PayrollPage() {
                                           {/* 연비 / 출근일수 / 자동계산 */}
                                           <div className="flex items-center gap-2 pl-24 flex-wrap">
                                             <span className="text-xs text-gray-500">연비</span>
-                                            <input type="number" value={eff} min={1} max={50} step={0.5} onChange={e=>setFuelEfficiency(prev=>({...prev,[row.employee_id]:Number(e.target.value)}))} disabled={isF}
-                                              className="w-16 text-center border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:bg-gray-50"/>
-                                            <span className="text-xs text-gray-400">km/L</span>
-                                            <span className="text-xs text-gray-500 ml-1">출근일수</span>
-                                            <input type="number" value={row.work_days||0} min={0} max={31} onChange={e=>updateRow(idx,{work_days:Number(e.target.value)})} disabled={isF}
-                                              className="w-14 text-center border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:bg-gray-50"/>
+                                            <div className="relative flex items-center gap-1">
+                                              <input type="number" value={eff} min={1} max={50} step={0.5} onChange={e=>setFuelEfficiency(prev=>({...prev,[row.employee_id]:Number(e.target.value)}))} disabled={isF}
+                                                className={`w-16 text-center border rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:bg-gray-50 ${hasDbEfficiency?'border-emerald-400 bg-emerald-50':'border-gray-200'}`}/>
+                                              <span className="text-xs text-gray-400">km/L</span>
+                                              {hasDbEfficiency&&(
+                                                <span className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">인사관리 연동</span>
+                                              )}
+                                            </div>
+                                            <span className="text-xs text-gray-500 ml-2">출근일수</span>
+                                            <input type="number" value={row.work_days||''} min={0} max={31} placeholder={String(refDays)} onChange={e=>updateRow(idx,{work_days:Number(e.target.value)})} disabled={isF}
+                                              className="w-14 text-center border border-blue-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-50 bg-blue-50"/>
                                             <span className="text-xs text-gray-400">일</span>
-                                            <span className="text-[10px] text-gray-400">(기준 {calcWorkingDays(selectedYear,selectedMonth)}일·공휴일제외)</span>
+                                            <span className="text-[10px] text-gray-400">(달력기준 {refDays}일·참고용)</span>
                                             {!isF&&canCalc&&(
                                               <button onClick={()=>handleFieldChange(idx,'fuel_pay',String(detail.final))}
                                                 className="ml-1 text-xs bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 rounded-lg font-bold">
                                                 자동계산 적용 → {formatKRW(detail.final)}원
                                               </button>
                                             )}
+                                            {!isF&&!canCalc&&(row.work_days||0)===0&&dist>0&&(
+                                              <span className="text-[10px] text-blue-500 ml-1">← 출근일수를 입력하세요</span>
+                                            )}
                                           </div>
                                           {/* 계산 상세 박스 */}
                                           {canCalc&&(
                                             <div className="ml-24 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[11px] text-gray-600 space-y-0.5">
                                               <div>① 1일 유류비 = 왕복 {dist*2}km ÷ {eff}km/L × {formatKRW(price)}원 = <strong>{formatKRW(Math.round(detail.dailyFuel))}원</strong> → 10원 올림 = <strong className="text-amber-700">{formatKRW(detail.dailyFuelCeiled)}원</strong></div>
-                                              <div>② 출근일수 {detail.workDays}일{detail.annualDaysOff>0?` - 연차 ${detail.annualDaysOff}일 = ${detail.workDays - detail.annualDaysOff}일`:''} × {formatKRW(detail.dailyFuelCeiled)}원 = <strong>{formatKRW(detail.rawTotal)}원</strong></div>
+                                              <div>② 입력 출근일수 {detail.workDays}일{detail.annualDaysOff>0?` - 연차 ${detail.annualDaysOff}일 = ${detail.workDays - detail.annualDaysOff}일`:''} × {formatKRW(detail.dailyFuelCeiled)}원 = <strong>{formatKRW(detail.rawTotal)}원</strong></div>
                                               {detail.rawTotal>100000&&<div className="text-red-500">③ 월 최대 100,000원 한도 적용 → <strong>100,000원</strong></div>}
                                               {detail.isTrial&&<div className="text-orange-600">④ 수습 50% 적용 → <strong>{formatKRW(detail.final)}원</strong></div>}
                                               <div className="pt-0.5 border-t border-gray-200 font-bold text-gray-800">최종 지급액: <span className="text-amber-700">{formatKRW(detail.final)}원</span></div>
