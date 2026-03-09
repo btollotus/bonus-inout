@@ -10,7 +10,7 @@ type LeaveRequest = {
   id: string
   user_id: string
   employee_name: string
-  leave_type: 'ANNUAL' | 'HALF_AM' | 'HALF_PM' | 'SICK' | 'FRIDAY_OFF' | 'SPECIAL'
+  leave_type: 'ANNUAL' | 'HALF_AM' | 'HALF_PM' | 'SICK' | 'FRIDAY_OFF' | 'SPECIAL' | 'REMOTE'
   leave_date: string
   note: string | null
   created_at: string
@@ -56,22 +56,25 @@ const LEAVE_TYPE_LABEL: Record<string, string> = {
   SICK: '병가 (1일)',
   FRIDAY_OFF: '금요일 휴무 (1일)',
   SPECIAL: '경조사 휴가 (유급)',
+  REMOTE: '재택근무 (유급)',
 }
 const LEAVE_TYPE_SHORT: Record<string, string> = {
   ANNUAL: '연차', HALF_AM: '오전반차', HALF_PM: '오후반차',
-  SICK: '병가', FRIDAY_OFF: '금휴', SPECIAL: '경조사',
+  SICK: '병가', FRIDAY_OFF: '금휴', SPECIAL: '경조사', REMOTE: '재택',
 }
 const LEAVE_TYPE_DAYS: Record<string, number> = {
-  ANNUAL: 1, HALF_AM: 0.5, HALF_PM: 0.5, SICK: 1, FRIDAY_OFF: 1, SPECIAL: 0,
+  ANNUAL: 1, HALF_AM: 0.5, HALF_PM: 0.5, SICK: 1, FRIDAY_OFF: 1, SPECIAL: 0, REMOTE: 0,
 }
 const MY_BG: Record<string, string> = {
   ANNUAL: 'bg-blue-500', HALF_AM: 'bg-indigo-500', HALF_PM: 'bg-violet-500',
   SICK: 'bg-rose-500', FRIDAY_OFF: 'bg-orange-500', SPECIAL: 'bg-yellow-500',
+  REMOTE: 'bg-teal-500',
 }
 const OTHER_STYLE: Record<string, string> = {
   ANNUAL: 'bg-blue-100 text-blue-800', HALF_AM: 'bg-indigo-100 text-indigo-800',
   HALF_PM: 'bg-violet-100 text-violet-800', SICK: 'bg-rose-100 text-rose-800',
   FRIDAY_OFF: 'bg-orange-100 text-orange-800', SPECIAL: 'bg-yellow-100 text-yellow-800',
+  REMOTE: 'bg-teal-100 text-teal-800',
 }
 
 // =====================================================================
@@ -94,10 +97,10 @@ const ALL_HOLIDAYS: Record<string, string> = {
   '2025-08-15':'광복절','2025-10-03':'개천절','2025-10-05':'추석 연휴',
   '2025-10-06':'추석','2025-10-07':'추석 연휴','2025-10-08':'추석 대체공휴일',
   '2025-10-09':'한글날','2025-12-25':'크리스마스',
-  // 2026 - 설날: 2/15(일)~2/19(목 대체)
+  // 2026 - 설날: 2/17(화) 당일만 공휴일 (네이버 달력 기준)
+  // 2/15(일)~2/18(수) 연휴는 관공서 공휴일이나 법정공휴일 아님
   '2026-01-01':'신정',
-  '2026-02-15':'설날 연휴','2026-02-16':'설날 연휴',
-  '2026-02-17':'설날','2026-02-18':'설날 연휴','2026-02-19':'설날 대체공휴일',
+  '2026-02-17':'설날',
   '2026-03-01':'삼일절','2026-03-02':'삼일절 대체공휴일',
   '2026-05-05':'어린이날','2026-05-24':'부처님오신날','2026-06-06':'현충일',
   '2026-08-15':'광복절','2026-09-24':'추석 연휴','2026-09-25':'추석',
@@ -133,8 +136,8 @@ const SOLAR_TERMS: Record<string, string> = {
   '2025-07-07':'소서','2025-07-22':'대서','2025-08-07':'입추','2025-08-23':'처서',
   '2025-09-07':'백로','2025-09-23':'추분','2025-10-08':'한로','2025-10-23':'상강',
   '2025-11-07':'입동','2025-11-22':'소설','2025-12-07':'대설','2025-12-22':'동지',
-  '2026-01-05':'소한','2026-01-20':'대한','2026-02-04':'입춘','2026-02-18':'우수',
-  '2026-03-06':'경칩','2026-03-20':'춘분','2026-04-05':'청명','2026-04-20':'곡우',
+  '2026-01-05':'소한','2026-01-20':'대한','2026-02-04':'입춘','2026-02-19':'우수',
+  '2026-03-05':'경칩','2026-03-20':'춘분','2026-04-05':'청명','2026-04-20':'곡우',
   '2026-05-05':'입하','2026-05-21':'소만','2026-06-06':'망종','2026-06-21':'하지',
   '2026-07-07':'소서','2026-07-23':'대서','2026-08-07':'입추','2026-08-23':'처서',
   '2026-09-08':'백로','2026-09-23':'추분','2026-10-08':'한로','2026-10-23':'상강',
@@ -920,6 +923,7 @@ export default function LeavePage() {
                   {color:'bg-blue-500',label:'연차'},{color:'bg-indigo-500',label:'오전반차'},
                   {color:'bg-violet-500',label:'오후반차'},{color:'bg-rose-500',label:'병가'},
                   {color:'bg-orange-500',label:'금휴'},{color:'bg-yellow-500',label:'경조사'},
+                  {color:'bg-teal-500',label:'재택'},
                 ].map(({color,label}) => (
                   <span key={label} className="flex items-center gap-1">
                     <span className={`w-2.5 h-2.5 rounded-full inline-block ${color}`} />{label}
@@ -1026,6 +1030,9 @@ export default function LeavePage() {
               {adminLeaveType==='SPECIAL' && (
                 <p className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mb-2">⭐ 경조사 휴가는 연차 차감 없이 유급 처리됩니다.</p>
               )}
+              {adminLeaveType==='REMOTE' && (
+                <p className="text-xs text-teal-600 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 mb-2">🏠 재택근무는 연차 차감 없이 유급 처리됩니다.</p>
+              )}
               <textarea value={adminNote} onChange={e => setAdminNote(e.target.value)} rows={2}
                 placeholder={adminLeaveType==='SPECIAL' ? '예: 본인결혼, 부모상, 자녀출산 등' : '관리자 입력'}
                 className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
@@ -1075,6 +1082,12 @@ export default function LeavePage() {
                   </label>
                 ))}
               </div>
+              {leaveType==='SPECIAL' && (
+                <p className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mt-2">⭐ 경조사 휴가는 연차 차감 없이 유급 처리됩니다.</p>
+              )}
+              {leaveType==='REMOTE' && (
+                <p className="text-xs text-teal-600 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 mt-2">🏠 재택근무는 연차 차감 없이 유급 처리됩니다.</p>
+              )}
             </div>
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-1">사유 (선택)</label>
