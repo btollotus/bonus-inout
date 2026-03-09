@@ -56,7 +56,8 @@ type LeaveUsage = {
   dates: string[]
 }
 
-type SendStatus = 'idle' | 'pending' | 'done' | 'error'
+// ── 수정: SendStatus에 에러 메시지 포함 ──
+type SendStatus = 'idle' | 'pending' | 'done' | { error: string }
 
 // ── 유틸 ────────────────────────────────────────────────
 function formatKRW(n: number) {
@@ -405,7 +406,11 @@ export default function PayrollPage() {
     for (let i = 0; i < targets.length; i++) {
       const emp = targets[i]
       const row = rows.find(r => r.employee_id === emp.id)
-      if (!row) { setSendStatus(p => ({ ...p, [emp.id]: 'error' })); setSendProgress(p => ({ ...p, done: i+1 })); continue }
+      if (!row) {
+        setSendStatus(p => ({ ...p, [emp.id]: { error: '급여 데이터 없음' } }))
+        setSendProgress(p => ({ ...p, done: i+1 }))
+        continue
+      }
 
       try {
         const html = buildSlipHTML(row, emp, leaveUsage[emp.id] || [])
@@ -427,9 +432,11 @@ export default function PayrollPage() {
           }),
         })
         const json = await res.json()
-        setSendStatus(p => ({ ...p, [emp.id]: json.ok ? 'done' : 'error' }))
-      } catch {
-        setSendStatus(p => ({ ...p, [emp.id]: 'error' }))
+        // ── 수정: 에러 메시지 저장 ──
+        setSendStatus(p => ({ ...p, [emp.id]: json.ok ? 'done' : { error: json.error || '발송 실패' } }))
+      } catch (err) {
+        // ── 수정: 네트워크 에러 메시지 저장 ──
+        setSendStatus(p => ({ ...p, [emp.id]: { error: err instanceof Error ? err.message : '네트워크 오류' } }))
       }
       setSendProgress(p => ({ ...p, done: i + 1 }))
     }
@@ -439,6 +446,10 @@ export default function PayrollPage() {
   const totalBase = rows.reduce((s, r) => s + (r.base_pay||0), 0)
   const totalNet = rows.reduce((s, r) => s + calcNet(r), 0)
   const isFinalized = rows.length > 0 && rows.every(r => r.status === 'final')
+
+  // ── 수정: 에러 카운트 헬퍼 ──
+  const errorCount = Object.values(sendStatus).filter(s => typeof s === 'object').length
+  const doneCount = Object.values(sendStatus).filter(s => s === 'done').length
 
   return (
     <div className="min-h-screen bg-gray-50 print:bg-white">
@@ -496,6 +507,7 @@ export default function PayrollPage() {
                   const isChecked = selectedIds.has(emp.id)
                   const row = rows.find(r => r.employee_id === emp.id)
                   const net = row ? calcNet(row) : 0
+                  const isError = status && typeof status === 'object'
                   return (
                     <div key={emp.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${isChecked&&hasEmail?'border-blue-200 bg-blue-50':'border-gray-200 bg-gray-50'} ${!hasEmail?'opacity-50':''}`}>
                       <input type="checkbox" checked={isChecked} disabled={!hasEmail||isSending}
@@ -508,11 +520,15 @@ export default function PayrollPage() {
                         </div>
                         <div className="text-xs text-gray-400 truncate">{emp.email||'이메일 미등록'}</div>
                         {row&&<div className="text-xs text-blue-600 font-medium">실지급 {formatKRW(net)}원</div>}
+                        {/* ── 수정: 에러 메시지 표시 ── */}
+                        {isError && (
+                          <div className="text-xs text-red-500 mt-0.5">⚠️ {(status as { error: string }).error}</div>
+                        )}
                       </div>
                       <div className="shrink-0 w-16 text-right">
                         {status==='pending'&&<span className="text-xs text-blue-500 animate-pulse">발송중...</span>}
                         {status==='done'&&<span className="text-xs text-emerald-600 font-bold">✓ 완료</span>}
-                        {status==='error'&&<span className="text-xs text-red-500 font-bold">✕ 실패</span>}
+                        {isError&&<span className="text-xs text-red-500 font-bold">✕ 실패</span>}
                       </div>
                     </div>
                   )
@@ -531,18 +547,15 @@ export default function PayrollPage() {
                 </div>
               )}
 
+              {/* ── 수정: 성공/실패 카운트 (안내문구 제거) ── */}
               {!isSending&&Object.keys(sendStatus).length>0&&(
                 <div className="mt-3 flex gap-4 text-sm justify-center">
-                  <span className="text-emerald-600 font-medium">✓ 성공 {Object.values(sendStatus).filter(s=>s==='done').length}건</span>
-                  {Object.values(sendStatus).filter(s=>s==='error').length>0&&(
-                    <span className="text-red-500 font-medium">✕ 실패 {Object.values(sendStatus).filter(s=>s==='error').length}건</span>
+                  <span className="text-emerald-600 font-medium">✓ 성공 {doneCount}건</span>
+                  {errorCount > 0 && (
+                    <span className="text-red-500 font-medium">✕ 실패 {errorCount}건</span>
                   )}
                 </div>
               )}
-
-              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
-                💡 발송에는 <code className="bg-amber-100 px-1 rounded">/api/send-payroll-email</code> route와 <code className="bg-amber-100 px-1 rounded">RESEND_API_KEY</code> 환경변수가 필요합니다.
-              </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end">
               {!isSending&&<button onClick={()=>setEmailModal(false)} className="border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">닫기</button>}
@@ -903,7 +916,6 @@ export default function PayrollPage() {
 // ── 인쇄용 명세서 컴포넌트 ──────────────────────────────
 import { forwardRef } from 'react'
 
-// ✅ 수정 1: nav/header 숨기기 셀렉터 강화, date-badge 제거
 const PRINT_STYLES = [
   '@media print {',
   '  @page { size: A4; margin: 15mm; }',
@@ -981,7 +993,6 @@ const PrintSlip = forwardRef<HTMLDivElement, { row: PayrollRow; emp: Employee | 
           </div>
         </div>
 
-        {/* ✅ 수정 2: 연차 날짜 한 줄로 표시 — date-badge div 제거 */}
         <div className="mt-3">
           <div className="section-header">▶ {row.pay_month} 연차·휴가 사용 내역</div>
           <table className="slip-table">
