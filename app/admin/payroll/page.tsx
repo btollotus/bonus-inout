@@ -442,6 +442,7 @@ export default function PayrollPage() {
   }
 
 
+  async function fetchLeaveUsage() {
     const firstDay = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
     const lastDay = new Date(selectedYear, selectedMonth, 0).toISOString().slice(0, 10)
     const { data } = await supabase
@@ -474,15 +475,26 @@ export default function PayrollPage() {
   async function fetchPayrollForMonth() {
     setFetchLoading(true)
     const pay_month = `${selectedYear}-${String(selectedMonth).padStart(2,'0')}`
-    const { data: existing } = await supabase.from('payroll_draft').select('*').eq('pay_month', pay_month)
+    // 급여 데이터 + 월 공통 출근일수 병렬 로드
+    const [{ data: existing }, { data: mwdData }] = await Promise.all([
+      supabase.from('payroll_draft').select('*').eq('pay_month', pay_month),
+      supabase.from('payroll_month_settings').select('work_days').eq('pay_month', pay_month).maybeSingle(),
+    ])
+    const savedWorkDays = mwdData?.work_days ?? 0
+    setMonthWorkDays(savedWorkDays)
+    setMonthWorkDaysEdit(savedWorkDays)
+
     const existingMap = new Map((existing || []).map((r: PayrollRow) => [r.employee_id, r]))
     const newRows: PayrollRow[] = employees.map((emp) => {
       const ex = existingMap.get(emp.id)
       if (ex) {
         const [y, m] = (ex.pay_month || '').split('-').map(Number)
-        return { ...emptyRow(emp, selectedYear, selectedMonth), ...ex, year: y||selectedYear, month: m||selectedMonth, other_allowances: ex.other_allowances || [] }
+        // 저장된 work_days가 0이면 월 공통값으로 채움
+        const wd = ex.work_days > 0 ? ex.work_days : savedWorkDays
+        return { ...emptyRow(emp, selectedYear, selectedMonth), ...ex, work_days: wd, year: y||selectedYear, month: m||selectedMonth, other_allowances: ex.other_allowances || [] }
       }
-      return emptyRow(emp, selectedYear, selectedMonth)
+      // 신규 row: 월 공통 출근일수 적용
+      return { ...emptyRow(emp, selectedYear, selectedMonth), work_days: savedWorkDays }
     })
     setRows(newRows)
     setFetchLoading(false)
@@ -816,7 +828,11 @@ export default function PayrollPage() {
                   </div>
                   {isFinalized&&<span className="bg-green-100 text-green-700 text-xs font-medium px-2.5 py-1 rounded-full">✓ 최종 확정됨</span>}
                   <div className="ml-auto flex items-center gap-2">
-                    <button onClick={()=>setShowFuelPanel(v=>!v)}
+                    <button onClick={()=>{ setShowWorkDaysPanel(v=>!v); setShowFuelPanel(false) }}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm ${monthWorkDays>0?'bg-blue-600 hover:bg-blue-700 text-white':'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300'}`}>
+                      📅 {selectedYear}년 {selectedMonth}월 출근일수 {monthWorkDays>0?`${monthWorkDays}일 ✓`:'설정'}
+                    </button>
+                    <button onClick={()=>{ setShowFuelPanel(v=>!v); setShowWorkDaysPanel(false) }}
                       className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm">
                       ⛽ {selectedYear}년 유가 설정
                     </button>
@@ -829,6 +845,42 @@ export default function PayrollPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* 출근일수 설정 패널 */}
+                {showWorkDaysPanel&&(
+                  <div className="px-6 py-4 border-b border-blue-100 bg-blue-50">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <span className="text-sm font-bold text-blue-800">📅 {selectedYear}년 {selectedMonth}월 기준 출근일수 설정</span>
+                        <span className="text-xs text-blue-600 ml-2">(전 직원 공통 적용 · 연차/반차는 개인별 자동 차감)</span>
+                      </div>
+                      <button onClick={()=>setShowWorkDaysPanel(false)} className="text-blue-400 hover:text-blue-600 text-lg">✕</button>
+                    </div>
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <div className="flex items-center gap-2 bg-white border border-blue-200 rounded-lg px-4 py-2">
+                        <span className="text-sm text-blue-700 font-medium">이번 달 출근일수</span>
+                        <input type="number" value={monthWorkDaysEdit||''} min={0} max={31}
+                          placeholder={String(calcWorkingDays(selectedYear, selectedMonth))}
+                          onChange={e=>setMonthWorkDaysEdit(Number(e.target.value))}
+                          className="w-16 text-center border-2 border-blue-300 rounded-lg px-2 py-1.5 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-blue-400 text-blue-800"/>
+                        <span className="text-sm text-blue-600">일</span>
+                      </div>
+                      <div className="text-xs text-blue-500 bg-white border border-blue-200 rounded-lg px-3 py-2">
+                        달력 기준: <strong>{calcWorkingDays(selectedYear, selectedMonth)}일</strong>
+                        <span className="text-blue-400 ml-1">(공휴일 제외 평일 수 · 참고용)</span>
+                      </div>
+                      <button onClick={saveWorkDays} disabled={workDaysSaving||!monthWorkDaysEdit}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-bold px-5 py-2 rounded-lg h-fit">
+                        {workDaysSaving ? '저장 중...' : '💾 전 직원 적용 · 저장'}
+                      </button>
+                    </div>
+                    {monthWorkDays>0&&(
+                      <p className="text-xs text-blue-600 mt-2">
+                        ✓ 현재 설정: <strong>{monthWorkDays}일</strong> · 각 직원의 연차·반차 사용일수가 자동 차감되어 유류지원비 계산에 반영됩니다.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {showFuelPanel&&(
                   <div className="px-6 py-4 border-b border-amber-100 bg-amber-50">
@@ -962,7 +1014,7 @@ export default function PayrollPage() {
                                               className="flex-1 text-right border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-50 disabled:text-gray-400"/>
                                             <span className="text-xs text-gray-400 w-4">원</span>
                                           </div>
-                                          {/* 연비 / 출근일수 / 자동계산 */}
+                                          {/* 연비 / 출근일수 표시 / 자동계산 */}
                                           <div className="flex items-center gap-2 pl-24 flex-wrap">
                                             <span className="text-xs text-gray-500">연비</span>
                                             <div className="relative flex items-center gap-1">
@@ -973,18 +1025,24 @@ export default function PayrollPage() {
                                                 <span className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">인사관리 연동</span>
                                               )}
                                             </div>
+                                            {/* 출근일수: 공통값 표시 + 개인 조정 가능 */}
                                             <span className="text-xs text-gray-500 ml-2">출근일수</span>
-                                            <input type="number" value={row.work_days||''} min={0} max={31} placeholder={String(refDays)} onChange={e=>updateRow(idx,{work_days:Number(e.target.value)})} disabled={isF}
+                                            <input type="number" value={row.work_days||''} min={0} max={31}
+                                              placeholder={monthWorkDays>0?String(monthWorkDays):String(refDays)}
+                                              onChange={e=>updateRow(idx,{work_days:Number(e.target.value)})} disabled={isF}
                                               className="w-14 text-center border border-blue-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-50 bg-blue-50"/>
                                             <span className="text-xs text-gray-400">일</span>
-                                            <span className="text-[10px] text-gray-400">(달력기준 {refDays}일·참고용)</span>
+                                            {monthWorkDays>0
+                                              ? <span className="text-[10px] text-blue-500">(공통 {monthWorkDays}일 적용됨)</span>
+                                              : <span className="text-[10px] text-orange-500">← 상단 📅 출근일수 먼저 설정하세요</span>
+                                            }
                                             {!isF&&canCalc&&(
                                               <button onClick={()=>handleFieldChange(idx,'fuel_pay',String(detail.final))}
                                                 className="ml-1 text-xs bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 rounded-lg font-bold">
-                                                자동계산 적용 → {formatKRW(detail.final)}원
+                                                자동계산 → {formatKRW(detail.final)}원
                                               </button>
                                             )}
-                                            {!isF&&!canCalc&&(row.work_days||0)===0&&dist>0&&(
+                                            {!isF&&!canCalc&&(row.work_days||0)===0&&dist>0&&monthWorkDays===0&&(
                                               <span className="text-[10px] text-blue-500 ml-1">← 출근일수를 입력하세요</span>
                                             )}
                                           </div>
