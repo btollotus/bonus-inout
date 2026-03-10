@@ -225,7 +225,13 @@ async function buildPDFBlob(html: string): Promise<Blob> {
 }
 
 // ── 명세서 HTML 생성 (PDF용) ─────────────────────────────
-function buildSlipHTML(row: PayrollRow, emp: Employee | undefined, leaveUsages: LeaveUsage[]): string {
+function buildSlipHTML(
+  row: PayrollRow,
+  emp: Employee | undefined,
+  leaveUsages: LeaveUsage[],
+  fuelDetail: FuelCalcDetail | null,
+  fuelPriceMap: Record<string, number>,
+): string {
   const net = calcNet(row)
   const totalIncome = (row.base_pay||0)+(row.meal_pay||0)+(row.fuel_pay||0)+(row.bonus_pay||0)+(row.other_allowances||[]).reduce((s,a)=>s+a.amount,0)
   const totalDeduction = (row.national_pension||0)+(row.health_insurance||0)+(row.employment_insurance||0)+(row.long_term_care||0)+(row.income_tax||0)+(row.local_income_tax||0)+(row.income_tax_settle||0)+(row.local_tax_settle||0)+(row.special_tax_settle||0)
@@ -243,6 +249,36 @@ function buildSlipHTML(row: PayrollRow, emp: Employee | undefined, leaveUsages: 
     const dateStr=sorted.map(fmtDate).join(' · ')
     return `<tr><td style="${lbl}">${leaveLabel(u.leave_type)}</td><td style="${amt}"><strong>${u.count}회</strong><span style="color:#666;font-size:10px;margin-left:8px;">(${dateStr})</span></td></tr>`
   }).join('') : `<tr><td colspan="2" style="${td}text-align:center;color:#888;">해당 월 연차·휴가 사용 내역 없음</td></tr>`
+
+  // ── 유류지원비 계산내역 HTML ──
+  const fuelSection = (()=>{
+    if (!fuelDetail || fuelDetail.distKm === 0 || row.fuel_pay === 0) return ''
+    const d = fuelDetail
+    const cellStyle = `border:1px solid #e0c97a;padding:4px 8px;font-size:10px;`
+    const labelStyle = `${cellStyle}background:#fffbeb;font-weight:600;width:140px;color:#78350f;`
+    const valStyle = `${cellStyle}background:#fff;`
+    const effectiveWorkDays = d.workDays - d.annualDaysOff
+    let rows = `
+<tr><td style="${labelStyle}">차량 / 유종</td><td style="${valStyle}">${emp?.car_type||'-'} / ${d.fuelType}</td></tr>
+<tr><td style="${labelStyle}">편도 출퇴근 거리</td><td style="${valStyle}">${d.distKm} km (왕복 ${d.distKm*2} km)</td></tr>
+<tr><td style="${labelStyle}">연비</td><td style="${valStyle}">${d.efficiency} km/L</td></tr>
+<tr><td style="${labelStyle}">유종별 ℓ당 단가</td><td style="${valStyle}">${formatKRW(d.pricePerL)}원/L</td></tr>
+<tr><td style="${labelStyle}">① 1일 유류비</td><td style="${valStyle}">왕복 ${d.distKm*2}km ÷ ${d.efficiency}km/L × ${formatKRW(d.pricePerL)}원 = ${formatKRW(Math.round(d.dailyFuel))}원 → <strong>10원 올림 = ${formatKRW(d.dailyFuelCeiled)}원</strong></td></tr>
+<tr><td style="${labelStyle}">② 기준 출근일수</td><td style="${valStyle}">${d.workDays}일${d.annualDaysOff>0?` − 연차 ${d.annualDaysOff}일 = <strong>${effectiveWorkDays}일</strong>`:''}</td></tr>
+<tr><td style="${labelStyle}">③ 월 유류비 합계</td><td style="${valStyle}">${formatKRW(d.dailyFuelCeiled)}원 × ${effectiveWorkDays}일 = <strong>${formatKRW(d.rawTotal)}원</strong></td></tr>`
+    if (d.rawTotal > 100000) {
+      rows += `<tr><td style="${labelStyle}">④ 한도 적용</td><td style="${valStyle}">월 최대 <strong>100,000원</strong> 한도 적용</td></tr>`
+    }
+    if (d.isTrial) {
+      rows += `<tr><td style="${labelStyle}">⑤ 수습 50% 적용</td><td style="${valStyle}">${formatKRW(d.capped)}원 × 50% = <strong>${formatKRW(d.final)}원</strong></td></tr>`
+    }
+    rows += `<tr style="background:#fef9c3;font-weight:bold;"><td style="${labelStyle}font-size:11px;">최종 유류지원비</td><td style="${valStyle}font-size:12px;color:#b45309;font-weight:bold;">${formatKRW(row.fuel_pay)}원</td></tr>`
+    return `<div style="margin-top:10px;">
+<div style="${sh}">▶ 유류지원비 계산 내역</div>
+<table style="width:100%;border-collapse:collapse;font-size:10px;"><tbody>${rows}</tbody></table>
+</div>`
+  })()
+
   return `<div style="text-align:center;font-size:18px;font-weight:bold;margin-bottom:14px;">${row.pay_month} (주)보누스메이트 급여명세서</div>
 <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px;"><tbody>
 <tr><th style="${lbl}">근무기간</th><td colspan="3" style="${td}">${py}.${String(pm).padStart(2,'0')}.01 ~ ${periodEnd}</td></tr>
@@ -272,6 +308,7 @@ ${(row.other_allowances||[]).map(a=>`<tr><td style="${lbl}">${a.label||'기타'}
 ${hasSettle?`<tr style="background:#fffbeb;"><td style="${td}font-weight:bold;color:#92400e;" colspan="2">◆ 연말정산</td></tr>${row.income_tax_settle!==0?`<tr><td style="${lbl}">연말정산소득세</td><td style="${amt}">${formatKRW(row.income_tax_settle)}</td></tr>`:''} ${row.local_tax_settle!==0?`<tr><td style="${lbl}">연말정산지방소득세</td><td style="${amt}">${formatKRW(row.local_tax_settle)}</td></tr>`:''} ${row.special_tax_settle!==0?`<tr><td style="${lbl}">연말정산농특세</td><td style="${amt}">${formatKRW(row.special_tax_settle)}</td></tr>`:''}`:''} 
 <tr style="background:#fee2e2;font-weight:bold;"><td style="${lbl}">공제합계</td><td style="${amt}">${totalDeduction<0?'+':'-'}${formatKRW(Math.abs(totalDeduction))}</td></tr>
 </tbody></table></div></div>
+${fuelSection}
 <div style="margin-top:10px;"><div style="${sh}">▶ ${row.pay_month} 연차·휴가 사용 내역</div>
 <table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr><th style="${th}width:160px">구분</th><th style="${th}">사용 횟수 및 날짜</th></tr></thead><tbody>${leaveRows}</tbody></table></div>
 ${row.memo?`<div style="margin-top:8px;"><div style="${sh}">▶ 메모</div><div style="border:1px solid #999;padding:6px 8px;min-height:28px;white-space:pre-wrap;">${row.memo}</div></div>`:''}
@@ -305,6 +342,11 @@ export default function PayrollPage() {
   const [fuelPriceSaving, setFuelPriceSaving] = useState(false)
   const [fuelPriceEdit, setFuelPriceEdit] = useState<Record<string, number>>({})
   const [showFuelPanel, setShowFuelPanel] = useState(false)
+  // 월별 기준 출근일수 (전체 공통)
+  const [monthWorkDays, setMonthWorkDays] = useState<number>(0)       // 현재 적용 중인 값
+  const [monthWorkDaysEdit, setMonthWorkDaysEdit] = useState<number>(0) // 편집 중인 값
+  const [showWorkDaysPanel, setShowWorkDaysPanel] = useState(false)
+  const [workDaysSaving, setWorkDaysSaving] = useState(false)
   const [settleDraft, setSettleDraft] = useState({ income_tax_settle: 0, local_tax_settle: 0, special_tax_settle: 0 })
   const printRef = useRef<HTMLDivElement>(null)
   const years = [new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2]
@@ -316,7 +358,7 @@ export default function PayrollPage() {
   const [sendProgress, setSendProgress] = useState({ done: 0, total: 0 })
 
   useEffect(() => { fetchEmployees(); fetchFuelPrices() }, [])
-  useEffect(() => { if (employees.length > 0) { fetchPayrollForMonth(); fetchLeaveUsage() } fetchFuelPrices(selectedYear) }, [selectedYear, selectedMonth, employees])
+  useEffect(() => { if (employees.length > 0) { fetchPayrollForMonth(); fetchLeaveUsage() } fetchFuelPrices(selectedYear); fetchWorkDays(selectedYear, selectedMonth) }, [selectedYear, selectedMonth, employees])
   useEffect(() => { if (tab === 'history') fetchHistory() }, [tab, historyYear])
 
   async function fetchEmployees() {
@@ -367,7 +409,39 @@ export default function PayrollPage() {
     setFuelPriceSaving(false)
   }
 
-  async function fetchLeaveUsage() {
+  async function saveWorkDays() {
+    setWorkDaysSaving(true)
+    const pay_month = `${selectedYear}-${String(selectedMonth).padStart(2,'0')}`
+    // work_days_settings 테이블에 upsert (없으면 fuel_price_settings 처럼 별도 테이블 or payroll_settings)
+    const { error } = await supabase.from('payroll_month_settings').upsert(
+      { pay_month, work_days: monthWorkDaysEdit },
+      { onConflict: 'pay_month' }
+    )
+    if (!error) {
+      setMonthWorkDays(monthWorkDaysEdit)
+      // 모든 rows의 work_days를 공통값으로 일괄 업데이트
+      setRows(prev => prev.map(r => ({ ...r, work_days: monthWorkDaysEdit })))
+      setSuccess(`${selectedYear}년 ${selectedMonth}월 기준 출근일수 ${monthWorkDaysEdit}일이 저장되었습니다.`)
+      setShowWorkDaysPanel(false)
+    } else {
+      setError('출근일수 저장 실패: ' + error.message)
+    }
+    setWorkDaysSaving(false)
+  }
+
+  async function fetchWorkDays(year: number, month: number) {
+    const pay_month = `${year}-${String(month).padStart(2,'0')}`
+    const { data } = await supabase.from('payroll_month_settings').select('work_days').eq('pay_month', pay_month).maybeSingle()
+    const days = data?.work_days ?? 0
+    setMonthWorkDays(days)
+    setMonthWorkDaysEdit(days)
+    // rows가 이미 로드된 경우 work_days 동기화
+    if (days > 0) {
+      setRows(prev => prev.map(r => r.work_days === 0 ? { ...r, work_days: days } : r))
+    }
+  }
+
+
     const firstDay = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
     const lastDay = new Date(selectedYear, selectedMonth, 0).toISOString().slice(0, 10)
     const { data } = await supabase
@@ -493,7 +567,16 @@ export default function PayrollPage() {
     setLoading(false)
   }
 
+  const [printFuelDetail, setPrintFuelDetail] = useState<FuelCalcDetail | null>(null)
+
   function handlePrint(row: PayrollRow, mode: 'print' | 'pdf' = 'print') {
+    // 인쇄 시 해당 직원의 유류비 상세 계산
+    const emp = empMap[row.employee_id]
+    const annualDaysOff = (leaveUsage[row.employee_id]||[]).filter(u=>u.leave_type==='annual'||u.leave_type==='ANNUAL').reduce((s,u)=>s+u.count,0)
+    const isTrial = emp?.position==='수습'
+    const eff = fuelEfficiency[row.employee_id] || DEFAULT_FUEL_EFFICIENCY[emp?.fuel_type||'없음'] || 12
+    const fd = emp ? calcFuelPayDetail(emp, row.work_days||0, eff, fuelPriceMap, annualDaysOff, isTrial) : null
+    setPrintFuelDetail(fd)
     setPrintTarget(row)
     setTimeout(() => {
       if (mode === 'pdf') { const orig = document.title; document.title = `${row.pay_month}_${row.employee_name}_급여명세서`; window.print(); setTimeout(() => { document.title = orig }, 1000) }
@@ -535,7 +618,12 @@ export default function PayrollPage() {
       }
 
       try {
-        const html = buildSlipHTML(row, emp, leaveUsage[emp.id] || [])
+        const empFull = empMap[emp.id]
+        const annualDaysOff = (leaveUsage[emp.id]||[]).filter(u=>u.leave_type==='annual'||u.leave_type==='ANNUAL').reduce((s,u)=>s+u.count,0)
+        const isTrial = empFull?.position==='수습'
+        const eff = fuelEfficiency[emp.id] || DEFAULT_FUEL_EFFICIENCY[empFull?.fuel_type||'없음'] || 12
+        const fd = empFull ? calcFuelPayDetail(empFull, row.work_days||0, eff, fuelPriceMap, annualDaysOff, isTrial) : null
+        const html = buildSlipHTML(row, emp, leaveUsage[emp.id] || [], fd, fuelPriceMap)
         const blob = await buildPDFBlob(html)
         const buf = await blob.arrayBuffer()
         const bytes = new Uint8Array(buf)
@@ -575,7 +663,7 @@ export default function PayrollPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 print:bg-white">
-      {printTarget && <PrintSlip row={printTarget} emp={empMap[printTarget.employee_id]} leaveUsage={leaveUsage[printTarget.employee_id] || []} ref={printRef} />}
+      {printTarget && <PrintSlip row={printTarget} emp={empMap[printTarget.employee_id]} leaveUsage={leaveUsage[printTarget.employee_id] || []} fuelDetail={printFuelDetail} ref={printRef} />}
 
       {/* 연말정산 모달 */}
       {settleModal && (
@@ -1124,8 +1212,8 @@ const PRINT_STYLES = [
   '.label-col { background: #f5f5f5; font-weight: 600; width: 120px; }',
 ].join('\n')
 
-const PrintSlip = forwardRef<HTMLDivElement, { row: PayrollRow; emp: Employee | undefined; leaveUsage: LeaveUsage[] }>(
-  ({ row, emp, leaveUsage }, ref) => {
+const PrintSlip = forwardRef<HTMLDivElement, { row: PayrollRow; emp: Employee | undefined; leaveUsage: LeaveUsage[]; fuelDetail: FuelCalcDetail | null }>(
+  ({ row, emp, leaveUsage, fuelDetail }, ref) => {
     const net = calcNet(row)
     const totalIncome = (row.base_pay||0)+(row.meal_pay||0)+(row.fuel_pay||0)+(row.bonus_pay||0)+(row.other_allowances||[]).reduce((s,a)=>s+a.amount,0)
     const totalDeduction = (row.national_pension||0)+(row.health_insurance||0)+(row.employment_insurance||0)+(row.long_term_care||0)+(row.income_tax||0)+(row.local_income_tax||0)+(row.income_tax_settle||0)+(row.local_tax_settle||0)+(row.special_tax_settle||0)
@@ -1134,6 +1222,7 @@ const PrintSlip = forwardRef<HTMLDivElement, { row: PayrollRow; emp: Employee | 
     const periodStart = `${pyear}.${String(pmonth).padStart(2,'0')}.01`
     const periodEnd = `${pyear}.${String(pmonth).padStart(2,'0')}.${new Date(pyear,pmonth,0).getDate()}`
     function getPayDate(y:number,m:number){const nm=m===12?1:m+1,ny=m===12?y+1:y;let d=new Date(ny,nm-1,10);while(d.getDay()===0||d.getDay()===6)d.setDate(d.getDate()-1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+    const fd = fuelDetail
 
     return (
       <div ref={ref} className="hidden print:block p-8 text-xs font-sans text-gray-900" style={{fontFamily:'Malgun Gothic,맑은 고딕,sans-serif'}}>
@@ -1184,6 +1273,36 @@ const PrintSlip = forwardRef<HTMLDivElement, { row: PayrollRow; emp: Employee | 
             </tbody></table>
           </div>
         </div>
+
+        {/* 유류지원비 계산내역 */}
+        {fd && fd.distKm > 0 && row.fuel_pay > 0 && (()=>{
+          const effectiveWorkDays = fd.workDays - fd.annualDaysOff
+          return (
+            <div className="mt-3">
+              <div className="section-header">▶ 유류지원비 계산 내역</div>
+              <table className="slip-table" style={{fontSize:'10px'}}>
+                <tbody>
+                  <tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>차량 / 유종</td><td>{emp?.car_type||'-'} / {fd.fuelType}</td></tr>
+                  <tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>편도 출퇴근 거리</td><td>{fd.distKm} km (왕복 {fd.distKm*2} km)</td></tr>
+                  <tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>연비</td><td>{fd.efficiency} km/L</td></tr>
+                  <tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>유종별 ℓ당 단가</td><td>{formatKRW(fd.pricePerL)}원/L</td></tr>
+                  <tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>① 1일 유류비</td>
+                    <td>왕복 {fd.distKm*2}km ÷ {fd.efficiency}km/L × {formatKRW(fd.pricePerL)}원 = {formatKRW(Math.round(fd.dailyFuel))}원 → <strong>10원 올림 = {formatKRW(fd.dailyFuelCeiled)}원</strong></td></tr>
+                  <tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>② 기준 출근일수</td>
+                    <td>{fd.workDays}일{fd.annualDaysOff>0&&<> − 연차 {fd.annualDaysOff}일 = <strong>{effectiveWorkDays}일</strong></>}</td></tr>
+                  <tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>③ 월 유류비 합계</td>
+                    <td>{formatKRW(fd.dailyFuelCeiled)}원 × {effectiveWorkDays}일 = <strong>{formatKRW(fd.rawTotal)}원</strong></td></tr>
+                  {fd.rawTotal>100000&&<tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>④ 한도 적용</td><td>월 최대 <strong>100,000원</strong> 한도 적용</td></tr>}
+                  {fd.isTrial&&<tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>⑤ 수습 50%</td><td>{formatKRW(fd.capped)}원 × 50% = <strong>{formatKRW(fd.final)}원</strong></td></tr>}
+                  <tr style={{background:'#fef9c3',fontWeight:'bold'}}>
+                    <td className="label-col" style={{fontSize:'11px',color:'#78350f'}}>최종 유류지원비</td>
+                    <td style={{textAlign:'right',fontSize:'12px',color:'#b45309',fontWeight:'bold'}}>{formatKRW(row.fuel_pay)}원</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )
+        })()}
 
         <div className="mt-3">
           <div className="section-header">▶ {row.pay_month} 연차·휴가 사용 내역</div>
