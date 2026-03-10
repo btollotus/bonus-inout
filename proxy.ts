@@ -17,7 +17,7 @@ const SUBADMIN_PATHS = [
   "/report",
   "/tax/spec",
   "/tax/statement",
-  "/leave",
+  // ✅ /leave 제거 — USER도 접근 가능
 ];
 
 export async function proxy(req: NextRequest) {
@@ -86,15 +86,14 @@ export async function proxy(req: NextRequest) {
         .eq("auth_user_id", data.user.id)
         .maybeSingle();
 
+      // resign_date가 null이거나 오늘보다 미래면 재직 → 정상 통과
       if (empData?.resign_date && empData.resign_date <= today) {
         // Supabase Auth 세션 강제 종료
         await admin.auth.admin.signOut(data.user.id);
-        // 퇴사자 전용 안내 페이지로 리다이렉트
         const url = req.nextUrl.clone();
         url.pathname = "/login";
         url.search = "?resigned=1";
         const redirectRes = NextResponse.redirect(url);
-        // 클라이언트 쿠키 삭제
         req.cookies.getAll().forEach(({ name }) => {
           if (name.includes("supabase") || name.startsWith("sb-")) {
             redirectRes.cookies.delete(name);
