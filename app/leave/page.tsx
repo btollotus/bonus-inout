@@ -285,7 +285,10 @@ export default function LeavePage() {
 
   useEffect(() => { fetchData() }, [])
   useEffect(() => { fetchHealthCerts() }, [])
-  useEffect(() => { if (isAdmin || isSubAdmin) fetchAllBalances() }, [leaveYear, isAdmin, isSubAdmin])
+  useEffect(() => {
+    if (isAdmin) fetchAllBalances()
+    else if (isSubAdmin) fetchAllBalancesReadOnly()
+  }, [leaveYear, isAdmin, isSubAdmin])
 
   // =====================================================================
   // 근로기준법 연차 계산
@@ -411,6 +414,51 @@ export default function LeavePage() {
     setAllBalances(result)
   }
 
+
+  // =====================================================================
+  // 전체 직원 연차 현황 읽기 전용 (SUBADMIN / USER)
+  // DB insert/update 없이 순수 조회만 수행
+  // =====================================================================
+  async function fetchAllBalancesReadOnly() {
+    const thisYear = leaveYear
+    const { data: empList } = await supabase
+      .from('employees').select('id, name, hire_date, auth_user_id')
+      .is('resign_date', null).order('name')
+
+    const { data: balList } = await supabase
+      .from('leave_balance')
+      .select('employee_id, total_granted, used_days, remaining_days, manual_override, override_reason')
+      .eq('year', thisYear)
+    const balMap: Record<string, any> = {}
+    for (const b of (balList || [])) balMap[b.employee_id] = b
+
+    const { data: reqList } = await supabase
+      .from('leave_requests').select('user_id, leave_type')
+      .gte('leave_date', `${thisYear}-01-01`).lte('leave_date', `${thisYear}-12-31`)
+
+    const authToEmpMap: Record<string, string> = {}
+    for (const e of (empList || [])) { if (e.auth_user_id) authToEmpMap[e.auth_user_id] = e.id }
+
+    const usedMap: Record<string, number> = {}
+    for (const r of (reqList || [])) {
+      const eid = authToEmpMap[r.user_id] ?? r.user_id
+      const t = r.leave_type?.toUpperCase()
+      const days = (t==='ANNUAL'||t==='FRIDAY_OFF') ? 1 : (t==='HALF_AM'||t==='HALF_PM') ? 0.5 : 0
+      usedMap[eid] = (usedMap[eid] || 0) + days
+    }
+
+    const result: EmpLeaveBalance[] = (empList || []).map((e: any) => {
+      const bal = balMap[e.id]
+      const total = bal?.total_granted ?? calcLegalLeaveDays(e.hire_date, thisYear)
+      const used = usedMap[e.id] ?? (bal?.used_days ?? 0)
+      return {
+        employee_id: e.id, employee_name: e.name, hire_date: e.hire_date,
+        total_days: total, used_days: used, remaining_days: Math.max(0, total - used),
+        manual_override: bal?.manual_override ?? false, override_reason: bal?.override_reason ?? '',
+      }
+    })
+    setAllBalances(result)
+  }
   async function saveManualOverride(targetEmpId: string) {
     const emp = allBalances.find(b => b.employee_id === targetEmpId)
     if (!emp) return
@@ -498,7 +546,8 @@ export default function LeavePage() {
       setAllRequests(allReqs.map((r: any) => ({ ...r, is_mine: r.user_id === user.id })))
     }
 
-    if (currentIsAdmin || currentRole === 'SUBADMIN') await fetchAllBalances()
+    if (currentIsAdmin) await fetchAllBalances()
+    else if (currentRole === 'SUBADMIN') await fetchAllBalancesReadOnly()
   }
 
   // ✅ SUBADMIN은 클릭 자체가 비활성화되므로 isFuture 로직 유지
@@ -771,7 +820,7 @@ export default function LeavePage() {
       {/* ✅ 전체 직원 연차 현황 — ADMIN/SUBADMIN/USER 모두 조회 가능, 수정은 ADMIN만 */}
       <div className="max-w-screen-xl mx-auto px-6 pb-4">
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
-          <button onClick={() => setShowAllBalances(!showAllBalances)}
+          <button onClick={() => { if (!showAllBalances && !isAdmin && !isSubAdmin && allBalances.length === 0) fetchAllBalancesReadOnly(); setShowAllBalances(!showAllBalances) }}
             className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors rounded-2xl">
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-gray-800">👑 전체 직원 연차 현황</span>
