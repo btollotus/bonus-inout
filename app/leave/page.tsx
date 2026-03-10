@@ -100,7 +100,6 @@ const ALL_HOLIDAYS: Record<string, string> = {
   '2025-10-06':'추석','2025-10-07':'추석 연휴','2025-10-08':'추석 대체공휴일',
   '2025-10-09':'한글날','2025-12-25':'크리스마스',
   // 2026 - 설날: 2/17(화) 당일만 공휴일 (네이버 달력 기준)
-  // 2/15(일)~2/18(수) 연휴는 관공서 공휴일이나 법정공휴일 아님
   '2026-01-01':'신정',
   '2026-01-02':'창립기념일',
   '2026-02-17':'설날',
@@ -163,33 +162,20 @@ const SOLAR_TERMS: Record<string, string> = {
 
 // =====================================================================
 // 음력 변환
-// 각 음력 연도의 양력 시작일 + 월별 일수 (대월30/소월29, 윤달 포함)
-// leapMonth: 해당 달 다음에 윤달 삽입 (0=없음)
-// months 배열: 1월~12월 순서 (윤달이 있으면 13개)
 // =====================================================================
 interface LunarYearInfo {
-  start: string      // 음력 1월 1일의 양력 날짜
-  leapMonth: number  // 윤달 위치 (0=없음, n=음력 n월 다음에 윤달)
-  months: number[]   // 각 달의 일수 (윤달 포함하면 13개)
+  start: string
+  leapMonth: number
+  months: number[]
 }
 
 const LUNAR_DATA: LunarYearInfo[] = [
-  // 2023 계묘년: 윤2월 포함 (384일) → 2024-02-10 ✓
   { start:'2023-01-22', leapMonth:2, months:[29,30,29,30,29,30,29,30,30,29,30,29,30] },
-  // 2024 갑진년: 윤달 없음 (354일) → 2025-01-29 ✓
   { start:'2024-02-10', leapMonth:0, months:[29,30,29,29,30,29,30,29,30,30,29,30] },
-  // 2025 을사년: 윤6월 포함 (384일) → 2026-02-17 ✓
-  // 6월(29)→윤6월(30)→7월(29) 순서
   { start:'2025-01-29', leapMonth:6, months:[30,29,30,29,30,29,30,29,30,29,30,29,30] },
-  // 2026 병오년: 윤달 없음 (355일) → 2027-02-07 ✓  [네이버 2월 달력 검증완료]
-  // 1월=30(2/17~3/18), 2월=29(3/19~4/16), 12월=30
   { start:'2026-02-17', leapMonth:0, months:[30,29,30,29,30,29,30,29,30,29,30,30] },
-  // 2027 정미년: 윤달 없음 (354일) → 2028-01-27 ✓
   { start:'2027-02-07', leapMonth:0, months:[29,29,30,29,30,29,30,30,30,29,30,29] },
-  // 2028 무신년: 윤5월 포함 (383일) → 2029-02-13 ✓
-  // 5월(30)→윤5월(29)→6월(29) 순서
   { start:'2028-01-27', leapMonth:5, months:[30,29,30,29,30,29,29,30,29,30,29,30,29] },
-  // 2029 기유년: 윤달 없음 (355일) → 2030-02-03 ✓
   { start:'2029-02-13', leapMonth:0, months:[30,30,29,30,29,30,29,30,29,30,29,30] },
 ]
 
@@ -209,28 +195,21 @@ function getLunarDate(dateStr: string): { month: number; day: number; isLeap: bo
     const leapMonth = cur.leapMonth
     const lunarYear = new Date(cur.start).getFullYear()
 
-    // 윤달 있는 경우: months 배열에서 leapMonth 번째 달(0-based: leapMonth) 다음이 윤달
-    // 예) leapMonth=6: 인덱스 0~5 = 1~6월, 인덱스 6 = 윤6월, 인덱스 7~12 = 7~12월
     for (let m = 0; m < cur.months.length; m++) {
       if (remaining < cur.months[m]) {
         let month: number
         let isLeap = false
 
         if (leapMonth === 0) {
-          // 윤달 없음: 그냥 순서대로
           month = m + 1
         } else {
-          // leapMonth가 있을 때:
-          // 인덱스 0 ~ leapMonth-1 → 음력 1 ~ leapMonth 월
-          // 인덱스 leapMonth       → 윤 leapMonth 월 (isLeap=true)
-          // 인덱스 leapMonth+1 ~ 끝 → 음력 leapMonth+1 ~ 12월
           if (m < leapMonth) {
             month = m + 1
           } else if (m === leapMonth) {
             month = leapMonth
             isLeap = true
           } else {
-            month = m  // leapMonth+1 이후는 m (leapMonth 자리가 윤달로 소비됐으므로)
+            month = m
           }
         }
 
@@ -265,6 +244,7 @@ type ModalMode = 'create' | 'edit'
 export default function LeavePage() {
   const [role, setRole] = useState<string>('')
   const isAdmin = role === 'ADMIN'
+  const isSubAdmin = role === 'SUBADMIN' // ✅ 추가
   const supabase = createClient()
   const year = new Date().getFullYear()
   const today = new Date().toISOString().split('T')[0]
@@ -294,7 +274,6 @@ export default function LeavePage() {
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [calYear, setCalYear] = useState(new Date().getFullYear())
 
-  // employee_health_certs: exam_date 기준 1년 후 갱신
   const [healthCerts, setHealthCerts] = useState<HealthCert[]>([])
 
   const [modalOpen, setModalOpen] = useState(false)
@@ -332,7 +311,6 @@ export default function LeavePage() {
 
   // =====================================================================
   // 보건증 갱신일 조회
-  // 테이블: employee_health_certs (employee_id, exam_date)
   // =====================================================================
   async function fetchHealthCerts() {
     try {
@@ -343,7 +321,6 @@ export default function LeavePage() {
 
       if (error || !data) return
 
-      // 직원별 최신 exam_date만 유지
       const latestMap: Record<string, any> = {}
       for (const row of data) {
         if (!latestMap[row.employee_id]) latestMap[row.employee_id] = row
@@ -371,8 +348,6 @@ export default function LeavePage() {
 
   // =====================================================================
   // 전체 직원 연차 현황 (ADMIN)
-  // leave_balance: total_granted, used_days, remaining_days 모두 DB에 저장
-  // 실제 remaining = total_granted - (leave_requests 집계) 로 재계산
   // =====================================================================
   async function fetchAllBalances() {
     const thisYear = leaveYear
@@ -387,7 +362,6 @@ export default function LeavePage() {
     const balMap: Record<string, any> = {}
     for (const b of (balList || [])) balMap[b.employee_id] = b
 
-    // leave_requests → user_id 기준이므로 auth_user_id로 매핑
     const { data: reqList } = await supabase
       .from('leave_requests').select('user_id, leave_type')
       .gte('leave_date', `${thisYear}-01-01`).lte('leave_date', `${thisYear}-12-31`)
@@ -403,7 +377,6 @@ export default function LeavePage() {
       usedMap[eid] = (usedMap[eid] || 0) + days
     }
 
-    // 법정 연차 자동 생성/갱신
     for (const e of (empList || [])) {
       if (!e.hire_date) continue
       const legalDays = calcLegalLeaveDays(e.hire_date, thisYear)
@@ -463,7 +436,6 @@ export default function LeavePage() {
 
   // =====================================================================
   // 데이터 로드
-  // leave_requests: user_id + employee_name 기반 (employee_id 컬럼 없음)
   // =====================================================================
   async function fetchData() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -505,13 +477,11 @@ export default function LeavePage() {
         bal = inserted
       }
 
-      // leave_requests: user_id로 조회
       const { data: reqs } = await supabase
         .from('leave_requests').select('*')
         .eq('user_id', user.id).order('leave_date', { ascending: false })
       setMyRequests(reqs || [])
 
-      // 실제 사용일수 집계
       const used = (reqs || [])
         .filter((r: any) => r.leave_date?.startsWith(year_str))
         .reduce((s: number, r: any) => {
@@ -522,7 +492,6 @@ export default function LeavePage() {
       setBalance({ total_days: totalDays, used_days: used, remaining_days: Math.max(0, totalDays - used) })
     }
 
-    // 전체 일정 (캘린더용) - employee_name은 leave_requests에 직접 저장됨
     const { data: allReqs } = await supabase
       .from('leave_requests').select('*').order('leave_date', { ascending: false })
     if (allReqs) {
@@ -532,6 +501,7 @@ export default function LeavePage() {
     if (currentIsAdmin) await fetchAllBalances()
   }
 
+  // ✅ SUBADMIN은 클릭 자체가 비활성화되므로 isFuture 로직 유지
   const isFuture = (d: string) => isAdmin || d >= today
 
   function openCreateModal(dateStr: string) {
@@ -541,6 +511,9 @@ export default function LeavePage() {
       setAdminLeaveType('ANNUAL'); setAdminNote(''); setAdminModalOpen(true)
       return
     }
+    // ✅ SUBADMIN은 신청 모달 열지 않음
+    if (isSubAdmin) return
+
     const existing = myRequests.find((r) => r.leave_date === dateStr)
     if (existing) { openEditModal(existing); return }
     setModalMode('create'); setModalDate(dateStr)
@@ -628,12 +601,12 @@ export default function LeavePage() {
       const isHoliday = !!ALL_HOLIDAYS[dateStr]
       const holidayName = ALL_HOLIDAYS[dateStr] || ''
       const isRed = isSun || isHoliday
-      const clickable = isFuture(dateStr)
+      // ✅ SUBADMIN은 날짜 클릭 비활성화
+      const clickable = isFuture(dateStr) && !isSubAdmin
       const certsDue = getCertsForDate(dateStr)
       const solarTerm = SOLAR_TERMS[dateStr] || ''
       const lunar = getLunarDate(dateStr)
 
-      // 음력 표시
       let lunarStr = ''
       let lunarIsMonthStart = false
       if (lunar) {
@@ -658,9 +631,7 @@ export default function LeavePage() {
               : 'opacity-45 cursor-default',
           ].join(' ')}
         >
-          {/* 날짜 + 음력 + 우측 뱃지들 */}
           <div className="flex items-start justify-between gap-0.5">
-            {/* 날짜 숫자 + 음력 */}
             <div className="flex flex-col items-center shrink-0 min-w-[28px]">
               <span className={[
                 'text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full',
@@ -678,7 +649,6 @@ export default function LeavePage() {
               )}
             </div>
 
-            {/* 공휴일명 + 절기 + 인원수 */}
             <div className="flex flex-col items-end gap-0.5 min-w-0 flex-1">
               {holidayName && (
                 <span className="text-[9px] font-medium text-red-500 bg-red-100 rounded px-1 py-0.5 truncate max-w-[66px]" title={holidayName}>
@@ -698,7 +668,6 @@ export default function LeavePage() {
             </div>
           </div>
 
-          {/* 일정 뱃지 */}
           <div className="flex flex-col gap-0.5 mt-0.5">
             {dayLeaves.map((lv) =>
               lv.is_mine ? (
@@ -719,6 +688,7 @@ export default function LeavePage() {
                   <span className="truncate min-w-0">{lv.employee_name}</span>
                   <span className="shrink-0 opacity-40 text-[9px]">·</span>
                   <span className="shrink-0">{LEAVE_TYPE_SHORT[lv.leave_type]}</span>
+                  {/* ✅ 삭제 버튼은 ADMIN만 */}
                   {isAdmin && (
                     <button onClick={(e) => { e.stopPropagation(); handleAdminDelete(lv.id) }}
                       className="shrink-0 text-red-400 hover:text-red-600 text-[9px] ml-0.5 font-bold">✕</button>
@@ -727,7 +697,6 @@ export default function LeavePage() {
               )
             )}
 
-            {/* 보건증 갱신 뱃지 */}
             {certsDue.map((cert) => (
               <div key={`cert-${cert.id}`}
                 onClick={(e) => e.stopPropagation()}
@@ -765,7 +734,12 @@ export default function LeavePage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">연차 / 반차 / 병가 신청</h1>
-            <p className="text-sm text-gray-400 mt-0.5">날짜를 클릭하여 신청하거나 수정할 수 있습니다</p>
+            {/* ✅ SUBADMIN 안내 문구 */}
+            <p className="text-sm text-gray-400 mt-0.5">
+              {isSubAdmin
+                ? '전체 직원 연차 현황을 조회할 수 있습니다 (부관리자)'
+                : '날짜를 클릭하여 신청하거나 수정할 수 있습니다'}
+            </p>
           </div>
           <div className="flex gap-3 shrink-0">
             {[
@@ -794,124 +768,132 @@ export default function LeavePage() {
         )}
       </div>
 
-      {/* ADMIN 전체 직원 연차 현황 */}
-      {isAdmin && (
-        <div className="max-w-screen-xl mx-auto px-6 pb-4">
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
-            <button onClick={() => setShowAllBalances(!showAllBalances)}
-              className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors rounded-2xl">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-gray-800">👑 전체 직원 연차 현황</span>
-                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{allBalances.length}명</span>
-                <span className="text-[10px] text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">입사일 기준 자동</span>
-              </div>
-              <div className="flex items-center gap-3">
+      {/* ✅ 전체 직원 연차 현황 — ADMIN/SUBADMIN/USER 모두 조회 가능, 수정은 ADMIN만 */}
+      <div className="max-w-screen-xl mx-auto px-6 pb-4">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+          <button onClick={() => setShowAllBalances(!showAllBalances)}
+            className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors rounded-2xl">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-gray-800">👑 전체 직원 연차 현황</span>
+              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{allBalances.length}명</span>
+              <span className="text-[10px] text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">입사일 기준 자동</span>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* ✅ 연도 선택은 ADMIN만 */}
+              {isAdmin && (
                 <select value={leaveYear} onClick={e => e.stopPropagation()} onChange={e => setLeaveYear(Number(e.target.value))}
                   className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
                   {[year+1, year, year-1].map(y => <option key={y} value={y}>{y}년</option>)}
                 </select>
-                <span className="text-gray-400 text-sm">{showAllBalances ? '▲' : '▼'}</span>
-              </div>
-            </button>
-            {showAllBalances && (
-              <div className="border-t border-gray-100 px-5 py-4">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">직원</th>
-                        <th className="text-center py-2 px-3 text-xs font-semibold text-blue-600">부여 연차</th>
-                        <th className="text-center py-2 px-3 text-xs font-semibold text-orange-500">사용 연차</th>
-                        <th className="text-center py-2 px-3 text-xs font-semibold text-emerald-600">잔여 연차</th>
-                        <th className="text-left py-2 px-3 text-xs font-semibold text-gray-400">사용률</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {allBalances.length === 0 ? (
-                        <tr><td colSpan={5} className="text-center py-6 text-gray-400 text-xs">연차 데이터가 없습니다.</td></tr>
-                      ) : (
-                        [...allBalances].sort((a,b) => a.employee_name.localeCompare(b.employee_name,'ko')).map((b) => {
-                          const pct = b.total_days > 0 ? Math.round(b.used_days / b.total_days * 100) : 0
-                          const barColor = pct>=90 ? 'bg-red-400' : pct>=70 ? 'bg-orange-400' : 'bg-emerald-400'
-                          const isEditing = editingBalance === b.employee_id
-                          return (
-                            <tr key={b.employee_id} className="hover:bg-gray-50 align-top">
-                              <td className="py-2.5 px-3">
-                                <div className="font-semibold text-gray-800">{b.employee_name}</div>
-                                {b.hire_date && (
-                                  <div className="text-[10px] text-gray-400 mt-0.5">
-                                    입사 {b.hire_date?.slice(0,10)} · 법정 {calcLegalLeaveDays(b.hire_date, leaveYear)}일
+              )}
+              {!isAdmin && (
+                <span className="text-sm text-gray-400 font-medium">{leaveYear}년</span>
+              )}
+              <span className="text-gray-400 text-sm">{showAllBalances ? '▲' : '▼'}</span>
+            </div>
+          </button>
+          {showAllBalances && (
+            <div className="border-t border-gray-100 px-5 py-4">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">직원</th>
+                      <th className="text-center py-2 px-3 text-xs font-semibold text-blue-600">부여 연차</th>
+                      <th className="text-center py-2 px-3 text-xs font-semibold text-orange-500">사용 연차</th>
+                      <th className="text-center py-2 px-3 text-xs font-semibold text-emerald-600">잔여 연차</th>
+                      <th className="text-left py-2 px-3 text-xs font-semibold text-gray-400">사용률</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {allBalances.length === 0 ? (
+                      <tr><td colSpan={5} className="text-center py-6 text-gray-400 text-xs">연차 데이터가 없습니다.</td></tr>
+                    ) : (
+                      [...allBalances].sort((a,b) => a.employee_name.localeCompare(b.employee_name,'ko')).map((b) => {
+                        const pct = b.total_days > 0 ? Math.round(b.used_days / b.total_days * 100) : 0
+                        const barColor = pct>=90 ? 'bg-red-400' : pct>=70 ? 'bg-orange-400' : 'bg-emerald-400'
+                        const isEditing = editingBalance === b.employee_id
+                        return (
+                          <tr key={b.employee_id} className="hover:bg-gray-50 align-top">
+                            <td className="py-2.5 px-3">
+                              <div className="font-semibold text-gray-800">{b.employee_name}</div>
+                              {b.hire_date && (
+                                <div className="text-[10px] text-gray-400 mt-0.5">
+                                  입사 {b.hire_date?.slice(0,10)} · 법정 {calcLegalLeaveDays(b.hire_date, leaveYear)}일
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              {/* ✅ 수정 UI는 ADMIN만 */}
+                              {isAdmin && isEditing ? (
+                                <div className="flex flex-col gap-1.5 items-center">
+                                  <input type="number" value={editDraft.total_days} min={0} max={365} autoFocus
+                                    onChange={e => setEditDraft(d => ({...d, total_days: Number(e.target.value)}))}
+                                    className="w-16 text-center border-2 border-blue-400 rounded-lg px-2 py-1 text-sm font-bold focus:outline-none" />
+                                  <input type="text" value={editDraft.override_reason} placeholder="사유 (선택)"
+                                    onChange={e => setEditDraft(d => ({...d, override_reason: e.target.value}))}
+                                    className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-300" />
+                                  <div className="flex gap-1">
+                                    <button onClick={() => saveManualOverride(b.employee_id)}
+                                      className="text-[10px] bg-blue-600 text-white px-2.5 py-1 rounded-lg hover:bg-blue-700 font-medium">저장</button>
+                                    <button onClick={() => setEditingBalance(null)}
+                                      className="text-[10px] bg-gray-100 text-gray-600 px-2.5 py-1 rounded-lg hover:bg-gray-200">취소</button>
                                   </div>
-                                )}
-                              </td>
-                              <td className="py-2 px-3 text-center">
-                                {isEditing ? (
-                                  <div className="flex flex-col gap-1.5 items-center">
-                                    <input type="number" value={editDraft.total_days} min={0} max={365} autoFocus
-                                      onChange={e => setEditDraft(d => ({...d, total_days: Number(e.target.value)}))}
-                                      className="w-16 text-center border-2 border-blue-400 rounded-lg px-2 py-1 text-sm font-bold focus:outline-none" />
-                                    <input type="text" value={editDraft.override_reason} placeholder="사유 (선택)"
-                                      onChange={e => setEditDraft(d => ({...d, override_reason: e.target.value}))}
-                                      className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-300" />
-                                    <div className="flex gap-1">
-                                      <button onClick={() => saveManualOverride(b.employee_id)}
-                                        className="text-[10px] bg-blue-600 text-white px-2.5 py-1 rounded-lg hover:bg-blue-700 font-medium">저장</button>
-                                      <button onClick={() => setEditingBalance(null)}
-                                        className="text-[10px] bg-gray-100 text-gray-600 px-2.5 py-1 rounded-lg hover:bg-gray-200">취소</button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center justify-center gap-1.5">
-                                    <span className="font-bold text-blue-600">
-                                      {b.total_days > 0
-                                        ? <>{b.total_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></>
-                                        : <span className="text-xs text-gray-300">미설정</span>}
-                                    </span>
-                                    {b.manual_override
-                                      ? <span title={b.override_reason||'수동조정'} className="text-[9px] text-amber-600 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded cursor-help">🔒수동</span>
-                                      : <span className="text-[9px] text-indigo-400 bg-indigo-50 px-1.5 py-0.5 rounded">자동</span>}
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <span className="font-bold text-blue-600">
+                                    {b.total_days > 0
+                                      ? <>{b.total_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></>
+                                      : <span className="text-xs text-gray-300">미설정</span>}
+                                  </span>
+                                  {b.manual_override
+                                    ? <span title={b.override_reason||'수동조정'} className="text-[9px] text-amber-600 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded cursor-help">🔒수동</span>
+                                    : <span className="text-[9px] text-indigo-400 bg-indigo-50 px-1.5 py-0.5 rounded">자동</span>}
+                                  {/* ✅ ✏️ 수정 버튼은 ADMIN만 표시 */}
+                                  {isAdmin && (
                                     <button onClick={() => { setEditingBalance(b.employee_id); setEditDraft({ total_days: b.total_days, override_reason: b.override_reason||'' }) }}
                                       className="text-[11px] text-gray-400 hover:text-blue-600 hover:bg-blue-50 px-1.5 py-0.5 rounded transition-colors">✏️</button>
-                                  </div>
-                                )}
-                              </td>
-                              <td className="py-2.5 px-3 text-center font-bold text-orange-500">
-                                {b.used_days > 0 ? <>{b.used_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></> : <span className="text-gray-300">-</span>}
-                              </td>
-                              <td className="py-2.5 px-3 text-center font-bold text-emerald-600">
-                                {b.total_days > 0 ? <>{b.remaining_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></> : <span className="text-xs text-gray-300">-</span>}
-                              </td>
-                              <td className="py-2.5 px-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="flex-1 bg-gray-100 rounded-full h-2 min-w-[80px]">
-                                    <div className={`${barColor} h-2 rounded-full transition-all`} style={{width:`${Math.min(pct,100)}%`}} />
-                                  </div>
-                                  <span className={`text-xs font-medium w-8 ${pct>=90?'text-red-500':pct>=70?'text-orange-500':'text-gray-500'}`}>{pct}%</span>
+                                  )}
                                 </div>
-                              </td>
-                            </tr>
-                          )
-                        })
-                      )}
-                    </tbody>
-                    {allBalances.length > 0 && (
-                      <tfoot className="border-t-2 border-gray-200">
-                        <tr className="bg-gray-50">
-                          <td className="py-2.5 px-3 text-xs font-bold text-gray-600">합계</td>
-                          <td className="py-2.5 px-3 text-center text-xs font-bold text-blue-600">{allBalances.reduce((s,b)=>s+b.total_days,0)}일</td>
-                          <td className="py-2.5 px-3 text-center text-xs font-bold text-orange-500">{allBalances.reduce((s,b)=>s+b.used_days,0)}일</td>
-                          <td className="py-2.5 px-3 text-center text-xs font-bold text-emerald-600">{allBalances.reduce((s,b)=>s+b.remaining_days,0)}일</td>
-                          <td />
-                        </tr>
-                      </tfoot>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-bold text-orange-500">
+                              {b.used_days > 0 ? <>{b.used_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></> : <span className="text-gray-300">-</span>}
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-bold text-emerald-600">
+                              {b.total_days > 0 ? <>{b.remaining_days}<span className="text-xs font-normal text-gray-400 ml-0.5">일</span></> : <span className="text-xs text-gray-300">-</span>}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 bg-gray-100 rounded-full h-2 min-w-[80px]">
+                                  <div className={`${barColor} h-2 rounded-full transition-all`} style={{width:`${Math.min(pct,100)}%`}} />
+                                </div>
+                                <span className={`text-xs font-medium w-8 ${pct>=90?'text-red-500':pct>=70?'text-orange-500':'text-gray-500'}`}>{pct}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
                     )}
-                  </table>
-                </div>
+                  </tbody>
+                  {allBalances.length > 0 && (
+                    <tfoot className="border-t-2 border-gray-200">
+                      <tr className="bg-gray-50">
+                        <td className="py-2.5 px-3 text-xs font-bold text-gray-600">합계</td>
+                        <td className="py-2.5 px-3 text-center text-xs font-bold text-blue-600">{allBalances.reduce((s,b)=>s+b.total_days,0)}일</td>
+                        <td className="py-2.5 px-3 text-center text-xs font-bold text-orange-500">{allBalances.reduce((s,b)=>s+b.used_days,0)}일</td>
+                        <td className="py-2.5 px-3 text-center text-xs font-bold text-emerald-600">{allBalances.reduce((s,b)=>s+b.remaining_days,0)}일</td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* 달력 */}
       <div className="max-w-screen-xl mx-auto px-6 pb-8">
@@ -960,8 +942,12 @@ export default function LeavePage() {
               className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-gray-100 text-gray-500 transition-colors">▶</button>
           </div>
 
+          {/* ✅ 역할별 안내 문구 */}
           <p className="text-xs text-blue-500 text-center mb-4">
-            {isAdmin ? '📌 날짜를 클릭하여 직원 휴가를 입력할 수 있습니다 (관리자)'
+            {isAdmin
+              ? '📌 날짜를 클릭하여 직원 휴가를 입력할 수 있습니다 (관리자)'
+              : isSubAdmin
+              ? '📌 전체 직원 연차 현황을 조회할 수 있습니다 (부관리자)'
               : '📌 오늘 이후 날짜를 클릭하면 신청 / 수정할 수 있습니다'}
           </p>
 
@@ -1001,7 +987,8 @@ export default function LeavePage() {
                         </p>
                       </div>
                     </div>
-                    {canEdit && (
+                    {/* ✅ 수정/삭제 버튼: ADMIN과 USER만, SUBADMIN 제외 */}
+                    {canEdit && !isSubAdmin && (
                       <div className="flex items-center gap-3 shrink-0">
                         <button onClick={() => openEditModal(req)} className="text-xs text-blue-500 hover:text-blue-700 font-medium">수정</button>
                         <span className="text-gray-200 text-sm">|</span>

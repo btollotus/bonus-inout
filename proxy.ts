@@ -17,13 +17,7 @@ const SUBADMIN_PATHS = [
   "/report",
   "/tax/spec",
   "/tax/statement",
-  // "/calendar" 제거 → 모든 로그인 사용자 허용
-];
-
-// SUBADMIN 차단 (ADMIN + USER만)
-const USER_ONLY_PATHS = [
-  "/leave",
-  // "/calendar" 제거 → 모든 로그인 사용자 허용
+  "/leave", // ✅ USER_ONLY_PATHS에서 이동 → SUBADMIN 접근 허용
 ];
 
 export async function proxy(req: NextRequest) {
@@ -95,17 +89,13 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
 
-  // ADMIN + SUBADMIN 전용 경로 (USER 차단)
+  // ADMIN + SUBADMIN 전용 경로 (USER 차단) — /leave 포함
   const isSubadminPath = SUBADMIN_PATHS.some((p) => pathname.startsWith(p));
   if (isSubadminPath && role === "USER") {
     return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
 
-  // USER + ADMIN 전용 경로 (SUBADMIN 차단)
-  const isUserOnly = USER_ONLY_PATHS.some((p) => pathname.startsWith(p));
-  if (isUserOnly && role === "SUBADMIN") {
-    return NextResponse.redirect(new URL("/unauthorized", req.url));
-  }
+  // ✅ USER_ONLY_PATHS 블록 삭제됨 (SUBADMIN이 /leave 접근 가능)
 
   return res;
 }
