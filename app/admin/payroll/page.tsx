@@ -10,6 +10,7 @@ type Employee = {
   position: string | null
   employee_code: string | null
   hire_date: string | null
+  resign_date: string | null   // 퇴사일 (실제 마지막 근무일 다음날)
   email: string | null
   bank_name: string | null
   bank_account: string | null
@@ -279,12 +280,19 @@ function buildSlipHTML(
 </div>`
   })()
 
+  const isResignedSlip = !!(emp?.resign_date)
+  const lastWorkDaySlip = isResignedSlip && emp?.resign_date
+    ? (()=>{ const d=new Date(emp!.resign_date!); d.setDate(d.getDate()-1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
+    : null
+
   return `<div style="text-align:center;font-size:18px;font-weight:bold;margin-bottom:14px;">${row.pay_month} (주)보누스메이트 급여명세서</div>
+${isResignedSlip?`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:5px 10px;margin-bottom:6px;font-size:11px;color:#b91c1c;font-weight:bold;">⚠ 퇴사자 급여명세서 · 마지막 근무일: ${lastWorkDaySlip}</div>`:''}
 <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px;"><tbody>
 <tr><th style="${lbl}">근무기간</th><td colspan="3" style="${td}">${py}.${String(pm).padStart(2,'0')}.01 ~ ${periodEnd}</td></tr>
 <tr><th style="${lbl}">성명</th><td style="${td}">${row.employee_name}</td><th style="${lbl}">사번</th><td style="${td}">${emp?.employee_code||''}</td></tr>
 <tr><th style="${lbl}">직위</th><td style="${td}">${emp?.position||''}</td><th style="${lbl}">입사일</th><td style="${td}">${emp?.hire_date||''}</td></tr>
-<tr><th style="${lbl}">급여지급일</th><td style="${td}">${getPayDate(py,pm)}</td><th style="${lbl}">급여계좌</th><td style="${td}">${emp?.bank_name?`[${emp.bank_name}] ${emp.bank_account||''}`:'-'}</td></tr>
+<tr><th style="${lbl}">급여지급일</th><td style="${td}">${getPayDate(py,pm)}</td><th style="${lbl}">${isResignedSlip?'퇴사일(마지막근무일)':'급여계좌'}</th><td style="${td}">${isResignedSlip?`<span style="color:#b91c1c;font-weight:bold;">${lastWorkDaySlip}</span>`:emp?.bank_name?`[${emp.bank_name}] ${emp.bank_account||''}`:'-'}</td></tr>
+${isResignedSlip?`<tr><th style="${lbl}">급여계좌</th><td colspan="3" style="${td}">${emp?.bank_name?`[${emp.bank_name}] ${emp.bank_account||''}`:'-'}</td></tr>`:''}
 </tbody></table>
 <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px;"><tbody>
 <tr><th style="${lbl}">소득합계</th><td style="${amt}width:18%">${formatKRW(totalIncome)}</td><th style="${lbl}">공제합계</th><td style="${amt}width:18%">${totalDeduction<0?'+':'-'}${formatKRW(Math.abs(totalDeduction))}</td><th style="background:#1a3a6b;color:#fff;width:90px;padding:4px 6px;border:1px solid #999;">실수령액</th><td style="${amt}width:18%;background:#e8f0fe;font-weight:bold;font-size:13px;">${formatKRW(net)}</td></tr>
@@ -357,19 +365,26 @@ export default function PayrollPage() {
   const [isSending, setIsSending] = useState(false)
   const [sendProgress, setSendProgress] = useState({ done: 0, total: 0 })
 
-  useEffect(() => { fetchEmployees(); fetchFuelPrices() }, [])
+  useEffect(() => { fetchEmployees(); fetchFuelPrices() }, [selectedYear, selectedMonth])
   useEffect(() => { if (employees.length > 0) { fetchPayrollForMonth(); fetchLeaveUsage() } fetchFuelPrices(selectedYear); fetchWorkDays(selectedYear, selectedMonth) }, [selectedYear, selectedMonth, employees])
   useEffect(() => { if (tab === 'history') fetchHistory() }, [tab, historyYear])
 
   async function fetchEmployees() {
-    const { data } = await supabase.from('employees').select('id, name, position, employee_code, hire_date, email, bank_name, bank_account, car_type, fuel_type, commute_distance, fuel_efficiency, auth_user_id').is('resign_date', null).order('name')
+    // 해당 월 1일 기준: resign_date가 없거나, resign_date > 해당월 1일 (= 해당 월에 하루라도 근무)
+    // resign_date는 "마지막 근무일 다음날"이므로, 2월1일까지 근무 → resign_date = 2026-02-02
+    // → 2월에 포함 조건: resign_date > "2026-02-01" (즉 2월2일 이후 퇴사일)
+    const monthStart = `${selectedYear}-${String(selectedMonth).padStart(2,'0')}-01`
+    const { data } = await supabase
+      .from('employees')
+      .select('id, name, position, employee_code, hire_date, resign_date, email, bank_name, bank_account, car_type, fuel_type, commute_distance, fuel_efficiency, auth_user_id')
+      .or(`resign_date.is.null,resign_date.gt.${monthStart}`)
+      .order('name')
     const emps = data || []
     setEmployees(emps)
     const map: Record<string, Employee> = {}
     const effMap: Record<string, number> = {}
     emps.forEach((e: Employee) => {
       map[e.id] = e
-      // 인사관리에서 입력한 연비가 있으면 우선 사용, 없으면 유종별 기본값
       effMap[e.id] = e.fuel_efficiency ?? DEFAULT_FUEL_EFFICIENCY[e.fuel_type || '없음'] ?? 12
     })
     setEmpMap(map)
@@ -913,13 +928,19 @@ export default function PayrollPage() {
                   </div>
                 )}
 
-                {rows.length>0&&(
-                  <div className="px-6 py-3 bg-blue-50 border-b border-blue-100 flex gap-6 text-sm flex-wrap">
-                    <span className="text-blue-700">대상 직원: <strong>{rows.length}명</strong></span>
-                    <span className="text-blue-700">기본급 합계: <strong>{formatKRW(totalBase)}원</strong></span>
-                    <span className="text-blue-700">실지급 합계: <strong>{formatKRW(totalNet)}원</strong></span>
-                  </div>
-                )}
+                {rows.length>0&&(()=>{
+                  const monthEnd2 = new Date(selectedYear, selectedMonth, 0).toISOString().slice(0,10)
+                  const resignedCount = employees.filter(e=>e.resign_date && e.resign_date<=monthEnd2).length
+                  return (
+                    <div className="px-6 py-3 bg-blue-50 border-b border-blue-100 flex gap-6 text-sm flex-wrap">
+                      <span className="text-blue-700">대상 직원: <strong>{rows.length}명</strong>
+                        {resignedCount>0&&<span className="text-red-500 text-xs ml-1">(퇴사자 {resignedCount}명 포함)</span>}
+                      </span>
+                      <span className="text-blue-700">기본급 합계: <strong>{formatKRW(totalBase)}원</strong></span>
+                      <span className="text-blue-700">실지급 합계: <strong>{formatKRW(totalNet)}원</strong></span>
+                    </div>
+                  )
+                })()}
 
                 {fetchLoading?<div className="py-16 text-center text-gray-400">불러오는 중...</div>
                 :rows.length===0?<div className="py-16 text-center text-gray-400">등록된 직원이 없습니다.</div>
@@ -934,12 +955,22 @@ export default function PayrollPage() {
                       const totalDeduction=(row.national_pension||0)+(row.health_insurance||0)+(row.employment_insurance||0)+(row.long_term_care||0)+(row.income_tax||0)+(row.local_income_tax||0)+(row.income_tax_settle||0)+(row.local_tax_settle||0)+(row.special_tax_settle||0)
                       const totalDeductionAbs=Math.abs(totalDeduction)
 
+                      const empInfo = empMap[row.employee_id]
+                      // 퇴사자 판별: resign_date가 있고, 해당 월의 말일 이전인 경우
+                      const monthEnd = new Date(selectedYear, selectedMonth, 0).toISOString().slice(0,10)
+                      const isResigned = !!(empInfo?.resign_date && empInfo.resign_date <= monthEnd)
+                      // 퇴사일 전날이 실제 마지막 근무일
+                      const lastWorkDay = isResigned && empInfo?.resign_date
+                        ? (()=>{ const d=new Date(empInfo.resign_date); d.setDate(d.getDate()-1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
+                        : null
+
                       return (
-                        <div key={row.employee_id}>
-                          <div className="px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors" onClick={()=>setExpandedRow(isOpen?null:row.employee_id)}>
+                        <div key={row.employee_id} className={isResigned?'bg-gray-50/80':''}>
+                          <div className={`px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors ${isResigned?'opacity-80':''}`} onClick={()=>setExpandedRow(isOpen?null:row.employee_id)}>
                             <div className="flex items-center justify-between gap-4">
                               <div className="flex items-center gap-3 min-w-0">
-                                <span className="text-sm font-bold text-gray-900 w-20 shrink-0">{row.employee_name}</span>
+                                <span className={`text-sm font-bold w-20 shrink-0 ${isResigned?'text-gray-400':'text-gray-900'}`}>{row.employee_name}</span>
+                                {isResigned&&<span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600 border border-red-200 shrink-0" title={`퇴사일: ${empInfo?.resign_date} / 마지막 근무일: ${lastWorkDay}`}>퇴사 {lastWorkDay?.slice(5).replace('-','/')}</span>}
                                 {isF&&<span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700 shrink-0">확정</span>}
                                 {empLeave.length>0&&(
                                   <div className="flex flex-wrap gap-1">
@@ -1282,15 +1313,29 @@ const PrintSlip = forwardRef<HTMLDivElement, { row: PayrollRow; emp: Employee | 
     function getPayDate(y:number,m:number){const nm=m===12?1:m+1,ny=m===12?y+1:y;let d=new Date(ny,nm-1,10);while(d.getDay()===0||d.getDay()===6)d.setDate(d.getDate()-1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
     const fd = fuelDetail
 
+    const isResignedPrint = !!(emp?.resign_date)
+    const lastWorkDayPrint = isResignedPrint && emp?.resign_date
+      ? (()=>{ const d=new Date(emp!.resign_date!); d.setDate(d.getDate()-1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
+      : null
+
     return (
       <div ref={ref} className="hidden print:block p-8 text-xs font-sans text-gray-900" style={{fontFamily:'Malgun Gothic,맑은 고딕,sans-serif'}}>
         <style dangerouslySetInnerHTML={{__html:PRINT_STYLES}}/>
         <div className="text-center mb-4" style={{fontSize:'18px',fontWeight:'bold'}}>{row.pay_month} (주)보누스메이트 급여명세서</div>
+        {isResignedPrint&&(
+          <div style={{background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:'4px',padding:'5px 10px',marginBottom:'6px',fontSize:'11px',color:'#b91c1c',fontWeight:'bold'}}>
+            ⚠ 퇴사자 급여명세서 · 마지막 근무일: {lastWorkDayPrint}
+          </div>
+        )}
         <table className="slip-table mb-3"><tbody>
           <tr><th className="label-col">근무기간</th><td colSpan={3}>{periodStart} ~ {periodEnd}</td></tr>
           <tr><th className="label-col">성명</th><td>{row.employee_name}</td><th className="label-col">사번</th><td>{emp?.employee_code||''}</td></tr>
           <tr><th className="label-col">직위</th><td>{emp?.position||''}</td><th className="label-col">입사일</th><td>{emp?.hire_date||''}</td></tr>
-          <tr><th className="label-col">급여지급일</th><td>{getPayDate(pyear,pmonth)}</td><th className="label-col">급여계좌</th><td>{emp?.bank_name?`[${emp.bank_name}] ${emp.bank_account||''}`:'-'}</td></tr>
+          <tr><th className="label-col">급여지급일</th><td>{getPayDate(pyear,pmonth)}</td>
+            <th className="label-col">{isResignedPrint?'마지막 근무일':'급여계좌'}</th>
+            <td>{isResignedPrint?<span style={{color:'#b91c1c',fontWeight:'bold'}}>{lastWorkDayPrint}</span>:emp?.bank_name?`[${emp.bank_name}] ${emp.bank_account||''}`:'-'}</td>
+          </tr>
+          {isResignedPrint&&<tr><th className="label-col">급여계좌</th><td colSpan={3}>{emp?.bank_name?`[${emp.bank_name}] ${emp.bank_account||''}`:'-'}</td></tr>}
         </tbody></table>
         <table className="slip-table mb-3"><tbody>
           <tr>
