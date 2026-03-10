@@ -456,8 +456,12 @@ export default function LeavePage() {
       .from('employees').select('id, name, hire_date').eq('auth_user_id', user.id).single()
 
     if (!emp) {
-      if (!currentIsAdmin) { setError('직원 정보가 없습니다. 관리자에게 직원등록을 요청하세요.'); return }
-    } else {
+      if (!emp) {
+        if (!currentIsAdmin && currentRole !== 'SUBADMIN') { 
+          setError('직원 정보가 없습니다. 관리자에게 직원등록을 요청하세요.'); 
+          return 
+        }
+      } else {
       setEmpId(emp.id)
       setMyName(emp.name ?? '')
       const year_str = String(year)
