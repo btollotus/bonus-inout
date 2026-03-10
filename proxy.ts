@@ -17,7 +17,7 @@ const SUBADMIN_PATHS = [
   "/report",
   "/tax/spec",
   "/tax/statement",
-  "/leave", // ✅ USER_ONLY_PATHS에서 이동 → SUBADMIN 접근 허용
+  "/leave",
 ];
 
 export async function proxy(req: NextRequest) {
@@ -60,7 +60,7 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Admin Client로 role 조회
+  // Admin Client로 role 조회 + 퇴사 여부 확인
   let role = "USER";
   try {
     const admin = createSupabaseAdmin(
@@ -68,14 +68,43 @@ export async function proxy(req: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { persistSession: false, autoRefreshToken: false } }
     );
+
+    // role 조회
     const { data: roleData } = await admin
       .from("user_roles")
       .select("role")
       .eq("user_id", data.user.id)
       .single();
     role = roleData?.role ?? "USER";
+
+    // ✅ 퇴사 여부 확인 — ADMIN/SUBADMIN은 제외
+    if (role === "USER") {
+      const today = new Date().toISOString().split("T")[0];
+      const { data: empData } = await admin
+        .from("employees")
+        .select("resign_date")
+        .eq("auth_user_id", data.user.id)
+        .maybeSingle();
+
+      if (empData?.resign_date && empData.resign_date <= today) {
+        // Supabase Auth 세션 강제 종료
+        await admin.auth.admin.signOut(data.user.id);
+        // 퇴사자 전용 안내 페이지로 리다이렉트
+        const url = req.nextUrl.clone();
+        url.pathname = "/login";
+        url.search = "?resigned=1";
+        const redirectRes = NextResponse.redirect(url);
+        // 클라이언트 쿠키 삭제
+        req.cookies.getAll().forEach(({ name }) => {
+          if (name.includes("supabase") || name.startsWith("sb-")) {
+            redirectRes.cookies.delete(name);
+          }
+        });
+        return redirectRes;
+      }
+    }
   } catch {
-    // role 조회 실패 시 USER 유지
+    // role/퇴사 조회 실패 시 USER 유지
   }
 
   // ADMIN 전용 경로
@@ -89,13 +118,11 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
 
-  // ADMIN + SUBADMIN 전용 경로 (USER 차단) — /leave 포함
+  // ADMIN + SUBADMIN 전용 경로 (USER 차단)
   const isSubadminPath = SUBADMIN_PATHS.some((p) => pathname.startsWith(p));
   if (isSubadminPath && role === "USER") {
     return NextResponse.redirect(new URL("/unauthorized", req.url));
   }
-
-  // ✅ USER_ONLY_PATHS 블록 삭제됨 (SUBADMIN이 /leave 접근 가능)
 
   return res;
 }

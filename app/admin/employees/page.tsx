@@ -444,6 +444,23 @@ export default function EmployeesPage() {
     setError('')
   }
 
+  // ✅ 퇴사 처리 함수: Auth ban/unban API 호출
+  async function syncResignedStatus(authUserId: string | null, resignDate: string | null) {
+    if (!authUserId) return
+    try {
+      await fetch('/api/admin/disable-resigned-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          auth_user_id: authUserId,
+          resign_date: resignDate || null,
+        }),
+      })
+    } catch (e) {
+      console.error('Auth ban 처리 실패:', e)
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.name.trim()) return setError('이름은 필수입니다.')
@@ -527,7 +544,15 @@ export default function EmployeesPage() {
             }])
           }
         }
-        setSuccess('직원 정보가 수정되었습니다.')
+
+        // ✅ 퇴사일 변경 시 Auth 계정 ban / unban 자동 처리
+        await syncResignedStatus(authUserId, form.resign_date || null)
+
+        setSuccess(
+          form.resign_date
+            ? `직원 정보가 수정되었습니다. ${authUserId ? '(퇴사 처리: 로그인 차단됨)' : ''}`
+            : '직원 정보가 수정되었습니다.'
+        )
       } else {
         let { error } = await supabase.from('employees').insert([fullPayload])
         if (error?.message?.includes('schema cache')) {
@@ -744,9 +769,12 @@ export default function EmployeesPage() {
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">퇴사일</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      퇴사일
+                      <span className="text-xs text-red-400 ml-1">· 저장 시 로그인 자동 차단</span>
+                    </label>
                     <input type="date" name="resign_date" value={form.resign_date} onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
                   </div>
 
                   {/* 생일 */}
@@ -791,6 +819,27 @@ export default function EmployeesPage() {
                   </div>
                 </div>
               </div>
+
+              {/* 퇴사일 입력 시 경고 배너 */}
+              {form.resign_date && (() => {
+                const today = new Date().toISOString().split('T')[0]
+                const isAlreadyResigned = form.resign_date <= today
+                return (
+                  <div className={`flex items-start gap-2 px-4 py-3 rounded-lg border text-sm ${
+                    isAlreadyResigned
+                      ? 'bg-red-50 border-red-200 text-red-700'
+                      : 'bg-amber-50 border-amber-200 text-amber-700'
+                  }`}>
+                    <span className="text-base shrink-0">{isAlreadyResigned ? '🚫' : '⚠️'}</span>
+                    <div>
+                      {isAlreadyResigned
+                        ? <><strong>퇴사 처리됩니다.</strong> 저장 즉시 해당 직원의 로그인이 차단됩니다.</>
+                        : <><strong>퇴사 예정일이 설정되었습니다.</strong> 퇴사일 당일부터 로그인이 차단됩니다.</>
+                      }
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* 차량/통근 정보 */}
               <div>
@@ -870,17 +919,21 @@ export default function EmployeesPage() {
               {filtered.map((emp) => {
                 const latestHealth = healthRecords[emp.id]?.[0]
                 const healthBadge = latestHealth ? expiryBadge(latestHealth.exam_date) : null
+                const today = new Date().toISOString().split('T')[0]
+                const isResigned = !!(emp.resign_date && emp.resign_date <= today)
                 return (
                   <React.Fragment key={emp.id}>
-                    <div className="px-6 py-4 hover:bg-gray-50 transition-colors">
+                    <div className={`px-6 py-4 hover:bg-gray-50 transition-colors ${isResigned ? 'opacity-60' : ''}`}>
                       <div className="flex items-start justify-between gap-4 mb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-base font-bold text-gray-900">{emp.name}</span>
                           {emp.position && (
                             <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">{emp.position}</span>
                           )}
-                          {emp.resign_date
-                            ? <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">퇴사</span>
+                          {isResigned
+                            ? <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold">🚫 퇴사 · 로그인차단</span>
+                            : emp.resign_date
+                            ? <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">⏳ 퇴사예정 {emp.resign_date}</span>
                             : <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full">재직</span>}
                           {emp.auth_user_id
                             ? <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">✓ 계정연동</span>
