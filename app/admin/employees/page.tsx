@@ -202,7 +202,7 @@ export default function EmployeesPage() {
     const yearStart = `${leaveYear}-01-01`
     const yearEnd = `${leaveYear}-12-31`
     const { data: balList } = await supabase.from('leave_balance')
-      .select('employee_id, total_days, used_days, remaining_days, manual_override, override_reason')
+      .select('employee_id, total_granted, used_days, remaining_days, manual_override, override_reason')
       .eq('year', leaveYear)
     const balMap: Record<string, any> = {}
     for (const b of (balList || [])) balMap[b.employee_id] = b
@@ -225,15 +225,15 @@ export default function EmployeesPage() {
         if (!bal) {
           const { data: ins } = await supabase.from('leave_balance').insert({
             employee_id: e.id, user_id: e.auth_user_id, year: leaveYear,
-            total_days: legalDays, used_days: usedNow,
+            total_granted: legalDays, used_days: usedNow,
             remaining_days: Math.max(0, legalDays - usedNow), manual_override: false,
           }).select().maybeSingle()
           if (ins) balMap[e.id] = ins
-        } else if (!bal.manual_override && bal.total_days !== legalDays) {
+        } else if (!bal.manual_override && bal.total_granted !== legalDays) {
           await supabase.from('leave_balance').update({
-            total_days: legalDays, remaining_days: Math.max(0, legalDays - usedNow)
+            total_granted: legalDays, remaining_days: Math.max(0, legalDays - usedNow)
           }).eq('employee_id', e.id).eq('year', leaveYear)
-          balMap[e.id] = { ...bal, total_days: legalDays, remaining_days: Math.max(0, legalDays - usedNow) }
+          balMap[e.id] = { ...bal, total_granted: legalDays, remaining_days: Math.max(0, legalDays - usedNow) }
         }
       }
     }
@@ -242,7 +242,7 @@ export default function EmployeesPage() {
     for (const e of employees) {
       const bal = balMap[e.id]
       const legalDays = calcLegalLeaveDays(e.hire_date, leaveYear)
-      const total = bal?.total_days ?? legalDays
+      const total = bal?.total_granted ?? legalDays
       const used = bal?.used_days ?? (usedMap[e.id] || 0)
       map[e.id] = {
         total_days: total, used_days: used,
@@ -262,13 +262,13 @@ export default function EmployeesPage() {
       .select('id').eq('employee_id', empId).eq('year', leaveYear).maybeSingle()
     if (ex) {
       await supabase.from('leave_balance').update({
-        total_days: total, remaining_days: Math.max(0, total-used),
+        total_granted: total, remaining_days: Math.max(0, total-used),
         manual_override: true, override_reason: leaveEditDraft.override_reason
       }).eq('id', ex.id)
     } else {
       await supabase.from('leave_balance').insert({
         employee_id: empId, user_id: authUserId, year: leaveYear,
-        total_days: total, used_days: used, remaining_days: Math.max(0, total-used),
+        total_granted: total, used_days: used, remaining_days: Math.max(0, total-used),
         manual_override: true, override_reason: leaveEditDraft.override_reason
       })
     }
