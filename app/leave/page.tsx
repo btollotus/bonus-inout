@@ -285,7 +285,7 @@ export default function LeavePage() {
 
   useEffect(() => { fetchData() }, [])
   useEffect(() => { fetchHealthCerts() }, [])
-  useEffect(() => { if (isAdmin) fetchAllBalances() }, [leaveYear, isAdmin])
+  useEffect(() => { if (isAdmin || isSubAdmin) fetchAllBalances() }, [leaveYear, isAdmin, isSubAdmin])
 
   // =====================================================================
   // 근로기준법 연차 계산
@@ -498,7 +498,7 @@ export default function LeavePage() {
       setAllRequests(allReqs.map((r: any) => ({ ...r, is_mine: r.user_id === user.id })))
     }
 
-    if (currentIsAdmin) await fetchAllBalances()
+    if (currentIsAdmin || currentRole === 'SUBADMIN') await fetchAllBalances()
   }
 
   // ✅ SUBADMIN은 클릭 자체가 비활성화되므로 isFuture 로직 유지
