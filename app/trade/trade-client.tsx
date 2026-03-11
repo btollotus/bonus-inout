@@ -1259,26 +1259,6 @@ export default function TradeClient() {
     }
     setEditOpen(true);
   }
-      setEEntryDate(r.date || todayYMD());
-      const m = (r.ledger_method ?? r.method ?? "BANK") as any;
-      setEPayMethod(["BANK", "CASH", "CARD", "ETC"].includes(m) ? m : "BANK");
-      const c = (r.ledger_category as Category) ?? (r.category as Category) ?? "기타";
-      setECategory(CATEGORIES.includes(c) ? c : "기타");
-      const amt = Number(r.ledger_amount ?? (r.inAmt || r.outAmt || 0));
-      setEAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
-      setELedgerMemo(r.ledger_memo ?? ""); setECounterpartyName(r.partnerName ?? ""); setEBusinessNo(r.businessNo ?? "");
-      const vatAmt = Number(r.ledger_vat_amount ?? 0), supplyAmt = Number(r.ledger_supply_amount ?? 0), totalAmt = Number(r.ledger_total_amount ?? 0);
-      const resolvedCat = CATEGORIES.includes(c) ? c : "기타";
-      setEVatFree(resolvedCat === "급여" ? true : (amt > 0 && vatAmt === 0 && supplyAmt === amt && totalAmt === amt));
-      setESalaryEmployeeId("");
-      if (CATEGORIES.includes(c) && c === "급여") {
-        const { data: hp, error: hpErr } = await supabase.from("hr_payments").select("employee_id").eq("ledger_entry_id", r.rawId).limit(1);
-        if (!hpErr && hp && hp[0]?.employee_id) setESalaryEmployeeId(String(hp[0].employee_id));
-      }
-    }
-    setEditOpen(true);
-  }
-
   async function saveEdit() {
     if (!editRow) return; setMsg(null);
     if (editRow.kind === "ORDER") {
