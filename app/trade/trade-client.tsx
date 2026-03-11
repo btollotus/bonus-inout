@@ -1330,6 +1330,7 @@ export default function TradeClient() {
     if (!window.confirm("정말 삭제하시겠습니까?\n삭제하면 복구할 수 없습니다.")) return;
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     if (r.kind === "ORDER") {
+      await supabase.from("work_order_items").update({ order_id: null }).eq("order_id", r.rawId);
       await supabase.from("order_shipments").delete().eq("order_id", r.rawId);
       await supabase.from("order_lines").delete().eq("order_id", r.rawId);
       const { error } = await supabase.from("orders").delete().eq("id", r.rawId);
