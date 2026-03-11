@@ -70,7 +70,7 @@ type WorkOrderRow = {
   work_order_items?: WoItem[];
 };
 // ── 기존 타입 계속 ──
-type Mode = "ORDERS" | "LEDGER" | "UNIFIED" | "WORK_ORDER";
+type Mode = "ORDERS" | "LEDGER" | "UNIFIED";
 type PartnerView = "PINNED" | "RECENT" | "ALL";
 type FoodTypeRow = { id: string; name: string };
 type PresetProductRow = { id: string; product_name: string; food_type: string | null; weight_g: number | string | null; barcode: string | null };
@@ -533,7 +533,6 @@ export default function TradeClient() {
 
   // 작업지시서 탭 전환 시 목록 자동 로드
   useEffect(() => {
-    if (mode === "WORK_ORDER" && selectedPartner) loadWoList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, selectedPartner?.id]);
 
@@ -1740,279 +1739,15 @@ export default function TradeClient() {
           <div className="min-w-0 space-y-6">
             {/* 탭 버튼 */}
             <div className="flex flex-wrap gap-2">
-              {(["ORDERS", "LEDGER", "UNIFIED", "WORK_ORDER"] as Mode[]).map((m) => {
-                const labels: Record<Mode, string> = { ORDERS: "주문/출고", LEDGER: "금전출납", UNIFIED: "통합", WORK_ORDER: "📋 작업지시서" };
+              {(["ORDERS", "LEDGER", "UNIFIED"] as Mode[]).map((m) => {
+                const labels: Record<string, string> = { ORDERS: "주문/출고", LEDGER: "금전출납", UNIFIED: "통합" };
                 return <button key={m} className={mode === m ? btnOn : btn} onClick={() => setMode(m)}>{labels[m]}</button>;
               })}
             </div>
 
-            {/* ── 작업지시서 입력 폼 ── */}
-            {mode === "WORK_ORDER" ? (
-              <div className={`${card} p-4`}>
-                <div className="mb-4 flex items-center gap-3 flex-wrap">
-                  <div className="text-lg font-semibold">작업지시서 입력</div>
-                  <span className={pill}>{selectedPartner ? selectedPartner.name : "거래처 미선택"}</span>
-                  <div className="ml-auto flex items-center gap-3">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input type="checkbox" checked={wo_isReorder} onChange={(e) => setWo_isReorder(e.target.checked)} />
-                      <span className={wo_isReorder ? "font-semibold text-orange-600" : "text-slate-700"}>재주문</span>
-                    </label>
-                    {wo_isReorder ? (
-                      <input className={`${inp} w-64`} placeholder="원본 작업지시서 ID (선택)" value={wo_originalId} onChange={(e) => setWo_originalId(e.target.value)} />
-                    ) : null}
-                  </div>
-                </div>
-
-                {/* 기본정보 */}
-                <div className="mb-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">기본정보</div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div>
-                    <div className="mb-1 text-xs text-slate-600">작업지시서 일자</div>
-                    <input type="date" className={inp} value={wo_orderDate} onChange={(e) => setWo_orderDate(e.target.value)} />
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs text-slate-600">품목명 <span className="text-red-500">*</span></div>
-                    <input className={inp} list="master-product-list" placeholder="예: 다크화이트" value={wo_productName} onChange={(e) => setWo_productName(e.target.value)} />
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs text-slate-600">서브네임</div>
-                    <input className={inp} placeholder="예: COS, 크로버" value={wo_subName} onChange={(e) => setWo_subName(e.target.value)} />
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs text-slate-600">식품유형</div>
-                    <input className={inp} list="food-types-list" placeholder="예: 화이트초콜릿" value={wo_foodType} onChange={(e) => setWo_foodType(e.target.value)} />
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs text-slate-600">규격(로고스펙)</div>
-                    <input className={inp} placeholder="예: 40x40mm" value={wo_logoSpec} onChange={(e) => setWo_logoSpec(e.target.value)} />
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs text-slate-600">두께</div>
-                    <select className={inp} value={wo_thickness} onChange={(e) => setWo_thickness(e.target.value)}>
-                      {["2mm", "3mm", "5mm", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {/* 납품정보 */}
-                <div className="mt-4 mb-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">납품정보</div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                  <div>
-                    <div className="mb-1 text-xs text-slate-600">납품방법</div>
-                    <select className={inp} value={wo_deliveryMethod} onChange={(e) => setWo_deliveryMethod(e.target.value)}>
-                      {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs text-slate-600">포장방법</div>
-                    <select className={inp} value={wo_packagingType} onChange={(e) => setWo_packagingType(e.target.value)}>
-                      {["트레이", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  </div>
-                  {wo_packagingType === "트레이" ? (
-                    <div>
-                      <div className="mb-1 text-xs text-slate-600">트레이 구수</div>
-                      <select className={inp} value={wo_traySlot} onChange={(e) => setWo_traySlot(e.target.value)}>
-                        {["정사각20구", "직사각20구", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                    </div>
-                  ) : null}
-                  <div>
-                    <div className="mb-1 text-xs text-slate-600">포장단위</div>
-                    <select className={inp} value={wo_packageUnit} onChange={(e) => setWo_packageUnit(e.target.value)}>
-                      {["100ea", "200ea", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs text-slate-600">성형틀 장당 생산수</div>
-                    <input className={inpR} inputMode="numeric" placeholder="예: 52" value={wo_moldPerSheet}
-                      onChange={(e) => setWo_moldPerSheet(e.target.value.replace(/[^\d]/g, ""))} />
-                  </div>
-                </div>
-
-                {/* 납기일별 주문 */}
-                <div className="mt-4 mb-2 flex items-center justify-between">
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">납기일별 주문</div>
-                  <button className={btn} onClick={() => setWo_items((prev) => [...prev, {
-                    id: crypto.randomUUID(), delivery_date: todayYMD(), sub_items: [{ name: "", qty: 0 }], order_qty: 0
-                  }])}>+ 납기일 추가</button>
-                </div>
-                <div className="space-y-3">
-                  {wo_items.map((item, itemIdx) => (
-                    <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="mb-3 flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-semibold text-slate-600">납기일</span>
-                        <input type="date" className={`${inp} w-44`} value={item.delivery_date}
-                          onChange={(e) => setWo_items((prev) => prev.map((x, i) => i === itemIdx ? { ...x, delivery_date: e.target.value } : x))} />
-                        <div className="ml-auto flex items-center gap-3">
-                          <span className="text-xs text-slate-500">
-                            합계: <span className="font-bold tabular-nums text-blue-700">
-                              {item.sub_items.reduce((s, si) => s + (Number(si.qty) || 0), 0).toLocaleString("ko-KR")}개
-                            </span>
-                          </span>
-                          {wo_items.length > 1 ? (
-                            <button className={btn} onClick={() => setWo_items((prev) => prev.filter((_, i) => i !== itemIdx))}>납기일 삭제</button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        {item.sub_items.map((si, siIdx) => (
-                          <div key={siIdx} className="grid grid-cols-[1fr_130px_44px] gap-2">
-                            <input className={inp} placeholder="학교명/제품명 (예: 삼광초, 크로버)" value={si.name}
-                              onChange={(e) => setWo_items((prev) => prev.map((x, i) => i === itemIdx
-                                ? { ...x, sub_items: x.sub_items.map((s, j) => j === siIdx ? { ...s, name: e.target.value } : s) }
-                                : x))} />
-                            <input className={inpR} inputMode="numeric" placeholder="수량"
-                              value={si.qty ? si.qty.toLocaleString("ko-KR") : ""}
-                              onChange={(e) => {
-                                const v = toInt(e.target.value.replace(/[^\d,]/g, ""));
-                                setWo_items((prev) => prev.map((x, i) => i === itemIdx
-                                  ? { ...x, sub_items: x.sub_items.map((s, j) => j === siIdx ? { ...s, qty: v } : s) }
-                                  : x));
-                              }} />
-                            <button className={btn} onClick={() => setWo_items((prev) => prev.map((x, i) => i === itemIdx
-                              ? { ...x, sub_items: x.sub_items.filter((_, j) => j !== siIdx) }
-                              : x))}>✕</button>
-                          </div>
-                        ))}
-                        <button className={`${btn} text-xs`} onClick={() => setWo_items((prev) => prev.map((x, i) => i === itemIdx
-                          ? { ...x, sub_items: [...x.sub_items, { name: "", qty: 0 }] }
-                          : x))}>+ 항목 추가</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* 비고/참고사항 */}
-                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div>
-                    <div className="mb-1 text-xs text-slate-600">비고</div>
-                    <input className={inp} placeholder="비고" value={wo_note} onChange={(e) => setWo_note(e.target.value)} />
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs text-slate-600">참고사항</div>
-                    <input className={inp} placeholder="참고사항" value={wo_referenceNote} onChange={(e) => setWo_referenceNote(e.target.value)} />
-                  </div>
-                </div>
-
-                {/* 이미지 업로드 */}
-                <div className="mt-4">
-                  <div className="mb-1 text-xs text-slate-600">인쇄 디자인 이미지 (여러 장 선택 가능)</div>
-                  <input type="file" accept="image/*" multiple className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700"
-                    onChange={(e) => setWo_imageFiles(Array.from(e.target.files ?? []))} />
-                  {wo_imageFiles.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {wo_imageFiles.map((f, i) => (
-                        <div key={i} className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700">
-                          🖼 {f.name}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                {/* 저장/초기화 버튼 */}
-                <div className="mt-5 flex items-center justify-end gap-3">
-                  <button className={btn} onClick={resetWoForm}>초기화</button>
-                  <button className={btnOn} onClick={createWorkOrder} disabled={wo_saving}>
-                    {wo_saving ? "저장 중..." : "✅ 작업지시서 생성"}
-                  </button>
-                </div>
-
-                {/* 작업지시서 목록 */}
-                {selectedPartner ? (
-                  <div className="mt-6 border-t border-slate-200 pt-5">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="text-sm font-semibold text-slate-700">
-                        {selectedPartner.name} 작업지시서 (최근 50건)
-                      </div>
-                      <button className={btn} onClick={loadWoList}>{wo_listLoading ? "로딩..." : "새로고침"}</button>
-                    </div>
-                    {wo_list.length === 0 ? (
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500 text-center">
-                        작업지시서가 없습니다.
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                        <table className="w-full table-fixed text-sm">
-                          <colgroup>
-                            <col style={{ width: "150px" }} />
-                            <col style={{ width: "160px" }} />
-                            <col style={{ width: "110px" }} />
-                            <col style={{ width: "110px" }} />
-                            <col style={{ width: "90px" }} />
-                            <col style={{ width: "80px" }} />
-                            <col style={{ width: "60px" }} />
-                            <col style={{ width: "60px" }} />
-                            <col style={{ width: "60px" }} />
-                            <col style={{ width: "60px" }} />
-                            <col style={{ width: "60px" }} />
-                          </colgroup>
-                          <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                            <tr>
-                              <th className="px-3 py-2 text-left">바코드</th>
-                              <th className="px-3 py-2 text-left">품목명</th>
-                              <th className="px-3 py-2 text-left">서브네임</th>
-                              <th className="px-3 py-2 text-left">일자</th>
-                              <th className="px-3 py-2 text-left">상태</th>
-                              <th className="px-3 py-2 text-left">납품방법</th>
-                              <th className="px-3 py-2 text-center">전사</th>
-                              <th className="px-3 py-2 text-center">검수</th>
-                              <th className="px-3 py-2 text-center">생산</th>
-                              <th className="px-3 py-2 text-center">입력</th>
-                              <th className="px-3 py-2 text-center">인쇄</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {wo_list.map((wo) => (
-                              <tr key={wo.id} className="border-t border-slate-200 bg-white hover:bg-slate-50">
-                                <td className="px-3 py-2 font-mono text-xs text-slate-600">{wo.barcode_no}</td>
-                                <td className="px-3 py-2 font-semibold">{wo.product_name}</td>
-                                <td className="px-3 py-2 text-slate-600">{wo.sub_name ?? ""}</td>
-                                <td className="px-3 py-2 tabular-nums text-xs">{wo.order_date}</td>
-                                <td className="px-3 py-2">
-                                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${wo.status === "완료" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
-                                    {wo.is_reorder ? "🔄 " : ""}{wo.status}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2 text-xs text-slate-600">{wo.delivery_method ?? ""}</td>
-                                <td className="px-3 py-2 text-center text-base">{wo.status_transfer ? "✅" : "⬜"}</td>
-                                <td className="px-3 py-2 text-center text-base">{wo.status_print_check ? "✅" : "⬜"}</td>
-                                <td className="px-3 py-2 text-center text-base">{wo.status_production ? "✅" : "⬜"}</td>
-                                <td className="px-3 py-2 text-center text-base">{wo.status_input ? "✅" : "⬜"}</td>
-                                <td className="px-3 py-2 text-center">
-                                  <button
-                                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs hover:bg-slate-50"
-                                    onClick={async () => {
-                                      if (wo.work_order_items) { setWo_printTarget(wo); return; }
-                                      // work_order_items 없으면 상세 조회
-                                      const { data } = await supabase
-                                        .from("work_orders")
-                                        .select("*,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id)")
-                                        .eq("id", wo.id)
-                                        .single();
-                                      if (data) setWo_printTarget(data as WorkOrderRow);
-                                    }}
-                                  >🖨️</button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500 text-center">
-                    왼쪽에서 거래처를 선택하면 작업지시서 목록이 표시됩니다.
-                  </div>
-                )}
-                <Datalists />
-              </div>
-            ) : null}
 
             {/* Order input */}
-            {mode !== "LEDGER" && mode !== "WORK_ORDER" ? (
+            {mode !== "LEDGER" ? (
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center gap-3">
                   <div className="text-lg font-semibold">주문/출고 입력</div>
@@ -2113,7 +1848,7 @@ export default function TradeClient() {
             ) : null}
 
             {/* Ledger input */}
-            {mode !== "ORDERS" && mode !== "WORK_ORDER" ? (
+            {mode !== "ORDERS" ? (
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center gap-3"><div className="text-lg font-semibold">금전출납 입력</div><span className={pill}>조회대상: {targetLabel}</span></div>
                 <div className="mb-2 flex items-center justify-end">
@@ -2176,9 +1911,8 @@ export default function TradeClient() {
               </div>
             ) : null}
 
-            {/* Trade history - 작업지시서 탭에선 숨김 */}
-            {mode !== "WORK_ORDER" ? (
-              <div className={`${card} p-4`}>
+            {/* 거래내역 */}
+            <div className={`${card} p-4`}>
                 <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div>
                     <div className="text-lg font-semibold">거래내역</div>
@@ -2257,6 +1991,18 @@ export default function TradeClient() {
                                 <button className={miniBtn} onClick={() => onMemoClick(x)}>메모</button>
                                 <button className={miniBtn} onClick={() => openEdit(x)}>수정</button>
                                 <button className={miniBtn} onClick={() => deleteTradeRow(x)}>삭제</button>
+                                {x.kind === "ORDER" ? (
+                                  <button className={`${miniBtn} col-span-2`} onClick={async () => {
+                                    const { data } = await supabase
+                                      .from("work_orders")
+                                      .select("*,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id)")
+                                      .eq("linked_order_id", x.rawId)
+                                      .limit(1)
+                                      .maybeSingle();
+                                    if (data) setWo_printTarget(data as WorkOrderRow);
+                                    else setMsg("연결된 작업지시서가 없습니다.");
+                                  }}>🖨️ 작업지시서</button>
+                                ) : null}
                               </div>
                             </td>
                           </tr>
@@ -2270,7 +2016,6 @@ export default function TradeClient() {
                 </div>
                 <div className="mt-2 text-xs text-slate-500">※ 주문/출고는 출금으로 표시됩니다. (입금/출금은 모두 양수 입력, 계산에서만 차감 처리)</div>
               </div>
-            ) : null}
           </div>
         </div>
 
