@@ -38,7 +38,7 @@ type OrderRow = {
   id: string; customer_id: string | null; customer_name: string | null;
   ship_date: string | null; ship_method: string | null; status: string | null;
   memo: string | null; supply_amount: number | null; vat_amount: number | null;
-  total_amount: number | null; created_at: string;
+  total_amount: number | null; created_at: string; work_order_item_id?: string | null;
   order_lines?: OrderLineRow[]; order_shipments?: OrderShipmentRow[];
 };
 type LedgerRow = {
@@ -67,6 +67,7 @@ type WorkOrderRow = {
   status_production: boolean; status_input: boolean; is_reorder: boolean;
   original_work_order_id: string | null; variant_id: string | null;
   images: string[]; created_at: string;
+  work_order_items?: WoItem[];
 };
 // ── 기존 타입 계속 ──
 type Mode = "ORDERS" | "LEDGER" | "UNIFIED" | "WORK_ORDER";
@@ -87,6 +88,7 @@ type UnifiedRow = {
   ledger_category?: string | null; ledger_method?: string | null;
   ledger_memo?: string | null; ledger_amount?: number;
   ledger_supply_amount?: number | null; ledger_vat_amount?: number | null; ledger_total_amount?: number | null;
+  linked_work_order_id?: string | null;
 };
 type EmployeeRow = { id: string; name: string | null };
 
@@ -442,6 +444,9 @@ export default function TradeClient() {
   const [wo_saving, setWo_saving] = useState(false);
   const [wo_list, setWo_list] = useState<WorkOrderRow[]>([]);
   const [wo_listLoading, setWo_listLoading] = useState(false);
+  const [wo_linkedOrderId, setWo_linkedOrderId] = useState<string | null>(null);
+  const [wo_linkedOrderSummary, setWo_linkedOrderSummary] = useState<string>("");
+  const [wo_modalOpen, setWo_modalOpen] = useState(false);
 
   // Edit modal - order
   const [eShipDate, setEShipDate] = useState(todayYMD());
@@ -885,6 +890,42 @@ export default function TradeClient() {
     setWo_isReorder(false); setWo_originalId("");
     setWo_items([{ id: crypto.randomUUID(), delivery_date: todayYMD(), sub_items: [{ name: "", qty: 0 }], order_qty: 0 }]);
     setWo_imageFiles([]);
+    setWo_linkedOrderId(null);
+    setWo_linkedOrderSummary("");
+  }
+
+  // 주문/출고 행 → 작업지시서 모달 열기
+  function openWoModalFromOrder(x: UnifiedRow) {
+    if (x.kind !== "ORDER") return;
+    resetWoForm();
+    // 주문 정보에서 자동 채우기
+    const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(null);
+    const title = x.order_title ?? "";
+    const lines = x.order_lines ?? [];
+    // 품목명: order_lines 첫번째 품목 or 적요
+    const firstLineName = lines[0]?.name ?? "";
+    const firstName = firstLineName || title;
+    // food_type
+    const firstFoodType = lines[0]?.food_type ?? "";
+    // 납기일별 항목 구성: 같은 납기일로 모든 품목을 sub_items로
+    const newWoItems: WoItem[] = [{
+      id: crypto.randomUUID(),
+      delivery_date: x.date || todayYMD(),
+      sub_items: lines.length > 0
+        ? lines.map((l) => ({ name: String(l.name ?? ""), qty: Number(l.qty ?? 0) }))
+        : [{ name: "", qty: 0 }],
+      order_qty: lines.reduce((s, l) => s + Number(l.qty ?? 0), 0),
+    }];
+    setWo_productName(firstName);
+    setWo_foodType(firstFoodType);
+    setWo_orderDate(x.date || todayYMD());
+    setWo_deliveryMethod(x.ship_method ?? "택배");
+    setWo_items(newWoItems);
+    setWo_linkedOrderId(x.rawId);
+    setWo_linkedOrderSummary(
+      `${x.date} / ${x.partnerName} / ${buildOrderSummaryText(x)} / ${fmt(x.outAmt)}원`
+    );
+    setWo_modalOpen(true);
   }
 
   async function loadWoList() {
@@ -893,7 +934,7 @@ export default function TradeClient() {
     try {
       const { data, error } = await supabase
         .from("work_orders")
-        .select("id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,created_at")
+        .select("id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,created_at,work_order_items(id,delivery_date,sub_items,order_qty)")
         .eq("client_id", selectedPartner.id)
         .order("created_at", { ascending: false })
         .limit(50);
@@ -946,6 +987,7 @@ export default function TradeClient() {
           is_reorder: wo_isReorder,
           original_work_order_id: wo_isReorder && wo_originalId ? wo_originalId : null,
           images: [],
+          ...(wo_linkedOrderId ? { linked_order_id: wo_linkedOrderId } : {}),
         })
         .select("id,barcode_no,work_order_no")
         .single();
@@ -963,50 +1005,10 @@ export default function TradeClient() {
       const { data: createdItems, error: itemErr } = await supabase
         .from("work_order_items")
         .insert(woItemsPayload)
-        .select("id,delivery_date,sub_items,order_qty");
+        .select("id,delivery_date,sub_items,order_qty,work_order_id");
       if (itemErr) return setMsg("납기일 항목 생성 실패: " + itemErr.message);
 
-      // ④ orders + order_lines 자동생성 (납기일별)
-      for (const wItem of (createdItems ?? []) as any[]) {
-        const { data: createdOrder, error: oErr } = await supabase
-          .from("orders")
-          .insert({
-            customer_id: selectedPartner.id,
-            customer_name: selectedPartner.name,
-            title: `${wo_productName.trim()}${wo_subName.trim() ? " - " + wo_subName.trim() : ""}`,
-            ship_date: wItem.delivery_date,
-            ship_method: wo_deliveryMethod,
-            status: "생산중",
-            memo: wo_note.trim() || null,
-            work_order_item_id: wItem.id,
-          })
-          .select("id")
-          .single();
-        if (oErr) return setMsg("주문 생성 실패: " + oErr.message);
-        const orderId = (createdOrder as any).id as string;
-
-        const subItems = (wItem.sub_items ?? []) as WoSubItem[];
-        const orderLinesPayload = subItems
-          .filter((si) => si.name.trim() && si.qty > 0)
-          .map((si, idx) => ({
-            order_id: orderId,
-            line_no: idx + 1,
-            food_type: wo_foodType.trim() || null,
-            name: si.name.trim(),
-            qty: si.qty,
-            unit: 0,
-            unit_type: "EA",
-            pack_ea: 1,
-            actual_ea: 0,
-          }));
-        if (orderLinesPayload.length > 0) {
-          const { error: olErr } = await supabase.from("order_lines").insert(orderLinesPayload);
-          if (olErr) return setMsg("품목 생성 실패: " + olErr.message);
-        }
-        await supabase.from("work_order_items").update({ order_id: orderId }).eq("id", wItem.id);
-      }
-
-      // ⑤ 신규 주문이면 products/product_variants/product_barcodes 자동등록
+      // ④ 신규 주문이면 products/product_variants/product_barcodes 자동등록
       if (!wo_isReorder) {
         const { data: existProduct } = await supabase
           .from("products").select("id").eq("name", wo_productName.trim()).limit(1).maybeSingle();
@@ -1051,6 +1053,7 @@ export default function TradeClient() {
 
       setMsg(`✅ 작업지시서 생성 완료! 바코드: ${finalBarcode}`);
       resetWoForm();
+      setWo_modalOpen(false);
       await loadWoList();
     } finally {
       setWo_saving(false);
@@ -1292,6 +1295,138 @@ export default function TradeClient() {
                   </div>
                 ) : null}
               </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* 작업지시서 모달 (주문/출고 행에서 열림) */}
+        {wo_modalOpen ? (
+          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto">
+            <div className="w-full max-w-[900px] mt-4 mb-8 rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div>
+                  <div className="text-base font-semibold">📋 작업지시서 생성</div>
+                  {wo_linkedOrderSummary ? (
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700">주문 연결됨</span>
+                      <span className="text-xs text-slate-500">{wo_linkedOrderSummary}</span>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex gap-2">
+                  <button className={btn} onClick={() => { setWo_modalOpen(false); resetWoForm(); }}>취소</button>
+                </div>
+              </div>
+              <div className="px-5 py-4 space-y-4">
+                {/* 기본정보 */}
+                <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">기본정보</div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div><div className="mb-1 text-xs text-slate-600">작업지시서 일자</div><input type="date" className={inp} value={wo_orderDate} onChange={(e) => setWo_orderDate(e.target.value)} /></div>
+                  <div><div className="mb-1 text-xs text-slate-600">품목명 <span className="text-red-500">*</span></div><input className={inp} list="master-product-list" placeholder="예: 다크화이트" value={wo_productName} onChange={(e) => setWo_productName(e.target.value)} /></div>
+                  <div><div className="mb-1 text-xs text-slate-600">서브네임</div><input className={inp} placeholder="예: COS, 크로버" value={wo_subName} onChange={(e) => setWo_subName(e.target.value)} /></div>
+                  <div><div className="mb-1 text-xs text-slate-600">식품유형</div><input className={inp} list="food-types-list" placeholder="예: 화이트초콜릿" value={wo_foodType} onChange={(e) => setWo_foodType(e.target.value)} /></div>
+                  <div><div className="mb-1 text-xs text-slate-600">규격(로고스펙)</div><input className={inp} placeholder="예: 40x40mm" value={wo_logoSpec} onChange={(e) => setWo_logoSpec(e.target.value)} /></div>
+                  <div><div className="mb-1 text-xs text-slate-600">두께</div>
+                    <select className={inp} value={wo_thickness} onChange={(e) => setWo_thickness(e.target.value)}>
+                      {["2mm", "3mm", "5mm", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {/* 납품정보 */}
+                <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">납품정보</div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                  <div><div className="mb-1 text-xs text-slate-600">납품방법</div>
+                    <select className={inp} value={wo_deliveryMethod} onChange={(e) => setWo_deliveryMethod(e.target.value)}>
+                      {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div><div className="mb-1 text-xs text-slate-600">포장방법</div>
+                    <select className={inp} value={wo_packagingType} onChange={(e) => setWo_packagingType(e.target.value)}>
+                      {["트레이", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  {wo_packagingType === "트레이" ? (
+                    <div><div className="mb-1 text-xs text-slate-600">트레이 구수</div>
+                      <select className={inp} value={wo_traySlot} onChange={(e) => setWo_traySlot(e.target.value)}>
+                        {["정사각20구", "직사각20구", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
+                  ) : null}
+                  <div><div className="mb-1 text-xs text-slate-600">포장단위</div>
+                    <select className={inp} value={wo_packageUnit} onChange={(e) => setWo_packageUnit(e.target.value)}>
+                      {["100ea", "200ea", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div><div className="mb-1 text-xs text-slate-600">성형틀 장당 생산수</div>
+                    <input className={inpR} inputMode="numeric" placeholder="예: 52" value={wo_moldPerSheet} onChange={(e) => setWo_moldPerSheet(e.target.value.replace(/[^\d]/g, ""))} />
+                  </div>
+                </div>
+                {/* 납기일별 주문 */}
+                <div className="flex items-center justify-between">
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">납기일별 주문</div>
+                  <button className={btn} onClick={() => setWo_items((prev) => [...prev, { id: crypto.randomUUID(), delivery_date: todayYMD(), sub_items: [{ name: "", qty: 0 }], order_qty: 0 }])}>+ 납기일 추가</button>
+                </div>
+                <div className="space-y-3">
+                  {wo_items.map((item, itemIdx) => (
+                    <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="mb-3 flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-slate-600">납기일</span>
+                        <input type="date" className={`${inp} w-44`} value={item.delivery_date}
+                          onChange={(e) => setWo_items((prev) => prev.map((x, i) => i === itemIdx ? { ...x, delivery_date: e.target.value } : x))} />
+                        <div className="ml-auto flex items-center gap-3">
+                          <span className="text-xs text-slate-500">합계: <span className="font-bold tabular-nums text-blue-700">{item.sub_items.reduce((s, si) => s + (Number(si.qty) || 0), 0).toLocaleString("ko-KR")}개</span></span>
+                          {wo_items.length > 1 ? <button className={btn} onClick={() => setWo_items((prev) => prev.filter((_, i) => i !== itemIdx))}>납기일 삭제</button> : null}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {item.sub_items.map((si, siIdx) => (
+                          <div key={siIdx} className="grid grid-cols-[1fr_130px_44px] gap-2">
+                            <input className={inp} placeholder="학교명/제품명" value={si.name}
+                              onChange={(e) => setWo_items((prev) => prev.map((x, i) => i === itemIdx ? { ...x, sub_items: x.sub_items.map((s, j) => j === siIdx ? { ...s, name: e.target.value } : s) } : x))} />
+                            <input className={inpR} inputMode="numeric" placeholder="수량"
+                              value={si.qty ? si.qty.toLocaleString("ko-KR") : ""}
+                              onChange={(e) => { const v = toInt(e.target.value.replace(/[^\d,]/g, "")); setWo_items((prev) => prev.map((x, i) => i === itemIdx ? { ...x, sub_items: x.sub_items.map((s, j) => j === siIdx ? { ...s, qty: v } : s) } : x)); }} />
+                            <button className={btn} onClick={() => setWo_items((prev) => prev.map((x, i) => i === itemIdx ? { ...x, sub_items: x.sub_items.filter((_, j) => j !== siIdx) } : x))}>✕</button>
+                          </div>
+                        ))}
+                        <button className={`${btn} text-xs`} onClick={() => setWo_items((prev) => prev.map((x, i) => i === itemIdx ? { ...x, sub_items: [...x.sub_items, { name: "", qty: 0 }] } : x))}>+ 항목 추가</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* 재주문 */}
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={wo_isReorder} onChange={(e) => setWo_isReorder(e.target.checked)} />
+                    <span className={wo_isReorder ? "font-semibold text-orange-600" : "text-slate-700"}>재주문</span>
+                  </label>
+                  {wo_isReorder ? <input className={`${inp} flex-1`} placeholder="원본 작업지시서 ID (선택)" value={wo_originalId} onChange={(e) => setWo_originalId(e.target.value)} /> : null}
+                </div>
+                {/* 비고/참고사항 */}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div><div className="mb-1 text-xs text-slate-600">비고</div><input className={inp} placeholder="비고" value={wo_note} onChange={(e) => setWo_note(e.target.value)} /></div>
+                  <div><div className="mb-1 text-xs text-slate-600">참고사항</div><input className={inp} placeholder="참고사항" value={wo_referenceNote} onChange={(e) => setWo_referenceNote(e.target.value)} /></div>
+                </div>
+                {/* 이미지 */}
+                <div>
+                  <div className="mb-1 text-xs text-slate-600">인쇄 디자인 이미지</div>
+                  <input type="file" accept="image/*" multiple className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700"
+                    onChange={(e) => setWo_imageFiles(Array.from(e.target.files ?? []))} />
+                  {wo_imageFiles.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {wo_imageFiles.map((f, i) => <div key={i} className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700">🖼 {f.name}</div>)}
+                    </div>
+                  ) : null}
+                </div>
+                {/* 저장 */}
+                <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-200">
+                  <button className={btn} onClick={() => { setWo_modalOpen(false); resetWoForm(); }}>취소</button>
+                  <button className={btnOn} onClick={async () => { await createWorkOrder(); if (!wo_saving) setWo_modalOpen(false); }} disabled={wo_saving}>
+                    {wo_saving ? "저장 중..." : "✅ 작업지시서 생성"}
+                  </button>
+                </div>
+              </div>
+              <Datalists />
             </div>
           </div>
         ) : null}
@@ -1682,7 +1817,7 @@ export default function TradeClient() {
                             <col style={{ width: "160px" }} />
                             <col style={{ width: "110px" }} />
                             <col style={{ width: "110px" }} />
-                            <col style={{ width: "100px" }} />
+                            <col style={{ width: "90px" }} />
                             <col style={{ width: "80px" }} />
                             <col style={{ width: "60px" }} />
                             <col style={{ width: "60px" }} />
@@ -1917,6 +2052,14 @@ export default function TradeClient() {
                                 <button className={miniBtn} onClick={() => onMemoClick(x)}>메모</button>
                                 <button className={miniBtn} onClick={() => openEdit(x)}>수정</button>
                                 <button className={miniBtn} onClick={() => deleteTradeRow(x)}>삭제</button>
+                                {x.kind === "ORDER" ? (
+                                  <button
+                                    className="col-span-2 rounded-lg border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[11px] font-semibold text-orange-700 hover:bg-orange-100 active:bg-orange-200"
+                                    onClick={() => openWoModalFromOrder(x)}
+                                  >
+                                    📋 작업지시서
+                                  </button>
+                                ) : null}
                               </div>
                             </td>
                           </tr>
