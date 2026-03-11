@@ -970,20 +970,6 @@ export default function TradeClient() {
         const variantId = (newVariant as any).id;
         await supabase.from("product_barcodes").insert({ variant_id: variantId, barcode: finalBarcode, is_primary: true, is_active: true });
         await supabase.from("work_orders").update({ variant_id: variantId }).eq("id", woId);
-
-        // 이미지 업로드 (UUID 경로로 한글 파일명 안전 처리)
-        if (wo_imageFiles.length > 0) {
-          const uploadedPaths: string[] = [];
-          for (const file of wo_imageFiles) {
-            const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
-            const path = `orders/${finalBarcode}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-            const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file);
-            if (!upErr) uploadedPaths.push(path);
-          }
-          if (uploadedPaths.length > 0) {
-            await supabase.from("work_orders").update({ images: uploadedPaths }).eq("id", woId);
-          }
-        }
       } catch (woCreateErr: any) {
         // 작업지시서 생성 실패는 경고만 (주문은 이미 저장됨)
         setMsg(`⚠️ 주문은 저장됐으나 작업지시서 자동생성 실패: ${woCreateErr?.message ?? woCreateErr}`);
@@ -1183,17 +1169,20 @@ export default function TradeClient() {
         await supabase.from("work_orders").update({ variant_id: variantId }).eq("id", woId);
       }
 
-      // ⑥ 이미지 업로드 (UUID 경로, 한글 파일명 안전 처리)
+      // ⑥ 이미지 업로드
       if (wo_imageFiles.length > 0) {
-        const uploadedPaths: string[] = [];
+        const uploadedUrls: string[] = [];
         for (const file of wo_imageFiles) {
-          const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
+          const ext = file.name.split(".").pop() ?? "jpg";
           const path = `orders/${finalBarcode}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
           const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file);
-          if (!upErr) uploadedPaths.push(path);
+          if (!upErr) {
+            const { data: urlData } = supabase.storage.from("work-order-images").getPublicUrl(path);
+            uploadedUrls.push(urlData.publicUrl);
+          }
         }
-        if (uploadedPaths.length > 0) {
-          await supabase.from("work_orders").update({ images: uploadedPaths }).eq("id", woId);
+        if (uploadedUrls.length > 0) {
+          await supabase.from("work_orders").update({ images: uploadedUrls }).eq("id", woId);
         }
       }
 
@@ -2081,18 +2070,15 @@ function WoPrintModal({ wo, onClose, employees }: {
   const items = (wo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date));
   const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
 
+  // Private 버킷 → signed URL 변환
   const [signedImages, setSignedImages] = useState<string[]>([]);
   useEffect(() => {
     async function resolveImages() {
       const rawUrls = wo.images ?? [];
       if (rawUrls.length === 0) { setSignedImages([]); return; }
       const paths = rawUrls.map((url) => {
-        // path만 저장된 경우와 full URL 모두 처리
-        if (url.startsWith("http")) {
-          const m = url.match(/work-order-images\/(.+?)(\?|$)/);
-          return m ? m[1] : null;
-        }
-        return url; // 이미 path
+        const m = url.match(/work-order-images\/(.+?)(\?|$)/);
+        return m ? m[1] : null;
       }).filter(Boolean) as string[];
       if (paths.length === 0) { setSignedImages(rawUrls); return; }
       const sb = createClient();
@@ -2103,6 +2089,8 @@ function WoPrintModal({ wo, onClose, employees }: {
     resolveImages();
   }, [wo.images]);
 
+  const [assignee, setAssignee] = useState({ transfer: "", printCheck: "", production: "", input: "" });
+  const empNames = employees.map((e) => e.name ?? "").filter(Boolean);
   const woWithSigned = { ...wo, images: signedImages };
 
   function doPrint() {
@@ -2115,61 +2103,88 @@ function WoPrintModal({ wo, onClose, employees }: {
     if (!doc) return;
     doc.open();
     doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
-      <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
       <style>
         @page { size: A4 portrait; margin: 12mm 14mm; }
         body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 10pt; color: #111; }
         * { box-sizing: border-box; }
         img { max-width: 100%; }
       </style>
-    </head><body>${content.innerHTML}
-    <script>
-      window.onload = function() {
-        if (typeof JsBarcode !== "undefined") {
-          document.querySelectorAll("svg[data-barcode]").forEach(function(el) {
-            JsBarcode(el, el.getAttribute("data-barcode"), { format:"CODE128", displayValue:false, width:1.5, height:40, margin:0 });
-          });
-        }
-        window.print();
-      };
-    <\/script>
-    </body></html>`);
+    </head><body>${content.innerHTML}</body></html>`);
     doc.close();
+    iframe.contentWindow?.focus();
+    setTimeout(() => {
+      iframe.contentWindow?.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
+    }, 500);
     onClose();
   }
 
-  // 모달 열리자마자 자동 인쇄 (이미지 로딩 대기)
-  const printTriggered = useRef(false);
+  // 모달 열리면 signed URL 로드 완료 후 자동 인쇄 여부 체크
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    if (printTriggered.current) return;
-    const hasImages = (wo.images ?? []).length > 0;
-    if (!hasImages) {
-      printTriggered.current = true;
-      setTimeout(doPrint, 100);
-    }
-  }, []);
+    // 이미지가 없으면 바로 ready
+    if ((wo.images ?? []).length === 0) setReady(true);
+  }, [wo.images]);
   useEffect(() => {
-    if (printTriggered.current) return;
-    if (signedImages.length > 0) {
-      printTriggered.current = true;
-      setTimeout(doPrint, 200);
-    }
+    if (signedImages.length > 0) setReady(true);
   }, [signedImages]);
 
-  // 숨겨진 인쇄 콘텐츠만 렌더
   return (
-    <div style={{ display: "none" }}>
-      <div id="wo-print-preview-inner">
-        <WoPrintContent wo={woWithSigned} items={items} totalOrder={totalOrder} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div className="font-semibold">🖨️ 담당자 선택 후 인쇄</div>
+          <button className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm hover:bg-slate-50" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 px-5 py-4">
+          {([
+            { key: "transfer",   label: "전사인쇄" },
+            { key: "printCheck", label: "인쇄검수" },
+            { key: "production", label: "생산완료" },
+            { key: "input",      label: "입력완료" },
+          ] as const).map(({ key, label }) => (
+            <div key={key}>
+              <div className="mb-1 text-xs text-slate-500">{label}</div>
+              <select
+                className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:border-blue-400"
+                value={assignee[key]}
+                onChange={(e) => setAssignee((prev) => ({ ...prev, [key]: e.target.value }))}
+              >
+                <option value="">—</option>
+                {empNames.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2 border-t border-slate-100 px-5 py-4">
+          <button
+            className="flex-1 rounded-xl border border-blue-500 bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            onClick={doPrint}
+            disabled={!ready}
+          >
+            {ready ? "🖨️ 인쇄" : "이미지 로딩 중..."}
+          </button>
+          <button className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm hover:bg-slate-50" onClick={onClose}>취소</button>
+        </div>
+
+        {/* 숨겨진 인쇄용 콘텐츠 */}
+        <div style={{ display: "none" }}>
+          <div id="wo-print-preview-inner">
+            <WoPrintContent wo={woWithSigned} items={items} totalOrder={totalOrder} assignee={assignee} />
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function WoPrintContent({ wo, items, totalOrder }: {
+function WoPrintContent({ wo, items, totalOrder, assignee }: {
   wo: WorkOrderRow;
   items: WoItem[];
   totalOrder: number;
+  assignee?: { transfer: string; printCheck: string; production: string; input: string };
 }) {
   const f = (n: number | null | undefined) => Number(n ?? 0).toLocaleString("ko-KR");
 
@@ -2179,10 +2194,10 @@ function WoPrintContent({ wo, items, totalOrder }: {
   const tdT: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 6px", fontSize: "8.5pt", verticalAlign: "middle" };
 
   const statusRows = [
-    { label: "전사인쇄", checked: wo.status_transfer },
-    { label: "인쇄검수", checked: wo.status_print_check },
-    { label: "생산완료", checked: wo.status_production },
-    { label: "입력완료", checked: wo.status_input },
+    { label: "전사인쇄", checked: wo.status_transfer,    name: assignee?.transfer   ?? "" },
+    { label: "인쇄검수", checked: wo.status_print_check, name: assignee?.printCheck ?? "" },
+    { label: "생산완료", checked: wo.status_production,  name: assignee?.production ?? "" },
+    { label: "입력완료", checked: wo.status_input,       name: assignee?.input      ?? "" },
   ];
 
   return (
@@ -2199,14 +2214,7 @@ function WoPrintContent({ wo, items, totalOrder }: {
             <td style={thS}>거래처명</td>
             <td style={tdS}>{wo.client_name}{wo.sub_name ? ` (${wo.sub_name})` : ""}</td>
             <td style={thS}>바코드</td>
-            <td style={{ ...tdS, fontFamily: "monospace", fontSize: "8pt", verticalAlign: "middle" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span>{wo.barcode_no}</span>
-                {wo.barcode_no ? (
-                  <svg data-barcode={wo.barcode_no} style={{ height: "32px", display: "block" }} />
-                ) : null}
-              </div>
-            </td>
+            <td style={{ ...tdS, fontFamily: "monospace", fontSize: "8pt" }}>{wo.barcode_no}</td>
           </tr>
           <tr>
             <td style={thS}>품목명</td>
@@ -2286,10 +2294,11 @@ function WoPrintContent({ wo, items, totalOrder }: {
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
         <tbody>
           <tr>
-            {statusRows.map(({ label, checked }) => (
+            {statusRows.map(({ label, checked, name }) => (
               <td key={label} style={{ border: "1px solid #cbd5e1", padding: "3px 6px", textAlign: "center", width: "25%" }}>
                 <span style={{ fontSize: "8pt", color: "#555" }}>{label} </span>
                 <span style={{ fontSize: "10pt" }}>{checked ? "✅" : "☐"}</span>
+                {name ? <span style={{ fontSize: "8pt", color: "#374151" }}> {name}</span> : null}
               </td>
             ))}
           </tr>
