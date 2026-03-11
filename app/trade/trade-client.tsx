@@ -464,6 +464,19 @@ export default function TradeClient() {
   const [eShip1, setEShip1] = useState<ShipFormState>(emptyShip());
   const [eShip2, setEShip2] = useState<ShipFormState>(emptyShip());
   const [eTwoShip, setETwoShip] = useState(false);
+  // 수정 모달 - 연결된 작업지시서
+  const [eWoId, setEWoId] = useState<string | null>(null);
+  const [eWoSubName, setEWoSubName] = useState("");
+  const [eWoProductName, setEWoProductName] = useState("");
+  const [eWoFoodType, setEWoFoodType] = useState("");
+  const [eWoLogoSpec, setEWoLogoSpec] = useState("");
+  const [eWoThickness, setEWoThickness] = useState("2mm");
+  const [eWoDeliveryMethod, setEWoDeliveryMethod] = useState("택배");
+  const [eWoPackagingType, setEWoPackagingType] = useState("트레이");
+  const [eWoMoldPerSheet, setEWoMoldPerSheet] = useState("");
+  const [eWoNote, setEWoNote] = useState("");
+  const [eWoImageFiles, setEWoImageFiles] = useState<File[]>([]);
+  const [eWoExistingImages, setEWoExistingImages] = useState<string[]>([]);
 
   // Edit modal - ledger
   const [eEntryDate, setEEntryDate] = useState(todayYMD());
@@ -1203,7 +1216,49 @@ export default function TradeClient() {
       setEShipMethod(r.ship_method ?? r.method ?? "택배"); setEOrderTitle(r.order_title ?? "");
       setELines(r.order_lines?.length ? r.order_lines.map((l) => ({ food_type: String(l.food_type ?? ""), name: String(l.name ?? ""), weight_g: Number(l.weight_g ?? 0), qty: toInt(l.qty ?? 0), unit: Number(l.unit ?? 0), total_incl_vat: Number(l.total_amount ?? 0) })) : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
       applyShipmentsToForm(r.order_shipments ?? [], setEShip1, setEShip2, setETwoShip);
+      // 연결된 work_order 조회
+      setEWoId(null); setEWoSubName(""); setEWoProductName(""); setEWoFoodType(""); setEWoLogoSpec("");
+      setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("트레이");
+      setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoExistingImages([]);
+      const { data: wo } = await supabase
+        .from("work_orders")
+        .select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,mold_per_sheet,note,images")
+        .eq("linked_order_id", r.rawId)
+        .limit(1)
+        .maybeSingle();
+      if (wo) {
+        setEWoId((wo as any).id);
+        setEWoSubName((wo as any).sub_name ?? "");
+        setEWoProductName((wo as any).product_name ?? "");
+        setEWoFoodType((wo as any).food_type ?? "");
+        setEWoLogoSpec((wo as any).logo_spec ?? "");
+        setEWoThickness((wo as any).thickness ?? "2mm");
+        setEWoDeliveryMethod((wo as any).delivery_method ?? "택배");
+        setEWoPackagingType((wo as any).packaging_type ?? "트레이");
+        setEWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
+        setEWoNote((wo as any).note ?? "");
+        setEWoExistingImages((wo as any).images ?? []);
+      }
     } else {
+      setEEntryDate(r.date || todayYMD());
+      const m = (r.ledger_method ?? r.method ?? "BANK") as any;
+      setEPayMethod(["BANK", "CASH", "CARD", "ETC"].includes(m) ? m : "BANK");
+      const c = (r.ledger_category as Category) ?? (r.category as Category) ?? "기타";
+      setECategory(CATEGORIES.includes(c) ? c : "기타");
+      const amt = Number(r.ledger_amount ?? (r.inAmt || r.outAmt || 0));
+      setEAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
+      setELedgerMemo(r.ledger_memo ?? ""); setECounterpartyName(r.partnerName ?? ""); setEBusinessNo(r.businessNo ?? "");
+      const vatAmt = Number(r.ledger_vat_amount ?? 0), supplyAmt = Number(r.ledger_supply_amount ?? 0), totalAmt = Number(r.ledger_total_amount ?? 0);
+      const resolvedCat = CATEGORIES.includes(c) ? c : "기타";
+      setEVatFree(resolvedCat === "급여" ? true : (amt > 0 && vatAmt === 0 && supplyAmt === amt && totalAmt === amt));
+      setESalaryEmployeeId("");
+      if (CATEGORIES.includes(c) && c === "급여") {
+        const { data: hp, error: hpErr } = await supabase.from("hr_payments").select("employee_id").eq("ledger_entry_id", r.rawId).limit(1);
+        if (!hpErr && hp && hp[0]?.employee_id) setESalaryEmployeeId(String(hp[0].employee_id));
+      }
+    }
+    setEditOpen(true);
+  }
       setEEntryDate(r.date || todayYMD());
       const m = (r.ledger_method ?? r.method ?? "BANK") as any;
       setEPayMethod(["BANK", "CASH", "CARD", "ETC"].includes(m) ? m : "BANK");
@@ -1242,6 +1297,32 @@ export default function TradeClient() {
       await supabase.from("order_shipments").delete().eq("order_id", editRow.rawId);
       const { error: siErr } = await supabase.from("order_shipments").insert(buildShipPayloads(editRow.rawId, eShip1, eShip2, eTwoShip));
       if (siErr) return setMsg(siErr.message);
+      // 연결된 work_order 업데이트
+      if (eWoId) {
+        let uploadedUrls: string[] = [...eWoExistingImages];
+        if (eWoImageFiles.length > 0) {
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+          for (const file of eWoImageFiles) {
+            const ext = file.name.split(".").pop() ?? "jpg";
+            const path = `${eWoId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+            const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file, { upsert: true });
+            if (!upErr) uploadedUrls.push(`${supabaseUrl}/storage/v1/object/public/work-order-images/${path}`);
+          }
+        }
+        await supabase.from("work_orders").update({
+          sub_name: eWoSubName.trim() || null,
+          product_name: eWoProductName.trim() || null,
+          food_type: eWoFoodType.trim() || null,
+          logo_spec: eWoLogoSpec.trim() || null,
+          thickness: eWoThickness || null,
+          delivery_method: eWoDeliveryMethod || null,
+          packaging_type: eWoPackagingType || null,
+          mold_per_sheet: eWoMoldPerSheet ? Number(eWoMoldPerSheet) : null,
+          note: eWoNote.trim() || null,
+          images: uploadedUrls,
+          updated_at: new Date().toISOString(),
+        }).eq("id", eWoId);
+      }
     } else {
       const amount = Number((eAmountStr || "0").replaceAll(",", ""));
       if (!Number.isFinite(amount) || amount <= 0) return setMsg("금액(원)을 올바르게 입력하세요.");
@@ -1466,6 +1547,84 @@ export default function TradeClient() {
                     <div className="mt-4 flex items-center justify-end gap-4 text-sm">
                       <div>공급가 {fmt(editOrderTotals.supply)}</div><div>부가세 {fmt(editOrderTotals.vat)}</div><div className="font-semibold">총액 {fmt(editOrderTotals.total)}</div>
                     </div>
+                    {/* 연결된 작업지시서 수정 */}
+                    {eWoId ? (
+                      <div className="mt-4 rounded-2xl border border-orange-100 bg-orange-50 p-3">
+                        <div className="mb-3 flex items-center gap-2">
+                          <div className="text-sm font-semibold text-orange-800">📋 작업지시서 수정</div>
+                          <span className="text-xs text-orange-600">주문과 연결된 작업지시서도 함께 저장됩니다</span>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                          <div><div className="mb-1 text-xs text-slate-600">품목명</div>
+                            <input className={inp} value={eWoProductName} onChange={(e) => setEWoProductName(e.target.value)} />
+                          </div>
+                          <div><div className="mb-1 text-xs text-slate-600">서브네임</div>
+                            <input className={inp} placeholder="예: COS, 크로버" value={eWoSubName} onChange={(e) => setEWoSubName(e.target.value)} />
+                          </div>
+                          <div><div className="mb-1 text-xs text-slate-600">식품유형</div>
+                            <input className={inp} list="food-types-list" placeholder="예: 화이트초콜릿" value={eWoFoodType} onChange={(e) => setEWoFoodType(e.target.value)} />
+                          </div>
+                          <div><div className="mb-1 text-xs text-slate-600">규격(로고스펙)</div>
+                            <input className={inp} placeholder="예: 40x40mm, 5x1.5cm" value={eWoLogoSpec} onChange={(e) => setEWoLogoSpec(e.target.value)} />
+                          </div>
+                          <div><div className="mb-1 text-xs text-slate-600">두께</div>
+                            <select className={inp} value={eWoThickness} onChange={(e) => setEWoThickness(e.target.value)}>
+                              {["2mm", "3mm", "5mm", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          </div>
+                          <div><div className="mb-1 text-xs text-slate-600">포장방법</div>
+                            <select className={inp} value={eWoPackagingType} onChange={(e) => setEWoPackagingType(e.target.value)}>
+                              {["트레이", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          </div>
+                          <div><div className="mb-1 text-xs text-slate-600">납품방법</div>
+                            <select className={inp} value={eWoDeliveryMethod} onChange={(e) => setEWoDeliveryMethod(e.target.value)}>
+                              {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          </div>
+                          <div><div className="mb-1 text-xs text-slate-600">성형틀 장당 생산수</div>
+                            <input className={inpR} inputMode="numeric" placeholder="예: 52" value={eWoMoldPerSheet}
+                              onChange={(e) => setEWoMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} />
+                          </div>
+                          <div><div className="mb-1 text-xs text-slate-600">비고</div>
+                            <input className={inp} value={eWoNote} onChange={(e) => setEWoNote(e.target.value)} />
+                          </div>
+                          <div className="md:col-span-3">
+                            <div className="mb-1 text-xs text-slate-600">인쇄 디자인 이미지 추가</div>
+                            <input type="file" accept="image/*" multiple
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700"
+                              onChange={(e) => setEWoImageFiles(Array.from(e.target.files ?? []))} />
+                            {/* 기존 이미지 */}
+                            {eWoExistingImages.length > 0 ? (
+                              <div className="mt-2">
+                                <div className="mb-1 text-xs text-slate-500">기존 이미지 ({eWoExistingImages.length}장)</div>
+                                <div className="flex flex-wrap gap-2">
+                                  {eWoExistingImages.map((url, i) => (
+                                    <div key={i} className="group relative">
+                                      <img src={url} alt="" className="h-16 w-16 rounded-lg border border-slate-200 object-cover" />
+                                      <button
+                                        className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
+                                        onClick={() => setEWoExistingImages((prev) => prev.filter((_, j) => j !== i))}
+                                        title="이미지 삭제"
+                                      >✕</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                            {eWoImageFiles.length > 0 ? (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {eWoImageFiles.map((f, i) => (
+                                  <div key={i} className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700">
+                                    🖼 {f.name}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                   </>
                 ) : (
                   <>
