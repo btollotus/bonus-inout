@@ -454,6 +454,7 @@ export default function TradeClient() {
   const [wo_linkedOrderId, setWo_linkedOrderId] = useState<string | null>(null);
   const [wo_linkedOrderSummary, setWo_linkedOrderSummary] = useState<string>("");
   const [wo_modalOpen, setWo_modalOpen] = useState(false);
+  const [wo_printTarget, setWo_printTarget] = useState<WorkOrderRow | null>(null);
 
   // Edit modal - order
   const [eShipDate, setEShipDate] = useState(todayYMD());
@@ -1945,6 +1946,7 @@ export default function TradeClient() {
                             <col style={{ width: "60px" }} />
                             <col style={{ width: "60px" }} />
                             <col style={{ width: "60px" }} />
+                            <col style={{ width: "60px" }} />
                           </colgroup>
                           <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                             <tr>
@@ -1958,6 +1960,7 @@ export default function TradeClient() {
                               <th className="px-3 py-2 text-center">검수</th>
                               <th className="px-3 py-2 text-center">생산</th>
                               <th className="px-3 py-2 text-center">입력</th>
+                              <th className="px-3 py-2 text-center">인쇄</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1977,6 +1980,21 @@ export default function TradeClient() {
                                 <td className="px-3 py-2 text-center text-base">{wo.status_print_check ? "✅" : "⬜"}</td>
                                 <td className="px-3 py-2 text-center text-base">{wo.status_production ? "✅" : "⬜"}</td>
                                 <td className="px-3 py-2 text-center text-base">{wo.status_input ? "✅" : "⬜"}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <button
+                                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs hover:bg-slate-50"
+                                    onClick={async () => {
+                                      if (wo.work_order_items) { setWo_printTarget(wo); return; }
+                                      // work_order_items 없으면 상세 조회
+                                      const { data } = await supabase
+                                        .from("work_orders")
+                                        .select("*,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id)")
+                                        .eq("id", wo.id)
+                                        .single();
+                                      if (data) setWo_printTarget(data as WorkOrderRow);
+                                    }}
+                                  >🖨️</button>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -2259,6 +2277,199 @@ export default function TradeClient() {
         {showTopBtn ? (
           <button type="button" className="fixed bottom-6 right-6 z-50 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-lg hover:bg-slate-50 active:bg-slate-100" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>TOP</button>
         ) : null}
+      </div>
+
+      {/* 작업지시서 인쇄 모달 */}
+      {wo_printTarget ? (
+        <WoPrintModal wo={wo_printTarget} onClose={() => setWo_printTarget(null)} />
+      ) : null}
+    </div>
+  );
+}
+
+// ─────────────────────── 작업지시서 인쇄 모달 ───────────────────────
+function WoPrintModal({ wo, onClose }: { wo: WorkOrderRow; onClose: () => void }) {
+  const items = (wo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date));
+  const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
+
+  return (
+    <>
+      <style>{`
+        @media print {
+          body > * { display: none !important; }
+          #wo-trade-print-area { display: block !important; }
+          @page { size: A4 portrait; margin: 12mm 14mm; }
+        }
+        #wo-trade-print-area { display: none; }
+      `}</style>
+
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+        <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div className="font-semibold">🖨️ 작업지시서 인쇄 미리보기</div>
+            <div className="flex gap-2">
+              <button className="rounded-xl border border-blue-500 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700" onClick={() => window.print()}>
+                인쇄
+              </button>
+              <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-50" onClick={onClose}>
+                닫기
+              </button>
+            </div>
+          </div>
+          <div className="overflow-y-auto p-4" style={{ maxHeight: "80vh" }}>
+            <WoPrintContent wo={wo} items={items} totalOrder={totalOrder} />
+          </div>
+        </div>
+      </div>
+
+      <div id="wo-trade-print-area">
+        <WoPrintContent wo={wo} items={items} totalOrder={totalOrder} />
+      </div>
+    </>
+  );
+}
+
+function WoPrintContent({ wo, items, totalOrder }: { wo: WorkOrderRow; items: WoItem[]; totalOrder: number }) {
+  const f = (n: number | null | undefined) => Number(n ?? 0).toLocaleString("ko-KR");
+
+  const thS: React.CSSProperties = { background: "#f8fafc", border: "1px solid #cbd5e1", padding: "5px 8px", fontWeight: "bold", fontSize: "9.5pt", color: "#374151", whiteSpace: "nowrap", width: "80px" };
+  const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "5px 10px", fontSize: "10pt" };
+  const thT: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "5px 8px", fontWeight: "bold", fontSize: "9pt", textAlign: "center", whiteSpace: "nowrap", background: "#f1f5f9" };
+  const tdT: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "5px 8px", fontSize: "9.5pt", verticalAlign: "middle" };
+
+  return (
+    <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "11pt", color: "#111", background: "#fff" }}>
+      <div style={{ textAlign: "center", fontSize: "9pt", color: "#555", marginBottom: "6px", letterSpacing: "2px" }}>성실! 신뢰! 화합!</div>
+      <div style={{ textAlign: "center", fontSize: "18pt", fontWeight: "bold", letterSpacing: "6px", marginBottom: "10px", borderBottom: "2px solid #111", paddingBottom: "8px" }}>
+        작 업 지 시 서
+      </div>
+
+      {/* 기본정보 */}
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "12px" }}>
+        <tbody>
+          <tr>
+            <td style={thS}>거래처명</td>
+            <td style={tdS}>{wo.client_name}{wo.sub_name ? ` (${wo.sub_name})` : ""}</td>
+            <td style={thS}>바코드</td>
+            <td style={{ ...tdS, fontFamily: "monospace" }}>{wo.barcode_no}</td>
+          </tr>
+          <tr>
+            <td style={thS}>품목명</td>
+            <td style={tdS}>{wo.product_name}</td>
+            <td style={thS}>식품유형</td>
+            <td style={tdS}>{wo.food_type ?? "—"}</td>
+          </tr>
+          <tr>
+            <td style={thS}>규격(로고)</td>
+            <td style={tdS}>{wo.logo_spec ?? "—"}</td>
+            <td style={thS}>두께</td>
+            <td style={tdS}>{wo.thickness ?? "—"}</td>
+          </tr>
+          <tr>
+            <td style={thS}>포장방법</td>
+            <td style={tdS}>{wo.packaging_type ?? "—"}{wo.packaging_type === "트레이" && wo.tray_slot ? ` / ${wo.tray_slot}` : ""}</td>
+            <td style={thS}>포장단위</td>
+            <td style={tdS}>{wo.package_unit ?? "—"}</td>
+          </tr>
+          <tr>
+            <td style={thS}>납품방법</td>
+            <td style={tdS}>{wo.delivery_method ?? "—"}</td>
+            <td style={thS}>성형틀/장</td>
+            <td style={tdS}>{wo.mold_per_sheet ? `${wo.mold_per_sheet}개` : "—"}</td>
+          </tr>
+          <tr>
+            <td style={thS}>주문일</td>
+            <td style={tdS}>{wo.order_date}</td>
+            <td style={thS}>작업지시번호</td>
+            <td style={{ ...tdS, fontFamily: "monospace", fontSize: "9pt" }}>{wo.work_order_no}</td>
+          </tr>
+          {wo.note ? <tr><td style={thS}>비고</td><td style={tdS} colSpan={3}>{wo.note}</td></tr> : null}
+          {wo.reference_note ? <tr><td style={thS}>참고사항</td><td style={tdS} colSpan={3}>{wo.reference_note}</td></tr> : null}
+        </tbody>
+      </table>
+
+      {/* 납기일별 테이블 */}
+      <div style={{ fontWeight: "bold", fontSize: "10pt", marginBottom: "4px", borderLeft: "3px solid #2563eb", paddingLeft: "6px" }}>
+        납기일별 생산 현황 (총 주문: {f(totalOrder)}개)
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "16px" }}>
+        <thead>
+          <tr>
+            <th style={thT}>납기일</th>
+            <th style={thT}>품목 (주문수량)</th>
+            <th style={thT}>주문합계</th>
+            <th style={thT}>출고수량</th>
+            <th style={thT}>개당중량(g)</th>
+            <th style={thT}>총중량(g)</th>
+            <th style={thT}>소비기한</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => {
+            const aq = (item as any).actual_qty ?? null;
+            const uw = (item as any).unit_weight ?? null;
+            const tw = aq && uw ? aq * uw : null;
+            const exp = (item as any).expiry_date ?? "";
+            const subText = (item.sub_items ?? []).map((si) => `${si.name} ${f(si.qty)}개`).join(", ");
+            return (
+              <tr key={item.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                <td style={{ ...tdT }}>{item.delivery_date}</td>
+                <td style={{ ...tdT, fontSize: "8.5pt" }}>{subText || "—"}</td>
+                <td style={{ ...tdT, textAlign: "right" }}>{f(item.order_qty)}</td>
+                <td style={{ ...tdT, textAlign: "right", fontWeight: "bold" }}>{aq != null ? f(aq) : "　"}</td>
+                <td style={{ ...tdT, textAlign: "right" }}>{uw != null ? uw : "　"}</td>
+                <td style={{ ...tdT, textAlign: "right", color: tw ? "#1d4ed8" : "#999" }}>{tw ? f(Math.round(tw)) : "　"}</td>
+                <td style={{ ...tdT, textAlign: "center" }}>{exp || "　"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {/* 진행상태 확인란 */}
+      <div style={{ fontWeight: "bold", fontSize: "10pt", marginBottom: "6px", borderLeft: "3px solid #2563eb", paddingLeft: "6px" }}>진행상태 확인</div>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "16px" }}>
+        <tbody>
+          <tr>
+            {([
+              { label: "전사인쇄", checked: wo.status_transfer },
+              { label: "인쇄검수", checked: wo.status_print_check },
+              { label: "생산완료", checked: wo.status_production },
+              { label: "입력완료", checked: wo.status_input },
+            ]).map(({ label, checked }) => (
+              <td key={label} style={{ border: "1px solid #cbd5e1", padding: "8px 12px", textAlign: "center", width: "25%" }}>
+                <div style={{ fontSize: "9pt", color: "#555", marginBottom: "4px" }}>{label}</div>
+                <div style={{ fontSize: "16pt" }}>{checked ? "✅" : "☐"}</div>
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+
+      {/* 이미지 */}
+      {(wo.images ?? []).length > 0 ? (
+        <div style={{ marginBottom: "16px" }}>
+          <div style={{ fontWeight: "bold", fontSize: "10pt", marginBottom: "6px", borderLeft: "3px solid #2563eb", paddingLeft: "6px" }}>인쇄 디자인 이미지</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            {wo.images.map((url, i) => (
+              <img key={i} src={url} alt={`디자인 ${i + 1}`} style={{ height: "100px", width: "100px", objectFit: "cover", border: "1px solid #e2e8f0", borderRadius: "6px" }} />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* 서명란 */}
+      <div style={{ marginTop: "24px", display: "flex", gap: "16px", borderTop: "1px solid #cbd5e1", paddingTop: "12px" }}>
+        {["지시자", "확인자", "작업자"].map((label) => (
+          <div key={label} style={{ flex: 1, textAlign: "center", borderRight: "1px solid #e2e8f0", paddingRight: "8px" }}>
+            <div style={{ fontSize: "9pt", color: "#555", marginBottom: "20px" }}>{label}</div>
+            <div style={{ fontSize: "9pt", color: "#aaa" }}>(서명)</div>
+          </div>
+        ))}
+        <div style={{ flex: 1, textAlign: "center" }}>
+          <div style={{ fontSize: "9pt", color: "#555", marginBottom: "20px" }}>출력일</div>
+          <div style={{ fontSize: "9pt" }}>{new Date().toLocaleDateString("ko-KR")}</div>
+        </div>
       </div>
     </div>
   );
