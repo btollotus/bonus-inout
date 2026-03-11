@@ -1925,6 +1925,21 @@ export default function TradeClient() {
                         <div className="mb-1 text-xs text-slate-600">성형틀 장당 생산수</div>
                         <input className={inpR} inputMode="numeric" placeholder="예: 52" value={orderWoMoldPerSheet} onChange={(e) => setOrderWoMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} />
                       </div>
+                      <div className="md:col-span-3">
+                        <div className="mb-1 text-xs text-slate-600">인쇄 디자인 이미지 (여러 장 선택 가능)</div>
+                        <input type="file" accept="image/*" multiple
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700"
+                          onChange={(e) => setWo_imageFiles(Array.from(e.target.files ?? []))} />
+                        {wo_imageFiles.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {wo_imageFiles.map((f, i) => (
+                              <div key={i} className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700">
+                                🖼 {f.name}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   ) : (
                     <div className="text-xs text-slate-500">작업지시서 없이 주문/출고만 저장됩니다.</div>
