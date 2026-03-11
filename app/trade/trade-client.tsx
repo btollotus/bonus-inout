@@ -48,7 +48,28 @@ type LedgerRow = {
   status: string | null; partner_id: string | null; created_at: string;
   supply_amount?: number | null; vat_amount?: number | null; total_amount?: number | null;
 };
-type Mode = "ORDERS" | "LEDGER" | "UNIFIED";
+// ── 작업지시서 타입 ──
+type WoSubItem = { name: string; qty: number };
+type WoItem = {
+  id: string;
+  delivery_date: string;
+  sub_items: WoSubItem[];
+  order_qty: number;
+};
+type WorkOrderRow = {
+  id: string; work_order_no: string; barcode_no: string;
+  client_id: string | null; client_name: string; sub_name: string | null;
+  order_date: string; food_type: string | null; product_name: string;
+  logo_spec: string | null; thickness: string | null; delivery_method: string | null;
+  packaging_type: string | null; tray_slot: string | null; package_unit: string | null;
+  mold_per_sheet: number | null; note: string | null; reference_note: string | null;
+  status: string; status_transfer: boolean; status_print_check: boolean;
+  status_production: boolean; status_input: boolean; is_reorder: boolean;
+  original_work_order_id: string | null; variant_id: string | null;
+  images: string[]; created_at: string;
+};
+// ── 기존 타입 계속 ──
+type Mode = "ORDERS" | "LEDGER" | "UNIFIED" | "WORK_ORDER";
 type PartnerView = "PINNED" | "RECENT" | "ALL";
 type FoodTypeRow = { id: string; name: string };
 type PresetProductRow = { id: string; product_name: string; food_type: string | null; weight_g: number | string | null; barcode: string | null };
@@ -67,7 +88,6 @@ type UnifiedRow = {
   ledger_memo?: string | null; ledger_amount?: number;
   ledger_supply_amount?: number | null; ledger_vat_amount?: number | null; ledger_total_amount?: number | null;
 };
-
 type EmployeeRow = { id: string; name: string | null };
 
 // ─────────────────────── Constants ───────────────────────
@@ -182,7 +202,6 @@ function loadRecentFromLS(): string[] {
   } catch { return []; }
 }
 function saveRecentToLS(ids: string[]) { try { localStorage.setItem(LS_RECENT_PARTNERS, JSON.stringify(ids)); } catch { } }
-const isMallPartner = (p: PartnerRow | null) => ["네이버", "쿠팡", "카카오"].some((k) => String(p?.name ?? "").includes(k));
 
 function buildOrderSummaryText(r: UnifiedRow) {
   if (r.kind !== "ORDER") return (r.ledger_memo ?? "").trim();
@@ -400,6 +419,30 @@ export default function TradeClient() {
   const [manualBusinessNo, setManualBusinessNo] = useState("");
   const [vatFree, setVatFree] = useState(false);
 
+  // ── 작업지시서 form state ──
+  const [wo_subName, setWo_subName] = useState("");
+  const [wo_orderDate, setWo_orderDate] = useState(todayYMD());
+  const [wo_foodType, setWo_foodType] = useState("");
+  const [wo_productName, setWo_productName] = useState("");
+  const [wo_logoSpec, setWo_logoSpec] = useState("");
+  const [wo_thickness, setWo_thickness] = useState("2mm");
+  const [wo_deliveryMethod, setWo_deliveryMethod] = useState("택배");
+  const [wo_packagingType, setWo_packagingType] = useState("트레이");
+  const [wo_traySlot, setWo_traySlot] = useState("정사각20구");
+  const [wo_packageUnit, setWo_packageUnit] = useState("100ea");
+  const [wo_moldPerSheet, setWo_moldPerSheet] = useState("");
+  const [wo_note, setWo_note] = useState("");
+  const [wo_referenceNote, setWo_referenceNote] = useState("");
+  const [wo_isReorder, setWo_isReorder] = useState(false);
+  const [wo_originalId, setWo_originalId] = useState("");
+  const [wo_items, setWo_items] = useState<WoItem[]>([
+    { id: crypto.randomUUID(), delivery_date: todayYMD(), sub_items: [{ name: "", qty: 0 }], order_qty: 0 },
+  ]);
+  const [wo_imageFiles, setWo_imageFiles] = useState<File[]>([]);
+  const [wo_saving, setWo_saving] = useState(false);
+  const [wo_list, setWo_list] = useState<WorkOrderRow[]>([]);
+  const [wo_listLoading, setWo_listLoading] = useState(false);
+
   // Edit modal - order
   const [eShipDate, setEShipDate] = useState(todayYMD());
   const [eOrdererName, setEOrdererName] = useState("");
@@ -461,6 +504,12 @@ export default function TradeClient() {
     setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id]);
+
+  // 작업지시서 탭 전환 시 목록 자동 로드
+  useEffect(() => {
+    if (mode === "WORK_ORDER" && selectedPartner) loadWoList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, selectedPartner?.id]);
 
   // Totals
   const orderTotals = useMemo(() => lines.reduce((acc, l) => { const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat); return { supply: acc.supply + r.supply, vat: acc.vat + r.vat, total: acc.total + r.total }; }, { supply: 0, vat: 0, total: 0 }), [lines]);
@@ -826,6 +875,188 @@ export default function TradeClient() {
     await loadTrades();
   }
 
+  // ── 작업지시서 함수 ──
+  function resetWoForm() {
+    setWo_subName(""); setWo_orderDate(todayYMD()); setWo_foodType("");
+    setWo_productName(""); setWo_logoSpec(""); setWo_thickness("2mm");
+    setWo_deliveryMethod("택배"); setWo_packagingType("트레이");
+    setWo_traySlot("정사각20구"); setWo_packageUnit("100ea");
+    setWo_moldPerSheet(""); setWo_note(""); setWo_referenceNote("");
+    setWo_isReorder(false); setWo_originalId("");
+    setWo_items([{ id: crypto.randomUUID(), delivery_date: todayYMD(), sub_items: [{ name: "", qty: 0 }], order_qty: 0 }]);
+    setWo_imageFiles([]);
+  }
+
+  async function loadWoList() {
+    if (!selectedPartner) return;
+    setWo_listLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("work_orders")
+        .select("id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,created_at")
+        .eq("client_id", selectedPartner.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) return setMsg(error.message);
+      setWo_list((data ?? []) as WorkOrderRow[]);
+    } finally {
+      setWo_listLoading(false);
+    }
+  }
+
+  async function createWorkOrder() {
+    setMsg(null);
+    if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
+    if (!wo_productName.trim()) return setMsg("품목명을 입력하세요.");
+    const cleanItems = wo_items
+      .map((item) => ({ ...item, order_qty: item.sub_items.reduce((s, si) => s + (Number(si.qty) || 0), 0) }))
+      .filter((item) => item.delivery_date && item.sub_items.some((si) => si.name.trim() && si.qty > 0));
+    if (cleanItems.length === 0) return setMsg("납기일과 수량을 1건 이상 입력하세요.");
+
+    setWo_saving(true);
+    try {
+      // ① 바코드 자동생성
+      const { data: barcodeData, error: barcodeErr } = await supabase.rpc("generate_work_order_barcode");
+      if (barcodeErr) return setMsg("바코드 생성 실패: " + barcodeErr.message);
+      const barcodeNo = barcodeData as string;
+      const workOrderNo = `WO-${wo_orderDate.replaceAll("-", "")}-${barcodeNo.slice(-4)}`;
+
+      // ② work_orders INSERT
+      const { data: createdWo, error: woErr } = await supabase
+        .from("work_orders")
+        .insert({
+          work_order_no: workOrderNo,
+          barcode_no: barcodeNo,
+          client_id: selectedPartner.id,
+          client_name: selectedPartner.name,
+          sub_name: wo_subName.trim() || null,
+          order_date: wo_orderDate,
+          food_type: wo_foodType.trim() || null,
+          product_name: wo_productName.trim(),
+          logo_spec: wo_logoSpec.trim() || null,
+          thickness: wo_thickness || null,
+          delivery_method: wo_deliveryMethod || null,
+          packaging_type: wo_packagingType || null,
+          tray_slot: wo_packagingType === "트레이" ? wo_traySlot : null,
+          package_unit: wo_packageUnit || null,
+          mold_per_sheet: wo_moldPerSheet ? Number(wo_moldPerSheet) : null,
+          note: wo_note.trim() || null,
+          reference_note: wo_referenceNote.trim() || null,
+          status: "생산중",
+          is_reorder: wo_isReorder,
+          original_work_order_id: wo_isReorder && wo_originalId ? wo_originalId : null,
+          images: [],
+        })
+        .select("id,barcode_no,work_order_no")
+        .single();
+      if (woErr) return setMsg("작업지시서 생성 실패: " + woErr.message);
+      const woId = (createdWo as any).id as string;
+      const finalBarcode = (createdWo as any).barcode_no as string;
+
+      // ③ work_order_items INSERT (납기일별)
+      const woItemsPayload = cleanItems.map((item) => ({
+        work_order_id: woId,
+        delivery_date: item.delivery_date,
+        sub_items: item.sub_items.filter((si) => si.name.trim() && si.qty > 0),
+        order_qty: item.order_qty,
+      }));
+      const { data: createdItems, error: itemErr } = await supabase
+        .from("work_order_items")
+        .insert(woItemsPayload)
+        .select("id,delivery_date,sub_items,order_qty");
+      if (itemErr) return setMsg("납기일 항목 생성 실패: " + itemErr.message);
+
+      // ④ orders + order_lines 자동생성 (납기일별)
+      for (const wItem of (createdItems ?? []) as any[]) {
+        const { data: createdOrder, error: oErr } = await supabase
+          .from("orders")
+          .insert({
+            customer_id: selectedPartner.id,
+            customer_name: selectedPartner.name,
+            title: `${wo_productName.trim()}${wo_subName.trim() ? " - " + wo_subName.trim() : ""}`,
+            ship_date: wItem.delivery_date,
+            ship_method: wo_deliveryMethod,
+            status: "생산중",
+            memo: wo_note.trim() || null,
+            work_order_item_id: wItem.id,
+          })
+          .select("id")
+          .single();
+        if (oErr) return setMsg("주문 생성 실패: " + oErr.message);
+        const orderId = (createdOrder as any).id as string;
+
+        const subItems = (wItem.sub_items ?? []) as WoSubItem[];
+        const orderLinesPayload = subItems
+          .filter((si) => si.name.trim() && si.qty > 0)
+          .map((si, idx) => ({
+            order_id: orderId,
+            line_no: idx + 1,
+            food_type: wo_foodType.trim() || null,
+            name: si.name.trim(),
+            qty: si.qty,
+            unit: 0,
+            unit_type: "EA",
+            pack_ea: 1,
+            actual_ea: 0,
+          }));
+        if (orderLinesPayload.length > 0) {
+          const { error: olErr } = await supabase.from("order_lines").insert(orderLinesPayload);
+          if (olErr) return setMsg("품목 생성 실패: " + olErr.message);
+        }
+        await supabase.from("work_order_items").update({ order_id: orderId }).eq("id", wItem.id);
+      }
+
+      // ⑤ 신규 주문이면 products/product_variants/product_barcodes 자동등록
+      if (!wo_isReorder) {
+        const { data: existProduct } = await supabase
+          .from("products").select("id").eq("name", wo_productName.trim()).limit(1).maybeSingle();
+        let productId: string;
+        if (existProduct?.id) {
+          productId = existProduct.id;
+        } else {
+          const { data: newProduct, error: pErr } = await supabase
+            .from("products")
+            .insert({ name: wo_productName.trim(), category: "업체", food_type: wo_foodType.trim() || "기타", default_weight_g: 0 })
+            .select("id").single();
+          if (pErr) return setMsg("품목 등록 실패: " + pErr.message);
+          productId = (newProduct as any).id;
+        }
+        const variantName = `${selectedPartner.name}${wo_subName.trim() ? "-" + wo_subName.trim() : ""}`;
+        const { data: newVariant, error: vErr } = await supabase
+          .from("product_variants")
+          .insert({ product_id: productId, variant_name: variantName, barcode: finalBarcode, pack_unit: 1, unit_type: "EA" })
+          .select("id").single();
+        if (vErr) return setMsg("규격 등록 실패: " + vErr.message);
+        const variantId = (newVariant as any).id;
+        await supabase.from("product_barcodes").insert({ variant_id: variantId, barcode: finalBarcode, is_primary: true, is_active: true });
+        await supabase.from("work_orders").update({ variant_id: variantId }).eq("id", woId);
+      }
+
+      // ⑥ 이미지 업로드
+      if (wo_imageFiles.length > 0) {
+        const uploadedUrls: string[] = [];
+        for (const file of wo_imageFiles) {
+          const ext = file.name.split(".").pop() ?? "jpg";
+          const path = `orders/${finalBarcode}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+          const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file);
+          if (!upErr) {
+            const { data: urlData } = supabase.storage.from("work-order-images").getPublicUrl(path);
+            uploadedUrls.push(urlData.publicUrl);
+          }
+        }
+        if (uploadedUrls.length > 0) {
+          await supabase.from("work_orders").update({ images: uploadedUrls }).eq("id", woId);
+        }
+      }
+
+      setMsg(`✅ 작업지시서 생성 완료! 바코드: ${finalBarcode}`);
+      resetWoForm();
+      await loadWoList();
+    } finally {
+      setWo_saving(false);
+    }
+  }
+
   function onCopyClick(r: UnifiedRow) {
     setMsg(null);
     if (r.kind === "ORDER") {
@@ -865,7 +1096,6 @@ export default function TradeClient() {
       setEAmountStr(amt > 0 ? amt.toLocaleString("ko-KR") : "");
       setELedgerMemo(r.ledger_memo ?? ""); setECounterpartyName(r.partnerName ?? ""); setEBusinessNo(r.businessNo ?? "");
       const vatAmt = Number(r.ledger_vat_amount ?? 0), supplyAmt = Number(r.ledger_supply_amount ?? 0), totalAmt = Number(r.ledger_total_amount ?? 0);
-      // ✅ 수정 모달 열 때 급여면 eVatFree 자동 true
       const resolvedCat = CATEGORIES.includes(c) ? c : "기타";
       setEVatFree(resolvedCat === "급여" ? true : (amt > 0 && vatAmt === 0 && supplyAmt === amt && totalAmt === amt));
       setESalaryEmployeeId("");
@@ -1129,77 +1359,51 @@ export default function TradeClient() {
                           {[["BANK", "입금"], ["CASH", "현금"], ["CARD", "카드"], ["ETC", "기타"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                         </select>
                       </div>
-                      {/* ✅ 수정 모달: 카테고리 버튼 - 급여 클릭 시 eVatFree 자동 설정 */}
                       <div><div className="mb-1 text-xs text-slate-600">카테고리</div>
                         <div className="flex flex-wrap gap-2">
                           {CATEGORIES.map((c) => (
-                            <button key={c} type="button"
-                              className={eCategory === c ? btnOn : btn}
-                              onClick={() => {
-                                setECategory(c);
-                                if (c === "급여") setEVatFree(true);
-                                else setEVatFree(false);
-                              }}>
+                            <button key={c} type="button" className={eCategory === c ? btnOn : btn}
+                              onClick={() => { setECategory(c); if (c === "급여") setEVatFree(true); else setEVatFree(false); }}>
                               {c}
                             </button>
                           ))}
                         </div>
                       </div>
-
                       {eCategory === "급여" ? (
                         <div className="md:col-span-3">
                           <div className="mb-1 text-xs text-slate-600">직원 선택(급여)</div>
-                          {/* ✅ 수정 모달: 직원 선택 시 업체명 자동 입력 */}
                           <select className={inp} value={eSalaryEmployeeId}
-                            onChange={(e) => {
-                              const empId = e.target.value;
-                              setESalaryEmployeeId(empId);
-                              const found = employees.find(x => x.id === empId);
-                              if (found?.name) setECounterpartyName(found.name);
-                            }}>
+                            onChange={(e) => { const empId = e.target.value; setESalaryEmployeeId(empId); const found = employees.find(x => x.id === empId); if (found?.name) setECounterpartyName(found.name); }}>
                             <option value="">직원을 선택하세요</option>
-                            {employees.map((emp) => (
-                              <option key={emp.id} value={emp.id}>{emp.name ?? "(이름없음)"}</option>
-                            ))}
+                            {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name ?? "(이름없음)"}</option>)}
                           </select>
                         </div>
                       ) : null}
-
                       <div>
                         <div className="mb-1 text-xs text-slate-600">금액(원)</div>
                         <input className={inpR} inputMode="numeric" value={eAmountStr}
                           onChange={(e) => setEAmountStr(e.target.value.replace(/[^\d,]/g, ""))}
                           onBlur={() => { const n = Number((eAmountStr || "0").replaceAll(",", "")); if (Number.isFinite(n) && n > 0) setEAmountStr(n.toLocaleString("ko-KR")); }}
                         />
-                        {/* ✅ 수정 모달: 부가세 없음 체크박스 - 급여 시 비활성화 */}
                         <div className="mt-2 flex items-center gap-2">
                           <label className={`flex items-center gap-2 text-sm ${eCategory === "급여" ? "text-slate-400 cursor-not-allowed" : "text-slate-700"}`}>
-                            <input type="checkbox" checked={eVatFree}
-                              disabled={eCategory === "급여"}
-                              onChange={(e) => eCategory !== "급여" && setEVatFree(e.target.checked)} />
+                            <input type="checkbox" checked={eVatFree} disabled={eCategory === "급여"} onChange={(e) => eCategory !== "급여" && setEVatFree(e.target.checked)} />
                             부가세 없음(총액=공급가){eCategory === "급여" && <span className="text-xs text-amber-600 ml-1">← 급여는 자동 적용</span>}
                           </label>
                         </div>
                         <div className="mt-2 grid grid-cols-2 gap-2">
-                          <div>
-                            <div className="mb-1 text-xs text-slate-600">공급가</div>
-                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{editLedgerSplit.total ? fmt(editLedgerSplit.supply) : ""}</div>
-                          </div>
-                          <div>
-                            <div className="mb-1 text-xs text-slate-600">부가세</div>
-                            {/* ✅ 수정 모달: 급여 시 부가세 0 강조 표시 */}
+                          <div><div className="mb-1 text-xs text-slate-600">공급가</div><div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{editLedgerSplit.total ? fmt(editLedgerSplit.supply) : ""}</div></div>
+                          <div><div className="mb-1 text-xs text-slate-600">부가세</div>
                             <div className={`rounded-xl border px-3 py-2 text-sm text-right tabular-nums ${eCategory === "급여" ? "border-amber-200 bg-amber-50 text-amber-700 font-semibold" : "border-slate-200 bg-slate-50"}`}>
                               {eCategory === "급여" ? "0 (비과세)" : editLedgerSplit.total ? fmt(editLedgerSplit.vat) : ""}
                             </div>
                           </div>
                         </div>
-                        <div className="mt-1 text-xs text-slate-500">※ 금액(총액)을 입력하면 공급가/부가세(10%)가 자동 분리됩니다. (부가세 없음 체크 시 총액=공급가)</div>
                       </div>
                       <div><div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div><input className={inp} value={eCounterpartyName} onChange={(e) => setECounterpartyName(e.target.value)} /></div>
                       <div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={eBusinessNo} onChange={(e) => setEBusinessNo(e.target.value)} /></div>
                       <div className="md:col-span-3"><div className="mb-1 text-xs text-slate-600">메모</div><input className={inp} value={eLedgerMemo} onChange={(e) => setELedgerMemo(e.target.value)} /></div>
                     </div>
-                    <div className="mt-2 text-xs text-slate-500">※ 방향(IN/OUT)은 카테고리로 자동 결정됩니다.</div>
                   </>
                 )}
               </div>
@@ -1276,15 +1480,264 @@ export default function TradeClient() {
 
           {/* RIGHT */}
           <div className="min-w-0 space-y-6">
-            <div className="flex gap-2">
-              {(["ORDERS", "LEDGER", "UNIFIED"] as Mode[]).map((m) => {
-                const labels: Record<Mode, string> = { ORDERS: "주문/출고", LEDGER: "금전출납", UNIFIED: "통합" };
+            {/* 탭 버튼 */}
+            <div className="flex flex-wrap gap-2">
+              {(["ORDERS", "LEDGER", "UNIFIED", "WORK_ORDER"] as Mode[]).map((m) => {
+                const labels: Record<Mode, string> = { ORDERS: "주문/출고", LEDGER: "금전출납", UNIFIED: "통합", WORK_ORDER: "📋 작업지시서" };
                 return <button key={m} className={mode === m ? btnOn : btn} onClick={() => setMode(m)}>{labels[m]}</button>;
               })}
             </div>
 
+            {/* ── 작업지시서 입력 폼 ── */}
+            {mode === "WORK_ORDER" ? (
+              <div className={`${card} p-4`}>
+                <div className="mb-4 flex items-center gap-3 flex-wrap">
+                  <div className="text-lg font-semibold">작업지시서 입력</div>
+                  <span className={pill}>{selectedPartner ? selectedPartner.name : "거래처 미선택"}</span>
+                  <div className="ml-auto flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="checkbox" checked={wo_isReorder} onChange={(e) => setWo_isReorder(e.target.checked)} />
+                      <span className={wo_isReorder ? "font-semibold text-orange-600" : "text-slate-700"}>재주문</span>
+                    </label>
+                    {wo_isReorder ? (
+                      <input className={`${inp} w-64`} placeholder="원본 작업지시서 ID (선택)" value={wo_originalId} onChange={(e) => setWo_originalId(e.target.value)} />
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* 기본정보 */}
+                <div className="mb-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">기본정보</div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">작업지시서 일자</div>
+                    <input type="date" className={inp} value={wo_orderDate} onChange={(e) => setWo_orderDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">품목명 <span className="text-red-500">*</span></div>
+                    <input className={inp} list="master-product-list" placeholder="예: 다크화이트" value={wo_productName} onChange={(e) => setWo_productName(e.target.value)} />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">서브네임</div>
+                    <input className={inp} placeholder="예: COS, 크로버" value={wo_subName} onChange={(e) => setWo_subName(e.target.value)} />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">식품유형</div>
+                    <input className={inp} list="food-types-list" placeholder="예: 화이트초콜릿" value={wo_foodType} onChange={(e) => setWo_foodType(e.target.value)} />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">규격(로고스펙)</div>
+                    <input className={inp} placeholder="예: 40x40mm" value={wo_logoSpec} onChange={(e) => setWo_logoSpec(e.target.value)} />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">두께</div>
+                    <select className={inp} value={wo_thickness} onChange={(e) => setWo_thickness(e.target.value)}>
+                      {["2mm", "3mm", "5mm", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* 납품정보 */}
+                <div className="mt-4 mb-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">납품정보</div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">납품방법</div>
+                    <select className={inp} value={wo_deliveryMethod} onChange={(e) => setWo_deliveryMethod(e.target.value)}>
+                      {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">포장방법</div>
+                    <select className={inp} value={wo_packagingType} onChange={(e) => setWo_packagingType(e.target.value)}>
+                      {["트레이", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  {wo_packagingType === "트레이" ? (
+                    <div>
+                      <div className="mb-1 text-xs text-slate-600">트레이 구수</div>
+                      <select className={inp} value={wo_traySlot} onChange={(e) => setWo_traySlot(e.target.value)}>
+                        {["정사각20구", "직사각20구", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
+                  ) : null}
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">포장단위</div>
+                    <select className={inp} value={wo_packageUnit} onChange={(e) => setWo_packageUnit(e.target.value)}>
+                      {["100ea", "200ea", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">성형틀 장당 생산수</div>
+                    <input className={inpR} inputMode="numeric" placeholder="예: 52" value={wo_moldPerSheet}
+                      onChange={(e) => setWo_moldPerSheet(e.target.value.replace(/[^\d]/g, ""))} />
+                  </div>
+                </div>
+
+                {/* 납기일별 주문 */}
+                <div className="mt-4 mb-2 flex items-center justify-between">
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">납기일별 주문</div>
+                  <button className={btn} onClick={() => setWo_items((prev) => [...prev, {
+                    id: crypto.randomUUID(), delivery_date: todayYMD(), sub_items: [{ name: "", qty: 0 }], order_qty: 0
+                  }])}>+ 납기일 추가</button>
+                </div>
+                <div className="space-y-3">
+                  {wo_items.map((item, itemIdx) => (
+                    <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="mb-3 flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-slate-600">납기일</span>
+                        <input type="date" className={`${inp} w-44`} value={item.delivery_date}
+                          onChange={(e) => setWo_items((prev) => prev.map((x, i) => i === itemIdx ? { ...x, delivery_date: e.target.value } : x))} />
+                        <div className="ml-auto flex items-center gap-3">
+                          <span className="text-xs text-slate-500">
+                            합계: <span className="font-bold tabular-nums text-blue-700">
+                              {item.sub_items.reduce((s, si) => s + (Number(si.qty) || 0), 0).toLocaleString("ko-KR")}개
+                            </span>
+                          </span>
+                          {wo_items.length > 1 ? (
+                            <button className={btn} onClick={() => setWo_items((prev) => prev.filter((_, i) => i !== itemIdx))}>납기일 삭제</button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {item.sub_items.map((si, siIdx) => (
+                          <div key={siIdx} className="grid grid-cols-[1fr_130px_44px] gap-2">
+                            <input className={inp} placeholder="학교명/제품명 (예: 삼광초, 크로버)" value={si.name}
+                              onChange={(e) => setWo_items((prev) => prev.map((x, i) => i === itemIdx
+                                ? { ...x, sub_items: x.sub_items.map((s, j) => j === siIdx ? { ...s, name: e.target.value } : s) }
+                                : x))} />
+                            <input className={inpR} inputMode="numeric" placeholder="수량"
+                              value={si.qty ? si.qty.toLocaleString("ko-KR") : ""}
+                              onChange={(e) => {
+                                const v = toInt(e.target.value.replace(/[^\d,]/g, ""));
+                                setWo_items((prev) => prev.map((x, i) => i === itemIdx
+                                  ? { ...x, sub_items: x.sub_items.map((s, j) => j === siIdx ? { ...s, qty: v } : s) }
+                                  : x));
+                              }} />
+                            <button className={btn} onClick={() => setWo_items((prev) => prev.map((x, i) => i === itemIdx
+                              ? { ...x, sub_items: x.sub_items.filter((_, j) => j !== siIdx) }
+                              : x))}>✕</button>
+                          </div>
+                        ))}
+                        <button className={`${btn} text-xs`} onClick={() => setWo_items((prev) => prev.map((x, i) => i === itemIdx
+                          ? { ...x, sub_items: [...x.sub_items, { name: "", qty: 0 }] }
+                          : x))}>+ 항목 추가</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 비고/참고사항 */}
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">비고</div>
+                    <input className={inp} placeholder="비고" value={wo_note} onChange={(e) => setWo_note(e.target.value)} />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-600">참고사항</div>
+                    <input className={inp} placeholder="참고사항" value={wo_referenceNote} onChange={(e) => setWo_referenceNote(e.target.value)} />
+                  </div>
+                </div>
+
+                {/* 이미지 업로드 */}
+                <div className="mt-4">
+                  <div className="mb-1 text-xs text-slate-600">인쇄 디자인 이미지 (여러 장 선택 가능)</div>
+                  <input type="file" accept="image/*" multiple className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700"
+                    onChange={(e) => setWo_imageFiles(Array.from(e.target.files ?? []))} />
+                  {wo_imageFiles.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {wo_imageFiles.map((f, i) => (
+                        <div key={i} className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700">
+                          🖼 {f.name}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* 저장/초기화 버튼 */}
+                <div className="mt-5 flex items-center justify-end gap-3">
+                  <button className={btn} onClick={resetWoForm}>초기화</button>
+                  <button className={btnOn} onClick={createWorkOrder} disabled={wo_saving}>
+                    {wo_saving ? "저장 중..." : "✅ 작업지시서 생성"}
+                  </button>
+                </div>
+
+                {/* 작업지시서 목록 */}
+                {selectedPartner ? (
+                  <div className="mt-6 border-t border-slate-200 pt-5">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="text-sm font-semibold text-slate-700">
+                        {selectedPartner.name} 작업지시서 (최근 50건)
+                      </div>
+                      <button className={btn} onClick={loadWoList}>{wo_listLoading ? "로딩..." : "새로고침"}</button>
+                    </div>
+                    {wo_list.length === 0 ? (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500 text-center">
+                        작업지시서가 없습니다.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                        <table className="w-full table-fixed text-sm">
+                          <colgroup>
+                            <col style={{ width: "150px" }} />
+                            <col style={{ width: "160px" }} />
+                            <col style={{ width: "110px" }} />
+                            <col style={{ width: "110px" }} />
+                            <col style={{ width: "100px" }} />
+                            <col style={{ width: "80px" }} />
+                            <col style={{ width: "60px" }} />
+                            <col style={{ width: "60px" }} />
+                            <col style={{ width: "60px" }} />
+                            <col style={{ width: "60px" }} />
+                          </colgroup>
+                          <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                            <tr>
+                              <th className="px-3 py-2 text-left">바코드</th>
+                              <th className="px-3 py-2 text-left">품목명</th>
+                              <th className="px-3 py-2 text-left">서브네임</th>
+                              <th className="px-3 py-2 text-left">일자</th>
+                              <th className="px-3 py-2 text-left">상태</th>
+                              <th className="px-3 py-2 text-left">납품방법</th>
+                              <th className="px-3 py-2 text-center">전사</th>
+                              <th className="px-3 py-2 text-center">검수</th>
+                              <th className="px-3 py-2 text-center">생산</th>
+                              <th className="px-3 py-2 text-center">입력</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {wo_list.map((wo) => (
+                              <tr key={wo.id} className="border-t border-slate-200 bg-white hover:bg-slate-50">
+                                <td className="px-3 py-2 font-mono text-xs text-slate-600">{wo.barcode_no}</td>
+                                <td className="px-3 py-2 font-semibold">{wo.product_name}</td>
+                                <td className="px-3 py-2 text-slate-600">{wo.sub_name ?? ""}</td>
+                                <td className="px-3 py-2 tabular-nums text-xs">{wo.order_date}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${wo.status === "완료" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                                    {wo.is_reorder ? "🔄 " : ""}{wo.status}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-xs text-slate-600">{wo.delivery_method ?? ""}</td>
+                                <td className="px-3 py-2 text-center text-base">{wo.status_transfer ? "✅" : "⬜"}</td>
+                                <td className="px-3 py-2 text-center text-base">{wo.status_print_check ? "✅" : "⬜"}</td>
+                                <td className="px-3 py-2 text-center text-base">{wo.status_production ? "✅" : "⬜"}</td>
+                                <td className="px-3 py-2 text-center text-base">{wo.status_input ? "✅" : "⬜"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500 text-center">
+                    왼쪽에서 거래처를 선택하면 작업지시서 목록이 표시됩니다.
+                  </div>
+                )}
+                <Datalists />
+              </div>
+            ) : null}
+
             {/* Order input */}
-            {mode !== "LEDGER" ? (
+            {mode !== "LEDGER" && mode !== "WORK_ORDER" ? (
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center gap-3"><div className="text-lg font-semibold">주문/출고 입력</div><span className={pill}>조회대상: {targetLabel}</span></div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
@@ -1320,7 +1773,7 @@ export default function TradeClient() {
             ) : null}
 
             {/* Ledger input */}
-            {mode !== "ORDERS" ? (
+            {mode !== "ORDERS" && mode !== "WORK_ORDER" ? (
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center gap-3"><div className="text-lg font-semibold">금전출납 입력</div><span className={pill}>조회대상: {targetLabel}</span></div>
                 <div className="mb-2 flex items-center justify-end">
@@ -1333,71 +1786,47 @@ export default function TradeClient() {
                       {[["BANK", "입금"], ["CASH", "현금"], ["CARD", "카드"], ["ETC", "기타"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                   </div>
-                  {/* ✅ 신규 입력폼: 카테고리 버튼 - 급여 클릭 시 vatFree 자동 true */}
                   <div><div className="mb-1 text-xs text-slate-600">카테고리</div>
                     <div className="flex flex-wrap gap-2">
                       {CATEGORIES.map((c) => (
-                        <button key={c} type="button"
-                          className={category === c ? btnOn : btn}
-                          onClick={() => {
-                            setCategory(c);
-                            if (c !== "급여") { setSalaryEmployeeId(""); setVatFree(false); }
-                            else { setVatFree(true); }
-                          }}>
+                        <button key={c} type="button" className={category === c ? btnOn : btn}
+                          onClick={() => { setCategory(c); if (c !== "급여") { setSalaryEmployeeId(""); setVatFree(false); } else { setVatFree(true); } }}>
                           {c}
                         </button>
                       ))}
                     </div>
                   </div>
-
                   {category === "급여" ? (
                     <div className="md:col-span-3">
                       <div className="mb-1 text-xs text-slate-600">직원 선택(급여)</div>
-                      {/* ✅ 신규 입력폼: 직원 선택 시 업체명 자동 입력 */}
                       <select className={inp} value={salaryEmployeeId}
-                        onChange={(e) => {
-                          const empId = e.target.value;
-                          setSalaryEmployeeId(empId);
-                          const found = employees.find(x => x.id === empId);
-                          if (found?.name) setManualCounterpartyName(found.name);
-                        }}>
+                        onChange={(e) => { const empId = e.target.value; setSalaryEmployeeId(empId); const found = employees.find(x => x.id === empId); if (found?.name) setManualCounterpartyName(found.name); }}>
                         <option value="">직원을 선택하세요</option>
-                        {employees.map((emp) => (
-                          <option key={emp.id} value={emp.id}>{emp.name ?? "(이름없음)"}</option>
-                        ))}
+                        {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name ?? "(이름없음)"}</option>)}
                       </select>
                     </div>
                   ) : null}
-
                   <div>
                     <div className="mb-1 text-xs text-slate-600">금액(원)</div>
                     <input className={inpR} inputMode="numeric" value={amountStr}
                       onChange={(e) => setAmountStr(e.target.value.replace(/[^\d,]/g, ""))}
                       onBlur={() => { const n = Number((amountStr || "0").replaceAll(",", "")); if (Number.isFinite(n) && n > 0) setAmountStr(n.toLocaleString("ko-KR")); }}
                     />
-                    {/* ✅ 신규 입력폼: 부가세 없음 체크박스 - 급여 시 비활성화 */}
                     <div className="mt-2 flex items-center gap-2">
                       <label className={`flex items-center gap-2 text-sm ${category === "급여" ? "text-slate-400 cursor-not-allowed" : "text-slate-700"}`}>
-                        <input type="checkbox" checked={vatFree}
-                          disabled={category === "급여"}
-                          onChange={(e) => category !== "급여" && setVatFree(e.target.checked)} />
+                        <input type="checkbox" checked={vatFree} disabled={category === "급여"} onChange={(e) => category !== "급여" && setVatFree(e.target.checked)} />
                         부가세 없음(총액=공급가){category === "급여" && <span className="text-xs text-amber-600 ml-1">← 급여는 자동 적용</span>}
                       </label>
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-2">
-                      <div>
-                        <div className="mb-1 text-xs text-slate-600">공급가</div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{ledgerSplit.total ? fmt(ledgerSplit.supply) : ""}</div>
-                      </div>
-                      <div>
-                        <div className="mb-1 text-xs text-slate-600">부가세</div>
-                        {/* ✅ 신규 입력폼: 급여 시 부가세 0 강조 표시 */}
+                      <div><div className="mb-1 text-xs text-slate-600">공급가</div><div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{ledgerSplit.total ? fmt(ledgerSplit.supply) : ""}</div></div>
+                      <div><div className="mb-1 text-xs text-slate-600">부가세</div>
                         <div className={`rounded-xl border px-3 py-2 text-sm text-right tabular-nums ${category === "급여" ? "border-amber-200 bg-amber-50 text-amber-700 font-semibold" : "border-slate-200 bg-slate-50"}`}>
                           {category === "급여" ? "0 (비과세)" : ledgerSplit.total ? fmt(ledgerSplit.vat) : ""}
                         </div>
                       </div>
                     </div>
-                    <div className="mt-1 text-xs text-slate-500">※ 금액(총액)을 입력하면 공급가/부가세(10%)가 자동 분리됩니다. (부가세 없음 체크 시 총액=공급가)</div>
+                    <div className="mt-1 text-xs text-slate-500">※ 금액(총액)을 입력하면 공급가/부가세(10%)가 자동 분리됩니다.</div>
                   </div>
                   <div><div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div><input className={inp} value={manualCounterpartyName} onChange={(e) => setManualCounterpartyName(e.target.value)} placeholder="예: 쿠팡 / 이마트 / 네이버페이 / ㅇㅇ상사" /></div>
                   <div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={manualBusinessNo} onChange={(e) => setManualBusinessNo(e.target.value)} placeholder="예: 123-45-67890" /></div>
@@ -1407,99 +1836,101 @@ export default function TradeClient() {
               </div>
             ) : null}
 
-            {/* Trade history */}
-            <div className={`${card} p-4`}>
-              <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <div className="text-lg font-semibold">거래내역</div>
-                  <div className="mt-2"><span className={pill}>조회대상: {targetLabel}</span></div>
-                  <div className="mt-2 text-xs text-slate-600">표시: {mode === "ORDERS" ? "주문/출고" : mode === "LEDGER" ? "금전출납" : "통합"}{includeOpening ? " · 기초잔액 포함" : ""}</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right text-sm">
-                  <div className="text-xs text-slate-600">기간 시작 전 기초잔액</div>
-                  <div className="font-semibold tabular-nums">{fmt(openingBalance)}</div>
-                  <div className="mt-2">
-                    <div className="text-xs text-slate-600">입금 {fmt(unifiedTotals.plus)} · 출금 {fmt(unifiedTotals.minus)}</div>
-                    <div className="text-sm font-semibold tabular-nums">잔액(최신) {fmt(unifiedTotals.endBalance)}</div>
+            {/* Trade history - 작업지시서 탭에선 숨김 */}
+            {mode !== "WORK_ORDER" ? (
+              <div className={`${card} p-4`}>
+                <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="text-lg font-semibold">거래내역</div>
+                    <div className="mt-2"><span className={pill}>조회대상: {targetLabel}</span></div>
+                    <div className="mt-2 text-xs text-slate-600">표시: {mode === "ORDERS" ? "주문/출고" : mode === "LEDGER" ? "금전출납" : "통합"}{includeOpening ? " · 기초잔액 포함" : ""}</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right text-sm">
+                    <div className="text-xs text-slate-600">기간 시작 전 기초잔액</div>
+                    <div className="font-semibold tabular-nums">{fmt(openingBalance)}</div>
+                    <div className="mt-2">
+                      <div className="text-xs text-slate-600">입금 {fmt(unifiedTotals.plus)} · 출금 {fmt(unifiedTotals.minus)}</div>
+                      <div className="text-sm font-semibold tabular-nums">잔액(최신) {fmt(unifiedTotals.endBalance)}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
-                <div><div className="mb-1 text-xs text-slate-600">From</div><input type="date" className={inp} value={fromYMD} onChange={(e) => { setToTouched(false); setFromYMD(e.target.value); }} /></div>
-                <div><div className="mb-1 text-xs text-slate-600">To</div><input type="date" className={inp} value={toYMD} onChange={(e) => { setToTouched(true); setToYMD(e.target.value); }} /></div>
-                <div className="flex flex-wrap gap-2">
-                  <button className={btn} onClick={() => { setFromYMD(addDays(todayYMD(), -30)); setToYMD(todayYMD()); setToTouched(false); }}>기간 초기화</button>
-                  <button className={btnOn} onClick={loadTrades}>조회</button>
-                  <button className={includeOpening ? btnOn : btn} onClick={() => setIncludeOpening((v) => !v)}>기초잔액 포함 러닝잔액</button>
+                <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                  <div><div className="mb-1 text-xs text-slate-600">From</div><input type="date" className={inp} value={fromYMD} onChange={(e) => { setToTouched(false); setFromYMD(e.target.value); }} /></div>
+                  <div><div className="mb-1 text-xs text-slate-600">To</div><input type="date" className={inp} value={toYMD} onChange={(e) => { setToTouched(true); setToYMD(e.target.value); }} /></div>
+                  <div className="flex flex-wrap gap-2">
+                    <button className={btn} onClick={() => { setFromYMD(addDays(todayYMD(), -30)); setToYMD(todayYMD()); setToTouched(false); }}>기간 초기화</button>
+                    <button className={btnOn} onClick={loadTrades}>조회</button>
+                    <button className={includeOpening ? btnOn : btn} onClick={() => setIncludeOpening((v) => !v)}>기초잔액 포함 러닝잔액</button>
+                  </div>
                 </div>
-              </div>
-              <div className="mb-3"><input className={inp} value={tradeSearch} onChange={(e) => setTradeSearch(e.target.value)} placeholder="검색: 매입처/사업자번호/메모(제품명)/품목명/카테고리/방법" /></div>
+                <div className="mb-3"><input className={inp} value={tradeSearch} onChange={(e) => setTradeSearch(e.target.value)} placeholder="검색: 매입처/사업자번호/메모(제품명)/품목명/카테고리/방법" /></div>
 
-              <div className="rounded-2xl border border-slate-200">
-                <div ref={tradeTopScrollRef} className="overflow-x-auto"
-                  onScroll={(e) => { const top = e.currentTarget, bottom = tradeBottomScrollRef.current; if (!bottom || tradeSyncingRef.current === "BOTTOM") return; tradeSyncingRef.current = "TOP"; bottom.scrollLeft = top.scrollLeft; tradeSyncingRef.current = null; }}>
-                  <div style={{ width: TRADE_TABLE_MIN_WIDTH, height: 1 }} />
-                </div>
-                <div ref={tradeBottomScrollRef} className="max-h-[680px] overflow-x-auto overflow-y-auto"
-                  onScroll={(e) => { const bottom = e.currentTarget, top = tradeTopScrollRef.current; if (!top || tradeSyncingRef.current === "TOP") return; tradeSyncingRef.current = "BOTTOM"; top.scrollLeft = bottom.scrollLeft; tradeSyncingRef.current = null; }}>
-                  <table className="w-full table-fixed text-sm">
-                    <colgroup>
-                      <col style={{ width: "110px" }} /><col style={{ width: "180px" }} /><col style={{ width: "140px" }} />
-                      <col style={{ width: "220px" }} /><col style={{ width: "120px" }} /><col style={{ width: "90px" }} />
-                      <col style={{ width: "110px" }} /><col style={{ width: "110px" }} /><col style={{ width: "130px" }} /><col style={{ width: "220px" }} />
-                    </colgroup>
-                    <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                      <tr>
-                        <th className="px-3 py-2 text-left">날짜</th><th className="px-3 py-2 text-left">거래처</th>
-                        <th className="px-3 py-2 text-left">주문자</th><th className="px-3 py-2 text-left">적요</th>
-                        <th className="px-3 py-2 text-left">카테고리</th><th className="px-3 py-2 text-left">방법</th>
-                        <th className="sticky right-[460px] z-20 bg-slate-50 px-3 py-2 text-right">입금</th>
-                        <th className="sticky right-[350px] z-20 bg-slate-50 px-3 py-2 text-right">출금</th>
-                        <th className="sticky right-[220px] z-20 bg-slate-50 px-3 py-2 text-right">잔액</th>
-                        <th className="sticky right-0 z-30 bg-slate-50 px-3 py-2 text-center">작업</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {unifiedRows.filter((x) => {
-                        if (mode === "ORDERS") return x.kind === "ORDER";
-                        if (mode === "LEDGER") return x.kind === "LEDGER";
-                        return true;
-                      }).filter((x) => {
-                        const q = tradeSearch.trim().toLowerCase();
-                        if (!q) return true;
-                        const orderLineText = x.kind === "ORDER" ? (x.order_lines ?? []).map((l) => `${l.name ?? ""} ${l.food_type ?? ""}`).join(" ") : "";
-                        const summaryText = buildOrderSummaryText(x);
-                        return [x.partnerName, x.businessNo ?? "", x.ordererName, summaryText, x.category, x.method, x.order_title ?? "", x.ledger_memo ?? "", orderLineText].filter(Boolean).join(" ").toLowerCase().includes(q);
-                      }).map((x) => (
-                        <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
-                          <td className="px-3 py-1 font-semibold tabular-nums leading-tight">{x.date}</td>
-                          <td className="px-3 py-1 font-semibold leading-tight">{x.partnerName}</td>
-                          <td className="px-3 py-1 font-semibold leading-tight">{x.ordererName}</td>
-                          <td className="px-3 py-1 font-semibold leading-tight">{buildOrderSummaryText(x)}</td>
-                          <td className="px-3 py-1 font-semibold leading-tight">{x.category}</td>
-                          <td className="px-3 py-1 font-semibold leading-tight">{x.kind === "LEDGER" ? methodLabel(x.method) : x.method}</td>
-                          <td className="sticky right-[460px] z-10 bg-white px-3 py-1 text-right tabular-nums font-semibold text-blue-700 leading-tight">{x.inAmt ? fmt(x.inAmt) : ""}</td>
-                          <td className="sticky right-[350px] z-10 bg-white px-3 py-1 text-right tabular-nums font-semibold text-red-600 leading-tight">{x.outAmt ? fmt(x.outAmt) : ""}</td>
-                          <td className="sticky right-[220px] z-10 bg-white px-3 py-1 text-right tabular-nums font-semibold leading-tight">{fmt(x.balance)}</td>
-                          <td className="sticky right-0 z-20 bg-white px-2 py-1">
-                            <div className="grid grid-cols-2 gap-1">
-                              <button className={miniBtn} onClick={() => onCopyClick(x)}>복사</button>
-                              <button className={miniBtn} onClick={() => onMemoClick(x)}>메모</button>
-                              <button className={miniBtn} onClick={() => openEdit(x)}>수정</button>
-                              <button className={miniBtn} onClick={() => deleteTradeRow(x)}>삭제</button>
-                            </div>
-                          </td>
+                <div className="rounded-2xl border border-slate-200">
+                  <div ref={tradeTopScrollRef} className="overflow-x-auto"
+                    onScroll={(e) => { const top = e.currentTarget, bottom = tradeBottomScrollRef.current; if (!bottom || tradeSyncingRef.current === "BOTTOM") return; tradeSyncingRef.current = "TOP"; bottom.scrollLeft = top.scrollLeft; tradeSyncingRef.current = null; }}>
+                    <div style={{ width: TRADE_TABLE_MIN_WIDTH, height: 1 }} />
+                  </div>
+                  <div ref={tradeBottomScrollRef} className="max-h-[680px] overflow-x-auto overflow-y-auto"
+                    onScroll={(e) => { const bottom = e.currentTarget, top = tradeTopScrollRef.current; if (!top || tradeSyncingRef.current === "TOP") return; tradeSyncingRef.current = "BOTTOM"; top.scrollLeft = bottom.scrollLeft; tradeSyncingRef.current = null; }}>
+                    <table className="w-full table-fixed text-sm">
+                      <colgroup>
+                        <col style={{ width: "110px" }} /><col style={{ width: "180px" }} /><col style={{ width: "140px" }} />
+                        <col style={{ width: "220px" }} /><col style={{ width: "120px" }} /><col style={{ width: "90px" }} />
+                        <col style={{ width: "110px" }} /><col style={{ width: "110px" }} /><col style={{ width: "130px" }} /><col style={{ width: "220px" }} />
+                      </colgroup>
+                      <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                        <tr>
+                          <th className="px-3 py-2 text-left">날짜</th><th className="px-3 py-2 text-left">거래처</th>
+                          <th className="px-3 py-2 text-left">주문자</th><th className="px-3 py-2 text-left">적요</th>
+                          <th className="px-3 py-2 text-left">카테고리</th><th className="px-3 py-2 text-left">방법</th>
+                          <th className="sticky right-[460px] z-20 bg-slate-50 px-3 py-2 text-right">입금</th>
+                          <th className="sticky right-[350px] z-20 bg-slate-50 px-3 py-2 text-right">출금</th>
+                          <th className="sticky right-[220px] z-20 bg-slate-50 px-3 py-2 text-right">잔액</th>
+                          <th className="sticky right-0 z-30 bg-slate-50 px-3 py-2 text-center">작업</th>
                         </tr>
-                      ))}
-                      {unifiedRows.length === 0 ? (
-                        <tr><td colSpan={10} className="bg-white px-4 py-4 text-sm text-slate-500">거래내역이 없습니다. (기간/거래처/모드 필터를 확인하세요)</td></tr>
-                      ) : null}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {unifiedRows.filter((x) => {
+                          if (mode === "ORDERS") return x.kind === "ORDER";
+                          if (mode === "LEDGER") return x.kind === "LEDGER";
+                          return true;
+                        }).filter((x) => {
+                          const q = tradeSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          const orderLineText = x.kind === "ORDER" ? (x.order_lines ?? []).map((l) => `${l.name ?? ""} ${l.food_type ?? ""}`).join(" ") : "";
+                          const summaryText = buildOrderSummaryText(x);
+                          return [x.partnerName, x.businessNo ?? "", x.ordererName, summaryText, x.category, x.method, x.order_title ?? "", x.ledger_memo ?? "", orderLineText].filter(Boolean).join(" ").toLowerCase().includes(q);
+                        }).map((x) => (
+                          <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
+                            <td className="px-3 py-1 font-semibold tabular-nums leading-tight">{x.date}</td>
+                            <td className="px-3 py-1 font-semibold leading-tight">{x.partnerName}</td>
+                            <td className="px-3 py-1 font-semibold leading-tight">{x.ordererName}</td>
+                            <td className="px-3 py-1 font-semibold leading-tight">{buildOrderSummaryText(x)}</td>
+                            <td className="px-3 py-1 font-semibold leading-tight">{x.category}</td>
+                            <td className="px-3 py-1 font-semibold leading-tight">{x.kind === "LEDGER" ? methodLabel(x.method) : x.method}</td>
+                            <td className="sticky right-[460px] z-10 bg-white px-3 py-1 text-right tabular-nums font-semibold text-blue-700 leading-tight">{x.inAmt ? fmt(x.inAmt) : ""}</td>
+                            <td className="sticky right-[350px] z-10 bg-white px-3 py-1 text-right tabular-nums font-semibold text-red-600 leading-tight">{x.outAmt ? fmt(x.outAmt) : ""}</td>
+                            <td className="sticky right-[220px] z-10 bg-white px-3 py-1 text-right tabular-nums font-semibold leading-tight">{fmt(x.balance)}</td>
+                            <td className="sticky right-0 z-20 bg-white px-2 py-1">
+                              <div className="grid grid-cols-2 gap-1">
+                                <button className={miniBtn} onClick={() => onCopyClick(x)}>복사</button>
+                                <button className={miniBtn} onClick={() => onMemoClick(x)}>메모</button>
+                                <button className={miniBtn} onClick={() => openEdit(x)}>수정</button>
+                                <button className={miniBtn} onClick={() => deleteTradeRow(x)}>삭제</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {unifiedRows.length === 0 ? (
+                          <tr><td colSpan={10} className="bg-white px-4 py-4 text-sm text-slate-500">거래내역이 없습니다. (기간/거래처/모드 필터를 확인하세요)</td></tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
+                <div className="mt-2 text-xs text-slate-500">※ 주문/출고는 출금으로 표시됩니다. (입금/출금은 모두 양수 입력, 계산에서만 차감 처리)</div>
               </div>
-              <div className="mt-2 text-xs text-slate-500">※ 주문/출고는 출금으로 표시됩니다. (입금/출금은 모두 양수 입력, 계산에서만 차감 처리)</div>
-            </div>
+            ) : null}
           </div>
         </div>
 
