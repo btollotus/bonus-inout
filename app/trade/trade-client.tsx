@@ -2037,6 +2037,29 @@ function WoPrintModal({ wo, onClose }: { wo: WorkOrderRow; onClose: () => void }
   const items = (wo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date));
   const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
 
+  // Private 버킷 → signed URL 변환
+  const [signedImages, setSignedImages] = useState<string[]>([]);
+  useEffect(() => {
+    async function resolveImages() {
+      const rawUrls = wo.images ?? [];
+      if (rawUrls.length === 0) { setSignedImages([]); return; }
+      // URL에서 storage path 추출: /object/public/work-order-images/PATH 또는 /object/sign/work-order-images/PATH
+      const paths = rawUrls.map((url) => {
+        const m = url.match(/work-order-images\/(.+?)(\?|$)/);
+        return m ? m[1] : null;
+      }).filter(Boolean) as string[];
+      if (paths.length === 0) { setSignedImages(rawUrls); return; }
+      const { data, error } = await supabase.storage
+        .from("work-order-images")
+        .createSignedUrls(paths, 60 * 60); // 1시간
+      if (error || !data) { setSignedImages(rawUrls); return; }
+      setSignedImages(data.map((d) => d.signedUrl));
+    }
+    resolveImages();
+  }, [wo.images]);
+
+  const woWithSigned = { ...wo, images: signedImages };
+
   return (
     <>
       <style>{`
@@ -2062,13 +2085,13 @@ function WoPrintModal({ wo, onClose }: { wo: WorkOrderRow; onClose: () => void }
             </div>
           </div>
           <div className="overflow-y-auto p-4" style={{ maxHeight: "80vh" }}>
-            <WoPrintContent wo={wo} items={items} totalOrder={totalOrder} />
+            <WoPrintContent wo={woWithSigned} items={items} totalOrder={totalOrder} />
           </div>
         </div>
       </div>
 
       <div id="wo-trade-print-area">
-        <WoPrintContent wo={wo} items={items} totalOrder={totalOrder} />
+        <WoPrintContent wo={woWithSigned} items={items} totalOrder={totalOrder} />
       </div>
     </>
   );
