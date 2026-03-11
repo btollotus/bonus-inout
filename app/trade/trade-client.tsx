@@ -2043,15 +2043,15 @@ function WoPrintModal({ wo, onClose }: { wo: WorkOrderRow; onClose: () => void }
     async function resolveImages() {
       const rawUrls = wo.images ?? [];
       if (rawUrls.length === 0) { setSignedImages([]); return; }
-      // URL에서 storage path 추출: /object/public/work-order-images/PATH 또는 /object/sign/work-order-images/PATH
       const paths = rawUrls.map((url) => {
         const m = url.match(/work-order-images\/(.+?)(\?|$)/);
         return m ? m[1] : null;
       }).filter(Boolean) as string[];
       if (paths.length === 0) { setSignedImages(rawUrls); return; }
-      const { data, error } = await supabase.storage
+      const sb = createClient();
+      const { data, error } = await sb.storage
         .from("work-order-images")
-        .createSignedUrls(paths, 60 * 60); // 1시간
+        .createSignedUrls(paths, 60 * 60);
       if (error || !data) { setSignedImages(rawUrls); return; }
       setSignedImages(data.map((d) => d.signedUrl));
     }
