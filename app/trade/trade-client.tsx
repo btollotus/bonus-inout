@@ -416,6 +416,7 @@ export default function TradeClient() {
   const [orderWoThickness, setOrderWoThickness] = useState("2mm");
   const [orderWoMoldPerSheet, setOrderWoMoldPerSheet] = useState("");
   const [orderWoPackagingType, setOrderWoPackagingType] = useState("트레이");
+  const [orderWoNote, setOrderWoNote] = useState("");
   const [orderWoEnabled, setOrderWoEnabled] = useState(true); // 작업지시서 자동생성 여부
 
   // Ledger form
@@ -914,7 +915,14 @@ export default function TradeClient() {
             delivery_method: shipMethod,
             packaging_type: orderWoPackagingType || null,
             mold_per_sheet: orderWoMoldPerSheet ? Number(orderWoMoldPerSheet) : null,
-            note: orderTitle.trim() || null,
+            note: (() => {
+              const realMemo = "화이트초콜릿(이산화티타늄첨가)\n이산화티타늄 혼합. 흰색으로 만들것.\n배합비 2kg + 100g";
+              const hasReal = (foodType ?? "").includes("리얼");
+              const base = orderWoNote.trim();
+              if (hasReal && base) return `${realMemo}\n\n${base}`;
+              if (hasReal) return realMemo;
+              return base || null;
+            })(),
             status: "생산중",
             is_reorder: false,
             images: [],
@@ -968,7 +976,7 @@ export default function TradeClient() {
         setOrderTitle(""); setOrdererName("");
         setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
         setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
-        setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoMoldPerSheet("");
+        setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoMoldPerSheet(""); setOrderWoNote("");
         await loadTrades();
         return;
       }
@@ -977,7 +985,7 @@ export default function TradeClient() {
     setOrderTitle(""); setOrdererName("");
     setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
-    setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoMoldPerSheet("");
+    setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoMoldPerSheet(""); setOrderWoNote("");
     await loadTrades();
   }
 
@@ -1556,7 +1564,7 @@ export default function TradeClient() {
                           </div>
                           <div><div className="mb-1 text-xs text-slate-600">포장방법</div>
                             <select className={inp} value={eWoPackagingType} onChange={(e) => setEWoPackagingType(e.target.value)}>
-                              {["트레이", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
+                              {["트레이-정사각20구", "트레이-직사각20구", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
                             </select>
                           </div>
                           <div><div className="mb-1 text-xs text-slate-600">납품방법</div>
@@ -1812,12 +1820,32 @@ export default function TradeClient() {
                       <div>
                         <div className="mb-1 text-xs text-slate-600">포장방법</div>
                         <select className={inp} value={orderWoPackagingType} onChange={(e) => setOrderWoPackagingType(e.target.value)}>
-                          {["트레이", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
+                          {["트레이-정사각20구", "트레이-직사각20구", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
                         </select>
                       </div>
                       <div>
                         <div className="mb-1 text-xs text-slate-600">성형틀 장당 생산수</div>
                         <input className={inpR} inputMode="numeric" placeholder="예: 52" value={orderWoMoldPerSheet} onChange={(e) => setOrderWoMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} />
+                      </div>
+                      <div className="md:col-span-3">
+                        <div className="mb-1 text-xs text-slate-600">메모 (작업 특이사항)</div>
+                        <textarea
+                          className={`${inp} resize-none`}
+                          rows={2}
+                          placeholder="전달할 메모나 특이사항을 입력하세요"
+                          value={orderWoNote}
+                          onChange={(e) => setOrderWoNote(e.target.value)}
+                        />
+                        {(() => {
+                          const firstFoodType = lines[0]?.food_type ?? "";
+                          if (!firstFoodType.includes("리얼")) return null;
+                          return (
+                            <div className="mt-1 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-700">
+                              ⚠️ 식품유형에 "리얼" 포함 → 아래 내용이 메모에 자동 삽입됩니다:<br />
+                              화이트초콜릿(이산화티타늄첨가) / 이산화티타늄 혼합. 흰색으로 만들것. / 배합비 2kg + 100g
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div className="md:col-span-3">
                         <div className="mb-1 text-xs text-slate-600">인쇄 디자인 이미지 (여러 장 선택 가능)</div>
@@ -2061,22 +2089,15 @@ function WoPrintModal({ wo, onClose, employees }: {
     resolveImages();
   }, [wo.images]);
 
-  // 진행상태 담당자 드롭다운
-  const [assignee, setAssignee] = useState<{ transfer: string; printCheck: string; production: string; input: string }>({
-    transfer: "", printCheck: "", production: "", input: "",
-  });
-
+  const [assignee, setAssignee] = useState({ transfer: "", printCheck: "", production: "", input: "" });
+  const empNames = employees.map((e) => e.name ?? "").filter(Boolean);
   const woWithSigned = { ...wo, images: signedImages };
 
-  // iframe 기반 인쇄
   function doPrint() {
     const content = document.getElementById("wo-print-preview-inner");
     if (!content) return;
     const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "none";
+    iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
     document.body.appendChild(iframe);
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) return;
@@ -2095,23 +2116,28 @@ function WoPrintModal({ wo, onClose, employees }: {
       iframe.contentWindow?.print();
       setTimeout(() => document.body.removeChild(iframe), 1000);
     }, 500);
+    onClose();
   }
 
-  const empNames = employees.map((e) => e.name ?? "").filter(Boolean);
+  // 모달 열리면 signed URL 로드 완료 후 자동 인쇄 여부 체크
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    // 이미지가 없으면 바로 ready
+    if ((wo.images ?? []).length === 0) setReady(true);
+  }, [wo.images]);
+  useEffect(() => {
+    if (signedImages.length > 0) setReady(true);
+  }, [signedImages]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <div className="font-semibold">🖨️ 작업지시서 인쇄 미리보기</div>
-          <div className="flex gap-2">
-            <button className="rounded-xl border border-blue-500 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700" onClick={doPrint}>인쇄</button>
-            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-50" onClick={onClose}>닫기</button>
-          </div>
+          <div className="font-semibold">🖨️ 담당자 선택 후 인쇄</div>
+          <button className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm hover:bg-slate-50" onClick={onClose}>✕</button>
         </div>
 
-        {/* 담당자 드롭다운 */}
-        <div className="grid grid-cols-4 gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3">
+        <div className="grid grid-cols-2 gap-3 px-5 py-4">
           {([
             { key: "transfer",   label: "전사인쇄" },
             { key: "printCheck", label: "인쇄검수" },
@@ -2119,9 +2145,9 @@ function WoPrintModal({ wo, onClose, employees }: {
             { key: "input",      label: "입력완료" },
           ] as const).map(({ key, label }) => (
             <div key={key}>
-              <div className="mb-1 text-[11px] text-slate-500">{label}</div>
+              <div className="mb-1 text-xs text-slate-500">{label}</div>
               <select
-                className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none"
+                className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:border-blue-400"
                 value={assignee[key]}
                 onChange={(e) => setAssignee((prev) => ({ ...prev, [key]: e.target.value }))}
               >
@@ -2132,7 +2158,19 @@ function WoPrintModal({ wo, onClose, employees }: {
           ))}
         </div>
 
-        <div className="overflow-y-auto p-4" style={{ maxHeight: "70vh" }}>
+        <div className="flex gap-2 border-t border-slate-100 px-5 py-4">
+          <button
+            className="flex-1 rounded-xl border border-blue-500 bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            onClick={doPrint}
+            disabled={!ready}
+          >
+            {ready ? "🖨️ 인쇄" : "이미지 로딩 중..."}
+          </button>
+          <button className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm hover:bg-slate-50" onClick={onClose}>취소</button>
+        </div>
+
+        {/* 숨겨진 인쇄용 콘텐츠 */}
+        <div style={{ display: "none" }}>
           <div id="wo-print-preview-inner">
             <WoPrintContent wo={woWithSigned} items={items} totalOrder={totalOrder} assignee={assignee} />
           </div>
@@ -2251,22 +2289,16 @@ function WoPrintContent({ wo, items, totalOrder, assignee }: {
         </tbody>
       </table>
 
-      {/* 진행상태 — 직원 이름 포함 */}
+      {/* 진행상태 — 최소 셀 */}
       <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "3px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>진행상태 확인</div>
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
-        <thead>
-          <tr>
-            {statusRows.map(({ label }) => (
-              <th key={label} style={{ ...thT, width: "25%" }}>{label}</th>
-            ))}
-          </tr>
-        </thead>
         <tbody>
           <tr>
             {statusRows.map(({ label, checked, name }) => (
-              <td key={label} style={{ border: "1px solid #cbd5e1", padding: "4px 6px", textAlign: "center" }}>
-                <div style={{ fontSize: "13pt", lineHeight: 1 }}>{checked ? "✅" : "☐"}</div>
-                {name ? <div style={{ fontSize: "8pt", color: "#374151", marginTop: "2px" }}>{name}</div> : <div style={{ fontSize: "8pt", color: "#ccc", marginTop: "2px" }}>—</div>}
+              <td key={label} style={{ border: "1px solid #cbd5e1", padding: "3px 6px", textAlign: "center", width: "25%" }}>
+                <span style={{ fontSize: "8pt", color: "#555" }}>{label} </span>
+                <span style={{ fontSize: "10pt" }}>{checked ? "✅" : "☐"}</span>
+                {name ? <span style={{ fontSize: "8pt", color: "#374151" }}> {name}</span> : null}
               </td>
             ))}
           </tr>
@@ -2285,20 +2317,6 @@ function WoPrintContent({ wo, items, totalOrder, assignee }: {
           </div>
         </div>
       ) : null}
-
-      {/* 서명란 */}
-      <div style={{ marginTop: "16px", display: "flex", gap: "0", borderTop: "1px solid #cbd5e1", paddingTop: "8px" }}>
-        {["지시자", "확인자", "작업자"].map((label, i) => (
-          <div key={label} style={{ flex: 1, textAlign: "center", borderRight: i < 2 ? "1px solid #e2e8f0" : "none", padding: "0 8px" }}>
-            <div style={{ fontSize: "8.5pt", color: "#555", marginBottom: "18px" }}>{label}</div>
-            <div style={{ fontSize: "8.5pt", color: "#aaa" }}>(서명)</div>
-          </div>
-        ))}
-        <div style={{ flex: 1, textAlign: "center", padding: "0 8px" }}>
-          <div style={{ fontSize: "8.5pt", color: "#555", marginBottom: "18px" }}>출력일</div>
-          <div style={{ fontSize: "8.5pt" }}>{new Date().toLocaleDateString("ko-KR")}</div>
-        </div>
-      </div>
     </div>
   );
 }
