@@ -457,6 +457,7 @@ export default function TradeClient() {
     { id: crypto.randomUUID(), delivery_date: todayYMD(), sub_items: [{ name: "", qty: 0 }], order_qty: 0 },
   ]);
   const [wo_imageFiles, setWo_imageFiles] = useState<File[]>([]);
+  const [wo_imagePreviewUrls, setWo_imagePreviewUrls] = useState<string[]>([]);
   const [wo_saving, setWo_saving] = useState(false);
   const [wo_list, setWo_list] = useState<WorkOrderRow[]>([]);
   const [wo_listLoading, setWo_listLoading] = useState(false);
@@ -486,6 +487,7 @@ export default function TradeClient() {
   const [eWoMoldPerSheet, setEWoMoldPerSheet] = useState("");
   const [eWoNote, setEWoNote] = useState("");
   const [eWoImageFiles, setEWoImageFiles] = useState<File[]>([]);
+  const [eWoImagePreviewUrls, setEWoImagePreviewUrls] = useState<string[]>([]);
   const [eWoExistingImages, setEWoExistingImages] = useState<string[]>([]);
   // FIX 4: signed URLs for existing images in edit modal
   const [eWoExistingSignedUrls, setEWoExistingSignedUrls] = useState<string[]>([]);
@@ -1011,7 +1013,7 @@ export default function TradeClient() {
         setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
         setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
         setOrderWoPackagingType("트레이-정사각20구"); setOrderWoMoldPerSheet(""); setOrderWoNote("");
-        setWo_imageFiles([]);
+        setWo_imageFiles([]); setWo_imagePreviewUrls([]);
         // FIX 1: reset file input
         if (orderWoFileInputRef.current) orderWoFileInputRef.current.value = "";
         await loadTrades();
@@ -1024,7 +1026,7 @@ export default function TradeClient() {
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
     setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
     setOrderWoPackagingType("트레이-정사각20구"); setOrderWoMoldPerSheet(""); setOrderWoNote("");
-    setWo_imageFiles([]);
+    setWo_imageFiles([]); setWo_imagePreviewUrls([]);
     // FIX 1: reset file input
     if (orderWoFileInputRef.current) orderWoFileInputRef.current.value = "";
     await loadTrades();
@@ -1065,7 +1067,7 @@ export default function TradeClient() {
     setWo_moldPerSheet(""); setWo_note(""); setWo_referenceNote("");
     setWo_isReorder(false); setWo_originalId("");
     setWo_items([{ id: crypto.randomUUID(), delivery_date: todayYMD(), sub_items: [{ name: "", qty: 0 }], order_qty: 0 }]);
-    setWo_imageFiles([]);
+    setWo_imageFiles([]); setWo_imagePreviewUrls([]);
     setWo_linkedOrderId(null);
     setWo_linkedOrderSummary("");
   }
@@ -1274,7 +1276,7 @@ export default function TradeClient() {
       // 연결된 work_order 조회
       setEWoId(null); setEWoSubName(""); setEWoProductName(""); setEWoFoodType(""); setEWoLogoSpec("");
       setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("트레이");
-      setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoExistingImages([]); setEWoExistingSignedUrls([]);
+      setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoImagePreviewUrls([]); setEWoExistingImages([]); setEWoExistingSignedUrls([]);
       const { data: wo } = await supabase
         .from("work_orders")
         .select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,mold_per_sheet,note,images")
@@ -1658,7 +1660,11 @@ export default function TradeClient() {
                             <div className="mb-1 text-xs text-slate-600">인쇄 디자인 이미지 추가</div>
                             <input type="file" accept="image/*" multiple
                               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700"
-                              onChange={(e) => setEWoImageFiles(Array.from(e.target.files ?? []))} />
+                              onChange={(e) => {
+                                const files = Array.from(e.target.files ?? []);
+                                setEWoImageFiles(files);
+                                setEWoImagePreviewUrls(files.map((f) => URL.createObjectURL(f)));
+                              }} />
                             {/* FIX 4: 기존 이미지 - signed URL로 표시 */}
                             {eWoExistingImages.length > 0 ? (
                               <div className="mt-2">
@@ -1690,13 +1696,16 @@ export default function TradeClient() {
                                 {eWoImageFiles.map((f, i) => (
                                   <div key={i} className="group relative">
                                     <img
-                                      src={URL.createObjectURL(f)}
+                                      src={eWoImagePreviewUrls[i] ?? ""}
                                       alt={f.name}
                                       className="h-16 w-16 rounded-lg border border-blue-200 object-cover"
                                     />
                                     <button
                                       className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
-                                      onClick={() => setEWoImageFiles((prev) => prev.filter((_, j) => j !== i))}
+                                      onClick={() => {
+                                        setEWoImageFiles((prev) => prev.filter((_, j) => j !== i));
+                                        setEWoImagePreviewUrls((prev) => prev.filter((_, j) => j !== i));
+                                      }}
                                       title="이미지 삭제"
                                     >✕</button>
                                   </div>
@@ -1948,20 +1957,27 @@ export default function TradeClient() {
                           accept="image/*"
                           multiple
                           className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700"
-                          onChange={(e) => setWo_imageFiles(Array.from(e.target.files ?? []))}
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files ?? []);
+                            setWo_imageFiles(files);
+                            setWo_imagePreviewUrls(files.map((f) => URL.createObjectURL(f)));
+                          }}
                         />
                         {wo_imageFiles.length > 0 ? (
                           <div className="mt-2 flex flex-wrap gap-2">
                             {wo_imageFiles.map((f, i) => (
                               <div key={i} className="group relative">
                                 <img
-                                  src={URL.createObjectURL(f)}
+                                  src={wo_imagePreviewUrls[i] ?? ""}
                                   alt={f.name}
                                   className="h-16 w-16 rounded-lg border border-blue-200 object-cover"
                                 />
                                 <button
                                   className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
-                                  onClick={() => setWo_imageFiles((prev) => prev.filter((_, j) => j !== i))}
+                                  onClick={() => {
+                                    setWo_imageFiles((prev) => prev.filter((_, j) => j !== i));
+                                    setWo_imagePreviewUrls((prev) => prev.filter((_, j) => j !== i));
+                                  }}
                                   title="이미지 삭제"
                                 >✕</button>
                               </div>
