@@ -934,17 +934,19 @@ export default function TradeClient() {
         const woId = (createdWo as any).id as string;
         const finalBarcode = (createdWo as any).barcode_no as string;
 
-        // work_order_items: 납기일(shipDate) 1건, sub_items = cleanLines 각각
-        const subItems = cleanLines.map((l) => ({ name: l.name, qty: l.qty }));
-        const totalQty = cleanLines.reduce((s, l) => s + l.qty, 0);
-        const { data: createdWoItem, error: wiErr } = await supabase
+        // work_order_items: 품목별 1행씩 (sub_items는 빈 배열, 품목명/수량은 sub_items[0]으로 저장)
+        const woItemsPayload = cleanLines.map((l) => ({
+          work_order_id: woId,
+          delivery_date: shipDate,
+          sub_items: [{ name: l.name, qty: l.qty }],
+          order_qty: l.qty,
+        }));
+        const { data: createdWoItems, error: wiErr } = await supabase
           .from("work_order_items")
-          .insert({ work_order_id: woId, delivery_date: shipDate, sub_items: subItems, order_qty: totalQty })
-          .select("id").single();
+          .insert(woItemsPayload)
+          .select("id");
         if (wiErr) throw new Error("작업지시서 항목 생성 실패: " + wiErr.message);
-
-        // order에 work_order_item_id 연결
-        const woItemId = (createdWoItem as any).id as string;
+        const woItemId = (createdWoItems as any[])?.[0]?.id as string;
         await supabase.from("orders").update({ work_order_item_id: woItemId }).eq("id", orderId);
 
         // products/product_variants/product_barcodes 자동등록
@@ -2254,8 +2256,8 @@ function WoPrintContent({ wo, items, totalOrder }: {
         <thead>
           <tr>
             <th style={thT}>납기일</th>
-            <th style={thT}>품목 (주문수량)</th>
-            <th style={thT}>주문합계</th>
+            <th style={thT}>품목명</th>
+            <th style={thT}>주문수량</th>
             <th style={thT}>출고수량</th>
             <th style={thT}>개당중량(g)</th>
             <th style={thT}>총중량(g)</th>
@@ -2268,11 +2270,12 @@ function WoPrintContent({ wo, items, totalOrder }: {
             const uw = (item as any).unit_weight ?? null;
             const tw = aq && uw ? aq * uw : null;
             const exp = (item as any).expiry_date ?? "";
-            const subText = (item.sub_items ?? []).map((si) => `${si.name} ${f(si.qty)}개`).join(", ");
+            // sub_items[0]에서 품목명 가져오기 (품목별 1행 구조)
+            const itemName = (item.sub_items ?? [])[0]?.name || "—";
             return (
               <tr key={item.id}>
                 <td style={tdT}>{item.delivery_date}</td>
-                <td style={{ ...tdT, fontSize: "7.5pt" }}>{subText || "—"}</td>
+                <td style={{ ...tdT, fontSize: "8.5pt", fontWeight: "500" }}>{itemName}</td>
                 <td style={{ ...tdT, textAlign: "right" }}>{f(item.order_qty)}</td>
                 <td style={{ ...tdT, textAlign: "right", fontWeight: "bold" }}>{aq != null ? f(aq) : "　"}</td>
                 <td style={{ ...tdT, textAlign: "right" }}>{uw != null ? uw : "　"}</td>

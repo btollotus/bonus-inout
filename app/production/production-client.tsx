@@ -758,36 +758,21 @@ export default function ProductionClient() {
                         return (
                           <div key={item.id} className={`rounded-2xl border p-3 ${isDone ? "border-green-200 bg-green-50" : "border-slate-200 bg-slate-50"}`}>
                             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                              <div className="font-semibold text-sm">
-                                📅 납기일: <span className="tabular-nums">{item.delivery_date}</span>
+                              <div>
+                                <div className="font-semibold text-sm">
+                                  📅 납기일: <span className="tabular-nums">{item.delivery_date}</span>
+                                </div>
+                                {(item.sub_items ?? [])[0]?.name ? (
+                                  <div className="mt-0.5 text-sm font-medium text-slate-700">
+                                    {(item.sub_items[0]).name}
+                                  </div>
+                                ) : null}
                               </div>
                               <div className="flex items-center gap-2 text-xs">
                                 <span className={pill}>주문 {fmt(item.order_qty)}개</span>
                                 {isDone ? <span className="rounded-full bg-green-100 border border-green-200 px-2 py-0.5 text-xs font-semibold text-green-700">완료</span> : null}
                               </div>
                             </div>
-
-                            {/* sub_items 테이블 */}
-                            {(item.sub_items ?? []).length > 0 ? (
-                              <div className="mb-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
-                                <table className="w-full text-xs">
-                                  <thead className="bg-slate-50">
-                                    <tr>
-                                      <th className="px-3 py-1.5 text-left text-slate-500 font-medium">품목명</th>
-                                      <th className="px-3 py-1.5 text-right text-slate-500 font-medium">주문수량</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {item.sub_items.map((si, idx) => (
-                                      <tr key={idx} className="border-t border-slate-100">
-                                        <td className="px-3 py-1.5 font-medium">{si.name}</td>
-                                        <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-blue-700">{fmt(si.qty)}개</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ) : null}
 
                             {/* 생산 입력 */}
                             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -1083,8 +1068,8 @@ function WoPrintContent({
         <thead>
           <tr>
             <th style={thT}>납기일</th>
-            <th style={thT}>품목 (주문수량)</th>
-            <th style={thT}>주문합계</th>
+            <th style={thT}>품목명</th>
+            <th style={thT}>주문수량</th>
             <th style={thT}>출고수량</th>
             <th style={thT}>개당중량(g)</th>
             <th style={thT}>총중량(g)</th>
@@ -1098,11 +1083,11 @@ function WoPrintContent({
             const unitWeight = item.unit_weight ?? (pi.unit_weight ? parseFloat(pi.unit_weight) : null);
             const totalWeight = actualQty && unitWeight ? actualQty * unitWeight : null;
             const expiryDate = item.expiry_date ?? pi.expiry_date ?? "";
-            const subText = (item.sub_items ?? []).map((si) => `${si.name} ${fmt(si.qty)}개`).join(", ");
+            const itemName = (item.sub_items ?? [])[0]?.name || "—";
             return (
               <tr key={item.id}>
                 <td style={tdT}>{item.delivery_date}</td>
-                <td style={{ ...tdT, fontSize: "7.5pt" }}>{subText || "—"}</td>
+                <td style={{ ...tdT, fontSize: "8.5pt", fontWeight: "500" }}>{itemName}</td>
                 <td style={{ ...tdT, textAlign: "right" }}>{fmt(item.order_qty)}</td>
                 <td style={{ ...tdT, textAlign: "right", fontWeight: "bold" }}>{actualQty != null ? fmt(actualQty) : "　"}</td>
                 <td style={{ ...tdT, textAlign: "right" }}>{unitWeight != null ? unitWeight : "　"}</td>
