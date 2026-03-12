@@ -902,7 +902,8 @@ export default function TradeClient() {
         const { data: barcodeData, error: barcodeErr } = await supabase.rpc("generate_work_order_barcode");
         if (barcodeErr) throw new Error("바코드 생성 실패: " + barcodeErr.message);
         const barcodeNo = barcodeData as string;
-        const workOrderNo = `WO-${shipDate.replaceAll("-", "")}-${barcodeNo.slice(-4)}`;
+        const todayStr = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+        const workOrderNo = `WO-${todayStr}-${barcodeNo.slice(-4)}`;
 
         // 품목명: 첫 번째 라인 품목명 사용 (또는 메모 title)
         const productName = orderTitle.trim() || cleanLines[0]?.name || selectedPartner.name;
@@ -1135,7 +1136,8 @@ export default function TradeClient() {
       const { data: barcodeData, error: barcodeErr } = await supabase.rpc("generate_work_order_barcode");
       if (barcodeErr) return setMsg("바코드 생성 실패: " + barcodeErr.message);
       const barcodeNo = barcodeData as string;
-      const workOrderNo = `WO-${wo_orderDate.replaceAll("-", "")}-${barcodeNo.slice(-4)}`;
+      const todayStr2 = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+      const workOrderNo = `WO-${todayStr2}-${barcodeNo.slice(-4)}`;
 
       // ② work_orders INSERT
       const { data: createdWo, error: woErr } = await supabase
@@ -1396,8 +1398,18 @@ export default function TradeClient() {
     if (!window.confirm("정말 삭제하시겠습니까?\n삭제하면 복구할 수 없습니다.")) return;
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     if (r.kind === "ORDER") {
+      // 연결된 work_orders 조회 후 삭제
+      const { data: linkedWos } = await supabase
+        .from("work_orders")
+        .select("id")
+        .eq("linked_order_id", r.rawId);
+      if (linkedWos && linkedWos.length > 0) {
+        for (const wo of linkedWos) {
+          await supabase.from("work_order_items").delete().eq("work_order_id", wo.id);
+        }
+        await supabase.from("work_orders").delete().eq("linked_order_id", r.rawId);
+      }
       await supabase.from("work_order_items").update({ order_id: null }).eq("order_id", r.rawId);
-      await supabase.from("work_orders").update({ linked_order_id: null }).eq("linked_order_id", r.rawId);
       await supabase.from("order_shipments").delete().eq("order_id", r.rawId);
       await supabase.from("order_lines").delete().eq("order_id", r.rawId);
       const { error } = await supabase.from("orders").delete().eq("id", r.rawId);
@@ -2287,10 +2299,11 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, onItemNoteChange }: 
     { label: "입력완료", checked: wo.status_input },
   ];
 
+  const visibleItems = items.filter((i) => !isSpecialItem((i.sub_items ?? [])[0]?.name || ""));
   const deliveryDate = items[0]?.delivery_date ?? wo.order_date;
-  const isMultiItem = items.length > 1;
+  const isMultiItem = visibleItems.length > 1;
   const productNameDisplay = (() => {
-    const names = items.map((i) => (i.sub_items ?? [])[0]?.name).filter(Boolean) as string[];
+    const names = visibleItems.map((i) => (i.sub_items ?? [])[0]?.name).filter(Boolean) as string[];
     if (names.length === 0) return wo.product_name;
     if (names.length === 1) return names[0];
     return `${names[0]} 외 ${names.length - 1}건`;
@@ -2355,11 +2368,11 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, onItemNoteChange }: 
 
       {/* 품목별 생산 현황 섹션 헤더 */}
       <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "6px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>
-        {isMultiItem ? `품목별 생산 현황 (총 ${items.length}건)` : "생산 현황"}
+        {isMultiItem ? `품목별 생산 현황 (총 ${visibleItems.length}건)` : "생산 현황"}
       </div>
 
-      {/* FIX 3: 성형틀/인쇄제판 품목은 수량 행만 표시 (바코드·상세 내용 없음) */}
-      {items.map((item, idx) => {
+      {/* 성형틀/인쇄제판 제외하고 품목 표시 */}
+      {items.filter((item) => !isSpecialItem((item.sub_items ?? [])[0]?.name || "")).map((item, idx, arr) => {
         const aq = item.actual_qty ?? null;
         const uw = item.unit_weight ?? null;
         const tw = aq && uw ? aq * uw : null;
@@ -2367,39 +2380,9 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, onItemNoteChange }: 
         const itemName = (item.sub_items ?? [])[0]?.name || "—";
         const itemBarcode = item.barcode_no ?? null;
         const noteVal = itemNotes[item.id] ?? (item.note ?? "");
-        const special = isSpecialItem(itemName);
-
-        if (special) {
-          // 성형틀/인쇄제판: 품목명 + 주문수량만 표시, 바코드·출고수량·소비기한 없음
-          return (
-            <div key={item.id} style={{ marginBottom: idx < items.length - 1 ? "10px" : "6px" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <tbody>
-                  <tr>
-                    <td style={{
-                      border: "1px solid #94a3b8",
-                      padding: "5px 10px", width: "22%",
-                      background: "#475569", color: "#fff",
-                      fontWeight: "bold", fontSize: "10pt", verticalAlign: "middle",
-                    }}>
-                      {itemName}
-                    </td>
-                    <td style={{
-                      border: "1px solid #94a3b8", borderLeft: "none",
-                      padding: "5px 10px", background: "#f8fafc", verticalAlign: "middle",
-                      fontSize: "9pt", color: "#64748b",
-                    }}>
-                      주문수량: <strong>{f(item.order_qty)}</strong>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          );
-        }
 
         return (
-          <div key={item.id} style={{ marginBottom: idx < items.length - 1 ? "10px" : "6px" }}>
+          <div key={item.id} style={{ marginBottom: idx < arr.length - 1 ? "10px" : "6px" }}>
             {/* 품목명 + 바코드 행 (가로 배열) */}
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <tbody>
@@ -2407,9 +2390,10 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, onItemNoteChange }: 
                   {/* 품목명 */}
                   <td style={{
                     border: "1px solid #94a3b8", borderBottom: "none",
-                    padding: "5px 10px", width: "22%",
+                    padding: "5px 10px", width: "30%",
                     background: "#1e3a5f", color: "#fff",
-                    fontWeight: "bold", fontSize: "11pt", verticalAlign: "middle",
+                    fontWeight: "bold", fontSize: "9pt", verticalAlign: "middle",
+                    whiteSpace: "nowrap",
                   }}>
                     {itemName}
                   </td>
