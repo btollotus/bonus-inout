@@ -519,7 +519,7 @@ export default function TradeClient() {
   const [eWoImageFiles, setEWoImageFiles] = useState<File[]>([]);
   const [eWoImagePreviewUrls, setEWoImagePreviewUrls] = useState<string[]>([]);
   const [eWoExistingImages, setEWoExistingImages] = useState<string[]>([]);
-  // FIX 4: signed URLs for existing images in edit modal
+  const [eWoExistingSignedLoading, setEWoExistingSignedLoading] = useState(false);
   const [eWoExistingSignedUrls, setEWoExistingSignedUrls] = useState<string[]>([]);
 
   // Edit modal - ledger
@@ -1306,7 +1306,7 @@ export default function TradeClient() {
       // 연결된 work_order 조회
       setEWoId(null); setEWoSubName(""); setEWoProductName(""); setEWoFoodType(""); setEWoLogoSpec("");
       setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("트레이");
-      setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoImagePreviewUrls([]); setEWoExistingImages([]); setEWoExistingSignedUrls([]);
+      setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoImagePreviewUrls([]); setEWoExistingImages([]); setEWoExistingSignedLoading(false); setEWoExistingSignedUrls([]);
       const { data: wo } = await supabase
         .from("work_orders")
         .select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,mold_per_sheet,note,images")
@@ -1328,8 +1328,10 @@ export default function TradeClient() {
         setEWoExistingImages(rawImages);
         // FIX: convert paths to signed URLs via helper
         if (rawImages.length > 0) {
+          setEWoExistingSignedLoading(true);
           const signedUrls = await resolveSignedImageUrls(rawImages, supabase);
           setEWoExistingSignedUrls(signedUrls);
+          setEWoExistingSignedLoading(false);
         }
       }
     } else {
@@ -1692,24 +1694,28 @@ export default function TradeClient() {
                               <div className="mt-2">
                                 <div className="mb-1 text-xs text-slate-500">기존 이미지 ({eWoExistingImages.length}장)</div>
                                 <div className="flex flex-wrap gap-2">
-                                  {eWoExistingImages.map((_, i) => (
-                                    <div key={i} className="group relative">
-                                      <img
-                                        src={eWoExistingSignedUrls[i] ?? ""}
-                                        alt=""
-                                        className="h-16 w-16 rounded-lg border border-slate-200 object-cover"
-                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                                      />
-                                      <button
-                                        className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
-                                        onClick={() => {
-                                          setEWoExistingImages((prev) => prev.filter((_, j) => j !== i));
-                                          setEWoExistingSignedUrls((prev) => prev.filter((_, j) => j !== i));
-                                        }}
-                                        title="이미지 삭제"
-                                      >✕</button>
-                                    </div>
-                                  ))}
+                                  {eWoExistingSignedLoading ? (
+                                    <div className="text-xs text-slate-400 py-2">이미지 로딩 중...</div>
+                                  ) : (
+                                    eWoExistingImages.map((_, i) => (
+                                      <div key={i} className="group relative">
+                                        <img
+                                          src={eWoExistingSignedUrls[i] ?? ""}
+                                          alt=""
+                                          className="h-16 w-16 rounded-lg border border-slate-200 object-cover"
+                                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                                        />
+                                        <button
+                                          className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
+                                          onClick={() => {
+                                            setEWoExistingImages((prev) => prev.filter((_, j) => j !== i));
+                                            setEWoExistingSignedUrls((prev) => prev.filter((_, j) => j !== i));
+                                          }}
+                                          title="이미지 삭제"
+                                        >✕</button>
+                                      </div>
+                                    ))
+                                  )}
                                 </div>
                               </div>
                             ) : null}
@@ -2224,18 +2230,21 @@ function WoPrintModal({ wo, onClose, employees }: {
   const [saving, setSaving] = useState(false);
 
   const [signedImages, setSignedImages] = useState<string[]>([]);
+  const [imagesLoading, setImagesLoading] = useState(true);
   useEffect(() => {
     async function resolveImages() {
       const rawUrls = wo.images ?? [];
-      if (rawUrls.length === 0) { setSignedImages([]); return; }
+      if (rawUrls.length === 0) { setSignedImages([]); setImagesLoading(false); return; }
       const sb = createClient();
       const signedUrls = await resolveSignedImageUrls(rawUrls, sb);
       setSignedImages(signedUrls);
+      setImagesLoading(false);
     }
     resolveImages();
   }, [wo.images]);
 
-  const woWithSigned = { ...wo, images: signedImages };
+  // signedImages가 로드될 때까지 raw images 사용 (이미지 영역이 사라지지 않도록)
+  const woWithSigned = { ...wo, images: imagesLoading ? (wo.images ?? []) : signedImages };
 
   // 비고 저장 후 인쇄
   async function saveAndPrint() {
@@ -2317,6 +2326,7 @@ function WoPrintModal({ wo, onClose, employees }: {
               items={items}
               totalOrder={totalOrder}
               itemNotes={itemNotes}
+              imagesLoading={imagesLoading}
               onItemNoteChange={(id, val) => setItemNotes((prev) => ({ ...prev, [id]: val }))}
             />
           </div>
@@ -2332,11 +2342,12 @@ function isSpecialItem(itemName: string): boolean {
   return n.startsWith("성형틀") || n.startsWith("인쇄제판");
 }
 
-function WoPrintContent({ wo, items, totalOrder, itemNotes, onItemNoteChange }: {
+function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onItemNoteChange }: {
   wo: WorkOrderRow;
   items: WoItem[];
   totalOrder: number;
   itemNotes: Record<string, string>;
+  imagesLoading?: boolean;
   onItemNoteChange: (itemId: string, value: string) => void;
 }) {
   const f = (n: number | null | undefined) => Number(n ?? 0).toLocaleString("ko-KR");
@@ -2550,10 +2561,14 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, onItemNoteChange }: 
         <div style={{ marginBottom: "10px" }}>
           <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "4px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>인쇄 디자인 이미지</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-            {wo.images.map((url, i) => (
-              <img key={i} src={url} alt={`디자인 ${i + 1}`}
-                style={{ maxWidth: "180px", maxHeight: "180px", width: "auto", height: "auto", objectFit: "contain", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />
-            ))}
+            {imagesLoading ? (
+              <div style={{ fontSize: "8pt", color: "#94a3b8", padding: "8px" }}>이미지 로딩 중...</div>
+            ) : (
+              wo.images.map((url, i) => (
+                <img key={i} src={url} alt={`디자인 ${i + 1}`}
+                  style={{ maxWidth: "180px", maxHeight: "180px", width: "auto", height: "auto", objectFit: "contain", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />
+              ))
+            )}
           </div>
         </div>
       ) : null}
