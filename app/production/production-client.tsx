@@ -49,6 +49,10 @@ type WorkOrderRow = {
   images: string[];
   linked_order_id: string | null;
   created_at: string;
+  assignee_transfer?: string | null;
+  assignee_print_check?: string | null;
+  assignee_production?: string | null;
+  assignee_input?: string | null;
   linked_order?: { memo: string | null } | { memo: string | null }[] | null;
   work_order_items?: WoItemRow[];
 };
@@ -134,14 +138,21 @@ export default function ProductionClient() {
   const [eReferenceNote, setEReferenceNote] = useState("");
   const [eSaving, setESaving] = useState(false);
 
-  // 체크박스
+  // 체크박스 + 담당자
   const [woChecks, setWoChecks] = useState<{
     status_transfer: boolean;
     status_print_check: boolean;
     status_production: boolean;
     status_input: boolean;
+    assignee_transfer: string;
+    assignee_print_check: string;
+    assignee_production: string;
+    assignee_input: string;
   } | null>(null);
   const [checkSaving, setCheckSaving] = useState(false);
+
+  // 이미지 signed URL
+  const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
 
   // 생산 입력 form
   const [prodInputs, setProdInputs] = useState<Record<string, {
@@ -167,6 +178,7 @@ export default function ProductionClient() {
           note,reference_note,status,status_transfer,status_print_check,
           status_production,status_input,is_reorder,original_work_order_id,
           variant_id,images,linked_order_id,created_at,
+          assignee_transfer,assignee_print_check,assignee_production,assignee_input,
           work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id),
           linked_order:orders!linked_order_id(memo)
         `)
@@ -228,7 +240,28 @@ export default function ProductionClient() {
       status_print_check: wo.status_print_check,
       status_production: wo.status_production,
       status_input: wo.status_input,
+      assignee_transfer: (wo as any).assignee_transfer ?? "",
+      assignee_print_check: (wo as any).assignee_print_check ?? "",
+      assignee_production: (wo as any).assignee_production ?? "",
+      assignee_input: (wo as any).assignee_input ?? "",
     });
+    // signed URL 로드
+    setSignedImageUrls([]);
+    (async () => {
+      const rawPaths = wo.images ?? [];
+      if (rawPaths.length === 0) return;
+      const paths = rawPaths.map((v) => {
+        if (v.startsWith("http")) {
+          const m = v.match(/work-order-images\/(.+?)(\?|$)/);
+          return m ? m[1] : null;
+        }
+        return v;
+      }).filter(Boolean) as string[];
+      if (paths.length === 0) { setSignedImageUrls(rawPaths); return; }
+      const { data, error } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
+      if (!error && data) setSignedImageUrls(data.map((d) => d.signedUrl));
+      else setSignedImageUrls(rawPaths);
+    })();
     const inputs: Record<string, { actual_qty: string; unit_weight: string; expiry_date: string }> = {};
     for (const item of wo.work_order_items ?? []) {
       inputs[item.id] = {
@@ -269,7 +302,7 @@ export default function ProductionClient() {
     }
   }
 
-  // ── 체크박스 저장 ──
+  // ── 체크박스 + 담당자 저장 ──
   async function saveChecks() {
     if (!selectedWo || !woChecks) return;
     setCheckSaving(true); setMsg(null);
@@ -279,6 +312,10 @@ export default function ProductionClient() {
         status_print_check: woChecks.status_print_check,
         status_production: woChecks.status_production,
         status_input: woChecks.status_input,
+        assignee_transfer: woChecks.assignee_transfer || null,
+        assignee_print_check: woChecks.assignee_print_check || null,
+        assignee_production: woChecks.assignee_production || null,
+        assignee_input: woChecks.assignee_input || null,
         updated_at: new Date().toISOString(),
       }).eq("id", selectedWo.id);
       if (error) return setMsg(error.message);
@@ -286,6 +323,31 @@ export default function ProductionClient() {
       await loadWoList();
     } finally {
       setCheckSaving(false);
+    }
+  }
+
+  // ── 작업지시서 삭제 (ADMIN only) ──
+  async function deleteWo(woId: string) {
+    if (!isAdmin) return;
+    if (!confirm("작업지시서를 삭제하시겠습니까?\n(연결된 주문의 work_order_item_id도 초기화됩니다)")) return;
+    try {
+      // work_order_items의 order_id → null
+      await supabase.from("work_order_items").update({ order_id: null }).eq("work_order_id", woId);
+      // linked order의 work_order_item_id → null
+      const wo = woList.find((w) => w.id === woId);
+      if (wo?.linked_order_id) {
+        await supabase.from("orders").update({ work_order_item_id: null }).eq("id", wo.linked_order_id);
+      }
+      // work_order_items 삭제
+      await supabase.from("work_order_items").delete().eq("work_order_id", woId);
+      // work_orders 삭제
+      const { error } = await supabase.from("work_orders").delete().eq("id", woId);
+      if (error) return setMsg("삭제 실패: " + error.message);
+      if (selectedWo?.id === woId) setSelectedWo(null);
+      setMsg("🗑️ 작업지시서가 삭제되었습니다.");
+      await loadWoList();
+    } catch (e: any) {
+      setMsg("삭제 오류: " + (e?.message ?? e));
     }
   }
 
@@ -411,11 +473,11 @@ export default function ProductionClient() {
                   const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
                   const allItemsDone = items.length > 0 && items.every((i) => i.actual_qty && i.unit_weight && i.expiry_date);
                   return (
-                    <button
-                      key={wo.id}
-                      className={`w-full rounded-2xl border p-3 text-left transition-all ${isSelected ? "border-blue-400 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"}`}
-                      onClick={() => applySelection(wo)}
-                    >
+                    <div key={wo.id} className="relative group">
+                      <button
+                        className={`w-full rounded-2xl border p-3 text-left transition-all ${isSelected ? "border-blue-400 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"}`}
+                        onClick={() => applySelection(wo)}
+                      >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5">
@@ -467,6 +529,14 @@ export default function ProductionClient() {
                         </div>
                       </div>
                     </button>
+                      {isAdmin ? (
+                        <button
+                          className="absolute top-2 right-2 hidden group-hover:flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-500 hover:bg-red-500 hover:text-white text-xs font-bold transition-colors z-10"
+                          onClick={(e) => { e.stopPropagation(); deleteWo(wo.id); }}
+                          title="작업지시서 삭제"
+                        >✕</button>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>
@@ -614,7 +684,7 @@ export default function ProductionClient() {
                 )}
               </div>
 
-              {/* 진행상태 체크박스 카드 */}
+              {/* 진행상태 + 담당자 카드 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <div className="font-semibold text-sm">✅ 진행상태</div>
@@ -629,20 +699,30 @@ export default function ProductionClient() {
                 {woChecks ? (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {([
-                      { key: "status_transfer",    label: "전사인쇄 확인" },
-                      { key: "status_print_check", label: "인쇄검수 확인" },
-                      { key: "status_production",  label: "생산 확인" },
-                      { key: "status_input",       label: "입력 확인" },
-                    ] as const).map(({ key, label }) => (
-                      <label key={key} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${woChecks[key] ? "border-green-300 bg-green-50 text-green-800" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-green-500"
-                          checked={woChecks[key]}
-                          onChange={(e) => setWoChecks((prev) => prev ? { ...prev, [key]: e.target.checked } : prev)}
-                        />
-                        {label}
-                      </label>
+                      { key: "status_transfer",    assigneeKey: "assignee_transfer",    label: "전사인쇄" },
+                      { key: "status_print_check", assigneeKey: "assignee_print_check", label: "인쇄검수" },
+                      { key: "status_production",  assigneeKey: "assignee_production",  label: "생산완료" },
+                      { key: "status_input",       assigneeKey: "assignee_input",       label: "입력완료" },
+                    ] as const).map(({ key, assigneeKey, label }) => (
+                      <div key={key} className={`rounded-xl border px-3 py-2.5 transition-colors ${woChecks[key] ? "border-green-300 bg-green-50" : "border-slate-200 bg-white"}`}>
+                        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium mb-2">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-green-500"
+                            checked={woChecks[key]}
+                            onChange={(e) => setWoChecks((prev) => prev ? { ...prev, [key]: e.target.checked } : prev)}
+                          />
+                          <span className={woChecks[key] ? "text-green-800" : "text-slate-700"}>{label}</span>
+                        </label>
+                        <select
+                          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
+                          value={woChecks[assigneeKey] ?? ""}
+                          onChange={(e) => setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: e.target.value } : prev)}
+                        >
+                          <option value="">— 담당자 —</option>
+                          {employees.map((e) => e.name ? <option key={e.id} value={e.name}>{e.name}</option> : null)}
+                        </select>
+                      </div>
                     ))}
                   </div>
                 ) : null}
@@ -793,12 +873,14 @@ export default function ProductionClient() {
                 <div className={`${card} p-4`}>
                   <div className="mb-3 font-semibold text-sm">🖼 인쇄 디자인 이미지</div>
                   <div className="flex flex-wrap gap-3">
-                    {selectedWo.images.map((url, i) => (
+                    {signedImageUrls.length > 0 ? signedImageUrls.map((url, i) => (
                       <a key={i} href={url} target="_blank" rel="noopener noreferrer"
                         className="block rounded-xl border border-slate-200 bg-white p-1 hover:border-blue-300 transition-colors">
                         <img src={url} alt={`디자인 ${i + 1}`} className="h-32 w-32 rounded-lg object-cover" />
                       </a>
-                    ))}
+                    )) : (
+                      <div className="text-sm text-slate-400">이미지 로딩 중...</div>
+                    )}
                   </div>
                 </div>
               ) : null}
