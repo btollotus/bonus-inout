@@ -1013,12 +1013,19 @@ export default function TradeClient() {
           productId = (newProduct as any).id;
         }
         const variantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}`;
-        const { data: newVariant, error: vErr } = await supabase
-          .from("product_variants")
-          .insert({ product_id: productId, variant_name: variantName, barcode: finalBarcode, pack_unit: 1, unit_type: "EA" })
-          .select("id").single();
-        if (vErr) throw new Error("규격 등록 실패: " + vErr.message);
-        const variantId = (newVariant as any).id;
+        const { data: existVariant } = await supabase
+          .from("product_variants").select("id").eq("product_id", productId).eq("variant_name", variantName).limit(1).maybeSingle();
+        let variantId: string;
+        if (existVariant?.id) {
+          variantId = existVariant.id;
+        } else {
+          const { data: newVariant, error: vErr } = await supabase
+            .from("product_variants")
+            .insert({ product_id: productId, variant_name: variantName, barcode: finalBarcode, pack_unit: 1, unit_type: "EA" })
+            .select("id").single();
+          if (vErr) throw new Error("규격 등록 실패: " + vErr.message);
+          variantId = (newVariant as any).id;
+        }
         await supabase.from("product_barcodes").insert({ variant_id: variantId, barcode: finalBarcode, is_primary: true, is_active: true });
         await supabase.from("work_orders").update({ variant_id: variantId }).eq("id", woId);
 
@@ -1242,12 +1249,19 @@ export default function TradeClient() {
           productId = (newProduct as any).id;
         }
         const variantName = `${selectedPartner.name}${wo_subName.trim() ? "-" + wo_subName.trim() : ""}`;
-        const { data: newVariant, error: vErr } = await supabase
-          .from("product_variants")
-          .insert({ product_id: productId, variant_name: variantName, barcode: finalBarcode, pack_unit: 1, unit_type: "EA" })
-          .select("id").single();
-        if (vErr) return setMsg("규격 등록 실패: " + vErr.message);
-        const variantId = (newVariant as any).id;
+        const { data: existVariant } = await supabase
+          .from("product_variants").select("id").eq("product_id", productId).eq("variant_name", variantName).limit(1).maybeSingle();
+        let variantId: string;
+        if (existVariant?.id) {
+          variantId = existVariant.id;
+        } else {
+          const { data: newVariant, error: vErr } = await supabase
+            .from("product_variants")
+            .insert({ product_id: productId, variant_name: variantName, barcode: finalBarcode, pack_unit: 1, unit_type: "EA" })
+            .select("id").single();
+          if (vErr) return setMsg("규격 등록 실패: " + vErr.message);
+          variantId = (newVariant as any).id;
+        }
         await supabase.from("product_barcodes").insert({ variant_id: variantId, barcode: finalBarcode, is_primary: true, is_active: true });
         await supabase.from("work_orders").update({ variant_id: variantId }).eq("id", woId);
       }
