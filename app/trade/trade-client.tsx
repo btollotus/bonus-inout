@@ -1688,8 +1688,17 @@ export default function TradeClient() {
                             {eWoImageFiles.length > 0 ? (
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {eWoImageFiles.map((f, i) => (
-                                  <div key={i} className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700">
-                                    🖼 {f.name}
+                                  <div key={i} className="group relative">
+                                    <img
+                                      src={URL.createObjectURL(f)}
+                                      alt={f.name}
+                                      className="h-16 w-16 rounded-lg border border-blue-200 object-cover"
+                                    />
+                                    <button
+                                      className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
+                                      onClick={() => setEWoImageFiles((prev) => prev.filter((_, j) => j !== i))}
+                                      title="이미지 삭제"
+                                    >✕</button>
                                   </div>
                                 ))}
                               </div>
@@ -1944,8 +1953,17 @@ export default function TradeClient() {
                         {wo_imageFiles.length > 0 ? (
                           <div className="mt-2 flex flex-wrap gap-2">
                             {wo_imageFiles.map((f, i) => (
-                              <div key={i} className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700">
-                                🖼 {f.name}
+                              <div key={i} className="group relative">
+                                <img
+                                  src={URL.createObjectURL(f)}
+                                  alt={f.name}
+                                  className="h-16 w-16 rounded-lg border border-blue-200 object-cover"
+                                />
+                                <button
+                                  className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
+                                  onClick={() => setWo_imageFiles((prev) => prev.filter((_, j) => j !== i))}
+                                  title="이미지 삭제"
+                                >✕</button>
                               </div>
                             ))}
                           </div>
