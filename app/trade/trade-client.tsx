@@ -2342,7 +2342,7 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, onItemNoteChange }: 
             <td style={thS}>납품방법</td>
             <td style={tdS}>{wo.delivery_method ?? "—"}</td>
             <td style={thS}>주문일</td>
-            <td style={tdS}>{wo.order_date}</td>
+            <td style={tdS}>{wo.created_at ? wo.created_at.slice(0, 10) : wo.order_date}</td>
           </tr>
           <tr>
             <td style={thS}>지시번호</td>
