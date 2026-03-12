@@ -1013,104 +1013,152 @@ function WoPrintContent({
       </div>
 
       {/* 기본정보 */}
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
-        <tbody>
-          <tr>
-            <td style={thS}>거래처명</td>
-            <td style={tdS}>{wo.client_name}{wo.sub_name ? ` (${wo.sub_name})` : ""}</td>
-            <td style={thS}>바코드</td>
-            <td style={{ ...tdS, verticalAlign: "middle" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ fontFamily: "monospace", fontSize: "8pt" }}>{wo.barcode_no}</span>
-                {wo.barcode_no ? <svg data-barcode={wo.barcode_no} style={{ height: "32px", display: "block" }} /> : null}
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td style={thS}>품목명</td>
-            <td style={tdS}>{wo.product_name}</td>
-            <td style={thS}>식품유형</td>
-            <td style={tdS}>{wo.food_type ?? "—"}</td>
-          </tr>
-          <tr>
-            <td style={thS}>규격(로고)</td>
-            <td style={tdS}>{wo.logo_spec ?? "—"}</td>
-            <td style={thS}>두께</td>
-            <td style={tdS}>{wo.thickness ?? "—"}</td>
-          </tr>
-          <tr>
-            <td style={thS}>포장방법</td>
-            <td style={tdS}>{wo.packaging_type ?? "—"}{wo.packaging_type === "트레이" && wo.tray_slot ? ` / ${wo.tray_slot}` : ""}</td>
-            <td style={thS}>포장단위</td>
-            <td style={tdS}>{wo.package_unit ?? "—"}</td>
-          </tr>
-          <tr>
-            <td style={thS}>납품방법</td>
-            <td style={tdS}>{wo.delivery_method ?? "—"}</td>
-            <td style={thS}>성형틀/장</td>
-            <td style={tdS}>{wo.mold_per_sheet ? `${wo.mold_per_sheet}개` : "—"}</td>
-          </tr>
-          <tr>
-            <td style={thS}>주문일</td>
-            <td style={tdS}>{wo.order_date}</td>
-            <td style={thS}>지시번호</td>
-            <td style={{ ...tdS, fontFamily: "monospace", fontSize: "8pt" }}>{wo.work_order_no}</td>
-          </tr>
-          {wo.note ? <tr><td style={thS}>비고</td><td style={tdS} colSpan={3}>{wo.note}</td></tr> : null}
-          {wo.reference_note ? <tr><td style={thS}>참고사항</td><td style={tdS} colSpan={3}>{wo.reference_note}</td></tr> : null}
-        </tbody>
-      </table>
-
-      {/* 납기일별 테이블 */}
-      <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "3px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>
-        납기일별 생산 현황 (총 주문: {fmt(totalOrder)}개)
-      </div>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
-        <thead>
-          <tr>
-            <th style={thT}>납기일</th>
-            <th style={thT}>품목명</th>
-            <th style={thT}>바코드</th>
-            <th style={thT}>주문수량</th>
-            <th style={thT}>출고수량</th>
-            <th style={thT}>개당중량(g)</th>
-            <th style={thT}>총중량(g)</th>
-            <th style={thT}>소비기한</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => {
-            const pi = prodInputs[item.id] ?? { actual_qty: "", unit_weight: "", expiry_date: "" };
-            const actualQty = item.actual_qty ?? (pi.actual_qty ? parseInt(pi.actual_qty) : null);
-            const unitWeight = item.unit_weight ?? (pi.unit_weight ? parseFloat(pi.unit_weight) : null);
-            const totalWeight = actualQty && unitWeight ? actualQty * unitWeight : null;
-            const expiryDate = item.expiry_date ?? pi.expiry_date ?? "";
-            const itemName = (item.sub_items ?? [])[0]?.name || "—";
-            const itemBarcode = item.barcode_no ?? null;
-            return (
-              <tr key={item.id}>
-                <td style={tdT}>{item.delivery_date}</td>
-                <td style={{ ...tdT, fontSize: "8.5pt", fontWeight: "500" }}>{itemName}</td>
-                <td style={{ ...tdT, verticalAlign: "middle", padding: "2px 4px" }}>
-                  {itemBarcode ? (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "1px" }}>
-                      <span style={{ fontFamily: "monospace", fontSize: "7pt", color: "#555" }}>{itemBarcode}</span>
-                      <svg data-barcode={itemBarcode} style={{ height: "24px", display: "block" }} />
-                    </div>
-                  ) : "—"}
-                </td>
-                <td style={{ ...tdT, textAlign: "right" }}>{fmt(item.order_qty)}</td>
-                <td style={{ ...tdT, textAlign: "right", fontWeight: "bold" }}>{actualQty != null ? fmt(actualQty) : "　"}</td>
-                <td style={{ ...tdT, textAlign: "right" }}>{unitWeight != null ? unitWeight : "　"}</td>
-                <td style={{ ...tdT, textAlign: "right", color: totalWeight ? "#1d4ed8" : "#999" }}>{totalWeight ? fmt(Math.round(totalWeight)) : "　"}</td>
-                <td style={{ ...tdT, textAlign: "center" }}>{expiryDate || "　"}</td>
+      {(() => {
+        const deliveryDate = items[0]?.delivery_date ?? "";
+        const isMultiItem = items.length > 1;
+        const productNameDisplay = (() => {
+          const names = items.map((i) => (i.sub_items ?? [])[0]?.name).filter(Boolean) as string[];
+          if (names.length === 0) return wo.product_name;
+          if (names.length === 1) return names[0];
+          return `${names[0]} 외 ${names.length - 1}건`;
+        })();
+        return (
+          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
+            <tbody>
+              <tr>
+                <td style={thS}>거래처명</td>
+                <td style={tdS}>{wo.client_name}{wo.sub_name ? ` (${wo.sub_name})` : ""}</td>
+                {!isMultiItem ? (
+                  <>
+                    <td style={thS}>바코드</td>
+                    <td style={{ ...tdS, verticalAlign: "middle" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ fontFamily: "monospace", fontSize: "8pt" }}>{items[0]?.barcode_no ?? wo.barcode_no}</span>
+                        {(items[0]?.barcode_no ?? wo.barcode_no) ? (
+                          <svg data-barcode={items[0]?.barcode_no ?? wo.barcode_no} style={{ height: "36px", display: "block" }} />
+                        ) : null}
+                      </div>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td style={thS}>납기일</td>
+                    <td style={{ ...tdS, fontWeight: "bold", fontSize: "10pt" }}>{deliveryDate}</td>
+                  </>
+                )}
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+              <tr>
+                <td style={thS}>품목명</td>
+                <td style={tdS} colSpan={isMultiItem ? 1 : 3}>{productNameDisplay}</td>
+                {isMultiItem ? (
+                  <>
+                    <td style={thS}>총 주문</td>
+                    <td style={{ ...tdS, fontWeight: "bold" }}>{fmt(totalOrder)}개</td>
+                  </>
+                ) : null}
+              </tr>
+              <tr>
+                <td style={thS}>식품유형</td>
+                <td style={tdS}>{wo.food_type ?? "—"}</td>
+                <td style={thS}>두께</td>
+                <td style={tdS}>{wo.thickness ?? "—"}</td>
+              </tr>
+              <tr>
+                <td style={thS}>규격(로고)</td>
+                <td style={tdS}>{wo.logo_spec ?? "—"}</td>
+                <td style={thS}>포장방법</td>
+                <td style={tdS}>{wo.packaging_type ?? "—"}{wo.packaging_type === "트레이" && wo.tray_slot ? ` / ${wo.tray_slot}` : ""}</td>
+              </tr>
+              <tr>
+                <td style={thS}>포장단위</td>
+                <td style={tdS}>{wo.package_unit ?? "—"}</td>
+                <td style={thS}>성형틀/장</td>
+                <td style={tdS}>{wo.mold_per_sheet ? `${wo.mold_per_sheet}개` : "—"}</td>
+              </tr>
+              <tr>
+                <td style={thS}>납품방법</td>
+                <td style={tdS}>{wo.delivery_method ?? "—"}</td>
+                {!isMultiItem ? (
+                  <>
+                    <td style={thS}>납기일</td>
+                    <td style={tdS}>{deliveryDate}</td>
+                  </>
+                ) : (
+                  <>
+                    <td style={thS}>주문일</td>
+                    <td style={tdS}>{wo.order_date}</td>
+                  </>
+                )}
+              </tr>
+              <tr>
+                <td style={thS}>지시번호</td>
+                <td style={{ ...tdS, fontFamily: "monospace", fontSize: "8pt" }} colSpan={3}>{wo.work_order_no}</td>
+              </tr>
+              {wo.note ? <tr><td style={thS}>비고</td><td style={tdS} colSpan={3}>{wo.note}</td></tr> : null}
+              {wo.reference_note ? <tr><td style={thS}>참고사항</td><td style={tdS} colSpan={3}>{wo.reference_note}</td></tr> : null}
+            </tbody>
+          </table>
+        );
+      })()}
 
-      {/* 진행상태 — 최소 셀 */}
+      {/* 품목별 생산 현황 테이블 */}
+      {(() => {
+        const deliveryDate = items[0]?.delivery_date ?? "";
+        const isMultiItem = items.length > 1;
+        return (
+          <>
+            <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "3px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>
+              {isMultiItem
+                ? `품목별 생산 현황 (납기일: ${deliveryDate} / 총 주문: ${fmt(totalOrder)}개)`
+                : `생산 현황 (총 주문: ${fmt(totalOrder)}개)`}
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thT, width: "22%" }}>품목명</th>
+                  <th style={{ ...thT, width: "30%" }}>바코드</th>
+                  <th style={{ ...thT, width: "8%" }}>주문수량</th>
+                  <th style={{ ...thT, width: "8%" }}>출고수량</th>
+                  <th style={{ ...thT, width: "8%" }}>개당중량(g)</th>
+                  <th style={{ ...thT, width: "8%" }}>총중량(g)</th>
+                  <th style={{ ...thT, width: "10%" }}>소비기한</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => {
+                  const pi = prodInputs[item.id] ?? { actual_qty: "", unit_weight: "", expiry_date: "" };
+                  const actualQty = item.actual_qty ?? (pi.actual_qty ? parseInt(pi.actual_qty) : null);
+                  const unitWeight = item.unit_weight ?? (pi.unit_weight ? parseFloat(pi.unit_weight) : null);
+                  const totalWeight = actualQty && unitWeight ? actualQty * unitWeight : null;
+                  const expiryDate = item.expiry_date ?? pi.expiry_date ?? "";
+                  const itemName = (item.sub_items ?? [])[0]?.name || "—";
+                  const itemBarcode = item.barcode_no ?? null;
+                  return (
+                    <tr key={item.id}>
+                      <td style={{ ...tdT, fontWeight: "600", fontSize: "9pt" }}>{itemName}</td>
+                      <td style={{ ...tdT, padding: "4px 6px", verticalAlign: "middle" }}>
+                        {itemBarcode ? (
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "2px" }}>
+                            <span style={{ fontFamily: "monospace", fontSize: "7.5pt", color: "#444", letterSpacing: "0.5px" }}>{itemBarcode}</span>
+                            <svg data-barcode={itemBarcode} style={{ height: "36px", width: "100%", display: "block" }} />
+                          </div>
+                        ) : <span style={{ color: "#aaa" }}>—</span>}
+                      </td>
+                      <td style={{ ...tdT, textAlign: "right" }}>{fmt(item.order_qty)}</td>
+                      <td style={{ ...tdT, textAlign: "right", fontWeight: "bold", color: actualQty ? "#1d4ed8" : "#111" }}>{actualQty != null ? fmt(actualQty) : ""}</td>
+                      <td style={{ ...tdT, textAlign: "right" }}>{unitWeight != null ? unitWeight : ""}</td>
+                      <td style={{ ...tdT, textAlign: "right", color: totalWeight ? "#1d4ed8" : "#999" }}>{totalWeight ? fmt(Math.round(totalWeight)) : ""}</td>
+                      <td style={{ ...tdT, textAlign: "center", fontSize: "8pt" }}>{expiryDate || ""}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
+        );
+      })()}
+
+      {/* 진행상태 */}
       <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "3px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>진행상태 확인</div>
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
         <tbody>
