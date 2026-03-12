@@ -49,7 +49,7 @@ type WorkOrderRow = {
   images: string[];
   linked_order_id: string | null;
   created_at: string;
-  linked_order?: { memo: string | null } | null;
+  linked_order?: { memo: string | null } | { memo: string | null }[] | null;
   work_order_items?: WoItemRow[];
 };
 
@@ -426,9 +426,10 @@ export default function ProductionClient() {
                                 if (!isMarketplace) return name;
                                 let ordererName = "";
                                 try {
-                                  const memo = (wo.linked_order as any)?.memo;
-                                  if (memo) {
-                                    const parsed = typeof memo === "string" ? JSON.parse(memo) : memo;
+                                  const lo = wo.linked_order;
+                                  const memoRaw = Array.isArray(lo) ? lo[0]?.memo : (lo as any)?.memo;
+                                  if (memoRaw) {
+                                    const parsed = typeof memoRaw === "string" ? JSON.parse(memoRaw) : memoRaw;
                                     ordererName = parsed?.orderer_name ?? "";
                                   }
                                 } catch {}
