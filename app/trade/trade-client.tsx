@@ -1036,7 +1036,6 @@ export default function TradeClient() {
             const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
             const path = `orders/${finalBarcode}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
             const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file);
-            if (upErr) console.error("[이미지 업로드 실패]", path, upErr);
             if (!upErr) uploadedPaths.push(path);
           }
           if (uploadedPaths.length > 0) {
@@ -1273,14 +1272,10 @@ export default function TradeClient() {
           const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
           const path = `orders/${finalBarcode}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
           const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file);
-          if (upErr) console.error("[이미지 업로드 실패]", path, upErr);
           if (!upErr) uploadedPaths.push(path);
         }
-        console.log("[이미지 업로드] woId:", woId, "uploadedPaths:", uploadedPaths);
         if (uploadedPaths.length > 0) {
-          const { error: imgUpdateErr } = await supabase.from("work_orders").update({ images: uploadedPaths }).eq("id", woId);
-          if (imgUpdateErr) console.error("[이미지 DB저장 실패]", imgUpdateErr);
-          else console.log("[이미지 DB저장 성공]");
+          await supabase.from("work_orders").update({ images: uploadedPaths }).eq("id", woId);
         }
       }
 
