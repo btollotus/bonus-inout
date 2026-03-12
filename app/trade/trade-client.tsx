@@ -424,6 +424,9 @@ export default function TradeClient() {
   const [orderWoNote, setOrderWoNote] = useState("");
   const [orderWoEnabled, setOrderWoEnabled] = useState(true); // 작업지시서 자동생성 여부
 
+  // FIX 1: file input ref for reset after submit
+  const orderWoFileInputRef = useRef<HTMLInputElement | null>(null);
+
   // Ledger form
   const [entryDate, setEntryDate] = useState(todayYMD());
   const [payMethod, setPayMethod] = useState<"BANK" | "CASH" | "CARD" | "ETC">("BANK");
@@ -484,6 +487,8 @@ export default function TradeClient() {
   const [eWoNote, setEWoNote] = useState("");
   const [eWoImageFiles, setEWoImageFiles] = useState<File[]>([]);
   const [eWoExistingImages, setEWoExistingImages] = useState<string[]>([]);
+  // FIX 4: signed URLs for existing images in edit modal
+  const [eWoExistingSignedUrls, setEWoExistingSignedUrls] = useState<string[]>([]);
 
   // Edit modal - ledger
   const [eEntryDate, setEEntryDate] = useState(todayYMD());
@@ -1006,6 +1011,8 @@ export default function TradeClient() {
         setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
         setOrderWoPackagingType("트레이-정사각20구"); setOrderWoMoldPerSheet(""); setOrderWoNote("");
         setWo_imageFiles([]);
+        // FIX 1: reset file input
+        if (orderWoFileInputRef.current) orderWoFileInputRef.current.value = "";
         await loadTrades();
         return;
       }
@@ -1017,6 +1024,8 @@ export default function TradeClient() {
     setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
     setOrderWoPackagingType("트레이-정사각20구"); setOrderWoMoldPerSheet(""); setOrderWoNote("");
     setWo_imageFiles([]);
+    // FIX 1: reset file input
+    if (orderWoFileInputRef.current) orderWoFileInputRef.current.value = "";
     await loadTrades();
   }
 
@@ -1263,7 +1272,7 @@ export default function TradeClient() {
       // 연결된 work_order 조회
       setEWoId(null); setEWoSubName(""); setEWoProductName(""); setEWoFoodType(""); setEWoLogoSpec("");
       setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("트레이");
-      setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoExistingImages([]);
+      setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoExistingImages([]); setEWoExistingSignedUrls([]);
       const { data: wo } = await supabase
         .from("work_orders")
         .select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,mold_per_sheet,note,images")
@@ -1281,7 +1290,21 @@ export default function TradeClient() {
         setEWoPackagingType((wo as any).packaging_type ?? "트레이");
         setEWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
         setEWoNote((wo as any).note ?? "");
-        setEWoExistingImages((wo as any).images ?? []);
+        const rawImages: string[] = (wo as any).images ?? [];
+        setEWoExistingImages(rawImages);
+        // FIX 4: convert paths to signed URLs for display
+        if (rawImages.length > 0) {
+          const paths = rawImages.map((url) => {
+            if (url.startsWith("http")) {
+              const m = url.match(/work-order-images\/(.+?)(\?|$)/);
+              return m ? m[1] : null;
+            }
+            return url;
+          }).filter(Boolean) as string[];
+          const { data: signedData } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
+          if (signedData) setEWoExistingSignedUrls(signedData.map((d) => d.signedUrl));
+          else setEWoExistingSignedUrls(rawImages);
+        }
       }
     } else {
       setEEntryDate(r.date || todayYMD());
@@ -1619,17 +1642,25 @@ export default function TradeClient() {
                             <input type="file" accept="image/*" multiple
                               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700"
                               onChange={(e) => setEWoImageFiles(Array.from(e.target.files ?? []))} />
-                            {/* 기존 이미지 */}
+                            {/* FIX 4: 기존 이미지 - signed URL로 표시 */}
                             {eWoExistingImages.length > 0 ? (
                               <div className="mt-2">
                                 <div className="mb-1 text-xs text-slate-500">기존 이미지 ({eWoExistingImages.length}장)</div>
                                 <div className="flex flex-wrap gap-2">
-                                  {eWoExistingImages.map((url, i) => (
+                                  {eWoExistingImages.map((_, i) => (
                                     <div key={i} className="group relative">
-                                      <img src={url} alt="" className="h-16 w-16 rounded-lg border border-slate-200 object-cover" />
+                                      <img
+                                        src={eWoExistingSignedUrls[i] ?? ""}
+                                        alt=""
+                                        className="h-16 w-16 rounded-lg border border-slate-200 object-cover"
+                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                                      />
                                       <button
                                         className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
-                                        onClick={() => setEWoExistingImages((prev) => prev.filter((_, j) => j !== i))}
+                                        onClick={() => {
+                                          setEWoExistingImages((prev) => prev.filter((_, j) => j !== i));
+                                          setEWoExistingSignedUrls((prev) => prev.filter((_, j) => j !== i));
+                                        }}
                                         title="이미지 삭제"
                                       >✕</button>
                                     </div>
@@ -1884,9 +1915,15 @@ export default function TradeClient() {
                       </div>
                       <div className="md:col-span-3">
                         <div className="mb-1 text-xs text-slate-600">인쇄 디자인 이미지 (여러 장 선택 가능)</div>
-                        <input type="file" accept="image/*" multiple
+                        {/* FIX 1: ref attached to file input */}
+                        <input
+                          ref={orderWoFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          multiple
                           className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700"
-                          onChange={(e) => setWo_imageFiles(Array.from(e.target.files ?? []))} />
+                          onChange={(e) => setWo_imageFiles(Array.from(e.target.files ?? []))}
+                        />
                         {wo_imageFiles.length > 0 ? (
                           <div className="mt-2 flex flex-wrap gap-2">
                             {wo_imageFiles.map((f, i) => (
@@ -2059,7 +2096,7 @@ export default function TradeClient() {
                                   <button className={`${miniBtn} col-span-2`} onClick={async () => {
                                     const { data } = await supabase
                                       .from("work_orders")
-                                      .select("*,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id)")
+                                      .select("*,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id,barcode_no,note)")
                                       .eq("linked_order_id", x.rawId)
                                       .limit(1)
                                       .maybeSingle();
@@ -2225,6 +2262,12 @@ function WoPrintModal({ wo, onClose, employees }: {
   );
 }
 
+// FIX 3: 성형틀/인쇄제판 품목 판별 헬퍼
+function isSpecialItem(itemName: string): boolean {
+  const n = String(itemName ?? "").trim();
+  return n.startsWith("성형틀") || n.startsWith("인쇄제판");
+}
+
 function WoPrintContent({ wo, items, totalOrder, itemNotes, onItemNoteChange }: {
   wo: WorkOrderRow;
   items: WoItem[];
@@ -2315,7 +2358,7 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, onItemNoteChange }: 
         {isMultiItem ? `품목별 생산 현황 (총 ${items.length}건)` : "생산 현황"}
       </div>
 
-      {/* 품목별 블록 반복 */}
+      {/* FIX 3: 성형틀/인쇄제판 품목은 수량 행만 표시 (바코드·상세 내용 없음) */}
       {items.map((item, idx) => {
         const aq = item.actual_qty ?? null;
         const uw = item.unit_weight ?? null;
@@ -2324,6 +2367,36 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, onItemNoteChange }: 
         const itemName = (item.sub_items ?? [])[0]?.name || "—";
         const itemBarcode = item.barcode_no ?? null;
         const noteVal = itemNotes[item.id] ?? (item.note ?? "");
+        const special = isSpecialItem(itemName);
+
+        if (special) {
+          // 성형틀/인쇄제판: 품목명 + 주문수량만 표시, 바코드·출고수량·소비기한 없음
+          return (
+            <div key={item.id} style={{ marginBottom: idx < items.length - 1 ? "10px" : "6px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <tbody>
+                  <tr>
+                    <td style={{
+                      border: "1px solid #94a3b8",
+                      padding: "5px 10px", width: "22%",
+                      background: "#475569", color: "#fff",
+                      fontWeight: "bold", fontSize: "10pt", verticalAlign: "middle",
+                    }}>
+                      {itemName}
+                    </td>
+                    <td style={{
+                      border: "1px solid #94a3b8", borderLeft: "none",
+                      padding: "5px 10px", background: "#f8fafc", verticalAlign: "middle",
+                      fontSize: "9pt", color: "#64748b",
+                    }}>
+                      주문수량: <strong>{f(item.order_qty)}</strong>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          );
+        }
 
         return (
           <div key={item.id} style={{ marginBottom: idx < items.length - 1 ? "10px" : "6px" }}>
