@@ -108,6 +108,36 @@ const TRADE_TABLE_MIN_WIDTH = 1330;
 // ─────────────────────── Helpers ───────────────────────
 const fmt = (n: number | null | undefined) => Number(n ?? 0).toLocaleString("ko-KR");
 
+/**
+ * DB images 컬럼(path 또는 full URL 혼재)을 signed URL 배열로 변환
+ * createSignedUrls 는 null을 반환할 수 있으므로 하나씩 createSignedUrl 로 처리
+ */
+async function resolveSignedImageUrls(rawImages: string[], supabaseClient: ReturnType<typeof createClient>): Promise<string[]> {
+  if (!rawImages || rawImages.length === 0) return [];
+  const results: string[] = [];
+  for (const raw of rawImages) {
+    // path 추출: full URL이면 버킷명 이후 path만 꺼냄, 아니면 그대로 사용
+    let storagePath = raw;
+    if (raw.startsWith("http")) {
+      const m = raw.match(/work-order-images\/(.+?)(\?|$)/);
+      storagePath = m ? decodeURIComponent(m[1]) : raw;
+    }
+    try {
+      const { data, error } = await supabaseClient.storage
+        .from("work-order-images")
+        .createSignedUrl(storagePath, 60 * 60);
+      if (!error && data?.signedUrl) {
+        results.push(data.signedUrl);
+      } else {
+        console.warn("[이미지 signed URL 실패]", storagePath, error?.message);
+      }
+    } catch (e) {
+      console.warn("[이미지 signed URL 오류]", storagePath, e);
+    }
+  }
+  return results;
+}
+
 function formatWeight(n: number | null | undefined) {
   const v = Number(n ?? 0);
   if (!Number.isFinite(v) || v === 0) return "";
@@ -1296,18 +1326,10 @@ export default function TradeClient() {
         setEWoNote((wo as any).note ?? "");
         const rawImages: string[] = (wo as any).images ?? [];
         setEWoExistingImages(rawImages);
-        // FIX 4: convert paths to signed URLs for display
+        // FIX: convert paths to signed URLs via helper
         if (rawImages.length > 0) {
-          const paths = rawImages.map((url) => {
-            if (url.startsWith("http")) {
-              const m = url.match(/work-order-images\/(.+?)(\?|$)/);
-              return m ? m[1] : null;
-            }
-            return url;
-          }).filter(Boolean) as string[];
-          const { data: signedData } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
-          if (signedData) setEWoExistingSignedUrls(signedData.map((d) => d.signedUrl));
-          else setEWoExistingSignedUrls(rawImages);
+          const signedUrls = await resolveSignedImageUrls(rawImages, supabase);
+          setEWoExistingSignedUrls(signedUrls);
         }
       }
     } else {
@@ -2206,18 +2228,9 @@ function WoPrintModal({ wo, onClose, employees }: {
     async function resolveImages() {
       const rawUrls = wo.images ?? [];
       if (rawUrls.length === 0) { setSignedImages([]); return; }
-      const paths = rawUrls.map((url) => {
-        if (url.startsWith("http")) {
-          const m = url.match(/work-order-images\/(.+?)(\?|$)/);
-          return m ? m[1] : null;
-        }
-        return url;
-      }).filter(Boolean) as string[];
-      if (paths.length === 0) { setSignedImages(rawUrls); return; }
       const sb = createClient();
-      const { data, error } = await sb.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
-      if (error || !data) { setSignedImages(rawUrls); return; }
-      setSignedImages(data.map((d) => d.signedUrl));
+      const signedUrls = await resolveSignedImageUrls(rawUrls, sb);
+      setSignedImages(signedUrls);
     }
     resolveImages();
   }, [wo.images]);
