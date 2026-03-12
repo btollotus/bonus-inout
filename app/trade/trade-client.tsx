@@ -55,6 +55,10 @@ type WoItem = {
   delivery_date: string;
   sub_items: WoSubItem[];
   order_qty: number;
+  barcode_no?: string | null;
+  actual_qty?: number | null;
+  unit_weight?: number | null;
+  expiry_date?: string | null;
 };
 type WorkOrderRow = {
   id: string; work_order_no: string; barcode_no: string;
@@ -934,13 +938,19 @@ export default function TradeClient() {
         const woId = (createdWo as any).id as string;
         const finalBarcode = (createdWo as any).barcode_no as string;
 
-        // work_order_items: 품목별 1행씩 (sub_items는 빈 배열, 품목명/수량은 sub_items[0]으로 저장)
-        const woItemsPayload = cleanLines.map((l) => ({
-          work_order_id: woId,
-          delivery_date: shipDate,
-          sub_items: [{ name: l.name, qty: l.qty }],
-          order_qty: l.qty,
-        }));
+        // work_order_items: 품목별 1행씩 + 각각 바코드 생성
+        const woItemsPayload: any[] = [];
+        for (const l of cleanLines) {
+          const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
+          if (ibErr) throw new Error("품목 바코드 생성 실패: " + ibErr.message);
+          woItemsPayload.push({
+            work_order_id: woId,
+            delivery_date: shipDate,
+            sub_items: [{ name: l.name, qty: l.qty }],
+            order_qty: l.qty,
+            barcode_no: itemBarcode as string,
+          });
+        }
         const { data: createdWoItems, error: wiErr } = await supabase
           .from("work_order_items")
           .insert(woItemsPayload)
@@ -1089,7 +1099,7 @@ export default function TradeClient() {
     try {
       const { data, error } = await supabase
         .from("work_orders")
-        .select("id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,created_at,work_order_items(id,delivery_date,sub_items,order_qty)")
+        .select("id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,created_at,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,expiry_date)")
         .eq("client_id", selectedPartner.id)
         .order("created_at", { ascending: false })
         .limit(50);
@@ -1150,17 +1160,25 @@ export default function TradeClient() {
       const woId = (createdWo as any).id as string;
       const finalBarcode = (createdWo as any).barcode_no as string;
 
-      // ③ work_order_items INSERT (납기일별)
-      const woItemsPayload = cleanItems.map((item) => ({
-        work_order_id: woId,
-        delivery_date: item.delivery_date,
-        sub_items: item.sub_items.filter((si) => si.name.trim() && si.qty > 0),
-        order_qty: item.order_qty,
-      }));
+      // ③ work_order_items INSERT - 각 sub_item별 바코드 생성
+      const woItemsPayload: any[] = [];
+      for (const item of cleanItems) {
+        for (const si of item.sub_items.filter((si) => si.name.trim() && si.qty > 0)) {
+          const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
+          if (ibErr) return setMsg("품목 바코드 생성 실패: " + ibErr.message);
+          woItemsPayload.push({
+            work_order_id: woId,
+            delivery_date: item.delivery_date,
+            sub_items: [{ name: si.name, qty: si.qty }],
+            order_qty: si.qty,
+            barcode_no: itemBarcode as string,
+          });
+        }
+      }
       const { data: createdItems, error: itemErr } = await supabase
         .from("work_order_items")
         .insert(woItemsPayload)
-        .select("id,delivery_date,sub_items,order_qty,work_order_id");
+        .select("id,delivery_date,sub_items,order_qty,work_order_id,barcode_no");
       if (itemErr) return setMsg("납기일 항목 생성 실패: " + itemErr.message);
 
       // ④ 신규 주문이면 products/product_variants/product_barcodes 자동등록
@@ -2215,33 +2233,42 @@ function WoPrintContent({ wo, items, totalOrder }: {
           </tr>
           <tr>
             <td style={thS}>품목명</td>
-            <td style={tdS}>{wo.product_name}</td>
-            <td style={thS}>식품유형</td>
-            <td style={tdS}>{wo.food_type ?? "—"}</td>
+            <td style={tdS} colSpan={3}>
+              {(() => {
+                const names = items.map((i) => (i.sub_items ?? [])[0]?.name).filter(Boolean) as string[];
+                if (names.length === 0) return wo.product_name;
+                if (names.length === 1) return names[0];
+                return `${names[0]} 외 ${names.length - 1}건`;
+              })()}
+            </td>
           </tr>
           <tr>
-            <td style={thS}>규격(로고)</td>
-            <td style={tdS}>{wo.logo_spec ?? "—"}</td>
+            <td style={thS}>식품유형</td>
+            <td style={tdS}>{wo.food_type ?? "—"}</td>
             <td style={thS}>두께</td>
             <td style={tdS}>{wo.thickness ?? "—"}</td>
           </tr>
           <tr>
+            <td style={thS}>규격(로고)</td>
+            <td style={tdS}>{wo.logo_spec ?? "—"}</td>
             <td style={thS}>포장방법</td>
             <td style={tdS}>{wo.packaging_type ?? "—"}{wo.packaging_type === "트레이" && wo.tray_slot ? ` / ${wo.tray_slot}` : ""}</td>
-            <td style={thS}>포장단위</td>
-            <td style={tdS}>{wo.package_unit ?? "—"}</td>
           </tr>
           <tr>
-            <td style={thS}>납품방법</td>
-            <td style={tdS}>{wo.delivery_method ?? "—"}</td>
+            <td style={thS}>포장단위</td>
+            <td style={tdS}>{wo.package_unit ?? "—"}</td>
             <td style={thS}>성형틀/장</td>
             <td style={tdS}>{wo.mold_per_sheet ? `${wo.mold_per_sheet}개` : "—"}</td>
           </tr>
           <tr>
+            <td style={thS}>납품방법</td>
+            <td style={tdS}>{wo.delivery_method ?? "—"}</td>
             <td style={thS}>주문일</td>
             <td style={tdS}>{wo.order_date}</td>
+          </tr>
+          <tr>
             <td style={thS}>지시번호</td>
-            <td style={{ ...tdS, fontFamily: "monospace", fontSize: "8pt" }}>{wo.work_order_no}</td>
+            <td style={{ ...tdS, fontFamily: "monospace", fontSize: "8pt" }} colSpan={3}>{wo.work_order_no}</td>
           </tr>
           {wo.note ? <tr><td style={thS}>비고</td><td style={tdS} colSpan={3}>{wo.note}</td></tr> : null}
           {wo.reference_note ? <tr><td style={thS}>참고사항</td><td style={tdS} colSpan={3}>{wo.reference_note}</td></tr> : null}
@@ -2257,6 +2284,7 @@ function WoPrintContent({ wo, items, totalOrder }: {
           <tr>
             <th style={thT}>납기일</th>
             <th style={thT}>품목명</th>
+            <th style={thT}>바코드</th>
             <th style={thT}>주문수량</th>
             <th style={thT}>출고수량</th>
             <th style={thT}>개당중량(g)</th>
@@ -2270,12 +2298,20 @@ function WoPrintContent({ wo, items, totalOrder }: {
             const uw = (item as any).unit_weight ?? null;
             const tw = aq && uw ? aq * uw : null;
             const exp = (item as any).expiry_date ?? "";
-            // sub_items[0]에서 품목명 가져오기 (품목별 1행 구조)
             const itemName = (item.sub_items ?? [])[0]?.name || "—";
+            const itemBarcode = item.barcode_no ?? null;
             return (
               <tr key={item.id}>
                 <td style={tdT}>{item.delivery_date}</td>
                 <td style={{ ...tdT, fontSize: "8.5pt", fontWeight: "500" }}>{itemName}</td>
+                <td style={{ ...tdT, verticalAlign: "middle", padding: "2px 4px" }}>
+                  {itemBarcode ? (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "1px" }}>
+                      <span style={{ fontFamily: "monospace", fontSize: "7pt", color: "#555" }}>{itemBarcode}</span>
+                      <svg data-barcode={itemBarcode} style={{ height: "24px", display: "block" }} />
+                    </div>
+                  ) : "—"}
+                </td>
                 <td style={{ ...tdT, textAlign: "right" }}>{f(item.order_qty)}</td>
                 <td style={{ ...tdT, textAlign: "right", fontWeight: "bold" }}>{aq != null ? f(aq) : "　"}</td>
                 <td style={{ ...tdT, textAlign: "right" }}>{uw != null ? uw : "　"}</td>

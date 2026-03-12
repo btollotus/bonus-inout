@@ -12,6 +12,7 @@ type WoItemRow = {
   delivery_date: string;
   sub_items: WoSubItem[];
   order_qty: number;
+  barcode_no: string | null;
   actual_qty: number | null;
   unit_weight: number | null;
   total_weight: number | null;
@@ -179,7 +180,7 @@ export default function ProductionClient() {
           status_production,status_input,is_reorder,original_work_order_id,
           variant_id,images,linked_order_id,created_at,
           assignee_transfer,assignee_print_check,assignee_production,assignee_input,
-          work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id),
+          work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id),
           linked_order:orders!linked_order_id(memo)
         `)
         .order("created_at", { ascending: false })
@@ -1069,6 +1070,7 @@ function WoPrintContent({
           <tr>
             <th style={thT}>납기일</th>
             <th style={thT}>품목명</th>
+            <th style={thT}>바코드</th>
             <th style={thT}>주문수량</th>
             <th style={thT}>출고수량</th>
             <th style={thT}>개당중량(g)</th>
@@ -1084,10 +1086,19 @@ function WoPrintContent({
             const totalWeight = actualQty && unitWeight ? actualQty * unitWeight : null;
             const expiryDate = item.expiry_date ?? pi.expiry_date ?? "";
             const itemName = (item.sub_items ?? [])[0]?.name || "—";
+            const itemBarcode = item.barcode_no ?? null;
             return (
               <tr key={item.id}>
                 <td style={tdT}>{item.delivery_date}</td>
                 <td style={{ ...tdT, fontSize: "8.5pt", fontWeight: "500" }}>{itemName}</td>
+                <td style={{ ...tdT, verticalAlign: "middle", padding: "2px 4px" }}>
+                  {itemBarcode ? (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "1px" }}>
+                      <span style={{ fontFamily: "monospace", fontSize: "7pt", color: "#555" }}>{itemBarcode}</span>
+                      <svg data-barcode={itemBarcode} style={{ height: "24px", display: "block" }} />
+                    </div>
+                  ) : "—"}
+                </td>
                 <td style={{ ...tdT, textAlign: "right" }}>{fmt(item.order_qty)}</td>
                 <td style={{ ...tdT, textAlign: "right", fontWeight: "bold" }}>{actualQty != null ? fmt(actualQty) : "　"}</td>
                 <td style={{ ...tdT, textAlign: "right" }}>{unitWeight != null ? unitWeight : "　"}</td>
