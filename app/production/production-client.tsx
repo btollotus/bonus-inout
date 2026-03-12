@@ -123,8 +123,8 @@ export default function ProductionClient() {
 
   // 선택된 작업지시서
   const [selectedWo, setSelectedWo] = useState<WorkOrderRow | null>(null);
-  const [editBasic, setEditBasic] = useState(false);
 
+  // [수정 3] editBasic 제거 - 항상 수정 가능 상태
   // 기본정보 수정 form
   const [eSubName, setESubName] = useState("");
   const [eProductName, setEProductName] = useState("");
@@ -140,7 +140,7 @@ export default function ProductionClient() {
   const [eReferenceNote, setEReferenceNote] = useState("");
   const [eSaving, setESaving] = useState(false);
 
-  // 체크박스 + 담당자
+  // [수정 1] 진행상태 체크박스 제거, 담당자 state만 유지
   const [woChecks, setWoChecks] = useState<{
     status_transfer: boolean;
     status_print_check: boolean;
@@ -224,7 +224,6 @@ export default function ProductionClient() {
   // ── 작업지시서 선택 ──
   function applySelection(wo: WorkOrderRow, resetEdit = true) {
     setSelectedWo(wo);
-    if (resetEdit) setEditBasic(false);
     setESubName(wo.sub_name ?? "");
     setEProductName(wo.product_name ?? "");
     setEFoodType(wo.food_type ?? "");
@@ -297,23 +296,18 @@ export default function ProductionClient() {
       }).eq("id", selectedWo.id);
       if (error) return setMsg(error.message);
       setMsg("✅ 기본정보 저장 완료");
-      setEditBasic(false);
       await loadWoList();
     } finally {
       setESaving(false);
     }
   }
 
-  // ── 체크박스 + 담당자 저장 ──
+  // ── 담당자 저장 ──
   async function saveChecks() {
     if (!selectedWo || !woChecks) return;
     setCheckSaving(true); setMsg(null);
     try {
       const { error } = await supabase.from("work_orders").update({
-        status_transfer: woChecks.status_transfer,
-        status_print_check: woChecks.status_print_check,
-        status_production: woChecks.status_production,
-        status_input: woChecks.status_input,
         assignee_transfer: woChecks.assignee_transfer || null,
         assignee_print_check: woChecks.assignee_print_check || null,
         assignee_production: woChecks.assignee_production || null,
@@ -321,7 +315,7 @@ export default function ProductionClient() {
         updated_at: new Date().toISOString(),
       }).eq("id", selectedWo.id);
       if (error) return setMsg(error.message);
-      setMsg("✅ 진행상태 저장 완료");
+      setMsg("✅ 담당자 저장 완료");
       await loadWoList();
     } finally {
       setCheckSaving(false);
@@ -333,16 +327,12 @@ export default function ProductionClient() {
     if (!isAdmin) return;
     if (!confirm("작업지시서를 삭제하시겠습니까?\n(연결된 주문의 work_order_item_id도 초기화됩니다)")) return;
     try {
-      // work_order_items의 order_id → null
       await supabase.from("work_order_items").update({ order_id: null }).eq("work_order_id", woId);
-      // linked order의 work_order_item_id → null
       const wo = woList.find((w) => w.id === woId);
       if (wo?.linked_order_id) {
         await supabase.from("orders").update({ work_order_item_id: null }).eq("id", wo.linked_order_id);
       }
-      // work_order_items 삭제
       await supabase.from("work_order_items").delete().eq("work_order_id", woId);
-      // work_orders 삭제
       const { error } = await supabase.from("work_orders").delete().eq("id", woId);
       if (error) return setMsg("삭제 실패: " + error.message);
       if (selectedWo?.id === woId) setSelectedWo(null);
@@ -372,7 +362,6 @@ export default function ProductionClient() {
         if (error) return setMsg("항목 저장 실패: " + error.message);
       }
 
-      // variant_id 있으면 첫 번째 항목 unit_weight → product_variants.weight_g 업데이트
       const firstUw = toNum(prodInputs[items[0]?.id]?.unit_weight);
       if (selectedWo.variant_id && firstUw > 0) {
         await supabase.from("product_variants")
@@ -380,7 +369,6 @@ export default function ProductionClient() {
           .eq("id", selectedWo.variant_id);
       }
 
-      // 모든 항목에 actual_qty, unit_weight, expiry_date 입력 시 status → 완료
       const allDone = items.length > 0 && items.every((item) => {
         const pi = prodInputs[item.id];
         return pi && pi.actual_qty && pi.unit_weight && pi.expiry_date;
@@ -391,13 +379,31 @@ export default function ProductionClient() {
           status_production: true,
           updated_at: new Date().toISOString(),
         }).eq("id", selectedWo.id);
-        if (woChecks) setWoChecks({ ...woChecks, status_production: true });
       }
 
       setMsg(allDone ? "✅ 생산 완료! 상태가 '완료'로 변경됐습니다." : "✅ 생산 정보 저장 완료");
       await loadWoList();
     } finally {
       setProdSaving(false);
+    }
+  }
+
+  // [수정 4] 생산완료 버튼 핸들러
+  async function markProductionComplete() {
+    if (!selectedWo) return;
+    if (!confirm("생산완료 처리하시겠습니까?\n상태가 '완료'로 변경됩니다.")) return;
+    setMsg(null);
+    try {
+      const { error } = await supabase.from("work_orders").update({
+        status: "완료",
+        status_production: true,
+        updated_at: new Date().toISOString(),
+      }).eq("id", selectedWo.id);
+      if (error) return setMsg("생산완료 처리 실패: " + error.message);
+      setMsg("✅ 생산완료 처리되었습니다.");
+      await loadWoList();
+    } catch (e: any) {
+      setMsg("오류: " + (e?.message ?? e));
     }
   }
 
@@ -516,18 +522,6 @@ export default function ProductionClient() {
                         </div>
                         <div className="shrink-0 flex flex-col items-end gap-1.5">
                           <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusCls}`}>{wo.status}</span>
-                          <div className="flex gap-0.5">
-                            {([
-                              { key: "status_transfer",    label: "전" },
-                              { key: "status_print_check", label: "인" },
-                              { key: "status_production",  label: "생" },
-                              { key: "status_input",       label: "입" },
-                            ] as const).map(({ key, label }) => (
-                              <span key={key} className={`inline-flex items-center justify-center rounded text-[9px] font-bold w-4 h-4 ${(wo as any)[key] ? "bg-green-500 text-white" : "bg-slate-200 text-slate-400"}`}>
-                                {label}
-                              </span>
-                            ))}
-                          </div>
                         </div>
                       </div>
                     </button>
@@ -577,29 +571,22 @@ export default function ProductionClient() {
                 </div>
               </div>
 
-              {/* 기본정보 카드 */}
+              {/* [수정 3] 기본정보 카드 - 항상 수정 가능, 저장버튼만 표시 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <div className="font-semibold text-sm">📝 기본정보</div>
                   {isAdmin ? (
-                    editBasic ? (
-                      <div className="flex gap-2">
-                        <button className={btnSm} onClick={() => { setEditBasic(false); applySelection(selectedWo); }}>취소</button>
-                        <button
-                          className="rounded-lg border border-blue-500 bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
-                          onClick={saveBasicInfo}
-                          disabled={eSaving}
-                        >
-                          {eSaving ? "저장 중..." : "💾 저장"}
-                        </button>
-                      </div>
-                    ) : (
-                      <button className={btnSm} onClick={() => setEditBasic(true)}>✏️ 수정</button>
-                    )
+                    <button
+                      className="rounded-lg border border-blue-500 bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                      onClick={saveBasicInfo}
+                      disabled={eSaving}
+                    >
+                      {eSaving ? "저장 중..." : "💾 저장"}
+                    </button>
                   ) : null}
                 </div>
 
-                {editBasic ? (
+                {isAdmin ? (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <div>
                       <div className="mb-1 text-xs text-slate-500">품목명 *</div>
@@ -686,7 +673,7 @@ export default function ProductionClient() {
                 )}
               </div>
 
-              {/* 진행상태 + 담당자 카드 */}
+              {/* 진행상태 카드 - 체크박스 제거, 담당자만 유지 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <div className="font-semibold text-sm">✅ 진행상태</div>
@@ -706,16 +693,8 @@ export default function ProductionClient() {
                       { key: "status_production",  assigneeKey: "assignee_production",  label: "생산완료" },
                       { key: "status_input",       assigneeKey: "assignee_input",       label: "입력완료" },
                     ] as const).map(({ key, assigneeKey, label }) => (
-                      <div key={key} className={`rounded-xl border px-3 py-2.5 transition-colors ${woChecks[key] ? "border-green-300 bg-green-50" : "border-slate-200 bg-white"}`}>
-                        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium mb-2">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-green-500"
-                            checked={woChecks[key]}
-                            onChange={(e) => setWoChecks((prev) => prev ? { ...prev, [key]: e.target.checked } : prev)}
-                          />
-                          <span className={woChecks[key] ? "text-green-800" : "text-slate-700"}>{label}</span>
-                        </label>
+                      <div key={key} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                        <div className="text-xs font-medium text-slate-600 mb-2">{label}</div>
                         <select
                           className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
                           value={woChecks[assigneeKey] ?? ""}
@@ -750,6 +729,11 @@ export default function ProductionClient() {
                     {(selectedWo.work_order_items ?? [])
                       .slice()
                       .sort((a, b) => a.delivery_date.localeCompare(b.delivery_date))
+                      // [수정 2] 성형틀, 인쇄제판 항목 제외
+                      .filter((item) => {
+                        const name = (item.sub_items ?? [])[0]?.name ?? "";
+                        return !name.startsWith("성형틀") && !name.startsWith("인쇄제판");
+                      })
                       .map((item) => {
                         const pi = prodInputs[item.id] ?? { actual_qty: "", unit_weight: "", expiry_date: "" };
                         const actualQty = toInt(pi.actual_qty);
@@ -829,30 +813,7 @@ export default function ProductionClient() {
                   </div>
                 )}
 
-                {/* 생산 요약 */}
-                {(selectedWo.work_order_items ?? []).length > 0 ? (() => {
-                  const items = selectedWo.work_order_items ?? [];
-                  const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
-                  const totalActual = items.reduce((s, i) => {
-                    const pi = prodInputs[i.id];
-                    return s + (pi?.actual_qty ? toInt(pi.actual_qty) : (i.actual_qty ?? 0));
-                  }, 0);
-                  const totalWeight = items.reduce((s, i) => {
-                    const pi = prodInputs[i.id];
-                    const aq = pi?.actual_qty ? toInt(pi.actual_qty) : (i.actual_qty ?? 0);
-                    const uw = pi?.unit_weight ? toNum(pi.unit_weight) : (i.unit_weight ?? 0);
-                    return s + (aq * uw);
-                  }, 0);
-                  return (
-                    <div className="mt-4 flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                      <div>주문합계 <span className="ml-1 font-bold tabular-nums">{fmt(totalOrder)}개</span></div>
-                      <div>생산합계 <span className="ml-1 font-bold tabular-nums text-blue-700">{fmt(totalActual)}개</span></div>
-                      {totalWeight > 0 ? (
-                        <div>총중량 <span className="ml-1 font-bold tabular-nums text-purple-700">{fmt(Math.round(totalWeight))}g ({(totalWeight / 1000).toFixed(2)}kg)</span></div>
-                      ) : null}
-                    </div>
-                  );
-                })() : null}
+                {/* [수정 5] 주문합계/생산합계 제거 */}
               </div>
 
               {/* 이미지 카드 */}
@@ -871,6 +832,16 @@ export default function ProductionClient() {
                   </div>
                 </div>
               ) : null}
+
+              {/* 생산완료 버튼 - 최하단 */}
+              <div className={`${card} p-4`}>
+                <button
+                  className="w-full rounded-xl border border-green-500 bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800"
+                  onClick={markProductionComplete}
+                >
+                  ✅ 생산완료 처리
+                </button>
+              </div>
 
             </div>
           ) : (
@@ -901,7 +872,14 @@ function PrintModal({
   onClose: () => void;
   employees: { id: string; name: string | null }[];
 }) {
-  const items = (wo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date));
+  // [수정 8] 성형틀/인쇄제판 제외
+  const items = (wo.work_order_items ?? [])
+    .slice()
+    .sort((a, b) => a.delivery_date.localeCompare(b.delivery_date))
+    .filter((item) => {
+      const name = (item.sub_items ?? [])[0]?.name ?? "";
+      return !name.startsWith("성형틀") && !name.startsWith("인쇄제판");
+    });
   const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
 
   // 품목별 비고 state
@@ -1036,13 +1014,6 @@ function WoPrintContent({
   const cellBase: React.CSSProperties = { border: "1px solid #cbd5e1", fontSize: "8.5pt", verticalAlign: "middle", padding: "4px 6px" };
   const cellHead: React.CSSProperties = { ...cellBase, background: "#f1f5f9", fontWeight: "bold", fontSize: "8pt", textAlign: "center", whiteSpace: "nowrap" };
 
-  const statusRows = [
-    { label: "전사인쇄", checked: wo.status_transfer },
-    { label: "인쇄검수", checked: wo.status_print_check },
-    { label: "생산완료", checked: wo.status_production },
-    { label: "입력완료", checked: wo.status_input },
-  ];
-
   const deliveryDate = items[0]?.delivery_date ?? "";
   const isMultiItem = items.length > 1;
   const productNameDisplay = (() => {
@@ -1094,7 +1065,8 @@ function WoPrintContent({
             <td style={thS}>납품방법</td>
             <td style={tdS}>{wo.delivery_method ?? "—"}</td>
             <td style={thS}>주문일</td>
-            <td style={tdS}>{wo.order_date}</td>
+            {/* [수정 6] 주문일 → created_at 입력일 */}
+            <td style={tdS}>{wo.created_at ? wo.created_at.slice(0, 10) : wo.order_date}</td>
           </tr>
           <tr>
             <td style={thS}>지시번호</td>
@@ -1117,6 +1089,7 @@ function WoPrintContent({
         const unitWeight = item.unit_weight ?? (pi.unit_weight ? parseFloat(pi.unit_weight) : null);
         const totalWeight = actualQty && unitWeight ? actualQty * unitWeight : null;
         const expiryDate = item.expiry_date ?? pi.expiry_date ?? "";
+        // [수정 7] 품목명 폰트 작게
         const itemName = (item.sub_items ?? [])[0]?.name || "—";
         const itemBarcode = item.barcode_no ?? null;
         const noteVal = itemNotes[item.id] ?? (item.note ?? "");
@@ -1131,7 +1104,10 @@ function WoPrintContent({
                     border: "1px solid #94a3b8", borderBottom: "none",
                     padding: "5px 10px", width: "22%",
                     background: "#1e3a5f", color: "#fff",
-                    fontWeight: "bold", fontSize: "11pt", verticalAlign: "middle",
+                    fontWeight: "bold",
+                    // [수정 7] fontSize 11pt → 9pt
+                    fontSize: "9pt",
+                    verticalAlign: "middle",
                   }}>
                     {itemName}
                   </td>
@@ -1214,20 +1190,7 @@ function WoPrintContent({
         );
       })}
 
-      {/* 진행상태 */}
-      <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "3px", marginTop: "6px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>진행상태 확인</div>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
-        <tbody>
-          <tr>
-            {statusRows.map(({ label, checked }) => (
-              <td key={label} style={{ border: "1px solid #cbd5e1", padding: "3px 6px", textAlign: "center", width: "25%" }}>
-                <span style={{ fontSize: "8pt", color: "#555" }}>{label} </span>
-                <span style={{ fontSize: "10pt" }}>{checked ? "✅" : "☐"}</span>
-              </td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
+      {/* [수정 1] 진행상태 확인 섹션 제거 */}
 
       {/* 이미지 */}
       {(wo.images ?? []).length > 0 ? (
