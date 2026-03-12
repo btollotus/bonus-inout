@@ -1438,23 +1438,26 @@ export default function TradeClient() {
     if (!window.confirm("정말 삭제하시겠습니까?\n삭제하면 복구할 수 없습니다.")) return;
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     if (r.kind === "ORDER") {
-      // 1. 연결된 work_orders 조회 (orders 삭제 전에 먼저)
+      // 1. 연결된 work_orders 조회
       const { data: linkedWos } = await supabase
         .from("work_orders")
         .select("id")
         .eq("linked_order_id", r.rawId);
 
-      // 2. work_order_items 먼저 삭제 (FK 제약 때문에)
+      // 2. orders.work_order_item_id NULL로 먼저 해제 (FK NO ACTION 제약)
+      await supabase.from("orders").update({ work_order_item_id: null }).eq("id", r.rawId);
+
+      // 3. work_order_items 삭제
       if (linkedWos && linkedWos.length > 0) {
         for (const wo of linkedWos) {
           await supabase.from("work_order_items").delete().eq("work_order_id", wo.id);
         }
-        // 3. work_orders 삭제 (id 기준으로 명확하게)
+        // 4. work_orders 삭제
         const woIds = linkedWos.map((w) => w.id);
         await supabase.from("work_orders").delete().in("id", woIds);
       }
 
-      // 4. orders 관련 테이블 삭제
+      // 5. orders 관련 테이블 삭제
       await supabase.from("order_shipments").delete().eq("order_id", r.rawId);
       await supabase.from("order_lines").delete().eq("order_id", r.rawId);
       const { error } = await supabase.from("orders").delete().eq("id", r.rawId);
