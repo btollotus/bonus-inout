@@ -426,7 +426,6 @@ export default function ProductionClient() {
       }
 
       // 2. 재고대장 연동: 항목별로 lots + movements insert
-      const variantId = selectedWo.variant_id;
       const now = new Date().toISOString();
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id ?? null;
@@ -436,12 +435,28 @@ export default function ProductionClient() {
       for (const item of items) {
         const pi = prodInputs[item.id];
         if (!pi || !pi.actual_qty || !pi.expiry_date) continue;
-        if (!variantId) continue;
 
         const actual_qty = toInt(pi.actual_qty);
         if (actual_qty <= 0) continue;
 
         const expiry_date = pi.expiry_date;
+
+        // ── [수정] item.barcode_no로 해당 item의 variant_id 개별 조회 ──
+        let variantId: string | null = null;
+        if (item.barcode_no) {
+          const { data: pbData } = await supabase
+            .from("product_barcodes")
+            .select("variant_id")
+            .eq("barcode", item.barcode_no)
+            .maybeSingle();
+          variantId = pbData?.variant_id ?? null;
+        }
+        // barcode로 못 찾으면 work_orders.variant_id로 fallback
+        if (!variantId) variantId = selectedWo.variant_id;
+        if (!variantId) {
+          stockErrors.push(`variant 없음 (${(item.sub_items ?? [])[0]?.name ?? item.id})`);
+          continue;
+        }
 
         // lots 조회 또는 생성 (variant_id + expiry_date 기준)
         let lotId: string | null = null;
@@ -858,7 +873,8 @@ export default function ProductionClient() {
                                 <input
                                   className={inpR}
                                   inputMode="numeric"
-                                  placeholder=""                                  value={pi.actual_qty}
+                                  placeholder=""
+                                  value={pi.actual_qty}
                                   onChange={(e) => setProdInputs((prev) => ({
                                     ...prev,
                                     [item.id]: { ...pi, actual_qty: e.target.value.replace(/[^\d]/g, "") }
@@ -871,7 +887,8 @@ export default function ProductionClient() {
                                 <input
                                   className={inpR}
                                   inputMode="decimal"
-                                  placeholder=""                                  value={pi.unit_weight}
+                                  placeholder=""
+                                  value={pi.unit_weight}
                                   onChange={(e) => setProdInputs((prev) => ({
                                     ...prev,
                                     [item.id]: { ...pi, unit_weight: e.target.value.replace(/[^\d.]/g, "") }
