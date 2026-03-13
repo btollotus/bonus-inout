@@ -764,13 +764,14 @@ export default function ProductionClient() {
                                 <input
                                   className={inpR}
                                   inputMode="numeric"
-                                  placeholder="예: 1500"
+                                  placeholder={`주문수량: ${fmt(item.order_qty)}`}
                                   value={pi.actual_qty}
                                   onChange={(e) => setProdInputs((prev) => ({
                                     ...prev,
                                     [item.id]: { ...pi, actual_qty: e.target.value.replace(/[^\d]/g, "") }
                                   }))}
                                 />
+                                <div className="mt-1 text-xs text-slate-400">주문수량: <span className="font-semibold text-slate-600">{fmt(item.order_qty)}개</span></div>
                               </div>
                               <div>
                                 <div className="mb-1 text-xs text-slate-500">개당 중량 (g)</div>
@@ -792,7 +793,23 @@ export default function ProductionClient() {
                                 </div>
                               </div>
                               <div>
-                                <div className="mb-1 text-xs text-slate-500">소비기한</div>
+                                <div className="mb-1 flex items-center justify-between">
+                                  <span className="text-xs text-slate-500">소비기한</span>
+                                  <button
+                                    type="button"
+                                    className="rounded-lg border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-200 active:bg-slate-300"
+                                    onClick={() => {
+                                      const d = new Date();
+                                      d.setFullYear(d.getFullYear() + 1);
+                                      d.setDate(d.getDate() - 1);
+                                      const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                                      setProdInputs((prev) => ({
+                                        ...prev,
+                                        [item.id]: { ...pi, expiry_date: ymd }
+                                      }));
+                                    }}
+                                  >+1년-1일</button>
+                                </div>
                                 <input
                                   type="date"
                                   className={inp}
