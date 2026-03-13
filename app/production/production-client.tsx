@@ -731,7 +731,7 @@ export default function ProductionClient() {
                     </div>
                     <div>
                       <div className="mb-1 text-xs text-slate-500">성형틀 장당 생산수</div>
-                      <input className={inpR} inputMode="numeric" placeholder="예: 52" value={eMoldPerSheet}
+                      <input className={inpR} inputMode="numeric" placeholder="" value={eMoldPerSheet}
                         onChange={(e) => setEMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} />
                     </div>
                     <div>
@@ -858,8 +858,7 @@ export default function ProductionClient() {
                                 <input
                                   className={inpR}
                                   inputMode="numeric"
-                                  placeholder={`주문수량: ${fmt(item.order_qty)}`}
-                                  value={pi.actual_qty}
+                                  placeholder=""                                  value={pi.actual_qty}
                                   onChange={(e) => setProdInputs((prev) => ({
                                     ...prev,
                                     [item.id]: { ...pi, actual_qty: e.target.value.replace(/[^\d]/g, "") }
@@ -872,8 +871,7 @@ export default function ProductionClient() {
                                 <input
                                   className={inpR}
                                   inputMode="decimal"
-                                  placeholder="예: 12.5"
-                                  value={pi.unit_weight}
+                                  placeholder=""                                  value={pi.unit_weight}
                                   onChange={(e) => setProdInputs((prev) => ({
                                     ...prev,
                                     [item.id]: { ...pi, unit_weight: e.target.value.replace(/[^\d.]/g, "") }
