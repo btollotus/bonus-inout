@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
-export const metadata: Metadata = { title: "작업지시서 | BONUSMATE ERP" };
 
 // ─────────────────────── Types ───────────────────────
 type WoSubItem = { name: string; qty: number };
