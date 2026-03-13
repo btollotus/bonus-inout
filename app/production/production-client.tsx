@@ -96,6 +96,7 @@ export default function ProductionClient() {
   // ── Role 조회 ──
   const [role, setRole] = useState<UserRole>(null);
   const isAdmin = role === "ADMIN";
+  const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
 
   useEffect(() => {
     (async () => {
@@ -125,7 +126,6 @@ export default function ProductionClient() {
   // 선택된 작업지시서
   const [selectedWo, setSelectedWo] = useState<WorkOrderRow | null>(null);
 
-  // [수정 3] editBasic 제거 - 항상 수정 가능 상태
   // 기본정보 수정 form
   const [eSubName, setESubName] = useState("");
   const [eProductName, setEProductName] = useState("");
@@ -141,7 +141,7 @@ export default function ProductionClient() {
   const [eReferenceNote, setEReferenceNote] = useState("");
   const [eSaving, setESaving] = useState(false);
 
-  // [수정 1] 진행상태 체크박스 제거, 담당자 state만 유지
+  // 진행상태 담당자 state
   const [woChecks, setWoChecks] = useState<{
     status_transfer: boolean;
     status_print_check: boolean;
@@ -196,7 +196,6 @@ export default function ProductionClient() {
       if (error) return setMsg(error.message);
       const list = (data ?? []) as WorkOrderRow[];
       setWoList(list);
-      // 선택된 항목 갱신
       if (selectedWo) {
         const refreshed = list.find((w) => w.id === selectedWo.id);
         if (refreshed) applySelection(refreshed, false);
@@ -247,7 +246,6 @@ export default function ProductionClient() {
       assignee_production: (wo as any).assignee_production ?? "",
       assignee_input: (wo as any).assignee_input ?? "",
     });
-    // signed URL 로드
     setSignedImageUrls([]);
     (async () => {
       const rawPaths = wo.images ?? [];
@@ -275,9 +273,9 @@ export default function ProductionClient() {
     setProdInputs(inputs);
   }
 
-  // ── 기본정보 저장 (ADMIN only) ──
+  // ── 기본정보 저장 (ADMIN + SUBADMIN) ──
   async function saveBasicInfo() {
-    if (!selectedWo || !isAdmin) return;
+    if (!selectedWo || !isAdminOrSubadmin) return;
     setESaving(true); setMsg(null);
     try {
       const { error } = await supabase.from("work_orders").update({
@@ -389,7 +387,7 @@ export default function ProductionClient() {
     }
   }
 
-  // [수정 4] 생산완료 버튼 핸들러
+  // ── 생산완료 버튼 핸들러 ──
   async function markProductionComplete() {
     if (!selectedWo) return;
     if (!confirm("생산완료 처리하시겠습니까?\n상태가 '완료'로 변경됩니다.")) return;
@@ -421,7 +419,7 @@ export default function ProductionClient() {
               {role === "ADMIN"
                 ? "ADMIN — 목록조회 · 기본정보수정 · 생산입력"
                 : role === "SUBADMIN"
-                ? "SUBADMIN — 목록조회 · 생산입력"
+                ? "SUBADMIN — 목록조회 · 기본정보수정 · 생산입력"
                 : "로딩 중..."}
             </div>
           </div>
@@ -572,11 +570,11 @@ export default function ProductionClient() {
                 </div>
               </div>
 
-              {/* [수정 3] 기본정보 카드 - 항상 수정 가능, 저장버튼만 표시 */}
+              {/* 기본정보 카드 - ADMIN + SUBADMIN 모두 수정 가능 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <div className="font-semibold text-sm">📝 기본정보</div>
-                  {isAdmin ? (
+                  {isAdminOrSubadmin ? (
                     <button
                       className="rounded-lg border border-blue-500 bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
                       onClick={saveBasicInfo}
@@ -587,7 +585,7 @@ export default function ProductionClient() {
                   ) : null}
                 </div>
 
-                {isAdmin ? (
+                {isAdminOrSubadmin ? (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <div>
                       <div className="mb-1 text-xs text-slate-500">품목명 *</div>
@@ -674,7 +672,7 @@ export default function ProductionClient() {
                 )}
               </div>
 
-              {/* 진행상태 카드 - 체크박스 제거, 담당자만 유지 */}
+              {/* 진행상태 카드 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <div className="font-semibold text-sm">✅ 진행상태</div>
@@ -730,7 +728,6 @@ export default function ProductionClient() {
                     {(selectedWo.work_order_items ?? [])
                       .slice()
                       .sort((a, b) => a.delivery_date.localeCompare(b.delivery_date))
-                      // [수정 2] 성형틀, 인쇄제판 항목 제외
                       .filter((item) => {
                         const name = (item.sub_items ?? [])[0]?.name ?? "";
                         return !name.startsWith("성형틀") && !name.startsWith("인쇄제판");
@@ -761,7 +758,6 @@ export default function ProductionClient() {
                               </div>
                             </div>
 
-                            {/* 생산 입력 */}
                             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                               <div>
                                 <div className="mb-1 text-xs text-slate-500">출고수량 (실생산)</div>
@@ -813,8 +809,6 @@ export default function ProductionClient() {
                       })}
                   </div>
                 )}
-
-                {/* [수정 5] 주문합계/생산합계 제거 */}
               </div>
 
               {/* 이미지 카드 */}
@@ -834,7 +828,7 @@ export default function ProductionClient() {
                 </div>
               ) : null}
 
-              {/* 생산완료 버튼 - 최하단 */}
+              {/* 생산완료 버튼 */}
               <div className={`${card} p-4`}>
                 <button
                   className="w-full rounded-xl border border-green-500 bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800"
@@ -873,7 +867,6 @@ function PrintModal({
   onClose: () => void;
   employees: { id: string; name: string | null }[];
 }) {
-  // [수정 8] 성형틀/인쇄제판 제외
   const items = (wo.work_order_items ?? [])
     .slice()
     .sort((a, b) => a.delivery_date.localeCompare(b.delivery_date))
@@ -883,7 +876,6 @@ function PrintModal({
     });
   const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
 
-  // 품목별 비고 state
   const [itemNotes, setItemNotes] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const item of items) init[item.id] = item.note ?? "";
@@ -961,7 +953,6 @@ function PrintModal({
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", background: "#f1f5f9" }}>
-      {/* 상단 툴바 */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "#1e3a5f", color: "#fff", flexShrink: 0 }}>
         <div style={{ fontWeight: "bold", fontSize: "14pt" }}>작업지시서 인쇄 미리보기</div>
         <div style={{ display: "flex", gap: "8px" }}>
@@ -981,7 +972,6 @@ function PrintModal({
         </div>
       </div>
 
-      {/* 스크롤 가능한 미리보기 영역 */}
       <div style={{ flex: 1, overflow: "auto", padding: "20px", display: "flex", justifyContent: "center" }}>
         <div style={{ background: "#fff", width: "210mm", minHeight: "297mm", padding: "12mm 14mm", boxShadow: "0 4px 24px rgba(0,0,0,0.15)" }}>
           <div id="prod-print-preview-inner">
@@ -1066,7 +1056,6 @@ function WoPrintContent({
             <td style={thS}>납품방법</td>
             <td style={tdS}>{wo.delivery_method ?? "—"}</td>
             <td style={thS}>주문일</td>
-            {/* [수정 6] 주문일 → created_at 입력일 */}
             <td style={tdS}>{wo.created_at ? wo.created_at.slice(0, 10) : wo.order_date}</td>
           </tr>
           <tr>
@@ -1090,7 +1079,6 @@ function WoPrintContent({
         const unitWeight = item.unit_weight ?? (pi.unit_weight ? parseFloat(pi.unit_weight) : null);
         const totalWeight = actualQty && unitWeight ? actualQty * unitWeight : null;
         const expiryDate = item.expiry_date ?? pi.expiry_date ?? "";
-        // [수정 7] 품목명 폰트 작게
         const itemName = (item.sub_items ?? [])[0]?.name || "—";
         const itemBarcode = item.barcode_no ?? null;
         const noteVal = itemNotes[item.id] ?? (item.note ?? "");
@@ -1099,14 +1087,12 @@ function WoPrintContent({
           <div key={item.id} style={{ marginBottom: idx < items.length - 1 ? "10px" : "6px" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <tbody>
-                {/* 품목명 + 바코드 가로 배열 */}
                 <tr>
                   <td style={{
                     border: "1px solid #94a3b8", borderBottom: "none",
                     padding: "5px 10px", width: "22%",
                     background: "#1e3a5f", color: "#fff",
                     fontWeight: "bold",
-                    // [수정 7] fontSize 11pt → 9pt
                     fontSize: "9pt",
                     verticalAlign: "middle",
                   }}>
@@ -1128,7 +1114,6 @@ function WoPrintContent({
                     )}
                   </td>
                 </tr>
-                {/* 헤더 행 */}
                 <tr>
                   <td style={cellHead}>주문수량</td>
                   <td style={{ border: "1px solid #cbd5e1", borderLeft: "none", padding: 0 }}>
@@ -1145,7 +1130,6 @@ function WoPrintContent({
                     </table>
                   </td>
                 </tr>
-                {/* 데이터 행 */}
                 <tr>
                   <td style={{ ...cellBase, textAlign: "right", fontWeight: "bold", fontSize: "11pt", borderTop: "none" }}>
                     {item.order_qty?.toLocaleString("ko-KR")}
@@ -1190,8 +1174,6 @@ function WoPrintContent({
           </div>
         );
       })}
-
-      {/* [수정 1] 진행상태 확인 섹션 제거 */}
 
       {/* 이미지 */}
       {(wo.images ?? []).length > 0 ? (
