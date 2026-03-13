@@ -387,19 +387,113 @@ export default function ProductionClient() {
     }
   }
 
-  // ── 생산완료 버튼 핸들러 ──
+  // ── 생산완료 버튼 핸들러 (재고대장 연동 포함) ──
   async function markProductionComplete() {
     if (!selectedWo) return;
-    if (!confirm("생산완료 처리하시겠습니까?\n상태가 '완료'로 변경됩니다.")) return;
+
+    const items = (selectedWo.work_order_items ?? []).filter((item) => {
+      const name = (item.sub_items ?? [])[0]?.name ?? "";
+      return !name.startsWith("성형틀") && !name.startsWith("인쇄제판");
+    });
+
+    // 생산정보 입력 여부 체크
+    const missingItems = items.filter((item) => {
+      const pi = prodInputs[item.id];
+      return !pi || !pi.actual_qty || !pi.unit_weight || !pi.expiry_date;
+    });
+    if (missingItems.length > 0) {
+      const ok = confirm(
+        "⚠️ 일부 항목에 생산정보(출고수량/개당중량/소비기한)가 입력되지 않았습니다.\n재고대장 연동이 불완전할 수 있습니다.\n\n그래도 완료 처리하시겠습니까?"
+      );
+      if (!ok) return;
+    } else {
+      if (!confirm("생산완료 처리하시겠습니까?\n상태가 '완료'로 변경되고 재고대장에 입고가 반영됩니다.")) return;
+    }
+
     setMsg(null);
     try {
+      // 1. 생산 입력값 먼저 저장
+      for (const item of items) {
+        const pi = prodInputs[item.id];
+        if (!pi || (!pi.actual_qty && !pi.unit_weight && !pi.expiry_date)) continue;
+        const actual_qty = pi.actual_qty ? toInt(pi.actual_qty) : null;
+        const unit_weight = pi.unit_weight ? toNum(pi.unit_weight) : null;
+        const expiry_date = pi.expiry_date || null;
+        await supabase.from("work_order_items").update({
+          actual_qty, unit_weight, expiry_date,
+          updated_at: new Date().toISOString(),
+        }).eq("id", item.id);
+      }
+
+      // 2. 재고대장 연동: 항목별로 lots + movements insert
+      const variantId = selectedWo.variant_id;
+      const now = new Date().toISOString();
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id ?? null;
+
+      const stockErrors: string[] = [];
+
+      for (const item of items) {
+        const pi = prodInputs[item.id];
+        if (!pi || !pi.actual_qty || !pi.expiry_date) continue;
+        if (!variantId) continue;
+
+        const actual_qty = toInt(pi.actual_qty);
+        if (actual_qty <= 0) continue;
+
+        const expiry_date = pi.expiry_date;
+
+        // lots 조회 또는 생성 (variant_id + expiry_date 기준)
+        let lotId: string | null = null;
+        const { data: existingLot } = await supabase
+          .from("lots")
+          .select("id")
+          .eq("variant_id", variantId)
+          .eq("expiry_date", expiry_date)
+          .maybeSingle();
+
+        if (existingLot) {
+          lotId = existingLot.id;
+        } else {
+          const { data: newLot, error: lotErr } = await supabase
+            .from("lots")
+            .insert({ variant_id: variantId, expiry_date })
+            .select("id")
+            .single();
+          if (lotErr) {
+            stockErrors.push("LOT 생성 실패 (" + expiry_date + "): " + lotErr.message);
+            continue;
+          }
+          lotId = newLot.id;
+        }
+
+        // movements insert (type = 'IN')
+        const { error: movErr } = await supabase.from("movements").insert({
+          lot_id: lotId,
+          type: "IN",
+          qty: actual_qty,
+          happened_at: now,
+          note: "작업지시서 생산완료 - " + selectedWo.work_order_no,
+          created_by: userId,
+        });
+        if (movErr) {
+          stockErrors.push("입고 기록 실패 (" + expiry_date + "): " + movErr.message);
+        }
+      }
+
+      // 3. work_orders 상태 완료로 변경
       const { error } = await supabase.from("work_orders").update({
         status: "완료",
         status_production: true,
         updated_at: new Date().toISOString(),
       }).eq("id", selectedWo.id);
       if (error) return setMsg("생산완료 처리 실패: " + error.message);
-      setMsg("✅ 생산완료 처리되었습니다.");
+
+      if (stockErrors.length > 0) {
+        setMsg("⚠️ 완료 처리됐으나 재고 연동 오류: " + stockErrors.join(" / "));
+      } else {
+        setMsg("✅ 생산완료 처리 및 재고대장 입고 반영 완료!");
+      }
       await loadWoList();
     } catch (e: any) {
       setMsg("오류: " + (e?.message ?? e));
