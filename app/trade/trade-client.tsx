@@ -961,6 +961,7 @@ export default function TradeClient() {
         const woId = (createdWo as any).id as string;
         const finalBarcode = (createdWo as any).barcode_no as string;
 
+        // ── 품목별 고유 바코드 생성 ──
         const woItemsPayload: any[] = [];
         for (const l of cleanLines) {
           const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
@@ -976,11 +977,19 @@ export default function TradeClient() {
         const { data: createdWoItems, error: wiErr } = await supabase
           .from("work_order_items")
           .insert(woItemsPayload)
-          .select("id");
+          .select("id,barcode_no,sub_items");
         if (wiErr) throw new Error("작업지시서 항목 생성 실패: " + wiErr.message);
         const woItemId = (createdWoItems as any[])?.[0]?.id as string;
         await supabase.from("orders").update({ work_order_item_id: woItemId }).eq("id", orderId);
 
+        // ── 인쇄제판(plates) 자동 생성 ──
+        await supabase.from("plates").insert({
+          work_order_id: woId,
+          description: `${selectedPartner.name} / ${productName}`,
+          status: "active",
+        });
+
+        // ── 품목별 product_variants upsert ──
         const { data: existProduct } = await supabase
           .from("products").select("id").eq("name", productName).limit(1).maybeSingle();
         let productId: string;
@@ -994,6 +1003,35 @@ export default function TradeClient() {
           if (pErr) throw new Error("품목 등록 실패: " + pErr.message);
           productId = (newProduct as any).id;
         }
+
+        // 각 work_order_item의 바코드로 품목별 variant 생성
+        let firstVariantId: string | null = null;
+        for (const createdItem of (createdWoItems as any[]) ?? []) {
+          const itemBarcodeNo = createdItem.barcode_no as string;
+          const itemName = (createdItem.sub_items as WoSubItem[])?.[0]?.name ?? productName;
+          const itemVariantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${itemName}`;
+          const { data: existItemVariant } = await supabase
+            .from("product_variants").select("id").eq("product_id", productId).eq("variant_name", itemVariantName).limit(1).maybeSingle();
+          let itemVariantId: string;
+          if (existItemVariant?.id) {
+            itemVariantId = existItemVariant.id;
+          } else {
+            const { data: newItemVariant, error: vivErr } = await supabase
+              .from("product_variants")
+              .insert({ product_id: productId, variant_name: itemVariantName, barcode: itemBarcodeNo, pack_unit: 1, unit_type: "EA" })
+              .select("id").single();
+            if (vivErr) throw new Error("품목 규격 등록 실패: " + vivErr.message);
+            itemVariantId = (newItemVariant as any).id;
+          }
+          const { data: existItemBarcode } = await supabase
+            .from("product_barcodes").select("id").eq("barcode", itemBarcodeNo).maybeSingle();
+          if (!existItemBarcode) {
+            await supabase.from("product_barcodes").insert({ variant_id: itemVariantId, barcode: itemBarcodeNo, is_primary: true, is_active: true });
+          }
+          if (!firstVariantId) firstVariantId = itemVariantId;
+        }
+
+        // work_orders.variant_id는 첫 번째 품목의 variant로 설정
         const variantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}`;
         const { data: existVariant } = await supabase
           .from("product_variants").select("id").eq("product_id", productId).eq("variant_name", variantName).limit(1).maybeSingle();
@@ -1189,6 +1227,7 @@ export default function TradeClient() {
       const woId = (createdWo as any).id as string;
       const finalBarcode = (createdWo as any).barcode_no as string;
 
+      // ── 품목별 고유 바코드 생성 ──
       const woItemsPayload: any[] = [];
       for (const item of cleanItems) {
         for (const si of item.sub_items.filter((si) => si.name.trim() && si.qty > 0)) {
@@ -1209,6 +1248,13 @@ export default function TradeClient() {
         .select("id,delivery_date,sub_items,order_qty,work_order_id,barcode_no");
       if (itemErr) return setMsg("납기일 항목 생성 실패: " + itemErr.message);
 
+      // ── 인쇄제판(plates) 자동 생성 ──
+      await supabase.from("plates").insert({
+        work_order_id: woId,
+        description: `${selectedPartner.name} / ${wo_productName.trim()}`,
+        status: "active",
+      });
+
       if (!wo_isReorder) {
         const { data: existProduct } = await supabase
           .from("products").select("id").eq("name", wo_productName.trim()).limit(1).maybeSingle();
@@ -1223,6 +1269,33 @@ export default function TradeClient() {
           if (pErr) return setMsg("품목 등록 실패: " + pErr.message);
           productId = (newProduct as any).id;
         }
+
+        // 각 work_order_item의 바코드로 품목별 variant 생성
+        for (const createdItem of (createdItems as any[]) ?? []) {
+          const itemBarcodeNo = createdItem.barcode_no as string;
+          const itemName = (createdItem.sub_items as WoSubItem[])?.[0]?.name ?? wo_productName.trim();
+          const itemVariantName = `${selectedPartner.name}${wo_subName.trim() ? "-" + wo_subName.trim() : ""}-${itemName}`;
+          const { data: existItemVariant } = await supabase
+            .from("product_variants").select("id").eq("product_id", productId).eq("variant_name", itemVariantName).limit(1).maybeSingle();
+          let itemVariantId: string;
+          if (existItemVariant?.id) {
+            itemVariantId = existItemVariant.id;
+          } else {
+            const { data: newItemVariant, error: vivErr } = await supabase
+              .from("product_variants")
+              .insert({ product_id: productId, variant_name: itemVariantName, barcode: itemBarcodeNo, pack_unit: 1, unit_type: "EA" })
+              .select("id").single();
+            if (vivErr) return setMsg("품목 규격 등록 실패: " + vivErr.message);
+            itemVariantId = (newItemVariant as any).id;
+          }
+          const { data: existItemBarcode } = await supabase
+            .from("product_barcodes").select("id").eq("barcode", itemBarcodeNo).maybeSingle();
+          if (!existItemBarcode) {
+            await supabase.from("product_barcodes").insert({ variant_id: itemVariantId, barcode: itemBarcodeNo, is_primary: true, is_active: true });
+          }
+        }
+
+        // work_orders.variant_id는 거래처명 기준 대표 variant로 설정
         const variantName = `${selectedPartner.name}${wo_subName.trim() ? "-" + wo_subName.trim() : ""}`;
         const { data: existVariant } = await supabase
           .from("product_variants").select("id").eq("product_id", productId).eq("variant_name", variantName).limit(1).maybeSingle();
