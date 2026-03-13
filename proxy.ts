@@ -17,6 +17,7 @@ const SUBADMIN_PATHS = [
   "/report",
   "/tax/spec",
   "/tax/statement",
+  "/production",
   // ✅ /leave 제거 — USER도 접근 가능
 ];
 

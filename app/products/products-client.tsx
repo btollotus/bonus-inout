@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
+export const metadata: Metadata = { title: "작업지시서 | BONUSMATE ERP" };
+
 function codeToAscii(code: string, shift: boolean, caps: boolean) {
   // capslock/shift에 따른 대문자 처리
   const upper = shift !== caps;
