@@ -108,15 +108,10 @@ const TRADE_TABLE_MIN_WIDTH = 1330;
 // ─────────────────────── Helpers ───────────────────────
 const fmt = (n: number | null | undefined) => Number(n ?? 0).toLocaleString("ko-KR");
 
-/**
- * DB images 컬럼(path 또는 full URL 혼재)을 signed URL 배열로 변환
- * createSignedUrls 는 null을 반환할 수 있으므로 하나씩 createSignedUrl 로 처리
- */
 async function resolveSignedImageUrls(rawImages: string[], supabaseClient: ReturnType<typeof createClient>): Promise<string[]> {
   if (!rawImages || rawImages.length === 0) return [];
   const results: string[] = [];
   for (const raw of rawImages) {
-    // path 추출: full URL이면 버킷명 이후 path만 꺼냄, 아니면 그대로 사용
     let storagePath = raw;
     if (raw.startsWith("http")) {
       const m = raw.match(/work-order-images\/(.+?)(\?|$)/);
@@ -445,16 +440,16 @@ export default function TradeClient() {
   const [ship1, setShip1] = useState<ShipFormState>(emptyShip());
   const [ship2, setShip2] = useState<ShipFormState>(emptyShip());
   const [twoShip, setTwoShip] = useState(false);
-  // 주문/출고 폼 → 작업지시서 연동 추가 필드
   const [orderWoSubName, setOrderWoSubName] = useState("");
   const [orderWoLogoSpec, setOrderWoLogoSpec] = useState("");
   const [orderWoThickness, setOrderWoThickness] = useState("2mm");
   const [orderWoMoldPerSheet, setOrderWoMoldPerSheet] = useState("");
-  const [orderWoPackagingType, setOrderWoPackagingType] = useState("트레이");
+  const [orderWoPackagingType, setOrderWoPackagingType] = useState("");
   const [orderWoNote, setOrderWoNote] = useState("");
-  const [orderWoEnabled, setOrderWoEnabled] = useState(true); // 작업지시서 자동생성 여부
+  const [orderWoEnabled, setOrderWoEnabled] = useState(true);
+  // ── 신규/재주문 플래그 ──
+  const [orderIsReorder, setOrderIsReorder] = useState(false);
 
-  // FIX 1: file input ref for reset after submit
   const orderWoFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Ledger form
@@ -505,7 +500,6 @@ export default function TradeClient() {
   const [eShip1, setEShip1] = useState<ShipFormState>(emptyShip());
   const [eShip2, setEShip2] = useState<ShipFormState>(emptyShip());
   const [eTwoShip, setETwoShip] = useState(false);
-  // 수정 모달 - 연결된 작업지시서
   const [eWoId, setEWoId] = useState<string | null>(null);
   const [eWoSubName, setEWoSubName] = useState("");
   const [eWoProductName, setEWoProductName] = useState("");
@@ -513,7 +507,7 @@ export default function TradeClient() {
   const [eWoLogoSpec, setEWoLogoSpec] = useState("");
   const [eWoThickness, setEWoThickness] = useState("2mm");
   const [eWoDeliveryMethod, setEWoDeliveryMethod] = useState("택배");
-  const [eWoPackagingType, setEWoPackagingType] = useState("트레이");
+  const [eWoPackagingType, setEWoPackagingType] = useState("");
   const [eWoMoldPerSheet, setEWoMoldPerSheet] = useState("");
   const [eWoNote, setEWoNote] = useState("");
   const [eWoImageFiles, setEWoImageFiles] = useState<File[]>([]);
@@ -545,7 +539,6 @@ export default function TradeClient() {
   const tradeSyncingRef = useRef<"TOP" | "BOTTOM" | null>(null);
   const syncDateRef = useRef<"SHIP" | "ENTRY" | null>(null);
 
-  // Date sync
   useEffect(() => {
     if (syncDateRef.current === "ENTRY") { syncDateRef.current = null; return; }
     syncDateRef.current = "SHIP"; setEntryDate(shipDate);
@@ -574,12 +567,10 @@ export default function TradeClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartner?.id]);
 
-  // 작업지시서 탭 전환 시 목록 자동 로드
   useEffect(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, selectedPartner?.id]);
 
-  // Totals
   const orderTotals = useMemo(() => lines.reduce((acc, l) => { const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat); return { supply: acc.supply + r.supply, vat: acc.vat + r.vat, total: acc.total + r.total }; }, { supply: 0, vat: 0, total: 0 }), [lines]);
   const editOrderTotals = useMemo(() => eLines.reduce((acc, l) => { const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat); return { supply: acc.supply + r.supply, vat: acc.vat + r.vat, total: acc.total + r.total }; }, { supply: 0, vat: 0, total: 0 }), [eLines]);
   const ledgerSplit = useMemo(() => splitVatFromTotalFlexible(amountStr, vatFree), [amountStr, vatFree]);
@@ -591,7 +582,6 @@ export default function TradeClient() {
     return partners;
   }, [partners, partnerView, recentPartnerIds]);
 
-  // Unified rows
   const unifiedRows = useMemo<UnifiedRow[]>(() => {
     const normalizeIso = (s: string | null | undefined) => {
       let v = String(s ?? "").trim();
@@ -905,7 +895,6 @@ export default function TradeClient() {
     }).filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) !== 0);
     if (cleanLines.length === 0) return setMsg("품목명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
 
-    // ① orders INSERT
     const { data: createdOrder, error: oErr } = await supabase
       .from("orders")
       .insert({
@@ -918,17 +907,14 @@ export default function TradeClient() {
     const orderId = (createdOrder as any)?.id as string;
     if (!orderId) return setMsg("주문 생성 후 ID를 가져오지 못했습니다.");
 
-    // ② order_lines INSERT
     const { error: lErr } = await supabase.from("order_lines").insert(
       cleanLines.map((l, idx) => ({ order_id: orderId, line_no: idx + 1, food_type: l.food_type || null, name: l.name, weight_g: l.weight_g || null, qty: l.qty, unit: l.unit, unit_type: l.unit_type, pack_ea: l.pack_ea, actual_ea: l.actual_ea, supply_amount: l.supply_amount, vat_amount: l.vat_amount, total_amount: l.total_amount }))
     );
     if (lErr) return setMsg(lErr.message);
 
-    // ③ order_shipments INSERT
     const { error: sErr } = await supabase.from("order_shipments").insert(buildShipPayloads(orderId, ship1, ship2, twoShip));
     if (sErr) return setMsg(sErr.message);
 
-    // ④ work_orders 자동생성 (작업지시서 연동 ON인 경우)
     if (orderWoEnabled) {
       try {
         const { data: barcodeData, error: barcodeErr } = await supabase.rpc("generate_work_order_barcode");
@@ -937,9 +923,7 @@ export default function TradeClient() {
         const todayStr = new Date().toISOString().slice(0, 10).replaceAll("-", "");
         const workOrderNo = `WO-${todayStr}-${barcodeNo.slice(-4)}`;
 
-        // 품목명: 첫 번째 라인 품목명 사용 (또는 메모 title)
         const productName = orderTitle.trim() || cleanLines[0]?.name || selectedPartner.name;
-        // food_type: 첫 번째 라인
         const foodType = cleanLines[0]?.food_type || null;
 
         const { data: createdWo, error: woErr } = await supabase
@@ -967,7 +951,7 @@ export default function TradeClient() {
               return base || null;
             })(),
             status: "생산중",
-            is_reorder: false,
+            is_reorder: orderIsReorder,
             images: [],
             linked_order_id: orderId,
           })
@@ -977,7 +961,6 @@ export default function TradeClient() {
         const woId = (createdWo as any).id as string;
         const finalBarcode = (createdWo as any).barcode_no as string;
 
-        // work_order_items: 품목별 1행씩 + 각각 바코드 생성
         const woItemsPayload: any[] = [];
         for (const l of cleanLines) {
           const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
@@ -998,7 +981,6 @@ export default function TradeClient() {
         const woItemId = (createdWoItems as any[])?.[0]?.id as string;
         await supabase.from("orders").update({ work_order_item_id: woItemId }).eq("id", orderId);
 
-        // products/product_variants/product_barcodes 자동등록
         const { data: existProduct } = await supabase
           .from("products").select("id").eq("name", productName).limit(1).maybeSingle();
         let productId: string;
@@ -1026,10 +1008,16 @@ export default function TradeClient() {
           if (vErr) throw new Error("규격 등록 실패: " + vErr.message);
           variantId = (newVariant as any).id;
         }
-        await supabase.from("product_barcodes").insert({ variant_id: variantId, barcode: finalBarcode, is_primary: true, is_active: true });
+        const { data: existBarcode } = await supabase
+          .from("product_barcodes")
+          .select("id")
+          .eq("barcode", finalBarcode)
+          .maybeSingle();
+        if (!existBarcode) {
+          await supabase.from("product_barcodes").insert({ variant_id: variantId, barcode: finalBarcode, is_primary: true, is_active: true });
+        }
         await supabase.from("work_orders").update({ variant_id: variantId }).eq("id", woId);
 
-        // 이미지 업로드 (UUID 경로로 한글 파일명 안전 처리)
         if (wo_imageFiles.length > 0) {
           const uploadedPaths: string[] = [];
           for (const file of wo_imageFiles) {
@@ -1043,28 +1031,27 @@ export default function TradeClient() {
           }
         }
       } catch (woCreateErr: any) {
-        // 작업지시서 생성 실패는 경고만 (주문은 이미 저장됨)
         setMsg(`⚠️ 주문은 저장됐으나 작업지시서 자동생성 실패: ${woCreateErr?.message ?? woCreateErr}`);
+        setOrderIsReorder(false);
         setOrderTitle(""); setOrdererName("");
         setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
         setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
         setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
-        setOrderWoPackagingType("트레이-정사각20구"); setOrderWoMoldPerSheet(""); setOrderWoNote("");
+        setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoNote("");
         setWo_imageFiles([]); setWo_imagePreviewUrls([]);
-        // FIX 1: reset file input
         if (orderWoFileInputRef.current) orderWoFileInputRef.current.value = "";
         await loadTrades();
         return;
       }
     }
 
+    setOrderIsReorder(false);
     setOrderTitle(""); setOrdererName("");
     setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
     setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
-    setOrderWoPackagingType("트레이-정사각20구"); setOrderWoMoldPerSheet(""); setOrderWoNote("");
+    setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoNote("");
     setWo_imageFiles([]); setWo_imagePreviewUrls([]);
-    // FIX 1: reset file input
     if (orderWoFileInputRef.current) orderWoFileInputRef.current.value = "";
     await loadTrades();
   }
@@ -1109,20 +1096,13 @@ export default function TradeClient() {
     setWo_linkedOrderSummary("");
   }
 
-  // 주문/출고 행 → 작업지시서 모달 열기
   function openWoModalFromOrder(x: UnifiedRow) {
     if (x.kind !== "ORDER") return;
     resetWoForm();
-    // 주문 정보에서 자동 채우기
-    const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(null);
-    const title = x.order_title ?? "";
     const lines = x.order_lines ?? [];
-    // 품목명: order_lines 첫번째 품목 or 적요
     const firstLineName = lines[0]?.name ?? "";
-    const firstName = firstLineName || title;
-    // food_type
+    const firstName = firstLineName || (x.order_title ?? "");
     const firstFoodType = lines[0]?.food_type ?? "";
-    // 납기일별 항목 구성: 같은 납기일로 모든 품목을 sub_items로
     const newWoItems: WoItem[] = [{
       id: crypto.randomUUID(),
       delivery_date: x.date || todayYMD(),
@@ -1171,14 +1151,12 @@ export default function TradeClient() {
 
     setWo_saving(true);
     try {
-      // ① 바코드 자동생성
       const { data: barcodeData, error: barcodeErr } = await supabase.rpc("generate_work_order_barcode");
       if (barcodeErr) return setMsg("바코드 생성 실패: " + barcodeErr.message);
       const barcodeNo = barcodeData as string;
       const todayStr2 = new Date().toISOString().slice(0, 10).replaceAll("-", "");
       const workOrderNo = `WO-${todayStr2}-${barcodeNo.slice(-4)}`;
 
-      // ② work_orders INSERT
       const { data: createdWo, error: woErr } = await supabase
         .from("work_orders")
         .insert({
@@ -1211,7 +1189,6 @@ export default function TradeClient() {
       const woId = (createdWo as any).id as string;
       const finalBarcode = (createdWo as any).barcode_no as string;
 
-      // ③ work_order_items INSERT - 각 sub_item별 바코드 생성
       const woItemsPayload: any[] = [];
       for (const item of cleanItems) {
         for (const si of item.sub_items.filter((si) => si.name.trim() && si.qty > 0)) {
@@ -1232,7 +1209,6 @@ export default function TradeClient() {
         .select("id,delivery_date,sub_items,order_qty,work_order_id,barcode_no");
       if (itemErr) return setMsg("납기일 항목 생성 실패: " + itemErr.message);
 
-      // ④ 신규 주문이면 products/product_variants/product_barcodes 자동등록
       if (!wo_isReorder) {
         const { data: existProduct } = await supabase
           .from("products").select("id").eq("name", wo_productName.trim()).limit(1).maybeSingle();
@@ -1261,11 +1237,17 @@ export default function TradeClient() {
           if (vErr) return setMsg("규격 등록 실패: " + vErr.message);
           variantId = (newVariant as any).id;
         }
-        await supabase.from("product_barcodes").insert({ variant_id: variantId, barcode: finalBarcode, is_primary: true, is_active: true });
+        const { data: existBarcode } = await supabase
+          .from("product_barcodes")
+          .select("id")
+          .eq("barcode", finalBarcode)
+          .maybeSingle();
+        if (!existBarcode) {
+          await supabase.from("product_barcodes").insert({ variant_id: variantId, barcode: finalBarcode, is_primary: true, is_active: true });
+        }
         await supabase.from("work_orders").update({ variant_id: variantId }).eq("id", woId);
       }
 
-      // ⑥ 이미지 업로드 (UUID 경로, 한글 파일명 안전 처리)
       if (wo_imageFiles.length > 0) {
         const uploadedPaths: string[] = [];
         for (const file of wo_imageFiles) {
@@ -1291,6 +1273,7 @@ export default function TradeClient() {
   function onCopyClick(r: UnifiedRow) {
     setMsg(null);
     if (r.kind === "ORDER") {
+      setOrderIsReorder(true);
       setMode("ORDERS"); setShipDate(todayYMD()); setOrdererName(r.orderer_name ?? r.ordererName ?? "");
       setShipMethod(r.ship_method ?? "택배"); setOrderTitle(r.order_title ?? "");
       setLines(r.order_lines?.length ? r.order_lines.map((l) => ({ food_type: String(l.food_type ?? ""), name: String(l.name ?? ""), weight_g: Number(l.weight_g ?? 0), qty: toInt(l.qty ?? 0), unit: Number(l.unit ?? 0), total_incl_vat: Number(l.total_amount ?? 0) })) : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
@@ -1317,9 +1300,8 @@ export default function TradeClient() {
       setEShipMethod(r.ship_method ?? r.method ?? "택배"); setEOrderTitle(r.order_title ?? "");
       setELines(r.order_lines?.length ? r.order_lines.map((l) => ({ food_type: String(l.food_type ?? ""), name: String(l.name ?? ""), weight_g: Number(l.weight_g ?? 0), qty: toInt(l.qty ?? 0), unit: Number(l.unit ?? 0), total_incl_vat: Number(l.total_amount ?? 0) })) : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
       applyShipmentsToForm(r.order_shipments ?? [], setEShip1, setEShip2, setETwoShip);
-      // 연결된 work_order 조회
       setEWoId(null); setEWoSubName(""); setEWoProductName(""); setEWoFoodType(""); setEWoLogoSpec("");
-      setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("트레이");
+      setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("");
       setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoImagePreviewUrls([]); setEWoExistingImages([]); setEWoExistingSignedLoading(false); setEWoExistingSignedUrls([]);
       const { data: wo } = await supabase
         .from("work_orders")
@@ -1335,12 +1317,11 @@ export default function TradeClient() {
         setEWoLogoSpec((wo as any).logo_spec ?? "");
         setEWoThickness((wo as any).thickness ?? "2mm");
         setEWoDeliveryMethod((wo as any).delivery_method ?? "택배");
-        setEWoPackagingType((wo as any).packaging_type ?? "트레이");
+        setEWoPackagingType((wo as any).packaging_type ?? "");
         setEWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
         setEWoNote((wo as any).note ?? "");
         const rawImages: string[] = (wo as any).images ?? [];
         setEWoExistingImages(rawImages);
-        // FIX: convert paths to signed URLs via helper
         if (rawImages.length > 0) {
           setEWoExistingSignedLoading(true);
           const signedUrls = await resolveSignedImageUrls(rawImages, supabase);
@@ -1368,6 +1349,7 @@ export default function TradeClient() {
     }
     setEditOpen(true);
   }
+
   async function saveEdit() {
     if (!editRow) return; setMsg(null);
     if (editRow.kind === "ORDER") {
@@ -1386,7 +1368,6 @@ export default function TradeClient() {
       await supabase.from("order_shipments").delete().eq("order_id", editRow.rawId);
       const { error: siErr } = await supabase.from("order_shipments").insert(buildShipPayloads(editRow.rawId, eShip1, eShip2, eTwoShip));
       if (siErr) return setMsg(siErr.message);
-      // 연결된 work_order 업데이트
       if (eWoId) {
         let uploadedUrls: string[] = [...eWoExistingImages];
         if (eWoImageFiles.length > 0) {
@@ -1438,26 +1419,18 @@ export default function TradeClient() {
     if (!window.confirm("정말 삭제하시겠습니까?\n삭제하면 복구할 수 없습니다.")) return;
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     if (r.kind === "ORDER") {
-      // 1. 연결된 work_orders 조회
       const { data: linkedWos } = await supabase
         .from("work_orders")
         .select("id")
         .eq("linked_order_id", r.rawId);
-
-      // 2. orders.work_order_item_id NULL로 먼저 해제 (FK NO ACTION 제약)
       await supabase.from("orders").update({ work_order_item_id: null }).eq("id", r.rawId);
-
-      // 3. work_order_items 삭제
       if (linkedWos && linkedWos.length > 0) {
         for (const wo of linkedWos) {
           await supabase.from("work_order_items").delete().eq("work_order_id", wo.id);
         }
-        // 4. work_orders 삭제
         const woIds = linkedWos.map((w) => w.id);
         await supabase.from("work_orders").delete().in("id", woIds);
       }
-
-      // 5. orders 관련 테이블 삭제
       await supabase.from("order_shipments").delete().eq("order_id", r.rawId);
       await supabase.from("order_lines").delete().eq("order_id", r.rawId);
       const { error } = await supabase.from("orders").delete().eq("id", r.rawId);
@@ -1655,7 +1628,6 @@ export default function TradeClient() {
                     <div className="mt-4 flex items-center justify-end gap-4 text-sm">
                       <div>공급가 {fmt(editOrderTotals.supply)}</div><div>부가세 {fmt(editOrderTotals.vat)}</div><div className="font-semibold">총액 {fmt(editOrderTotals.total)}</div>
                     </div>
-                    {/* 연결된 작업지시서 수정 */}
                     {eWoId ? (
                       <div className="mt-4 rounded-2xl border border-orange-100 bg-orange-50 p-3">
                         <div className="mb-3 flex items-center gap-2">
@@ -1682,7 +1654,9 @@ export default function TradeClient() {
                           </div>
                           <div><div className="mb-1 text-xs text-slate-600">포장방법</div>
                             <select className={inp} value={eWoPackagingType} onChange={(e) => setEWoPackagingType(e.target.value)}>
-                              {["트레이-정사각20구", "트레이-직사각20구", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
+                              {["", "트레이-정사각20구", "트레이-직사각20구", "벌크"].map((v) => (
+                                <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>
+                              ))}
                             </select>
                           </div>
                           <div><div className="mb-1 text-xs text-slate-600">납품방법</div>
@@ -1706,7 +1680,6 @@ export default function TradeClient() {
                                 setEWoImageFiles(files);
                                 setEWoImagePreviewUrls(files.map((f) => URL.createObjectURL(f)));
                               }} />
-                            {/* FIX 4: 기존 이미지 - signed URL로 표시 */}
                             {eWoExistingImages.length > 0 ? (
                               <div className="mt-2">
                                 <div className="mb-1 text-xs text-slate-500">기존 이미지 ({eWoExistingImages.length}장)</div>
@@ -1892,14 +1865,12 @@ export default function TradeClient() {
 
           {/* RIGHT */}
           <div className="min-w-0 space-y-6">
-            {/* 탭 버튼 */}
             <div className="flex flex-wrap gap-2">
               {(["ORDERS", "LEDGER", "UNIFIED"] as Mode[]).map((m) => {
                 const labels: Record<string, string> = { ORDERS: "주문/출고", LEDGER: "금전출납", UNIFIED: "통합" };
                 return <button key={m} className={mode === m ? btnOn : btn} onClick={() => setMode(m)}>{labels[m]}</button>;
               })}
             </div>
-
 
             {/* Order input */}
             {mode !== "LEDGER" ? (
@@ -1966,7 +1937,9 @@ export default function TradeClient() {
                       <div>
                         <div className="mb-1 text-xs text-slate-600">포장방법</div>
                         <select className={inp} value={orderWoPackagingType} onChange={(e) => setOrderWoPackagingType(e.target.value)}>
-                          {["트레이-정사각20구", "트레이-직사각20구", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
+                          {["", "트레이-정사각20구", "트레이-직사각20구", "벌크"].map((v) => (
+                            <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>
+                          ))}
                         </select>
                       </div>
                       <div>
@@ -1995,7 +1968,6 @@ export default function TradeClient() {
                       </div>
                       <div className="md:col-span-3">
                         <div className="mb-1 text-xs text-slate-600">인쇄 디자인 이미지 (여러 장 선택 가능)</div>
-                        {/* FIX 1: ref attached to file input */}
                         <input
                           ref={orderWoFileInputRef}
                           type="file"
@@ -2039,7 +2011,17 @@ export default function TradeClient() {
                 <div className="mt-4 flex items-center justify-end gap-4 text-sm">
                   <div>공급가 {fmt(orderTotals.supply)}</div><div>부가세 {fmt(orderTotals.vat)}</div>
                   <div className="font-semibold">총액 {fmt(orderTotals.total)}</div>
-                  <button className={btnOn} onClick={createOrder}>주문/출고 생성{orderWoEnabled ? " + 작업지시서" : ""}</button>
+                  <div className="flex items-center gap-3">
+                    <span style={{
+                      padding: "3px 12px", borderRadius: "12px", fontSize: "12px", fontWeight: "bold",
+                      background: orderIsReorder ? "#fef3c7" : "#dbeafe",
+                      color: orderIsReorder ? "#b45309" : "#1d4ed8",
+                      border: `1px solid ${orderIsReorder ? "#fcd34d" : "#93c5fd"}`,
+                    }}>
+                      {orderIsReorder ? "재주문" : "신규"}
+                    </span>
+                    <button className={btnOn} onClick={createOrder}>주문/출고 생성{orderWoEnabled ? " + 작업지시서" : ""}</button>
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -2229,6 +2211,14 @@ export default function TradeClient() {
   );
 }
 
+// ─────────────────────── 이미지 실제크기 파싱 헬퍼 ───────────────────────
+function parseLogoSize(logoSpec: string | null): { width: string; height: string } | null {
+  if (!logoSpec) return null;
+  const m = logoSpec.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(mm|cm)/i);
+  if (!m) return null;
+  return { width: `${m[1]}${m[3]}`, height: `${m[2]}${m[3]}` };
+}
+
 // ─────────────────────── 작업지시서 인쇄 모달 ───────────────────────
 function WoPrintModal({ wo, onClose, employees }: {
   wo: WorkOrderRow;
@@ -2238,7 +2228,6 @@ function WoPrintModal({ wo, onClose, employees }: {
   const items = (wo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date));
   const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
 
-  // 품목별 비고 state (DB에서 초기값 로드)
   const [itemNotes, setItemNotes] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const item of items) init[item.id] = item.note ?? "";
@@ -2260,14 +2249,11 @@ function WoPrintModal({ wo, onClose, employees }: {
     resolveImages();
   }, [wo.images]);
 
-  // signedImages가 로드될 때까지 raw images 사용 (이미지 영역이 사라지지 않도록)
   const woWithSigned = { ...wo, images: imagesLoading ? (wo.images ?? []) : signedImages };
 
-  // 비고 저장 후 인쇄
   async function saveAndPrint() {
     setSaving(true);
     const sb = createClient();
-    // 변경된 비고만 업데이트
     for (const item of items) {
       const newNote = itemNotes[item.id] ?? "";
       if (newNote !== (item.note ?? "")) {
@@ -2301,7 +2287,7 @@ function WoPrintModal({ wo, onClose, employees }: {
       window.onload = function() {
         if (typeof JsBarcode !== "undefined") {
           document.querySelectorAll("svg[data-barcode]").forEach(function(el) {
-            JsBarcode(el, el.getAttribute("data-barcode"), { format:"CODE128", displayValue:false, width:2, height:52, margin:0 });
+            JsBarcode(el, el.getAttribute("data-barcode"), { format:"CODE128", displayValue:false, width:2, height:26, margin:0 });
           });
         }
         window.print();
@@ -2314,7 +2300,6 @@ function WoPrintModal({ wo, onClose, employees }: {
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", background: "#f1f5f9" }}>
-      {/* 상단 툴바 */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "#1e3a5f", color: "#fff", flexShrink: 0 }}>
         <div style={{ fontWeight: "bold", fontSize: "14pt" }}>작업지시서 인쇄 미리보기</div>
         <div style={{ display: "flex", gap: "8px" }}>
@@ -2334,7 +2319,6 @@ function WoPrintModal({ wo, onClose, employees }: {
         </div>
       </div>
 
-      {/* 스크롤 가능한 미리보기 영역 */}
       <div style={{ flex: 1, overflow: "auto", padding: "20px", display: "flex", justifyContent: "center" }}>
         <div style={{ background: "#fff", width: "210mm", minHeight: "297mm", padding: "12mm 14mm", boxShadow: "0 4px 24px rgba(0,0,0,0.15)" }}>
           <div id="wo-print-preview-inner">
@@ -2345,6 +2329,7 @@ function WoPrintModal({ wo, onClose, employees }: {
               itemNotes={itemNotes}
               imagesLoading={imagesLoading}
               onItemNoteChange={(id, val) => setItemNotes((prev) => ({ ...prev, [id]: val }))}
+              isReorder={wo.is_reorder}
             />
           </div>
         </div>
@@ -2353,19 +2338,20 @@ function WoPrintModal({ wo, onClose, employees }: {
   );
 }
 
-// FIX 3: 성형틀/인쇄제판 품목 판별 헬퍼
+// ─────────────────────── 성형틀/인쇄제판 품목 판별 헬퍼 ───────────────────────
 function isSpecialItem(itemName: string): boolean {
   const n = String(itemName ?? "").trim();
   return n.startsWith("성형틀") || n.startsWith("인쇄제판");
 }
 
-function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onItemNoteChange }: {
+function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onItemNoteChange, isReorder }: {
   wo: WorkOrderRow;
   items: WoItem[];
   totalOrder: number;
   itemNotes: Record<string, string>;
   imagesLoading?: boolean;
   onItemNoteChange: (itemId: string, value: string) => void;
+  isReorder: boolean;
 }) {
   const f = (n: number | null | undefined) => Number(n ?? 0).toLocaleString("ko-KR");
 
@@ -2389,7 +2375,6 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onIte
     return `${names[0]} 외 ${names.length - 1}건`;
   })();
 
-  // 품목별 데이터 행 스타일
   const cellBase: React.CSSProperties = { border: "1px solid #cbd5e1", fontSize: "8.5pt", verticalAlign: "middle", padding: "4px 6px" };
   const cellHead: React.CSSProperties = { ...cellBase, background: "#f1f5f9", fontWeight: "bold", fontSize: "8pt", textAlign: "center", whiteSpace: "nowrap" };
 
@@ -2398,6 +2383,15 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onIte
       <div style={{ textAlign: "center", fontSize: "8.5pt", color: "#555", marginBottom: "4px", letterSpacing: "2px" }}>성실! 신뢰! 화합!</div>
       <div style={{ textAlign: "center", fontSize: "17pt", fontWeight: "bold", letterSpacing: "6px", marginBottom: "8px", borderBottom: "2px solid #111", paddingBottom: "6px" }}>
         작 업 지 시 서
+        <span style={{
+          marginLeft: "14px", fontSize: "10pt", fontWeight: "bold", letterSpacing: "0px",
+          padding: "2px 10px", borderRadius: "12px", verticalAlign: "middle",
+          background: isReorder ? "#fef3c7" : "#dbeafe",
+          color: isReorder ? "#b45309" : "#1d4ed8",
+          border: `1px solid ${isReorder ? "#fcd34d" : "#93c5fd"}`,
+        }}>
+          {isReorder ? "재주문" : "신규"}
+        </span>
       </div>
 
       {/* 기본정보 */}
@@ -2428,7 +2422,7 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onIte
           <tr>
             <td style={thS}>포장단위</td>
             <td style={tdS}>{wo.package_unit ?? "—"}</td>
-            <td style={thS}>성형틀/장</td>
+            <td style={thS}>장/성형틀</td>
             <td style={tdS}>{wo.mold_per_sheet ? `${wo.mold_per_sheet}개` : "—"}</td>
           </tr>
           <tr>
@@ -2451,7 +2445,6 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onIte
         {isMultiItem ? `품목별 생산 현황 (총 ${visibleItems.length}건)` : "생산 현황"}
       </div>
 
-      {/* 성형틀/인쇄제판 제외하고 품목 표시 */}
       {items.filter((item) => !isSpecialItem((item.sub_items ?? [])[0]?.name || "")).map((item, idx, arr) => {
         const aq = item.actual_qty ?? null;
         const uw = item.unit_weight ?? null;
@@ -2463,21 +2456,20 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onIte
 
         return (
           <div key={item.id} style={{ marginBottom: idx < arr.length - 1 ? "10px" : "6px" }}>
-            {/* 품목명 + 바코드 행 (가로 배열) */}
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <tbody>
                 <tr>
-                  {/* 품목명 */}
+                  {/* 품목명 - 배경색 제거, 텍스트 검정 */}
                   <td style={{
                     border: "1px solid #94a3b8", borderBottom: "none",
                     padding: "5px 10px", width: "30%",
-                    background: "#1e3a5f", color: "#fff",
+                    background: "#f1f5f9", color: "#111",
                     fontWeight: "bold", fontSize: "9pt", verticalAlign: "middle",
                     whiteSpace: "nowrap",
                   }}>
                     {itemName}
                   </td>
-                  {/* 바코드 숫자 + 막대 가로 배열 */}
+                  {/* 바코드 - 높이 26px */}
                   <td style={{
                     border: "1px solid #94a3b8", borderBottom: "none", borderLeft: "none",
                     padding: "5px 10px", background: "#f8fafc", verticalAlign: "middle",
@@ -2487,7 +2479,7 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onIte
                         <span style={{ fontFamily: "monospace", fontSize: "8pt", color: "#444", whiteSpace: "nowrap", writingMode: "horizontal-tb", minWidth: "fit-content" }}>
                           {itemBarcode}
                         </span>
-                        <svg data-barcode={itemBarcode} style={{ height: "52px", flex: 1, display: "block", minWidth: 0 }} />
+                        <svg data-barcode={itemBarcode} style={{ height: "26px", flex: 1, display: "block", minWidth: 0 }} />
                       </div>
                     ) : (
                       <span style={{ color: "#aaa", fontSize: "8pt" }}>바코드 없음</span>
@@ -2532,7 +2524,6 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onIte
                           <td style={{ ...cellBase, border: "none", borderRight: "1px solid #cbd5e1", textAlign: "center", fontSize: "8pt", width: "18%" }}>
                             {exp || ""}
                           </td>
-                          {/* 비고 - 태블릿 터치 입력 가능 textarea */}
                           <td style={{ ...cellBase, border: "none", padding: "2px", width: "40%" }}>
                             <textarea
                               value={noteVal}
@@ -2573,18 +2564,34 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onIte
         </tbody>
       </table>
 
-      {/* 이미지 */}
+      {/* 이미지 - 실제크기 적용 */}
       {(wo.images ?? []).length > 0 ? (
         <div style={{ marginBottom: "10px" }}>
-          <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "4px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>인쇄 디자인 이미지</div>
+          <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "2px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>인쇄 디자인 이미지</div>
+          <div style={{ fontSize: "7.5pt", color: "#94a3b8", marginBottom: "4px" }}>
+            {parseLogoSize(wo.logo_spec)
+              ? `※ 인쇄 시 실제크기 적용 (${wo.logo_spec})`
+              : "※ 실제크기 적용: 규격(로고스펙)에 25x25mm 형식으로 입력하세요"}
+          </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
             {imagesLoading ? (
               <div style={{ fontSize: "8pt", color: "#94a3b8", padding: "8px" }}>이미지 로딩 중...</div>
             ) : (
-              wo.images.map((url, i) => (
-                <img key={i} src={url} alt={`디자인 ${i + 1}`}
-                  style={{ maxWidth: "180px", maxHeight: "180px", width: "auto", height: "auto", objectFit: "contain", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />
-              ))
+              wo.images.map((url, i) => {
+                const logoSize = parseLogoSize(wo.logo_spec);
+                return (
+                  <img key={i} src={url} alt={`디자인 ${i + 1}`}
+                    style={{
+                      width: logoSize ? logoSize.width : "auto",
+                      height: logoSize ? logoSize.height : "auto",
+                      maxWidth: logoSize ? "none" : "100%",
+                      objectFit: "contain",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "4px",
+                      display: "block",
+                    }} />
+                );
+              })
             )}
           </div>
         </div>
