@@ -356,9 +356,19 @@ export default function ReportClient() {
       const outEA = intMin(r.period_out_ea ?? 0, 0);
       const eEA = intMin(r.end_stock_ea ?? 0, 0);
 
+      // 업체 표시명: "거래처명-품목명" (예: 아라한-A학교)
+      const isVendor = (r.product_category ?? "") === "업체";
+      const vendorName = safeStr(r.food_type ?? "").trim();
+      const productName = safeStr(r.product_name ?? "").trim();
+      const vendorDisplayName = vendorName && productName
+        ? `${vendorName}-${productName}`
+        : vendorName || productName || "-";
+      const nameCellStr = isVendor ? vendorDisplayName : productName;
+      const foodTypeCellStr = isVendor ? productName : safeStr(r.food_type ?? "-");
+
       const rowData: Record<ColKey, string> = {
-        name: safeStr(r.product_name),
-        food_type: safeStr(r.food_type ?? "-"),
+        name: nameCellStr,
+        food_type: foodTypeCellStr,
         prev_stock: String(sEA),
         in: String(inEA),
         out: String(outEA),
@@ -552,10 +562,15 @@ export default function ReportClient() {
                   const eEA = intMin(r.end_stock_ea ?? 0, 0);
                   const unit = intMin(r.pack_unit ?? 0, 0);
 
-                  // 업체: variant_name(food_type)=거래처명, product_name=품목명(식품유형 위치)
+                  // 업체: "거래처명-품목명" 형태로 표시 (예: 아라한-A학교)
                   const isVendor = (r.product_category ?? "") === "업체";
-                  const nameCell = isVendor ? safeStr(r.food_type ?? "-") : safeStr(r.product_name);
-                  const foodTypeCell = isVendor ? safeStr(r.product_name) : safeStr(r.food_type ?? "-");
+                  const vendorName = safeStr(r.food_type ?? "").trim();   // 거래처명 (variant_name)
+                  const productName = safeStr(r.product_name ?? "").trim(); // 품목명
+                  const vendorDisplayName = vendorName && productName
+                    ? `${vendorName}-${productName}`
+                    : vendorName || productName || "-";
+                  const nameCell = isVendor ? vendorDisplayName : productName;
+                  const foodTypeCell = isVendor ? productName : safeStr(r.food_type ?? "-");
 
                   const cellMap: Record<ColKey, React.ReactNode> = {
                     name: <span className="font-medium">{nameCell}</span>,
