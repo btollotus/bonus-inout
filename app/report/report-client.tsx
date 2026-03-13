@@ -552,9 +552,14 @@ export default function ReportClient() {
                   const eEA = intMin(r.end_stock_ea ?? 0, 0);
                   const unit = intMin(r.pack_unit ?? 0, 0);
 
+                  // 업체: variant_name(food_type)=거래처명, product_name=품목명(식품유형 위치)
+                  const isVendor = (r.product_category ?? "") === "업체";
+                  const nameCell = isVendor ? safeStr(r.food_type ?? "-") : safeStr(r.product_name);
+                  const foodTypeCell = isVendor ? safeStr(r.product_name) : safeStr(r.food_type ?? "-");
+
                   const cellMap: Record<ColKey, React.ReactNode> = {
-                    name: <span className="font-medium">{safeStr(r.product_name)}</span>,
-                    food_type: safeStr(r.food_type ?? "-"),
+                    name: <span className="font-medium">{nameCell}</span>,
+                    food_type: foodTypeCell,
                     prev_stock: (
                       <div className="text-right leading-tight">
                         <div>{toBoxAndEa(sEA, unit).boxText}</div>
