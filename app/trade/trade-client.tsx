@@ -2214,7 +2214,7 @@ export default function TradeClient() {
 // ─────────────────────── 이미지 실제크기 파싱 헬퍼 ───────────────────────
 function parseLogoSize(logoSpec: string | null): { width: string; height: string } | null {
   if (!logoSpec) return null;
-  const m = logoSpec.match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(mm|cm)/i);
+  const m = logoSpec.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(mm|cm)/i);
   if (!m) return null;
   return { width: `${m[1]}${m[3]}`, height: `${m[2]}${m[3]}` };
 }
@@ -2530,7 +2530,7 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onIte
                               onChange={(e) => onItemNoteChange(item.id, e.target.value)}
                               placeholder="비고 입력..."
                               style={{
-                                width: "100%", height: "52px", resize: "none",
+                                width: "100%", height: "26px", resize: "none",
                                 border: "none", outline: "none",
                                 fontSize: "8.5pt", fontFamily: "inherit",
                                 padding: "3px 4px", background: "transparent",
