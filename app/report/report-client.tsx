@@ -31,6 +31,9 @@ type AggRow = {
   barcode: string;
   note: string | null;
   pack_unit?: number | null;
+  // 수정/삭제용 lot_id 추가
+  lot_id?: string | null;
+  variant_id?: string | null;
 };
 
 function intMin(n: any, min = 0) {
@@ -94,14 +97,6 @@ function csvEscape(v: any) {
   return s;
 }
 
-function shouldReplaceFoodType(cur: string | null | undefined) {
-  const s = (cur ?? "").trim();
-  if (!s) return true;
-  if (s === "EA" || s === "BOX") return true;
-  return false;
-}
-
-// ── 구분 필터별 헤더/컬럼 정의 ──
 type ColKey = "name" | "food_type" | "prev_stock" | "in" | "out" | "stock" | "expiry" | "barcode" | "note";
 
 const COLS: Record<Exclude<Category, "ALL">, { key: ColKey; label: string }[]> = {
@@ -117,7 +112,7 @@ const COLS: Record<Exclude<Category, "ALL">, { key: ColKey; label: string }[]> =
     { key: "note",       label: "비고" },
   ],
   업체: [
-    { key: "name",       label: "거래처명" },
+    { key: "name",       label: "제품명" },
     { key: "food_type",  label: "식품유형" },
     { key: "prev_stock", label: "전일재고" },
     { key: "in",         label: "입고" },
@@ -139,7 +134,6 @@ const COLS: Record<Exclude<Category, "ALL">, { key: ColKey; label: string }[]> =
   ],
 };
 
-// ALL일 때는 기성 컬럼 기준으로 표시 (전일재고 포함 전체)
 const COLS_ALL: { key: ColKey; label: string }[] = [
   { key: "name",       label: "제품명" },
   { key: "food_type",  label: "식품유형" },
@@ -157,6 +151,17 @@ function getCols(cat: Category) {
   return COLS[cat];
 }
 
+// ── 수정 모달 타입 ──
+type EditModalState = {
+  open: boolean;
+  row: AggRow | null;
+  product_name: string;
+  food_type: string;
+  end_stock_ea: string;
+  expiry_date: string;
+  note: string;
+};
+
 export default function ReportClient() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -169,10 +174,35 @@ export default function ReportClient() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // ADMIN 여부
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // 수정 모달
+  const [editModal, setEditModal] = useState<EditModalState>({
+    open: false, row: null,
+    product_name: "", food_type: "", end_stock_ea: "", expiry_date: "", note: "",
+  });
+  const [editSaving, setEditSaving] = useState(false);
+
   const printedAt = formatYYYYMMDD(new Date());
 
   useEffect(() => {
     document.title = "BONUSMATE ERP 재고대장";
+  }, []);
+
+  // ADMIN 여부 확인
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      setIsAdmin(data?.role === "ADMIN");
+    })();
   }, []);
 
   useEffect(() => {
@@ -185,60 +215,6 @@ export default function ReportClient() {
       : rows.filter((r) => (r.product_category ?? "") === categoryFilter);
 
   const periodLabel = startDay === endDay ? `${startDay}` : `${startDay} ~ ${endDay}`;
-
-  const enrichFoodTypes = async (listAgg: AggRow[]) => {
-    const barcodes = Array.from(
-      new Set(
-        listAgg
-          .map((r) => safeStr(r.barcode).trim())
-          .filter((b) => b && b.length >= 3)
-      )
-    );
-    if (barcodes.length === 0) return listAgg;
-
-    let map = new Map<string, string>();
-
-    try {
-      const { data, error } = await supabase
-        .from("product_variants")
-        .select("barcode, food_type")
-        .in("barcode", barcodes);
-      if (!error && data) {
-        for (const r of data as any[]) {
-          const b = safeStr(r?.barcode).trim();
-          const ft = safeStr(r?.food_type).trim();
-          if (b && ft) map.set(b, ft);
-        }
-      }
-    } catch {}
-
-    if (map.size === 0) {
-      try {
-        const { data, error } = await supabase
-          .from("v_tradeclient_products")
-          .select("barcode, food_type")
-          .in("barcode", barcodes);
-        if (!error && data) {
-          for (const r of data as any[]) {
-            const b = safeStr(r?.barcode).trim();
-            const ft = safeStr(r?.food_type).trim();
-            if (b && ft) map.set(b, ft);
-          }
-        }
-      } catch {}
-    }
-
-    if (map.size === 0) return listAgg;
-
-    for (const r of listAgg) {
-      const b = safeStr(r.barcode).trim();
-      const ft = map.get(b);
-      if (ft && shouldReplaceFoodType(r.food_type)) {
-        r.food_type = ft;
-      }
-    }
-    return listAgg;
-  };
 
   const fetchReport = async () => {
     const s = startDay;
@@ -310,8 +286,34 @@ export default function ReportClient() {
         }
       }
 
+      // lot_id, variant_id 보강 (수정/삭제용)
       let listAgg = Array.from(agg.values());
-      listAgg = await enrichFoodTypes(listAgg);
+      if (isAdmin && listAgg.length > 0) {
+        const barcodes = listAgg.map((r) => r.barcode).filter(Boolean);
+        const { data: lotData } = await supabase
+          .from("lots")
+          .select("id, expiry_date, variant_id, product_variants(barcode)")
+          .in("variant_id", (
+            await supabase
+              .from("product_variants")
+              .select("id")
+              .in("barcode", barcodes)
+          ).data?.map((v: any) => v.id) ?? []);
+
+        if (lotData) {
+          for (const row of listAgg) {
+            const lot = (lotData as any[]).find((l) =>
+              (l.product_variants as any)?.barcode === row.barcode &&
+              l.expiry_date === row.expiry_date
+            );
+            if (lot) {
+              row.lot_id = lot.id;
+              row.variant_id = lot.variant_id;
+            }
+          }
+        }
+      }
+
       listAgg.sort((a, b) => {
         const pn = safeStr(a.product_name).localeCompare(safeStr(b.product_name), "ko");
         if (pn !== 0) return pn;
@@ -338,6 +340,101 @@ export default function ReportClient() {
     }
   };
 
+  // ── 수정 모달 열기 ──
+  function openEdit(r: AggRow) {
+    setEditModal({
+      open: true,
+      row: r,
+      product_name: r.product_name ?? "",
+      food_type: r.food_type ?? "",
+      end_stock_ea: String(r.end_stock_ea ?? 0),
+      expiry_date: r.expiry_date ?? "",
+      note: r.note ?? "",
+    });
+  }
+
+  // ── 수정 저장 ──
+  async function saveEdit() {
+    const { row } = editModal;
+    if (!row) return;
+    setEditSaving(true);
+    setMsg(null);
+    try {
+      // 1. product_variants.variant_name, food_type 수정 (barcode 기준)
+      const { data: pvData } = await supabase
+        .from("product_variants")
+        .select("id, product_id")
+        .eq("barcode", row.barcode)
+        .maybeSingle();
+
+      if (pvData) {
+        // variant_name 수정
+        await supabase
+          .from("product_variants")
+          .update({ variant_name: editModal.product_name.trim() })
+          .eq("id", pvData.id);
+
+        // products.food_type 수정
+        await supabase
+          .from("products")
+          .update({ food_type: editModal.food_type.trim() })
+          .eq("id", pvData.product_id);
+      }
+
+      // 2. lots.expiry_date 수정 (lot_id 기준)
+      if (row.lot_id) {
+        await supabase
+          .from("lots")
+          .update({ expiry_date: editModal.expiry_date })
+          .eq("id", row.lot_id);
+      }
+
+      // 3. 수량 수정: movements에 보정 movement 추가
+      if (row.lot_id) {
+        const newQty = intMin(Number(editModal.end_stock_ea), 0);
+        const currentQty = intMin(row.end_stock_ea, 0);
+        const diff = newQty - currentQty;
+        if (diff !== 0) {
+          const { data: { user } } = await supabase.auth.getUser();
+          await supabase.from("movements").insert({
+            lot_id: row.lot_id,
+            type: diff > 0 ? "IN" : "OUT",
+            qty: Math.abs(diff),
+            happened_at: new Date().toISOString(),
+            note: `재고대장 수동 수정 (ADMIN)`,
+            created_by: user?.id ?? null,
+          });
+        }
+      }
+
+      setMsg("✅ 수정 완료");
+      setEditModal((prev) => ({ ...prev, open: false, row: null }));
+      await fetchReport();
+    } catch (e: any) {
+      setMsg("수정 오류: " + (e?.message ?? e));
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  // ── 삭제 ──
+  async function deleteRow(r: AggRow) {
+    if (!window.confirm(`"${r.product_name}" 항목을 삭제하시겠습니까?\n관련 movements와 lot이 모두 삭제됩니다.`)) return;
+    setMsg(null);
+    try {
+      if (r.lot_id) {
+        // movements 먼저 삭제
+        await supabase.from("movements").delete().eq("lot_id", r.lot_id);
+        // lot 삭제
+        await supabase.from("lots").delete().eq("id", r.lot_id);
+      }
+      setMsg("🗑️ 삭제 완료");
+      await fetchReport();
+    } catch (e: any) {
+      setMsg("삭제 오류: " + (e?.message ?? e));
+    }
+  }
+
   const doPrint = () => {
     if (filteredRows.length === 0) { setMsg("인쇄할 데이터가 없습니다. (날짜/필터 확인 후 조회)"); return; }
     window.print();
@@ -356,19 +453,9 @@ export default function ReportClient() {
       const outEA = intMin(r.period_out_ea ?? 0, 0);
       const eEA = intMin(r.end_stock_ea ?? 0, 0);
 
-      // 업체 표시명: "거래처명-품목명" (예: 아라한-A학교)
-      const isVendor = (r.product_category ?? "") === "업체";
-      const vendorName = safeStr(r.food_type ?? "").trim();
-      const productName = safeStr(r.product_name ?? "").trim();
-      const vendorDisplayName = vendorName && productName
-        ? `${vendorName}-${productName}`
-        : vendorName || productName || "-";
-      const nameCellStr = isVendor ? vendorDisplayName : productName;
-      const foodTypeCellStr = isVendor ? productName : safeStr(r.food_type ?? "-");
-
       const rowData: Record<ColKey, string> = {
-        name: nameCellStr,
-        food_type: foodTypeCellStr,
+        name: safeStr(r.product_name),
+        food_type: safeStr(r.food_type ?? "-"),
         prev_stock: String(sEA),
         in: String(inEA),
         out: String(outEA),
@@ -401,10 +488,12 @@ export default function ReportClient() {
   const scrollTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
   const cols = getCols(categoryFilter);
+  const isRightAlign = (key: ColKey) => ["prev_stock", "in", "out", "stock"].includes(key);
 
-  // 컬럼별 정렬 기준
-  const isRightAlign = (key: ColKey) =>
-    ["prev_stock", "in", "out", "stock"].includes(key);
+  // ADMIN일 때 작업 컬럼 추가
+  const displayCols = isAdmin
+    ? [...cols, { key: "actions" as any, label: "작업" }]
+    : cols;
 
   return (
     <div className="min-h-screen bg-white text-black p-6 print:bg-white print:text-black print:p-0 print:min-h-0">
@@ -436,10 +525,88 @@ export default function ReportClient() {
         .print-only { display: none; }
       `}</style>
 
+      {/* 수정 모달 */}
+      {editModal.open && editModal.row ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-black/10 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-black/10 px-5 py-4">
+              <div className="font-semibold">재고 수정 · ADMIN</div>
+              <button
+                className="rounded-lg border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5"
+                onClick={() => setEditModal((prev) => ({ ...prev, open: false }))}
+              >닫기</button>
+            </div>
+            <div className="space-y-3 px-5 py-4">
+              <div>
+                <div className="mb-1 text-xs text-black/60">제품명 (variant_name)</div>
+                <input
+                  className="w-full rounded-xl border border-black/15 px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  value={editModal.product_name}
+                  onChange={(e) => setEditModal((prev) => ({ ...prev, product_name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-black/60">식품유형 (products.food_type)</div>
+                <input
+                  className="w-full rounded-xl border border-black/15 px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  value={editModal.food_type}
+                  onChange={(e) => setEditModal((prev) => ({ ...prev, food_type: e.target.value }))}
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-black/60">재고 수량 (EA)</div>
+                <input
+                  className="w-full rounded-xl border border-black/15 px-3 py-2 text-sm text-right tabular-nums outline-none focus:border-blue-400"
+                  inputMode="numeric"
+                  value={editModal.end_stock_ea}
+                  onChange={(e) => setEditModal((prev) => ({ ...prev, end_stock_ea: e.target.value.replace(/[^\d]/g, "") }))}
+                />
+                <div className="mt-1 text-xs text-black/40">현재: {fmt(intMin(editModal.row.end_stock_ea))} EA → 차이만큼 movements에 IN/OUT 자동 추가</div>
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-black/60">소비기한</div>
+                <input
+                  type="date"
+                  className="w-full rounded-xl border border-black/15 px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  value={editModal.expiry_date}
+                  onChange={(e) => setEditModal((prev) => ({ ...prev, expiry_date: e.target.value }))}
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-black/60">비고</div>
+                <input
+                  className="w-full rounded-xl border border-black/15 px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  value={editModal.note}
+                  onChange={(e) => setEditModal((prev) => ({ ...prev, note: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-black/10 px-5 py-3">
+              <button
+                className="rounded-xl border border-black/15 px-4 py-2 text-sm hover:bg-black/5"
+                onClick={() => setEditModal((prev) => ({ ...prev, open: false }))}
+              >취소</button>
+              <button
+                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                onClick={saveEdit}
+                disabled={editSaving}
+              >{editSaving ? "저장 중..." : "저장"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div id="report-print-area">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold">재고대장</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-semibold">재고대장</h1>
+              {isAdmin && (
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                  ADMIN
+                </span>
+              )}
+            </div>
             <div className="print-only" style={{ marginTop: 6 }}>
               인쇄일: {printedAt}<br />
               기간: {periodLabel}<br />
@@ -528,7 +695,11 @@ export default function ReportClient() {
             PDF/인쇄
           </button>
 
-          {msg && <div className="text-sm text-black/70">{msg}</div>}
+          {msg && (
+            <div className={`text-sm ${msg.startsWith("✅") || msg.startsWith("🗑️") ? "text-green-700" : "text-red-600"}`}>
+              {msg}
+            </div>
+          )}
         </div>
 
         {/* 테이블 */}
@@ -536,10 +707,10 @@ export default function ReportClient() {
           <table className="w-full text-sm">
             <thead className="bg-black/5 print:bg-black/5">
               <tr>
-                {cols.map((col) => (
+                {displayCols.map((col) => (
                   <th
                     key={col.key}
-                    className={`p-3 print:p-2 ${isRightAlign(col.key) ? "text-right" : "text-left"}`}
+                    className={`p-3 print:p-2 ${isRightAlign(col.key as ColKey) ? "text-right" : "text-left"}`}
                   >
                     {col.label}
                   </th>
@@ -550,7 +721,7 @@ export default function ReportClient() {
             <tbody>
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td className="p-3 text-black/60" colSpan={cols.length}>
+                  <td className="p-3 text-black/60" colSpan={displayCols.length}>
                     데이터가 없습니다. (날짜/필터 확인 후 조회)
                   </td>
                 </tr>
@@ -562,17 +733,11 @@ export default function ReportClient() {
                   const eEA = intMin(r.end_stock_ea ?? 0, 0);
                   const unit = intMin(r.pack_unit ?? 0, 0);
 
-                  // 업체: "거래처명-품목명" 형태로 표시 (예: 아라한-A학교)
-                  const isVendor = (r.product_category ?? "") === "업체";
-                  const vendorName = safeStr(r.food_type ?? "").trim();   // 거래처명 (variant_name)
-                  const productName = safeStr(r.product_name ?? "").trim(); // 품목명
-                  const vendorDisplayName = vendorName && productName
-                    ? `${vendorName}-${productName}`
-                    : vendorName || productName || "-";
-                  const nameCell = isVendor ? vendorDisplayName : productName;
-                  const foodTypeCell = isVendor ? productName : safeStr(r.food_type ?? "-");
+                  // 제품명 = product_name (variant_name), 식품유형 = food_type (products.food_type)
+                  const nameCell = safeStr(r.product_name ?? "-");
+                  const foodTypeCell = safeStr(r.food_type ?? "-");
 
-                  const cellMap: Record<ColKey, React.ReactNode> = {
+                  const cellMap: Record<string, React.ReactNode> = {
                     name: <span className="font-medium">{nameCell}</span>,
                     food_type: foodTypeCell,
                     prev_stock: (
@@ -602,6 +767,18 @@ export default function ReportClient() {
                     expiry: safeStr(r.expiry_date),
                     barcode: safeStr(r.barcode),
                     note: safeStr(r.note ?? ""),
+                    actions: isAdmin ? (
+                      <div className="flex gap-1 no-print">
+                        <button
+                          className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          onClick={() => openEdit(r)}
+                        >수정</button>
+                        <button
+                          className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
+                          onClick={() => deleteRow(r)}
+                        >삭제</button>
+                      </div>
+                    ) : null,
                   };
 
                   return (
@@ -609,10 +786,10 @@ export default function ReportClient() {
                       key={`${r.barcode}-${r.expiry_date}-${idx}`}
                       className="border-t border-black/10 print:border-black/15"
                     >
-                      {cols.map((col) => (
+                      {displayCols.map((col) => (
                         <td
                           key={col.key}
-                          className={`p-3 print:p-2 ${isRightAlign(col.key) ? "" : ""}`}
+                          className="p-3 print:p-2"
                         >
                           {cellMap[col.key]}
                         </td>
@@ -627,6 +804,7 @@ export default function ReportClient() {
 
         <div className="mt-2 text-xs text-black/50 no-print">
           ※ 선택한 "구분 필터"가 화면/엑셀/인쇄에 동일하게 적용됩니다. / 기간 조회는 내부적으로 날짜별 재고리포트를 집계합니다.
+          {isAdmin && " / ADMIN: 수정·삭제 기능 활성화됨"}
         </div>
       </div>
 
