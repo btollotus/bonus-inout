@@ -937,7 +937,7 @@ export default function TradeClient() {
         let firstVariantId: string | null = null;
         for (const createdItem of (createdWoItems as any[]) ?? []) {
           const itemBarcodeNo = createdItem.barcode_no as string;
-          const itemName = (createdItem.sub_items as WoSubItem[])?.[0]?.name ?? productName;
+          const itemName = (createdItem.sub_items as WoSubItem[])?.[0]?.name ?? firstItemName;
           const itemVariantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${itemName}`;
           const { data: existItemVariant } = await supabase
             .from("product_variants").select("id, barcode").eq("product_id", productId).eq("variant_name", itemVariantName).limit(1).maybeSingle();
