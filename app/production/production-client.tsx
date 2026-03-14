@@ -1294,7 +1294,7 @@ function WoPrintContent({
               const sz = parseSize(wo.logo_spec);
               return (
                 <div style={{ marginTop: "6px", display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "flex-end" }}>
-                  {item.images.map((url, imgIdx) => (
+                  {(item.images ?? []).map((url, imgIdx) => (
                     <div key={imgIdx} style={{ textAlign: "center" }}>
                       <img src={url} alt={`이미지${imgIdx+1}`}
                         style={{ width: sz ? sz.w : 80, height: sz ? sz.h : 80, objectFit: "contain", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />
