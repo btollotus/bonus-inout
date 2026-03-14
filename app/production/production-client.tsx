@@ -204,7 +204,10 @@ export default function ProductionClient() {
 
   useEffect(() => { loadWoList(); }, [loadWoList]);
   useEffect(() => {
-    supabase.from("employees").select("id,name").order("name").limit(500)
+    supabase.from("employees").select("id,name,is_active,resign_date")
+      .eq("is_active", true)
+      .is("resign_date", null)
+      .order("name").limit(500)
       .then(({ data }) => { if (data) setEmployees(data); });
   }, []);
 
@@ -268,6 +271,49 @@ export default function ProductionClient() {
       };
     }
     setProdInputs(inputs);
+    // ── 개당 중량 자동입력: unit_weight 없는 항목에 variant weight_g 조회 ──
+    (async () => {
+      const items = wo.work_order_items ?? [];
+      const missingWeight = items.filter((item) => item.unit_weight == null && item.barcode_no);
+      if (missingWeight.length === 0 && wo.variant_id == null) return;
+      // barcode_no → variant_id → weight_g 조회
+      const barcodes = missingWeight.map((i) => i.barcode_no).filter(Boolean) as string[];
+      let weightMap: Record<string, string> = {};
+      if (barcodes.length > 0) {
+        const { data: pbData } = await supabase
+          .from("product_barcodes")
+          .select("barcode, variant_id, product_variants(weight_g)")
+          .in("barcode", barcodes);
+        for (const pb of pbData ?? []) {
+          const wg = (pb as any).product_variants?.weight_g;
+          if (wg != null && wg > 0) weightMap[(pb as any).barcode] = String(wg);
+        }
+      }
+      // variant_id fallback: work_orders.variant_id
+      let fallbackWeight = "";
+      if (wo.variant_id) {
+        const { data: vData } = await supabase
+          .from("product_variants")
+          .select("weight_g")
+          .eq("id", wo.variant_id)
+          .maybeSingle();
+        if ((vData as any)?.weight_g != null && (vData as any).weight_g > 0) {
+          fallbackWeight = String((vData as any).weight_g);
+        }
+      }
+      setProdInputs((prev) => {
+        const next = { ...prev };
+        for (const item of items) {
+          if (item.unit_weight != null) continue; // 이미 값 있으면 skip
+          const wByBarcode = item.barcode_no ? weightMap[item.barcode_no] : undefined;
+          const autoWeight = wByBarcode ?? fallbackWeight;
+          if (autoWeight) {
+            next[item.id] = { ...next[item.id], unit_weight: autoWeight };
+          }
+        }
+        return next;
+      });
+    })();
   }
 
   // ── 작업지시서 삭제 (ADMIN only) ──
