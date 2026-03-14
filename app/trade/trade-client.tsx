@@ -881,7 +881,9 @@ export default function TradeClient() {
         const todayStr = new Date().toISOString().slice(0, 10).replaceAll("-", "");
         const workOrderNo = `WO-${todayStr}-${barcodeNo.slice(-4)}`;
 
-        const productName = orderTitle.trim() || cleanLines[0]?.name || selectedPartner.name;
+        const firstItemName = cleanLines[0]?.name ?? "";
+        const productName = orderTitle.trim()
+          || (firstItemName ? `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${firstItemName}` : selectedPartner.name);
         const foodType = cleanLines[0]?.food_type || null;
 
         const { data: createdWo, error: woErr } = await supabase.from("work_orders").insert({
@@ -1137,12 +1139,13 @@ export default function TradeClient() {
       await supabase.from("plates").insert({ work_order_id: woId, description: `${selectedPartner.name} / ${wo_productName.trim()}`, status: "active" });
 
       if (!wo_isReorder) {
-        const { data: existProduct } = await supabase.from("products").select("id").eq("name", wo_productName.trim()).limit(1).maybeSingle();
+        const woProductsName = `${selectedPartner.name}${wo_subName.trim() ? "-" + wo_subName.trim() : ""}-${wo_productName.trim()}`;
+        const { data: existProduct } = await supabase.from("products").select("id").eq("name", woProductsName).limit(1).maybeSingle();
         let productId: string;
         if (existProduct?.id) {
           productId = existProduct.id;
         } else {
-          const { data: newProduct, error: pErr } = await supabase.from("products").insert({ name: wo_productName.trim(), category: "업체", food_type: wo_foodType.trim() || "기타", default_weight_g: 0 }).select("id").single();
+          const { data: newProduct, error: pErr } = await supabase.from("products").insert({ name: woProductsName, category: "업체", food_type: wo_foodType.trim() || "기타", default_weight_g: 0 }).select("id").single();
           if (pErr) return setMsg("품목 등록 실패: " + pErr.message);
           productId = (newProduct as any).id;
         }
