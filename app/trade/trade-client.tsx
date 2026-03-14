@@ -965,22 +965,10 @@ export default function TradeClient() {
           if (!firstVariantId) firstVariantId = itemVariantId;
         }
 
-        // work_orders.variant_id 대표 variant
-        const variantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}`;
-        const { data: existVariant } = await supabase.from("product_variants").select("id").eq("product_id", productId).eq("variant_name", variantName).limit(1).maybeSingle();
-        let variantId: string;
-        if (existVariant?.id) {
-          variantId = existVariant.id;
-        } else {
-          const { data: newVariant, error: vErr } = await supabase.from("product_variants").insert({ product_id: productId, variant_name: variantName, barcode: finalBarcode, pack_unit: 1, unit_type: "EA" }).select("id").single();
-          if (vErr) throw new Error("규격 등록 실패: " + vErr.message);
-          variantId = (newVariant as any).id;
+        // work_orders.variant_id = 첫 번째 품목 variant
+        if (firstVariantId) {
+          await supabase.from("work_orders").update({ variant_id: firstVariantId }).eq("id", woId);
         }
-        const { data: existBarcode } = await supabase.from("product_barcodes").select("id").eq("barcode", finalBarcode).maybeSingle();
-        if (!existBarcode) {
-          await supabase.from("product_barcodes").insert({ variant_id: variantId, barcode: finalBarcode, is_primary: true, is_active: true });
-        }
-        await supabase.from("work_orders").update({ variant_id: variantId }).eq("id", woId);
 
         if (wo_imageFiles.length > 0) {
           const uploadedPaths: string[] = [];
@@ -1151,6 +1139,7 @@ export default function TradeClient() {
         }
 
         // ── 품목별 variant 생성 (바코드 중복 방지) ──
+        let firstVariantId: string | null = null;
         for (const createdItem of (createdItems as any[]) ?? []) {
           const itemBarcodeNo = createdItem.barcode_no as string;
           const itemName = (createdItem.sub_items as WoSubItem[])?.[0]?.name ?? wo_productName.trim();
@@ -1178,24 +1167,13 @@ export default function TradeClient() {
               await supabase.from("product_barcodes").insert({ variant_id: itemVariantId, barcode: itemBarcodeNo, is_primary: true, is_active: true });
             }
           }
+          if (!firstVariantId) firstVariantId = itemVariantId;
         }
 
-        // work_orders.variant_id 대표 variant
-        const variantName = `${selectedPartner.name}${wo_subName.trim() ? "-" + wo_subName.trim() : ""}`;
-        const { data: existVariant } = await supabase.from("product_variants").select("id").eq("product_id", productId).eq("variant_name", variantName).limit(1).maybeSingle();
-        let variantId: string;
-        if (existVariant?.id) {
-          variantId = existVariant.id;
-        } else {
-          const { data: newVariant, error: vErr } = await supabase.from("product_variants").insert({ product_id: productId, variant_name: variantName, barcode: finalBarcode, pack_unit: 1, unit_type: "EA" }).select("id").single();
-          if (vErr) return setMsg("규격 등록 실패: " + vErr.message);
-          variantId = (newVariant as any).id;
+        // work_orders.variant_id = 첫 번째 품목 variant
+        if (firstVariantId) {
+          await supabase.from("work_orders").update({ variant_id: firstVariantId }).eq("id", woId);
         }
-        const { data: existBarcode } = await supabase.from("product_barcodes").select("id").eq("barcode", finalBarcode).maybeSingle();
-        if (!existBarcode) {
-          await supabase.from("product_barcodes").insert({ variant_id: variantId, barcode: finalBarcode, is_primary: true, is_active: true });
-        }
-        await supabase.from("work_orders").update({ variant_id: variantId }).eq("id", woId);
       }
 
       if (wo_imageFiles.length > 0) {
