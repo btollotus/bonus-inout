@@ -20,6 +20,7 @@ type WoItemRow = {
   expiry_date: string | null;
   order_id: string | null;
   note: string | null;
+  images: string[] | null;
 };
 
 type WorkOrderRow = {
@@ -179,7 +180,7 @@ export default function ProductionClient() {
           status_production,status_input,is_reorder,original_work_order_id,
           variant_id,images,linked_order_id,created_at,
           assignee_transfer,assignee_print_check,assignee_production,assignee_input,
-          work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note),
+          work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images),
           linked_order:orders!linked_order_id(memo)
         `)
         .order("created_at", { ascending: false })
@@ -890,29 +891,19 @@ export default function ProductionClient() {
                                 />
                               </div>
                             </div>
+                            {/* 품목별 이미지 표시 */}
+                            {(item.images ?? []).length > 0 ? (
+                              <ItemImages
+                                images={item.images ?? []}
+                                logoSpec={selectedWo.logo_spec}
+                              />
+                            ) : null}
                           </div>
                         );
                       })}
                   </div>
                 )}
               </div>
-
-              {/* 이미지 카드 */}
-              {(selectedWo.images ?? []).length > 0 ? (
-                <div className={`${card} p-4`}>
-                  <div className="mb-3 font-semibold text-sm">🖼 인쇄 디자인 이미지</div>
-                  <div className="flex flex-wrap gap-3">
-                    {signedImageUrls.length > 0 ? signedImageUrls.map((url, i) => (
-                      <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                        className="block rounded-xl border border-slate-200 bg-white p-1 hover:border-blue-300 transition-colors">
-                        <img src={url} alt={`디자인 ${i + 1}`} className="h-32 w-32 rounded-lg object-cover" />
-                      </a>
-                    )) : (
-                      <div className="text-sm text-slate-400">이미지 로딩 중...</div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
 
               {/* 생산완료 버튼 - 모든 저장 포함 */}
               <div className={`${card} p-4`}>
@@ -940,6 +931,59 @@ export default function ProductionClient() {
       {printOpen && selectedWo ? (
         <PrintModal wo={selectedWo} prodInputs={prodInputs} onClose={() => setPrintOpen(false)} employees={employees} />
       ) : null}
+    </div>
+  );
+}
+
+// ─────────────────────── ItemImages ───────────────────────
+function ItemImages({ images, logoSpec }: { images: string[]; logoSpec: string | null }) {
+  const [signedUrls, setSignedUrls] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (images.length === 0) return;
+    (async () => {
+      const paths = images.map((v) => {
+        if (v.startsWith("http")) {
+          const m = v.match(/work-order-images\/(.+?)(\?|$)/);
+          return m ? m[1] : null;
+        }
+        return v;
+      }).filter(Boolean) as string[];
+      if (paths.length === 0) { setSignedUrls(images); return; }
+      const { data, error } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
+      if (!error && data) setSignedUrls(data.map((d) => d.signedUrl));
+      else setSignedUrls(images);
+    })();
+  }, [images.join(",")]);
+
+  // 규격(로고스펙)에서 크기 파싱 (예: "30*30mm", "40x40mm")
+  const parseSize = (spec: string | null) => {
+    if (!spec) return null;
+    const m = spec.match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(mm|cm)?/i);
+    if (!m) return null;
+    const unit = (m[3] ?? "mm").toLowerCase();
+    const w = parseFloat(m[1]) * (unit === "cm" ? 37.8 : 3.78);
+    const h = parseFloat(m[2]) * (unit === "cm" ? 37.8 : 3.78);
+    return { w: Math.round(w), h: Math.round(h) };
+  };
+  const size = parseSize(logoSpec);
+
+  if (signedUrls.length === 0) return <div className="mt-2 text-xs text-slate-400">이미지 로딩 중...</div>;
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {signedUrls.map((url, i) => (
+        <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+          className="block rounded-xl border border-slate-200 bg-white p-1 hover:border-blue-300 transition-colors">
+          <img
+            src={url}
+            alt={`디자인 ${i + 1}`}
+            style={size ? { width: size.w, height: size.h, objectFit: "contain" } : { width: 80, height: 80, objectFit: "cover" }}
+            className="rounded-lg"
+          />
+          {logoSpec ? <div className="mt-1 text-center text-[10px] text-slate-400">{logoSpec}</div> : null}
+        </a>
+      ))}
     </div>
   );
 }
@@ -1236,21 +1280,33 @@ function WoPrintContent({
                 </tr>
               </tbody>
             </table>
+              {/* 품목 이미지 - 규격 크기로 표시 */}
+            {(item.images ?? []).length > 0 ? (() => {
+              const parseSize = (spec: string | null) => {
+                if (!spec) return null;
+                const m = spec.match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(mm|cm)?/i);
+                if (!m) return null;
+                const unit = (m[3] ?? "mm").toLowerCase();
+                const w = parseFloat(m[1]) * (unit === "cm" ? 37.8 : 3.78);
+                const h = parseFloat(m[2]) * (unit === "cm" ? 37.8 : 3.78);
+                return { w: Math.round(w), h: Math.round(h) };
+              };
+              const sz = parseSize(wo.logo_spec);
+              return (
+                <div style={{ marginTop: "6px", display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "flex-end" }}>
+                  {item.images.map((url, imgIdx) => (
+                    <div key={imgIdx} style={{ textAlign: "center" }}>
+                      <img src={url} alt={`이미지${imgIdx+1}`}
+                        style={{ width: sz ? sz.w : 80, height: sz ? sz.h : 80, objectFit: "contain", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />
+                      {wo.logo_spec ? <div style={{ fontSize: "7pt", color: "#94a3b8", marginTop: "2px" }}>{wo.logo_spec}</div> : null}
+                    </div>
+                  ))}
+                </div>
+              );
+            })() : null}
           </div>
         );
       })}
-
-      {(wo.images ?? []).length > 0 ? (
-        <div style={{ marginBottom: "10px" }}>
-          <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "4px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>인쇄 디자인 이미지</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-            {wo.images.map((url, i) => (
-              <img key={i} src={url} alt={`디자인 ${i + 1}`}
-                style={{ maxWidth: "180px", maxHeight: "180px", width: "auto", height: "auto", objectFit: "contain", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />
-            ))}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

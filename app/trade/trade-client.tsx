@@ -449,8 +449,11 @@ export default function TradeClient() {
   const [wo_items, setWo_items] = useState<WoItem[]>([
     { id: crypto.randomUUID(), delivery_date: todayYMD(), sub_items: [{ name: "", qty: 0 }], order_qty: 0 },
   ]);
-  const [wo_imageFiles, setWo_imageFiles] = useState<File[]>([]);
-  const [wo_imagePreviewUrls, setWo_imagePreviewUrls] = useState<string[]>([]);
+  // 품목별 이미지 (key = line index)
+  const [wo_itemImageFiles, setWo_itemImageFiles] = useState<Record<number, File[]>>({});
+  const [wo_itemImagePreviewUrls, setWo_itemImagePreviewUrls] = useState<Record<number, string[]>>({});
+  // 복사 시 기존 이미지 (key = line index, value = signed URL 배열)
+  const [wo_itemExistingImageUrls, setWo_itemExistingImageUrls] = useState<Record<number, string[]>>({});
   const [wo_saving, setWo_saving] = useState(false);
   const [wo_list, setWo_list] = useState<WorkOrderRow[]>([]);
   const [wo_listLoading, setWo_listLoading] = useState(false);
@@ -974,15 +977,22 @@ export default function TradeClient() {
           await supabase.from("work_orders").update({ variant_id: firstVariantId }).eq("id", woId);
         }
 
-        if (wo_imageFiles.length > 0) {
+        // 품목별 이미지 업로드 → work_order_items.images
+        for (let lineIdx = 0; lineIdx < cleanLines.length; lineIdx++) {
+          const files = wo_itemImageFiles[lineIdx] ?? [];
+          if (files.length === 0) continue;
+          const createdItem = (createdWoItems as any[])?.[lineIdx];
+          if (!createdItem?.id) continue;
           const uploadedPaths: string[] = [];
-          for (const file of wo_imageFiles) {
+          for (const file of files) {
             const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
-            const path = `orders/${finalBarcode}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+            const path = `orders/${finalBarcode}/item_${lineIdx}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
             const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file);
             if (!upErr) uploadedPaths.push(path);
           }
-          if (uploadedPaths.length > 0) await supabase.from("work_orders").update({ images: uploadedPaths }).eq("id", woId);
+          if (uploadedPaths.length > 0) {
+            await supabase.from("work_order_items").update({ images: uploadedPaths }).eq("id", createdItem.id);
+          }
         }
       } catch (woCreateErr: any) {
         setMsg(`⚠️ 주문은 저장됐으나 작업지시서 자동생성 실패: ${woCreateErr?.message ?? woCreateErr}`);
@@ -991,8 +1001,7 @@ export default function TradeClient() {
         setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
         setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
         setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoNote("");
-        setWo_imageFiles([]); setWo_imagePreviewUrls([]);
-        if (orderWoFileInputRef.current) orderWoFileInputRef.current.value = "";
+        setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({});
         await loadTrades(); return;
       }
     }
@@ -1002,8 +1011,7 @@ export default function TradeClient() {
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
     setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
     setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoNote("");
-    setWo_imageFiles([]); setWo_imagePreviewUrls([]);
-    if (orderWoFileInputRef.current) orderWoFileInputRef.current.value = "";
+    setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({});
     await loadTrades();
   }
 
@@ -1042,7 +1050,7 @@ export default function TradeClient() {
     setWo_moldPerSheet(""); setWo_note(""); setWo_referenceNote("");
     setWo_isReorder(false); setWo_originalId("");
     setWo_items([{ id: crypto.randomUUID(), delivery_date: todayYMD(), sub_items: [{ name: "", qty: 0 }], order_qty: 0 }]);
-    setWo_imageFiles([]); setWo_imagePreviewUrls([]);
+    setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({});
     setWo_linkedOrderId(null); setWo_linkedOrderSummary("");
   }
 
@@ -1182,15 +1190,19 @@ export default function TradeClient() {
         }
       }
 
-      if (wo_imageFiles.length > 0) {
+      // 작업지시서 모달: 첫 번째 품목(0번) 이미지를 첫 번째 work_order_item에 저장
+      const woModalFiles = wo_itemImageFiles[0] ?? [];
+      if (woModalFiles.length > 0 && createdItems?.[0]?.id) {
         const uploadedPaths: string[] = [];
-        for (const file of wo_imageFiles) {
+        for (const file of woModalFiles) {
           const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
-          const path = `orders/${finalBarcode}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+          const path = `orders/${finalBarcode}/item_0_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
           const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file);
           if (!upErr) uploadedPaths.push(path);
         }
-        if (uploadedPaths.length > 0) await supabase.from("work_orders").update({ images: uploadedPaths }).eq("id", woId);
+        if (uploadedPaths.length > 0) {
+          await supabase.from("work_order_items").update({ images: uploadedPaths }).eq("id", createdItems[0].id);
+        }
       }
 
       setMsg(`✅ 작업지시서 생성 완료! 바코드: ${finalBarcode}`);
@@ -1206,54 +1218,45 @@ export default function TradeClient() {
       setOrderTitle(r.order_title ?? "");
       setLines(r.order_lines?.length ? r.order_lines.map((l) => ({ food_type: String(l.food_type ?? ""), name: String(l.name ?? ""), weight_g: Number(l.weight_g ?? 0), qty: toInt(l.qty ?? 0), unit: Number(l.unit ?? 0), total_incl_vat: Number(l.total_amount ?? 0) })) : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
       applyShipmentsToForm(r.order_shipments ?? [], setShip1, setShip2, setTwoShip);
-      // ── 기존 작업지시서 이미지 복사 ──
+      // ── 기존 작업지시서 + work_order_items 이미지 복사 ──
       try {
         const { data: wo } = await supabase
           .from("work_orders")
-          .select("images,sub_name,logo_spec,thickness,packaging_type,mold_per_sheet,note")
+          .select("id,sub_name,logo_spec,thickness,packaging_type,mold_per_sheet,note,work_order_items(id,sub_items,images)")
           .eq("linked_order_id", r.rawId)
           .limit(1)
           .maybeSingle();
-        if (wo && (wo as any).images?.length > 0) {
-          const rawImages: string[] = (wo as any).images ?? [];
-          // signed URL 변환
-          const paths = rawImages.map((v: string) => {
-            if (v.startsWith("http")) {
-              const m = v.match(/work-order-images\/(.+?)(\?|$)/);
-              return m ? m[1] : null;
-            }
-            return v;
-          }).filter(Boolean) as string[];
-          if (paths.length > 0) {
-            const { data: signedData } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
-            if (signedData) {
-              const signedUrls = signedData.map((d: any) => d.signedUrl);
-              // File 객체로 변환해서 wo_imageFiles에 설정
-              const files: File[] = [];
-              const previewUrls: string[] = [];
-              for (let i = 0; i < signedUrls.length; i++) {
-                try {
-                  const resp = await fetch(signedUrls[i]);
-                  const blob = await resp.blob();
-                  const ext = (paths[i].split(".").pop() ?? "jpg").toLowerCase();
-                  const file = new File([blob], `copy_image_${i}.${ext}`, { type: blob.type });
-                  files.push(file);
-                  previewUrls.push(URL.createObjectURL(blob));
-                } catch {}
-              }
-              setWo_imageFiles(files);
-              setWo_imagePreviewUrls(previewUrls);
-            }
-          }
-        }
-        // 작업지시서 기본 설정도 복사
         if (wo) {
+          // 작업지시서 기본 설정 복사
           setOrderWoSubName((wo as any).sub_name ?? "");
           setOrderWoLogoSpec((wo as any).logo_spec ?? "");
           setOrderWoThickness((wo as any).thickness ?? "2mm");
           setOrderWoPackagingType((wo as any).packaging_type ?? "");
           setOrderWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
           setOrderWoNote((wo as any).note ?? "");
+
+          // 품목별 이미지 복사 (work_order_items.images 기준)
+          const woItems: any[] = (wo as any).work_order_items ?? [];
+          const newExistingMap: Record<number, string[]> = {};
+          for (let lineIdx = 0; lineIdx < woItems.length; lineIdx++) {
+            const rawImages: string[] = woItems[lineIdx]?.images ?? [];
+            if (rawImages.length === 0) continue;
+            const paths = rawImages.map((v: string) => {
+              if (v.startsWith("http")) {
+                const m = v.match(/work-order-images\/(.+?)(\?|$)/);
+                return m ? m[1] : null;
+              }
+              return v;
+            }).filter(Boolean) as string[];
+            if (paths.length === 0) continue;
+            const { data: signedData } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
+            if (signedData) {
+              newExistingMap[lineIdx] = signedData.map((d: any) => d.signedUrl);
+            }
+          }
+          if (Object.keys(newExistingMap).length > 0) {
+            setWo_itemExistingImageUrls(newExistingMap);
+          }
         }
       } catch (e) {
         // 이미지 복사 실패해도 주문 복사는 계속
@@ -1799,8 +1802,48 @@ export default function TradeClient() {
                   </div>
                 </div>
                 <LineHeader gridCols={lineGridCols} />
-                <div className="mt-2 space-y-2">
-                  {lines.map((l, i) => <LineRow key={i} l={l} i={i} onUpdate={updateLine} onRemove={removeLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} />)}
+                <div className="mt-2 space-y-1">
+                  {lines.map((l, i) => (
+                    <div key={i}>
+                      <LineRow l={l} i={i} onUpdate={updateLine} onRemove={removeLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} />
+                      {orderWoEnabled && l.name && !["택배비"].includes(l.name) ? (
+                        <div className="ml-1 mb-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                          <div className="mb-1 text-xs text-slate-500">🖼 {l.name} 인쇄 디자인 이미지</div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* 기존 이미지 (복사 시) */}
+                            {(wo_itemExistingImageUrls[i] ?? []).map((url, j) => (
+                              <div key={`exist-${j}`} className="group relative">
+                                <img src={url} alt={`기존이미지${j+1}`} className="h-14 w-14 rounded-lg border border-slate-200 object-cover opacity-80" />
+                                <button className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
+                                  onClick={() => setWo_itemExistingImageUrls((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }))}>✕</button>
+                              </div>
+                            ))}
+                            {/* 새로 선택한 이미지 */}
+                            {(wo_itemImagePreviewUrls[i] ?? []).map((url, j) => (
+                              <div key={`new-${j}`} className="group relative">
+                                <img src={url} alt={`이미지${j+1}`} className="h-14 w-14 rounded-lg border border-blue-200 object-cover" />
+                                <button className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
+                                  onClick={() => {
+                                    setWo_itemImageFiles((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }));
+                                    setWo_itemImagePreviewUrls((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }));
+                                  }}>✕</button>
+                              </div>
+                            ))}
+                            <label className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-400 hover:border-blue-400 hover:text-blue-500">
+                              <span className="text-xl">+</span>
+                              <input type="file" accept="image/*" multiple className="hidden"
+                                onChange={(e) => {
+                                  const files = Array.from(e.target.files ?? []);
+                                  setWo_itemImageFiles((prev) => ({ ...prev, [i]: [...(prev[i] ?? []), ...files] }));
+                                  setWo_itemImagePreviewUrls((prev) => ({ ...prev, [i]: [...(prev[i] ?? []), ...files.map((f) => URL.createObjectURL(f))] }));
+                                  e.target.value = "";
+                                }} />
+                            </label>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
                 </div>
                 <Datalists />
 
@@ -1840,22 +1883,8 @@ export default function TradeClient() {
                           return <div className="mt-1 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-700">⚠️ 식품유형에 "리얼" 포함 → 이산화티타늄 메모 자동 삽입</div>;
                         })()}
                       </div>
-                      <div className="md:col-span-3">
-                        <div className="mb-1 text-xs text-slate-600">인쇄 디자인 이미지</div>
-                        <input ref={orderWoFileInputRef} type="file" accept="image/*" multiple
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700"
-                          onChange={(e) => { const files = Array.from(e.target.files ?? []); setWo_imageFiles(files); setWo_imagePreviewUrls(files.map((f) => URL.createObjectURL(f))); }} />
-                        {wo_imageFiles.length > 0 ? (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {wo_imageFiles.map((f, i) => (
-                              <div key={i} className="group relative">
-                                <img src={wo_imagePreviewUrls[i] ?? ""} alt={f.name} className="h-16 w-16 rounded-lg border border-blue-200 object-cover" />
-                                <button className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
-                                  onClick={() => { setWo_imageFiles((prev) => prev.filter((_, j) => j !== i)); setWo_imagePreviewUrls((prev) => prev.filter((_, j) => j !== i)); }}>✕</button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
+                      <div className="md:col-span-3 text-xs text-slate-500">
+                        💡 인쇄 디자인 이미지는 아래 각 품목별로 업로드하세요.
                       </div>
                     </div>
                   ) : <div className="text-xs text-slate-500">작업지시서 없이 주문/출고만 저장됩니다.</div>}
