@@ -1201,7 +1201,7 @@ export default function TradeClient() {
     } finally { setWo_saving(false); }
   }
 
-  function onCopyClick(r: UnifiedRow) {
+  async function onCopyClick(r: UnifiedRow) {
     setMsg(null);
     if (r.kind === "ORDER") {
       setOrderIsReorder(true); setMode("ORDERS"); setShipDate(todayYMD());
@@ -1209,6 +1209,58 @@ export default function TradeClient() {
       setOrderTitle(r.order_title ?? "");
       setLines(r.order_lines?.length ? r.order_lines.map((l) => ({ food_type: String(l.food_type ?? ""), name: String(l.name ?? ""), weight_g: Number(l.weight_g ?? 0), qty: toInt(l.qty ?? 0), unit: Number(l.unit ?? 0), total_incl_vat: Number(l.total_amount ?? 0) })) : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
       applyShipmentsToForm(r.order_shipments ?? [], setShip1, setShip2, setTwoShip);
+      // ── 기존 작업지시서 이미지 복사 ──
+      try {
+        const { data: wo } = await supabase
+          .from("work_orders")
+          .select("images,sub_name,logo_spec,thickness,packaging_type,mold_per_sheet,note")
+          .eq("linked_order_id", r.rawId)
+          .limit(1)
+          .maybeSingle();
+        if (wo && (wo as any).images?.length > 0) {
+          const rawImages: string[] = (wo as any).images ?? [];
+          // signed URL 변환
+          const paths = rawImages.map((v: string) => {
+            if (v.startsWith("http")) {
+              const m = v.match(/work-order-images\/(.+?)(\?|$)/);
+              return m ? m[1] : null;
+            }
+            return v;
+          }).filter(Boolean) as string[];
+          if (paths.length > 0) {
+            const { data: signedData } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
+            if (signedData) {
+              const signedUrls = signedData.map((d: any) => d.signedUrl);
+              // File 객체로 변환해서 wo_imageFiles에 설정
+              const files: File[] = [];
+              const previewUrls: string[] = [];
+              for (let i = 0; i < signedUrls.length; i++) {
+                try {
+                  const resp = await fetch(signedUrls[i]);
+                  const blob = await resp.blob();
+                  const ext = (paths[i].split(".").pop() ?? "jpg").toLowerCase();
+                  const file = new File([blob], `copy_image_${i}.${ext}`, { type: blob.type });
+                  files.push(file);
+                  previewUrls.push(URL.createObjectURL(blob));
+                } catch {}
+              }
+              setWo_imageFiles(files);
+              setWo_imagePreviewUrls(previewUrls);
+            }
+          }
+        }
+        // 작업지시서 기본 설정도 복사
+        if (wo) {
+          setOrderWoSubName((wo as any).sub_name ?? "");
+          setOrderWoLogoSpec((wo as any).logo_spec ?? "");
+          setOrderWoThickness((wo as any).thickness ?? "2mm");
+          setOrderWoPackagingType((wo as any).packaging_type ?? "");
+          setOrderWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
+          setOrderWoNote((wo as any).note ?? "");
+        }
+      } catch (e) {
+        // 이미지 복사 실패해도 주문 복사는 계속
+      }
     } else {
       setMode("LEDGER"); setEntryDate(todayYMD());
       const c = (r.ledger_category as Category) ?? "기타"; setCategory(CATEGORIES.includes(c) ? c : "기타");
