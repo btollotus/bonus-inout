@@ -139,7 +139,6 @@ export default function ProductionClient() {
   const [eMoldPerSheet, setEMoldPerSheet] = useState("");
   const [eNote, setENote] = useState("");
   const [eReferenceNote, setEReferenceNote] = useState("");
-  const [eSaving, setESaving] = useState(false);
 
   // 진행상태 담당자 state
   const [woChecks, setWoChecks] = useState<{
@@ -152,7 +151,6 @@ export default function ProductionClient() {
     assignee_production: string;
     assignee_input: string;
   } | null>(null);
-  const [checkSaving, setCheckSaving] = useState(false);
 
   // 이미지 signed URL
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
@@ -163,7 +161,6 @@ export default function ProductionClient() {
     unit_weight: string;
     expiry_date: string;
   }>>({});
-  const [prodSaving, setProdSaving] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
 
@@ -273,54 +270,6 @@ export default function ProductionClient() {
     setProdInputs(inputs);
   }
 
-  // ── 기본정보 저장 (ADMIN + SUBADMIN) ──
-  async function saveBasicInfo() {
-    if (!selectedWo || !isAdminOrSubadmin) return;
-    setESaving(true); setMsg(null);
-    try {
-      const { error } = await supabase.from("work_orders").update({
-        sub_name: eSubName.trim() || null,
-        product_name: eProductName.trim(),
-        food_type: eFoodType.trim() || null,
-        logo_spec: eLogoSpec.trim() || null,
-        thickness: eThickness || null,
-        delivery_method: eDeliveryMethod || null,
-        packaging_type: ePackagingType || null,
-        tray_slot: ePackagingType === "트레이" ? eTraySlot : null,
-        package_unit: ePackageUnit || null,
-        mold_per_sheet: eMoldPerSheet ? Number(eMoldPerSheet) : null,
-        note: eNote.trim() || null,
-        reference_note: eReferenceNote.trim() || null,
-        updated_at: new Date().toISOString(),
-      }).eq("id", selectedWo.id);
-      if (error) return setMsg(error.message);
-      setMsg("✅ 기본정보 저장 완료");
-      await loadWoList();
-    } finally {
-      setESaving(false);
-    }
-  }
-
-  // ── 담당자 저장 ──
-  async function saveChecks() {
-    if (!selectedWo || !woChecks) return;
-    setCheckSaving(true); setMsg(null);
-    try {
-      const { error } = await supabase.from("work_orders").update({
-        assignee_transfer: woChecks.assignee_transfer || null,
-        assignee_print_check: woChecks.assignee_print_check || null,
-        assignee_production: woChecks.assignee_production || null,
-        assignee_input: woChecks.assignee_input || null,
-        updated_at: new Date().toISOString(),
-      }).eq("id", selectedWo.id);
-      if (error) return setMsg(error.message);
-      setMsg("✅ 담당자 저장 완료");
-      await loadWoList();
-    } finally {
-      setCheckSaving(false);
-    }
-  }
-
   // ── 작업지시서 삭제 (ADMIN only) ──
   async function deleteWo(woId: string) {
     if (!isAdmin) return;
@@ -342,52 +291,7 @@ export default function ProductionClient() {
     }
   }
 
-  // ── 생산 입력 저장 ──
-  async function saveProdInputs() {
-    if (!selectedWo) return;
-    setProdSaving(true); setMsg(null);
-    try {
-      const items = selectedWo.work_order_items ?? [];
-      for (const item of items) {
-        const pi = prodInputs[item.id];
-        if (!pi) continue;
-        const actual_qty = pi.actual_qty ? toInt(pi.actual_qty) : null;
-        const unit_weight = pi.unit_weight ? toNum(pi.unit_weight) : null;
-        const expiry_date = pi.expiry_date || null;
-        const { error } = await supabase.from("work_order_items").update({
-          actual_qty, unit_weight, expiry_date,
-          updated_at: new Date().toISOString(),
-        }).eq("id", item.id);
-        if (error) return setMsg("항목 저장 실패: " + error.message);
-      }
-
-      const firstUw = toNum(prodInputs[items[0]?.id]?.unit_weight);
-      if (selectedWo.variant_id && firstUw > 0) {
-        await supabase.from("product_variants")
-          .update({ weight_g: firstUw })
-          .eq("id", selectedWo.variant_id);
-      }
-
-      const allDone = items.length > 0 && items.every((item) => {
-        const pi = prodInputs[item.id];
-        return pi && pi.actual_qty && pi.unit_weight && pi.expiry_date;
-      });
-      if (allDone) {
-        await supabase.from("work_orders").update({
-          status: "완료",
-          status_production: true,
-          updated_at: new Date().toISOString(),
-        }).eq("id", selectedWo.id);
-      }
-
-      setMsg(allDone ? "✅ 생산 완료! 상태가 '완료'로 변경됐습니다." : "✅ 생산 정보 저장 완료");
-      await loadWoList();
-    } finally {
-      setProdSaving(false);
-    }
-  }
-
-  // ── 생산완료 버튼 핸들러 (재고대장 연동 포함) ──
+  // ── 생산완료 버튼 핸들러 (기본정보 + 담당자 + 생산입력 + 재고대장 연동 모두 처리) ──
   async function markProductionComplete() {
     if (!selectedWo) return;
 
@@ -407,41 +311,79 @@ export default function ProductionClient() {
       );
       if (!ok) return;
     } else {
-      if (!confirm("생산완료 처리하시겠습니까?\n상태가 '완료'로 변경되고 재고대장에 입고가 반영됩니다.")) return;
+      if (!confirm("생산완료 처리하시겠습니까?\n기본정보·담당자·생산입력이 모두 저장되고 재고대장에 입고가 반영됩니다.")) return;
     }
 
     setMsg(null);
     try {
-      // 1. 생산 입력값 먼저 저장
+      // ── 1. 기본정보 저장 ──
+      if (isAdminOrSubadmin) {
+        const { error: basicErr } = await supabase.from("work_orders").update({
+          sub_name: eSubName.trim() || null,
+          product_name: eProductName.trim(),
+          food_type: eFoodType.trim() || null,
+          logo_spec: eLogoSpec.trim() || null,
+          thickness: eThickness || null,
+          delivery_method: eDeliveryMethod || null,
+          packaging_type: ePackagingType || null,
+          tray_slot: ePackagingType === "트레이" ? eTraySlot : null,
+          package_unit: ePackageUnit || null,
+          mold_per_sheet: eMoldPerSheet ? Number(eMoldPerSheet) : null,
+          note: eNote.trim() || null,
+          reference_note: eReferenceNote.trim() || null,
+          updated_at: new Date().toISOString(),
+        }).eq("id", selectedWo.id);
+        if (basicErr) return setMsg("기본정보 저장 실패: " + basicErr.message);
+      }
+
+      // ── 2. 담당자 저장 ──
+      if (woChecks) {
+        const { error: checksErr } = await supabase.from("work_orders").update({
+          assignee_transfer: woChecks.assignee_transfer || null,
+          assignee_print_check: woChecks.assignee_print_check || null,
+          assignee_production: woChecks.assignee_production || null,
+          assignee_input: woChecks.assignee_input || null,
+          updated_at: new Date().toISOString(),
+        }).eq("id", selectedWo.id);
+        if (checksErr) return setMsg("담당자 저장 실패: " + checksErr.message);
+      }
+
+      // ── 3. 생산 입력값 저장 ──
       for (const item of items) {
         const pi = prodInputs[item.id];
         if (!pi || (!pi.actual_qty && !pi.unit_weight && !pi.expiry_date)) continue;
         const actual_qty = pi.actual_qty ? toInt(pi.actual_qty) : null;
         const unit_weight = pi.unit_weight ? toNum(pi.unit_weight) : null;
         const expiry_date = pi.expiry_date || null;
-        await supabase.from("work_order_items").update({
+        const { error: itemErr } = await supabase.from("work_order_items").update({
           actual_qty, unit_weight, expiry_date,
           updated_at: new Date().toISOString(),
         }).eq("id", item.id);
+        if (itemErr) return setMsg("생산입력 저장 실패: " + itemErr.message);
       }
 
-      // 2. 재고대장 연동: 항목별로 lots + movements insert
+      // variant weight_g 업데이트
+      const allItems = selectedWo.work_order_items ?? [];
+      const firstUw = toNum(prodInputs[allItems[0]?.id]?.unit_weight);
+      if (selectedWo.variant_id && firstUw > 0) {
+        await supabase.from("product_variants")
+          .update({ weight_g: firstUw })
+          .eq("id", selectedWo.variant_id);
+      }
+
+      // ── 4. 재고대장 연동 ──
       const now = new Date().toISOString();
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id ?? null;
-
       const stockErrors: string[] = [];
 
       for (const item of items) {
         const pi = prodInputs[item.id];
         if (!pi || !pi.actual_qty || !pi.expiry_date) continue;
-
         const actual_qty = toInt(pi.actual_qty);
         if (actual_qty <= 0) continue;
-
         const expiry_date = pi.expiry_date;
 
-        // ── [수정] item.barcode_no로 해당 item의 variant_id 개별 조회 ──
         let variantId: string | null = null;
         if (item.barcode_no) {
           const { data: pbData } = await supabase
@@ -451,14 +393,12 @@ export default function ProductionClient() {
             .maybeSingle();
           variantId = pbData?.variant_id ?? null;
         }
-        // barcode로 못 찾으면 work_orders.variant_id로 fallback
         if (!variantId) variantId = selectedWo.variant_id;
         if (!variantId) {
           stockErrors.push(`variant 없음 (${(item.sub_items ?? [])[0]?.name ?? item.id})`);
           continue;
         }
 
-        // lots 조회 또는 생성 (variant_id + expiry_date 기준)
         let lotId: string | null = null;
         const { data: existingLot } = await supabase
           .from("lots")
@@ -475,14 +415,10 @@ export default function ProductionClient() {
             .insert({ variant_id: variantId, expiry_date })
             .select("id")
             .single();
-          if (lotErr) {
-            stockErrors.push("LOT 생성 실패 (" + expiry_date + "): " + lotErr.message);
-            continue;
-          }
+          if (lotErr) { stockErrors.push("LOT 생성 실패 (" + expiry_date + "): " + lotErr.message); continue; }
           lotId = newLot.id;
         }
 
-        // movements insert (type = 'IN')
         const { error: movErr } = await supabase.from("movements").insert({
           lot_id: lotId,
           type: "IN",
@@ -491,23 +427,21 @@ export default function ProductionClient() {
           note: "작업지시서 생산완료 - " + selectedWo.work_order_no,
           created_by: userId,
         });
-        if (movErr) {
-          stockErrors.push("입고 기록 실패 (" + expiry_date + "): " + movErr.message);
-        }
+        if (movErr) stockErrors.push("입고 기록 실패 (" + expiry_date + "): " + movErr.message);
       }
 
-      // 3. work_orders 상태 완료로 변경
-      const { error } = await supabase.from("work_orders").update({
+      // ── 5. 상태 완료로 변경 ──
+      const { error: statusErr } = await supabase.from("work_orders").update({
         status: "완료",
         status_production: true,
         updated_at: new Date().toISOString(),
       }).eq("id", selectedWo.id);
-      if (error) return setMsg("생산완료 처리 실패: " + error.message);
+      if (statusErr) return setMsg("상태 변경 실패: " + statusErr.message);
 
       if (stockErrors.length > 0) {
-        setMsg("⚠️ 완료 처리됐으나 재고 연동 오류: " + stockErrors.join(" / "));
+        setMsg("⚠️ 저장 완료됐으나 재고 연동 오류: " + stockErrors.join(" / "));
       } else {
-        setMsg("✅ 생산완료 처리 및 재고대장 입고 반영 완료!");
+        setMsg("✅ 생산완료 처리 완료! 기본정보·담당자·생산입력 저장 및 재고대장 입고 반영됐습니다.");
       }
       await loadWoList();
     } catch (e: any) {
@@ -594,45 +528,45 @@ export default function ProductionClient() {
                         className={`w-full rounded-2xl border p-3 text-left transition-all ${isSelected ? "border-blue-400 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"}`}
                         onClick={() => applySelection(wo)}
                       >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-semibold text-sm truncate">
-                              {(() => {
-                                const name = wo.client_name ?? "";
-                                const isMarketplace = ["네이버-판매", "카카오플러스-판매", "쿠팡-판매"].includes(name);
-                                if (!isMarketplace) return name;
-                                let ordererName = "";
-                                try {
-                                  const lo = wo.linked_order;
-                                  const memoRaw = Array.isArray(lo) ? lo[0]?.memo : (lo as any)?.memo;
-                                  if (memoRaw) {
-                                    const parsed = typeof memoRaw === "string" ? JSON.parse(memoRaw) : memoRaw;
-                                    ordererName = parsed?.orderer_name ?? "";
-                                  }
-                                } catch {}
-                                return ordererName ? `${name} · ${ordererName}` : name;
-                              })()}
-                            </span>
-                            {wo.sub_name ? <span className="text-xs text-slate-500">· {wo.sub_name}</span> : null}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-semibold text-sm truncate">
+                                {(() => {
+                                  const name = wo.client_name ?? "";
+                                  const isMarketplace = ["네이버-판매", "카카오플러스-판매", "쿠팡-판매"].includes(name);
+                                  if (!isMarketplace) return name;
+                                  let ordererName = "";
+                                  try {
+                                    const lo = wo.linked_order;
+                                    const memoRaw = Array.isArray(lo) ? lo[0]?.memo : (lo as any)?.memo;
+                                    if (memoRaw) {
+                                      const parsed = typeof memoRaw === "string" ? JSON.parse(memoRaw) : memoRaw;
+                                      ordererName = parsed?.orderer_name ?? "";
+                                    }
+                                  } catch {}
+                                  return ordererName ? `${name} · ${ordererName}` : name;
+                                })()}
+                              </span>
+                              {wo.sub_name ? <span className="text-xs text-slate-500">· {wo.sub_name}</span> : null}
+                            </div>
+                            <div className="mt-0.5 text-xs text-slate-600 font-medium truncate">{wo.product_name}</div>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              <span className="text-[10px] text-slate-400 tabular-nums font-mono">{wo.barcode_no}</span>
+                              {wo.thickness ? <span className={`${pill} text-[10px]`}>{wo.thickness}</span> : null}
+                              {wo.packaging_type ? <span className={`${pill} text-[10px]`}>{wo.packaging_type}</span> : null}
+                            </div>
+                            <div className="mt-1 text-[11px] text-slate-400">
+                              주문일 {wo.order_date}
+                              {totalOrder > 0 ? ` · ${fmt(totalOrder)}개` : ""}
+                              {allItemsDone ? " · ✅생산완료" : ""}
+                            </div>
                           </div>
-                          <div className="mt-0.5 text-xs text-slate-600 font-medium truncate">{wo.product_name}</div>
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            <span className="text-[10px] text-slate-400 tabular-nums font-mono">{wo.barcode_no}</span>
-                            {wo.thickness ? <span className={`${pill} text-[10px]`}>{wo.thickness}</span> : null}
-                            {wo.packaging_type ? <span className={`${pill} text-[10px]`}>{wo.packaging_type}</span> : null}
-                          </div>
-                          <div className="mt-1 text-[11px] text-slate-400">
-                            주문일 {wo.order_date}
-                            {totalOrder > 0 ? ` · ${fmt(totalOrder)}개` : ""}
-                            {allItemsDone ? " · ✅생산완료" : ""}
+                          <div className="shrink-0 flex flex-col items-end gap-1.5">
+                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusCls}`}>{wo.status}</span>
                           </div>
                         </div>
-                        <div className="shrink-0 flex flex-col items-end gap-1.5">
-                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusCls}`}>{wo.status}</span>
-                        </div>
-                      </div>
-                    </button>
+                      </button>
                       {isAdmin ? (
                         <button
                           className="absolute top-2 right-2 hidden group-hover:flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-500 hover:bg-red-500 hover:text-white text-xs font-bold transition-colors z-10"
@@ -679,19 +613,11 @@ export default function ProductionClient() {
                 </div>
               </div>
 
-              {/* 기본정보 카드 - ADMIN + SUBADMIN 모두 수정 가능 */}
+              {/* 기본정보 카드 - 저장 버튼 제거 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <div className="font-semibold text-sm">📝 기본정보</div>
-                  {isAdminOrSubadmin ? (
-                    <button
-                      className="rounded-lg border border-blue-500 bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
-                      onClick={saveBasicInfo}
-                      disabled={eSaving}
-                    >
-                      {eSaving ? "저장 중..." : "💾 저장"}
-                    </button>
-                  ) : null}
+                  <div className="text-xs text-slate-400">생산완료 처리 시 자동 저장</div>
                 </div>
 
                 {isAdminOrSubadmin ? (
@@ -781,17 +707,11 @@ export default function ProductionClient() {
                 )}
               </div>
 
-              {/* 진행상태 카드 */}
+              {/* 진행상태 카드 - 저장 버튼 제거 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <div className="font-semibold text-sm">✅ 진행상태</div>
-                  <button
-                    className="rounded-lg border border-blue-500 bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
-                    onClick={saveChecks}
-                    disabled={checkSaving}
-                  >
-                    {checkSaving ? "저장 중..." : "💾 저장"}
-                  </button>
+                  <div className="text-xs text-slate-400">생산완료 처리 시 자동 저장</div>
                 </div>
                 {woChecks ? (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -817,17 +737,11 @@ export default function ProductionClient() {
                 ) : null}
               </div>
 
-              {/* 납기일별 생산 입력 카드 */}
+              {/* 납기일별 생산 입력 카드 - 저장 버튼 제거 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <div className="font-semibold text-sm">🏭 납기일별 생산 입력</div>
-                  <button
-                    className="rounded-lg border border-blue-500 bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
-                    onClick={saveProdInputs}
-                    disabled={prodSaving}
-                  >
-                    {prodSaving ? "저장 중..." : "💾 저장"}
-                  </button>
+                  <div className="text-xs text-slate-400">생산완료 처리 시 자동 저장</div>
                 </div>
 
                 {(selectedWo.work_order_items ?? []).length === 0 ? (
@@ -954,13 +868,13 @@ export default function ProductionClient() {
                 </div>
               ) : null}
 
-              {/* 생산완료 버튼 */}
+              {/* 생산완료 버튼 - 모든 저장 포함 */}
               <div className={`${card} p-4`}>
                 <button
                   className="w-full rounded-xl border border-green-500 bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800"
                   onClick={markProductionComplete}
                 >
-                  ✅ 생산완료 처리
+                  ✅ 생산완료 처리 (기본정보 · 담당자 · 생산입력 저장 포함)
                 </button>
               </div>
 
@@ -1147,7 +1061,6 @@ function WoPrintContent({
         작 업 지 시 서
       </div>
 
-      {/* 기본정보 */}
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
         <tbody>
           <tr>
@@ -1193,12 +1106,10 @@ function WoPrintContent({
         </tbody>
       </table>
 
-      {/* 품목별 생산 현황 헤더 */}
       <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "6px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>
         {isMultiItem ? `품목별 생산 현황 (총 ${items.length}건)` : "생산 현황"}
       </div>
 
-      {/* 품목별 블록 반복 */}
       {items.map((item, idx) => {
         const pi = prodInputs[item.id] ?? { actual_qty: "", unit_weight: "", expiry_date: "" };
         const actualQty = item.actual_qty ?? (pi.actual_qty ? parseInt(pi.actual_qty) : null);
@@ -1214,25 +1125,13 @@ function WoPrintContent({
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <tbody>
                 <tr>
-                  <td style={{
-                    border: "1px solid #94a3b8", borderBottom: "none",
-                    padding: "5px 10px", width: "22%",
-                    background: "#1e3a5f", color: "#fff",
-                    fontWeight: "bold",
-                    fontSize: "9pt",
-                    verticalAlign: "middle",
-                  }}>
+                  <td style={{ border: "1px solid #94a3b8", borderBottom: "none", padding: "5px 10px", width: "22%", background: "#1e3a5f", color: "#fff", fontWeight: "bold", fontSize: "9pt", verticalAlign: "middle" }}>
                     {itemName}
                   </td>
-                  <td style={{
-                    border: "1px solid #94a3b8", borderBottom: "none", borderLeft: "none",
-                    padding: "5px 10px", background: "#f8fafc", verticalAlign: "middle",
-                  }}>
+                  <td style={{ border: "1px solid #94a3b8", borderBottom: "none", borderLeft: "none", padding: "5px 10px", background: "#f8fafc", verticalAlign: "middle" }}>
                     {itemBarcode ? (
                       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <span style={{ fontFamily: "monospace", fontSize: "8pt", color: "#444", whiteSpace: "nowrap" }}>
-                          {itemBarcode}
-                        </span>
+                        <span style={{ fontFamily: "monospace", fontSize: "8pt", color: "#444", whiteSpace: "nowrap" }}>{itemBarcode}</span>
                         <svg data-barcode={itemBarcode} style={{ height: "52px", flex: 1, display: "block", minWidth: 0 }} />
                       </div>
                     ) : (
@@ -1281,13 +1180,7 @@ function WoPrintContent({
                               value={noteVal}
                               onChange={(e) => onItemNoteChange(item.id, e.target.value)}
                               placeholder="비고 입력..."
-                              style={{
-                                width: "100%", height: "52px", resize: "none",
-                                border: "none", outline: "none",
-                                fontSize: "8.5pt", fontFamily: "inherit",
-                                padding: "3px 4px", background: "transparent",
-                                lineHeight: "1.4",
-                              }}
+                              style={{ width: "100%", height: "52px", resize: "none", border: "none", outline: "none", fontSize: "8.5pt", fontFamily: "inherit", padding: "3px 4px", background: "transparent", lineHeight: "1.4" }}
                             />
                           </td>
                         </tr>
@@ -1301,7 +1194,6 @@ function WoPrintContent({
         );
       })}
 
-      {/* 이미지 */}
       {(wo.images ?? []).length > 0 ? (
         <div style={{ marginBottom: "10px" }}>
           <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "4px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>인쇄 디자인 이미지</div>
