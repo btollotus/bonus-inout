@@ -354,10 +354,7 @@ export default function TradeClient() {
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => { if (typeof document !== "undefined") document.title = "BONUSMATE ERP 거래내역(통합)"; }, []);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (/\/trade\/?$/.test(window.location.pathname)) window.history.replaceState({}, "", "/");
-  }, []);
+
 
   const [msg, setMsg] = useState<string | null>(null);
   const [showTopBtn, setShowTopBtn] = useState(false);
