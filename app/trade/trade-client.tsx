@@ -2178,14 +2178,34 @@ function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: (
   const [saving, setSaving] = useState(false);
   const [signedImages, setSignedImages] = useState<string[]>([]);
   const [imagesLoading, setImagesLoading] = useState(true);
+  const [signedItemImagesMap, setSignedItemImagesMap] = useState<Record<string, string[]>>({}); // item.id → signed URLs
 
   useEffect(() => {
     async function resolveImages() {
-      const rawUrls = wo.images ?? [];
-      if (rawUrls.length === 0) { setSignedImages([]); setImagesLoading(false); return; }
       const sb = createClient();
-      const signedUrls = await resolveSignedImageUrls(rawUrls, sb);
-      setSignedImages(signedUrls); setImagesLoading(false);
+      // wo.images (공통)
+      const rawUrls = wo.images ?? [];
+      if (rawUrls.length > 0) {
+        const signedUrls = await resolveSignedImageUrls(rawUrls, sb);
+        setSignedImages(signedUrls);
+      } else {
+        setSignedImages([]);
+      }
+      // 품목별 이미지
+      const itemImagesMap: Record<string, string[]> = {};
+      for (const item of (wo.work_order_items ?? [])) {
+        const rawItemUrls: string[] = (item as any).images ?? [];
+        if (rawItemUrls.length === 0) continue;
+        const paths = rawItemUrls.map((v: string) => {
+          if (v.startsWith("http")) { const m = v.match(/work-order-images\/(.+?)(\?|$)/); return m ? m[1] : null; }
+          return v;
+        }).filter(Boolean) as string[];
+        if (paths.length === 0) continue;
+        const { data } = await sb.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
+        if (data) itemImagesMap[item.id] = data.map((d: any) => d.signedUrl);
+      }
+      setSignedItemImagesMap(itemImagesMap);
+      setImagesLoading(false);
     }
     resolveImages();
   }, [wo.images]);
@@ -2236,7 +2256,7 @@ function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: (
       <div style={{ flex: 1, overflow: "auto", padding: "20px", display: "flex", justifyContent: "center" }}>
         <div style={{ background: "#fff", width: "210mm", minHeight: "297mm", padding: "12mm 14mm", boxShadow: "0 4px 24px rgba(0,0,0,0.15)" }}>
           <div id="wo-print-preview-inner">
-            <WoPrintContent wo={woWithSigned} items={items} totalOrder={totalOrder} itemNotes={itemNotes} imagesLoading={imagesLoading} onItemNoteChange={(id, val) => setItemNotes((prev) => ({ ...prev, [id]: val }))} isReorder={wo.is_reorder} />
+            <WoPrintContent wo={woWithSigned} items={items} totalOrder={totalOrder} itemNotes={itemNotes} imagesLoading={imagesLoading} signedItemImagesMap={signedItemImagesMap} onItemNoteChange={(id, val) => setItemNotes((prev) => ({ ...prev, [id]: val }))} isReorder={wo.is_reorder} />
           </div>
         </div>
       </div>
@@ -2249,9 +2269,9 @@ function isSpecialItem(itemName: string): boolean {
   return n.startsWith("성형틀") || n.startsWith("인쇄제판");
 }
 
-function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onItemNoteChange, isReorder }: {
+function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, signedItemImagesMap, onItemNoteChange, isReorder }: {
   wo: WorkOrderRow; items: WoItem[]; totalOrder: number;
-  itemNotes: Record<string, string>; imagesLoading?: boolean;
+  itemNotes: Record<string, string>; imagesLoading?: boolean; signedItemImagesMap?: Record<string, string[]>;
   onItemNoteChange: (itemId: string, value: string) => void; isReorder: boolean;
 }) {
   const f = (n: number | null | undefined) => Number(n ?? 0).toLocaleString("ko-KR");
@@ -2344,6 +2364,26 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, onIte
                 </tr>
               </tbody>
             </table>
+            {/* 품목별 이미지 - 규격 크기로 표시 */}
+            {(() => {
+              const itemSignedUrls = signedItemImagesMap?.[item.id] ?? [];
+              if (itemSignedUrls.length === 0) return null;
+              const logoSize = parseLogoSize(wo.logo_spec);
+              return (
+                <div style={{ marginTop: "6px", display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "flex-end" }}>
+                  {imagesLoading
+                    ? <div style={{ fontSize: "8pt", color: "#94a3b8", padding: "4px" }}>이미지 로딩 중...</div>
+                    : itemSignedUrls.map((url, imgIdx) => (
+                      <div key={imgIdx} style={{ textAlign: "center" }}>
+                        <img src={url} alt={`이미지${imgIdx+1}`}
+                          style={{ width: logoSize ? logoSize.width : "auto", height: logoSize ? logoSize.height : "auto", maxWidth: logoSize ? "none" : "120px", objectFit: "contain", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />
+                        {wo.logo_spec ? <div style={{ fontSize: "7pt", color: "#94a3b8", marginTop: "2px" }}>{wo.logo_spec}</div> : null}
+                      </div>
+                    ))
+                  }
+                </div>
+              );
+            })()}
           </div>
         );
       })}
