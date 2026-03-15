@@ -2129,7 +2129,7 @@ export default function TradeClient() {
                               <button className={miniBtn} onClick={() => deleteTradeRow(x)}>삭제</button>
                               {x.kind === "ORDER" ? (
                                 <button className={`${miniBtn} col-span-2`} onClick={async () => {
-                                  const { data } = await supabase.from("work_orders").select("*,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id,barcode_no,note)").eq("linked_order_id", x.rawId).limit(1).maybeSingle();
+                                  const { data } = await supabase.from("work_orders").select("*,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id,barcode_no,note,images)").eq("linked_order_id", x.rawId).limit(1).maybeSingle();
                                   if (data) setWo_printTarget(data as WorkOrderRow);
                                   else setMsg("연결된 작업지시서가 없습니다.");
                                 }}>🖨️ 작업지시서</button>
