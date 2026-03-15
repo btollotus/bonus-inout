@@ -983,20 +983,35 @@ export default function TradeClient() {
         }
 
         // 품목별 이미지 업로드 → work_order_items.images
+        // (기존 이미지 경로 + 새 파일 업로드 합쳐서 저장)
         for (let lineIdx = 0; lineIdx < cleanLines.length; lineIdx++) {
-          const files = wo_itemImageFiles[lineIdx] ?? [];
-          if (files.length === 0) continue;
           const createdItem = (createdWoItems as any[])?.[lineIdx];
           if (!createdItem?.id) continue;
+
+          // 기존 이미지 URL → storage 경로로 변환 (복사 시)
+          const existingUrls: string[] = wo_itemExistingImageUrls[lineIdx] ?? [];
+          const existingPaths: string[] = existingUrls.map((url: string) => {
+            if (url.startsWith("http")) {
+              const m = url.match(/work-order-images\/(.+?)(\?|$)/);
+              return m ? m[1] : null;
+            }
+            return url;
+          }).filter(Boolean) as string[];
+
+          // 새로 선택한 파일 업로드
+          const newFiles = wo_itemImageFiles[lineIdx] ?? [];
           const uploadedPaths: string[] = [];
-          for (const file of files) {
+          for (const file of newFiles) {
             const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
             const path = `orders/${finalBarcode}/item_${lineIdx}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
             const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file);
             if (!upErr) uploadedPaths.push(path);
           }
-          if (uploadedPaths.length > 0) {
-            await supabase.from("work_order_items").update({ images: uploadedPaths }).eq("id", createdItem.id);
+
+          // 기존 + 신규 합쳐서 저장
+          const finalPaths = [...existingPaths, ...uploadedPaths];
+          if (finalPaths.length > 0) {
+            await supabase.from("work_order_items").update({ images: finalPaths }).eq("id", createdItem.id);
           }
         }
       } catch (woCreateErr: any) {
