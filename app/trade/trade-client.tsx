@@ -1317,13 +1317,26 @@ export default function TradeClient() {
           const signedUrls = await resolveSignedImageUrls(rawImages, supabase);
           setEWoExistingSignedUrls(signedUrls); setEWoExistingSignedLoading(false);
         }
-        // 품목별 이미지 로드
-        const woItems: any[] = ((wo as any).work_order_items ?? [])
-          .slice().sort((a: any, b: any) => a.delivery_date.localeCompare(b.delivery_date));
-        setEWoItemIds(woItems.map((i: any) => i.id));
+        // 품목별 이미지 로드 (eLines 이름 기준 매핑)
+        const woItems: any[] = (wo as any).work_order_items ?? [];
+        // woItem id를 eLines 이름 순서로 매핑
+        const eLineNames = r.order_lines?.length
+          ? r.order_lines.map((l: any) => String(l.name ?? ""))
+          : [];
+        const orderedItemIds: string[] = eLineNames.map((lineName: string) => {
+          const matched = woItems.find((wi: any) =>
+            (wi.sub_items?.[0]?.name ?? "") === lineName
+          );
+          return matched?.id ?? "";
+        });
+        setEWoItemIds(orderedItemIds);
         const newExistingMap: Record<number, string[]> = {};
-        for (let idx = 0; idx < woItems.length; idx++) {
-          const rawItemImages: string[] = woItems[idx]?.images ?? [];
+        for (let idx = 0; idx < eLineNames.length; idx++) {
+          const lineName = eLineNames[idx];
+          const matchedItem = woItems.find((wi: any) =>
+            (wi.sub_items?.[0]?.name ?? "") === lineName
+          ) ?? woItems[idx];
+          const rawItemImages: string[] = matchedItem?.images ?? [];
           if (rawItemImages.length === 0) continue;
           const paths = rawItemImages.map((v: string) => {
             if (v.startsWith("http")) { const m = v.match(/work-order-images\/(.+?)(\?|$)/); return m ? m[1] : null; }
