@@ -1250,7 +1250,7 @@ export default function TradeClient() {
       try {
         const { data: wo } = await supabase
           .from("work_orders")
-          .select("id,sub_name,logo_spec,thickness,packaging_type,mold_per_sheet,note,work_order_items(id,sub_items,images)")
+          .select("id,sub_name,logo_spec,thickness,packaging_type,mold_per_sheet,note,work_order_items(id,sub_items,images,barcode_no)")
           .eq("linked_order_id", r.rawId)
           .limit(1)
           .maybeSingle();
