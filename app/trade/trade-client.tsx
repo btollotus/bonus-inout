@@ -454,6 +454,7 @@ export default function TradeClient() {
   const [wo_itemImagePreviewUrls, setWo_itemImagePreviewUrls] = useState<Record<number, string[]>>({});
   // 복사 시 기존 이미지 (key = line index, value = signed URL 배열)
   const [wo_itemExistingImageUrls, setWo_itemExistingImageUrls] = useState<Record<number, string[]>>({});
+  const [wo_itemExistingBarcodes, setWo_itemExistingBarcodes] = useState<Record<number, string>>({}); // 재주문 시 기존 바코드
   const [wo_saving, setWo_saving] = useState(false);
   const [wo_list, setWo_list] = useState<WorkOrderRow[]>([]);
   const [wo_listLoading, setWo_listLoading] = useState(false);
@@ -913,12 +914,19 @@ export default function TradeClient() {
         const woId = (createdWo as any).id as string;
         const finalBarcode = (createdWo as any).barcode_no as string;
 
-        // 품목별 고유 바코드 생성
+        // 품목별 바코드 생성 (재주문이면 기존 바코드 재사용)
         const woItemsPayload: any[] = [];
-        for (const l of cleanLines) {
-          const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
-          if (ibErr) throw new Error("품목 바코드 생성 실패: " + ibErr.message);
-          woItemsPayload.push({ work_order_id: woId, delivery_date: shipDate, sub_items: [{ name: l.name, qty: l.qty }], order_qty: l.qty, barcode_no: itemBarcode as string });
+        for (let li = 0; li < cleanLines.length; li++) {
+          const l = cleanLines[li];
+          let itemBarcodeNo: string;
+          if (orderIsReorder && wo_itemExistingBarcodes[li]) {
+            itemBarcodeNo = wo_itemExistingBarcodes[li]; // 기존 바코드 재사용
+          } else {
+            const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
+            if (ibErr) throw new Error("품목 바코드 생성 실패: " + ibErr.message);
+            itemBarcodeNo = itemBarcode as string;
+          }
+          woItemsPayload.push({ work_order_id: woId, delivery_date: shipDate, sub_items: [{ name: l.name, qty: l.qty }], order_qty: l.qty, barcode_no: itemBarcodeNo });
         }
         const { data: createdWoItems, error: wiErr } = await supabase.from("work_order_items").insert(woItemsPayload).select("id,barcode_no,sub_items");
         if (wiErr) throw new Error("작업지시서 항목 생성 실패: " + wiErr.message);
@@ -1021,7 +1029,7 @@ export default function TradeClient() {
         setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
         setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
         setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoNote("");
-        setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({});
+        setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
         await loadTrades(); return;
       }
     }
@@ -1031,7 +1039,7 @@ export default function TradeClient() {
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
     setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
     setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoNote("");
-    setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({});
+    setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
     await loadTrades();
   }
 
@@ -1070,7 +1078,7 @@ export default function TradeClient() {
     setWo_moldPerSheet(""); setWo_note(""); setWo_referenceNote("");
     setWo_isReorder(false); setWo_originalId("");
     setWo_items([{ id: crypto.randomUUID(), delivery_date: todayYMD(), sub_items: [{ name: "", qty: 0 }], order_qty: 0 }]);
-    setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({});
+    setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
     setWo_linkedOrderId(null); setWo_linkedOrderSummary("");
   }
 
@@ -1254,6 +1262,21 @@ export default function TradeClient() {
           setOrderWoPackagingType((wo as any).packaging_type ?? "");
           setOrderWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
           setOrderWoNote((wo as any).note ?? "");
+
+          // 품목별 기존 바코드 저장 (재주문 시 재사용)
+          const woItemsAll: any[] = (wo as any).work_order_items ?? [];
+          const barcodeMap: Record<number, string> = {};
+          const copiedLineNames = r.order_lines?.length
+            ? r.order_lines.map((l: any) => String(l.name ?? ""))
+            : [];
+          for (let bi = 0; bi < copiedLineNames.length; bi++) {
+            const lineName = copiedLineNames[bi];
+            const matched = woItemsAll.find((wi: any) =>
+              (wi.sub_items?.[0]?.name ?? "") === lineName
+            ) ?? woItemsAll[bi];
+            if (matched?.barcode_no) barcodeMap[bi] = matched.barcode_no;
+          }
+          if (Object.keys(barcodeMap).length > 0) setWo_itemExistingBarcodes(barcodeMap);
 
           // 품목별 이미지 복사 (lines 이름 기준 매핑)
           const woItems: any[] = (wo as any).work_order_items ?? [];
