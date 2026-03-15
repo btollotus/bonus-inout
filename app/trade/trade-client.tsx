@@ -485,6 +485,11 @@ export default function TradeClient() {
   const [eWoExistingImages, setEWoExistingImages] = useState<string[]>([]);
   const [eWoExistingSignedLoading, setEWoExistingSignedLoading] = useState(false);
   const [eWoExistingSignedUrls, setEWoExistingSignedUrls] = useState<string[]>([]);
+  // 품목별 이미지 (수정 모달)
+  const [eItemImageFiles, setEItemImageFiles] = useState<Record<number, File[]>>({});
+  const [eItemImagePreviewUrls, setEItemImagePreviewUrls] = useState<Record<number, string[]>>({});
+  const [eItemExistingImageUrls, setEItemExistingImageUrls] = useState<Record<number, string[]>>({});
+  const [eWoItemIds, setEWoItemIds] = useState<string[]>([]); // work_order_items.id 순서 보존
 
   const [eEntryDate, setEEntryDate] = useState(todayYMD());
   const [ePayMethod, setEPayMethod] = useState<"BANK" | "CASH" | "CARD" | "ETC">("BANK");
@@ -1287,7 +1292,9 @@ export default function TradeClient() {
       setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("");
       setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoImagePreviewUrls([]);
       setEWoExistingImages([]); setEWoExistingSignedLoading(false); setEWoExistingSignedUrls([]);
-      const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,mold_per_sheet,note,images").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
+      const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,mold_per_sheet,note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no)").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
+      // 품목별 이미지 초기화
+      setEItemImageFiles({}); setEItemImagePreviewUrls({}); setEItemExistingImageUrls({}); setEWoItemIds([]);
       if (wo) {
         setEWoId((wo as any).id); setEWoSubName((wo as any).sub_name ?? "");
         setEWoProductName((wo as any).product_name ?? ""); setEWoFoodType((wo as any).food_type ?? "");
@@ -1302,6 +1309,23 @@ export default function TradeClient() {
           const signedUrls = await resolveSignedImageUrls(rawImages, supabase);
           setEWoExistingSignedUrls(signedUrls); setEWoExistingSignedLoading(false);
         }
+        // 품목별 이미지 로드
+        const woItems: any[] = ((wo as any).work_order_items ?? [])
+          .slice().sort((a: any, b: any) => a.delivery_date.localeCompare(b.delivery_date));
+        setEWoItemIds(woItems.map((i: any) => i.id));
+        const newExistingMap: Record<number, string[]> = {};
+        for (let idx = 0; idx < woItems.length; idx++) {
+          const rawItemImages: string[] = woItems[idx]?.images ?? [];
+          if (rawItemImages.length === 0) continue;
+          const paths = rawItemImages.map((v: string) => {
+            if (v.startsWith("http")) { const m = v.match(/work-order-images\/(.+?)(\?|$)/); return m ? m[1] : null; }
+            return v;
+          }).filter(Boolean) as string[];
+          if (paths.length === 0) continue;
+          const { data: sd } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
+          if (sd) newExistingMap[idx] = sd.map((d: any) => d.signedUrl);
+        }
+        setEItemExistingImageUrls(newExistingMap);
       }
     } else {
       setEEntryDate(r.date || todayYMD());
@@ -1353,6 +1377,25 @@ export default function TradeClient() {
           }
         }
         await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, mold_per_sheet: eWoMoldPerSheet ? Number(eWoMoldPerSheet) : null, note: eWoNote.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString() }).eq("id", eWoId);
+        // 품목별 이미지 저장
+        for (let idx = 0; idx < eWoItemIds.length; idx++) {
+          const itemId = eWoItemIds[idx];
+          if (!itemId) continue;
+          const existingPaths: string[] = (eItemExistingImageUrls[idx] ?? []).map((url: string) => {
+            if (url.startsWith("http")) { const m = url.match(/work-order-images\/(.+?)(\?|$)/); return m ? m[1] : null; }
+            return url;
+          }).filter(Boolean) as string[];
+          const newFiles = eItemImageFiles[idx] ?? [];
+          const newPaths: string[] = [];
+          for (const file of newFiles) {
+            const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
+            const path = `orders/${eWoId}/item_${idx}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+            const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file, { upsert: true });
+            if (!upErr) newPaths.push(path);
+          }
+          const finalPaths = [...existingPaths, ...newPaths];
+          await supabase.from("work_order_items").update({ images: finalPaths }).eq("id", itemId);
+        }
       }
     } else {
       const amount = Number((eAmountStr || "0").replaceAll(",", ""));
@@ -1573,8 +1616,48 @@ export default function TradeClient() {
                       </div>
                     </div>
                     <LineHeader gridCols={lineGridCols} />
-                    <div className="mt-2 space-y-2">
-                      {eLines.map((l, i) => <LineRow key={i} l={l} i={i} onUpdate={updateEditLine} onRemove={removeEditLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} />)}
+                    <div className="mt-2 space-y-1">
+                      {eLines.map((l, i) => (
+                        <div key={i}>
+                          <LineRow l={l} i={i} onUpdate={updateEditLine} onRemove={removeEditLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} />
+                          {eWoId && l.name && !["택배비"].includes(l.name) ? (
+                            <div className="ml-1 mb-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                              <div className="mb-1 text-xs text-slate-500">🖼 {l.name} 인쇄 디자인 이미지</div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {/* 기존 이미지 */}
+                                {(eItemExistingImageUrls[i] ?? []).map((url, j) => (
+                                  <div key={`exist-${j}`} className="group relative">
+                                    <img src={url} alt={`기존${j+1}`} className="h-14 w-14 rounded-lg border border-slate-200 object-cover opacity-80" />
+                                    <button className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
+                                      onClick={() => setEItemExistingImageUrls((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }))}>✕</button>
+                                  </div>
+                                ))}
+                                {/* 새로 선택한 이미지 */}
+                                {(eItemImagePreviewUrls[i] ?? []).map((url, j) => (
+                                  <div key={`new-${j}`} className="group relative">
+                                    <img src={url} alt={`새이미지${j+1}`} className="h-14 w-14 rounded-lg border border-blue-200 object-cover" />
+                                    <button className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
+                                      onClick={() => {
+                                        setEItemImageFiles((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }));
+                                        setEItemImagePreviewUrls((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }));
+                                      }}>✕</button>
+                                  </div>
+                                ))}
+                                <label className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-400 hover:border-blue-400 hover:text-blue-500">
+                                  <span className="text-xl">+</span>
+                                  <input type="file" accept="image/*" multiple className="hidden"
+                                    onChange={(e) => {
+                                      const files = Array.from(e.target.files ?? []);
+                                      setEItemImageFiles((prev) => ({ ...prev, [i]: [...(prev[i] ?? []), ...files] }));
+                                      setEItemImagePreviewUrls((prev) => ({ ...prev, [i]: [...(prev[i] ?? []), ...files.map((f) => URL.createObjectURL(f))] }));
+                                      e.target.value = "";
+                                    }} />
+                                </label>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
                     </div>
                     <div className="mt-4 flex items-center justify-end gap-4 text-sm">
                       <div>공급가 {fmt(editOrderTotals.supply)}</div><div>부가세 {fmt(editOrderTotals.vat)}</div><div className="font-semibold">총액 {fmt(editOrderTotals.total)}</div>
