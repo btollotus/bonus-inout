@@ -1240,11 +1240,19 @@ export default function TradeClient() {
           setOrderWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
           setOrderWoNote((wo as any).note ?? "");
 
-          // 품목별 이미지 복사 (work_order_items.images 기준)
+          // 품목별 이미지 복사 (lines 이름 기준 매핑)
           const woItems: any[] = (wo as any).work_order_items ?? [];
+          const copiedLines = r.order_lines?.length
+            ? r.order_lines.map((l: any) => String(l.name ?? ""))
+            : [];
           const newExistingMap: Record<number, string[]> = {};
-          for (let lineIdx = 0; lineIdx < woItems.length; lineIdx++) {
-            const rawImages: string[] = woItems[lineIdx]?.images ?? [];
+          for (let lineIdx = 0; lineIdx < copiedLines.length; lineIdx++) {
+            const lineName = copiedLines[lineIdx];
+            // sub_items[0].name이 line name과 일치하는 woItem 찾기
+            const matchedItem = woItems.find((wi: any) =>
+              (wi.sub_items?.[0]?.name ?? "") === lineName
+            ) ?? woItems[lineIdx]; // fallback: 인덱스 순서
+            const rawImages: string[] = matchedItem?.images ?? [];
             if (rawImages.length === 0) continue;
             const paths = rawImages.map((v: string) => {
               if (v.startsWith("http")) {
