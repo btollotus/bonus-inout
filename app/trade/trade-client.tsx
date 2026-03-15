@@ -2225,7 +2225,7 @@ function parseLogoSize(logoSpec: string | null): { width: string; height: string
 
 // ─────────────────────── WoPrintModal ───────────────────────
 function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: () => void; employees: EmployeeRow[]; }) {
-  const items = (wo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date));
+  const items = (wo.work_order_items ?? []).slice().sort((a, b) => (a.barcode_no ?? "").localeCompare(b.barcode_no ?? ""));
   const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
   const [itemNotes, setItemNotes] = useState<Record<string, string>>(() => { const init: Record<string, string> = {}; for (const item of items) init[item.id] = item.note ?? ""; return init; });
   const [saving, setSaving] = useState(false);
