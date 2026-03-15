@@ -454,7 +454,7 @@ export default function TradeClient() {
   const [wo_itemImagePreviewUrls, setWo_itemImagePreviewUrls] = useState<Record<number, string[]>>({});
   // 복사 시 기존 이미지 (key = line index, value = signed URL 배열)
   const [wo_itemExistingImageUrls, setWo_itemExistingImageUrls] = useState<Record<number, string[]>>({});
-  const [wo_itemExistingBarcodes, setWo_itemExistingBarcodes] = useState<Record<number, string>>({}); // 재주문 시 기존 바코드
+  const [wo_itemExistingBarcodes, setWo_itemExistingBarcodes] = useState<Record<string, string>>({}); // 재주문 시 기존 바코드 (key=품목명)
   const [wo_saving, setWo_saving] = useState(false);
   const [wo_list, setWo_list] = useState<WorkOrderRow[]>([]);
   const [wo_listLoading, setWo_listLoading] = useState(false);
@@ -919,8 +919,8 @@ export default function TradeClient() {
         for (let li = 0; li < cleanLines.length; li++) {
           const l = cleanLines[li];
           let itemBarcodeNo: string;
-          if (orderIsReorder && wo_itemExistingBarcodes[li]) {
-            itemBarcodeNo = wo_itemExistingBarcodes[li]; // 기존 바코드 재사용
+          if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
+            itemBarcodeNo = wo_itemExistingBarcodes[l.name]; // 기존 바코드 재사용 (품목명 기준)
           } else {
             const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
             if (ibErr) throw new Error("품목 바코드 생성 실패: " + ibErr.message);
@@ -1263,18 +1263,12 @@ export default function TradeClient() {
           setOrderWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
           setOrderWoNote((wo as any).note ?? "");
 
-          // 품목별 기존 바코드 저장 (재주문 시 재사용)
+          // 품목별 기존 바코드 저장 (재주문 시 재사용) - 품목명을 key로 사용
           const woItemsAll: any[] = (wo as any).work_order_items ?? [];
-          const barcodeMap: Record<number, string> = {};
-          const copiedLineNames = r.order_lines?.length
-            ? r.order_lines.map((l: any) => String(l.name ?? ""))
-            : [];
-          for (let bi = 0; bi < copiedLineNames.length; bi++) {
-            const lineName = copiedLineNames[bi];
-            const matched = woItemsAll.find((wi: any) =>
-              (wi.sub_items?.[0]?.name ?? "") === lineName
-            ) ?? woItemsAll[bi];
-            if (matched?.barcode_no) barcodeMap[bi] = matched.barcode_no;
+          const barcodeMap: Record<string, string> = {};
+          for (const wi of woItemsAll) {
+            const itemName = wi.sub_items?.[0]?.name ?? "";
+            if (itemName && wi.barcode_no) barcodeMap[itemName] = wi.barcode_no;
           }
           if (Object.keys(barcodeMap).length > 0) setWo_itemExistingBarcodes(barcodeMap);
 
