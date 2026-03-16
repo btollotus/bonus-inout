@@ -60,7 +60,10 @@ function hangulToQwerty(input: string) {
 }
 
 // ✅ variant_name이 unit_type 값이면 product_name으로 대체
-function getDisplayName(variant_name: string, product_name: string): string {
+function getDisplayName(variant_name: string, product_name: string, category?: string | null): string {
+  // 기성 카테고리는 무조건 product_name 표시
+  if (category === "기성") return product_name;
+  // 그 외: variant_name이 unit_type 값이면 product_name 표시
   const unitTypes = ["EA", "BOX", "ea", "box", ""];
   if (unitTypes.includes((variant_name ?? "").trim())) return product_name;
   return variant_name;
@@ -349,7 +352,7 @@ export default function ProductsClient() {
     if (t) {
       base = base.filter((r) =>
         // ✅ variant_name으로 검색
-        getDisplayName(r.variant_name, r.product_name).toLowerCase().includes(t) ||
+        getDisplayName(r.variant_name, r.product_name, r.product_category).toLowerCase().includes(t) ||
         (r.product_food_type ?? "").toLowerCase().includes(t) ||
         r.barcode.toLowerCase().includes(t)
       );
@@ -357,7 +360,7 @@ export default function ProductsClient() {
     return [...base].sort((a, b) => {
       const ai = categoryOrderIndex(a.product_category), bi = categoryOrderIndex(b.product_category);
       if (ai !== bi) return ai - bi;
-      const an = getDisplayName(a.variant_name, a.product_name).toLowerCase(), bn = getDisplayName(b.variant_name, b.product_name).toLowerCase();
+      const an = getDisplayName(a.variant_name, a.product_name, a.product_category).toLowerCase(), bn = getDisplayName(b.variant_name, b.product_name, b.product_category).toLowerCase();
       if (an < bn) return -1; if (an > bn) return 1; return 0;
     });
   })();
@@ -368,7 +371,7 @@ export default function ProductsClient() {
     const lines = [header.map(esc).join(",")];
     for (const r of filtered) {
       lines.push([
-        esc(getDisplayName(r.variant_name, r.product_name) ?? ""),       // ✅ variant_name 또는 product_name
+        esc(getDisplayName(r.variant_name, r.product_name, r.product_category) ?? ""),       // ✅ variant_name 또는 product_name
         esc(r.product_category ?? ""),
         esc(r.product_food_type ?? ""),
         esc(r.weight_g ?? ""),
@@ -562,7 +565,7 @@ export default function ProductsClient() {
                             }}));
                           }} />
                       ) : (
-                        getDisplayName(r.variant_name, r.product_name)  // ✅ variant_name 또는 product_name
+                        getDisplayName(r.variant_name, r.product_name, r.product_category)  // ✅ 기성=product_name, 업체=variant_name
                       )}
                     </td>
 
@@ -685,7 +688,7 @@ export default function ProductsClient() {
                             onClick={() => {
                               setRowMetaEditOpen((prev) => ({ ...prev, [r.variant_id]: true }));
                               setRowMetaDraft((prev) => ({ ...prev, [r.variant_id]: {
-                                variant_name: getDisplayName(r.variant_name, r.product_name) ?? "",   // ✅ variant_name
+                                variant_name: getDisplayName(r.variant_name, r.product_name, r.product_category) ?? "",   // ✅ variant_name
                                 category: ((r.product_category as any) ?? "") as any,
                                 food_type: r.product_food_type ?? "",
                                 weight_g: (r.weight_g ?? "").toString(),
