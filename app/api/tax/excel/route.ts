@@ -343,6 +343,8 @@ export async function GET(req: Request) {
       const qty = safeNum(ln.qty);
       const unitWeight = safeNum(ln.weight_g);
 
+      console.log("DEBUG weight:", ln.name, ln.weight_g, ln.qty, unitWeight, qty);
+
       const packEa = extractPackEaFromName(ln.name);
       let totalQty = qty;
 
