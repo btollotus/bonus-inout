@@ -652,7 +652,7 @@ export default function TradeClient() {
     if (!error && data) setMasterProducts(data as MasterProductRow[]);
   }
   async function loadEmployees() {
-    const { data, error } = await supabase.from("employees").select("id,name").order("name", { ascending: true }).limit(500);
+    const { data, error } = await supabase.from("employees").select("id,name").is("resign_date", null).order("name", { ascending: true }).limit(500);
     if (!error) setEmployees((data ?? []) as EmployeeRow[]);
   }
 
@@ -1063,7 +1063,7 @@ export default function TradeClient() {
       const { error: hpErr } = await supabase.from("hr_payments").insert({ ledger_entry_id: ledgerEntryId, employee_id: salaryEmployeeId, pay_month: payMonth, kind: "SALARY", amount, note: null });
       if (hpErr) return setMsg(hpErr.message);
     }
-    setAmountStr(""); setLedgerMemo(""); setVatFree(false);
+    setAmountStr(""); setLedgerMemo(""); setVatFree(category === "급여");
     if (!selectedPartner) { setManualCounterpartyName(""); setManualBusinessNo(""); }
     setSalaryEmployeeId(""); setToTouched(false);
     await loadTrades();
