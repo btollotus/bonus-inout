@@ -111,7 +111,7 @@ export async function GET(req: Request) {
         const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
         if (!url || !serviceKey) {
           // 서버 설정 누락이면 즉시 오류 반환
-          // (GitHub Actions 백업이 “조용히 HTML 저장” 같은 문제로 이어지지 않게)
+          // (GitHub Actions 백업이 "조용히 HTML 저장" 같은 문제로 이어지지 않게)
           throw new Error("SUPABASE_SERVICE_ROLE_KEY 또는 NEXT_PUBLIC_SUPABASE_URL 누락");
         }
         return createSupabaseClient(url, serviceKey, {
@@ -159,7 +159,8 @@ export async function GET(req: Request) {
   if (orderIds.length) {
     const { data: lines, error: linesErr } = await supabase
       .from("order_lines")
-      .select("order_id,name,food_type,weight_g,qty,unit,supply_amount,vat_amount,total_amount")
+      // ✅ unit_type, pack_ea 추가 (무게 계산 시 unit_type 기반으로 처리하기 위함)
+      .select("order_id,name,food_type,weight_g,qty,unit,unit_type,pack_ea,supply_amount,vat_amount,total_amount")
       .in("order_id", orderIds)
       .limit(200000);
 
@@ -339,18 +340,26 @@ export async function GET(req: Request) {
       const total = safeNum(ln.total_amount ?? supply + vat);
 
       // ✅ 무게(품목무게 * 총수량) 계산
-      const unit = String(ln.unit ?? "").toUpperCase();
+      // ✅ unit(bigint 0)이 아닌 unit_type(text "BOX"/"EA") 기반으로 수정
+      // 우선순위 1: 품목명에 "(100개)" 패턴 있으면 → qty * packEaFromName
+      // 우선순위 2: unit_type = BOX 이면 → qty * pack_ea(DB값), pack_ea 없으면 qty 그대로
+      // 우선순위 3: EA 또는 기타 → qty 그대로
+      const unitType = String(ln.unit_type ?? "").toUpperCase();
       const qty = safeNum(ln.qty);
       const unitWeight = safeNum(ln.weight_g);
 
-      console.log("DEBUG weight:", ln.name, ln.weight_g, ln.qty, unitWeight, qty);
-
-      const packEa = extractPackEaFromName(ln.name);
+      const packEaFromName = extractPackEaFromName(ln.name);
       let totalQty = qty;
 
-      if (packEa != null) {
-        totalQty = qty * packEa;
-      } else if (unit === "BOX") {
+      if (packEaFromName != null) {
+        // 품목명에 개수 패턴 있으면 최우선
+        totalQty = qty * packEaFromName;
+      } else if (unitType === "BOX") {
+        // BOX 단위: DB의 pack_ea 사용, 없으면 qty 그대로
+        const packEaFromDb = safeNum(ln.pack_ea);
+        totalQty = packEaFromDb > 0 ? qty * packEaFromDb : qty;
+      } else {
+        // EA 또는 기타: qty 그대로
         totalQty = qty;
       }
 
