@@ -61,8 +61,8 @@ function hangulToQwerty(input: string) {
 
 // ✅ variant_name이 unit_type 값이면 product_name으로 대체
 function getDisplayName(variant_name: string, product_name: string, category?: string | null): string {
-  // 기성 카테고리는 무조건 product_name 표시
-  if (category === "기성") return product_name;
+  // 기성/전사지 카테고리는 무조건 product_name 표시
+  if (category === "기성" || category === "전사지") return product_name;
   // 그 외: variant_name이 unit_type 값이면 product_name 표시
   const unitTypes = ["EA", "BOX", "ea", "box", ""];
   if (unitTypes.includes((variant_name ?? "").trim())) return product_name;
