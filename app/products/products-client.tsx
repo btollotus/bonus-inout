@@ -255,11 +255,11 @@ export default function ProductsClient() {
     finally { setLoading(false); }
   };
 
-  // ✅ 수정 저장: variant_name은 product_variants에, food_type/category는 products에
+  // ✅ 수정 저장: 기성/전사지는 product_name 업데이트, 업체는 variant_name 업데이트
   const saveVariantMeta = async (r: VariantRow) => {
     setMsg(null);
     const draft = rowMetaDraft[r.variant_id];
-    const vn = (draft?.variant_name ?? r.variant_name ?? "").trim();  // ✅ variant_name 수정
+    const vn = (draft?.variant_name ?? r.variant_name ?? "").trim();
     const ct = (draft?.category ?? (r.product_category as any) ?? "").trim();
     const ft = (draft?.food_type ?? r.product_food_type ?? "").trim();
     const wgRaw = (draft?.weight_g ?? (r.weight_g ?? "").toString()).trim();
@@ -275,13 +275,20 @@ export default function ProductsClient() {
 
     setLoading(true);
     try {
-      // 1) product_variants.variant_name 업데이트 ✅
+      // 1) product_variants.variant_name + weight_g + pack_ea 업데이트
       const { error: vnUpdErr } = await supabase.from("product_variants").update({ variant_name: vn, weight_g: wg, pack_ea: pe }).eq("id", r.variant_id);
       if (vnUpdErr) throw vnUpdErr;
 
-      // 2) products.category, food_type 업데이트
-      const { error: pUpdErr } = await supabase.from("products").update({ category: ct, food_type: ft }).eq("id", r.product_id);
-      if (pUpdErr) throw pUpdErr;
+      // 2) products 업데이트
+      // 기성/전사지: product_name 기준 → products.name도 업데이트
+      // 업체/기타: variant_name 기준 → products.name은 건드리지 않음 (다른 품목 영향 방지)
+      if (ct === "기성" || ct === "전사지") {
+        const { error: pUpdErr } = await supabase.from("products").update({ name: vn, category: ct, food_type: ft }).eq("id", r.product_id);
+        if (pUpdErr) throw pUpdErr;
+      } else {
+        const { error: pUpdErr } = await supabase.from("products").update({ category: ct, food_type: ft }).eq("id", r.product_id);
+        if (pUpdErr) throw pUpdErr;
+      }
 
       setRowMetaEditOpen((prev) => ({ ...prev, [r.variant_id]: false }));
       setRowMetaDraft((prev) => { const next = { ...prev }; delete next[r.variant_id]; return next; });
