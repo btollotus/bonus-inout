@@ -1170,7 +1170,7 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
             <td style={thS}>거래처명</td>
             <td style={tdS}>{wo.client_name}{wo.sub_name ? ` (${wo.sub_name})` : ""}</td>
             <td style={thS}>납기일</td>
-            <td style={{ ...tdS, fontWeight: "bold" }}>{deliveryDate}</td>
+            <td style={{ ...tdS, fontWeight: "bold" }}>{deliveryDate}{deliveryDate ? ` (${["일","월","화","수","목","금","토"][new Date(deliveryDate).getDay()]})` : ""}</td>
           </tr>
           <tr>
             <td style={thS}>품목명</td>
@@ -1198,11 +1198,11 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
             <td style={thS}>납품방법</td>
             <td style={tdS}>{wo.delivery_method ?? "—"}</td>
             <td style={thS}>주문일</td>
-            <td style={tdS}>{wo.created_at ? wo.created_at.slice(0, 10) : wo.order_date}</td>
+            <td style={tdS}>{(() => { const d = wo.created_at ? wo.created_at.slice(0, 10) : wo.order_date; return d ? `${d} (${["일","월","화","수","목","금","토"][new Date(d).getDay()]})` : ""; })()}</td>
           </tr>
           <tr>
             <td style={thS}>지시번호</td>
-            <td style={{ ...tdS, fontFamily: "monospace", fontSize: "8pt" }} colSpan={3}>{wo.work_order_no}</td>
+            <td style={{ ...tdS }} colSpan={3}>{wo.work_order_no}</td>
           </tr>
           {wo.note ? <tr><td style={thS}>비고</td><td style={tdS} colSpan={3}>{wo.note}</td></tr> : null}
           {wo.reference_note ? <tr><td style={thS}>참고사항</td><td style={tdS} colSpan={3}>{wo.reference_note}</td></tr> : null}
@@ -1282,7 +1282,7 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
                             <textarea
                               value={noteVal}
                               onChange={(e) => onItemNoteChange(item.id, e.target.value)}
-                              placeholder="비고 입력..."
+                              placeholder=""
                               style={{ width: "100%", height: "52px", resize: "none", border: "none", outline: "none", fontSize: "8.5pt", fontFamily: "inherit", padding: "3px 4px", background: "transparent", lineHeight: "1.4" }}
                             />
                           </td>
