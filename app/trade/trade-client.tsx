@@ -1897,7 +1897,7 @@ export default function TradeClient() {
               })}
             </div>
             <div className="mt-3 flex gap-2">
-              <button className={`${btn} flex-1`} onClick={() => { setSelectedPartner(null); setPartnerFilter(""); }}>선택 해제</button>
+            <button className={`${btn} flex-1`} onClick={() => { setSelectedPartner(null); setPartnerFilter(""); setTradeSearch(""); }}>선택 해제</button>
               <button className={`${btn} flex-1`} onClick={loadTrades}>조회 갱신</button>
             </div>
           </div>
