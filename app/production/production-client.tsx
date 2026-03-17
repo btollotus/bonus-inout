@@ -206,7 +206,6 @@ export default function ProductionClient() {
   useEffect(() => { loadWoList(); }, [loadWoList]);
   useEffect(() => {
     supabase.from("employees").select("id,name,is_active,resign_date")
-      .eq("is_active", true)
       .is("resign_date", null)
       .order("name").limit(500)
       .then(({ data }) => { if (data) setEmployees(data); });
@@ -342,6 +341,20 @@ export default function ProductionClient() {
   async function markProductionComplete() {
     if (!selectedWo) return;
 
+        // SUBADMIN은 담당자 4개 모두 필수
+        if (!isAdmin && woChecks) {
+          const missing = [
+            !woChecks.assignee_transfer && "전사인쇄",
+            !woChecks.assignee_print_check && "인쇄검수",
+            !woChecks.assignee_production && "생산완료",
+            !woChecks.assignee_input && "입력완료",
+          ].filter(Boolean) as string[];
+          if (missing.length > 0) {
+            setMsg(`담당자를 모두 선택해주세요: ${missing.join(", ")}`);
+            return;
+          }
+        }
+        
     const items = (selectedWo.work_order_items ?? []).filter((item) => {
       const name = (item.sub_items ?? [])[0]?.name ?? "";
       return !name.startsWith("성형틀") && !name.startsWith("인쇄제판");
