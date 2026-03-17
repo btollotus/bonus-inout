@@ -160,7 +160,7 @@ export async function GET(req: Request) {
     const { data: lines, error: linesErr } = await supabase
       .from("order_lines")
       // ✅ unit_type, pack_ea 추가 (무게 계산 시 unit_type 기반으로 처리하기 위함)
-      .select("order_id,name,food_type,weight_g,qty,unit,unit_type,pack_ea,supply_amount,vat_amount,total_amount")
+      .select("order_id,line_no,name,food_type,weight_g,qty,unit,unit_type,pack_ea,supply_amount,vat_amount,total_amount")
       .in("order_id", orderIds)
       .limit(200000);
 
