@@ -2062,9 +2062,9 @@ export default function TradeClient() {
                   <div>공급가 {fmt(orderTotals.supply)}</div><div>부가세 {fmt(orderTotals.vat)}</div>
                   <div className="font-semibold">총액 {fmt(orderTotals.total)}</div>
                   <div className="flex items-center gap-3">
-                    <span style={{ padding: "3px 12px", borderRadius: "12px", fontSize: "12px", fontWeight: "bold", background: orderIsReorder ? "#fef3c7" : "#dbeafe", color: orderIsReorder ? "#b45309" : "#1d4ed8", border: `1px solid ${orderIsReorder ? "#fcd34d" : "#93c5fd"}` }}>
+                  <button type="button" onClick={() => setOrderIsReorder((v) => !v)} style={{ padding: "3px 12px", borderRadius: "12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", border: "none", background: orderIsReorder ? "#fef3c7" : "#dbeafe", color: orderIsReorder ? "#b45309" : "#1d4ed8", outline: `1px solid ${orderIsReorder ? "#fcd34d" : "#93c5fd"}` }}>
                       {orderIsReorder ? "재주문" : "신규"}
-                    </span>
+                    </button>
                     <button className={btnOn} onClick={createOrder}>주문/출고 생성{orderWoEnabled ? " + 작업지시서" : ""}</button>
                   </div>
                 </div>
