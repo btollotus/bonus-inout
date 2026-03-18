@@ -205,7 +205,7 @@ export default function ProductionClient() {
 
   useEffect(() => { loadWoList(); }, [loadWoList]);
   useEffect(() => {
-    supabase.from("employees").select("id,name,is_active,resign_date")
+    supabase.from("employees").select("id,name,resign_date")
       .is("resign_date", null)
       .order("name").limit(500)
       .then(({ data }) => { if (data) setEmployees(data); });
