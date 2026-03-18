@@ -36,6 +36,8 @@ type LedgerRow = {
   memo: string | null;
 
   status: string;
+  tax_invoice_received?: boolean | null;
+  payment_completed?: boolean | null;
 
   signed_amount: number;
   running_balance: number | null;
@@ -351,6 +353,26 @@ export default function LedgerClient() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const toggleTaxInvoiceReceived = async (r: LedgerRow) => {
+    const next = !(r.tax_invoice_received ?? false);
+    const { error } = await supabase
+      .from("ledger_entries")
+      .update({ tax_invoice_received: next })
+      .eq("id", r.id);
+    if (error) return setMsg(error.message);
+    await loadLedger();
+  };
+
+  const togglePaymentCompleted = async (r: LedgerRow) => {
+    const next = !(r.payment_completed ?? false);
+    const { error } = await supabase
+      .from("ledger_entries")
+      .update({ payment_completed: next })
+      .eq("id", r.id);
+    if (error) return setMsg(error.message);
+    await loadLedger();
   };
 
   // 합계(현재 rows)
@@ -982,16 +1004,47 @@ export default function LedgerClient() {
                         <td style={{ ...td, textAlign: "right" }}>{r.direction === "IN" ? fmt(r.amount) : ""}</td>
                         <td style={{ ...td, textAlign: "right" }}>{r.direction === "OUT" ? fmt(r.amount) : ""}</td>
                         <td style={{ ...td, textAlign: "right", opacity: 0.95 }}>{fmt(r.running_balance)}</td>
-                        <td style={td}>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <button type="button" onClick={() => copyFromRow(r)} style={miniBtn}>
-                              복사
-                            </button>
-                            <button type="button" onClick={() => voidEntry(r.id)} style={miniDangerBtn}>
-                              VOID
-                            </button>
-                          </div>
-                        </td>
+                        
+
+<td style={td}>
+  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <button type="button" onClick={() => copyFromRow(r)} style={miniBtn}>
+      복사
+    </button>
+    <button type="button" onClick={() => voidEntry(r.id)} style={miniDangerBtn}>
+      VOID
+    </button>
+    {r.direction === "OUT" ? (
+      <>
+        <button
+          type="button"
+          onClick={() => toggleTaxInvoiceReceived(r)}
+          style={{
+            ...miniBtn,
+            borderColor: r.tax_invoice_received ? "rgba(100,200,100,0.6)" : "rgba(255,160,50,0.6)",
+            background: r.tax_invoice_received ? "rgba(100,200,100,0.08)" : "transparent",
+            color: r.tax_invoice_received ? "#4ade80" : "#fb923c",
+          }}
+        >
+          {r.tax_invoice_received ? "✅ 계산서수령" : "☐ 계산서미수령"}
+        </button>
+        <button
+          type="button"
+          onClick={() => togglePaymentCompleted(r)}
+          style={{
+            ...miniBtn,
+            borderColor: r.payment_completed ? "rgba(100,200,100,0.6)" : "rgba(255,160,50,0.6)",
+            background: r.payment_completed ? "rgba(100,200,100,0.08)" : "transparent",
+            color: r.payment_completed ? "#4ade80" : "#fb923c",
+          }}
+        >
+          {r.payment_completed ? "✅ 결제완료" : "☐ 결제미완료"}
+        </button>
+      </>
+    ) : null}
+  </div>
+</td>
+
                       </tr>
                     ))
                   )}
