@@ -2276,9 +2276,11 @@ export default function TradeClient() {
 // ─────────────────────── 이미지 실제크기 파싱 ───────────────────────
 function parseLogoSize(logoSpec: string | null): { width: string; height: string } | null {
   if (!logoSpec) return null;
-  const m = logoSpec.match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(mm|cm)/i);
+  const m = logoSpec.match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(mm|cm)?/i);
   if (!m) return null;
-  return { width: `${m[1]}${m[3]}`, height: `${m[2]}${m[3]}` };
+  const unit = m[3] ?? "mm";
+  return { width: `${m[1]}${unit}`, height: `${m[2]}${unit}` };
+
 }
 
 // ─────────────────────── WoPrintModal ───────────────────────
