@@ -164,6 +164,7 @@ export default function TaxClient() {
   const [excludePartners, setExcludePartners] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("pending_exclude_partners") ?? "[]"); } catch { return []; }
   });
+  const [pendingTab, setPendingTab] = useState<"ORDER" | "LEDGER">("ORDER");
   const [excludeCategories, setExcludeCategories] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("pending_exclude_categories") ?? "[]"); } catch { return []; }
   });
@@ -1056,6 +1057,15 @@ export default function TaxClient() {
 
 {viewMode === "PENDING" ? (
           <div className="mt-6 space-y-6">
+            {/* 서브탭 */}
+            <div className="flex gap-2">
+              <button className={pendingTab === "ORDER" ? btnOn : btn} onClick={() => setPendingTab("ORDER")}>
+                ☐ 세금계산서 미발행
+              </button>
+              <button className={pendingTab === "LEDGER" ? btnOn : btn} onClick={() => setPendingTab("LEDGER")}>
+                ☐ 계산서미수령 / 결제미완료
+              </button>
+            </div>
 
             {/* 제외 거래처 필터 */}
             {(() => {
@@ -1067,73 +1077,7 @@ export default function TaxClient() {
               const filteredLedgers = pendingLedgers.filter((r) => !excludePartners.includes(r.counterparty_name ?? ""));
               return (
                 <>
-  <div className={`${card} p-4`}>
-                    <div className="mb-2 text-sm font-semibold">제외할 거래처 설정</div>
-                    <div className="text-xs text-slate-500 mb-3">제외할 거래처를 검색해서 추가하세요. (브라우저에 저장됩니다)</div>
-                    {/* 검색 입력 */}
-                    <div className="flex gap-2 mb-3">
-                      <input
-                        className={input}
-                        list="pending-partner-names"
-                        placeholder="거래처명 검색 후 추가"
-                        id="exclude-partner-input"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            const val = (e.currentTarget as HTMLInputElement).value.trim();
-                            if (!val) return;
-                            setExcludePartners((prev) => {
-                              if (prev.includes(val)) return prev;
-                              const next = [...prev, val];
-                              try { localStorage.setItem("pending_exclude_partners", JSON.stringify(next)); } catch {}
-                              return next;
-                            });
-                            (e.currentTarget as HTMLInputElement).value = "";
-                          }
-                        }}
-                      />
-                      <datalist id="pending-partner-names">
-                        {allNames.filter((n) => !excludePartners.includes(n)).map((n) => <option key={n} value={n} />)}
-                      </datalist>
-                      <button className={btn} onClick={() => {
-                        const el = document.getElementById("exclude-partner-input") as HTMLInputElement;
-                        const val = el?.value.trim();
-                        if (!val) return;
-                        setExcludePartners((prev) => {
-                          if (prev.includes(val)) return prev;
-                          const next = [...prev, val];
-                          try { localStorage.setItem("pending_exclude_partners", JSON.stringify(next)); } catch {}
-                          return next;
-                        });
-                        el.value = "";
-                      }}>추가</button>
-                    </div>
-                    {/* 제외 목록 */}
-                    {excludePartners.length === 0 ? (
-                      <div className="text-sm text-slate-400">제외된 거래처 없음</div>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {excludePartners.map((name) => (
-                          <span key={name} className="inline-flex items-center gap-1 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-700">
-                            {name}
-                            <button type="button" className="ml-1 text-orange-400 hover:text-orange-700"
-                              onClick={() => {
-                                setExcludePartners((prev) => {
-                                  const next = prev.filter((x) => x !== name);
-                                  try { localStorage.setItem("pending_exclude_partners", JSON.stringify(next)); } catch {}
-                                  return next;
-                                });
-                              }}>✕</button>
-                          </span>
-                        ))}
-                        <button className="text-xs text-slate-500 underline ml-2"
-                          onClick={() => { setExcludePartners([]); try { localStorage.removeItem("pending_exclude_partners"); } catch {} }}>
-                          전체 해제
-                        </button>
-                      </div>
-                    )}
-                  </div>  
-
-
+ {pendingTab === "ORDER" ? (
                   <div className={`${card} p-4`}>
                     <div className="flex items-center justify-between gap-3 mb-3">
                       <div>
@@ -1173,7 +1117,9 @@ export default function TaxClient() {
                       </table>
                     </div>
                   </div>
+                  ) : null}
 
+                  {pendingTab === "LEDGER" ? (
                   <div className={`${card} p-4`}>
                     <div className="flex items-center justify-between gap-3 mb-3">
                       <div>
@@ -1220,6 +1166,8 @@ export default function TaxClient() {
                       </table>
                     </div>
                   </div>
+                  ) : null} 
+
                 </>
               );
             })()}
