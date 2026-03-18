@@ -2486,8 +2486,8 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
                     ? <div style={{ fontSize: "8pt", color: "#94a3b8", padding: "4px" }}>이미지 로딩 중...</div>
                     : itemSignedUrls.map((url, imgIdx) => (
                       <div key={imgIdx} style={{ textAlign: "center" }}>
-                        <img src={url} alt={`이미지${imgIdx+1}`}
-                          style={{ width: logoSize ? logoSize.width : "auto", height: logoSize ? logoSize.height : "auto", maxWidth: logoSize ? "none" : "120px", objectFit: "contain", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />
+<img src={url} alt={`이미지${imgIdx+1}`}
+                          style={{ width: logoSize ? logoSize.width : "auto", height: logoSize ? logoSize.height : "auto", maxWidth: logoSize ? logoSize.width : "120px", maxHeight: logoSize ? logoSize.height : "120px", objectFit: "cover", objectPosition: "top left", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />
                         {wo.logo_spec ? <div style={{ fontSize: "7pt", color: "#94a3b8", marginTop: "2px" }}>{wo.logo_spec}</div> : null}
                       </div>
                     ))
@@ -2516,7 +2516,8 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
             {imagesLoading ? <div style={{ fontSize: "8pt", color: "#94a3b8", padding: "8px" }}>이미지 로딩 중...</div>
               : wo.images.map((url, i) => {
                 const logoSize = parseLogoSize(wo.logo_spec);
-                return <img key={i} src={url} alt={`디자인 ${i + 1}`} style={{ width: logoSize ? logoSize.width : "auto", height: logoSize ? logoSize.height : "auto", maxWidth: logoSize ? "none" : "100%", objectFit: "contain", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />;
+                return <img key={i} src={url} alt={`디자인 ${i + 1}`} style={{ width: logoSize ? logoSize.width : "auto", height: logoSize ? logoSize.height : "auto", maxWidth: logoSize ? logoSize.width : "100%", maxHeight: logoSize ? logoSize.height : "auto", objectFit: "cover", objectPosition: "top left", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />;
+                
               })}
           </div>
         </div>
