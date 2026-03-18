@@ -419,7 +419,7 @@ export default function ProductionClient() {
           actual_qty, unit_weight, expiry_date,
           updated_at: new Date().toISOString(),
         }).eq("id", item.id);
-        if (itemErr) return setMsg("생산입력 저장 실패: " + itemErr.message);
+        if (itemErr) { setMsg("생산입력 저장 실패: " + itemErr.message); return; }
       }
 
       // variant weight_g 업데이트
