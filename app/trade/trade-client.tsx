@@ -933,7 +933,7 @@ export default function TradeClient() {
             if (ibErr) throw new Error("품목 바코드 생성 실패: " + ibErr.message);
             itemBarcodeNo = itemBarcode as string;
           }
-          woItemsPayload.push({ work_order_id: woId, delivery_date: shipDate, sub_items: [{ name: l.name, qty: l.qty }], order_qty: l.qty, barcode_no: itemBarcodeNo });
+          woItemsPayload.push({ work_order_id: woId, delivery_date: shipDate, sub_items: [{ name: l.name, qty: l.qty }], order_qty: l.qty, barcode_no: itemBarcodeNo, unit_weight: l.weight_g && Number(l.weight_g) > 0 ? Number(l.weight_g) : null });
         }
         const { data: createdWoItems, error: wiErr } = await supabase.from("work_order_items").insert(woItemsPayload).select("id,barcode_no,sub_items");
         if (wiErr) throw new Error("작업지시서 항목 생성 실패: " + wiErr.message);
