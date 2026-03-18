@@ -147,6 +147,9 @@ export default function TaxClient() {
     tax_invoice_received: boolean | null;
     payment_completed: boolean | null;
     direction: string;
+    category: string | null;
+    method: string | null;
+    vat_amount: number | null;
   };
   
   const [pendingOrders, setPendingOrders] = useState<PendingOrderRow[]>([]);
@@ -440,12 +443,21 @@ export default function TaxClient() {
   
     const { data: lData } = await supabase
       .from("ledger_entries")
-      .select("id,entry_date,counterparty_name,amount,tax_invoice_received,payment_completed,direction")
+      .select("id,entry_date,counterparty_name,amount,tax_invoice_received,payment_completed,direction,category,method,vat_amount")
       .eq("direction", "OUT")
       .or("tax_invoice_received.eq.false,payment_completed.eq.false")
+      .not("category", "in", '("급여","세금")')
+      .not("method", "eq", "CARD")
       .order("entry_date", { ascending: false })
       .limit(500);
-    setPendingLedgers((lData ?? []) as PendingLedgerRow[]);
+
+    // 부가세 없음(vat_amount=0 이고 supply=total인 경우) 제외
+    const filtered = (lData ?? []).filter((r: any) => {
+      // vat_amount가 0이면 제외
+      if (Number(r.vat_amount ?? 0) === 0) return false;
+      return true;
+    });
+    setPendingLedgers(filtered as PendingLedgerRow[]);
   }
 
   useEffect(() => {
