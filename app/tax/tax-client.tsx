@@ -88,7 +88,7 @@ function toInt(n: any) {
   return Number.isFinite(v) ? Math.trunc(v) : 0;
 }
 
-type ViewMode = "PURCHASE" | "SALES" | "AR";
+type ViewMode = "PURCHASE" | "SALES" | "AR" | "PENDING";
 
 export default function TaxClient() {
   const supabase = useMemo(() => createClient(), []);
@@ -131,6 +131,26 @@ export default function TaxClient() {
   // ✅ 미수금(AR) 옵션/데이터
   const [includeChannelsAR, setIncludeChannelsAR] = useState<boolean>(false);
   const [arRows, setArRows] = useState<ARSummaryRow[]>([]);
+
+  type PendingOrderRow = {
+    id: string;
+    customer_name: string;
+    ship_date: string;
+    total_amount: number;
+    tax_invoice_issued: boolean | null;
+  };
+  type PendingLedgerRow = {
+    id: string;
+    entry_date: string;
+    counterparty_name: string | null;
+    amount: number;
+    tax_invoice_received: boolean | null;
+    payment_completed: boolean | null;
+    direction: string;
+  };
+  
+  const [pendingOrders, setPendingOrders] = useState<PendingOrderRow[]>([]);
+  const [pendingLedgers, setPendingLedgers] = useState<PendingLedgerRow[]>([]);
 
   const pageBg = "bg-slate-50 text-slate-900";
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
@@ -403,6 +423,25 @@ export default function TaxClient() {
     }
   }
 
+  async function loadPending() {
+    const { data: oData } = await supabase
+      .from("orders")
+      .select("id,customer_name,ship_date,total_amount,tax_invoice_issued")
+      .eq("tax_invoice_issued", false)
+      .order("ship_date", { ascending: false })
+      .limit(500);
+    setPendingOrders((oData ?? []) as PendingOrderRow[]);
+  
+    const { data: lData } = await supabase
+      .from("ledger_entries")
+      .select("id,entry_date,counterparty_name,amount,tax_invoice_received,payment_completed,direction")
+      .eq("direction", "OUT")
+      .or("tax_invoice_received.eq.false,payment_completed.eq.false")
+      .order("entry_date", { ascending: false })
+      .limit(500);
+    setPendingLedgers((lData ?? []) as PendingLedgerRow[]);
+  }
+
   useEffect(() => {
     loadCats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -418,6 +457,10 @@ export default function TaxClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode, toYMD, includeChannelsAR]);
 
+  useEffect(() => {
+    if (viewMode === "PENDING") loadPending();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
   // =========================
   // 집계: 매출/매입/VAT
   // =========================
@@ -661,6 +704,10 @@ export default function TaxClient() {
             <button className={viewMode === "AR" ? btnOn : btn} onClick={() => setViewMode("AR")}>
               미수금
             </button>
+
+            <button className={viewMode === "PENDING" ? btnOn : btn} onClick={() => setViewMode("PENDING")}>
+  미처리현황
+</button>
 
             <button className={btn} onClick={printNow}>
               인쇄
@@ -978,6 +1025,97 @@ export default function TaxClient() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        ) : null}
+
+{viewMode === "PENDING" ? (
+          <div className="mt-6 space-y-6">
+            <div className={`${card} p-4`}>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <div className="text-lg font-semibold">☐ 세금계산서 미발행 주문</div>
+                  <div className="mt-1 text-xs text-slate-600">발행 처리가 안 된 출고 주문 목록</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500">{pendingOrders.length}건</span>
+                  <button className={btn} onClick={loadPending}>새로고침</button>
+                </div>
+              </div>
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full table-fixed text-sm">
+                  <colgroup>
+                    <col style={{ width: "130px" }} />
+                    <col style={{ width: "260px" }} />
+                    <col style={{ width: "160px" }} />
+                  </colgroup>
+                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left">출고일</th>
+                      <th className="px-3 py-2 text-left">거래처</th>
+                      <th className="px-3 py-2 text-right">총액</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingOrders.length === 0 ? (
+                      <tr><td colSpan={3} className="bg-white px-4 py-4 text-sm text-slate-500">미발행 주문이 없습니다. ✅</td></tr>
+                    ) : pendingOrders.map((r) => (
+                      <tr key={r.id} className="border-t border-slate-200 bg-white">
+                        <td className="px-3 py-2 tabular-nums">{r.ship_date}</td>
+                        <td className="px-3 py-2 font-semibold">{r.customer_name}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(r.total_amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className={`${card} p-4`}>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <div className="text-lg font-semibold">☐ 계산서미수령 / 결제미완료 매입</div>
+                  <div className="mt-1 text-xs text-slate-600">OUT 항목 중 처리가 안 된 매입 목록</div>
+                </div>
+                <span className="text-xs text-slate-500">{pendingLedgers.length}건</span>
+              </div>
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full table-fixed text-sm">
+                  <colgroup>
+                    <col style={{ width: "130px" }} />
+                    <col style={{ width: "220px" }} />
+                    <col style={{ width: "140px" }} />
+                    <col style={{ width: "140px" }} />
+                    <col style={{ width: "140px" }} />
+                  </colgroup>
+                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left">날짜</th>
+                      <th className="px-3 py-2 text-left">거래처</th>
+                      <th className="px-3 py-2 text-right">금액</th>
+                      <th className="px-3 py-2 text-center">계산서수령</th>
+                      <th className="px-3 py-2 text-center">결제완료</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingLedgers.length === 0 ? (
+                      <tr><td colSpan={5} className="bg-white px-4 py-4 text-sm text-slate-500">미처리 매입이 없습니다. ✅</td></tr>
+                    ) : pendingLedgers.map((r) => (
+                      <tr key={r.id} className="border-t border-slate-200 bg-white">
+                        <td className="px-3 py-2 tabular-nums">{r.entry_date}</td>
+                        <td className="px-3 py-2 font-semibold">{r.counterparty_name ?? "-"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(r.amount)}</td>
+                        <td className="px-3 py-2 text-center">
+                          {r.tax_invoice_received ? "✅" : <span className="text-orange-500 font-semibold">☐ 미수령</span>}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {r.payment_completed ? "✅" : <span className="text-orange-500 font-semibold">☐ 미완료</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         ) : null}
