@@ -1248,7 +1248,7 @@ export default function TradeClient() {
   async function onCopyClick(r: UnifiedRow) {
     setMsg(null);
     if (r.kind === "ORDER") {
-      setOrderIsReorder(true); setMode("ORDERS"); setShipDate(todayYMD());
+      setOrderIsReorder(false); setMode("ORDERS"); setShipDate(todayYMD());
       setOrdererName(r.orderer_name ?? r.ordererName ?? ""); setShipMethod(r.ship_method ?? "택배");
       setOrderTitle(r.order_title ?? "");
       setLines(r.order_lines?.length ? r.order_lines.map((l) => ({ food_type: String(l.food_type ?? ""), name: String(l.name ?? ""), weight_g: Number(l.weight_g ?? 0), qty: toInt(l.qty ?? 0), unit: Number(l.unit ?? 0), total_incl_vat: Number(l.total_amount ?? 0) })) : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
