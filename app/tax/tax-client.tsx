@@ -95,6 +95,13 @@ export default function TaxClient() {
 
   const [msg, setMsg] = useState<string | null>(null);
 
+  const [showTopBtn, setShowTopBtn] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShowTopBtn(window.scrollY > 300);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   // 기간
   const [fromYMD, setFromYMD] = useState(addDays(todayYMD(), -30));
   const [toYMD, setToYMD] = useState(todayYMD());
@@ -1221,6 +1228,15 @@ export default function TaxClient() {
         <div className="mt-6 text-xs text-slate-500">
           ※ 이 페이지는 “세무사 전달/인쇄/집계” 전용입니다. 입력은 기존 주문/출고/금전출납 화면에서 하시면 됩니다.
         </div>
+        {showTopBtn ? (
+          <button
+            type="button"
+            className="fixed bottom-6 right-6 z-50 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-lg hover:bg-slate-50"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          >
+            TOP
+          </button>
+        ) : null}
       </div>
     </div>
   );
