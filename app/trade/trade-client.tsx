@@ -87,7 +87,9 @@ type UnifiedRow = {
   ledger_supply_amount?: number | null; ledger_vat_amount?: number | null; ledger_total_amount?: number | null;
   linked_work_order_id?: string | null;
   tax_invoice_issued?: boolean | null;
-  };
+  tax_invoice_received?: boolean | null;
+  payment_completed?: boolean | null;
+};
 type EmployeeRow = { id: string; name: string | null };
 
 // ─────────────────────── Constants ───────────────────────
@@ -595,6 +597,8 @@ export default function TradeClient() {
         method: l.method ?? "", inAmt: sign > 0 ? amt : 0, outAmt: sign < 0 ? amt : 0, signed: sign * amt, rawId: l.id,
         ledger_category: l.category ?? null, ledger_method: l.method ?? null, ledger_memo: l.memo ?? null, ledger_amount: amt,
         ledger_supply_amount: (l.supply_amount ?? null) as any, ledger_vat_amount: (l.vat_amount ?? null) as any, ledger_total_amount: (l.total_amount ?? null) as any,
+        tax_invoice_received: (l as any).tax_invoice_received ?? false,
+        payment_completed: (l as any).payment_completed ?? false,     
       });
     }
 
@@ -717,7 +721,7 @@ export default function TradeClient() {
     {
       const pageSize = 1000; let from = 0; const all: any[] = [];
       while (true) {
-        let lq = supabase.from("ledger_entries").select("id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,status,partner_id,created_at,supply_amount,vat_amount,total_amount").gte("entry_date", f).lte("entry_date", t).order("entry_date", { ascending: false }).range(from, from + pageSize - 1);
+        let lq = supabase.from("ledger_entries").select("id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,status,partner_id,created_at,supply_amount,vat_amount,total_amount,tax_invoice_received,payment_completed").gte("entry_date", f).lte("entry_date", t).order("entry_date", { ascending: false }).range(from, from + pageSize - 1);
         if (selectedPartnerId || selectedBusinessNo) {
           const ors: string[] = [];
           if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
@@ -1492,6 +1496,21 @@ export default function TradeClient() {
     }
     await loadTrades();
   }
+  async function toggleTaxInvoiceReceived(r: UnifiedRow) {
+    if (r.kind !== "LEDGER") return;
+    const next = !(r.tax_invoice_received ?? false);
+    const { error } = await supabase.from("ledger_entries").update({ tax_invoice_received: next }).eq("id", r.rawId);
+    if (error) return setMsg(error.message);
+    await loadTrades();
+  }
+
+  async function togglePaymentCompleted(r: UnifiedRow) {
+    if (r.kind !== "LEDGER") return;
+    const next = !(r.payment_completed ?? false);
+    const { error } = await supabase.from("ledger_entries").update({ payment_completed: next }).eq("id", r.rawId);
+    if (error) return setMsg(error.message);
+    await loadTrades();
+  }
 
   async function toggleTaxInvoice(r: UnifiedRow) {
     if (r.kind !== "ORDER") return;
@@ -2207,6 +2226,23 @@ export default function TradeClient() {
     }}>🖨️ 작업지시서</button>
   </>
 ) : null}
+{x.kind === "LEDGER" && x.outAmt > 0 ? (
+  <>
+    <button
+      className={`col-span-2 rounded-lg border px-1.5 py-0.5 text-[11px] font-semibold ${x.tax_invoice_received ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100" : "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"}`}
+      onClick={() => toggleTaxInvoiceReceived(x)}
+    >
+      {x.tax_invoice_received ? "✅ 계산서수령" : "☐ 계산서미수령"}
+    </button>
+    <button
+      className={`col-span-2 rounded-lg border px-1.5 py-0.5 text-[11px] font-semibold ${x.payment_completed ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100" : "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"}`}
+      onClick={() => togglePaymentCompleted(x)}
+    >
+      {x.payment_completed ? "✅ 결제완료" : "☐ 결제미완료"}
+    </button>
+  </>
+) : null}
+
 
                             </div>
                           </td>
