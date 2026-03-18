@@ -374,7 +374,7 @@ export default function ProductionClient() {
       if (!confirm("생산완료 처리하시겠습니까?\n기본정보·담당자·생산입력이 모두 저장되고 재고대장에 입고가 반영됩니다.")) return;
     }
 
-    setMsg(null);
+    setMsg(`⏳ 시작 - role:${role}, isAdminOrSubadmin:${isAdminOrSubadmin}`);
     try {
       // ── 1. 기본정보 저장 ──
       if (isAdminOrSubadmin) {
@@ -431,6 +431,7 @@ export default function ProductionClient() {
       }
 
       // ── 4. 재고대장 연동 ──
+      setMsg("⏳ 4단계: 재고대장 연동 중...");
       const now = new Date().toISOString();
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id ?? null;
