@@ -417,7 +417,6 @@ export default function ProductionClient() {
         const expiry_date = pi.expiry_date || null;
         const { error: itemErr } = await supabase.from("work_order_items").update({
           actual_qty, unit_weight, expiry_date,
-          updated_at: new Date().toISOString(),
         }).eq("id", item.id);
         if (itemErr) { setMsg("생산입력 저장 실패: " + itemErr.message); return; }
       }
