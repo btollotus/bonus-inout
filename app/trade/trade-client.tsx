@@ -39,6 +39,7 @@ type OrderRow = {
   ship_date: string | null; ship_method: string | null; status: string | null;
   memo: string | null; supply_amount: number | null; vat_amount: number | null;
   total_amount: number | null; created_at: string; work_order_item_id?: string | null;
+  tax_invoice_issued?: boolean | null;
   order_lines?: OrderLineRow[]; order_shipments?: OrderShipmentRow[];
 };
 type LedgerRow = {
@@ -85,7 +86,8 @@ type UnifiedRow = {
   ledger_memo?: string | null; ledger_amount?: number;
   ledger_supply_amount?: number | null; ledger_vat_amount?: number | null; ledger_total_amount?: number | null;
   linked_work_order_id?: string | null;
-};
+  tax_invoice_issued?: boolean | null;
+  };
 type EmployeeRow = { id: string; name: string | null };
 
 // ─────────────────────── Constants ───────────────────────
@@ -576,7 +578,7 @@ export default function TradeClient() {
         inAmt: 0, outAmt: total, signed: -total, rawId: o.id, ship_method: o.ship_method ?? "택배",
         order_title: memo?.title ?? null, orderer_name: orderer,
         order_lines: (o.order_lines ?? []).map((l) => ({ food_type: l.food_type ?? "", name: l.name ?? "", weight_g: Number(l.weight_g ?? 0), qty: Number(l.qty ?? 0), unit: Number(l.unit ?? 0), total_amount: Number(l.total_amount ?? 0), unit_type: (l.unit_type ?? "EA") as any, pack_ea: Number(l.pack_ea ?? 1), actual_ea: Number(l.actual_ea ?? 0) })),
-        order_shipments: (o.order_shipments ?? []).map((s) => ({ seq: Number(s.seq ?? 1), ship_to_name: String(s.ship_to_name ?? ""), ship_to_address1: String(s.ship_to_address1 ?? ""), ship_to_address2: s.ship_to_address2 ?? null, ship_to_mobile: s.ship_to_mobile ?? null, ship_to_phone: s.ship_to_phone ?? null, ship_zipcode: s.ship_zipcode ?? null, delivery_message: s.delivery_message ?? null })),
+        order_shipments: (o.order_shipments ?? []).map((s) => ({ seq: Number(s.seq ?? 1), ship_to_name: String(s.ship_to_name ?? ""), ship_to_address1: String(s.ship_to_address1 ?? ""), ship_to_address2: s.ship_to_address2 ?? null, ship_to_mobile: s.ship_to_mobile ?? null, ship_to_phone: s.ship_to_phone ?? null, ship_zipcode: s.ship_zipcode ?? null, delivery_message: s.delivery_message ?? null, tax_invoice_issued: o.tax_invoice_issued ?? false, })),
       });
     }
 
@@ -701,7 +703,7 @@ export default function TradeClient() {
     {
       const pageSize = 500; let from = 0; const all: any[] = [];
       while (true) {
-        let oq = supabase.from("orders").select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)").gte("ship_date", f).lte("ship_date", t).order("ship_date", { ascending: false }).range(from, from + pageSize - 1);
+        let oq = supabase.from("orders").select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,tax_invoice_issued,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)").gte("ship_date", f).lte("ship_date", t).order("ship_date", { ascending: false }).range(from, from + pageSize - 1);
         if (selectedPartnerId) oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
         const { data, error } = await oq;
         if (error) return setMsg(error.message);
@@ -1491,6 +1493,16 @@ export default function TradeClient() {
     await loadTrades();
   }
 
+  async function toggleTaxInvoice(r: UnifiedRow) {
+    if (r.kind !== "ORDER") return;
+    const next = !(r.tax_invoice_issued ?? false);
+    const { error } = await supabase
+      .from("orders")
+      .update({ tax_invoice_issued: next })
+      .eq("id", r.rawId);
+    if (error) return setMsg(error.message);
+    await loadTrades();
+  }
   // Styles
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
@@ -2181,12 +2193,21 @@ export default function TradeClient() {
                               <button className={miniBtn} onClick={() => openEdit(x)}>수정</button>
                               <button className={miniBtn} onClick={() => deleteTradeRow(x)}>삭제</button>
                               {x.kind === "ORDER" ? (
-                                <button className={`${miniBtn} col-span-2`} onClick={async () => {
-                                  const { data } = await supabase.from("work_orders").select("*,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id,barcode_no,note,images)").eq("linked_order_id", x.rawId).limit(1).maybeSingle();
-                                  if (data) setWo_printTarget(data as WorkOrderRow);
-                                  else setMsg("연결된 작업지시서가 없습니다.");
-                                }}>🖨️ 작업지시서</button>
-                              ) : null}
+  <>
+    <button
+      className={`col-span-2 rounded-lg border px-1.5 py-0.5 text-[11px] font-semibold ${x.tax_invoice_issued ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100" : "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"}`}
+      onClick={() => toggleTaxInvoice(x)}
+    >
+      {x.tax_invoice_issued ? "✅ 세금계산서 발행" : "☐ 세금계산서 미발행"}
+    </button>
+    <button className={`${miniBtn} col-span-2`} onClick={async () => {
+      const { data } = await supabase.from("work_orders").select("*,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id,barcode_no,note,images)").eq("linked_order_id", x.rawId).limit(1).maybeSingle();
+      if (data) setWo_printTarget(data as WorkOrderRow);
+      else setMsg("연결된 작업지시서가 없습니다.");
+    }}>🖨️ 작업지시서</button>
+  </>
+) : null}
+
                             </div>
                           </td>
                         </tr>
