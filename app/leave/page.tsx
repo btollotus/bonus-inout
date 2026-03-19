@@ -608,12 +608,19 @@ export default function LeavePage() {
           .from('employees').select('auth_user_id, name').eq('id', adminEmpId).single()
         console.log('empData:', empData, 'empErr:', empErr)  // ← 추가
 
-    const { error: e } = await supabase.from('leave_requests').insert([{
-      user_id: empData?.auth_user_id ?? adminEmpId,
-      employee_name: empData?.name ?? '',
-      leave_type: adminLeaveType, leave_date: adminDate, note: adminNote || null,
-    }])
-    if (e) { setError(getKoreanErrorMessage(e.message)); setLoading(false); return }
+        if (!empData?.name) {
+          setError('직원 정보를 불러오지 못했습니다. 다시 시도해주세요.')
+          setLoading(false)
+          return
+        }
+        const { error: e } = await supabase.from('leave_requests').insert([{
+          user_id: empData.auth_user_id ?? myUserId,
+          employee_name: empData.name,
+          leave_type: adminLeaveType, leave_date: adminDate, note: adminNote || null,
+        }])
+        if (e) { setError(e.message); setLoading(false); return }
+
+
     setSuccess(`${adminDate} 휴가 입력이 완료되었습니다.`)
     setAdminModalOpen(false); setLoading(false); fetchData()
   }
