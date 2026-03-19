@@ -2489,10 +2489,12 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
                     ? <div style={{ fontSize: "8pt", color: "#94a3b8", padding: "4px" }}>이미지 로딩 중...</div>
                     : itemSignedUrls.map((url, imgIdx) => (
 <div key={imgIdx} style={{ textAlign: "center" }}>
-<div style={{ width: "567px", height: "567px", overflow: "hidden", border: "1px solid #e2e8f0", borderRadius: "4px", display: "inline-block", flexShrink: 0 }}>
-                                          <img src={url} alt={`이미지${imgIdx+1}`}
-                            style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top left", display: "block" }} />
-                        </div>
+<div style={{ width: "150mm", height: "150mm", overflow: "hidden", border: "1px solid #e2e8f0", borderRadius: "4px", display: "inline-block", flexShrink: 0, position: "relative" }}>
+  <img src={url} alt={`이미지${imgIdx+1}`}
+    style={{ position: "absolute", top: 0, left: 0, width: "150mm", height: "150mm", objectFit: "cover", objectPosition: "top left", display: "block" }} />
+</div>
+
+
                         {wo.logo_spec ? <div style={{ fontSize: "7pt", color: "#94a3b8", marginTop: "2px" }}>{wo.logo_spec}</div> : null}
                       </div>
                     ))
@@ -2522,9 +2524,9 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
               : wo.images.map((url, i) => {
                 const logoSize = parseLogoSize(wo.logo_spec);
                 return (
-                  <div key={i} style={{ width: "567px", height: "567px", overflow: "hidden", border: "1px solid #e2e8f0", borderRadius: "4px", display: "inline-block" }}>
-                              <img src={url} alt={`디자인 ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top left", display: "block" }} />
-                  </div>
+<div key={i} style={{ width: "150mm", height: "150mm", overflow: "hidden", border: "1px solid #e2e8f0", borderRadius: "4px", display: "inline-block", position: "relative" }}>
+  <img src={url} alt={`디자인 ${i + 1}`} style={{ position: "absolute", top: 0, left: 0, width: "150mm", height: "150mm", objectFit: "cover", objectPosition: "top left", display: "block" }} />
+</div>
                 );                
               })}
           </div>
