@@ -2489,7 +2489,7 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
                     ? <div style={{ fontSize: "8pt", color: "#94a3b8", padding: "4px" }}>이미지 로딩 중...</div>
                     : itemSignedUrls.map((url, imgIdx) => (
 <div key={imgIdx} style={{ textAlign: "center" }}>
-                        <div style={{ width: logoSize ? logoSize.width : "150mm", height: logoSize ? logoSize.height : "150mm", overflow: "hidden", border: "1px solid #e2e8f0", borderRadius: "4px", display: "inline-block" }}>
+                        <div style={{ width: "150mm", height: "150mm", overflow: "hidden", border: "1px solid #e2e8f0", borderRadius: "4px", display: "inline-block" }}>
                           <img src={url} alt={`이미지${imgIdx+1}`}
                             style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top left", display: "block" }} />
                         </div>
