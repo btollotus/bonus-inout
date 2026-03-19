@@ -1436,7 +1436,10 @@ export default function TradeClient() {
             if (!upErr) uploadedUrls.push(path);
           }
         }
-        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, mold_per_sheet: eWoMoldPerSheet ? Number(eWoMoldPerSheet) : null, note: eWoNote.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString() }).eq("id", eWoId);
+        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, mold_per_sheet: eWoMoldPerSheet ? Number(eWoMoldPerSheet) : null, note: eWoNote.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString(), order_date: eShipDate }).eq("id", eWoId);
+        await supabase.from("work_order_items").update({ delivery_date: eShipDate }).eq("work_order_id", eWoId);
+
+      
         // 품목별 이미지 저장
         for (let idx = 0; idx < eWoItemIds.length; idx++) {
           const itemId = eWoItemIds[idx];
