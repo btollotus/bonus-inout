@@ -496,6 +496,7 @@ export default function TaxClient() {
     const set = new Set(purchaseCatFilter);
     return ledgers.filter((l) => {
       if (String(l.direction) !== "OUT") return false;
+      if (isSalesRefundCategory(l.category)) return false;
       if (purchaseCatFilter.length && !set.has(l.category)) return false;
       return true;
     });
