@@ -600,11 +600,14 @@ export default function LeavePage() {
     closeModal(); setLoading(false); fetchData()
   }
 
-  async function handleAdminSubmit() {
-    if (!adminDate || !adminEmpId) return
-    setLoading(true); setError(''); setSuccess('')
-    const { data: empData } = await supabase
-      .from('employees').select('auth_user_id, name').eq('id', adminEmpId).single()
+      async function handleAdminSubmit() {
+        if (!adminDate || !adminEmpId) return
+        setLoading(true); setError(''); setSuccess('')
+        console.log('adminEmpId:', adminEmpId)  // ← 추가
+        const { data: empData, error: empErr } = await supabase
+          .from('employees').select('auth_user_id, name').eq('id', adminEmpId).single()
+        console.log('empData:', empData, 'empErr:', empErr)  // ← 추가
+
     const { error: e } = await supabase.from('leave_requests').insert([{
       user_id: empData?.auth_user_id ?? adminEmpId,
       employee_name: empData?.name ?? '',
