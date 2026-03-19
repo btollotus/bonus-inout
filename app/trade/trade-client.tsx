@@ -2426,9 +2426,18 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
           {wo.reference_note ? <tr><td style={thS}>참고사항</td><td style={tdS} colSpan={3}>{wo.reference_note}</td></tr> : null}
         </tbody>
       </table>
+      <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "3px", marginTop: "6px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>진행상태 확인</div>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
+        <tbody><tr>{statusRows.map(({ label, checked }) => (
+          <td key={label} style={{ border: "1px solid #cbd5e1", padding: "3px 6px", textAlign: "center", width: "25%" }}>
+            <span style={{ fontSize: "8pt", color: "#555" }}>{label} </span><span style={{ fontSize: "10pt" }}>{checked ? "✅" : "☐"}</span>
+          </td>
+        ))}</tr></tbody>
+      </table>
       <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "6px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>
         {isMultiItem ? `품목별 생산 현황 (총 ${visibleItems.length}건)` : "생산 현황"}
       </div>
+
       {items.filter((item) => !isSpecialItem((item.sub_items ?? [])[0]?.name || "")).map((item, idx, arr) => {
         const aq = item.actual_qty ?? null, uw = item.unit_weight ?? null;
         const tw = aq && uw ? aq * uw : null;
@@ -2488,6 +2497,7 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
                   {imagesLoading
                     ? <div style={{ fontSize: "8pt", color: "#94a3b8", padding: "4px" }}>이미지 로딩 중...</div>
                     : itemSignedUrls.map((url, imgIdx) => (
+ 
 <div key={imgIdx} style={{ textAlign: "center" }}>
 <div style={{ width: logoSize ? logoSize.width : "150mm", height: logoSize ? logoSize.height : "150mm", overflow: "hidden", border: "1px solid #e2e8f0", borderRadius: "4px", display: "inline-block", flexShrink: 0, position: "relative" }}>
   <img src={url} alt={`이미지${imgIdx+1}`}
@@ -2505,14 +2515,9 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
           </div>
         );
       })}
-      <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "3px", marginTop: "6px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>진행상태 확인</div>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
-        <tbody><tr>{statusRows.map(({ label, checked }) => (
-          <td key={label} style={{ border: "1px solid #cbd5e1", padding: "3px 6px", textAlign: "center", width: "25%" }}>
-            <span style={{ fontSize: "8pt", color: "#555" }}>{label} </span><span style={{ fontSize: "10pt" }}>{checked ? "✅" : "☐"}</span>
-          </td>
-        ))}</tr></tbody>
-      </table>
+
+
+
       {(wo.images ?? []).length > 0 ? (
         <div style={{ marginBottom: "10px" }}>
           <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "2px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>인쇄 디자인 이미지</div>
