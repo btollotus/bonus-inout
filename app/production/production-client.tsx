@@ -232,49 +232,6 @@ export default function ProductionClient() {
   const [stepSaving, setStepSaving] = useState<string | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
 
-  // ★ 추가: 새 작업지시서 알람 state
-  const [newWoNotifications, setNewWoNotifications] = useState<NewWoNotification[]>([]);
-  const [showNewWoModal, setShowNewWoModal] = useState(false);
-  const insertChannelRef = useRef<RealtimeChannel | null>(null);
-  const pageLoadTimeRef = useRef<string>(new Date().toISOString());
-
-  // ★ 추가: INSERT 구독 — 새 작업지시서 생성 시 알람 + 소리 + 목록 갱신
-  useEffect(() => {
-    const channel = supabase
-      .channel("wo_new_insert_notify")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "work_orders" },
-        (payload) => {
-          console.log("🔔 [알람] 새 작업지시서 INSERT 감지:", payload.new);
-          const d = payload.new as Record<string, unknown>;
-
-          const notification: NewWoNotification = {
-            id: String(d.id ?? ""),
-            client_name: String(d.client_name ?? ""),
-            product_name: String(d.product_name ?? ""),
-            work_order_no: String(d.work_order_no ?? ""),
-            order_date: String(d.order_date ?? ""),
-            created_at: String(d.created_at ?? ""),
-          };
-
-          setNewWoNotifications((prev) => [notification, ...prev]);
-          setShowNewWoModal(true);
-          playNotificationSound();
-          loadWoList();
-        }
-      )
-      .subscribe((status, err) => {
-        console.log("🔔 [알람채널] 상태:", status, err ?? "");
-      });
-
-    insertChannelRef.current = channel;
-    return () => {
-      supabase.removeChannel(channel);
-      insertChannelRef.current = null;
-    };
-  }, []); // eslint-disable-line
-
   // ── Realtime 구독: selectedWo가 바뀔 때마다 재구독 ──
   useEffect(() => {
     if (realtimeChannelRef.current) {
