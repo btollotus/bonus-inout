@@ -635,7 +635,7 @@ export default function TradeClient() {
   }
 
   async function loadPartners() {
-    setMsg(null);
+  //  setMsg(null);
     try {
       let q = supabase.from("partners")
         .select("id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone")
@@ -646,13 +646,21 @@ export default function TradeClient() {
       if (error) {
         // AbortError는 정상적인 언마운트로 인한 취소 — 무시
         if (error.message?.includes("aborted") || error.message?.includes("AbortError")) return;
-        return setMsg(error.message);
+        setMsg("거래처 로드 에러: " + error.message); return;
+  
+  
+      //  if (error.message?.includes("aborted") || error.message?.includes("AbortError")) return;
+      //  return setMsg(error.message);
       }
       setPartners((data ?? []) as PartnerRow[]);
     } catch (e: any) {
       // fetch abort는 무시
       if (e?.name === "AbortError" || e?.message?.includes("aborted")) return;
-      setMsg(e?.message ?? String(e));
+      setMsg("거래처 로드 예외: " + (e?.message ?? String(e)));
+
+
+   //   if (e?.name === "AbortError" || e?.message?.includes("aborted")) return;
+   //   setMsg(e?.message ?? String(e));
     }
   }
 
