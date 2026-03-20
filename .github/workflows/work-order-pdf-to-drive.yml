@@ -45,7 +45,6 @@ jobs:
           scope = drive
           service_account_file = /home/runner/.config/rclone/sa.json
           EOF
-
           python3 - <<'PY'
           import json, subprocess
           target_name = "Supabase-Backup"
@@ -71,7 +70,7 @@ jobs:
           open("/home/runner/.config/rclone/rclone.conf", "w", encoding="utf-8").write(conf)
           PY
 
-- name: Download and convert to PDF
+      - name: Download and convert to PDF
         run: |
           WORK_ORDER_ID="${{ github.event.inputs.work_order_id }}"
           FILE_NAME="${{ github.event.inputs.file_name }}"
@@ -90,14 +89,11 @@ jobs:
 
           ls -alh "$PDF_FILE"
 
-
       - name: Upload to Google Drive
         run: |
           FILE_NAME="${{ github.event.inputs.file_name }}"
           OUTPUT="${FILE_NAME}.pdf"
           DEST="gdrive:bonus-inout/work-order-pdf"
-
           rclone mkdir "$DEST" || true
           rclone copy "$OUTPUT" "$DEST" -P
-
           echo "✅ Uploaded: $DEST/$OUTPUT"
