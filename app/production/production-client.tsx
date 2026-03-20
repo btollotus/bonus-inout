@@ -498,11 +498,41 @@ export default function ProductionClient() {
       }).eq("id", selectedWo.id);
       if (statusErr) return setMsg("상태 변경 실패: " + statusErr.message);
 
-      if (stockErrors.length > 0) {
+     if (stockErrors.length > 0) {
         setMsg("⚠️ 저장 완료됐으나 재고 연동 오류: " + stockErrors.join(" / "));
       } else {
         setMsg("✅ 생산완료 처리 완료! 기본정보·담당자·생산입력 저장 및 재고대장 입고 반영됐습니다.");
       }
+
+      // ===== PDF → 구글드라이브 업로드 트리거 =====
+      try {
+        const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+        const sanitize = (str: string) =>
+          str.replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "_");
+        const fileName = [
+          today,
+          sanitize(selectedWo.client_name ?? "업체미상"),
+          sanitize(eProductName ?? "품목미상"),
+          sanitize(eFoodType ?? ""),
+          sanitize(eLogoSpec ?? ""),
+          "작업지시서",
+        ].filter(Boolean).join("-");
+
+        const triggerRes = await fetch("/api/trigger-work-order-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workOrderId: selectedWo.id, fileName }),
+        });
+        if (triggerRes.ok) {
+          console.log("✅ PDF 드라이브 업로드 트리거 성공:", fileName);
+        } else {
+          console.error("❌ PDF 드라이브 업로드 트리거 실패");
+        }
+      } catch (pdfErr) {
+        console.error("PDF 업로드 트리거 오류 (무시):", pdfErr);
+      }
+      // ===== PDF 업로드 트리거 끝 =====
+
       await loadWoList();
     } catch (e: any) {
       setMsg("오류: " + (e?.message ?? e));
