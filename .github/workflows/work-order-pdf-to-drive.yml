@@ -1,5 +1,4 @@
 name: Work Order PDF to Google Drive
-
 on:
   workflow_dispatch:
     inputs:
@@ -16,14 +15,13 @@ jobs:
   upload:
     runs-on: ubuntu-latest
     steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y rclone curl \
-            fonts-nanum fonts-nanum-coding \
-            chromium-browser
+      - name: Cache apt packages
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: rclone fonts-nanum fonts-nanum-coding chromium-browser
+          version: 1.0
 
-      - name: Write service account json
+      - name: Write rclone service account
         env:
           GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
         run: |
@@ -72,7 +70,7 @@ jobs:
           open("/home/runner/.config/rclone/rclone.conf", "w", encoding="utf-8").write(conf)
           PY
 
-      - name: Download and convert to PDF
+      - name: Download HTML and convert to PDF
         run: |
           WORK_ORDER_ID="${{ github.event.inputs.work_order_id }}"
           FILE_NAME="${{ github.event.inputs.file_name }}"
@@ -84,12 +82,11 @@ jobs:
             -H "x-internal-token: ${{ secrets.INTERNAL_API_TOKEN }}" \
             -o "$HTML_FILE" "$URL"
 
-          sudo apt-get install -y chromium-browser
           chromium-browser --headless --no-sandbox \
             --run-all-compositor-stages-before-draw \
             --print-to-pdf-no-header \
             --no-pdf-header-footer \
-            --print-to-pdf="$PDF_FILE" \            
+            --print-to-pdf="$PDF_FILE" \
             "file://$(pwd)/$HTML_FILE"
 
           ls -alh "$PDF_FILE"
