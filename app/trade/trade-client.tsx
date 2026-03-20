@@ -635,7 +635,7 @@ export default function TradeClient() {
   }
 
   async function loadPartners() {
-  //  setMsg(null);
+   setMsg(null);
     try {
       let q = supabase.from("partners")
         .select("id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone")
