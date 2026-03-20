@@ -616,8 +616,10 @@ export default function LeavePage() {
         const { error: e } = await supabase.from('leave_requests').insert([{
           user_id: empData.auth_user_id ?? myUserId,
           employee_name: empData.name,
+          employee_id: adminEmpId,
           leave_type: adminLeaveType, leave_date: adminDate, note: adminNote || null,
         }])
+
         if (e) { setError(e.message); setLoading(false); return }
 
 
