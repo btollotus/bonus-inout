@@ -505,18 +505,32 @@ export default function ProductionClient() {
       }
 
       // ===== PDF → 구글드라이브 업로드 트리거 =====
-      try {
-        const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-        const sanitize = (str: string) =>
-          str.replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "_");
-        const fileName = [
-          today,
-          sanitize(selectedWo.client_name ?? "업체미상"),
-          sanitize(eProductName ?? "품목미상"),
-          sanitize(eFoodType ?? ""),
-          sanitize(eLogoSpec ?? ""),
-          "작업지시서",
-        ].filter(Boolean).join("-");
+// ===== PDF → 구글드라이브 업로드 트리거 =====
+try {
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+
+  // 특수문자 처리: *×x → x 변환 후 파일명 안전 문자만 허용
+  const sanitize = (str: string) =>
+    str
+      .replace(/[*×]/g, "x")           // 곱하기 기호 → x
+      .replace(/[\\/:?"<>|]/g, "")     // 파일명 불가 문자 제거
+      .replace(/\s+/g, "_");           // 공백 → 언더스코어
+
+  // client_name이 eProductName 앞에 포함된 경우 제거
+  const clientName = selectedWo.client_name ?? "업체미상";
+  const rawProductName = eProductName ?? "품목미상";
+  const cleanProductName = rawProductName.startsWith(clientName)
+    ? rawProductName.slice(clientName.length).replace(/^[-_\s]+/, "")
+    : rawProductName;
+
+  const fileName = [
+    today,
+    sanitize(clientName),
+    sanitize(cleanProductName || "품목미상"),
+    sanitize(eFoodType ?? ""),
+    sanitize(eLogoSpec ?? ""),
+    "작업지시서",
+  ].filter(Boolean).join("-");
 
         const triggerRes = await fetch("/api/trigger-work-order-pdf", {
           method: "POST",
