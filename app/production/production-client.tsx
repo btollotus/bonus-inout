@@ -225,7 +225,21 @@ export default function ProductionClient() {
   function applySelection(wo: WorkOrderRow, resetEdit = true) {
     setSelectedWo(wo);
     setESubName(wo.sub_name ?? "");
-    setEProductName(wo.product_name ?? "");
+
+  // 서브네임 있으면 서브네임만, 없으면 첫번째 품목명 (외 N건)
+const woSubNameVal = wo.sub_name ?? "";
+if (woSubNameVal) {
+  setEProductName(woSubNameVal);
+} else {
+  const visibleItems = (wo.work_order_items ?? []).filter((item) => {
+    const n = (item.sub_items ?? [])[0]?.name ?? "";
+    return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+  });
+  const firstName = visibleItems[0]?.sub_items?.[0]?.name ?? wo.product_name ?? "";
+  const count = visibleItems.length;
+  setEProductName(count > 1 ? `${firstName} 외 ${count - 1}건` : firstName);
+}
+
     setEFoodType(wo.food_type ?? "");
     setELogoSpec(wo.logo_spec ?? "");
     setEThickness(wo.thickness ?? "2mm");
