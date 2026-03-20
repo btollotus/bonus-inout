@@ -53,9 +53,9 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
   const pageLoadTimeRef = useRef<string>(new Date().toISOString());
 
   useEffect(() => {
-    // 로그인 페이지 등에서는 구독 안 함
     if (hide) return;
 
+    console.log("🔔 [TopNavWrapper] 구독 시작...");
     const supabase = createClient();
     const channel = supabase
       .channel("wo_global_insert_notify")
@@ -63,9 +63,13 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "work_orders" },
         (payload) => {
+          console.log("🔔 [TopNavWrapper] INSERT 수신!", payload.new);
           const d = payload.new as Record<string, unknown>;
           const createdAt = String(d.created_at ?? "");
-          if (createdAt && createdAt < pageLoadTimeRef.current) return;
+          if (createdAt && createdAt < pageLoadTimeRef.current) {
+            console.log("🔔 [TopNavWrapper] 과거 데이터라 무시:", createdAt, "<", pageLoadTimeRef.current);
+            return;
+          }
 
           const notification: NewWoNotification = {
             id: String(d.id ?? ""),
@@ -81,10 +85,13 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
           playNotificationSound();
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log("🔔 [TopNavWrapper] 채널 상태:", status, err ?? "");
+      });
 
     channelRef.current = channel;
     return () => {
+      console.log("🔔 [TopNavWrapper] 구독 해제");
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
@@ -96,7 +103,6 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
     <>
       <TopNav role={role} email={email} />
 
-      {/* 새 작업지시서 알람 모달 */}
       {showModal && notifications.length > 0 && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-[480px] rounded-2xl border border-orange-200 bg-white shadow-2xl overflow-hidden">
@@ -149,7 +155,6 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
         </div>
       )}
 
-      {/* 헤더 배지 (모달 닫은 후 미확인 알람 표시) */}
       {!showModal && notifications.length > 0 && (
         <div className="fixed top-4 right-4 z-[199]">
           <button
