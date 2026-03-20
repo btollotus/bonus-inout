@@ -86,8 +86,10 @@ jobs:
 
           sudo apt-get install -y chromium-browser
           chromium-browser --headless --no-sandbox \
-            --print-to-pdf="$PDF_FILE" \
+            --run-all-compositor-stages-before-draw \
             --print-to-pdf-no-header \
+            --no-pdf-header-footer \
+            --print-to-pdf="$PDF_FILE" \            
             "file://$(pwd)/$HTML_FILE"
 
           ls -alh "$PDF_FILE"

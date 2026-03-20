@@ -132,7 +132,15 @@ function generateWorkOrderHTML(wo: any): string {
   <meta charset="UTF-8">
   <title>작업지시서</title>
   <style>
-    @page { size: A4 portrait; margin: 12mm 14mm; }
+  @page { 
+  size: A4 portrait; 
+  margin: 12mm 14mm;
+}
+@page :first {
+  margin-top: 12mm;
+}
+* { -webkit-print-color-adjust: exact; }  
+  
     body { margin: 0; font-family: 'Nanum Gothic', 'NanumGothic', 'Malgun Gothic', sans-serif; font-size: 10pt; color: #111; background: #fff; }
     * { box-sizing: border-box; }
   </style>
