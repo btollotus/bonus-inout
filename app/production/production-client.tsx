@@ -246,10 +246,8 @@ export default function ProductionClient() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "work_orders" },
         (payload) => {
+          console.log("🔔 [알람] 새 작업지시서 INSERT 감지:", payload.new);
           const d = payload.new as Record<string, unknown>;
-          const createdAt = String(d.created_at ?? "");
-          // 페이지 로드 이전 데이터는 무시
-          if (createdAt && createdAt < pageLoadTimeRef.current) return;
 
           const notification: NewWoNotification = {
             id: String(d.id ?? ""),
@@ -257,16 +255,18 @@ export default function ProductionClient() {
             product_name: String(d.product_name ?? ""),
             work_order_no: String(d.work_order_no ?? ""),
             order_date: String(d.order_date ?? ""),
-            created_at: createdAt,
+            created_at: String(d.created_at ?? ""),
           };
 
           setNewWoNotifications((prev) => [notification, ...prev]);
           setShowNewWoModal(true);
-          playNotificationSound(); // ★ 알림음
-          loadWoList();            // ★ 목록 자동 갱신
+          playNotificationSound();
+          loadWoList();
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log("🔔 [알람채널] 상태:", status, err ?? "");
+      });
 
     insertChannelRef.current = channel;
     return () => {
