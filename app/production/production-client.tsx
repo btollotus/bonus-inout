@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
-
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 // ─────────────────────── Types ───────────────────────
 type WoSubItem = { name: string; qty: number };
@@ -92,6 +92,65 @@ const statusColors: Record<string, string> = {
   "완료":   "bg-green-100 text-green-700 border-green-200",
 };
 
+// ─────────────────────── 진행상태 4단계 정의 ───────────────────────
+const PROGRESS_STEPS = [
+  {
+    label: "전사인쇄",
+    statusKey: "status_transfer" as const,
+    assigneeKey: "assignee_transfer" as const,
+    icon: "🖨️",
+    cardDone: "border-blue-300 bg-blue-50",
+    cardSkip: "border-amber-300 bg-amber-50",
+    cardEmpty: "border-slate-200 bg-white",
+    badgeDone: "bg-blue-100 text-blue-700 border-blue-200",
+    badgeSkip: "bg-amber-100 text-amber-700 border-amber-200",
+  },
+  {
+    label: "인쇄검수",
+    statusKey: "status_print_check" as const,
+    assigneeKey: "assignee_print_check" as const,
+    icon: "🔍",
+    cardDone: "border-violet-300 bg-violet-50",
+    cardSkip: "border-amber-300 bg-amber-50",
+    cardEmpty: "border-slate-200 bg-white",
+    badgeDone: "bg-violet-100 text-violet-700 border-violet-200",
+    badgeSkip: "bg-amber-100 text-amber-700 border-amber-200",
+  },
+  {
+    label: "생산완료",
+    statusKey: "status_production" as const,
+    assigneeKey: "assignee_production" as const,
+    icon: "✅",
+    cardDone: "border-green-300 bg-green-50",
+    cardSkip: "border-amber-300 bg-amber-50",
+    cardEmpty: "border-slate-200 bg-white",
+    badgeDone: "bg-green-100 text-green-700 border-green-200",
+    badgeSkip: "bg-amber-100 text-amber-700 border-amber-200",
+  },
+  {
+    label: "입력완료",
+    statusKey: "status_input" as const,
+    assigneeKey: "assignee_input" as const,
+    icon: "📥",
+    cardDone: "border-teal-300 bg-teal-50",
+    cardSkip: "border-amber-300 bg-amber-50",
+    cardEmpty: "border-slate-200 bg-white",
+    badgeDone: "bg-teal-100 text-teal-700 border-teal-200",
+    badgeSkip: "bg-amber-100 text-amber-700 border-amber-200",
+  },
+] as const;
+
+type WoChecks = {
+  status_transfer: boolean;
+  status_print_check: boolean;
+  status_production: boolean;
+  status_input: boolean;
+  assignee_transfer: string;
+  assignee_print_check: string;
+  assignee_production: string;
+  assignee_input: string;
+};
+
 // ─────────────────────── Component ───────────────────────
 export default function ProductionClient() {
   // ── Role 조회 ──
@@ -118,16 +177,13 @@ export default function ProductionClient() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  // 필터
   const [filterStatus, setFilterStatus] = useState<"전체" | "생산중" | "완료">("생산중");
   const [filterSearch, setFilterSearch] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
 
-  // 선택된 작업지시서
   const [selectedWo, setSelectedWo] = useState<WorkOrderRow | null>(null);
 
-  // 기본정보 수정 form
   const [eSubName, setESubName] = useState("");
   const [eProductName, setEProductName] = useState("");
   const [eFoodType, setEFoodType] = useState("");
@@ -141,22 +197,8 @@ export default function ProductionClient() {
   const [eNote, setENote] = useState("");
   const [eReferenceNote, setEReferenceNote] = useState("");
 
-  // 진행상태 담당자 state
-  const [woChecks, setWoChecks] = useState<{
-    status_transfer: boolean;
-    status_print_check: boolean;
-    status_production: boolean;
-    status_input: boolean;
-    assignee_transfer: string;
-    assignee_print_check: string;
-    assignee_production: string;
-    assignee_input: string;
-  } | null>(null);
-
-  // 이미지 signed URL
+  const [woChecks, setWoChecks] = useState<WoChecks | null>(null);
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
-
-  // 생산 입력 form
   const [prodInputs, setProdInputs] = useState<Record<string, {
     actual_qty: string;
     unit_weight: string;
@@ -164,6 +206,111 @@ export default function ProductionClient() {
   }>>({});
   const [printOpen, setPrintOpen] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
+
+  // ── Realtime 진행상태 전용 state ──
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [flashKey, setFlashKey] = useState<string | null>(null); // 원격 업데이트 flash
+  const [stepSaving, setStepSaving] = useState<string | null>(null); // 저장 중인 단계
+  const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
+
+  // ── Realtime 구독: selectedWo가 바뀔 때마다 재구독 ──
+  useEffect(() => {
+    // 기존 채널 정리
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+      realtimeChannelRef.current = null;
+      setRealtimeConnected(false);
+    }
+    if (!selectedWo?.id) return;
+
+    const channel = supabase
+      .channel(`wo_progress:${selectedWo.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "work_orders",
+          filter: `id=eq.${selectedWo.id}`,
+        },
+        (payload) => {
+          const d = payload.new as Record<string, unknown>;
+
+          // woChecks 실시간 갱신
+          setWoChecks((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              status_transfer:    typeof d.status_transfer    === "boolean" ? d.status_transfer    : prev.status_transfer,
+              status_print_check: typeof d.status_print_check === "boolean" ? d.status_print_check : prev.status_print_check,
+              status_production:  typeof d.status_production  === "boolean" ? d.status_production  : prev.status_production,
+              status_input:       typeof d.status_input       === "boolean" ? d.status_input       : prev.status_input,
+              assignee_transfer:    d.assignee_transfer    !== undefined ? (d.assignee_transfer    as string ?? "") : prev.assignee_transfer,
+              assignee_print_check: d.assignee_print_check !== undefined ? (d.assignee_print_check as string ?? "") : prev.assignee_print_check,
+              assignee_production:  d.assignee_production  !== undefined ? (d.assignee_production  as string ?? "") : prev.assignee_production,
+              assignee_input:       d.assignee_input       !== undefined ? (d.assignee_input       as string ?? "") : prev.assignee_input,
+            };
+          });
+
+          // 마지막 업데이트 시각
+          const now = new Date();
+          setLastUpdatedAt(
+            `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`
+          );
+
+          // 어떤 단계가 바뀌었는지 flash
+          const changed = PROGRESS_STEPS.find(
+            (s) => d[s.assigneeKey] !== undefined || d[s.statusKey] !== undefined
+          );
+          if (changed) {
+            setFlashKey(changed.assigneeKey);
+            setTimeout(() => setFlashKey(null), 1500);
+          }
+        }
+      )
+      .subscribe((status) => {
+        setRealtimeConnected(status === "SUBSCRIBED");
+      });
+
+    realtimeChannelRef.current = channel;
+    return () => {
+      supabase.removeChannel(channel);
+      realtimeChannelRef.current = null;
+      setRealtimeConnected(false);
+    };
+  }, [selectedWo?.id]);
+
+  // ── 담당자 선택 → 즉시 DB 저장 (Realtime broadcast) ──
+  async function handleAssigneeChange(
+    assigneeKey: keyof WoChecks,
+    statusKey: keyof WoChecks,
+    value: string
+  ) {
+    if (!woChecks || !selectedWo) return;
+    const isDone = value !== "";
+
+    // 낙관적 업데이트 (즉시 UI 반영)
+    setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: value, [statusKey]: isDone } : prev);
+    setStepSaving(assigneeKey);
+
+    const { error } = await supabase
+      .from("work_orders")
+      .update({
+        [assigneeKey]: value || null,
+        [statusKey]: isDone,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", selectedWo.id);
+
+    setStepSaving(null);
+
+    if (error) {
+      // 실패 시 롤백
+      setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: woChecks[assigneeKey], [statusKey]: woChecks[statusKey] } : prev);
+      setMsg("진행상태 저장 실패: " + error.message);
+    }
+  }
 
   // ── Load ──
   const loadWoList = useCallback(async () => {
@@ -226,19 +373,18 @@ export default function ProductionClient() {
     setSelectedWo(wo);
     setESubName(wo.sub_name ?? "");
 
-  // 서브네임 있으면 서브네임만, 없으면 첫번째 품목명 (외 N건)
-const woSubNameVal = wo.sub_name ?? "";
-if (woSubNameVal) {
-  setEProductName(woSubNameVal);
-} else {
-  const visibleItems = (wo.work_order_items ?? []).filter((item) => {
-    const n = (item.sub_items ?? [])[0]?.name ?? "";
-    return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
-  });
-  const firstName = visibleItems[0]?.sub_items?.[0]?.name ?? wo.product_name ?? "";
-  const count = visibleItems.length;
-  setEProductName(count > 1 ? `${firstName} 외 ${count - 1}건` : firstName);
-}
+    const woSubNameVal = wo.sub_name ?? "";
+    if (woSubNameVal) {
+      setEProductName(woSubNameVal);
+    } else {
+      const visibleItems = (wo.work_order_items ?? []).filter((item) => {
+        const n = (item.sub_items ?? [])[0]?.name ?? "";
+        return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+      });
+      const firstName = visibleItems[0]?.sub_items?.[0]?.name ?? wo.product_name ?? "";
+      const count = visibleItems.length;
+      setEProductName(count > 1 ? `${firstName} 외 ${count - 1}건` : firstName);
+    }
 
     setEFoodType(wo.food_type ?? "");
     setELogoSpec(wo.logo_spec ?? "");
@@ -260,6 +406,8 @@ if (woSubNameVal) {
       assignee_production: (wo as any).assignee_production ?? "",
       assignee_input: (wo as any).assignee_input ?? "",
     });
+    setLastUpdatedAt(null);
+    setFlashKey(null);
     setSignedImageUrls([]);
     (async () => {
       const rawPaths = wo.images ?? [];
@@ -285,12 +433,10 @@ if (woSubNameVal) {
       };
     }
     setProdInputs(inputs);
-    // ── 개당 중량 자동입력: unit_weight 없는 항목에 variant weight_g 조회 ──
     (async () => {
       const items = wo.work_order_items ?? [];
       const missingWeight = items.filter((item) => item.unit_weight == null && item.barcode_no);
       if (missingWeight.length === 0 && wo.variant_id == null) return;
-      // barcode_no → variant_id → weight_g 조회
       const barcodes = missingWeight.map((i) => i.barcode_no).filter(Boolean) as string[];
       let weightMap: Record<string, string> = {};
       if (barcodes.length > 0) {
@@ -303,7 +449,6 @@ if (woSubNameVal) {
           if (wg != null && wg > 0) weightMap[(pb as any).barcode] = String(wg);
         }
       }
-      // variant_id fallback: work_orders.variant_id
       let fallbackWeight = "";
       if (wo.variant_id) {
         const { data: vData } = await supabase
@@ -318,7 +463,7 @@ if (woSubNameVal) {
       setProdInputs((prev) => {
         const next = { ...prev };
         for (const item of items) {
-          if (item.unit_weight != null) continue; // 이미 값 있으면 skip
+          if (item.unit_weight != null) continue;
           const wByBarcode = item.barcode_no ? weightMap[item.barcode_no] : undefined;
           const autoWeight = wByBarcode ?? fallbackWeight;
           if (autoWeight) {
@@ -351,30 +496,28 @@ if (woSubNameVal) {
     }
   }
 
-  // ── 생산완료 버튼 핸들러 (기본정보 + 담당자 + 생산입력 + 재고대장 연동 모두 처리) ──
+  // ── 생산완료 버튼 핸들러 ──
   async function markProductionComplete() {
     if (!selectedWo) return;
 
-        // SUBADMIN은 담당자 4개 모두 필수
-        if (!isAdmin && woChecks) {
-          const missing = [
-            !woChecks.assignee_transfer && "전사인쇄",
-            !woChecks.assignee_print_check && "인쇄검수",
-            !woChecks.assignee_production && "생산완료",
-            !woChecks.assignee_input && "입력완료",
-          ].filter(Boolean) as string[];
-          if (missing.length > 0) {
-            setMsg(`담당자를 모두 선택해주세요: ${missing.join(", ")}`);
-            return;
-          }
-        }
+    if (!isAdmin && woChecks) {
+      const missing = [
+        !woChecks.assignee_transfer && "전사인쇄",
+        !woChecks.assignee_print_check && "인쇄검수",
+        !woChecks.assignee_production && "생산완료",
+        !woChecks.assignee_input && "입력완료",
+      ].filter(Boolean) as string[];
+      if (missing.length > 0) {
+        setMsg(`담당자를 모두 선택해주세요: ${missing.join(", ")}`);
+        return;
+      }
+    }
 
     const items = (selectedWo.work_order_items ?? []).filter((item) => {
       const name = (item.sub_items ?? [])[0]?.name ?? "";
       return !name.startsWith("성형틀") && !name.startsWith("인쇄제판");
     });
 
-    // 생산정보 입력 여부 체크
     const missingItems = items.filter((item) => {
       const pi = prodInputs[item.id];
       return !pi || !pi.actual_qty || !pi.unit_weight || !pi.expiry_date;
@@ -410,7 +553,7 @@ if (woSubNameVal) {
         if (basicErr) return setMsg("기본정보 저장 실패: " + basicErr.message);
       }
 
-      // ── 2. 담당자 저장 ──
+      // ── 2. 담당자 저장 (Realtime으로 이미 저장됐을 수 있지만 안전하게 한 번 더) ──
       if (woChecks) {
         const { error: checksErr } = await supabase.from("work_orders").update({
           assignee_transfer: woChecks.assignee_transfer || null,
@@ -512,39 +655,30 @@ if (woSubNameVal) {
       }).eq("id", selectedWo.id);
       if (statusErr) return setMsg("상태 변경 실패: " + statusErr.message);
 
-     if (stockErrors.length > 0) {
+      if (stockErrors.length > 0) {
         setMsg("⚠️ 저장 완료됐으나 재고 연동 오류: " + stockErrors.join(" / "));
       } else {
         setMsg("✅ 생산완료 처리 완료! 기본정보·담당자·생산입력 저장 및 재고대장 입고 반영됐습니다.");
       }
 
-      // ===== PDF → 구글드라이브 업로드 트리거 =====
-// ===== PDF → 구글드라이브 업로드 트리거 =====
-try {
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-
-  // 특수문자 처리: *×x → x 변환 후 파일명 안전 문자만 허용
-  const sanitize = (str: string) =>
-    str
-      .replace(/[*×]/g, "x")           // 곱하기 기호 → x
-      .replace(/[\\/:?"<>|]/g, "")     // 파일명 불가 문자 제거
-      .replace(/\s+/g, "_");           // 공백 → 언더스코어
-
-  // client_name이 eProductName 앞에 포함된 경우 제거
-  const clientName = selectedWo.client_name ?? "업체미상";
-  const rawProductName = eProductName ?? "품목미상";
-  const cleanProductName = rawProductName.startsWith(clientName)
-    ? rawProductName.slice(clientName.length).replace(/^[-_\s]+/, "")
-    : rawProductName;
-
-  const fileName = [
-    today,
-    sanitize(clientName),
-    sanitize(cleanProductName || "품목미상"),
-    sanitize(eFoodType ?? ""),
-    sanitize(eLogoSpec ?? ""),
-    "작업지시서",
-  ].filter(Boolean).join("-");
+      // ── PDF → 구글드라이브 업로드 트리거 ──
+      try {
+        const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+        const sanitize = (str: string) =>
+          str.replace(/[*×]/g, "x").replace(/[\\/:?"<>|]/g, "").replace(/\s+/g, "_");
+        const clientName = selectedWo.client_name ?? "업체미상";
+        const rawProductName = eProductName ?? "품목미상";
+        const cleanProductName = rawProductName.startsWith(clientName)
+          ? rawProductName.slice(clientName.length).replace(/^[-_\s]+/, "")
+          : rawProductName;
+        const fileName = [
+          today,
+          sanitize(clientName),
+          sanitize(cleanProductName || "품목미상"),
+          sanitize(eFoodType ?? ""),
+          sanitize(eLogoSpec ?? ""),
+          "작업지시서",
+        ].filter(Boolean).join("-");
 
         const triggerRes = await fetch("/api/trigger-work-order-pdf", {
           method: "POST",
@@ -559,13 +693,17 @@ try {
       } catch (pdfErr) {
         console.error("PDF 업로드 트리거 오류 (무시):", pdfErr);
       }
-      // ===== PDF 업로드 트리거 끝 =====
 
       await loadWoList();
     } catch (e: any) {
       setMsg("오류: " + (e?.message ?? e));
     }
   }
+
+  // ── 진행상태 진행률 계산 ──
+  const doneCount = woChecks
+    ? PROGRESS_STEPS.filter((s) => (woChecks[s.assigneeKey] ?? "") !== "").length
+    : 0;
 
   // ── 렌더 ──
   return (
@@ -600,7 +738,6 @@ try {
           <div className={`${card} flex flex-col p-4`} style={{ maxHeight: "calc(100vh - 140px)", overflowY: "auto" }}>
             <div className="mb-3 text-base font-semibold">작업지시서 목록</div>
 
-            {/* 필터 */}
             <div className="mb-3 space-y-2">
               <input
                 className={inp}
@@ -627,7 +764,6 @@ try {
               </div>
             </div>
 
-            {/* 목록 */}
             {loading ? (
               <div className="py-8 text-center text-sm text-slate-400">불러오는 중...</div>
             ) : filteredList.length === 0 ? (
@@ -731,13 +867,12 @@ try {
                 </div>
               </div>
 
-              {/* 기본정보 카드 - 저장 버튼 제거 */}
+              {/* 기본정보 카드 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <div className="font-semibold text-sm">📝 기본정보</div>
                   <div className="text-xs text-slate-400">생산완료 처리 시 자동 저장</div>
                 </div>
-
                 {isAdminOrSubadmin ? (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <div>
@@ -825,37 +960,114 @@ try {
                 )}
               </div>
 
-              {/* 진행상태 카드 - 저장 버튼 제거 */}
+              {/* ── 진행상태 카드 (Realtime 통합) ── */}
               <div className={`${card} p-4`}>
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="font-semibold text-sm">✅ 진행상태</div>
-                  <div className="text-xs text-slate-400">생산완료 처리 시 자동 저장</div>
+                {/* 헤더 */}
+                <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="font-semibold text-sm">✅ 진행상태</div>
+                    {/* 실시간 연결 인디케이터 */}
+                    <div className="flex items-center gap-1">
+                      <span className={`inline-block w-2 h-2 rounded-full transition-colors ${realtimeConnected ? "bg-green-400 animate-pulse" : "bg-slate-300"}`} />
+                      <span className="text-[10px] text-slate-400">
+                        {realtimeConnected ? "실시간 연결됨" : "연결 중..."}
+                      </span>
+                    </div>
+                    {lastUpdatedAt && (
+                      <span className="text-[10px] text-blue-400 font-mono">↻ {lastUpdatedAt} 업데이트</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* 진행률 바 */}
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-green-400 transition-all duration-500"
+                          style={{ width: `${Math.round((doneCount / PROGRESS_STEPS.length) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-slate-500 tabular-nums">{doneCount}/{PROGRESS_STEPS.length}</span>
+                    </div>
+                    <div className="text-xs text-slate-400">담당자 선택 시 자동 저장</div>
+                  </div>
                 </div>
+
+                {/* 4단계 카드 */}
                 {woChecks ? (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {([
-                      { key: "status_transfer",    assigneeKey: "assignee_transfer",    label: "전사인쇄" },
-                      { key: "status_print_check", assigneeKey: "assignee_print_check", label: "인쇄검수" },
-                      { key: "status_production",  assigneeKey: "assignee_production",  label: "생산완료" },
-                      { key: "status_input",       assigneeKey: "assignee_input",       label: "입력완료" },
-                    ] as const).map(({ key, assigneeKey, label }) => (
-                      <div key={key} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                        <div className="text-xs font-medium text-slate-600 mb-2">{label}</div>
-                        <select
-                          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
-                          value={woChecks[assigneeKey] ?? ""}
-                          onChange={(e) => setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: e.target.value } : prev)}
+                    {PROGRESS_STEPS.map((step) => {
+                      const assigneeVal = woChecks[step.assigneeKey] ?? "";
+                      const isDone = assigneeVal !== "";
+                      const othersDone = PROGRESS_STEPS.some(
+                        (s) => s.assigneeKey !== step.assigneeKey && (woChecks[s.assigneeKey] ?? "") !== ""
+                      );
+                      const isSkipped = !isDone && othersDone;
+                      const isSaving = stepSaving === step.assigneeKey;
+                      const isFlashing = flashKey === step.assigneeKey;
+
+                      const cardCls = isDone ? step.cardDone : isSkipped ? step.cardSkip : step.cardEmpty;
+
+                      return (
+                        <div
+                          key={step.assigneeKey}
+                          className={`rounded-xl border px-3 py-2.5 transition-all duration-300 ${cardCls} ${isFlashing ? "ring-2 ring-blue-400 ring-offset-1 scale-[1.02]" : ""}`}
                         >
-                          <option value="">— 담당자 —</option>
-                          {employees.map((e) => e.name ? <option key={e.id} value={e.name}>{e.name}</option> : null)}
-                        </select>
-                      </div>
-                    ))}
+                          {/* 레이블 + 배지 */}
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                              <span>{step.icon}</span>
+                              {step.label}
+                            </div>
+                            <div>
+                              {isSaving ? (
+                                <span className="text-[10px] text-slate-400 animate-pulse">저장 중...</span>
+                              ) : isDone ? (
+                                <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${step.badgeDone}`}>완료</span>
+                              ) : isSkipped ? (
+                                <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${step.badgeSkip}`}>⚠ 미입력</span>
+                              ) : (
+                                <span className="rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-400">대기</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 담당자 선택 */}
+                          <select
+                            className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 transition-colors ${isDone ? "border-current bg-white/70 text-slate-700 font-medium" : "border-slate-200 bg-white text-slate-500"} ${isSaving ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                            value={assigneeVal}
+                            disabled={isSaving}
+                            onChange={(e) => handleAssigneeChange(step.assigneeKey, step.statusKey, e.target.value)}
+                          >
+                            <option value="">— 담당자 선택 —</option>
+                            {employees.map((e) => e.name ? <option key={e.id} value={e.name}>{e.name}</option> : null)}
+                          </select>
+
+                          {/* 완료 시 담당자명 */}
+                          {isDone && (
+                            <div className="mt-1.5 text-[11px] font-semibold text-center text-slate-600 truncate">
+                              👤 {assigneeVal}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
+
+                {/* 미입력 단계 안내 */}
+                {woChecks && PROGRESS_STEPS.some((s) => {
+                  const av = woChecks[s.assigneeKey] ?? "";
+                  const othersDone = PROGRESS_STEPS.some((os) => os.assigneeKey !== s.assigneeKey && (woChecks[os.assigneeKey] ?? "") !== "");
+                  return av === "" && othersDone;
+                }) && (
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-600">
+                    <span className="inline-block w-3 h-3 rounded-sm border border-amber-300 bg-amber-100" />
+                    ⚠ 미입력 단계는 담당자 미선택 상태입니다. 스킵이 맞다면 그대로 진행해도 됩니다.
+                  </div>
+                )}
               </div>
 
-              {/* 납기일별 생산 입력 카드 - 저장 버튼 제거 */}
+              {/* 납기일별 생산 입력 카드 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <div className="font-semibold text-sm">🏭 납기일별 생산 입력</div>
@@ -889,7 +1101,7 @@ try {
                                 </div>
                                 {(item.sub_items ?? [])[0]?.name ? (
                                   <div className="mt-0.5 text-sm font-medium text-slate-700">
-                                    {(item.sub_items[0]).name}
+                                    {item.sub_items[0].name}
                                   </div>
                                 ) : null}
                               </div>
@@ -944,10 +1156,7 @@ try {
                                       d.setFullYear(d.getFullYear() + 1);
                                       d.setDate(d.getDate() - 1);
                                       const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-                                      setProdInputs((prev) => ({
-                                        ...prev,
-                                        [item.id]: { ...pi, expiry_date: ymd }
-                                      }));
+                                      setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, expiry_date: ymd } }));
                                     }}
                                   >+1년-1일</button>
                                 </div>
@@ -962,12 +1171,8 @@ try {
                                 />
                               </div>
                             </div>
-                            {/* 품목별 이미지 표시 */}
                             {(item.images ?? []).length > 0 ? (
-                              <ItemImages
-                                images={item.images ?? []}
-                                logoSpec={selectedWo.logo_spec}
-                              />
+                              <ItemImages images={item.images ?? []} logoSpec={selectedWo.logo_spec} />
                             ) : null}
                           </div>
                         );
@@ -976,7 +1181,7 @@ try {
                 )}
               </div>
 
-              {/* 생산완료 버튼 - 모든 저장 포함 */}
+              {/* 생산완료 버튼 */}
               <div className={`${card} p-4`}>
                 <button
                   className="w-full rounded-xl border border-green-500 bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800"
@@ -998,7 +1203,6 @@ try {
         </div>
       </div>
 
-      {/* 인쇄 모달 */}
       {printOpen && selectedWo ? (
         <PrintModal wo={selectedWo} prodInputs={prodInputs} onClose={() => setPrintOpen(false)} employees={employees} />
       ) : null}
@@ -1027,7 +1231,6 @@ function ItemImages({ images, logoSpec }: { images: string[]; logoSpec: string |
     })();
   }, [images.join(",")]);
 
-  // 규격(로고스펙)에서 크기 파싱 (예: "30*30mm", "40x40mm")
   const parseSize = (spec: string | null) => {
     if (!spec) return null;
     const m = spec.match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(mm|cm)?/i);
@@ -1202,7 +1405,7 @@ function WoPrintContent({
   onItemNoteChange: (itemId: string, value: string) => void;
 }) {
   const thS: React.CSSProperties = { background: "#f8fafc", border: "1px solid #cbd5e1", padding: "3px 6px", fontWeight: "bold", fontSize: "11pt", color: "#374151", whiteSpace: "nowrap", width: "80px" };
-const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8px", fontSize: "11pt" };
+  const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8px", fontSize: "11pt" };
   const cellBase: React.CSSProperties = { border: "1px solid #cbd5e1", fontSize: "8.5pt", verticalAlign: "middle", padding: "4px 6px" };
   const cellHead: React.CSSProperties = { ...cellBase, background: "#f1f5f9", fontWeight: "bold", fontSize: "8pt", textAlign: "center", whiteSpace: "nowrap" };
 
@@ -1260,7 +1463,7 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
           </tr>
           <tr>
             <td style={thS}>지시번호</td>
-            <td style={{ ...tdS }} colSpan={3}>{wo.work_order_no}</td>
+            <td style={tdS} colSpan={3}>{wo.work_order_no}</td>
           </tr>
           {wo.note ? <tr><td style={thS}>비고</td><td style={tdS} colSpan={3}>{wo.note}</td></tr> : null}
           {wo.reference_note ? <tr><td style={thS}>참고사항</td><td style={tdS} colSpan={3}>{wo.reference_note}</td></tr> : null}
@@ -1351,7 +1554,6 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
                 </tr>
               </tbody>
             </table>
-              {/* 품목 이미지 - 규격 크기로 표시 */}
             {(item.images ?? []).length > 0 ? (() => {
               const parseSize = (spec: string | null) => {
                 if (!spec) return null;
@@ -1367,7 +1569,7 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
                 <div style={{ marginTop: "6px", display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "flex-end" }}>
                   {(item.images ?? []).map((url, imgIdx) => (
                     <div key={imgIdx} style={{ textAlign: "center" }}>
-                      <img src={url} alt={`이미지${imgIdx+1}`}
+                      <img src={url} alt={`이미지${imgIdx + 1}`}
                         style={{ width: sz ? sz.w : 80, height: sz ? sz.h : 80, objectFit: "contain", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />
                       {wo.logo_spec ? <div style={{ fontSize: "7pt", color: "#94a3b8", marginTop: "2px" }}>{wo.logo_spec}</div> : null}
                     </div>
