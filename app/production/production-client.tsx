@@ -63,6 +63,16 @@ type WorkOrderRow = {
 
 type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
 
+// ★ 추가: 새 작업지시서 알람 타입
+type NewWoNotification = {
+  id: string;
+  client_name: string;
+  product_name: string;
+  work_order_no: string;
+  order_date: string;
+  created_at: string;
+};
+
 // ─────────────────────── Helpers ───────────────────────
 const supabase = createClient();
 
@@ -177,13 +187,16 @@ export default function ProductionClient() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // 필터
   const [filterStatus, setFilterStatus] = useState<"전체" | "생산중" | "완료">("생산중");
   const [filterSearch, setFilterSearch] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
 
+  // 선택된 작업지시서
   const [selectedWo, setSelectedWo] = useState<WorkOrderRow | null>(null);
 
+  // 기본정보 수정 form
   const [eSubName, setESubName] = useState("");
   const [eProductName, setEProductName] = useState("");
   const [eFoodType, setEFoodType] = useState("");
@@ -197,8 +210,13 @@ export default function ProductionClient() {
   const [eNote, setENote] = useState("");
   const [eReferenceNote, setEReferenceNote] = useState("");
 
+  // 진행상태 담당자 state
   const [woChecks, setWoChecks] = useState<WoChecks | null>(null);
+
+  // 이미지 signed URL
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
+
+  // 생산 입력 form
   const [prodInputs, setProdInputs] = useState<Record<string, {
     actual_qty: string;
     unit_weight: string;
@@ -210,13 +228,55 @@ export default function ProductionClient() {
   // ── Realtime 진행상태 전용 state ──
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
-  const [flashKey, setFlashKey] = useState<string | null>(null); // 원격 업데이트 flash
-  const [stepSaving, setStepSaving] = useState<string | null>(null); // 저장 중인 단계
+  const [flashKey, setFlashKey] = useState<string | null>(null);
+  const [stepSaving, setStepSaving] = useState<string | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
+
+  // ★ 추가: 새 작업지시서 알람 state
+  const [newWoNotifications, setNewWoNotifications] = useState<NewWoNotification[]>([]);
+  const [showNewWoModal, setShowNewWoModal] = useState(false);
+  const insertChannelRef = useRef<RealtimeChannel | null>(null);
+  const pageLoadTimeRef = useRef<string>(new Date().toISOString());
+
+  // ★ 추가: INSERT 구독 — 새 작업지시서 생성 시 알람 + 소리 + 목록 갱신
+  useEffect(() => {
+    const channel = supabase
+      .channel("wo_new_insert_notify")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "work_orders" },
+        (payload) => {
+          const d = payload.new as Record<string, unknown>;
+          const createdAt = String(d.created_at ?? "");
+          // 페이지 로드 이전 데이터는 무시
+          if (createdAt && createdAt < pageLoadTimeRef.current) return;
+
+          const notification: NewWoNotification = {
+            id: String(d.id ?? ""),
+            client_name: String(d.client_name ?? ""),
+            product_name: String(d.product_name ?? ""),
+            work_order_no: String(d.work_order_no ?? ""),
+            order_date: String(d.order_date ?? ""),
+            created_at: createdAt,
+          };
+
+          setNewWoNotifications((prev) => [notification, ...prev]);
+          setShowNewWoModal(true);
+          playNotificationSound(); // ★ 알림음
+          loadWoList();            // ★ 목록 자동 갱신
+        }
+      )
+      .subscribe();
+
+    insertChannelRef.current = channel;
+    return () => {
+      supabase.removeChannel(channel);
+      insertChannelRef.current = null;
+    };
+  }, []); // eslint-disable-line
 
   // ── Realtime 구독: selectedWo가 바뀔 때마다 재구독 ──
   useEffect(() => {
-    // 기존 채널 정리
     if (realtimeChannelRef.current) {
       supabase.removeChannel(realtimeChannelRef.current);
       realtimeChannelRef.current = null;
@@ -237,7 +297,6 @@ export default function ProductionClient() {
         (payload) => {
           const d = payload.new as Record<string, unknown>;
 
-          // woChecks 실시간 갱신
           setWoChecks((prev) => {
             if (!prev) return prev;
             return {
@@ -253,13 +312,11 @@ export default function ProductionClient() {
             };
           });
 
-          // 마지막 업데이트 시각
           const now = new Date();
           setLastUpdatedAt(
             `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`
           );
 
-          // 어떤 단계가 바뀌었는지 flash
           const changed = PROGRESS_STEPS.find(
             (s) => d[s.assigneeKey] !== undefined || d[s.statusKey] !== undefined
           );
@@ -290,7 +347,6 @@ export default function ProductionClient() {
     if (!woChecks || !selectedWo) return;
     const isDone = value !== "";
 
-    // 낙관적 업데이트 (즉시 UI 반영)
     setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: value, [statusKey]: isDone } : prev);
     setStepSaving(assigneeKey);
 
@@ -306,7 +362,6 @@ export default function ProductionClient() {
     setStepSaving(null);
 
     if (error) {
-      // 실패 시 롤백
       setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: woChecks[assigneeKey], [statusKey]: woChecks[statusKey] } : prev);
       setMsg("진행상태 저장 실패: " + error.message);
     }
@@ -373,18 +428,19 @@ export default function ProductionClient() {
     setSelectedWo(wo);
     setESubName(wo.sub_name ?? "");
 
-    const woSubNameVal = wo.sub_name ?? "";
-    if (woSubNameVal) {
-      setEProductName(woSubNameVal);
-    } else {
-      const visibleItems = (wo.work_order_items ?? []).filter((item) => {
-        const n = (item.sub_items ?? [])[0]?.name ?? "";
-        return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
-      });
-      const firstName = visibleItems[0]?.sub_items?.[0]?.name ?? wo.product_name ?? "";
-      const count = visibleItems.length;
-      setEProductName(count > 1 ? `${firstName} 외 ${count - 1}건` : firstName);
-    }
+  // 서브네임 있으면 서브네임만, 없으면 첫번째 품목명 (외 N건)
+const woSubNameVal = wo.sub_name ?? "";
+if (woSubNameVal) {
+  setEProductName(woSubNameVal);
+} else {
+  const visibleItems = (wo.work_order_items ?? []).filter((item) => {
+    const n = (item.sub_items ?? [])[0]?.name ?? "";
+    return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+  });
+  const firstName = visibleItems[0]?.sub_items?.[0]?.name ?? wo.product_name ?? "";
+  const count = visibleItems.length;
+  setEProductName(count > 1 ? `${firstName} 외 ${count - 1}건` : firstName);
+}
 
     setEFoodType(wo.food_type ?? "");
     setELogoSpec(wo.logo_spec ?? "");
@@ -433,10 +489,12 @@ export default function ProductionClient() {
       };
     }
     setProdInputs(inputs);
+    // ── 개당 중량 자동입력: unit_weight 없는 항목에 variant weight_g 조회 ──
     (async () => {
       const items = wo.work_order_items ?? [];
       const missingWeight = items.filter((item) => item.unit_weight == null && item.barcode_no);
       if (missingWeight.length === 0 && wo.variant_id == null) return;
+      // barcode_no → variant_id → weight_g 조회
       const barcodes = missingWeight.map((i) => i.barcode_no).filter(Boolean) as string[];
       let weightMap: Record<string, string> = {};
       if (barcodes.length > 0) {
@@ -449,6 +507,7 @@ export default function ProductionClient() {
           if (wg != null && wg > 0) weightMap[(pb as any).barcode] = String(wg);
         }
       }
+      // variant_id fallback: work_orders.variant_id
       let fallbackWeight = "";
       if (wo.variant_id) {
         const { data: vData } = await supabase
@@ -463,7 +522,7 @@ export default function ProductionClient() {
       setProdInputs((prev) => {
         const next = { ...prev };
         for (const item of items) {
-          if (item.unit_weight != null) continue;
+          if (item.unit_weight != null) continue; // 이미 값 있으면 skip
           const wByBarcode = item.barcode_no ? weightMap[item.barcode_no] : undefined;
           const autoWeight = wByBarcode ?? fallbackWeight;
           if (autoWeight) {
@@ -496,28 +555,30 @@ export default function ProductionClient() {
     }
   }
 
-  // ── 생산완료 버튼 핸들러 ──
+  // ── 생산완료 버튼 핸들러 (기본정보 + 담당자 + 생산입력 + 재고대장 연동 모두 처리) ──
   async function markProductionComplete() {
     if (!selectedWo) return;
 
-    if (!isAdmin && woChecks) {
-      const missing = [
-        !woChecks.assignee_transfer && "전사인쇄",
-        !woChecks.assignee_print_check && "인쇄검수",
-        !woChecks.assignee_production && "생산완료",
-        !woChecks.assignee_input && "입력완료",
-      ].filter(Boolean) as string[];
-      if (missing.length > 0) {
-        setMsg(`담당자를 모두 선택해주세요: ${missing.join(", ")}`);
-        return;
-      }
-    }
+        // SUBADMIN은 담당자 4개 모두 필수
+        if (!isAdmin && woChecks) {
+          const missing = [
+            !woChecks.assignee_transfer && "전사인쇄",
+            !woChecks.assignee_print_check && "인쇄검수",
+            !woChecks.assignee_production && "생산완료",
+            !woChecks.assignee_input && "입력완료",
+          ].filter(Boolean) as string[];
+          if (missing.length > 0) {
+            setMsg(`담당자를 모두 선택해주세요: ${missing.join(", ")}`);
+            return;
+          }
+        }
 
     const items = (selectedWo.work_order_items ?? []).filter((item) => {
       const name = (item.sub_items ?? [])[0]?.name ?? "";
       return !name.startsWith("성형틀") && !name.startsWith("인쇄제판");
     });
 
+    // 생산정보 입력 여부 체크
     const missingItems = items.filter((item) => {
       const pi = prodInputs[item.id];
       return !pi || !pi.actual_qty || !pi.unit_weight || !pi.expiry_date;
@@ -553,7 +614,7 @@ export default function ProductionClient() {
         if (basicErr) return setMsg("기본정보 저장 실패: " + basicErr.message);
       }
 
-      // ── 2. 담당자 저장 (Realtime으로 이미 저장됐을 수 있지만 안전하게 한 번 더) ──
+      // ── 2. 담당자 저장 ──
       if (woChecks) {
         const { error: checksErr } = await supabase.from("work_orders").update({
           assignee_transfer: woChecks.assignee_transfer || null,
@@ -655,30 +716,38 @@ export default function ProductionClient() {
       }).eq("id", selectedWo.id);
       if (statusErr) return setMsg("상태 변경 실패: " + statusErr.message);
 
-      if (stockErrors.length > 0) {
+     if (stockErrors.length > 0) {
         setMsg("⚠️ 저장 완료됐으나 재고 연동 오류: " + stockErrors.join(" / "));
       } else {
         setMsg("✅ 생산완료 처리 완료! 기본정보·담당자·생산입력 저장 및 재고대장 입고 반영됐습니다.");
       }
 
-      // ── PDF → 구글드라이브 업로드 트리거 ──
-      try {
-        const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-        const sanitize = (str: string) =>
-          str.replace(/[*×]/g, "x").replace(/[\\/:?"<>|]/g, "").replace(/\s+/g, "_");
-        const clientName = selectedWo.client_name ?? "업체미상";
-        const rawProductName = eProductName ?? "품목미상";
-        const cleanProductName = rawProductName.startsWith(clientName)
-          ? rawProductName.slice(clientName.length).replace(/^[-_\s]+/, "")
-          : rawProductName;
-        const fileName = [
-          today,
-          sanitize(clientName),
-          sanitize(cleanProductName || "품목미상"),
-          sanitize(eFoodType ?? ""),
-          sanitize(eLogoSpec ?? ""),
-          "작업지시서",
-        ].filter(Boolean).join("-");
+      // ===== PDF → 구글드라이브 업로드 트리거 =====
+try {
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+
+  // 특수문자 처리: *×x → x 변환 후 파일명 안전 문자만 허용
+  const sanitize = (str: string) =>
+    str
+      .replace(/[*×]/g, "x")           // 곱하기 기호 → x
+      .replace(/[\\/:?"<>|]/g, "")     // 파일명 불가 문자 제거
+      .replace(/\s+/g, "_");           // 공백 → 언더스코어
+
+  // client_name이 eProductName 앞에 포함된 경우 제거
+  const clientName = selectedWo.client_name ?? "업체미상";
+  const rawProductName = eProductName ?? "품목미상";
+  const cleanProductName = rawProductName.startsWith(clientName)
+    ? rawProductName.slice(clientName.length).replace(/^[-_\s]+/, "")
+    : rawProductName;
+
+  const fileName = [
+    today,
+    sanitize(clientName),
+    sanitize(cleanProductName || "품목미상"),
+    sanitize(eFoodType ?? ""),
+    sanitize(eLogoSpec ?? ""),
+    "작업지시서",
+  ].filter(Boolean).join("-");
 
         const triggerRes = await fetch("/api/trigger-work-order-pdf", {
           method: "POST",
@@ -693,6 +762,7 @@ export default function ProductionClient() {
       } catch (pdfErr) {
         console.error("PDF 업로드 트리거 오류 (무시):", pdfErr);
       }
+      // ===== PDF 업로드 트리거 끝 =====
 
       await loadWoList();
     } catch (e: any) {
@@ -710,6 +780,62 @@ export default function ProductionClient() {
     <div className="min-h-screen bg-slate-50 p-4">
       <div className="mx-auto max-w-[1400px] space-y-4">
 
+        {/* ★ 추가: 새 작업지시서 알람 모달 */}
+        {showNewWoModal && newWoNotifications.length > 0 && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-[480px] rounded-2xl border border-orange-200 bg-white shadow-2xl overflow-hidden">
+              {/* 모달 헤더 */}
+              <div className="flex items-center justify-between gap-3 bg-orange-500 px-5 py-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl animate-bounce">🔔</span>
+                  <div>
+                    <div className="text-base font-bold text-white">새 작업지시서 도착!</div>
+                    <div className="text-xs text-orange-100">ADMIN이 새 주문을 등록했습니다</div>
+                  </div>
+                </div>
+                <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-sm font-bold text-white">
+                  {newWoNotifications.length}건
+                </span>
+              </div>
+              {/* 알람 목록 */}
+              <div className="max-h-[320px] overflow-y-auto divide-y divide-slate-100">
+                {newWoNotifications.map((n, idx) => (
+                  <div key={n.id} className="px-5 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-slate-800 truncate">{n.client_name}</div>
+                        <div className="text-sm text-slate-600 truncate mt-0.5">{n.product_name}</div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          <span className="text-[11px] text-slate-400 font-mono">{n.work_order_no}</span>
+                          <span className="text-[11px] text-slate-400">· 주문일 {n.order_date}</span>
+                        </div>
+                      </div>
+                      {idx === 0 && (
+                        <span className="shrink-0 rounded-full bg-orange-100 border border-orange-200 px-2 py-0.5 text-[11px] font-semibold text-orange-700">NEW</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* 하단 버튼 */}
+              <div className="border-t border-slate-100 px-5 py-3 flex gap-2">
+                <button
+                  className="flex-1 rounded-xl bg-orange-500 py-2.5 text-sm font-bold text-white hover:bg-orange-600 active:bg-orange-700 transition-colors"
+                  onClick={() => { setShowNewWoModal(false); setNewWoNotifications([]); }}
+                >
+                  확인 ({newWoNotifications.length}건)
+                </button>
+                <button
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                  onClick={() => setShowNewWoModal(false)}
+                >
+                  나중에
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 헤더 */}
         <div className="flex items-center justify-between">
           <div>
@@ -722,7 +848,21 @@ export default function ProductionClient() {
                 : "로딩 중..."}
             </div>
           </div>
-          <button className={btn} onClick={loadWoList}>🔄 새로고침</button>
+          {/* ★ 수정: 알람 배지 버튼 + 새로고침 */}
+          <div className="flex items-center gap-2">
+            {newWoNotifications.length > 0 && !showNewWoModal && (
+              <button
+                className="relative rounded-xl border border-orange-300 bg-orange-50 px-3 py-1.5 text-sm font-medium text-orange-700 hover:bg-orange-100"
+                onClick={() => setShowNewWoModal(true)}
+              >
+                🔔 새 작업지시서
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                  {newWoNotifications.length}
+                </span>
+              </button>
+            )}
+            <button className={btn} onClick={loadWoList}>🔄 새로고침</button>
+          </div>
         </div>
 
         {msg ? (
@@ -738,6 +878,7 @@ export default function ProductionClient() {
           <div className={`${card} flex flex-col p-4`} style={{ maxHeight: "calc(100vh - 140px)", overflowY: "auto" }}>
             <div className="mb-3 text-base font-semibold">작업지시서 목록</div>
 
+            {/* 필터 */}
             <div className="mb-3 space-y-2">
               <input
                 className={inp}
@@ -764,6 +905,7 @@ export default function ProductionClient() {
               </div>
             </div>
 
+            {/* 목록 */}
             {loading ? (
               <div className="py-8 text-center text-sm text-slate-400">불러오는 중...</div>
             ) : filteredList.length === 0 ? (
@@ -867,12 +1009,13 @@ export default function ProductionClient() {
                 </div>
               </div>
 
-              {/* 기본정보 카드 */}
+              {/* 기본정보 카드 - 저장 버튼 제거 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <div className="font-semibold text-sm">📝 기본정보</div>
                   <div className="text-xs text-slate-400">생산완료 처리 시 자동 저장</div>
                 </div>
+
                 {isAdminOrSubadmin ? (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <div>
@@ -960,9 +1103,8 @@ export default function ProductionClient() {
                 )}
               </div>
 
-              {/* ── 진행상태 카드 (Realtime 통합) ── */}
+              {/* 진행상태 카드 - 저장 버튼 제거 */}
               <div className={`${card} p-4`}>
-                {/* 헤더 */}
                 <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2 flex-wrap">
                     <div className="font-semibold text-sm">✅ 진행상태</div>
@@ -992,7 +1134,6 @@ export default function ProductionClient() {
                   </div>
                 </div>
 
-                {/* 4단계 카드 */}
                 {woChecks ? (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {PROGRESS_STEPS.map((step) => {
@@ -1004,7 +1145,6 @@ export default function ProductionClient() {
                       const isSkipped = !isDone && othersDone;
                       const isSaving = stepSaving === step.assigneeKey;
                       const isFlashing = flashKey === step.assigneeKey;
-
                       const cardCls = isDone ? step.cardDone : isSkipped ? step.cardSkip : step.cardEmpty;
 
                       return (
@@ -1012,7 +1152,6 @@ export default function ProductionClient() {
                           key={step.assigneeKey}
                           className={`rounded-xl border px-3 py-2.5 transition-all duration-300 ${cardCls} ${isFlashing ? "ring-2 ring-blue-400 ring-offset-1 scale-[1.02]" : ""}`}
                         >
-                          {/* 레이블 + 배지 */}
                           <div className="flex items-center justify-between mb-2">
                             <div className="text-xs font-semibold text-slate-700 flex items-center gap-1">
                               <span>{step.icon}</span>
@@ -1030,8 +1169,6 @@ export default function ProductionClient() {
                               )}
                             </div>
                           </div>
-
-                          {/* 담당자 선택 */}
                           <select
                             className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 transition-colors ${isDone ? "border-current bg-white/70 text-slate-700 font-medium" : "border-slate-200 bg-white text-slate-500"} ${isSaving ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                             value={assigneeVal}
@@ -1041,8 +1178,6 @@ export default function ProductionClient() {
                             <option value="">— 담당자 선택 —</option>
                             {employees.map((e) => e.name ? <option key={e.id} value={e.name}>{e.name}</option> : null)}
                           </select>
-
-                          {/* 완료 시 담당자명 */}
                           {isDone && (
                             <div className="mt-1.5 text-[11px] font-semibold text-center text-slate-600 truncate">
                               👤 {assigneeVal}
@@ -1054,7 +1189,6 @@ export default function ProductionClient() {
                   </div>
                 ) : null}
 
-                {/* 미입력 단계 안내 */}
                 {woChecks && PROGRESS_STEPS.some((s) => {
                   const av = woChecks[s.assigneeKey] ?? "";
                   const othersDone = PROGRESS_STEPS.some((os) => os.assigneeKey !== s.assigneeKey && (woChecks[os.assigneeKey] ?? "") !== "");
@@ -1067,7 +1201,7 @@ export default function ProductionClient() {
                 )}
               </div>
 
-              {/* 납기일별 생산 입력 카드 */}
+              {/* 납기일별 생산 입력 카드 - 저장 버튼 제거 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
                   <div className="font-semibold text-sm">🏭 납기일별 생산 입력</div>
@@ -1101,7 +1235,7 @@ export default function ProductionClient() {
                                 </div>
                                 {(item.sub_items ?? [])[0]?.name ? (
                                   <div className="mt-0.5 text-sm font-medium text-slate-700">
-                                    {item.sub_items[0].name}
+                                    {(item.sub_items[0]).name}
                                   </div>
                                 ) : null}
                               </div>
@@ -1156,7 +1290,10 @@ export default function ProductionClient() {
                                       d.setFullYear(d.getFullYear() + 1);
                                       d.setDate(d.getDate() - 1);
                                       const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-                                      setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, expiry_date: ymd } }));
+                                      setProdInputs((prev) => ({
+                                        ...prev,
+                                        [item.id]: { ...pi, expiry_date: ymd }
+                                      }));
                                     }}
                                   >+1년-1일</button>
                                 </div>
@@ -1171,8 +1308,12 @@ export default function ProductionClient() {
                                 />
                               </div>
                             </div>
+                            {/* 품목별 이미지 표시 */}
                             {(item.images ?? []).length > 0 ? (
-                              <ItemImages images={item.images ?? []} logoSpec={selectedWo.logo_spec} />
+                              <ItemImages
+                                images={item.images ?? []}
+                                logoSpec={selectedWo.logo_spec}
+                              />
                             ) : null}
                           </div>
                         );
@@ -1181,7 +1322,7 @@ export default function ProductionClient() {
                 )}
               </div>
 
-              {/* 생산완료 버튼 */}
+              {/* 생산완료 버튼 - 모든 저장 포함 */}
               <div className={`${card} p-4`}>
                 <button
                   className="w-full rounded-xl border border-green-500 bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800"
@@ -1203,6 +1344,7 @@ export default function ProductionClient() {
         </div>
       </div>
 
+      {/* 인쇄 모달 */}
       {printOpen && selectedWo ? (
         <PrintModal wo={selectedWo} prodInputs={prodInputs} onClose={() => setPrintOpen(false)} employees={employees} />
       ) : null}
@@ -1231,6 +1373,7 @@ function ItemImages({ images, logoSpec }: { images: string[]; logoSpec: string |
     })();
   }, [images.join(",")]);
 
+  // 규격(로고스펙)에서 크기 파싱 (예: "30*30mm", "40x40mm")
   const parseSize = (spec: string | null) => {
     if (!spec) return null;
     const m = spec.match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(mm|cm)?/i);
@@ -1405,7 +1548,7 @@ function WoPrintContent({
   onItemNoteChange: (itemId: string, value: string) => void;
 }) {
   const thS: React.CSSProperties = { background: "#f8fafc", border: "1px solid #cbd5e1", padding: "3px 6px", fontWeight: "bold", fontSize: "11pt", color: "#374151", whiteSpace: "nowrap", width: "80px" };
-  const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8px", fontSize: "11pt" };
+const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8px", fontSize: "11pt" };
   const cellBase: React.CSSProperties = { border: "1px solid #cbd5e1", fontSize: "8.5pt", verticalAlign: "middle", padding: "4px 6px" };
   const cellHead: React.CSSProperties = { ...cellBase, background: "#f1f5f9", fontWeight: "bold", fontSize: "8pt", textAlign: "center", whiteSpace: "nowrap" };
 
@@ -1463,7 +1606,7 @@ function WoPrintContent({
           </tr>
           <tr>
             <td style={thS}>지시번호</td>
-            <td style={tdS} colSpan={3}>{wo.work_order_no}</td>
+            <td style={{ ...tdS }} colSpan={3}>{wo.work_order_no}</td>
           </tr>
           {wo.note ? <tr><td style={thS}>비고</td><td style={tdS} colSpan={3}>{wo.note}</td></tr> : null}
           {wo.reference_note ? <tr><td style={thS}>참고사항</td><td style={tdS} colSpan={3}>{wo.reference_note}</td></tr> : null}
@@ -1554,6 +1697,7 @@ function WoPrintContent({
                 </tr>
               </tbody>
             </table>
+              {/* 품목 이미지 - 규격 크기로 표시 */}
             {(item.images ?? []).length > 0 ? (() => {
               const parseSize = (spec: string | null) => {
                 if (!spec) return null;
@@ -1569,7 +1713,7 @@ function WoPrintContent({
                 <div style={{ marginTop: "6px", display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "flex-end" }}>
                   {(item.images ?? []).map((url, imgIdx) => (
                     <div key={imgIdx} style={{ textAlign: "center" }}>
-                      <img src={url} alt={`이미지${imgIdx + 1}`}
+                      <img src={url} alt={`이미지${imgIdx+1}`}
                         style={{ width: sz ? sz.w : 80, height: sz ? sz.h : 80, objectFit: "contain", border: "1px solid #e2e8f0", borderRadius: "4px", display: "block" }} />
                       {wo.logo_spec ? <div style={{ fontSize: "7pt", color: "#94a3b8", marginTop: "2px" }}>{wo.logo_spec}</div> : null}
                     </div>
@@ -1582,4 +1726,38 @@ function WoPrintContent({
       })}
     </div>
   );
+}
+
+// ─────────────────────── 알림음 (Web Audio API) ───────────────────────
+function playNotificationSound() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+    // 3연속 상승 톤 (딩동댕 느낌)
+    const notes = [
+      { freq: 523.25, start: 0.0,  dur: 0.15 }, // C5
+      { freq: 659.25, start: 0.18, dur: 0.15 }, // E5
+      { freq: 783.99, start: 0.36, dur: 0.25 }, // G5
+    ];
+
+    notes.forEach(({ freq, start, dur }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+
+      // 부드러운 어택/릴리즈
+      gain.gain.setValueAtTime(0, ctx.currentTime + start);
+      gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + start + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur + 0.05);
+    });
+  } catch (e) {
+    console.warn("알림음 재생 실패:", e);
+  }
 }
