@@ -1166,15 +1166,26 @@ export default function LeavePage() {
               <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="개인사정"
                 className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
             </div>
+
+
             <div className="flex gap-2">
               <button onClick={closeModal}
                 className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-xl text-sm hover:bg-gray-50">취소</button>
+              {modalMode === 'edit' && editingId && (
+                <button onClick={async () => { closeModal(); await handleDelete(editingId) }}
+                  disabled={loading}
+                  className="flex-1 border border-red-300 text-red-500 py-2.5 rounded-xl text-sm hover:bg-red-50">
+                  삭제
+                </button>
+              )}
               <button onClick={handleSubmit} disabled={loading}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm">
                 {loading ? (modalMode==='create' ? '신청 중...' : '수정 중...')
                   : modalMode==='create' ? `${LEAVE_TYPE_DAYS[leaveType]}일 신청` : '수정 완료'}
               </button>
             </div>
+
+
           </div>
         </div>
       )}
