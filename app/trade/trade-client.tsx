@@ -1344,7 +1344,25 @@ export default function TradeClient() {
       setEItemImageFiles({}); setEItemImagePreviewUrls({}); setEItemExistingImageUrls({}); setEWoItemIds([]);
       if (wo) {
         setEWoId((wo as any).id); setEWoSubName((wo as any).sub_name ?? "");
-        setEWoProductName((wo as any).product_name ?? ""); setEWoFoodType((wo as any).food_type ?? "");
+// 서브네임 있으면 서브네임만, 없으면 품목명 자동 생성
+const woSubNameVal = (wo as any).sub_name ?? "";
+if (woSubNameVal) {
+  setEWoProductName(woSubNameVal);
+} else {
+  const woItemsAll: any[] = (wo as any).work_order_items ?? [];
+  const visibleWoItems = woItemsAll.filter((i: any) => {
+    const n = (i.sub_items?.[0]?.name ?? "").trim();
+    return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+  });
+  const firstName = visibleWoItems[0]?.sub_items?.[0]?.name ?? (wo as any).product_name ?? "";
+  const count = visibleWoItems.length;
+  setEWoProductName(count > 1 ? `${firstName} 외 ${count - 1}건` : firstName);
+}
+
+       
+        
+        
+        setEWoFoodType((wo as any).food_type ?? "");
         setEWoLogoSpec((wo as any).logo_spec ?? ""); setEWoThickness((wo as any).thickness ?? "2mm");
         setEWoDeliveryMethod((wo as any).delivery_method ?? "택배"); setEWoPackagingType((wo as any).packaging_type ?? "");
         setEWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
@@ -2365,7 +2383,7 @@ function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: (
         <div style={{ fontWeight: "bold", fontSize: "14pt" }}>작업지시서 인쇄 미리보기</div>
         <div style={{ display: "flex", gap: "8px" }}>
           <button onClick={saveAndPrint} disabled={saving} style={{ padding: "8px 20px", background: saving ? "#94a3b8" : "#2563eb", color: "#fff", border: "none", borderRadius: "6px", fontSize: "11pt", fontWeight: "bold", cursor: saving ? "not-allowed" : "pointer" }}>
-            {saving ? "저장 중..." : "🖨️ 저장 후 인쇄"}
+            {saving ? "저장 중..." : "🖨️ 인쇄"}
           </button>
           <button onClick={onClose} style={{ padding: "8px 16px", background: "#64748b", color: "#fff", border: "none", borderRadius: "6px", fontSize: "11pt", cursor: "pointer" }}>닫기</button>
         </div>
