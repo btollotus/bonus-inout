@@ -694,8 +694,6 @@ export default function TradeClient() {
     const selectedPartnerId = selectedPartner?.id ?? null;
     let t = toYMD || todayYMD();
 
-    let t = toYMD || todayYMD();
-
     if (!toTouched) {
 
       let latestOrderDate = "", latestLedgerDate = "";
