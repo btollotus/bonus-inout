@@ -128,7 +128,7 @@ export async function GET(req: Request) {
   {
     const { data, error } = await supabase
       .from("orders")
-      .select("id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount,memo")
+      .select("id,customer_id,customer_name,ship_date,ship_method,supply_amount,vat_amount,total_amount,memo,tax_invoice_issued")
       .gte("ship_date", from)
       .lte("ship_date", to)
       .order("ship_date", { ascending: true })
@@ -231,7 +231,7 @@ export async function GET(req: Request) {
   let ledgerQuery = supabase
     .from("ledger_entries")
     .select(
-      "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,supply_amount,vat_amount,total_amount,vat_type,vat_rate"
+      "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,supply_amount,vat_amount,total_amount,vat_type,vat_rate,tax_invoice_received,payment_completed"
     )
     .eq("direction", "OUT")
     .gte("entry_date", from)
@@ -302,6 +302,9 @@ export async function GET(req: Request) {
       rows.push({
         날짜: toYmd(o.ship_date),
         구분: "매출",
+        세금계산서발행: o.tax_invoice_issued ? "✅" : "☐",
+        계산서수령: "",
+        결제완료: "",
         사업자등록번호: normalizeBizNo(partnerBizNo),
         거래처: String(o.customer_name ?? ""),
 
@@ -368,6 +371,9 @@ export async function GET(req: Request) {
       rows.push({
         날짜: toYmd(o.ship_date),
         구분: "매출",
+        세금계산서발행: o.tax_invoice_issued ? "✅" : "☐",
+        계산서수령: "",
+        결제완료: "",
         사업자등록번호: normalizeBizNo(partnerBizNo),
         거래처: String(o.customer_name ?? ""),
 
@@ -445,6 +451,9 @@ export async function GET(req: Request) {
     rows.push({
       날짜: toYmd(l.entry_date),
       구분: `매입(${cat})`,
+      세금계산서발행: "",
+      계산서수령: (l as any).tax_invoice_received ? "✅" : "☐",
+      결제완료: (l as any).payment_completed ? "✅" : "☐",
       사업자등록번호: normalizeBizNo(l.business_no),
       거래처: String(l.counterparty_name ?? ""),
 
@@ -485,6 +494,9 @@ export async function GET(req: Request) {
   const header = [
     "날짜",
     "구분",
+    "세금계산서발행",
+    "계산서수령",
+    "결제완료",
     "사업자등록번호",
     "거래처",
     "주문자",
@@ -516,6 +528,9 @@ export async function GET(req: Request) {
   (ws as any)["!cols"] = [
     { wch: 12 }, // 날짜
     { wch: 16 }, // 구분
+    { wch: 14 }, // 세금계산서발행
+    { wch: 12 }, // 계산서수령
+    { wch: 12 }, // 결제완료
     { wch: 16 }, // 사업자등록번호
     { wch: 26 }, // 거래처
     { wch: 14 }, // 주문자
