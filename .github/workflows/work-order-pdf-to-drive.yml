@@ -71,20 +71,25 @@ jobs:
           open("/home/runner/.config/rclone/rclone.conf", "w", encoding="utf-8").write(conf)
           PY
 
-      - name: Download PDF from API
+- name: Download and convert to PDF
         run: |
           WORK_ORDER_ID="${{ github.event.inputs.work_order_id }}"
           FILE_NAME="${{ github.event.inputs.file_name }}"
-
           URL="https://bonus-inout.vercel.app/api/work-order-pdf?id=${WORK_ORDER_ID}"
-          OUTPUT="${FILE_NAME}.pdf"
+          HTML_FILE="${FILE_NAME}.html"
+          PDF_FILE="${FILE_NAME}.pdf"
 
-          echo "Downloading PDF: $URL"
           curl -L --fail \
             -H "x-internal-token: ${{ secrets.INTERNAL_API_TOKEN }}" \
-            -o "$OUTPUT" "$URL"
+            -o "$HTML_FILE" "$URL"
 
-          ls -alh "$OUTPUT"
+          sudo apt-get install -y chromium-browser
+          chromium-browser --headless --no-sandbox \
+            --print-to-pdf="$PDF_FILE" \
+            "file://$(pwd)/$HTML_FILE"
+
+          ls -alh "$PDF_FILE"
+
 
       - name: Upload to Google Drive
         run: |
