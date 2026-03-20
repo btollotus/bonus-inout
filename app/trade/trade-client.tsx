@@ -636,14 +636,24 @@ export default function TradeClient() {
 
   async function loadPartners() {
     setMsg(null);
-    let q = supabase.from("partners")
-      .select("id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone")
-      .order("is_pinned", { ascending: false }).order("pin_order", { ascending: true }).order("name", { ascending: true }).limit(500);
-    const f = partnerFilter.trim();
-    if (f) q = q.or(`name.ilike.%${f}%,business_no.ilike.%${f}%`);
-    const { data, error } = await q;
-    if (error) return setMsg(error.message);
-    setPartners((data ?? []) as PartnerRow[]);
+    try {
+      let q = supabase.from("partners")
+        .select("id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone")
+        .order("is_pinned", { ascending: false }).order("pin_order", { ascending: true }).order("name", { ascending: true }).limit(500);
+      const f = partnerFilter.trim();
+      if (f) q = q.or(`name.ilike.%${f}%,business_no.ilike.%${f}%`);
+      const { data, error } = await q;
+      if (error) {
+        // AbortError는 정상적인 언마운트로 인한 취소 — 무시
+        if (error.message?.includes("aborted") || error.message?.includes("AbortError")) return;
+        return setMsg(error.message);
+      }
+      setPartners((data ?? []) as PartnerRow[]);
+    } catch (e: any) {
+      // fetch abort는 무시
+      if (e?.name === "AbortError" || e?.message?.includes("aborted")) return;
+      setMsg(e?.message ?? String(e));
+    }
   }
 
   async function loadFoodTypes() {
@@ -684,7 +694,10 @@ export default function TradeClient() {
     const selectedPartnerId = selectedPartner?.id ?? null;
     let t = toYMD || todayYMD();
 
+    let t = toYMD || todayYMD();
+
     if (!toTouched) {
+
       let latestOrderDate = "", latestLedgerDate = "";
       let oqLatest = supabase.from("orders").select("ship_date,customer_id,customer_name").not("ship_date", "is", null).order("ship_date", { ascending: false }).limit(1);
       if (selectedPartnerId) oqLatest = oqLatest.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
@@ -711,7 +724,9 @@ export default function TradeClient() {
         let oq = supabase.from("orders").select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,tax_invoice_issued,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)").gte("ship_date", f).lte("ship_date", t).order("ship_date", { ascending: false }).range(from, from + pageSize - 1);
         if (selectedPartnerId) oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
         const { data, error } = await oq;
-        if (error) return setMsg(error.message);
+        if (error) { if (error.message?.includes("aborted")) return; return setMsg(error.message); }
+
+
         if (data && data.length) all.push(...data);
         if (!data || data.length < pageSize) break;
         from += pageSize;
