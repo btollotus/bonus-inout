@@ -7,6 +7,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 
 const HIDE_NAV_PATHS = ["/login", "/accept-invite", "/reset-password"];
 
+
 type NewWoNotification = {
   id: string;
   client_name: string;
@@ -95,7 +96,9 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
   const [myRole, setMyRole] = useState<string>(role ?? "");
   const [imageUploading, setImageUploading] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+   const fileInputRef = useRef<HTMLInputElement | null>(null);
+const cameraInputRef = useRef<HTMLInputElement | null>(null);  // ← 여기로 이동
+
   const supabaseRef = useRef(createClient());
 
   // 유저 정보 로드
@@ -437,20 +440,44 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
                 )}
                 <div className="flex items-end gap-2">
                   {/* 사진 버튼 */}
+
+
+{/* 카메라 버튼 */}
+<button
+                    onClick={() => cameraInputRef.current?.click()}
+                    disabled={imageUploading || chatSending}
+                    className="shrink-0 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
+                    title="카메라로 촬영"
+                  >
+                    📷
+                  </button>
+                  {/* 갤러리 버튼 */}
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={imageUploading || chatSending}
                     className="shrink-0 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
-                    title="사진 촬영 / 첨부"
+                    title="갤러리에서 선택"
                   >
-                    📷
+                    🖼️
                   </button>
-                  {/* capture="environment" → 태블릿 후면 카메라 바로 열림 */}
+                  {/* 카메라 전용 input */}
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) sendImage(file);
+                      e.target.value = "";
+                    }}
+                  />
+                  {/* 갤러리 전용 input */}
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
