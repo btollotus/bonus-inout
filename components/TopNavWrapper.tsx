@@ -149,7 +149,11 @@ const cameraInputRef = useRef<HTMLInputElement | null>(null);  // ← 여기로 
         { event: "INSERT", schema: "public", table: "chat_messages" },
         (payload) => {
           const msg = payload.new as ChatMessage;
-          setMessages((prev) => [...prev, msg]);
+          // ✅ 낙관적 메시지(temp-)와 중복 방지
+          setMessages((prev) => {
+            const filtered = prev.filter((m) => !m.id.startsWith("temp-") || m.content !== msg.content);
+            return [...filtered, msg];
+          });
           // 내가 보낸 메시지가 아닐 때만 알림
           setMyUserId((currentId) => {
             if (msg.sender_id !== currentId) {
@@ -217,16 +221,28 @@ const cameraInputRef = useRef<HTMLInputElement | null>(null);  // ← 여기로 
   // 메시지 전송
   const sendMessage = useCallback(async () => {
     if (!chatInput.trim() || chatSending) return;
+    const text = chatInput.trim();
+    setChatInput("");
     setChatSending(true);
+    // ✅ 낙관적 업데이트: 즉시 화면에 표시
+    const tempMsg: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      sender_id: myUserId ?? "",
+      sender_name: myName,
+      sender_role: myRole,
+      content: text,
+      image_url: null,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMsg]);
     const supabase = supabaseRef.current;
     await supabase.from("chat_messages").insert({
       sender_id: myUserId,
       sender_name: myName,
       sender_role: myRole,
-      content: chatInput.trim(),
+      content: text,
       image_url: null,
     });
-    setChatInput("");
     setChatSending(false);
   }, [chatInput, chatSending, myUserId, myName, myRole]);
 
@@ -236,11 +252,33 @@ const cameraInputRef = useRef<HTMLInputElement | null>(null);  // ← 여기로 
     setImageUploading(true);
     const supabase = supabaseRef.current;
     try {
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `${myUserId}/${Date.now()}.${ext}`;
+      // ✅ 이미지 압축 (최대 1200px, 품질 0.7)
+      const compressed = await new Promise<Blob>((resolve) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          const MAX = 1200;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+            else { width = Math.round(width * MAX / height); height = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+          canvas.toBlob((b) => resolve(b!), "image/jpeg", 0.7);
+          URL.revokeObjectURL(url);
+        };
+        img.src = url;
+      });
+      const path = `${myUserId}/${Date.now()}.jpg`;
       const { error: upErr } = await supabase.storage
         .from("chat-images")
-        .upload(path, file, { contentType: file.type });
+        .upload(path, compressed, { contentType: "image/jpeg" });
+
+
+
+
       if (upErr) throw upErr;
 
       const { data: urlData } = supabase.storage
