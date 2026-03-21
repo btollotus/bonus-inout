@@ -149,20 +149,24 @@ export function ChatProvider({
         { event: "INSERT", schema: "public", table: "chat_messages" },
         (payload) => {
           const msg = payload.new as ChatMessage;
-          // temp 메시지 교체 (낙관적 업데이트)
+
           setMessages((prev) => {
+            // 중복 방지 (이미 실제 id로 있으면 무시)
+            if (prev.some((m) => m.id === msg.id)) return prev;
+
+            // temp 메시지 교체: sender_id + content 일치하는 가장 오래된 것
             const tempIdx = prev.findIndex(
               (m) => m.id.startsWith("temp-") &&
               m.sender_id === msg.sender_id &&
-              m.content === msg.content
+              m.content === msg.content &&
+              m.image_url === msg.image_url
             );
             if (tempIdx >= 0) {
               const next = [...prev];
               next[tempIdx] = msg;
               return next;
             }
-            // 중복 방지
-            if (prev.some((m) => m.id === msg.id)) return prev;
+
             return [...prev, msg];
           });
 
@@ -189,17 +193,16 @@ export function ChatProvider({
     setChatSending(true);
 
     // 낙관적 업데이트
-    const tempId = `temp-${Date.now()}`;
     const tempMsg: ChatMessage = {
-      id: tempId,
-      sender_id: myUserIdRef.current ?? "",
-      sender_name: myNameRef.current,
-      sender_role: myRoleRef.current,
-      content: text,
-      image_url: null,
-      created_at: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, tempMsg]);
+        id: `temp-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+        sender_id: myUserIdRef.current ?? "",
+        sender_name: myNameRef.current,
+        sender_role: myRoleRef.current,
+        content: text,
+        image_url: null,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, tempMsg]);
 
     await supabase.from("chat_messages").insert({
       sender_id: myUserIdRef.current,
