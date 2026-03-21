@@ -1,8 +1,6 @@
 // app/layout.tsx
 import "./globals.css";
 import TopNavWrapper from "@/components/TopNavWrapper";
-import { ChatProvider } from "@/components/ChatProvider";
-import FloatingChat from "@/components/FloatingChat";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
@@ -40,11 +38,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="ko">
       <body style={{ margin: 0, backgroundColor: "#f9fafb", color: "#111", minHeight: "100vh" }}>
-        <ChatProvider role={role} email={email}>
-          <TopNavWrapper role={role} email={email} />
-          <main style={{ width: "100%" }}>{children}</main>
-          <FloatingChat />
-        </ChatProvider>
+        <TopNavWrapper role={role} email={email} />
+        <main style={{ width: "100%" }}>{children}</main>
       </body>
     </html>
   );

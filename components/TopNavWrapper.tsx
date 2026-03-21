@@ -42,14 +42,46 @@ function playNotificationSound() {
   }
 }
 
+// 이미지 압축 (최대 1200px, JPEG 0.8)
+async function compressImage(file: File): Promise<Blob> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 1200;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+        else { width = Math.round(width * MAX / height); height = MAX; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+      canvas.toBlob((b) => resolve(b!), "image/jpeg", 0.8);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+}
+
 export default function TopNavWrapper({ role, email }: { role?: string; email?: string }) {
   const pathname = usePathname();
   const hide = HIDE_NAV_PATHS.some((p) => pathname.startsWith(p));
 
+  // ── 작업지시서 알람 ──
   const [notifications, setNotifications] = useState<NewWoNotification[]>([]);
   const [showModal, setShowModal] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pageLoadTimeRef = useRef<string>(new Date().toISOString());
+
+  // ── 사진 전송 ──
+  const [photoStatus, setPhotoStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
+  const [photoError, setPhotoError] = useState<string>("");
+  const [lastFile, setLastFile] = useState<File | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
+  const galleryRef = useRef<HTMLInputElement | null>(null);
+  const canPhoto = role === "ADMIN" || role === "SUBADMIN";
 
   useEffect(() => {
     if (hide) return;
@@ -82,12 +114,60 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
     return () => { supabase.removeChannel(channel); channelRef.current = null; };
   }, [hide]);
 
+  // 성공 메시지 3초 후 자동 사라짐
+  useEffect(() => {
+    if (photoStatus === "success") {
+      const t = setTimeout(() => setPhotoStatus("idle"), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [photoStatus]);
+
+  async function sendPhoto(file: File) {
+    setLastFile(file);
+    setPhotoStatus("sending");
+    setPhotoError("");
+
+    try {
+      // 이미지 압축
+      const compressed = await compressImage(file);
+
+      // FormData 구성
+      const formData = new FormData();
+      formData.append("photo", compressed, "photo.jpg");
+
+      // API 호출
+      const res = await fetch("/api/send-photo", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error ?? "전송 실패");
+      }
+
+      setPhotoStatus("success");
+      setLastFile(null);
+    } catch (e: any) {
+      setPhotoError(e?.message ?? "전송 실패");
+      setPhotoStatus("error");
+    }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) sendPhoto(file);
+    e.target.value = "";
+  }
+
   if (hide) return null;
 
   return (
     <>
       <TopNav role={role} email={email} />
 
+      {/* ── 작업지시서 알람 모달 ── */}
       {showModal && notifications.length > 0 && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-[480px] rounded-2xl border border-orange-200 bg-white shadow-2xl overflow-hidden">
@@ -152,6 +232,80 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
             </span>
           </button>
         </div>
+      )}
+
+      {/* ── 사진 전송 플로팅 버튼 (ADMIN/SUBADMIN만) ── */}
+      {canPhoto && (
+        <>
+          {/* 카메라 input */}
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          {/* 갤러리 input */}
+          <input
+            ref={galleryRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+
+          {/* 상태 토스트 */}
+          {photoStatus === "sending" && (
+            <div className="fixed bottom-24 right-6 z-[190] rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-lg flex items-center gap-2">
+              <span className="animate-spin">⏳</span> 전송 중...
+            </div>
+          )}
+          {photoStatus === "success" && (
+            <div className="fixed bottom-24 right-6 z-[190] rounded-2xl bg-green-600 px-4 py-3 text-sm font-medium text-white shadow-lg flex items-center gap-2">
+              ✅ 전송 완료!
+            </div>
+          )}
+          {photoStatus === "error" && (
+            <div className="fixed bottom-24 right-6 z-[190] rounded-2xl border border-red-200 bg-white px-4 py-3 text-sm shadow-lg">
+              <div className="font-medium text-red-600 mb-2">❌ {photoError}</div>
+              <button
+                className="w-full rounded-xl bg-red-500 py-1.5 text-xs font-bold text-white hover:bg-red-600"
+                onClick={() => { if (lastFile) sendPhoto(lastFile); }}
+              >
+                다시 보내기
+              </button>
+              <button
+                className="mt-1 w-full rounded-xl border border-slate-200 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
+                onClick={() => { setPhotoStatus("idle"); setLastFile(null); }}
+              >
+                취소
+              </button>
+            </div>
+          )}
+
+          {/* 플로팅 버튼 */}
+          {photoStatus === "idle" || photoStatus === "success" ? (
+            <div className="fixed bottom-6 right-6 z-[190] flex gap-2">
+              {/* 카메라 버튼 */}
+              <button
+                onClick={() => cameraRef.current?.click()}
+                className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 shadow-lg hover:bg-blue-700 active:scale-95 transition-all"
+                title="카메라로 촬영 후 전송"
+              >
+                <span className="text-2xl">📷</span>
+              </button>
+              {/* 갤러리 버튼 */}
+              <button
+                onClick={() => galleryRef.current?.click()}
+                className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-600 shadow-lg hover:bg-slate-700 active:scale-95 transition-all"
+                title="갤러리에서 선택 후 전송"
+              >
+                <span className="text-2xl">🖼️</span>
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
     </>
   );
