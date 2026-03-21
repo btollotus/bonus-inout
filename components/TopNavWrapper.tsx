@@ -377,18 +377,30 @@ const cameraInputRef = useRef<HTMLInputElement | null>(null);  // ← 여기로 
       {/* ── 채팅 (ADMIN/SUBADMIN만) ── */}
       {canChat && (
         <>
-          {/* 플로팅 버튼 */}
-          {!chatOpen && (
+{/* 플로팅 버튼 */}
+{!chatOpen && (
             <button
               onClick={() => setChatOpen(true)}
-              className="fixed bottom-6 right-6 z-[190] flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 shadow-lg hover:bg-blue-700 active:scale-95 transition-all"
+              className={`fixed bottom-6 right-6 z-[190] flex h-14 w-14 items-center justify-center rounded-full shadow-lg active:scale-95 transition-all ${
+                unreadCount > 0
+                  ? "bg-red-500 hover:bg-red-600 animate-bounce shadow-red-300 shadow-xl"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
               title="내부 채팅"
             >
-              <span className="text-2xl">💬</span>
+              {unreadCount > 0 ? (
+                <div className="flex flex-col items-center leading-none">
+                  <span className="text-lg">💬</span>
+                  <span className="text-[11px] font-bold text-white tabular-nums">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-2xl">💬</span>
+              )}
+              {/* 링 애니메이션 */}
               {unreadCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white animate-pulse">
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </span>
+                <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-40" />
               )}
             </button>
           )}
