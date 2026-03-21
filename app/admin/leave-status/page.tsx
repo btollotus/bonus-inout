@@ -1,33 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/browser'
-import type { RealtimeChannel } from "@supabase/supabase-js";
-
-type NewWoNotification = {
-  id: string; client_name: string; product_name: string;
-  work_order_no: string; order_date: string; created_at: string;
-};
-
-function playNotificationSound() {
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const notes = [
-      { freq: 523.25, start: 0.0, dur: 0.15 },
-      { freq: 659.25, start: 0.18, dur: 0.15 },
-      { freq: 783.99, start: 0.36, dur: 0.25 },
-    ];
-    notes.forEach(({ freq, start, dur }) => {
-      const osc = ctx.createOscillator(); const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination); osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
-      gain.gain.setValueAtTime(0, ctx.currentTime + start);
-      gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + start + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-      osc.start(ctx.currentTime + start); osc.stop(ctx.currentTime + start + dur + 0.05);
-    });
-  } catch (e) { console.warn("알림음 재생 실패:", e); }
-}
 
 type LeaveRequest = {
   id: string
@@ -87,28 +61,6 @@ export default function LeaveStatusPage({ role }: { role?: string }) {
   const [tab, setTab] = useState<'calendar' | 'summary' | 'requests'>('calendar')
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
   const [error, setError] = useState('')
-
-  const [newWoNotifications, setNewWoNotifications] = useState<NewWoNotification[]>([]);
-const [showNewWoModal, setShowNewWoModal] = useState(false);
-const insertChannelRef = useRef<RealtimeChannel | null>(null);
-const pageLoadTimeRef = useRef<string>(new Date().toISOString());
-
-useEffect(() => {
-  const channel = supabase
-    .channel("wo_leave_insert_notify")
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "work_orders" }, (payload) => {
-      const d = payload.new as Record<string, unknown>;
-      const createdAt = String(d.created_at ?? "");
-      if (createdAt && createdAt < pageLoadTimeRef.current) return;
-      setNewWoNotifications((prev) => [{ id: String(d.id ?? ""), client_name: String(d.client_name ?? ""), product_name: String(d.product_name ?? ""), work_order_no: String(d.work_order_no ?? ""), order_date: String(d.order_date ?? ""), created_at: createdAt }, ...prev]);
-      setShowNewWoModal(true);
-      playNotificationSound();
-    })
-    .subscribe((status, err) => { console.log("🔔 [leave INSERT채널]", status, err ?? ""); });
-  insertChannelRef.current = channel;
-  return () => { supabase.removeChannel(channel); insertChannelRef.current = null; };
-}, []); // eslint-disable-line
-
   const years = [new Date().getFullYear(), new Date().getFullYear() - 1]
 
   useEffect(() => { fetchLeaveData() }, [selectedYear])
@@ -205,42 +157,6 @@ useEffect(() => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-
-{showNewWoModal && newWoNotifications.length > 0 && (
-  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-    <div className="w-full max-w-[480px] rounded-2xl border border-orange-200 bg-white shadow-2xl overflow-hidden">
-      <div className="flex items-center justify-between gap-3 bg-orange-500 px-5 py-4">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl animate-bounce">🔔</span>
-          <div><div className="text-base font-bold text-white">새 작업지시서 도착!</div><div className="text-xs text-orange-100">새 주문이 등록됐습니다</div></div>
-        </div>
-        <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-sm font-bold text-white">{newWoNotifications.length}건</span>
-      </div>
-      <div className="max-h-[320px] overflow-y-auto divide-y divide-slate-100">
-        {newWoNotifications.map((n, idx) => (
-          <div key={n.id} className="px-5 py-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold text-slate-800 truncate">{n.client_name}</div>
-                <div className="text-sm text-slate-600 truncate mt-0.5">{n.product_name}</div>
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  <span className="text-[11px] text-slate-400 font-mono">{n.work_order_no}</span>
-                  <span className="text-[11px] text-slate-400">· 주문일 {n.order_date}</span>
-                </div>
-              </div>
-              {idx === 0 && <span className="shrink-0 rounded-full bg-orange-100 border border-orange-200 px-2 py-0.5 text-[11px] font-semibold text-orange-700">NEW</span>}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="border-t border-slate-100 px-5 py-3 flex gap-2">
-        <button className="flex-1 rounded-xl bg-orange-500 py-2.5 text-sm font-bold text-white hover:bg-orange-600" onClick={() => { setShowNewWoModal(false); setNewWoNotifications([]); }}>확인 ({newWoNotifications.length}건)</button>
-        <button className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50" onClick={() => setShowNewWoModal(false)}>나중에</button>
-      </div>
-    </div>
-  </div>
-)}
-
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between flex-wrap gap-3">
