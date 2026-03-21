@@ -255,7 +255,7 @@ const pageLoadTimeRef = useRef<string>(new Date().toISOString());
 
 useEffect(() => {
   const channel = supabase
-    .channel("wo_new_insert_notify")
+  .channel("wo_production_insert_notify")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "work_orders" }, (payload) => {
       const d = payload.new as Record<string, unknown>;
       const createdAt = String(d.created_at ?? "");
