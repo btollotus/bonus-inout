@@ -263,7 +263,6 @@ useEffect(() => {
       setNewWoNotifications((prev) => [{ id: String(d.id ?? ""), client_name: String(d.client_name ?? ""), product_name: String(d.product_name ?? ""), work_order_no: String(d.work_order_no ?? ""), order_date: String(d.order_date ?? ""), created_at: createdAt }, ...prev]);
       setShowNewWoModal(true);
       playNotificationSound();
-      loadWoList();
     })
     .subscribe((status, err) => { console.log("🔔 [production INSERT채널]", status, err ?? ""); });
   insertChannelRef.current = channel;
