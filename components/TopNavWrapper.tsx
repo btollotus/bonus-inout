@@ -1,11 +1,10 @@
 "use client";
 import { usePathname } from "next/navigation";
 import TopNav from "@/components/TopNav";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
-// 이 경로들에서는 TopNav 숨김
 const HIDE_NAV_PATHS = ["/login", "/accept-invite", "/reset-password"];
 
 type NewWoNotification = {
@@ -14,6 +13,16 @@ type NewWoNotification = {
   product_name: string;
   work_order_no: string;
   order_date: string;
+  created_at: string;
+};
+
+type ChatMessage = {
+  id: string;
+  sender_id: string;
+  sender_name: string;
+  sender_role: string;
+  content: string | null;
+  image_url: string | null;
   created_at: string;
 };
 
@@ -43,34 +52,145 @@ function playNotificationSound() {
   }
 }
 
+function playChatSound() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.2);
+  } catch (e) {}
+}
+
+function formatTime(iso: string) {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+
 export default function TopNavWrapper({ role, email }: { role?: string; email?: string }) {
   const pathname = usePathname();
   const hide = HIDE_NAV_PATHS.some((p) => pathname.startsWith(p));
 
+  // ── 작업지시서 알람 ──
   const [notifications, setNotifications] = useState<NewWoNotification[]>([]);
   const [showModal, setShowModal] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pageLoadTimeRef = useRef<string>(new Date().toISOString());
 
+  // ── 채팅 ──
+  const [chatOpen, setChatOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [myUserId, setMyUserId] = useState<string | null>(null);
+  const [myName, setMyName] = useState<string>("");
+  const [myRole, setMyRole] = useState<string>(role ?? "");
+  const [imageUploading, setImageUploading] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const supabaseRef = useRef(createClient());
+
+  // 유저 정보 로드
   useEffect(() => {
     if (hide) return;
+    (async () => {
+      const supabase = supabaseRef.current;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      setMyUserId(user.id);
 
-    console.log("🔔 [TopNavWrapper] 구독 시작...");
-    const supabase = createClient();
+      const { data: roleData } = await supabase
+        .from("user_roles").select("role").eq("user_id", user.id).maybeSingle();
+      const r = roleData?.role ?? role ?? "";
+      setMyRole(r);
+
+      const { data: empData } = await supabase
+        .from("employees").select("name").eq("auth_user_id", user.id).maybeSingle();
+      if (empData?.name) {
+        setMyName(empData.name);
+      } else {
+        setMyName(email?.split("@")[0] ?? "");
+      }
+    })();
+  }, [hide]);
+
+  // 채팅 메시지 초기 로드
+  useEffect(() => {
+    if (hide) return;
+    (async () => {
+      const supabase = supabaseRef.current;
+      const { data } = await supabase
+        .from("chat_messages")
+        .select("*")
+        .order("created_at", { ascending: true })
+        .limit(100);
+      if (data) setMessages(data as ChatMessage[]);
+    })();
+  }, [hide]);
+
+  // 채팅 Realtime 구독
+  useEffect(() => {
+    if (hide) return;
+    const supabase = supabaseRef.current;
+    const channel = supabase
+      .channel("chat_messages_realtime")
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "chat_messages" },
+        (payload) => {
+          const msg = payload.new as ChatMessage;
+          setMessages((prev) => [...prev, msg]);
+          // 내가 보낸 메시지가 아닐 때만 알림
+          setMyUserId((currentId) => {
+            if (msg.sender_id !== currentId) {
+              playChatSound();
+              setChatOpen((open) => {
+                if (!open) setUnreadCount((c) => c + 1);
+                return open;
+              });
+            }
+            return currentId;
+          });
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [hide]);
+
+  // 채팅창 열면 unread 초기화 + 스크롤 하단
+  useEffect(() => {
+    if (chatOpen) {
+      setUnreadCount(0);
+      setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+  }, [chatOpen]);
+
+  // 새 메시지 오면 채팅창 열려있으면 스크롤
+  useEffect(() => {
+    if (chatOpen) {
+      setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
+  }, [messages]);
+
+  // 작업지시서 알람 구독
+  useEffect(() => {
+    if (hide) return;
+    const supabase = supabaseRef.current;
     const channel = supabase
       .channel("wo_global_insert_notify")
-      .on(
-        "postgres_changes",
+      .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "work_orders" },
         (payload) => {
-          console.log("🔔 [TopNavWrapper] INSERT 수신!", payload.new);
           const d = payload.new as Record<string, unknown>;
           const createdAt = String(d.created_at ?? "");
-          if (createdAt && createdAt < pageLoadTimeRef.current) {
-            console.log("🔔 [TopNavWrapper] 과거 데이터라 무시:", createdAt, "<", pageLoadTimeRef.current);
-            return;
-          }
-
+          if (createdAt && createdAt < pageLoadTimeRef.current) return;
           const notification: NewWoNotification = {
             id: String(d.id ?? ""),
             client_name: String(d.client_name ?? ""),
@@ -79,7 +199,6 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
             order_date: String(d.order_date ?? ""),
             created_at: createdAt,
           };
-
           setNotifications((prev) => [notification, ...prev]);
           setShowModal(true);
           playNotificationSound();
@@ -88,21 +207,66 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
       .subscribe((status, err) => {
         console.log("🔔 [TopNavWrapper] 채널 상태:", status, err ?? "");
       });
-
     channelRef.current = channel;
-    return () => {
-      console.log("🔔 [TopNavWrapper] 구독 해제");
-      supabase.removeChannel(channel);
-      channelRef.current = null;
-    };
+    return () => { supabase.removeChannel(channel); channelRef.current = null; };
   }, [hide]);
 
+  // 메시지 전송
+  const sendMessage = useCallback(async () => {
+    if (!chatInput.trim() || chatSending) return;
+    setChatSending(true);
+    const supabase = supabaseRef.current;
+    await supabase.from("chat_messages").insert({
+      sender_id: myUserId,
+      sender_name: myName,
+      sender_role: myRole,
+      content: chatInput.trim(),
+      image_url: null,
+    });
+    setChatInput("");
+    setChatSending(false);
+  }, [chatInput, chatSending, myUserId, myName, myRole]);
+
+  // 이미지 전송
+  const sendImage = useCallback(async (file: File) => {
+    if (!file) return;
+    setImageUploading(true);
+    const supabase = supabaseRef.current;
+    try {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const path = `${myUserId}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("chat-images")
+        .upload(path, file, { contentType: file.type });
+      if (upErr) throw upErr;
+
+      const { data: urlData } = supabase.storage
+        .from("chat-images")
+        .getPublicUrl(path);
+
+      await supabase.from("chat_messages").insert({
+        sender_id: myUserId,
+        sender_name: myName,
+        sender_role: myRole,
+        content: null,
+        image_url: urlData.publicUrl,
+      });
+    } catch (e: any) {
+      console.error("이미지 전송 오류:", e?.message);
+    } finally {
+      setImageUploading(false);
+    }
+  }, [myUserId, myName, myRole]);
+
   if (hide) return null;
+
+  const canChat = myRole === "ADMIN" || myRole === "SUBADMIN";
 
   return (
     <>
       <TopNav role={role} email={email} />
 
+      {/* ── 작업지시서 알람 모달 ── */}
       {showModal && notifications.length > 0 && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-[480px] rounded-2xl border border-orange-200 bg-white shadow-2xl overflow-hidden">
@@ -139,7 +303,7 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
             </div>
             <div className="border-t border-slate-100 px-5 py-3 flex gap-2">
               <button
-                className="flex-1 rounded-xl bg-orange-500 py-2.5 text-sm font-bold text-white hover:bg-orange-600 active:bg-orange-700 transition-colors"
+                className="flex-1 rounded-xl bg-orange-500 py-2.5 text-sm font-bold text-white hover:bg-orange-600 transition-colors"
                 onClick={() => { setShowModal(false); setNotifications([]); }}
               >
                 확인 ({notifications.length}건)
@@ -167,6 +331,169 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
             </span>
           </button>
         </div>
+      )}
+
+      {/* ── 채팅 (ADMIN/SUBADMIN만) ── */}
+      {canChat && (
+        <>
+          {/* 플로팅 버튼 */}
+          {!chatOpen && (
+            <button
+              onClick={() => setChatOpen(true)}
+              className="fixed bottom-6 right-6 z-[190] flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 shadow-lg hover:bg-blue-700 active:scale-95 transition-all"
+              title="내부 채팅"
+            >
+              <span className="text-2xl">💬</span>
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white animate-pulse">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* 채팅창 */}
+          {chatOpen && (
+            <div className="fixed bottom-4 right-4 z-[190] flex flex-col w-[360px] max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-5rem)] rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+
+              {/* 헤더 */}
+              <div className="flex items-center justify-between gap-2 bg-blue-600 px-4 py-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">💬</span>
+                  <div>
+                    <div className="text-sm font-bold text-white">내부 채팅</div>
+                    <div className="text-[11px] text-blue-200">ADMIN · SUBADMIN 전용</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setChatOpen(false)}
+                  className="rounded-lg p-1.5 text-white/70 hover:bg-white/20 hover:text-white transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 메시지 목록 */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50">
+                {messages.length === 0 && (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center text-slate-400 text-sm">
+                      <div className="text-3xl mb-2">💬</div>
+                      <div>아직 메시지가 없어요</div>
+                      <div className="text-xs mt-1">첫 메시지를 보내보세요!</div>
+                    </div>
+                  </div>
+                )}
+                {messages.map((msg) => {
+                  const isMine = msg.sender_id === myUserId;
+                  return (
+                    <div key={msg.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[78%] flex flex-col gap-0.5 ${isMine ? "items-end" : "items-start"}`}>
+                        {!isMine && (
+                          <div className="flex items-center gap-1.5 px-1">
+                            <span className="text-[11px] font-semibold text-slate-600">{msg.sender_name}</span>
+                            <span className={`text-[9px] rounded-full px-1.5 py-0.5 font-bold ${
+                              msg.sender_role === "ADMIN"
+                                ? "bg-red-100 text-red-600"
+                                : "bg-blue-100 text-blue-600"
+                            }`}>
+                              {msg.sender_role}
+                            </span>
+                          </div>
+                        )}
+                        <div className={`rounded-2xl px-3 py-2 ${
+                          isMine
+                            ? "rounded-tr-sm bg-blue-600 text-white"
+                            : "rounded-tl-sm bg-white border border-slate-200 text-slate-800"
+                        }`}>
+                          {msg.image_url ? (
+                            <a href={msg.image_url} target="_blank" rel="noopener noreferrer">
+                              <img
+                                src={msg.image_url}
+                                alt="전송된 이미지"
+                                className="max-w-full rounded-xl max-h-48 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                              />
+                            </a>
+                          ) : (
+                            <div className="text-sm whitespace-pre-wrap break-words">{msg.content}</div>
+                          )}
+                        </div>
+                        <div className={`text-[10px] text-slate-400 px-1 ${isMine ? "text-right" : "text-left"}`}>
+                          {formatTime(msg.created_at)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={chatBottomRef} />
+              </div>
+
+              {/* 입력창 */}
+              <div className="shrink-0 border-t border-slate-200 bg-white p-2">
+                {imageUploading && (
+                  <div className="mb-2 rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-center text-blue-600 animate-pulse">
+                    📤 이미지 업로드 중...
+                  </div>
+                )}
+                <div className="flex items-end gap-2">
+                  {/* 사진 버튼 */}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={imageUploading || chatSending}
+                    className="shrink-0 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
+                    title="사진 촬영 / 첨부"
+                  >
+                    📷
+                  </button>
+                  {/* capture="environment" → 태블릿 후면 카메라 바로 열림 */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) sendImage(file);
+                      e.target.value = "";
+                    }}
+                  />
+
+                  {/* 텍스트 입력 */}
+                  <textarea
+                    className="flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 max-h-24"
+                    rows={1}
+                    placeholder="메시지 입력... (Enter 전송)"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage();
+                      }
+                    }}
+                  />
+
+                  {/* 전송 버튼 */}
+                  <button
+                    onClick={sendMessage}
+                    disabled={!chatInput.trim() || chatSending || imageUploading}
+                    className="shrink-0 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-40"
+                    title="전송"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
+                      <path d="M22 2L11 13" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M22 2L15 22l-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
+                <div className="mt-1.5 text-[10px] text-slate-400 text-center">
+                  Enter 전송 · Shift+Enter 줄바꿈 · 📷 카메라/사진 첨부
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </>
   );
