@@ -91,9 +91,16 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [myName, setMyName] = useState<string>("");
   const [myRole, setMyRole] = useState<string>(role ?? "");
+  // ✅ 항상 최신값 참조용 ref
+  const myUserIdRef = useRef<string | null>(null);
+  const myNameRef = useRef<string>("");
+  const myRoleRef = useRef<string>(role ?? "");
+
+
   const [imageUploading, setImageUploading] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
    const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -109,19 +116,25 @@ const cameraInputRef = useRef<HTMLInputElement | null>(null);  // ← 여기로 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setMyUserId(user.id);
+      myUserIdRef.current = user.id;
+  
 
       const { data: roleData } = await supabase
         .from("user_roles").select("role").eq("user_id", user.id).maybeSingle();
       const r = roleData?.role ?? role ?? "";
       setMyRole(r);
+      myRoleRef.current = r;
 
       const { data: empData } = await supabase
         .from("employees").select("name").eq("auth_user_id", user.id).maybeSingle();
-      if (empData?.name) {
-        setMyName(empData.name);
-      } else {
-        setMyName(email?.split("@")[0] ?? "");
-      }
+        if (empData?.name) {
+          setMyName(empData.name);
+          myNameRef.current = empData.name;
+        } else {
+          const fallback = email?.split("@")[0] ?? "";
+          setMyName(fallback);
+          myNameRef.current = fallback;
+        }
     })();
   }, [hide]);
 
@@ -237,9 +250,9 @@ const cameraInputRef = useRef<HTMLInputElement | null>(null);  // ← 여기로 
     setMessages((prev) => [...prev, tempMsg]);
     const supabase = supabaseRef.current;
     await supabase.from("chat_messages").insert({
-      sender_id: myUserId,
-      sender_name: myName,
-      sender_role: myRole,
+      sender_id: myUserIdRef.current,
+      sender_name: myNameRef.current,
+      sender_role: myRoleRef.current,
       content: text,
       image_url: null,
     });
@@ -271,7 +284,7 @@ const cameraInputRef = useRef<HTMLInputElement | null>(null);  // ← 여기로 
         };
         img.src = url;
       });
-      const path = `${myUserId}/${Date.now()}.jpg`;
+      const path = `${myUserIdRef.current}/${Date.now()}.jpg`;
       const { error: upErr } = await supabase.storage
         .from("chat-images")
         .upload(path, compressed, { contentType: "image/jpeg" });
@@ -285,13 +298,13 @@ const cameraInputRef = useRef<HTMLInputElement | null>(null);  // ← 여기로 
         .from("chat-images")
         .getPublicUrl(path);
 
-      await supabase.from("chat_messages").insert({
-        sender_id: myUserId,
-        sender_name: myName,
-        sender_role: myRole,
-        content: null,
-        image_url: urlData.publicUrl,
-      });
+        await supabase.from("chat_messages").insert({
+          sender_id: myUserIdRef.current,
+          sender_name: myNameRef.current,
+          sender_role: myRoleRef.current,
+          content: null,
+          image_url: urlData.publicUrl,
+        });
     } catch (e: any) {
       console.error("이미지 전송 오류:", e?.message);
     } finally {
