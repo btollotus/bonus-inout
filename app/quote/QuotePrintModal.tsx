@@ -237,26 +237,24 @@ table { border-collapse: collapse; width: 100%; }
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }} rowSpan={4}>
                             발<br/>신<br/>자
                           </td>
-                          {/* 상호 | (주)보누스메이트 | 성명 | 조대성(도장) — 성명/조대성 셀 구분 */}
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 44, padding: "2px 3px" }}>상호</td>
                           <td style={{ border: "1px solid #999", padding: "2px 5px" }}>{OUR.nameShort}</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px 2px 3px", position: "relative", minWidth: 80 }}>
-                            {/* 성명 | 조대성 구분선 */}
+                          {/* 성명 | 조대성 — 도장을 조대성 바로 옆에 */}
+                          <td style={{ border: "1px solid #999", padding: "2px 5px 2px 3px", minWidth: 80, whiteSpace: "nowrap" }}>
                             <span style={{ display: "inline-block", paddingRight: 4, borderRight: "1px solid #bbb", marginRight: 4 }}>성명</span>
-                            <span style={{ position: "relative", display: "inline-block" }}>
+                            <span style={{ position: "relative", display: "inline-block", paddingRight: 28 }}>
                               {OUR.ceo}
-                              {/* 도장: "성"자에 겹치도록 left:-8 */}
-                              <img src="/stamp.png" alt="" style={{ position: "absolute", left: -8, top: -6, height: 28, opacity: 0.9 }}
+                              <img src="/stamp.png" alt="" style={{ position: "absolute", left: "100%", top: -4, marginLeft: -4, height: 26, opacity: 0.9 }}
                                 onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                             </span>
                           </td>
                         </tr>
+                        {/* 사업장주소 — 한 줄로 */}
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>사업장주소</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px" }} colSpan={2}>{OUR.address}</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px", whiteSpace: "nowrap" }}>사업장주소</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px", fontSize: 8 }} colSpan={2}>{OUR.address}</td>
                         </tr>
                         <tr>
-                          {/* 업태 | 제조업 | 종목 | 식품제조가공업 — 종목/내용 셀 구분 */}
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>업 태</td>
                           <td style={{ border: "1px solid #999", padding: "2px 5px" }}>{OUR.bizType}</td>
                           <td style={{ border: "1px solid #999", padding: "2px 5px 2px 3px" }}>
@@ -279,14 +277,11 @@ table { border-collapse: collapse; width: 100%; }
             <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 6 }}>
               <tbody>
                 <tr>
-                  <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 68, fontSize: 9, padding: "3px 4px" }}>합계금액</td>
+                  <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 68, fontSize: 9, padding: "3px 4px", whiteSpace: "nowrap" }}>합계금액</td>
                   <td style={{ border: "1px solid #999", padding: "3px 8px", fontSize: 10, fontWeight: "bold" }}>
-                    금 {numberToKorean(sumTotal)}원 정
+                    금 {numberToKorean(sumTotal)}원 정 &nbsp;&nbsp; ₩ {fmt(sumTotal)}
                   </td>
-                  <td style={{ border: "1px solid #999", textAlign: "right", padding: "3px 8px", fontSize: 10, fontWeight: "bold", width: 110 }}>
-                    ₩ {fmt(sumTotal)}
-                  </td>
-                  <td style={{ border: "1px solid #999", textAlign: "center", width: 72, fontSize: 8, color: "#555", padding: "3px 4px" }}>
+                  <td style={{ border: "1px solid #999", textAlign: "center", width: 68, fontSize: 8, color: "#555", padding: "3px 4px", whiteSpace: "nowrap" }}>
                     부가세 포함
                   </td>
                 </tr>
