@@ -6,32 +6,26 @@ import React, { useRef } from "react";
 type QuotePrintProps = {
   onClose: () => void;
   quoteData: {
-    // 업체 정보
     customerName: string;
-    // 견적 기본 정보
-    quoteDate: string;       // YYYY-MM-DD
-    productType: string;     // 예: 전사 1도 (3mm)
+    quoteDate: string;        // YYYY-MM-DD
+    productType: string;      // 예: 전사 1도 (3mm)
+    colorType: "dark" | "white"; // 다크 / 화이트
+    isRaise: boolean;         // 레이즈 여부
     widthMm: number | null;
     heightMm: number | null;
+    thickness: string;        // 예: 3mm
     quantity: number;
     isNew: boolean;
     designChanged: boolean;
     useStockMold: boolean;
-    shape: string | null;
     memo: string | null;
     // 계산 결과
-    unitPrice: number;       // V (고객 제시가)
-    moldCost: number;        // 성형틀
-    plateCost: number;       // 판비
-    sheetCount: number;      // 전사지 장수
-    sheetCost: number;       // 전사지 비용
-    workFee: number;         // 기본작업비
-    totalActual: number;     // 합계 (부가세 별도)
-    totalWithVat: number;    // 부가세 포함
+    moldCost: number;
+    plateCost: number;
+    sheetCost: number;
+    workFee: number;
     V: number;               // 고객 제시 단가
-    V_stock: number | null;  // 기성 성형틀 단가
-    // 식품 유형 (제품에서 자동 판별)
-    foodType: string;
+    V_stock: number | null;
   };
 };
 
@@ -64,18 +58,15 @@ function numberToKorean(n: number): string {
     const chunk = n % 10000;
     if (chunk !== 0) {
       let chunkStr = "";
-      let tmp = chunk;
-      let tenIdx = 0;
+      let tmp = chunk, tenIdx = 0;
       while (tmp > 0) {
         const d = tmp % 10;
         if (d !== 0) chunkStr = units[d] + tens[tenIdx] + chunkStr;
-        tmp = Math.floor(tmp / 10);
-        tenIdx++;
+        tmp = Math.floor(tmp / 10); tenIdx++;
       }
       result = chunkStr + bigs[bigIdx] + result;
     }
-    n = Math.floor(n / 10000);
-    bigIdx++;
+    n = Math.floor(n / 10000); bigIdx++;
   }
   return result;
 }
@@ -84,8 +75,7 @@ function formatDateKorean(ymd: string): string {
   if (!ymd) return "";
   const [y, m, d] = ymd.split("-");
   const days = ["일", "월", "화", "수", "목", "금", "토"];
-  const date = new Date(ymd);
-  const dow = days[date.getDay()];
+  const dow = days[new Date(ymd).getDay()];
   return `${y}년 ${parseInt(m)}월 ${parseInt(d)}일 ${dow}요일`;
 }
 
@@ -94,104 +84,88 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   const printRef = useRef<HTMLDivElement>(null);
 
   const {
-    customerName, quoteDate, productType, widthMm, heightMm,
-    quantity, isNew, designChanged, useStockMold, shape, memo,
-    unitPrice, moldCost, plateCost, sheetCount, sheetCost,
-    workFee, totalActual, totalWithVat, V, V_stock, foodType,
+    customerName, quoteDate, productType, colorType, isRaise,
+    widthMm, heightMm, thickness, quantity, isNew,
+    designChanged, useStockMold, memo,
+    moldCost, plateCost, sheetCost, workFee, V, V_stock,
   } = quoteData;
 
-  // 품목 테이블 행 구성
-  const lineItems: { name: string; spec: string; qty: string; unit: number; supply: number; vat: number; total: number }[] = [];
+  // ── 식품유형 ──
+  const foodType = (colorType === "dark" && !isRaise)
+    ? "준초콜릿"
+    : "당류가공품";
 
-  // 성형틀
+  // ── 제품 품명 표시 ──
+  // 예: 다크(30×30mm, 두께 3mm) / 화이트(30×30mm, 두께 3mm) / 컬러인쇄(30×30mm, 두께 3mm)
+  const sizeStr = widthMm && heightMm ? `${widthMm}×${heightMm}mm, 두께 ${thickness}` : `두께 ${thickness}`;
+  const colorLabel = isRaise ? "컬러인쇄" : colorType === "dark" ? "다크" : "화이트";
+  const productNameDisplay = `${colorLabel}(${sizeStr})`;
+
+  // ── 주의사항 ──
+  const cautions: string[] = [];
+  if (isRaise) {
+    cautions.push("본 제품은 인쇄면에 물이 묻으면 번지거나 지워질 수 있으니 주의하셔야되고, 특히 냉동,냉장 보관시 결로에 의해 번질 수 있으니 주의하셔야됩니다.");
+  }
+  cautions.push("27도 이하 건조한 곳에 보관하세요.");
+
+  // ── 품목 행 구성 ──
+  type LineItem = { name: string; qty: string; unit: number; supply: number; vat: number; total: number };
+  const lineItems: LineItem[] = [];
+
   if (moldCost > 0) {
     lineItems.push({
-      name: "성형틀 제작비", spec: widthMm && heightMm ? `${widthMm}×${heightMm}mm` : "",
-      qty: "식", unit: moldCost, supply: moldCost,
-      vat: Math.round(moldCost * 0.1), total: Math.round(moldCost * 1.1),
+      name: "성형틀 (최초 1회)", qty: "1",
+      unit: moldCost, supply: moldCost,
+      vat: Math.round(moldCost * 0.1),
+      total: moldCost + Math.round(moldCost * 0.1),
     });
   }
-  // 판비
   if (plateCost > 0) {
     lineItems.push({
-      name: "인쇄제판비", spec: "",
-      qty: "식", unit: plateCost, supply: plateCost,
-      vat: Math.round(plateCost * 0.1), total: Math.round(plateCost * 1.1),
+      name: "인쇄제판 (최초 1회)", qty: "1",
+      unit: plateCost, supply: plateCost,
+      vat: Math.round(plateCost * 0.1),
+      total: plateCost + Math.round(plateCost * 0.1),
     });
   }
-  // 전사지
-  if (sheetCost > 0) {
-    lineItems.push({
-      name: "전사지", spec: `${sheetCount}장`,
-      qty: "식", unit: sheetCost, supply: sheetCost,
-      vat: Math.round(sheetCost * 0.1), total: Math.round(sheetCost * 1.1),
-    });
-  }
-  // 기본작업비
-  if (workFee > 0) {
-    lineItems.push({
-      name: "기본작업비", spec: "",
-      qty: "식", unit: workFee, supply: workFee,
-      vat: Math.round(workFee * 0.1), total: Math.round(workFee * 1.1),
-    });
-  }
-  // 초콜릿 제품 본체
-  const productSpec = [
-    widthMm && heightMm ? `${widthMm}×${heightMm}mm` : "",
-    shape ?? "",
-    productType,
-  ].filter(Boolean).join(" / ");
+  // 전사지 항목 → 견적서에 숨김 (초콜릿 단가에 포함)
+  // workFee도 단가에 포함, 별도 표시 안 함
 
+  // 초콜릿 제작비
+  const chocoSupply = V * quantity;
+  const chocoVat = Math.round(chocoSupply * 0.1);
   lineItems.push({
-    name: "초콜릿 제작비",
-    spec: productSpec,
-    qty: fmt(quantity) + "개",
-    unit: V,
-    supply: V * quantity,
-    vat: Math.round(V * quantity * 0.1),
-    total: Math.round(V * quantity * 1.1),
+    name: productNameDisplay, qty: fmt(quantity) + "개",
+    unit: V, supply: chocoSupply,
+    vat: chocoVat, total: chocoSupply + chocoVat,
   });
 
-  // 합계
   const sumSupply = lineItems.reduce((a, r) => a + r.supply, 0);
   const sumVat    = lineItems.reduce((a, r) => a + r.vat, 0);
   const sumTotal  = lineItems.reduce((a, r) => a + r.total, 0);
 
-  // 빈 행 (최소 8행 채우기)
+  // 빈 행 (최소 8행)
   const emptyRows = Math.max(0, 8 - lineItems.length);
 
+  // ── 인쇄 ──
   function doPrint() {
     const content = printRef.current;
     if (!content) return;
-
     const iframe = document.createElement("iframe");
     iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
     document.body.appendChild(iframe);
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) return;
-
     doc.open();
     doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
-@page { size: A4 portrait; margin: 15mm 15mm 15mm 15mm; }
+@page { size: A4 portrait; margin: 15mm 15mm 12mm 15mm; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 9pt; color: #111; background: #fff; }
 table { border-collapse: collapse; width: 100%; }
-td, th { border: 1px solid #999; padding: 3px 5px; }
-.no-border td, .no-border th { border: none; }
-.title { text-align: center; font-size: 18pt; font-weight: bold; letter-spacing: 8px; margin: 8px 0 12px; }
-.logo-wrap { text-align: center; margin-bottom: 4px; }
-.logo-wrap img { height: 36px; }
-.sum-kor { font-size: 10pt; font-weight: bold; }
-.red { color: #c00; font-size: 8pt; }
-.footer { margin-top: 8px; font-size: 8pt; color: #333; }
-.footer p { margin: 2px 0; }
-.company-footer { text-align: center; font-size: 8pt; margin-top: 12px; color: #555; }
 </style>
-</head><body>${content.innerHTML}
-</body></html>`);
+</head><body>${content.innerHTML}</body></html>`);
     doc.close();
-
     setTimeout(() => {
       iframe.contentWindow?.focus();
       iframe.contentWindow?.print();
@@ -199,10 +173,8 @@ td, th { border: 1px solid #999; padding: 3px 5px; }
     }, 300);
   }
 
-  // td 스타일
-  const tdC = "border border-slate-400 px-1 py-0.5 text-center text-xs";
-  const tdL = "border border-slate-400 px-1 py-0.5 text-left text-xs";
-  const tdR = "border border-slate-400 px-1 py-0.5 text-right text-xs tabular-nums";
+  const cellBase: React.CSSProperties = { border: "1px solid #999", padding: "3px 5px", fontSize: 8.5 };
+  const cellHead: React.CSSProperties = { ...cellBase, background: "#f0f0f0", textAlign: "center", fontWeight: "bold" };
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/40">
@@ -221,9 +193,9 @@ td, th { border: 1px solid #999; padding: 3px 5px; }
         </div>
       </div>
 
-      {/* 미리보기 영역 */}
+      {/* 미리보기 */}
       <div className="flex-1 overflow-auto bg-slate-200 p-6">
-        <div className="mx-auto bg-white shadow-xl" style={{ width: "210mm", minHeight: "297mm", padding: "15mm" }}>
+        <div className="mx-auto bg-white shadow-xl" style={{ width: "210mm", minHeight: "297mm", padding: "15mm 15mm 12mm" }}>
           <div ref={printRef}>
 
             {/* 로고 */}
@@ -237,77 +209,52 @@ td, th { border: 1px solid #999; padding: 3px 5px; }
               견 적 서
             </div>
 
-            {/* 견적일 + 발신자 테이블 */}
+            {/* 견적일 + 발신자 */}
             <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 8 }}>
               <tbody>
                 <tr>
                   {/* 좌: 견적일, 업체명 */}
-                  <td style={{ border: "none", verticalAlign: "top", width: "45%", paddingRight: 8 }}>
-                    <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                      <tbody>
-                        <tr>
-                          <td style={{ border: "none", fontSize: 9, paddingBottom: 4 }}>
-                            견적일 : {formatDateKorean(quoteDate)}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "none", fontSize: 10, paddingBottom: 4 }}>
-                            업체명 : <strong>{customerName}</strong> &nbsp; 귀중
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: "none", fontSize: 9, color: "#555", paddingTop: 4 }}>
-                            아래와 같이 견적합니다.
-                          </td>
-                        </tr>
-                        {!isNew && (
-                          <tr>
-                            <td style={{ border: "none", fontSize: 8, color: "#c00", paddingTop: 4 }}>
-                              ※ 주문제작은 선결제 후 진행됩니다.
-                            </td>
-                          </tr>
-                        )}
-                        {isNew && (
-                          <tr>
-                            <td style={{ border: "none", fontSize: 8, color: "#c00", paddingTop: 4 }}>
-                              ※ 주문제작은 선결제 후 진행됩니다.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <td style={{ border: "none", verticalAlign: "top", width: "44%", paddingRight: 10 }}>
+                    <div style={{ fontSize: 9, marginBottom: 4 }}>견적일 : {formatDateKorean(quoteDate)}</div>
+                    <div style={{ fontSize: 10, marginBottom: 4 }}>
+                      업체명 : <strong>{customerName}</strong> &nbsp; 귀중
+                    </div>
+                    <div style={{ fontSize: 9, color: "#555", marginBottom: 4 }}>아래와 같이 견적합니다.</div>
+                    <div style={{ fontSize: 8, color: "#c00" }}>※ 주문제작은 선결제 후 진행됩니다.</div>
                   </td>
 
-                  {/* 우: 발신자 정보 */}
-                  <td style={{ border: "none", verticalAlign: "top", width: "55%" }}>
+                  {/* 우: 발신자 */}
+                  <td style={{ border: "none", verticalAlign: "top", width: "56%" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 8.5 }}>
                       <tbody>
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 56, padding: "2px 4px" }}>등록번호</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 52, padding: "2px 3px" }}>등록번호</td>
                           <td style={{ border: "1px solid #999", padding: "2px 6px" }} colSpan={3}>{OUR.business_no}</td>
                         </tr>
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 4px" }} rowSpan={4}>발<br/>신<br/>자</td>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 48, padding: "2px 4px" }}>상호</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 6px" }}>{OUR.nameShort}</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 6px", position: "relative" }}>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }} rowSpan={4}>
+                            발<br/>신<br/>자
+                          </td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 44, padding: "2px 3px" }}>상호</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px" }}>{OUR.nameShort}</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px", position: "relative", minWidth: 80 }}>
                             성명 {OUR.ceo}
                             <img src="/stamp.png" alt="" style={{ position: "absolute", right: 2, top: -4, height: 28, opacity: 0.9 }}
                               onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                           </td>
                         </tr>
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 4px" }}>사업장주소</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 6px" }} colSpan={2}>{OUR.address}</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>사업장주소</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px" }} colSpan={2}>{OUR.address}</td>
                         </tr>
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 4px" }}>업 태</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 6px" }}>{OUR.bizType}</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 6px" }}>종목 {OUR.bizItem}</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>업 태</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px" }}>{OUR.bizType}</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px" }}>종목 {OUR.bizItem}</td>
                         </tr>
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 4px" }}>전화번호</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 6px" }} colSpan={2}>{OUR.phone}</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>전화번호</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px" }} colSpan={2}>{OUR.phone}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -320,102 +267,94 @@ td, th { border: 1px solid #999; padding: 3px 5px; }
             <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 6 }}>
               <tbody>
                 <tr>
-                  <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 72, fontSize: 9, padding: "3px 4px" }}>합계금액</td>
+                  <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 68, fontSize: 9, padding: "3px 4px" }}>합계금액</td>
                   <td style={{ border: "1px solid #999", padding: "3px 8px", fontSize: 10, fontWeight: "bold" }}>
                     금 {numberToKorean(sumTotal)}원 정
                   </td>
-                  <td style={{ border: "1px solid #999", textAlign: "right", padding: "3px 8px", fontSize: 10, fontWeight: "bold", width: 120 }}>
+                  <td style={{ border: "1px solid #999", textAlign: "right", padding: "3px 8px", fontSize: 10, fontWeight: "bold", width: 110 }}>
                     ( ₩ {fmt(sumTotal)} )
                   </td>
-                  <td style={{ border: "1px solid #999", textAlign: "center", width: 80, fontSize: 8.5, color: "#555", padding: "3px 4px" }}>
+                  <td style={{ border: "1px solid #999", textAlign: "center", width: 72, fontSize: 8, color: "#555", padding: "3px 4px" }}>
                     부가세 포함
                   </td>
                 </tr>
               </tbody>
             </table>
 
-            {/* 품목 테이블 */}
+            {/* 품목 테이블 — 규격 컬럼 없음 */}
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 8.5, marginBottom: 6 }}>
               <thead>
                 <tr style={{ background: "#f0f0f0" }}>
-                  <th style={{ border: "1px solid #999", textAlign: "center", padding: "3px", width: "30%" }}>품 명</th>
-                  <th style={{ border: "1px solid #999", textAlign: "center", padding: "3px", width: "18%" }}>규 격</th>
-                  <th style={{ border: "1px solid #999", textAlign: "center", padding: "3px", width: "8%" }}>수 량</th>
-                  <th style={{ border: "1px solid #999", textAlign: "center", padding: "3px", width: "11%" }}>단 가</th>
-                  <th style={{ border: "1px solid #999", textAlign: "center", padding: "3px", width: "13%" }}>공급가</th>
-                  <th style={{ border: "1px solid #999", textAlign: "center", padding: "3px", width: "9%" }}>부가세</th>
-                  <th style={{ border: "1px solid #999", textAlign: "center", padding: "3px", width: "11%" }}>합 계</th>
+                  <th style={{ ...cellHead, width: "42%", textAlign: "left" }}>품 명</th>
+                  <th style={{ ...cellHead, width: "10%" }}>수 량</th>
+                  <th style={{ ...cellHead, width: "13%" }}>단 가</th>
+                  <th style={{ ...cellHead, width: "14%" }}>공급가</th>
+                  <th style={{ ...cellHead, width: "10%" }}>부가세</th>
+                  <th style={{ ...cellHead, width: "11%" }}>합 계</th>
                 </tr>
               </thead>
               <tbody>
                 {lineItems.map((r, i) => (
                   <tr key={i}>
-                    <td style={{ border: "1px solid #999", padding: "3px 5px" }}>{r.name}</td>
-                    <td style={{ border: "1px solid #999", padding: "3px 5px", textAlign: "center" }}>{r.spec}</td>
-                    <td style={{ border: "1px solid #999", padding: "3px 5px", textAlign: "center" }}>{r.qty}</td>
-                    <td style={{ border: "1px solid #999", padding: "3px 5px", textAlign: "right" }}>{fmt(r.unit)}</td>
-                    <td style={{ border: "1px solid #999", padding: "3px 5px", textAlign: "right" }}>{fmt(r.supply)}</td>
-                    <td style={{ border: "1px solid #999", padding: "3px 5px", textAlign: "right" }}>{fmt(r.vat)}</td>
-                    <td style={{ border: "1px solid #999", padding: "3px 5px", textAlign: "right" }}>{fmt(r.total)}</td>
+                    <td style={{ ...cellBase }}>{r.name}</td>
+                    <td style={{ ...cellBase, textAlign: "center" }}>{r.qty}</td>
+                    <td style={{ ...cellBase, textAlign: "right" }}>{fmt(r.unit)}</td>
+                    <td style={{ ...cellBase, textAlign: "right" }}>{fmt(r.supply)}</td>
+                    <td style={{ ...cellBase, textAlign: "right" }}>{fmt(r.vat)}</td>
+                    <td style={{ ...cellBase, textAlign: "right" }}>{fmt(r.total)}</td>
                   </tr>
                 ))}
+
                 {/* 빈 행 */}
                 {Array.from({ length: emptyRows }).map((_, i) => (
-                  <tr key={`empty-${i}`} style={{ height: 20 }}>
-                    <td style={{ border: "1px solid #999" }} />
-                    <td style={{ border: "1px solid #999" }} />
-                    <td style={{ border: "1px solid #999" }} />
-                    <td style={{ border: "1px solid #999" }} />
-                    <td style={{ border: "1px solid #999" }} />
-                    <td style={{ border: "1px solid #999" }} />
-                    <td style={{ border: "1px solid #999" }} />
+                  <tr key={`e-${i}`} style={{ height: 20 }}>
+                    <td style={{ ...cellBase }} /><td style={{ ...cellBase }} />
+                    <td style={{ ...cellBase }} /><td style={{ ...cellBase }} />
+                    <td style={{ ...cellBase }} /><td style={{ ...cellBase }} />
                   </tr>
                 ))}
 
-                {/* 식품유형 / 주의사항 행 */}
+                {/* 식품유형 */}
                 <tr>
-                  <td style={{ border: "1px solid #999", padding: "3px 5px", fontSize: 8, color: "#333" }} colSpan={7}>
-                    *식품유형-{foodType}
+                  <td style={{ ...cellBase, color: "#333" }} colSpan={6}>
+                    *식품유형 - {foodType}
                   </td>
                 </tr>
-                <tr>
-                  <td style={{ border: "1px solid #999", padding: "3px 5px", fontSize: 8, color: "#555" }} colSpan={7}>
-                    *본 제품은 인쇄면에 물이 묻으면 번지거나 지워질 수 있으니 주의하세야되고,
-                  </td>
-                </tr>
-                <tr>
-                  <td style={{ border: "1px solid #999", padding: "3px 5px", fontSize: 8, color: "#555" }} colSpan={7}>
-                    *특히 냉동,냉장 보관시 결로에 의한 번짐 주의하세요.
-                  </td>
-                </tr>
+
+                {/* 주의사항 */}
+                {cautions.map((c, i) => (
+                  <tr key={`c-${i}`}>
+                    <td style={{ ...cellBase, color: "#555" }} colSpan={6}>*{c}</td>
+                  </tr>
+                ))}
+
+                {/* 기성 성형틀 사용 시 */}
                 {useStockMold && (
                   <tr>
-                    <td style={{ border: "1px solid #999", padding: "3px 5px", fontSize: 8, color: "#555" }} colSpan={7}>
-                      *기성 성형틀 사용
-                    </td>
-                  </tr>
-                )}
-                {designChanged && (
-                  <tr>
-                    <td style={{ border: "1px solid #999", padding: "3px 5px", fontSize: 8, color: "#555" }} colSpan={7}>
-                      *디자인 변경 재주문 (인쇄제판비 발생)
-                    </td>
-                  </tr>
-                )}
-                {memo && (
-                  <tr>
-                    <td style={{ border: "1px solid #999", padding: "3px 5px", fontSize: 8, color: "#555" }} colSpan={7}>
-                      *{memo}
-                    </td>
+                    <td style={{ ...cellBase, color: "#555" }} colSpan={6}>*기성 성형틀 사용</td>
                   </tr>
                 )}
 
-                {/* 소계 행 */}
+                {/* 디자인 변경 */}
+                {designChanged && (
+                  <tr>
+                    <td style={{ ...cellBase, color: "#555" }} colSpan={6}>*디자인 변경 재주문 (인쇄제판 재발생)</td>
+                  </tr>
+                )}
+
+                {/* 메모 */}
+                {memo && (
+                  <tr>
+                    <td style={{ ...cellBase, color: "#555" }} colSpan={6}>*{memo}</td>
+                  </tr>
+                )}
+
+                {/* 소계 */}
                 <tr style={{ background: "#f5f5f5", fontWeight: "bold" }}>
-                  <td style={{ border: "1px solid #999", textAlign: "center", padding: "3px 5px", fontSize: 9 }} colSpan={4}>소 계</td>
-                  <td style={{ border: "1px solid #999", textAlign: "right", padding: "3px 5px" }}>{fmt(sumSupply)}</td>
-                  <td style={{ border: "1px solid #999", textAlign: "right", padding: "3px 5px" }}>{fmt(sumVat)}</td>
-                  <td style={{ border: "1px solid #999", textAlign: "right", padding: "3px 5px" }}>{fmt(sumTotal)}</td>
+                  <td style={{ ...cellBase, textAlign: "center" }} colSpan={3}>소 계</td>
+                  <td style={{ ...cellBase, textAlign: "right" }}>{fmt(sumSupply)}</td>
+                  <td style={{ ...cellBase, textAlign: "right" }}>{fmt(sumVat)}</td>
+                  <td style={{ ...cellBase, textAlign: "right" }}>{fmt(sumTotal)}</td>
                 </tr>
               </tbody>
             </table>
@@ -435,7 +374,7 @@ td, th { border: 1px solid #999; padding: 3px 5px; }
             </div>
 
             {/* 푸터 */}
-            <div style={{ textAlign: "center", fontSize: 8, color: "#555", marginTop: 16, borderTop: "1px solid #ddd", paddingTop: 8 }}>
+            <div style={{ textAlign: "center", fontSize: 8, color: "#555", marginTop: 14, borderTop: "1px solid #ddd", paddingTop: 8 }}>
               {OUR.name}(카카오플러스) &nbsp; {OUR.website} &nbsp; 전화 {OUR.phone}
             </div>
 

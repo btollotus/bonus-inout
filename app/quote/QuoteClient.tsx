@@ -115,6 +115,7 @@ export default function QuoteClient() {
   // 견적 입력 폼
   const [requestType, setRequestType] = useState<"product" | "sheet">("product");
   const [productType, setProductType] = useState("전사3mm");
+  const [colorType, setColorType] = useState<"dark" | "white">("dark"); // 다크/화이트
   const [widthMm, setWidthMm] = useState("");
   const [heightMm, setHeightMm] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -326,11 +327,21 @@ export default function QuoteClient() {
   const isManual = productType === "입체초콜릿";
 
   // 식품유형 자동 판별
-  function getFoodType(pt: string): string {
+  function getFoodType(pt: string, ct: "dark" | "white"): string {
     if (pt.startsWith("레이즈")) return "당류가공품";
-    if (pt.startsWith("전사") || pt.startsWith("도눔") || pt.startsWith("롤리팝")) return "준초콜릿 / 당류가공품";
-    return "준초콜릿";
+    return ct === "dark" ? "준초콜릿" : "당류가공품";
   }
+
+  // 두께 추출
+  function getThickness(pt: string): string {
+    if (pt.includes("2mm")) return "2mm";
+    if (pt.includes("3mm")) return "3mm";
+    if (pt.includes("5mm")) return "5mm";
+    return "";
+  }
+
+  // 레이즈 여부
+  const isRaise = productType.startsWith("레이즈");
 
   // 견적서 인쇄 모달
   const [printOpen, setPrintOpen] = useState(false);
@@ -440,10 +451,39 @@ export default function QuoteClient() {
                 {/* 제품 선택 */}
                 <div className="mb-4">
                   <div className="mb-1 text-xs font-semibold text-slate-600">제품 종류</div>
-                  <select className={inp} value={productType} onChange={e => { setProductType(e.target.value); setCalcResult(null); }}>
+                  <select className={inp} value={productType} onChange={e => {
+                    const pt = e.target.value;
+                    setProductType(pt);
+                    setCalcResult(null);
+                    // 레이즈는 항상 화이트
+                    if (pt.startsWith("레이즈")) setColorType("white");
+                  }}>
                     {PRODUCT_TYPES.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
                   </select>
                 </div>
+
+                {/* 다크/화이트 선택 (레이즈는 자동 화이트) */}
+                {!isManual && (
+                  <div className="mb-4">
+                    <div className="mb-1 text-xs font-semibold text-slate-600">색상</div>
+                    <div className="flex gap-2">
+                      <button type="button"
+                        disabled={isRaise}
+                        className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${colorType === "dark" ? "border-slate-700 bg-slate-800 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"} ${isRaise ? "opacity-40 cursor-not-allowed" : ""}`}
+                        onClick={() => setColorType("dark")}>
+                        🍫 다크 (준초콜릿)
+                      </button>
+                      <button type="button"
+                        className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${colorType === "white" ? "border-amber-400 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                        onClick={() => setColorType("white")}>
+                        🤍 화이트 (당류가공품)
+                      </button>
+                    </div>
+                    {isRaise && (
+                      <div className="mt-1 text-xs text-slate-400">레이즈(컬러인쇄)는 화이트 초콜릿 전용입니다.</div>
+                    )}
+                  </div>
+                )}
 
                 {isManual && (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
@@ -877,25 +917,22 @@ export default function QuoteClient() {
             customerName: activeCustomerName,
             quoteDate: new Date().toISOString().slice(0, 10),
             productType: PRODUCT_TYPES.find(p => p.key === productType)?.label ?? productType,
+            colorType,
+            isRaise,
             widthMm: parseFloat(widthMm) || null,
             heightMm: parseFloat(heightMm) || null,
+            thickness: getThickness(productType),
             quantity: parseInt(quantity) || 0,
             isNew,
             designChanged,
             useStockMold,
-            shape,
             memo: memo || null,
-            unitPrice: calcResult.unitPrice,
             moldCost: calcResult.moldCost,
             plateCost: calcResult.plateCost,
-            sheetCount: calcResult.sheetCount,
             sheetCost: calcResult.sheetCost,
             workFee: calcResult.workFee,
-            totalActual: calcResult.totalActual,
-            totalWithVat: calcResult.totalWithVat,
             V: calcResult.V,
             V_stock: calcResult.V_stock,
-            foodType: getFoodType(productType),
           }}
         />
       )}
