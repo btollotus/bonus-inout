@@ -9,13 +9,14 @@ const nav = [
   { href: "/scan",               label: "스캔",          allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/products",           label: "품목/바코드",    allowedRoles: ["ADMIN"]             },
   { href: "/report",             label: "재고대장",       allowedRoles: ["ADMIN", "SUBADMIN"] },
+  { href: "/quote",              label: "견적서",         allowedRoles: ["ADMIN"]             }, // ← 신규 (ADMIN only)
   { href: "/trade",              label: "거래내역(통합)", allowedRoles: ["ADMIN"]             },
-{ href: "/production",         label: "작업지시서",     allowedRoles: ["ADMIN", "SUBADMIN"] },
-{ href: "/tax",                label: "세무사",         allowedRoles: ["ADMIN"]             },
+  { href: "/production",         label: "작업지시서",     allowedRoles: ["ADMIN", "SUBADMIN"] },
+  { href: "/tax",                label: "세무사",         allowedRoles: ["ADMIN"]             },
   { href: "/tax/spec",           label: "거래명세서",     allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/tax/statement",      label: "거래원장",       allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/calendar",           label: "출고 캘린더",    allowedRoles: ["ADMIN", "SUBADMIN", "USER"] },
-  { href: "/leave",              label: "연차신청",       allowedRoles: ["ADMIN", "SUBADMIN", "USER"]     },
+  { href: "/leave",              label: "연차신청",       allowedRoles: ["ADMIN", "SUBADMIN", "USER"] },
   { href: "/admin/employees",    label: "인사관리",       allowedRoles: ["ADMIN"]             },
   { href: "/admin/payroll",      label: "급여관리",       allowedRoles: ["ADMIN"]             },
 ];
@@ -24,7 +25,8 @@ function canSee(userRole: string, allowedRoles: string[]) {
   return allowedRoles.includes(userRole);
 }
 
-const HR_MENUS = ["/leave", "/admin/employees", "/admin/payroll"];
+const HR_MENUS    = ["/leave", "/admin/employees", "/admin/payroll"];
+const QUOTE_MENUS = ["/quote"];
 
 const linkBase: React.CSSProperties = {
   padding: "5px 8px",
@@ -36,7 +38,6 @@ const linkBase: React.CSSProperties = {
   fontSize: 12,
   whiteSpace: "nowrap",
 };
-
 
 export default function TopNav({ role, email }: { role?: string; email?: string }) {
   const pathname = usePathname();
@@ -101,8 +102,9 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
             {nav
               .filter((x) => canSee(userRole, x.allowedRoles))
               .map((x) => {
-                const active = pathname === x.href || pathname.startsWith(x.href + "/");
-                const isHR = HR_MENUS.includes(x.href);
+                const active  = pathname === x.href || pathname.startsWith(x.href + "/");
+                const isHR    = HR_MENUS.includes(x.href);
+                const isQuote = QUOTE_MENUS.includes(x.href);
 
                 return (
                   <Link
@@ -110,8 +112,20 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
                     href={x.href}
                     style={{
                       ...linkBase,
-                      borderColor: active ? "rgba(255,255,255,0.40)" : isHR ? "rgba(96,165,250,0.40)" : "rgba(255,255,255,0.16)",
-                      backgroundColor: active ? "rgba(255,255,255,0.16)" : isHR ? "rgba(96,165,250,0.10)" : "rgba(255,255,255,0.04)",
+                      borderColor: active
+                        ? "rgba(255,255,255,0.40)"
+                        : isQuote
+                        ? "rgba(251,191,36,0.55)"   // 견적서: 노란색 테두리
+                        : isHR
+                        ? "rgba(96,165,250,0.40)"
+                        : "rgba(255,255,255,0.16)",
+                      backgroundColor: active
+                        ? "rgba(255,255,255,0.16)"
+                        : isQuote
+                        ? "rgba(251,191,36,0.12)"   // 견적서: 노란색 배경
+                        : isHR
+                        ? "rgba(96,165,250,0.10)"
+                        : "rgba(255,255,255,0.04)",
                       color: "white",
                     }}
                   >
