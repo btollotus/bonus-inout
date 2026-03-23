@@ -39,6 +39,7 @@ const OUR = {
   bizType: "제조업",
   bizItem: "식품제조가공업",
   phone: "02-356-3380",
+  kakao: "cacaoplus",
   email: "cacaoplus@naver.com",
   bank: "국민은행 024801-04-536001(주식회사 보누스메이트)",
   website: "www.bonusmate.co.kr",
@@ -234,17 +235,17 @@ table { border-collapse: collapse; width: 100%; }
                           <td style={{ border: "1px solid #999", padding: "2px 6px" }} colSpan={3}>{OUR.business_no}</td>
                         </tr>
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }} rowSpan={4}>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }} rowSpan={6}>
                             발<br/>신<br/>자
                           </td>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 44, padding: "2px 3px" }}>상호</td>
                           <td style={{ border: "1px solid #999", padding: "2px 5px" }}>{OUR.nameShort}</td>
-                          {/* 성명 | 조대성 — 도장을 조대성 바로 옆에 */}
+                          {/* 성명 | 조대성 — 도장 글자 바로 옆 */}
                           <td style={{ border: "1px solid #999", padding: "2px 5px 2px 3px", minWidth: 80, whiteSpace: "nowrap" }}>
                             <span style={{ display: "inline-block", paddingRight: 4, borderRight: "1px solid #bbb", marginRight: 4 }}>성명</span>
-                            <span style={{ position: "relative", display: "inline-block", paddingRight: 28 }}>
+                            <span style={{ position: "relative", display: "inline-block" }}>
                               {OUR.ceo}
-                              <img src="/stamp.png" alt="" style={{ position: "absolute", left: "100%", top: -4, marginLeft: -4, height: 26, opacity: 0.9 }}
+                              <img src="/stamp.png" alt="" style={{ position: "absolute", left: "calc(100% - 2px)", top: -5, height: 26, opacity: 0.9 }}
                                 onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                             </span>
                           </td>
@@ -265,6 +266,16 @@ table { border-collapse: collapse; width: 100%; }
                         <tr>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>전화번호</td>
                           <td style={{ border: "1px solid #999", padding: "2px 5px" }} colSpan={2}>{OUR.phone}</td>
+                        </tr>
+                        <tr>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>카카오톡</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px" }} colSpan={2}>
+                            {OUR.kakao} &nbsp;|&nbsp; ✉ {OUR.email}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>입금계좌</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px", fontWeight: "bold" }} colSpan={2}>{OUR.bank}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -370,8 +381,6 @@ table { border-collapse: collapse; width: 100%; }
             <div style={{ fontSize: 8.5, marginTop: 8 }}>
               <div style={{ fontWeight: "bold", marginBottom: 4 }}>[비 고]</div>
               <p style={{ margin: "2px 0" }}>* 세금계산서 발행시 사업자등록증을 이메일로 보내주세요</p>
-              <p style={{ margin: "2px 0" }}>* e-mail : {OUR.email}</p>
-              <p style={{ margin: "2px 0" }}>* 계좌 : {OUR.bank}</p>
               <p style={{ margin: "2px 0", color: "#c00", fontWeight: "bold" }}>* 주문제작은 선결제입니다.</p>
               {V_stock && (
                 <p style={{ margin: "2px 0", color: "#555" }}>
