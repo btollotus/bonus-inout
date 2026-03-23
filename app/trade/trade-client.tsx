@@ -2080,7 +2080,7 @@ if (woSubNameVal) {
                       </div>
                       <div><div className="mb-1 text-xs text-slate-600">포장방법</div>
                         <select className={inp} value={orderWoPackagingType} onChange={(e) => setOrderWoPackagingType(e.target.value)}>
-                          {["", "트레이-정사각20구", "트레이-직사각20구", "벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
+                          {["", "트레이-정사각20구", "트레이-직사각20구", "트레이-35구", "벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
                         </select>
                       </div>
                       <div><div className="mb-1 text-xs text-slate-600">성형틀 장당 생산수</div><input className={inpR} inputMode="numeric" value={orderWoMoldPerSheet} onChange={(e) => setOrderWoMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} /></div>
