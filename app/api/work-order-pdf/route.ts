@@ -70,10 +70,10 @@ function generateWorkOrderHTML(wo: any): string {
   const isReorder = wo.is_reorder ?? false;
 
   const statusRows = [
-    { label: "전사인쇄", checked: wo.status_transfer },
-    { label: "인쇄검수", checked: wo.status_print_check },
-    { label: "생산완료", checked: wo.status_production },
-    { label: "입력완료", checked: wo.status_input },
+    { label: "전사인쇄", checked: wo.status_transfer, assignee: wo.assignee_transfer ?? null },
+    { label: "인쇄검수", checked: wo.status_print_check, assignee: wo.assignee_print_check ?? null },
+    { label: "생산완료", checked: wo.status_production, assignee: wo.assignee_production ?? null },
+    { label: "입력완료", checked: wo.status_input, assignee: wo.assignee_input ?? null },
   ];
 
   const itemsHTML = items.map((item: any, idx: number) => {
@@ -202,10 +202,11 @@ function generateWorkOrderHTML(wo: any): string {
   <div style="font-weight:bold;font-size:9pt;margin-bottom:3px;margin-top:6px;border-left:3px solid #2563eb;padding-left:5px;">진행상태 확인</div>
   <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
     <tbody><tr>
-      ${statusRows.map(({ label, checked }) => `
-        <td style="border:1px solid #cbd5e1;padding:3px 6px;text-align:center;width:25%;">
-          <span style="font-size:8pt;color:#555;">${label} </span><span style="font-size:10pt;">${checked ? "✅" : "☐"}</span>
-        </td>`).join("")}
+    ${statusRows.map(({ label, checked, assignee }) => `
+    <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:center;width:25%;">
+      <div style="font-size:8pt;color:#555;">${label} <span style="font-size:10pt;">${checked ? "✅" : "☐"}</span></div>
+      ${assignee ? `<div style="font-size:8pt;font-weight:bold;color:#1e3a5f;margin-top:2px;">👤 ${assignee}</div>` : ""}
+    </td>`).join("")}
     </tr></tbody>
   </table>
 
