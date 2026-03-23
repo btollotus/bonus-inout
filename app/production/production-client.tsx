@@ -69,6 +69,11 @@ type NewWoNotification = {
   work_order_no: string; order_date: string; created_at: string;
 };
 
+// ★ 추가
+type WoReadInfo = {
+  read_at: string;
+};
+
 // ─────────────────────── Helpers ───────────────────────
 const supabase = createClient();
 
@@ -246,6 +251,33 @@ export default function ProductionClient() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [flashKey, setFlashKey] = useState<string | null>(null);
   const [stepSaving, setStepSaving] = useState<string | null>(null);
+
+  const [readMap, setReadMap] = useState<Record<string, WoReadInfo>>({});
+  const currentUserIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      currentUserIdRef.current = user?.id ?? null;
+    });
+  }, []);
+
+  const loadReadMap = useCallback(async (woIds: string[]) => {
+    if (woIds.length === 0) return;
+    const userId = currentUserIdRef.current;
+    if (!userId) return;
+    const { data } = await supabase
+      .from("work_order_reads")
+      .select("work_order_id, read_at")
+      .eq("user_id", userId)
+      .in("work_order_id", woIds);
+    if (!data) return;
+    const map: Record<string, WoReadInfo> = {};
+    for (const row of data) {
+      map[row.work_order_id] = { read_at: row.read_at };
+    }
+    setReadMap(map);
+  }, []);
+
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
 
   const [newWoNotifications, setNewWoNotifications] = useState<NewWoNotification[]>([]);
@@ -390,6 +422,9 @@ useEffect(() => {
       if (error) return setMsg(error.message);
       const list = (data ?? []) as WorkOrderRow[];
       setWoList(list);
+      // ★ 추가
+const ids = list.map((w) => w.id);
+await loadReadMap(ids);
       if (selectedWo) {
         const refreshed = list.find((w) => w.id === selectedWo.id);
         if (refreshed) applySelection(refreshed, false);
@@ -397,7 +432,7 @@ useEffect(() => {
     } finally {
       setLoading(false);
     }
-  }, [filterStatus, filterDateFrom, filterDateTo]); // eslint-disable-line
+  }, [filterStatus, filterDateFrom, filterDateTo, loadReadMap]); // eslint-disable-line
 
   useEffect(() => { loadWoList(); }, [loadWoList]);
   useEffect(() => {
@@ -459,6 +494,20 @@ if (woSubNameVal) {
     setLastUpdatedAt(null);
     setFlashKey(null);
     setSignedImageUrls([]);
+    // ★ 추가: 카드 클릭 시 읽음 기록
+const userId = currentUserIdRef.current;
+if (userId && !readMap[wo.id]) {
+  const now = new Date().toISOString();
+  supabase
+    .from("work_order_reads")
+    .upsert(
+      { work_order_id: wo.id, user_id: userId, read_at: now },
+      { onConflict: "work_order_id,user_id" }
+    )
+    .then(() => {
+      setReadMap((prev) => ({ ...prev, [wo.id]: { read_at: now } }));
+    });
+}
     (async () => {
       const rawPaths = wo.images ?? [];
       if (rawPaths.length === 0) return;
@@ -763,7 +812,10 @@ try {
       setMsg("오류: " + (e?.message ?? e));
     }
   }
-
+// ★ 추가
+const unreadCount = useMemo(() => {
+  return filteredList.filter((wo) => wo.status === "생산중" && !readMap[wo.id]).length;
+}, [filteredList, readMap]);
   // ── 진행상태 진행률 계산 ──
   const doneCount = woChecks
     ? PROGRESS_STEPS.filter((s) => (woChecks[s.assigneeKey] ?? "") !== "").length
@@ -839,6 +891,15 @@ try {
 
           {/* ── LEFT: 목록 ── */}
           <div className={`${card} flex flex-col p-4`} style={{ maxHeight: "calc(100vh - 140px)", overflowY: "auto" }}>
+            {/* ★ 추가: 미확인 카운트 배너 */}
+{unreadCount > 0 && (
+  <div className="mb-3 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
+    <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+    <span className="text-xs font-semibold text-red-700">
+      미확인 작업지시서 {unreadCount}건
+    </span>
+  </div>
+)}
             <div className="mb-3 text-base font-semibold">작업지시서 목록</div>
 
             {/* 필터 */}
@@ -884,10 +945,14 @@ try {
                   return (
                     <div key={wo.id} className="relative group">
                       <button
-                        className={`w-full rounded-2xl border p-3 text-left transition-all ${isSelected ? "border-blue-400 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"}`}
+                      className={`w-full rounded-2xl border p-3 text-left transition-all overflow-hidden ${isSelected ? "border-blue-400 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"}`}
                         onClick={() => applySelection(wo)}
                       >
+                        {/* ★ 왼쪽 색상 바 */}
+                        <span className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl ${wo.status === "생산중" && !readMap[wo.id] ? "bg-red-400" : "bg-green-300"}`} />
                         <div className="flex items-start justify-between gap-2">
+
+
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="font-semibold text-sm truncate">
@@ -908,6 +973,13 @@ try {
                                 })()}
                               </span>
                               {wo.sub_name ? <span className="text-xs text-slate-500">· {wo.sub_name}</span> : null}
+                              {/* ★ NEW 뱃지 */}
+                              {wo.status === "생산중" && !readMap[wo.id] && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-red-100 border border-red-200 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                                  NEW
+                                </span>
+                              )}
                             </div>
                             <div className="mt-0.5 text-xs text-slate-600 font-medium truncate">{wo.product_name}</div>
                             <div className="mt-1 flex flex-wrap gap-1">
@@ -919,8 +991,14 @@ try {
                               주문일 {wo.order_date}
                               {totalOrder > 0 ? ` · ${fmt(totalOrder)}개` : ""}
                               {allItemsDone ? " · ✅생산완료" : ""}
+                              {/* ★ 확인 시간 */}
+                              {readMap[wo.id] && (
+                                <span className="ml-1 text-green-500">
+                                  · 확인 {new Date(readMap[wo.id].read_at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              )}
                             </div>
-                          </div>
+                            </div>
                           <div className="shrink-0 flex flex-col items-end gap-1.5">
                             <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusCls}`}>{wo.status}</span>
                           </div>
@@ -1106,8 +1184,10 @@ try {
                         (s) => s.assigneeKey !== step.assigneeKey && (woChecks[s.assigneeKey] ?? "") !== ""
                       );
                       const isSkipped = !isDone && othersDone;
+
                       const isSaving = stepSaving === step.assigneeKey;
                       const isFlashing = flashKey === step.assigneeKey;
+
                       const cardCls = isDone ? step.cardDone : isSkipped ? step.cardSkip : step.cardEmpty;
 
                       return (
