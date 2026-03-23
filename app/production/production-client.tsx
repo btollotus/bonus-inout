@@ -1389,8 +1389,8 @@ const unreadCount = useMemo(() => {
 
       {/* 인쇄 모달 */}
       {printOpen && selectedWo ? (
-        <PrintModal wo={selectedWo} prodInputs={prodInputs} onClose={() => setPrintOpen(false)} employees={employees} />
-      ) : null}
+  <PrintModal wo={{ ...selectedWo, ...(woChecks ?? {}) }} prodInputs={prodInputs} onClose={() => setPrintOpen(false)} employees={employees} />
+) : null}
     </div>
   );
 }
