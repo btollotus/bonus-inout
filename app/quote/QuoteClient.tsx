@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import QuotePrintModal from "./QuotePrintModal";
 
 // ─────────────────────── Types ───────────────────────
 type Tab = "input" | "list" | "sheet";
@@ -324,6 +325,16 @@ export default function QuoteClient() {
   const isFixed = productType.startsWith("도눔1000") && !productType.includes("별도");
   const isManual = productType === "입체초콜릿";
 
+  // 식품유형 자동 판별
+  function getFoodType(pt: string): string {
+    if (pt.startsWith("레이즈")) return "당류가공품";
+    if (pt.startsWith("전사") || pt.startsWith("도눔") || pt.startsWith("롤리팝")) return "준초콜릿 / 당류가공품";
+    return "준초콜릿";
+  }
+
+  // 견적서 인쇄 모달
+  const [printOpen, setPrintOpen] = useState(false);
+
   return (
     <div className="bg-slate-50 text-slate-900 min-h-screen">
       <div className="mx-auto w-full max-w-[1400px] px-4 py-6">
@@ -583,6 +594,10 @@ export default function QuoteClient() {
 
                   <button className={`${btnOn} mt-3 w-full`} onClick={handleSave}>
                     💾 견적 저장
+                  </button>
+                  <button className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    onClick={() => setPrintOpen(true)}>
+                    🖨️ 견적서 출력
                   </button>
                 </div>
               )}
@@ -853,6 +868,37 @@ export default function QuoteClient() {
           </div>
         )}
       </div>
+
+      {/* 견적서 인쇄 모달 */}
+      {printOpen && calcResult && (
+        <QuotePrintModal
+          onClose={() => setPrintOpen(false)}
+          quoteData={{
+            customerName: activeCustomerName,
+            quoteDate: new Date().toISOString().slice(0, 10),
+            productType: PRODUCT_TYPES.find(p => p.key === productType)?.label ?? productType,
+            widthMm: parseFloat(widthMm) || null,
+            heightMm: parseFloat(heightMm) || null,
+            quantity: parseInt(quantity) || 0,
+            isNew,
+            designChanged,
+            useStockMold,
+            shape,
+            memo: memo || null,
+            unitPrice: calcResult.unitPrice,
+            moldCost: calcResult.moldCost,
+            plateCost: calcResult.plateCost,
+            sheetCount: calcResult.sheetCount,
+            sheetCost: calcResult.sheetCost,
+            workFee: calcResult.workFee,
+            totalActual: calcResult.totalActual,
+            totalWithVat: calcResult.totalWithVat,
+            V: calcResult.V,
+            V_stock: calcResult.V_stock,
+            foodType: getFoodType(productType),
+          }}
+        />
+      )}
     </div>
   );
 }
