@@ -96,10 +96,20 @@ export default function QuoteClient() {
   const [tab, setTab] = useState<Tab>("input");
   const [msg, setMsg] = useState<string | null>(null);
 
-  // 거래처
+  // 거래처 — 직접입력 or 기존 거래처 선택
+  const [partnerMode, setPartnerMode] = useState<"direct" | "select">("direct");
+  const [customerName, setCustomerName] = useState("");        // 직접 입력
   const [partners, setPartners] = useState<PartnerRow[]>([]);
   const [partnerFilter, setPartnerFilter] = useState("");
   const [selectedPartner, setSelectedPartner] = useState<PartnerRow | null>(null);
+
+  // 현재 유효한 업체명 (직접입력 or 선택된 거래처)
+  const activeCustomerName = partnerMode === "direct"
+    ? customerName.trim()
+    : selectedPartner?.name ?? "";
+  const activeCustomerId = partnerMode === "select"
+    ? selectedPartner?.id ?? null
+    : null;
 
   // 견적 입력 폼
   const [requestType, setRequestType] = useState<"product" | "sheet">("product");
@@ -179,8 +189,9 @@ export default function QuoteClient() {
 
   // ─── 계산 (API 호출) ───
   async function handleCalc() {
-    if (!selectedPartner) return setMsg("거래처를 먼저 선택하세요.");
-    if (!widthMm || !heightMm || !quantity) return setMsg("크기와 수량을 입력하세요.");
+    if (!activeCustomerName) return setMsg("업체명을 입력하거나 거래처를 선택하세요.");
+    if (!isFixed && (!widthMm || !heightMm)) return setMsg("크기를 입력하세요.");
+    if (!quantity) return setMsg("수량을 입력하세요.");
     setCalcLoading(true); setCalcResult(null);
     try {
       const res = await fetch("/api/quote/calculate", {
@@ -216,12 +227,12 @@ export default function QuoteClient() {
 
   // ─── 견적 저장 ───
   async function handleSave() {
-    if (!selectedPartner) return setMsg("거래처를 먼저 선택하세요.");
+    if (!activeCustomerName) return setMsg("업체명을 입력하거나 거래처를 선택하세요.");
     if (!calcResult) return setMsg("먼저 계산을 실행하세요.");
     setMsg(null);
     const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
-      customer_id: selectedPartner.id,
-      customer_name: selectedPartner.name,
+      customer_id: activeCustomerId,
+      customer_name: activeCustomerName,
       request_type: "product",
       product_type: productType,
       width_mm: parseFloat(widthMm) || null,
@@ -259,11 +270,11 @@ export default function QuoteClient() {
 
   // ─── 전사지 견적 저장 ───
   async function handleSheetSave() {
-    if (!selectedPartner) return setMsg("거래처를 먼저 선택하세요.");
+    if (!activeCustomerName) return setMsg("업체명을 입력하거나 거래처를 선택하세요.");
     if (!sheetCalcResult) return setMsg("먼저 계산을 실행하세요.");
     const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
-      customer_id: selectedPartner.id,
-      customer_name: selectedPartner.name,
+      customer_id: activeCustomerId,
+      customer_name: activeCustomerName,
       request_type: "sheet",
       quantity: sheetCalcResult.sheets,
       is_new: sheetIsNew,
@@ -344,26 +355,66 @@ export default function QuoteClient() {
 
             {/* 거래처 선택 */}
             <div className={`${card} p-4`}>
-              <div className="mb-3 text-lg font-semibold">거래처 선택</div>
-              <input className={`${inp} mb-3`} placeholder="업체명 검색" value={partnerFilter}
-                onChange={e => setPartnerFilter(e.target.value)} />
-              {selectedPartner && (
-                <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
-                  ✓ {selectedPartner.name}
+              <div className="mb-3 text-lg font-semibold">업체 선택</div>
+
+              {/* 모드 토글 */}
+              <div className="mb-3 flex gap-2">
+                <button
+                  className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${partnerMode === "direct" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  onClick={() => { setPartnerMode("direct"); setSelectedPartner(null); }}>
+                  ✏️ 직접 입력
+                </button>
+                <button
+                  className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${partnerMode === "select" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  onClick={() => { setPartnerMode("select"); setCustomerName(""); }}>
+                  🔍 기존 거래처
+                </button>
+              </div>
+
+              {/* 직접 입력 모드 */}
+              {partnerMode === "direct" && (
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-slate-600">업체명</div>
+                  <input className={inp} placeholder="예: 아난티앳강남" value={customerName}
+                    onChange={e => setCustomerName(e.target.value)} />
+                  <div className="mt-2 text-xs text-slate-400">
+                    신규 문의 업체는 업체명만 입력하세요.<br/>수주 확정 후 거래처 등록을 권장해요.
+                  </div>
                 </div>
               )}
-              <div className="max-h-[400px] space-y-1 overflow-y-auto">
-                {partners.map(p => (
-                  <button key={p.id}
-                    className={`w-full rounded-xl border px-3 py-2 text-left text-sm ${selectedPartner?.id === p.id ? "border-blue-300 bg-blue-50 font-semibold" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-                    onClick={() => setSelectedPartner(p)}>
-                    <div className="font-semibold">{p.name}</div>
-                    {p.business_no && <div className="text-xs text-slate-500">{p.business_no}</div>}
-                  </button>
-                ))}
-              </div>
-              {selectedPartner && (
-                <button className={`${btn} mt-3 w-full`} onClick={() => setSelectedPartner(null)}>선택 해제</button>
+
+              {/* 기존 거래처 선택 모드 */}
+              {partnerMode === "select" && (
+                <div>
+                  <input className={`${inp} mb-2`} placeholder="업체명 검색" value={partnerFilter}
+                    onChange={e => setPartnerFilter(e.target.value)} />
+                  {selectedPartner && (
+                    <div className="mb-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
+                      ✓ {selectedPartner.name}
+                    </div>
+                  )}
+                  <div className="max-h-[320px] space-y-1 overflow-y-auto">
+                    {partners.map(p => (
+                      <button key={p.id}
+                        className={`w-full rounded-xl border px-3 py-2 text-left text-sm ${selectedPartner?.id === p.id ? "border-blue-300 bg-blue-50 font-semibold" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                        onClick={() => setSelectedPartner(p)}>
+                        <div className="font-semibold">{p.name}</div>
+                        {p.business_no && <div className="text-xs text-slate-500">{p.business_no}</div>}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedPartner && (
+                    <button className={`${btn} mt-2 w-full`} onClick={() => setSelectedPartner(null)}>선택 해제</button>
+                  )}
+                </div>
+              )}
+
+              {/* 현재 선택된 업체 표시 */}
+              {activeCustomerName && (
+                <div className="mt-3 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm font-semibold text-green-700">
+                  📋 {activeCustomerName}
+                  {activeCustomerId && <span className="ml-1 text-xs font-normal text-green-600">(등록된 거래처)</span>}
+                </div>
               )}
             </div>
 
@@ -372,7 +423,7 @@ export default function QuoteClient() {
               <div className={`${card} p-4`}>
                 <div className="mb-4 flex items-center gap-3">
                   <div className="text-lg font-semibold">견적 입력</div>
-                  {selectedPartner && <span className={pill}>{selectedPartner.name}</span>}
+                  {activeCustomerName && <span className={pill}>{activeCustomerName}</span>}
                 </div>
 
                 {/* 제품 선택 */}
@@ -650,23 +701,56 @@ export default function QuoteClient() {
 
             {/* 거래처 */}
             <div className={`${card} p-4`}>
-              <div className="mb-3 text-lg font-semibold">거래처 선택</div>
-              <input className={`${inp} mb-3`} placeholder="업체명 검색" value={partnerFilter}
-                onChange={e => setPartnerFilter(e.target.value)} />
-              {selectedPartner && (
-                <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
-                  ✓ {selectedPartner.name}
+              <div className="mb-3 text-lg font-semibold">업체 선택</div>
+
+              {/* 모드 토글 */}
+              <div className="mb-3 flex gap-2">
+                <button
+                  className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${partnerMode === "direct" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  onClick={() => { setPartnerMode("direct"); setSelectedPartner(null); }}>
+                  ✏️ 직접 입력
+                </button>
+                <button
+                  className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${partnerMode === "select" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  onClick={() => { setPartnerMode("select"); setCustomerName(""); }}>
+                  🔍 기존 거래처
+                </button>
+              </div>
+
+              {partnerMode === "direct" && (
+                <div>
+                  <input className={inp} placeholder="예: 터치 한남" value={customerName}
+                    onChange={e => setCustomerName(e.target.value)} />
+                  <div className="mt-2 text-xs text-slate-400">업체명만 입력하세요.</div>
                 </div>
               )}
-              <div className="max-h-[300px] space-y-1 overflow-y-auto">
-                {partners.map(p => (
-                  <button key={p.id}
-                    className={`w-full rounded-xl border px-3 py-2 text-left text-sm ${selectedPartner?.id === p.id ? "border-blue-300 bg-blue-50 font-semibold" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-                    onClick={() => setSelectedPartner(p)}>
-                    {p.name}
-                  </button>
-                ))}
-              </div>
+
+              {partnerMode === "select" && (
+                <div>
+                  <input className={`${inp} mb-2`} placeholder="업체명 검색" value={partnerFilter}
+                    onChange={e => setPartnerFilter(e.target.value)} />
+                  {selectedPartner && (
+                    <div className="mb-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
+                      ✓ {selectedPartner.name}
+                    </div>
+                  )}
+                  <div className="max-h-[300px] space-y-1 overflow-y-auto">
+                    {partners.map(p => (
+                      <button key={p.id}
+                        className={`w-full rounded-xl border px-3 py-2 text-left text-sm ${selectedPartner?.id === p.id ? "border-blue-300 bg-blue-50 font-semibold" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                        onClick={() => setSelectedPartner(p)}>
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeCustomerName && (
+                <div className="mt-3 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm font-semibold text-green-700">
+                  📋 {activeCustomerName}
+                </div>
+              )}
             </div>
 
             {/* 전사지 입력 */}
@@ -674,7 +758,7 @@ export default function QuoteClient() {
               <div className={`${card} p-4`}>
                 <div className="mb-4 flex items-center gap-3">
                   <div className="text-lg font-semibold">전사지 단독 견적</div>
-                  {selectedPartner && <span className={pill}>{selectedPartner.name}</span>}
+                  {activeCustomerName && <span className={pill}>{activeCustomerName}</span>}
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
