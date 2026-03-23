@@ -108,10 +108,21 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   }
   cautions.push("27도 이하 건조한 곳에 보관하세요.");
 
-  // ── 품목 행 구성 ──
+  // ── 품목 행 구성 — 순서: 제품 먼저, 성형틀/인쇄제판 아래 ──
   type LineItem = { name: string; qty: string; unit: number; supply: number; vat: number; total: number };
   const lineItems: LineItem[] = [];
 
+  // 1) 초콜릿 제품 (맨 위)
+  const chocoSupply = V * quantity;
+  const chocoVat = Math.round(chocoSupply * 0.1);
+  lineItems.push({
+    name: productNameDisplay,
+    qty: fmt(quantity),   // 숫자만 (개 없음)
+    unit: V, supply: chocoSupply,
+    vat: chocoVat, total: chocoSupply + chocoVat,
+  });
+
+  // 2) 성형틀 (아래)
   if (moldCost > 0) {
     lineItems.push({
       name: "성형틀 (최초 1회)", qty: "1",
@@ -120,6 +131,8 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
       total: moldCost + Math.round(moldCost * 0.1),
     });
   }
+
+  // 3) 인쇄제판 (아래)
   if (plateCost > 0) {
     lineItems.push({
       name: "인쇄제판 (최초 1회)", qty: "1",
@@ -128,17 +141,6 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
       total: plateCost + Math.round(plateCost * 0.1),
     });
   }
-  // 전사지 항목 → 견적서에 숨김 (초콜릿 단가에 포함)
-  // workFee도 단가에 포함, 별도 표시 안 함
-
-  // 초콜릿 제작비
-  const chocoSupply = V * quantity;
-  const chocoVat = Math.round(chocoSupply * 0.1);
-  lineItems.push({
-    name: productNameDisplay, qty: fmt(quantity) + "개",
-    unit: V, supply: chocoSupply,
-    vat: chocoVat, total: chocoSupply + chocoVat,
-  });
 
   const sumSupply = lineItems.reduce((a, r) => a + r.supply, 0);
   const sumVat    = lineItems.reduce((a, r) => a + r.vat, 0);
@@ -235,12 +237,18 @@ table { border-collapse: collapse; width: 100%; }
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }} rowSpan={4}>
                             발<br/>신<br/>자
                           </td>
+                          {/* 상호 | (주)보누스메이트 | 성명 | 조대성(도장) — 성명/조대성 셀 구분 */}
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 44, padding: "2px 3px" }}>상호</td>
                           <td style={{ border: "1px solid #999", padding: "2px 5px" }}>{OUR.nameShort}</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px", position: "relative", minWidth: 80 }}>
-                            성명 {OUR.ceo}
-                            <img src="/stamp.png" alt="" style={{ position: "absolute", right: 2, top: -4, height: 28, opacity: 0.9 }}
-                              onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                          <td style={{ border: "1px solid #999", padding: "2px 5px 2px 3px", position: "relative", minWidth: 80 }}>
+                            {/* 성명 | 조대성 구분선 */}
+                            <span style={{ display: "inline-block", paddingRight: 4, borderRight: "1px solid #bbb", marginRight: 4 }}>성명</span>
+                            <span style={{ position: "relative", display: "inline-block" }}>
+                              {OUR.ceo}
+                              {/* 도장: "성"자에 겹치도록 left:-8 */}
+                              <img src="/stamp.png" alt="" style={{ position: "absolute", left: -8, top: -6, height: 28, opacity: 0.9 }}
+                                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            </span>
                           </td>
                         </tr>
                         <tr>
@@ -248,9 +256,13 @@ table { border-collapse: collapse; width: 100%; }
                           <td style={{ border: "1px solid #999", padding: "2px 5px" }} colSpan={2}>{OUR.address}</td>
                         </tr>
                         <tr>
+                          {/* 업태 | 제조업 | 종목 | 식품제조가공업 — 종목/내용 셀 구분 */}
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>업 태</td>
                           <td style={{ border: "1px solid #999", padding: "2px 5px" }}>{OUR.bizType}</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px" }}>종목 {OUR.bizItem}</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px 2px 3px" }}>
+                            <span style={{ display: "inline-block", paddingRight: 4, borderRight: "1px solid #bbb", marginRight: 4 }}>종목</span>
+                            {OUR.bizItem}
+                          </td>
                         </tr>
                         <tr>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>전화번호</td>
@@ -272,7 +284,7 @@ table { border-collapse: collapse; width: 100%; }
                     금 {numberToKorean(sumTotal)}원 정
                   </td>
                   <td style={{ border: "1px solid #999", textAlign: "right", padding: "3px 8px", fontSize: 10, fontWeight: "bold", width: 110 }}>
-                    ( ₩ {fmt(sumTotal)} )
+                    ₩ {fmt(sumTotal)}
                   </td>
                   <td style={{ border: "1px solid #999", textAlign: "center", width: 72, fontSize: 8, color: "#555", padding: "3px 4px" }}>
                     부가세 포함
