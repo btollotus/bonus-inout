@@ -1651,8 +1651,30 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
             <td style={thS}>지시번호</td>
             <td style={{ ...tdS }} colSpan={3}>{wo.work_order_no}</td>
           </tr>
+
+
           {wo.note ? <tr><td style={thS}>비고</td><td style={tdS} colSpan={3}>{wo.note}</td></tr> : null}
           {wo.reference_note ? <tr><td style={thS}>참고사항</td><td style={tdS} colSpan={3}>{wo.reference_note}</td></tr> : null}
+        </tbody>
+      </table>
+
+      {/* ★ 진행상태 + 담당자 */}
+      <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "3px", marginTop: "6px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>진행상태 확인</div>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
+        <tbody>
+          <tr>
+            {([
+              { label: "전사인쇄", checked: wo.status_transfer, assignee: (wo as any).assignee_transfer },
+              { label: "인쇄검수", checked: wo.status_print_check, assignee: (wo as any).assignee_print_check },
+              { label: "생산완료", checked: wo.status_production, assignee: (wo as any).assignee_production },
+              { label: "입력완료", checked: wo.status_input, assignee: (wo as any).assignee_input },
+            ] as Array<{ label: string; checked: boolean; assignee: string | null }>).map(({ label, checked, assignee }) => (
+              <td key={label} style={{ border: "1px solid #cbd5e1", padding: "4px 6px", textAlign: "center", width: "25%" }}>
+                <div style={{ fontSize: "8pt", color: "#555" }}>{label} <span style={{ fontSize: "10pt" }}>{checked ? "✅" : "☐"}</span></div>
+                {assignee ? <div style={{ fontSize: "8pt", fontWeight: "bold", color: "#1e3a5f", marginTop: "2px" }}>👤 {assignee}</div> : null}
+              </td>
+            ))}
+          </tr>
         </tbody>
       </table>
 
