@@ -1090,7 +1090,7 @@ const unreadCount = useMemo(() => {
                     <div>
                       <div className="mb-1 text-xs text-slate-500">포장방법</div>
                       <select className={inp} value={ePackagingType} onChange={(e) => setEPackagingType(e.target.value)}>
-                        {["트레이-정사각20구", "트레이-직사각20구", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
+                        {["트레이-정사각20구", "트레이-직사각20구", "트레이-35구", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </div>
                     {ePackagingType === "트레이" ? (

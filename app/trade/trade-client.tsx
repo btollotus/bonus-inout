@@ -1807,7 +1807,7 @@ if (woSubNameVal) {
                           </div>
                           <div><div className="mb-1 text-xs text-slate-600">포장방법</div>
                             <select className={inp} value={eWoPackagingType} onChange={(e) => setEWoPackagingType(e.target.value)}>
-                              {["", "트레이-정사각20구", "트레이-직사각20구", "벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
+                              {["", "트레이-정사각20구", "트레이-직사각20구", "트레이-35구", "벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
                             </select>
                           </div>
                           <div><div className="mb-1 text-xs text-slate-600">납품방법</div>
