@@ -231,7 +231,7 @@ async function loadSignageList() {
     try {
       const SHEET_ID = "1bCejl7Fw5Zke7lplp1S2_1aNqOij4jyqPn5cwRdNt-I";
       const API_KEY  = "AIzaSyCE_cEcRke2p-hw1RvQzJHnFHXR3gpNIAs";
-      const RANGE = "'Form Responses 1'!A2:I";
+      const RANGE = "'설문지 응답 시트1'!A2:I";
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(RANGE)}?key=${API_KEY}`;
       const res  = await fetch(url);
       const json = await res.json();
