@@ -1,13 +1,8 @@
-import type { Metadata } from "next";
-export const metadata: Metadata = { title: "스캔 | BONUSMATE ERP" };
+// app/scan/page.tsx
+// /scan → /inventory 로 redirect (기존 북마크/링크 호환)
 
-import AuthGate from "@/components/AuthGate";
-import ScanClient from "./scan-client";
+import { redirect } from "next/navigation";
 
 export default function ScanPage() {
-  return (
-    <AuthGate>
-      <ScanClient />
-    </AuthGate>
-  );
+  redirect("/inventory");
 }

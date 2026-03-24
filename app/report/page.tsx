@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
-export const metadata: Metadata = { title: "재고대장 | BONUSMATE ERP" };
-
 // app/report/page.tsx
-import ReportClient from "./report-client";
+// /report → /inventory?tab=report 로 redirect (재고대장 탭 바로 열기)
+
+import { redirect } from "next/navigation";
 
 export default function ReportPage() {
-  return <ReportClient />;
+  redirect("/inventory?tab=report");
 }
