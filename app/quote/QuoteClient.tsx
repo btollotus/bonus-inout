@@ -427,6 +427,7 @@ export default function QuoteClient() {
             { key: "input", label: "📋 견적 입력" },
             { key: "list",  label: "📑 견적 목록" },
             { key: "sheet", label: "📄 전사지 견적" },
+            { key: "signage", label: "🪧 제작문의" },
           ] as { key: Tab; label: string }[]).map(t => (
             <button key={t.key} className={tab === t.key ? btnOn : btn} onClick={() => setTab(t.key)}>
               {t.label}
