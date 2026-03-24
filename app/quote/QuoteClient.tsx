@@ -824,8 +824,14 @@ export default function QuoteClient() {
                     onClick={() => setStatusFilter(s)}>{s}</button>
                 ))}
               </div>
-              <input className={`${inp} max-w-[240px]`} placeholder="업체명/제품/메모 검색"
-                value={listSearch} onChange={e => setListSearch(e.target.value)} />
+              <div className="relative">
+                <input className={`${inp} max-w-[240px] pr-7`} placeholder="업체명/제품/메모 검색"
+                  value={listSearch} onChange={e => setListSearch(e.target.value)} />
+                {listSearch && (
+                  <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                    onClick={() => setListSearch("")}>✕</button>
+                )}
+              </div>
               <button className={btn} onClick={loadQuoteList}>🔄 새로고침</button>
             </div>
 
