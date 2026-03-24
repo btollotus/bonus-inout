@@ -265,7 +265,7 @@ table { border-collapse: collapse; width: 100%; }
                         <tr>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "3px 4px", fontSize: 10 }}>업태</td>
                           <td style={{ border: "1px solid #999", padding: "3px 5px" }}>{OUR.bizType}</td>
-                          <td style={{ border: "1px solid #999", padding: "3px 5px" }}>
+                          <td style={{ border: "1px solid #999", padding: "3px 5px", whiteSpace: "nowrap", fontSize: 10 }}>
                             <span style={{ paddingRight: 3, borderRight: "1px solid #bbb", marginRight: 3, fontSize: 10 }}>종목</span>
                             {OUR.bizItem}
                           </td>
