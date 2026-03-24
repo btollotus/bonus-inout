@@ -25,7 +25,67 @@ export async function GET(req: NextRequest) {
 
   if (error || !order) return new NextResponse("Work order not found", { status: 404 });
 
-  const html = generateWorkOrderHTML(order);
+  // ── 이미지 경로 → signed URL → Base64 변환 ──
+  async function resolveImagesToBase64(rawImages: string[] | null): Promise<string[]> {
+    if (!rawImages || rawImages.length === 0) return [];
+
+    // signed URL 생성 (storage path인 경우)
+    const paths = rawImages.map((v) => {
+      if (v.startsWith("http")) {
+        const m = v.match(/work-order-images\/(.+?)(\?|$)/);
+        return m ? m[1] : null;
+      }
+      return v;
+    }).filter(Boolean) as string[];
+
+    let urls: string[] = rawImages;
+
+    if (paths.length > 0) {
+      const { data, error } = await supabase.storage
+        .from("work-order-images")
+        .createSignedUrls(paths, 60 * 60);
+      if (!error && data) {
+        urls = data.map((d) => d.signedUrl);
+      }
+    }
+
+    // URL → Base64 변환
+    const base64List = await Promise.all(
+      urls.map(async (url) => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return null;
+          const buffer = await res.arrayBuffer();
+          const contentType = res.headers.get("content-type") ?? "image/png";
+          const b64 = Buffer.from(buffer).toString("base64");
+          return `data:${contentType};base64,${b64}`;
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    return base64List.filter(Boolean) as string[];
+  }
+
+  // work_orders.images (대표 이미지)
+  const woImages = await resolveImagesToBase64(order.images ?? []);
+
+  // work_order_items[].images
+  const itemsWithImages = await Promise.all(
+    (order.work_order_items ?? []).map(async (item: any) => ({
+      ...item,
+      _base64Images: await resolveImagesToBase64(item.images ?? []),
+    }))
+  );
+
+  const orderWithImages = {
+    ...order,
+    _woBase64Images: woImages,
+    work_order_items: itemsWithImages,
+  };
+
+  const html = generateWorkOrderHTML(orderWithImages);
   return new NextResponse(html, {
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });
@@ -69,6 +129,8 @@ function generateWorkOrderHTML(wo: any): string {
   const createdDay = createdDate ? `(${dayNames[new Date(createdDate).getDay()]})` : "";
   const isReorder = wo.is_reorder ?? false;
 
+  const logoSize = parseLogoSize(wo.logo_spec);
+
   const statusRows = [
     { label: "전사인쇄", checked: wo.status_transfer, assignee: wo.assignee_transfer ?? null },
     { label: "인쇄검수", checked: wo.status_print_check, assignee: wo.assignee_print_check ?? null },
@@ -84,6 +146,19 @@ function generateWorkOrderHTML(wo: any): string {
     const itemName = (item.sub_items ?? [])[0]?.name || "—";
     const itemBarcode = item.barcode_no ?? null;
     const note = item.note ?? "";
+
+    // ── 품목 이미지 HTML (Base64) ──
+    const base64Images: string[] = item._base64Images ?? [];
+    const imagesHTML = base64Images.length > 0
+      ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end;">
+          ${base64Images.map((src) => `
+            <div style="text-align:center;">
+              <img src="${src}" alt="디자인이미지"
+                style="width:${logoSize?.width ?? "80px"};height:${logoSize?.height ?? "80px"};object-fit:contain;border:1px solid #e2e8f0;border-radius:4px;display:block;" />
+              ${wo.logo_spec ? `<div style="font-size:7pt;color:#94a3b8;margin-top:2px;">${wo.logo_spec}</div>` : ""}
+            </div>`).join("")}
+        </div>`
+      : "";
 
     return `
     <div style="margin-bottom:${idx < items.length - 1 ? "10px" : "6px"};">
@@ -123,8 +198,21 @@ function generateWorkOrderHTML(wo: any): string {
           </tr>
         </tbody>
       </table>
+      ${imagesHTML}
     </div>`;
   }).join("");
+
+  // 대표 이미지 (work_orders.images) — 필요시 하단에 추가
+  const woImagesHTML = (wo._woBase64Images ?? []).length > 0
+    ? `<div style="margin-top:10px;">
+        <div style="font-weight:bold;font-size:9pt;margin-bottom:4px;border-left:3px solid #2563eb;padding-left:5px;">대표 이미지</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          ${(wo._woBase64Images as string[]).map((src) => `
+            <img src="${src}" alt="대표이미지"
+              style="width:${logoSize?.width ?? "80px"};height:${logoSize?.height ?? "80px"};object-fit:contain;border:1px solid #e2e8f0;border-radius:4px;" />`).join("")}
+        </div>
+      </div>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -132,17 +220,9 @@ function generateWorkOrderHTML(wo: any): string {
   <meta charset="UTF-8">
   <title>작업지시서</title>
   <style>
-  @page { 
-  size: A4 portrait; 
-  margin: 12mm 14mm;
-}
-@page :first {
-  margin-top: 12mm;
-}
-* { -webkit-print-color-adjust: exact; }  
-  
+    @page { size: A4 portrait; margin: 12mm 14mm; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-sizing: border-box; }
     body { margin: 0; font-family: 'Nanum Gothic', 'NanumGothic', 'Malgun Gothic', sans-serif; font-size: 10pt; color: #111; background: #fff; }
-    * { box-sizing: border-box; }
   </style>
 </head>
 <body>
@@ -215,6 +295,7 @@ function generateWorkOrderHTML(wo: any): string {
   </div>
 
   ${itemsHTML}
+  ${woImagesHTML}
 </body>
 </html>`;
 }
