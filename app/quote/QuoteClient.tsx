@@ -178,6 +178,11 @@ export default function QuoteClient() {
   const [sheetCalcResult, setSheetCalcResult] = useState<any>(null);
   const [sheetList, setSheetList] = useState<QuoteRequestRow[]>([]);
 
+  // ─── 제작문의 (사인판) ───
+const [signageList, setSignageList] = useState<any[]>([]);
+const [signageLoading, setSignageLoading] = useState(false);
+const [signageSearch, setSignageSearch] = useState("");
+
   // 스타일
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
@@ -220,9 +225,32 @@ export default function QuoteClient() {
     setSheetList((data ?? []) as QuoteRequestRow[]);
   }
 
+  // ─── 제작문의(사인판) 구글 시트 로드 ───
+async function loadSignageList() {
+    setSignageLoading(true);
+    try {
+      const SHEET_ID = "1bCejl7Fw5Zke7lplp1S2_1aNqOij4jyqPn5cwRdNt-I";
+      const API_KEY  = "AIzaSyCE_cEcRke2p-hw1RvQzJHnFHXR3gpNIAs";
+      const RANGE    = "Form Responses 1!A2:I";
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(RANGE)}?key=${API_KEY}`;
+      const res  = await fetch(url);
+      const json = await res.json();
+      setSignageList((json.values ?? []).reverse());
+    } catch {
+      setMsg("제작문의 데이터를 불러오지 못했습니다.");
+    } finally {
+      setSignageLoading(false);
+    }
+  }
+
+
   useEffect(() => { loadPartners(); }, [partnerFilter]);
   useEffect(() => { if (tab === "list") loadQuoteList(); }, [tab, statusFilter]);
   useEffect(() => { if (tab === "sheet") loadSheetList(); }, [tab]);
+
+  useEffect(() => {
+    if (tab === "signage") loadSignageList();
+  }, [tab]);
 
   // ─── 계산 (API 호출) — 품목별로 inline 처리 ───
   // (각 품목의 계산 버튼에서 직접 fetch 호출)
@@ -1096,15 +1124,77 @@ export default function QuoteClient() {
           </div>
         )}
 
-      {/* ───────────── 탭 4: 제작문의 ───────────── */}
-      {tab === "signage" && (
-          <div className={card + " p-6"}>
-            <div className="text-center py-12 text-slate-400">
-              <div className="text-4xl mb-3">🪧</div>
-              <div className="text-sm">준비 중입니다...</div>
-            </div>
-          </div>
-        )}
+{/* ───────────── 탭 4: 제작문의 ───────────── */}
+{tab === "signage" && (
+  <div className={`${card} p-4`}>
+    <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="text-lg font-semibold">🪧 사인판(장식물) 제작문의</div>
+      <input
+        className={`${inp} max-w-[240px]`}
+        placeholder="업체명, 담당자 검색..."
+        value={signageSearch}
+        onChange={e => setSignageSearch(e.target.value)}
+      />
+      <button className={btn} onClick={loadSignageList}>🔄 새로고침</button>
+      <span className="text-xs text-slate-400 ml-auto">총 {signageList.length}건</span>
+    </div>
+
+    {signageLoading ? (
+      <div className="py-8 text-center text-sm text-slate-400">불러오는 중...</div>
+    ) : (
+      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            <col style={{ width: 90 }} />
+            <col style={{ width: 120 }} />
+            <col style={{ width: 80 }} />
+            <col style={{ width: 110 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 90 }} />
+            <col style={{ width: 90 }} />
+            <col style={{ width: 60 }} />
+            <col style={{ width: "auto" }} />
+          </colgroup>
+          <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+            <tr>
+              <th className="px-3 py-2 text-left">접수일시</th>
+              <th className="px-3 py-2 text-left">업체명</th>
+              <th className="px-3 py-2 text-left">담당자</th>
+              <th className="px-3 py-2 text-left">연락처</th>
+              <th className="px-3 py-2 text-left">모양</th>
+              <th className="px-3 py-2 text-left">크기</th>
+              <th className="px-3 py-2 text-left">종류</th>
+              <th className="px-3 py-2 text-left">수량</th>
+              <th className="px-3 py-2 text-left">기타문의</th>
+            </tr>
+          </thead>
+          <tbody>
+            {signageList
+              .filter(r => {
+                const q = signageSearch.toLowerCase();
+                return !q || (r[1]??'').toLowerCase().includes(q) || (r[2]??'').toLowerCase().includes(q);
+              })
+              .map((r, i) => (
+                <tr key={i} className="border-t border-slate-200 bg-white hover:bg-slate-50">
+                  <td className="px-3 py-2 text-xs text-slate-500 tabular-nums">
+                    {r[0] ? r[0].slice(0, 10) : "—"}
+                  </td>
+                  <td className="px-3 py-2 font-semibold truncate">{r[1] ?? "—"}</td>
+                  <td className="px-3 py-2 truncate">{r[2] ?? "—"}</td>
+                  <td className="px-3 py-2 text-xs text-slate-500 tabular-nums">{r[3] ?? "—"}</td>
+                  <td className="px-3 py-2 text-xs">{r[4] ?? "—"}</td>
+                  <td className="px-3 py-2 text-xs">{r[5] ?? "—"}</td>
+                  <td className="px-3 py-2 text-xs">{r[6] ?? "—"}</td>
+                  <td className="px-3 py-2 text-xs text-right tabular-nums">{r[7] ?? "—"}</td>
+                  <td className="px-3 py-2 text-xs text-slate-500 truncate">{r[8] ?? "—"}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+)}
 
       </div>
 
