@@ -113,7 +113,7 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   for (const item of items) {
     const colorLabel = item.isRaise ? "컬러인쇄" : item.colorType === "dark" ? "다크" : "화이트";
     const sizeStr = item.widthMm && item.heightMm
-      ? `${item.widthMm}×${item.heightMm}mm, 두께 ${item.thickness}`
+      ? `${item.widthMm}×${item.heightMm}mm${item.thickness ? `, 두께 ${item.thickness}` : ""}`
       : item.thickness ? `두께 ${item.thickness}` : "";
     const productName = sizeStr ? `${colorLabel}(${sizeStr})` : colorLabel;
     const unitPrice = inputMode === "manual" ? item.manualV : item.V;
@@ -209,13 +209,15 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   function doPrint() {
     const content = printRef.current;
     if (!content) return;
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
-    document.body.appendChild(iframe);
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!doc) return;
-    doc.open();
-    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+    const fileName = makeFileName();
+
+    // 새 팝업 창에서 인쇄 — title이 파일명으로 정확히 지정됨
+    const popup = window.open("", "_blank", "width=900,height=700");
+    if (!popup) return;
+
+    popup.document.write(`<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+<title>${fileName}</title>
 <style>
 @page { size: A4 portrait; margin: 15mm 15mm 12mm 15mm; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -223,12 +225,12 @@ body { font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 11pt;
 table { border-collapse: collapse; width: 100%; }
 </style>
 </head><body>${content.innerHTML}</body></html>`);
-    doc.close();
+    popup.document.close();
+    popup.focus();
     setTimeout(() => {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-      setTimeout(() => document.body.removeChild(iframe), 1000);
-    }, 300);
+      popup.print();
+      setTimeout(() => popup.close(), 500);
+    }, 400);
   }
 
   const cellBase: React.CSSProperties = { border: "1px solid #999", padding: "3px 5px", fontSize: 12.8 };

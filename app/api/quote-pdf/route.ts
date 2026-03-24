@@ -214,7 +214,7 @@ table { border-collapse: collapse; width: 100%; }
             </tr>
             <tr>
               <td style="border:1px solid #999;background:#f5f5f5;text-align:center;padding:3px 4px;">계좌</td>
-              <td style="border:1px solid #999;padding:3px 5px;font-size:10pt;font-weight:bold;" colspan="2">${OUR.bank}</td>
+              <td style="border:1px solid #999;padding:3px 5px;font-size:9pt;font-weight:bold;white-space:nowrap;" colspan="2">${OUR.bank}</td>
             </tr>
           </tbody>
         </table>
