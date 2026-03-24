@@ -173,7 +173,7 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
 <style>
 @page { size: A4 portrait; margin: 15mm 15mm 12mm 15mm; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 9pt; color: #111; background: #fff; }
+body { font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 11pt; color: #111; background: #fff; }
 table { border-collapse: collapse; width: 100%; }
 </style>
 </head><body>${content.innerHTML}</body></html>`);
@@ -185,7 +185,7 @@ table { border-collapse: collapse; width: 100%; }
     }, 300);
   }
 
-  const cellBase: React.CSSProperties = { border: "1px solid #999", padding: "3px 5px", fontSize: 8.5 };
+  const cellBase: React.CSSProperties = { border: "1px solid #999", padding: "3px 5px", fontSize: 12.8 };
   const cellHead: React.CSSProperties = { ...cellBase, background: "#f0f0f0", textAlign: "center", fontWeight: "bold" };
 
   return (
@@ -217,7 +217,7 @@ table { border-collapse: collapse; width: 100%; }
             </div>
 
             {/* 제목 */}
-            <div style={{ textAlign: "center", fontSize: 20, fontWeight: "bold", letterSpacing: 8, margin: "8px 0 12px" }}>
+            <div style={{ textAlign: "center", fontSize: 22, fontWeight: "bold", letterSpacing: 8, margin: "8px 0 12px" }}>
               견 적 서
             </div>
 
@@ -226,15 +226,15 @@ table { border-collapse: collapse; width: 100%; }
               <tbody>
                 <tr>
                   <td style={{ border: "none", verticalAlign: "top", width: "44%", paddingRight: 10 }}>
-                    <div style={{ fontSize: 9, marginBottom: 4 }}>견적일 : {formatDateKorean(quoteDate)}</div>
-                    <div style={{ fontSize: 10, marginBottom: 4 }}>
+                    <div style={{ fontSize: 13.5, marginBottom: 4 }}>견적일 : {formatDateKorean(quoteDate)}</div>
+                    <div style={{ fontSize: 15, marginBottom: 4 }}>
                       업체명 : <strong>{customerName}</strong> &nbsp; 귀중
                     </div>
-                    <div style={{ fontSize: 9, color: "#555", marginBottom: 4 }}>아래와 같이 견적합니다.</div>
-                    <div style={{ fontSize: 8, color: "#c00" }}>※ 주문제작은 선결제 후 진행됩니다.</div>
+                    <div style={{ fontSize: 13.5, color: "#555", marginBottom: 4 }}>아래와 같이 견적합니다.</div>
+                    <div style={{ fontSize: 12, color: "#c00" }}>※ 주문제작은 선결제 후 진행됩니다.</div>
                   </td>
                   <td style={{ border: "none", verticalAlign: "top", width: "56%" }}>
-                    <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 8.5 }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.8 }}>
                       <tbody>
                         <tr>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 52, padding: "2px 3px" }}>등록번호</td>
@@ -257,7 +257,7 @@ table { border-collapse: collapse; width: 100%; }
                         </tr>
                         <tr>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px", whiteSpace: "nowrap" }}>사업장주소</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px", fontSize: 8 }} colSpan={2}>{OUR.address}</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px", fontSize: 12 }} colSpan={2}>{OUR.address}</td>
                         </tr>
                         <tr>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>업 태</td>
@@ -292,11 +292,11 @@ table { border-collapse: collapse; width: 100%; }
             <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 6 }}>
               <tbody>
                 <tr>
-                  <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 68, fontSize: 9, padding: "3px 4px", whiteSpace: "nowrap" }}>합계금액</td>
-                  <td style={{ border: "1px solid #999", padding: "3px 8px", fontSize: 10, fontWeight: "bold" }}>
+                  <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 68, fontSize: 13.5, padding: "3px 4px", whiteSpace: "nowrap" }}>합계금액</td>
+                  <td style={{ border: "1px solid #999", padding: "3px 8px", fontSize: 15, fontWeight: "bold" }}>
                     금 {numberToKorean(sumTotal)}원 정 &nbsp;&nbsp; ₩ {fmt(sumTotal)}
                   </td>
-                  <td style={{ border: "1px solid #999", textAlign: "center", width: 68, fontSize: 8, color: "#555", padding: "3px 4px", whiteSpace: "nowrap" }}>
+                  <td style={{ border: "1px solid #999", textAlign: "center", width: 68, fontSize: 12, color: "#555", padding: "3px 4px", whiteSpace: "nowrap" }}>
                     부가세 포함
                   </td>
                 </tr>
@@ -304,7 +304,7 @@ table { border-collapse: collapse; width: 100%; }
             </table>
 
             {/* 품목 테이블 */}
-            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 8.5, marginBottom: 6 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 16.5, marginBottom: 6 }}>
               <thead>
                 <tr style={{ background: "#f0f0f0" }}>
                   <th style={{ ...cellHead, width: "42%", textAlign: "left" }}>품 명</th>
@@ -362,14 +362,14 @@ table { border-collapse: collapse; width: 100%; }
             </table>
 
             {/* 비고 */}
-            <div style={{ fontSize: 8.5, marginTop: 8 }}>
+            <div style={{ fontSize: 12.8, marginTop: 8 }}>
               <div style={{ fontWeight: "bold", marginBottom: 4 }}>[비 고]</div>
               <p style={{ margin: "2px 0" }}>* 세금계산서 발행시 사업자등록증을 이메일로 보내주세요</p>
               <p style={{ margin: "2px 0", color: "#c00", fontWeight: "bold" }}>* 주문제작은 선결제입니다.</p>
             </div>
 
             {/* 푸터 */}
-            <div style={{ textAlign: "center", fontSize: 8, color: "#555", marginTop: 14, borderTop: "1px solid #ddd", paddingTop: 8 }}>
+            <div style={{ textAlign: "center", fontSize: 12, color: "#555", marginTop: 14, borderTop: "1px solid #ddd", paddingTop: 8 }}>
               {OUR.name}(카카오플러스) &nbsp; {OUR.website} &nbsp; 전화 {OUR.phone}
             </div>
 
