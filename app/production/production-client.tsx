@@ -767,7 +767,10 @@ if (userId && !readMap[wo.id]) {
 
       // ===== PDF → 구글드라이브 업로드 트리거 =====
 try {
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const woDateMatch = selectedWo.work_order_no?.match(/WO-(\d{8})-/);
+  const today = woDateMatch
+    ? woDateMatch[1]
+    : new Date().toISOString().slice(0, 10).replace(/-/g, "");
 
   // 특수문자 처리: *×x → x 변환 후 파일명 안전 문자만 허용
   const sanitize = (str: string) =>
