@@ -227,26 +227,32 @@ table { border-collapse: collapse; width: 100%; }
                 <tr>
                   <td style={{ border: "none", verticalAlign: "top", width: "44%", paddingRight: 10 }}>
                     <div style={{ fontSize: 13.5, marginBottom: 4 }}>견적일 : {formatDateKorean(quoteDate)}</div>
-                    <div style={{ fontSize: 15, marginBottom: 4 }}>
+                    <div style={{ fontSize: customerName.length > 15 ? 12 : 15, marginBottom: 4 }}>
                       업체명 : <strong>{customerName}</strong> &nbsp; 귀중
                     </div>
                     <div style={{ fontSize: 13.5, color: "#555", marginBottom: 4 }}>아래와 같이 견적합니다.</div>
                     <div style={{ fontSize: 12, color: "#c00" }}>※ 주문제작은 선결제 후 진행됩니다.</div>
                   </td>
                   <td style={{ border: "none", verticalAlign: "top", width: "56%" }}>
-                    <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.8 }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 11, tableLayout: "fixed" }}>
+                      <colgroup>
+                        <col style={{ width: 28 }} />
+                        <col style={{ width: 52 }} />
+                        <col style={{ width: "50%" }} />
+                        <col style={{ width: "50%" }} />
+                      </colgroup>
                       <tbody>
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 52, padding: "2px 3px" }}>등록번호</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px", whiteSpace: "nowrap" }}>등록번호</td>
                           <td style={{ border: "1px solid #999", padding: "2px 6px" }} colSpan={3}>{OUR.business_no}</td>
                         </tr>
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }} rowSpan={6}>
-                            발<br/>신<br/>자
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px", writingMode: "vertical-rl" as any, letterSpacing: 2 }} rowSpan={6}>
+                            발신자
                           </td>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 44, padding: "2px 3px" }}>상호</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>상호</td>
                           <td style={{ border: "1px solid #999", padding: "2px 5px" }}>{OUR.nameShort}</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px 2px 3px", minWidth: 80, whiteSpace: "nowrap" }}>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px 2px 3px", whiteSpace: "nowrap", overflow: "hidden" }}>
                             <span style={{ display: "inline-block", paddingRight: 4, borderRight: "1px solid #bbb", marginRight: 4 }}>성명</span>
                             <span style={{ position: "relative", display: "inline-block" }}>
                               {OUR.ceo}
@@ -257,7 +263,7 @@ table { border-collapse: collapse; width: 100%; }
                         </tr>
                         <tr>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px", whiteSpace: "nowrap" }}>사업장주소</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px", fontSize: 12 }} colSpan={2}>{OUR.address}</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px", fontSize: 10 }} colSpan={2}>{OUR.address}</td>
                         </tr>
                         <tr>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>업 태</td>
@@ -273,13 +279,13 @@ table { border-collapse: collapse; width: 100%; }
                         </tr>
                         <tr>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>카카오톡</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px" }} colSpan={2}>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px", fontSize: 10 }} colSpan={2}>
                             {OUR.kakao} &nbsp;|&nbsp; ✉ {OUR.email}
                           </td>
                         </tr>
                         <tr>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>입금계좌</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px", fontWeight: "bold" }} colSpan={2}>{OUR.bank}</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 5px", fontWeight: "bold", fontSize: 10 }} colSpan={2}>{OUR.bank}</td>
                         </tr>
                       </tbody>
                     </table>
