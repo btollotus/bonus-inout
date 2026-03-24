@@ -2329,7 +2329,36 @@ function parseLogoSize(logoSpec: string | null): { width: string; height: string
 function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: () => void; employees: EmployeeRow[]; }) {
   const items = (wo.work_order_items ?? []).slice().sort((a, b) => (a.barcode_no ?? "").localeCompare(b.barcode_no ?? ""));
   const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
-  const [itemNotes, setItemNotes] = useState<Record<string, string>>(() => { const init: Record<string, string> = {}; for (const item of items) init[item.id] = item.note ?? ""; return init; });
+  const [itemNotes, setItemNotes] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const item of items) {
+      if (item.note) { init[item.id] = item.note; continue; }
+      const foodType = wo.food_type ?? "";
+      const qty = item.order_qty ?? 0;
+      const mold = wo.mold_per_sheet ?? 0;
+      const isChocBase = foodType.includes("초콜릿중간재");
+      const isNeoColor = foodType.includes("네오컬러");
+      if (!isChocBase && mold > 0 && qty > 0) {
+        if (isNeoColor) {
+          const perRow = mold === 108 ? 9 : mold === 88 ? 8 : mold === 63 ? 7 : Math.round(Math.sqrt(mold));
+          const buffer = mold === 63 ? 20 : 30;
+          const totalNeeded = qty + buffer;
+          const sheets = totalNeeded / mold;
+          const fullSheets = Math.floor(sheets);
+          const remainder = sheets - fullSheets;
+          const extraRows = remainder > 0 ? Math.ceil(remainder * mold / perRow) : 0;
+          init[item.id] = extraRows > 0 ? `전사지: ${fullSheets}장 ${extraRows}줄` : `전사지: ${fullSheets}장`;
+        } else {
+          init[item.id] = `전사지: ${Math.ceil(qty / mold)}장`;
+        }
+      } else {
+        init[item.id] = item.note ?? "";
+      }
+    }
+    return init;
+  });
+
+
   const [saving, setSaving] = useState(false);
   const [signedImages, setSignedImages] = useState<string[]>([]);
   const [imagesLoading, setImagesLoading] = useState(true);
