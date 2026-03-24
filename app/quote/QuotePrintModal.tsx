@@ -7,25 +7,29 @@ type QuotePrintProps = {
   onClose: () => void;
   quoteData: {
     customerName: string;
-    quoteDate: string;        // YYYY-MM-DD
-    productType: string;      // 예: 전사 1도 (3mm)
-    colorType: "dark" | "white"; // 다크 / 화이트
-    isRaise: boolean;         // 레이즈 여부
+    quoteDate: string;
+    productType: string;
+    colorType: "dark" | "white";
+    isRaise: boolean;
     widthMm: number | null;
     heightMm: number | null;
-    thickness: string;        // 예: 3mm
+    thickness: string;
     quantity: number;
     isNew: boolean;
     designChanged: boolean;
     useStockMold: boolean;
     memo: string | null;
-    // 계산 결과
     moldCost: number;
     plateCost: number;
     sheetCost: number;
     workFee: number;
-    V: number;               // 고객 제시 단가
+    V: number;
     V_stock: number | null;
+    // 수동 입력 품목
+    manualItems: { id: string; name: string; qty: string; unitPrice: string }[] | null;
+    // 추가 옵션
+    iceboxPrice: number;   // 0이면 없음
+    deliveryPrice: number; // 0이면 없음
   };
 };
 
@@ -89,6 +93,7 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
     widthMm, heightMm, thickness, quantity, isNew,
     designChanged, useStockMold, memo,
     moldCost, plateCost, sheetCost, workFee, V, V_stock,
+    manualItems, iceboxPrice, deliveryPrice,
   } = quoteData;
 
   // ── 식품유형 ──
@@ -97,7 +102,6 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
     : "당류가공품";
 
   // ── 제품 품명 표시 ──
-  // 예: 다크(30×30mm, 두께 3mm) / 화이트(30×30mm, 두께 3mm) / 컬러인쇄(30×30mm, 두께 3mm)
   const sizeStr = widthMm && heightMm ? `${widthMm}×${heightMm}mm, 두께 ${thickness}` : `두께 ${thickness}`;
   const colorLabel = isRaise ? "컬러인쇄" : colorType === "dark" ? "다크" : "화이트";
   const productNameDisplay = `${colorLabel}(${sizeStr})`;
@@ -109,38 +113,57 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   }
   cautions.push("27도 이하 건조한 곳에 보관하세요.");
 
-  // ── 품목 행 구성 — 순서: 제품 먼저, 성형틀/인쇄제판 아래 ──
+  // ── 품목 행 구성 ──
   type LineItem = { name: string; qty: string; unit: number; supply: number; vat: number; total: number };
   const lineItems: LineItem[] = [];
 
-  // 1) 초콜릿 제품 (맨 위)
-  const chocoSupply = V * quantity;
-  const chocoVat = Math.round(chocoSupply * 0.1);
-  lineItems.push({
-    name: productNameDisplay,
-    qty: fmt(quantity),   // 숫자만 (개 없음)
-    unit: V, supply: chocoSupply,
-    vat: chocoVat, total: chocoSupply + chocoVat,
-  });
-
-  // 2) 성형틀 (아래)
-  if (moldCost > 0) {
-    lineItems.push({
-      name: "성형틀 (최초 1회)", qty: "1",
-      unit: moldCost, supply: moldCost,
-      vat: Math.round(moldCost * 0.1),
-      total: moldCost + Math.round(moldCost * 0.1),
-    });
+  if (manualItems) {
+    // ── 수동 입력 모드 ──
+    // 1) 일반 품목
+    for (const item of manualItems) {
+      const u = parseInt(item.unitPrice) || 0;
+      const q = parseInt(item.qty) || 0;
+      if (!item.name || u === 0 || q === 0) continue;
+      const supply = u * q;
+      const vat = Math.round(supply * 0.1);
+      lineItems.push({ name: item.name, qty: fmt(q), unit: u, supply, vat, total: supply + vat });
+    }
+    // 2) 성형틀
+    if (moldCost > 0) {
+      lineItems.push({ name: "성형틀 (최초 1회)", qty: "1", unit: moldCost, supply: moldCost, vat: Math.round(moldCost*0.1), total: moldCost + Math.round(moldCost*0.1) });
+    }
+    // 3) 인쇄제판 (레이즈 아닌 경우만)
+    if (plateCost > 0 && !isRaise) {
+      lineItems.push({ name: "인쇄제판 (최초 1회)", qty: "1", unit: plateCost, supply: plateCost, vat: Math.round(plateCost*0.1), total: plateCost + Math.round(plateCost*0.1) });
+    }
+  } else {
+    // ── 자동 계산 모드 ──
+    // 1) 초콜릿 제품 (맨 위)
+    const chocoSupply = V * quantity;
+    const chocoVat = Math.round(chocoSupply * 0.1);
+    lineItems.push({ name: productNameDisplay, qty: fmt(quantity), unit: V, supply: chocoSupply, vat: chocoVat, total: chocoSupply + chocoVat });
+    // 2) 성형틀
+    if (moldCost > 0) {
+      lineItems.push({ name: "성형틀 (최초 1회)", qty: "1", unit: moldCost, supply: moldCost, vat: Math.round(moldCost*0.1), total: moldCost + Math.round(moldCost*0.1) });
+    }
+    // 3) 인쇄제판 (레이즈 아닌 경우만)
+    if (plateCost > 0 && !isRaise) {
+      lineItems.push({ name: "인쇄제판 (최초 1회)", qty: "1", unit: plateCost, supply: plateCost, vat: Math.round(plateCost*0.1), total: plateCost + Math.round(plateCost*0.1) });
+    }
   }
 
-  // 3) 인쇄제판 — 레이즈는 L이 단가에 포함되므로 표시 안 함
-  if (plateCost > 0 && !isRaise) {
-    lineItems.push({
-      name: "인쇄제판 (최초 1회)", qty: "1",
-      unit: plateCost, supply: plateCost,
-      vat: Math.round(plateCost * 0.1),
-      total: plateCost + Math.round(plateCost * 0.1),
-    });
+  // ── 아이스박스 ──
+  if (iceboxPrice > 0) {
+    const supply = Math.round(iceboxPrice / 1.1);
+    const vat = iceboxPrice - supply;
+    lineItems.push({ name: "아이스박스/택배포장(5~10월)", qty: "1", unit: iceboxPrice, supply, vat, total: iceboxPrice });
+  }
+
+  // ── 택배비 ──
+  if (deliveryPrice > 0) {
+    const supply = Math.round(deliveryPrice / 1.1);
+    const vat = deliveryPrice - supply;
+    lineItems.push({ name: "택배비", qty: "1", unit: deliveryPrice, supply, vat, total: deliveryPrice });
   }
 
   const sumSupply = lineItems.reduce((a, r) => a + r.supply, 0);
