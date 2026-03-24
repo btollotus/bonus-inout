@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/browser";
 import QuotePrintModal from "./QuotePrintModal";
 
 // ─────────────────────── Types ───────────────────────
-type Tab = "input" | "list" | "sheet";
+type Tab = "input" | "list" | "sheet" | "signage";
 
 type PartnerRow = {
   id: string;
