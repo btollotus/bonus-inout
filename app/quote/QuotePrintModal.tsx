@@ -111,7 +111,8 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   const lineItems: LineItem[] = [];
 
   for (const item of items) {
-    const colorLabel = item.isRaise ? "컬러인쇄" : item.colorType === "dark" ? "다크" : "화이트";
+    const isDoneum = item.productType.includes("도눔");
+    const colorLabel = (isDoneum ? "도눔 " : "") + (item.isRaise ? "컬러인쇄" : item.colorType === "dark" ? "다크" : "화이트");
     const sizeStr = item.widthMm && item.heightMm
       ? `${item.widthMm}×${item.heightMm}mm${item.thickness ? `, 두께 ${item.thickness}` : ""}`
       : item.thickness ? `두께 ${item.thickness}` : "";
@@ -169,7 +170,8 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
     const safe = (s: string) => s.replace(/[\\/:*?"<>|×x]/g, "x").replace(/\s+/g, "_").slice(0, 20);
     const first = items[0];
     if (!first) return `${today}-${safe(customerName)}-견적서`;
-    const colorLabel = first.isRaise ? "컬러인쇄" : first.colorType === "dark" ? "다크" : "화이트";
+    const isDoneumFirst = first.productType.includes("도눔");
+    const colorLabel = (isDoneumFirst ? "도눔-" : "") + (first.isRaise ? "컬러인쇄" : first.colorType === "dark" ? "다크" : "화이트");
     const sizeStr = first.widthMm && first.heightMm ? `${first.widthMm}x${first.heightMm}mm` : "";
     const qty = first.quantity ? `${first.quantity}개` : "";
     return [today, safe(customerName), colorLabel, sizeStr, qty, "견적서"].filter(Boolean).join("-");

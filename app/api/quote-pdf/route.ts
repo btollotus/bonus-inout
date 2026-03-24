@@ -88,7 +88,8 @@ export async function GET(req: NextRequest) {
   const sizeStr = qr.width_mm && qr.height_mm
     ? `${qr.width_mm}×${qr.height_mm}mm${thickness ? ", 두께 " + thickness : ""}`
     : thickness ? `두께 ${thickness}` : "";
-  const colorLabel = isRaise ? "컬러인쇄" : colorType === "dark" ? "다크" : "화이트";
+  const isDoneum = pt.includes("도눔");
+  const colorLabel = (isDoneum ? "도눔 " : "") + (isRaise ? "컬러인쇄" : colorType === "dark" ? "다크" : "화이트");
   const productName = sizeStr ? `${colorLabel}(${sizeStr})` : colorLabel;
 
   const V = q?.final_price ?? 0;
