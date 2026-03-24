@@ -16,7 +16,8 @@ type PrintItem = {
   useStockMold: boolean;
   moldCost: number;
   plateCost: number;
-  V: number;        // 자동: V or V_stock / 수동: manualV
+  V: number;
+  manualV: number;
 };
 
 type QuotePrintProps = {
