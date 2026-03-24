@@ -356,6 +356,7 @@ export default function QuoteClient() {
   // 견적서 인쇄 모달
   const [printOpen, setPrintOpen] = useState(false);
   const [lastQuoteRequestId, setLastQuoteRequestId] = useState<string | null>(null);
+  const [selectedQuoteRow, setSelectedQuoteRow] = useState<QuoteRequestRow | null>(null);
 
   return (
     <div className="bg-slate-50 text-slate-900 min-h-screen">
@@ -838,6 +839,10 @@ export default function QuoteClient() {
                           <td className="px-3 py-2 text-xs text-slate-500">{r.lost_reason ?? "—"}</td>
                           <td className="px-3 py-2">
                             <div className="flex flex-wrap gap-1">
+                              <button className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                                onClick={() => { setSelectedQuoteRow(r); setLastQuoteRequestId(r.id); setPrintOpen(true); }}>
+                                🖨️ 견적서
+                              </button>
                               {r.status !== "수주" && (
                                 <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-1 text-[11px] font-semibold text-green-700 hover:bg-green-100"
                                   onClick={() => updateStatus(r.id, "수주")}>수주</button>
@@ -1028,8 +1033,43 @@ export default function QuoteClient() {
       {/* 견적서 인쇄 모달 */}
       {printOpen && (
         <QuotePrintModal
-          onClose={() => setPrintOpen(false)}
-          quoteData={{
+          onClose={() => { setPrintOpen(false); setSelectedQuoteRow(null); }}
+          quoteData={selectedQuoteRow ? (() => {
+            // 목록에서 불러온 저장된 견적
+            const r = selectedQuoteRow;
+            const q = r.quotes?.[0];
+            const pt = r.product_type ?? "";
+            const isRaise = pt.startsWith("레이즈");
+            const thickness = pt.includes("2mm") ? "2mm" : pt.includes("3mm") ? "3mm" : pt.includes("5mm") ? "5mm" : "";
+            return {
+              customerName: r.customer_name,
+              quoteDate: r.created_at.slice(0, 10),
+              inputMode: "auto" as const,
+              items: [{
+                productType: pt,
+                colorType: "dark" as const,
+                isRaise,
+                widthMm: r.width_mm,
+                heightMm: r.height_mm,
+                thickness,
+                quantity: r.quantity ?? 0,
+                isNew: r.is_new,
+                designChanged: r.design_changed,
+                useStockMold: r.use_stock_mold,
+                moldCost: q?.mold_cost ?? 0,
+                plateCost: q?.plate_cost ?? 0,
+                sheetCost: 0,
+                workFee: 0,
+                V: q?.final_price ?? 0,
+                manualV: 0,
+              }],
+              memo: r.memo,
+              iceboxPrice: 0,
+              deliveryPrice: 0,
+              quoteRequestId: r.id,
+            };
+          })() : {
+            // 새로 입력한 견적
             customerName: activeCustomerName,
             quoteDate: new Date().toISOString().slice(0, 10),
             inputMode,

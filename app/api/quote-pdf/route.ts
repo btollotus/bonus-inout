@@ -83,9 +83,10 @@ export async function GET(req: NextRequest) {
 
   const isRaise = (qr.product_type ?? "").startsWith("레이즈");
   const colorType = qr.color_type ?? "dark";
-  const thickness = qr.thickness ?? "";
+  const pt = qr.product_type ?? "";
+  const thickness = pt.includes("2mm") ? "2mm" : pt.includes("3mm") ? "3mm" : pt.includes("5mm") ? "5mm" : "";
   const sizeStr = qr.width_mm && qr.height_mm
-    ? `${qr.width_mm}×${qr.height_mm}mm, 두께 ${thickness}`
+    ? `${qr.width_mm}×${qr.height_mm}mm${thickness ? ", 두께 " + thickness : ""}`
     : thickness ? `두께 ${thickness}` : "";
   const colorLabel = isRaise ? "컬러인쇄" : colorType === "dark" ? "다크" : "화이트";
   const productName = sizeStr ? `${colorLabel}(${sizeStr})` : colorLabel;
@@ -118,29 +119,32 @@ export async function GET(req: NextRequest) {
 
   const quoteDate = (qr.created_at ?? "").slice(0, 10);
 
-  const cellBase = `border:1px solid #999;padding:4px 6px;font-size:11pt;`;
-  const cellHead = `${cellBase}background:#f0f0f0;text-align:center;font-weight:bold;`;
+  const cb = "border:1px solid #999;padding:4px 6px;font-size:11pt;";
+  const ch = cb + "background:#f0f0f0;text-align:center;font-weight:bold;";
+  const cbC = cb + "text-align:center;";
+  const cbR = cb + "text-align:right;";
 
-  const lineRowsHtml = lineItems.map(r => `
-    <tr>
-      <td style="${cellBase}">${r.name}</td>
-      <td style="${cellBase}text-align:center;">${r.qty}</td>
-      <td style="${cellBase}text-align:right;">${fmt(r.unit)}</td>
-      <td style="${cellBase}text-align:right;">${fmt(r.supply)}</td>
-      <td style="${cellBase}text-align:right;">${fmt(r.vat)}</td>
-      <td style="${cellBase}text-align:right;">${fmt(r.total)}</td>
-    </tr>`).join("");
+  const lineRowsHtml = lineItems.map(r =>
+    "<tr>" +
+    "<td style='" + cb + "'>"+r.name+"</td>" +
+    "<td style='" + cbC + "'>"+r.qty+"</td>" +
+    "<td style='" + cbR + "'>"+fmt(r.unit)+"</td>" +
+    "<td style='" + cbR + "'>"+fmt(r.supply)+"</td>" +
+    "<td style='" + cbR + "'>"+fmt(r.vat)+"</td>" +
+    "<td style='" + cbR + "'>"+fmt(r.total)+"</td>" +
+    "</tr>"
+  ).join("");
 
   const emptyRowsHtml = Array.from({ length: emptyRows }).map(() =>
-    `<tr style="height:22px;">${"<td style=\"" + cellBase + "\"></td>".repeat(6)}</tr>`
+    "<tr style='height:22px;'>" + ("<td style='" + cb + "'></td>").repeat(6) + "</tr>"
   ).join("");
 
   const cautionsHtml = cautions.map(c =>
-    `<tr><td colspan="6" style="${cellBase}color:#555;">*${c}</td></tr>`
+    "<tr><td colspan='6' style='" + cb + "color:#555;'>*" + c + "</td></tr>"
   ).join("");
 
   const memoHtml = qr.memo
-    ? `<tr><td colspan="6" style="${cellBase}color:#555;">*${qr.memo}</td></tr>`
+    ? "<tr><td colspan='6' style='" + cb + "color:#555;'>*" + qr.memo + "</td></tr>"
     : "";
 
   const customerName = qr.customer_name ?? "";
@@ -236,25 +240,25 @@ table { border-collapse: collapse; width: 100%; }
 <table style="font-size:11pt;margin-bottom:6px;">
   <thead>
     <tr style="background:#f0f0f0;">
-      <th style="${cellHead}width:42%;text-align:left;">품 명</th>
-      <th style="${cellHead}width:10%;">수 량</th>
-      <th style="${cellHead}width:13%;">단 가</th>
-      <th style="${cellHead}width:14%;">공급가</th>
-      <th style="${cellHead}width:10%;">부가세</th>
-      <th style="${cellHead}width:11%;">합 계</th>
+      <th style="${ch}width:42%;text-align:left;">품 명</th>
+      <th style="${ch}width:10%;">수 량</th>
+      <th style="${ch}width:13%;">단 가</th>
+      <th style="${ch}width:14%;">공급가</th>
+      <th style="${ch}width:10%;">부가세</th>
+      <th style="${ch}width:11%;">합 계</th>
     </tr>
   </thead>
   <tbody>
     ${lineRowsHtml}
     ${emptyRowsHtml}
-    <tr><td colspan="6" style="${cellBase}color:#333;">*식품유형 - ${foodType}</td></tr>
+    <tr><td colspan="6" style="${cb}color:#333;">*식품유형 - ${foodType}</td></tr>
     ${cautionsHtml}
     ${memoHtml}
     <tr style="background:#f5f5f5;font-weight:bold;">
-      <td colspan="3" style="${cellBase}text-align:center;">소 계</td>
-      <td style="${cellBase}text-align:right;">${fmt(sumSupply)}</td>
-      <td style="${cellBase}text-align:right;">${fmt(sumVat)}</td>
-      <td style="${cellBase}text-align:right;">${fmt(sumTotal)}</td>
+      <td colspan="3" style="${cb}text-align:center;">소 계</td>
+      <td style="${cb}text-align:right;">${fmt(sumSupply)}</td>
+      <td style="${cb}text-align:right;">${fmt(sumVat)}</td>
+      <td style="${cb}text-align:right;">${fmt(sumTotal)}</td>
     </tr>
   </tbody>
 </table>
