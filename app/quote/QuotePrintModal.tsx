@@ -236,15 +236,15 @@ table { border-collapse: collapse; width: 100%; }
                   <td style={{ border: "none", verticalAlign: "top", width: "56%" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 11, tableLayout: "fixed" }}>
                       <colgroup>
-                        <col style={{ width: 28 }} />
-                        <col style={{ width: 52 }} />
-                        <col style={{ width: "50%" }} />
-                        <col style={{ width: "50%" }} />
+                        <col style={{ width: 20 }} />
+                        <col style={{ width: 48 }} />
+                        <col />
+                        <col />
                       </colgroup>
                       <tbody>
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px", whiteSpace: "nowrap" }}>등록번호</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 6px" }} colSpan={3}>{OUR.business_no}</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px", whiteSpace: "nowrap" }} colSpan={2}>등록번호</td>
+                          <td style={{ border: "1px solid #999", padding: "2px 6px" }} colSpan={2}>{OUR.business_no}</td>
                         </tr>
                         <tr>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px", writingMode: "vertical-rl" as any, letterSpacing: 2 }} rowSpan={6}>
