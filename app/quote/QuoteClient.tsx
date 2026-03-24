@@ -322,6 +322,57 @@ export default function QuoteClient() {
     loadQuoteList();
   }
 
+  // ─── 견적 삭제 ───
+  async function deleteQuote(id: string) {
+    if (!confirm("이 견적을 삭제하시겠습니까?")) return;
+    await supabase.from("quotes").delete().eq("request_id", id);
+    const { error } = await supabase.from("quote_requests").delete().eq("id", id);
+    if (error) return setMsg(error.message);
+    setMsg("🗑️ 견적이 삭제됐어요.");
+    loadQuoteList();
+  }
+
+  // ─── 기존 견적 불러오기 (견적 입력 탭으로 이동) ───
+  function loadQuoteToForm(r: QuoteRequestRow) {
+    const q = r.quotes?.[0];
+    const pt = r.product_type ?? "전사3mm";
+    const isRaiseItem = pt.startsWith("레이즈");
+    setPartnerMode("direct");
+    setCustomerName(r.customer_name);
+    setItems([{
+      id: crypto.randomUUID(),
+      productType: pt,
+      colorType: "dark",
+      widthMm: r.width_mm ? String(r.width_mm) : "",
+      heightMm: r.height_mm ? String(r.height_mm) : "",
+      quantity: r.quantity ? String(r.quantity) : "",
+      isNew: r.is_new,
+      designChanged: r.design_changed,
+      useStockMold: r.use_stock_mold,
+      reuseExistingMold: r.reuse_existing_mold,
+      calcResult: q ? {
+        unitPrice: q.unit_price ?? 0,
+        moldCost: q.mold_cost ?? 0,
+        plateCost: q.plate_cost ?? 0,
+        sheetCount: q.transfer_sheets ?? 0,
+        sheetCost: q.transfer_cost ?? 0,
+        workFee: q.work_fee ?? 0,
+        totalActual: q.total ?? 0,
+        totalWithVat: Math.round((q.total ?? 0) * 1.1),
+        T: q.t_price ?? 0,
+        U: q.u_price ?? 0,
+        V: q.final_price ?? 0,
+        V_stock: q.final_price_stock ?? null,
+      } : null,
+      calcLoading: false,
+      manualV: "",
+    }]);
+    setMemo(r.memo ?? "");
+    setInputMode("auto");
+    setTab("input");
+    setMsg("✅ 견적을 불러왔어요. 수정 후 견적서 출력 버튼을 누르세요.");
+  }
+
   function resetForm() {
     setItems([newItem()]); setMemo("");
     setUseIcebox(false); setIceboxPrice(4620); setDeliveryPrice(0);
@@ -843,6 +894,10 @@ export default function QuoteClient() {
                                 onClick={() => { setSelectedQuoteRow(r); setLastQuoteRequestId(r.id); setPrintOpen(true); }}>
                                 🖨️ 견적서
                               </button>
+                              <button className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-100"
+                                onClick={() => loadQuoteToForm(r)}>
+                                ✏️ 불러오기
+                              </button>
                               {r.status !== "수주" && (
                                 <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-1 text-[11px] font-semibold text-green-700 hover:bg-green-100"
                                   onClick={() => updateStatus(r.id, "수주")}>수주</button>
@@ -859,6 +914,10 @@ export default function QuoteClient() {
                                 <button className="rounded-lg border border-slate-300 bg-slate-50 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100"
                                   onClick={() => updateStatus(r.id, "견적완료")}>견적완료</button>
                               )}
+                              <button className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-500 hover:bg-red-100"
+                                onClick={() => deleteQuote(r.id)}>
+                                🗑️
+                              </button>
                             </div>
                           </td>
                         </tr>
