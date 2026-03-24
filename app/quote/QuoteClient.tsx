@@ -708,18 +708,18 @@ export default function QuoteClient() {
                     disabled={inputMode === "auto" && items.every(x => !x.calcResult)}
                     onClick={async () => {
                       if (!activeCustomerName) return setMsg("업체명을 입력하세요.");
-                      // 자동 계산 모드: 저장 후 quoteRequestId 획득
+                      setMsg(null);
+                      // 자동 계산 모드: DB 저장 후 quoteRequestId 획득
                       if (inputMode === "auto") {
                         const firstItem = items.find(x => x.calcResult);
                         if (firstItem?.calcResult) {
                           const cr = firstItem.calcResult;
                           const V = firstItem.useStockMold && cr.V_stock ? cr.V_stock : cr.V;
-                          const { data: req } = await supabase.from("quote_requests").insert({
+                          const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
                             customer_id: activeCustomerId,
                             customer_name: activeCustomerName,
                             request_type: "product",
                             product_type: firstItem.productType,
-                            color_type: firstItem.colorType,
                             width_mm: parseFloat(firstItem.widthMm) || null,
                             height_mm: parseFloat(firstItem.heightMm) || null,
                             quantity: parseInt(firstItem.quantity) || null,
@@ -728,17 +728,23 @@ export default function QuoteClient() {
                             use_stock_mold: firstItem.useStockMold,
                             reuse_existing_mold: firstItem.reuseExistingMold,
                             mold_qty: 1, memo: memo || null, status: "견적완료",
+                            updated_at: new Date().toISOString(),
                           }).select("id").single();
-                          if (req?.id) {
-                            await supabase.from("quotes").insert({
+                          if (reqErr) {
+                            setMsg("⚠️ 저장 오류: " + reqErr.message);
+                          } else if (req?.id) {
+                            const { error: quoteErr } = await supabase.from("quotes").insert({
                               request_id: req.id,
-                              unit_price: cr.unitPrice, mold_cost: cr.moldCost,
-                              plate_cost: cr.plateCost, transfer_sheets: cr.sheetCount,
-                              transfer_cost: cr.sheetCost, work_fee: cr.workFee,
-                              total: cr.totalActual, t_price: cr.T, u_price: cr.U,
-                              final_price: V, final_price_stock: cr.V_stock ?? null,
+                              unit_price: cr.unitPrice ?? 0,
+                              mold_cost: cr.moldCost ?? 0,
+                              plate_cost: cr.plateCost ?? 0,
+                              total: cr.totalActual ?? 0,
+                              final_price: V,
+                              final_price_stock: cr.V_stock ?? null,
                             });
+                            if (quoteErr) setMsg("⚠️ 견적 상세 저장 오류: " + quoteErr.message);
                             setLastQuoteRequestId(req.id);
+                            loadQuoteList();
                           }
                         }
                       }
