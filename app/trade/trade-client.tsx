@@ -1268,6 +1268,19 @@ export default function TradeClient() {
 
   async function onCopyClick(r: UnifiedRow) {
     setMsg(null);
+
+      // ── 해당 거래처 자동 선택 ──
+  const copyPartnerId = r.kind === "ORDER"
+  ? (orders.find(o => o.id === r.rawId)?.customer_id ?? null)
+  : (ledgers.find(l => l.id === r.rawId)?.partner_id ?? null);
+if (copyPartnerId) {
+  const found = partners.find(p => p.id === copyPartnerId);
+  if (found && found.id !== selectedPartner?.id) {
+    setSelectedPartner(found);
+    pushRecentPartner(found.id);
+  }
+}
+
     if (r.kind === "ORDER") {
       setOrderIsReorder(false); setMode("ORDERS"); setShipDate(todayYMD());
       setOrdererName(r.orderer_name ?? r.ordererName ?? ""); setShipMethod(r.ship_method ?? "택배");
@@ -1351,6 +1364,19 @@ export default function TradeClient() {
 
   async function openEdit(r: UnifiedRow) {
     setMsg(null); setEditRow(r);
+
+      // ── 해당 거래처 자동 선택 ──
+  const editPartnerId = r.kind === "ORDER"
+  ? (orders.find(o => o.id === r.rawId)?.customer_id ?? null)
+  : (ledgers.find(l => l.id === r.rawId)?.partner_id ?? null);
+if (editPartnerId) {
+  const found = partners.find(p => p.id === editPartnerId);
+  if (found && found.id !== selectedPartner?.id) {
+    setSelectedPartner(found);
+    pushRecentPartner(found.id);
+  }
+}
+
     if (r.kind === "ORDER") {
       setEShipDate(r.date || todayYMD()); setEOrdererName(r.orderer_name ?? r.ordererName ?? "");
       setEShipMethod(r.ship_method ?? r.method ?? "택배"); setEOrderTitle(r.order_title ?? "");
@@ -1959,7 +1985,19 @@ if (woSubNameVal) {
                 const active = selectedPartner?.id === p.id;
                 return (
                   <div key={p.id} className={`flex items-stretch gap-2 rounded-2xl border ${active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
-                    <button className="flex-1 rounded-2xl px-3 py-3 text-left" onClick={() => selectPartner(p)}>
+                    
+                    <button className="flex-1 rounded-2xl px-3 py-3 text-left" onClick={() => {
+  selectPartner(p);
+  setShipDate(todayYMD()); setOrdererName(""); setShipMethod("택배"); setOrderTitle("");
+  setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
+  setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
+  setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
+  setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoNote("");
+  setOrderIsReorder(false); setOrderWoEnabled(true);
+  setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({});
+  setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
+}}>
+  
                       <div className="font-semibold">{p.name}</div>
                       <div className="text-xs text-slate-500">{p.business_no ?? ""}</div>
                     </button>
