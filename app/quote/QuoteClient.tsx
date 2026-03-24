@@ -355,6 +355,7 @@ export default function QuoteClient() {
 
   // 견적서 인쇄 모달
   const [printOpen, setPrintOpen] = useState(false);
+  const [lastQuoteRequestId, setLastQuoteRequestId] = useState<string | null>(null);
 
   return (
     <div className="bg-slate-50 text-slate-900 min-h-screen">
@@ -702,18 +703,49 @@ export default function QuoteClient() {
 
                 {/* 하단 버튼 */}
                 <div className="flex gap-2">
-                  {inputMode === "manual" ? (
-                    <button className="flex-1 rounded-xl border border-orange-300 bg-orange-500 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-600"
-                      onClick={() => { if (!activeCustomerName) return setMsg("업체명을 입력하세요."); setPrintOpen(true); }}>
-                      🖨️ 견적서 출력
-                    </button>
-                  ) : (
-                    <button className={`${btnOn} flex-1`}
-                      onClick={() => { if (!activeCustomerName) return setMsg("업체명을 입력하세요."); setPrintOpen(true); }}
-                      disabled={items.every(x => !x.calcResult)}>
-                      🖨️ 견적서 출력
-                    </button>
-                  )}
+                  <button
+                    className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-white ${inputMode === "manual" ? "border border-orange-300 bg-orange-500 hover:bg-orange-600" : `${btnOn}`}`}
+                    disabled={inputMode === "auto" && items.every(x => !x.calcResult)}
+                    onClick={async () => {
+                      if (!activeCustomerName) return setMsg("업체명을 입력하세요.");
+                      // 자동 계산 모드: 저장 후 quoteRequestId 획득
+                      if (inputMode === "auto") {
+                        const firstItem = items.find(x => x.calcResult);
+                        if (firstItem?.calcResult) {
+                          const cr = firstItem.calcResult;
+                          const V = firstItem.useStockMold && cr.V_stock ? cr.V_stock : cr.V;
+                          const { data: req } = await supabase.from("quote_requests").insert({
+                            customer_id: activeCustomerId,
+                            customer_name: activeCustomerName,
+                            request_type: "product",
+                            product_type: firstItem.productType,
+                            color_type: firstItem.colorType,
+                            width_mm: parseFloat(firstItem.widthMm) || null,
+                            height_mm: parseFloat(firstItem.heightMm) || null,
+                            quantity: parseInt(firstItem.quantity) || null,
+                            is_new: firstItem.isNew,
+                            design_changed: firstItem.designChanged,
+                            use_stock_mold: firstItem.useStockMold,
+                            reuse_existing_mold: firstItem.reuseExistingMold,
+                            mold_qty: 1, memo: memo || null, status: "견적완료",
+                          }).select("id").single();
+                          if (req?.id) {
+                            await supabase.from("quotes").insert({
+                              request_id: req.id,
+                              unit_price: cr.unitPrice, mold_cost: cr.moldCost,
+                              plate_cost: cr.plateCost, transfer_sheets: cr.sheetCount,
+                              transfer_cost: cr.sheetCost, work_fee: cr.workFee,
+                              total: cr.totalActual, t_price: cr.T, u_price: cr.U,
+                              final_price: V, final_price_stock: cr.V_stock ?? null,
+                            });
+                            setLastQuoteRequestId(req.id);
+                          }
+                        }
+                      }
+                      setPrintOpen(true);
+                    }}>
+                    🖨️ 견적서 출력
+                  </button>
                   <button className={btn} onClick={() => { setItems([newItem()]); setMemo(""); setUseIcebox(false); setIceboxPrice(4620); setDeliveryPrice(0); }}>
                     초기화
                   </button>
@@ -1018,6 +1050,7 @@ export default function QuoteClient() {
             memo: memo || null,
             iceboxPrice: useIcebox ? iceboxPrice : 0,
             deliveryPrice,
+            quoteRequestId: lastQuoteRequestId,
           }}
         />
       )}

@@ -30,6 +30,7 @@ type QuotePrintProps = {
     memo: string | null;
     iceboxPrice: number;
     deliveryPrice: number;
+    quoteRequestId?: string | null;  // DB 저장된 견적 ID (드라이브 업로드용)
   };
 };
 
@@ -87,7 +88,10 @@ function formatDateKorean(ymd: string): string {
 // ─────────────────────── Component ───────────────────────
 export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps) {
   const printRef = useRef<HTMLDivElement>(null);
-  const { customerName, quoteDate, inputMode, items, memo, iceboxPrice, deliveryPrice } = quoteData;
+  const [saving, setSaving] = React.useState(false);
+  const [saveMsg, setSaveMsg] = React.useState<string | null>(null);
+
+  const { customerName, quoteDate, inputMode, items, memo, iceboxPrice, deliveryPrice, quoteRequestId } = quoteData;
 
   // ── 식품유형 (첫 품목 기준) ──
   const firstItem = items[0];
@@ -159,6 +163,48 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   const sumTotal  = lineItems.reduce((a, r) => a + r.total, 0);
   const emptyRows = Math.max(0, 8 - lineItems.length);
 
+  // ── 파일명 생성 ──
+  function makeFileName(): string {
+    const today = quoteDate.replace(/-/g, "");
+    const safe = (s: string) => s.replace(/[\\/:*?"<>|×x]/g, "x").replace(/\s+/g, "_").slice(0, 20);
+    const first = items[0];
+    if (!first) return `${today}-${safe(customerName)}-견적서`;
+    const colorLabel = first.isRaise ? "컬러인쇄" : first.colorType === "dark" ? "다크" : "화이트";
+    const sizeStr = first.widthMm && first.heightMm ? `${first.widthMm}x${first.heightMm}mm` : "";
+    const qty = first.quantity ? `${first.quantity}개` : "";
+    return [today, safe(customerName), colorLabel, sizeStr, qty, "견적서"].filter(Boolean).join("-");
+  }
+
+  // ── 인쇄 + 드라이브 저장 ──
+  async function handlePrintAndSave() {
+    doPrint();  // 브라우저 인쇄 즉시 실행
+
+    // 드라이브 업로드 (quoteRequestId가 있을 때만)
+    if (quoteRequestId) {
+      setSaving(true);
+      setSaveMsg("📤 구글 드라이브 저장 중...");
+      try {
+        const res = await fetch("/api/trigger-quote-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            quoteRequestId,
+            fileName: makeFileName(),
+          }),
+        });
+        if (res.ok) {
+          setSaveMsg("✅ 드라이브 저장 요청 완료 (1~2분 소요)");
+        } else {
+          setSaveMsg("⚠️ 드라이브 저장 실패 (인쇄는 완료)");
+        }
+      } catch {
+        setSaveMsg("⚠️ 드라이브 저장 오류 (인쇄는 완료)");
+      } finally {
+        setSaving(false);
+      }
+    }
+  }
+
   // ── 인쇄 ──
   function doPrint() {
     const content = printRef.current;
@@ -192,10 +238,17 @@ table { border-collapse: collapse; width: 100%; }
     <div className="fixed inset-0 z-50 flex flex-col bg-black/40">
       {/* 상단 버튼 */}
       <div className="flex items-center justify-between bg-slate-800 px-5 py-3 text-white">
-        <div className="font-semibold">견적서 미리보기</div>
+        <div className="flex items-center gap-3">
+          <div className="font-semibold">견적서 미리보기</div>
+          {saveMsg && (
+            <span className={`text-xs px-3 py-1 rounded-full ${saveMsg.startsWith("✅") ? "bg-green-700 text-green-100" : saveMsg.startsWith("📤") ? "bg-blue-700 text-blue-100" : "bg-amber-700 text-amber-100"}`}>
+              {saveMsg}
+            </span>
+          )}
+        </div>
         <div className="flex gap-2">
-          <button onClick={doPrint}
-            className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold hover:bg-blue-700">
+          <button onClick={handlePrintAndSave} disabled={saving}
+            className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold hover:bg-blue-700 disabled:opacity-60">
             🖨️ 인쇄 / PDF 저장
           </button>
           <button onClick={onClose}

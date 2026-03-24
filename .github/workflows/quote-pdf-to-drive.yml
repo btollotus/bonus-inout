@@ -1,0 +1,107 @@
+name: Quote PDF to Google Drive
+on:
+  workflow_dispatch:
+    inputs:
+      quote_request_id:
+        description: "견적 요청 ID"
+        required: true
+        type: string
+      file_name:
+        description: "저장할 파일명 (확장자 제외)"
+        required: true
+        type: string
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cache apt packages
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: rclone fonts-nanum fonts-nanum-coding
+          version: 1.0
+
+      - name: Install Google Chrome
+        run: |
+          wget -q -O /tmp/chrome.deb \
+            https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y /tmp/chrome.deb
+          google-chrome --version
+
+      - name: Write rclone service account
+        env:
+          GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          mkdir -p ~/.config/rclone
+          python3 - <<'PY'
+          import os
+          p = "/home/runner/.config/rclone/sa.json"
+          s = os.environ.get("GDRIVE_SA_JSON", "")
+          if not s.strip():
+            raise SystemExit("ERROR: secrets.GDRIVE_SERVICE_ACCOUNT_JSON is empty")
+          with open(p, "w", encoding="utf-8") as f:
+            f.write(s)
+          print("sa.json written, bytes=", len(s.encode("utf-8")))
+          PY
+
+      - name: Setup rclone with Shared Drive
+        run: |
+          cat > ~/.config/rclone/rclone.conf << 'RCLONE'
+          [gdrive]
+          type = drive
+          scope = drive
+          service_account_file = /home/runner/.config/rclone/sa.json
+          RCLONE
+          python3 - <<'PY'
+          import json, subprocess
+          target_name = "Supabase-Backup"
+          out = subprocess.check_output(["rclone", "backend", "drives", "gdrive:", "--json"], text=True)
+          drives = json.loads(out)
+          did = ""
+          for d in drives:
+            if str(d.get("name", "")) == target_name:
+              did = str(d.get("id", ""))
+              break
+          if not did:
+            print("AVAILABLE DRIVES:")
+            for d in drives:
+              print("-", d.get("name"), d.get("id"))
+            raise SystemExit(f"ERROR: Could not find Shared Drive named '{target_name}'")
+          print("shared_drive_id =", did)
+          conf = f"""[gdrive]
+          type = drive
+          scope = drive
+          service_account_file = /home/runner/.config/rclone/sa.json
+          team_drive = {did}
+          """
+          open("/home/runner/.config/rclone/rclone.conf", "w", encoding="utf-8").write(conf)
+          PY
+
+      - name: Download HTML and convert to PDF
+        run: |
+          QUOTE_ID="${{ github.event.inputs.quote_request_id }}"
+          FILE_NAME="${{ github.event.inputs.file_name }}"
+          URL="https://bonus-inout.vercel.app/api/quote-pdf?id=${QUOTE_ID}"
+          HTML_FILE="${FILE_NAME}.html"
+          PDF_FILE="${FILE_NAME}.pdf"
+
+          curl -L --fail \
+            -H "x-internal-token: ${{ secrets.INTERNAL_API_TOKEN }}" \
+            -o "$HTML_FILE" "$URL"
+
+          google-chrome --headless --no-sandbox \
+            --run-all-compositor-stages-before-draw \
+            --print-to-pdf-no-header \
+            --no-pdf-header-footer \
+            --print-to-pdf="$PDF_FILE" \
+            "file://$(pwd)/$HTML_FILE"
+
+          ls -alh "$PDF_FILE"
+
+      - name: Upload to Google Drive
+        run: |
+          FILE_NAME="${{ github.event.inputs.file_name }}"
+          OUTPUT="${FILE_NAME}.pdf"
+          DEST="gdrive:bonus-inout/quote-pdf"
+          rclone mkdir "$DEST" || true
+          rclone copy "$OUTPUT" "$DEST" -P
+          echo "✅ Uploaded: $DEST/$OUTPUT"
