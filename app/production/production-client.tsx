@@ -1755,8 +1755,7 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
                               value={noteVal}
                               onChange={(e) => onItemNoteChange(item.id, e.target.value)}
                               placeholder=""
-                              style={{ width: "100%", height: "52px", resize: "none", border: "none", outline: "none", fontSize: "11pt", fontFamily: "inherit", padding: "3px 4px", background: "transparent", lineHeight: "1.4" }}
-
+                              style={{ width: "100%", height: "52px", resize: "none", border: "none", outline: "none", fontSize: "8.5pt", fontFamily: "inherit", padding: "3px 4px", background: "transparent", lineHeight: "1.4" }}
                             />
                           </td>
                         </tr>
