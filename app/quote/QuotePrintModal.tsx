@@ -133,8 +133,8 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
     });
   }
 
-  // 3) 인쇄제판 (아래)
-  if (plateCost > 0) {
+  // 3) 인쇄제판 — 레이즈는 L이 단가에 포함되므로 표시 안 함
+  if (plateCost > 0 && !isRaise) {
     lineItems.push({
       name: "인쇄제판 (최초 1회)", qty: "1",
       unit: plateCost, supply: plateCost,
