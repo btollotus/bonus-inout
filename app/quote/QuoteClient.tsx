@@ -995,6 +995,7 @@ export default function QuoteClient() {
               )}
             </div>
 
+
             {/* 전사지 입력 */}
             <div className="space-y-4">
               <div className={`${card} p-4`}>
@@ -1094,7 +1095,20 @@ export default function QuoteClient() {
             </div>
           </div>
         )}
+
+      {/* ───────────── 탭 4: 제작문의 ───────────── */}
+      {tab === "signage" && (
+          <div className={card + " p-6"}>
+            <div className="text-center py-12 text-slate-400">
+              <div className="text-4xl mb-3">🪧</div>
+              <div className="text-sm">준비 중입니다...</div>
+            </div>
+          </div>
+        )}
+
       </div>
+
+
 
       {/* 견적서 인쇄 모달 */}
       {printOpen && (
