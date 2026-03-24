@@ -234,58 +234,58 @@ table { border-collapse: collapse; width: 100%; }
                     <div style={{ fontSize: 12, color: "#c00" }}>※ 주문제작은 선결제 후 진행됩니다.</div>
                   </td>
                   <td style={{ border: "none", verticalAlign: "top", width: "56%" }}>
-                    <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 11, tableLayout: "fixed" }}>
-                      <colgroup>
-                        <col style={{ width: 20 }} />
-                        <col style={{ width: 48 }} />
-                        <col />
-                        <col />
-                      </colgroup>
+                    {/* 발신자 정보: 외부 2열(발신자 | 내용), 내용 열 안에 별도 테이블 */}
+                    <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 11 }}>
                       <tbody>
+                        {/* 등록번호 행 */}
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px", whiteSpace: "nowrap" }} colSpan={2}>등록번호</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 6px" }} colSpan={2}>{OUR.business_no}</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 52, padding: "3px 4px", fontSize: 10 }}>등록번호</td>
+                          <td style={{ border: "1px solid #999", padding: "3px 6px" }} colSpan={3}>{OUR.business_no}</td>
                         </tr>
+                        {/* 상호 + 성명 */}
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px", writingMode: "vertical-rl" as any, letterSpacing: 2 }} rowSpan={6}>
-                            발신자
-                          </td>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>상호</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px" }}>{OUR.nameShort}</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px 2px 3px", whiteSpace: "nowrap", overflow: "hidden" }}>
-                            <span style={{ display: "inline-block", paddingRight: 4, borderRight: "1px solid #bbb", marginRight: 4 }}>성명</span>
-                            <span style={{ position: "relative", display: "inline-block" }}>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "3px 4px", fontSize: 10 }} rowSpan={6}>발<br/>신<br/>자</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 52, padding: "3px 4px", fontSize: 10 }}>상호</td>
+                          <td style={{ border: "1px solid #999", padding: "3px 5px" }}>{OUR.nameShort}</td>
+                          <td style={{ border: "1px solid #999", padding: "3px 5px", whiteSpace: "nowrap", width: 90 }}>
+                            <span style={{ paddingRight: 3, borderRight: "1px solid #bbb", marginRight: 3, fontSize: 10 }}>성명</span>
+                            <span style={{ position: "relative" }}>
                               {OUR.ceo}
-                              <img src="/stamp.png" alt="" style={{ position: "absolute", left: "calc(100% - 2px)", top: -5, height: 26, opacity: 0.9 }}
+                              <img src="/stamp.png" alt="" style={{ position: "absolute", left: "100%", top: -4, marginLeft: -6, height: 24, opacity: 0.9 }}
                                 onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                             </span>
                           </td>
                         </tr>
+                        {/* 사업장주소 */}
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px", whiteSpace: "nowrap" }}>사업장주소</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px", fontSize: 10 }} colSpan={2}>{OUR.address}</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "3px 4px", fontSize: 10 }}>주소</td>
+                          <td style={{ border: "1px solid #999", padding: "3px 5px", fontSize: 10 }} colSpan={2}>{OUR.address}</td>
                         </tr>
+                        {/* 업태/종목 */}
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>업 태</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px" }}>{OUR.bizType}</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px 2px 3px" }}>
-                            <span style={{ display: "inline-block", paddingRight: 4, borderRight: "1px solid #bbb", marginRight: 4 }}>종목</span>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "3px 4px", fontSize: 10 }}>업태</td>
+                          <td style={{ border: "1px solid #999", padding: "3px 5px" }}>{OUR.bizType}</td>
+                          <td style={{ border: "1px solid #999", padding: "3px 5px" }}>
+                            <span style={{ paddingRight: 3, borderRight: "1px solid #bbb", marginRight: 3, fontSize: 10 }}>종목</span>
                             {OUR.bizItem}
                           </td>
                         </tr>
+                        {/* 전화번호 */}
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>전화번호</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px" }} colSpan={2}>{OUR.phone}</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "3px 4px", fontSize: 10 }}>전화</td>
+                          <td style={{ border: "1px solid #999", padding: "3px 5px" }} colSpan={2}>{OUR.phone}</td>
                         </tr>
+                        {/* 카카오/이메일 */}
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>카카오톡</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px", fontSize: 10 }} colSpan={2}>
-                            {OUR.kakao} &nbsp;|&nbsp; ✉ {OUR.email}
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "3px 4px", fontSize: 10 }}>카카오</td>
+                          <td style={{ border: "1px solid #999", padding: "3px 5px", fontSize: 10 }} colSpan={2}>
+                            {OUR.kakao} &nbsp;|&nbsp; {OUR.email}
                           </td>
                         </tr>
+                        {/* 입금계좌 */}
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px" }}>입금계좌</td>
-                          <td style={{ border: "1px solid #999", padding: "2px 5px", fontWeight: "bold", fontSize: 10 }} colSpan={2}>{OUR.bank}</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "3px 4px", fontSize: 10 }}>계좌</td>
+                          <td style={{ border: "1px solid #999", padding: "3px 5px", fontSize: 10, fontWeight: "bold" }} colSpan={2}>{OUR.bank}</td>
                         </tr>
                       </tbody>
                     </table>
