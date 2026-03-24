@@ -722,7 +722,6 @@ export default function QuoteClient() {
             </div>
           </div>
         )}
-        )}
 
         {/* ───────────── 탭 2: 견적 목록 ───────────── */}
         {tab === "list" && (
