@@ -923,7 +923,7 @@ export default function TradeClient() {
         const { data: createdWo, error: woErr } = await supabase.from("work_orders").insert({
           work_order_no: workOrderNo, barcode_no: barcodeNo,
           client_id: selectedPartner.id, client_name: selectedPartner.name,
-          sub_name: orderWoSubName.trim() || null, order_date: shipDate,
+          sub_name: orderWoSubName.trim() || null, order_date: todayYMD(),
           food_type: foodType, product_name: productName,
           logo_spec: orderWoLogoSpec.trim() || null, thickness: orderWoThickness || null,
           delivery_method: shipMethod, packaging_type: orderWoPackagingType || null,
