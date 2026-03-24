@@ -620,14 +620,22 @@ export default function QuoteClient() {
 
                   {/* 고객 제시가 */}
                   <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                    <div className="rounded-2xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-center">
-                      <div className="text-xs text-blue-600 font-semibold">★ 고객 제시가 (V)</div>
-                      <div className="text-2xl font-black text-blue-700 tabular-nums">{fmt(calcResult.V)}원</div>
-                    </div>
-                    {calcResult.V_stock && (
-                      <div className="rounded-2xl border-2 border-purple-300 bg-purple-50 px-4 py-3 text-center">
-                        <div className="text-xs text-purple-600 font-semibold">기성 성형틀 제시가</div>
-                        <div className="text-2xl font-black text-purple-700 tabular-nums">{fmt(calcResult.V_stock)}원</div>
+                    {/* 기성 성형틀이면 V_stock을 메인으로 표시 */}
+                    {useStockMold && calcResult.V_stock ? (
+                      <>
+                        <div className="rounded-2xl border-2 border-purple-300 bg-purple-50 px-4 py-3 text-center">
+                          <div className="text-xs text-purple-600 font-semibold">★ 고객 제시가 (기성 성형틀)</div>
+                          <div className="text-2xl font-black text-purple-700 tabular-nums">{fmt(calcResult.V_stock)}원</div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+                          <div className="text-xs text-slate-500 font-semibold">일반 성형틀 제작 시 단가</div>
+                          <div className="text-lg font-bold text-slate-500 tabular-nums">{fmt(calcResult.V)}원</div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="rounded-2xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-center md:col-span-2">
+                        <div className="text-xs text-blue-600 font-semibold">★ 고객 제시가 (V)</div>
+                        <div className="text-2xl font-black text-blue-700 tabular-nums">{fmt(calcResult.V)}원</div>
                       </div>
                     )}
                   </div>
@@ -931,8 +939,8 @@ export default function QuoteClient() {
             plateCost: calcResult.plateCost,
             sheetCost: calcResult.sheetCost,
             workFee: calcResult.workFee,
-            V: calcResult.V,
-            V_stock: calcResult.V_stock,
+            V: useStockMold && calcResult.V_stock ? calcResult.V_stock : calcResult.V,
+            V_stock: null,  // 이미 V에 반영했으므로 비고 표시 불필요
           }}
         />
       )}
