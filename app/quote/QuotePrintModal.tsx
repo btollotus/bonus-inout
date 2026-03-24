@@ -3,33 +3,32 @@
 import React, { useRef } from "react";
 
 // ─────────────────────── Types ───────────────────────
+type PrintItem = {
+  productType: string;
+  colorType: "dark" | "white";
+  isRaise: boolean;
+  widthMm: number | null;
+  heightMm: number | null;
+  thickness: string;
+  quantity: number;
+  isNew: boolean;
+  designChanged: boolean;
+  useStockMold: boolean;
+  moldCost: number;
+  plateCost: number;
+  V: number;        // 자동: V or V_stock / 수동: manualV
+};
+
 type QuotePrintProps = {
   onClose: () => void;
   quoteData: {
     customerName: string;
     quoteDate: string;
-    productType: string;
-    colorType: "dark" | "white";
-    isRaise: boolean;
-    widthMm: number | null;
-    heightMm: number | null;
-    thickness: string;
-    quantity: number;
-    isNew: boolean;
-    designChanged: boolean;
-    useStockMold: boolean;
+    inputMode: "auto" | "manual";
+    items: PrintItem[];
     memo: string | null;
-    moldCost: number;
-    plateCost: number;
-    sheetCost: number;
-    workFee: number;
-    V: number;
-    V_stock: number | null;
-    // 수동 입력 품목
-    manualItems: { id: string; name: string; qty: string; unitPrice: string }[] | null;
-    // 추가 옵션
-    iceboxPrice: number;   // 0이면 없음
-    deliveryPrice: number; // 0이면 없음
+    iceboxPrice: number;
+    deliveryPrice: number;
   };
 };
 
@@ -87,28 +86,17 @@ function formatDateKorean(ymd: string): string {
 // ─────────────────────── Component ───────────────────────
 export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps) {
   const printRef = useRef<HTMLDivElement>(null);
+  const { customerName, quoteDate, inputMode, items, memo, iceboxPrice, deliveryPrice } = quoteData;
 
-  const {
-    customerName, quoteDate, productType, colorType, isRaise,
-    widthMm, heightMm, thickness, quantity, isNew,
-    designChanged, useStockMold, memo,
-    moldCost, plateCost, sheetCost, workFee, V, V_stock,
-    manualItems, iceboxPrice, deliveryPrice,
-  } = quoteData;
+  // ── 식품유형 (첫 품목 기준) ──
+  const firstItem = items[0];
+  const foodType = firstItem
+    ? (firstItem.colorType === "dark" && !firstItem.isRaise ? "준초콜릿" : "당류가공품")
+    : "준초콜릿";
 
-  // ── 식품유형 ──
-  const foodType = (colorType === "dark" && !isRaise)
-    ? "준초콜릿"
-    : "당류가공품";
-
-  // ── 제품 품명 표시 ──
-  const sizeStr = widthMm && heightMm ? `${widthMm}×${heightMm}mm, 두께 ${thickness}` : `두께 ${thickness}`;
-  const colorLabel = isRaise ? "컬러인쇄" : colorType === "dark" ? "다크" : "화이트";
-  const productNameDisplay = `${colorLabel}(${sizeStr})`;
-
-  // ── 주의사항 ──
+  // ── 주의사항 (첫 품목 기준) ──
   const cautions: string[] = [];
-  if (isRaise) {
+  if (firstItem?.isRaise) {
     cautions.push("본 제품은 인쇄면에 물이 묻으면 번지거나 지워질 수 있으니 주의하셔야되고, 특히 냉동,냉장 보관시 결로에 의해 번질 수 있으니 주의하셔야됩니다.");
   }
   cautions.push("27도 이하 건조한 곳에 보관하세요.");
@@ -117,49 +105,48 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   type LineItem = { name: string; qty: string; unit: number; supply: number; vat: number; total: number };
   const lineItems: LineItem[] = [];
 
-  if (manualItems) {
-    // ── 수동 입력 모드 ──
-    // 1) 일반 품목
-    for (const item of manualItems) {
-      const u = parseInt(item.unitPrice) || 0;
-      const q = parseInt(item.qty) || 0;
-      if (!item.name || u === 0 || q === 0) continue;
-      const supply = u * q;
-      const vat = Math.round(supply * 0.1);
-      lineItems.push({ name: item.name, qty: fmt(q), unit: u, supply, vat, total: supply + vat });
+  for (const item of items) {
+    const colorLabel = item.isRaise ? "컬러인쇄" : item.colorType === "dark" ? "다크" : "화이트";
+    const sizeStr = item.widthMm && item.heightMm
+      ? `${item.widthMm}×${item.heightMm}mm, 두께 ${item.thickness}`
+      : item.thickness ? `두께 ${item.thickness}` : "";
+    const productName = sizeStr ? `${colorLabel}(${sizeStr})` : colorLabel;
+    const unitPrice = inputMode === "manual" ? item.manualV : item.V;
+    if (!unitPrice || !item.quantity) continue;
+
+    const supply = unitPrice * item.quantity;
+    const vat = Math.round(supply * 0.1);
+    lineItems.push({ name: productName, qty: fmt(item.quantity), unit: unitPrice, supply, vat, total: supply + vat });
+
+    // 성형틀 (moldCost > 0)
+    if (item.moldCost > 0) {
+      lineItems.push({
+        name: "성형틀 (최초 1회)", qty: "1",
+        unit: item.moldCost, supply: item.moldCost,
+        vat: Math.round(item.moldCost * 0.1),
+        total: item.moldCost + Math.round(item.moldCost * 0.1),
+      });
     }
-    // 2) 성형틀
-    if (moldCost > 0) {
-      lineItems.push({ name: "성형틀 (최초 1회)", qty: "1", unit: moldCost, supply: moldCost, vat: Math.round(moldCost*0.1), total: moldCost + Math.round(moldCost*0.1) });
-    }
-    // 3) 인쇄제판 (레이즈 아닌 경우만)
-    if (plateCost > 0 && !isRaise) {
-      lineItems.push({ name: "인쇄제판 (최초 1회)", qty: "1", unit: plateCost, supply: plateCost, vat: Math.round(plateCost*0.1), total: plateCost + Math.round(plateCost*0.1) });
-    }
-  } else {
-    // ── 자동 계산 모드 ──
-    // 1) 초콜릿 제품 (맨 위)
-    const chocoSupply = V * quantity;
-    const chocoVat = Math.round(chocoSupply * 0.1);
-    lineItems.push({ name: productNameDisplay, qty: fmt(quantity), unit: V, supply: chocoSupply, vat: chocoVat, total: chocoSupply + chocoVat });
-    // 2) 성형틀
-    if (moldCost > 0) {
-      lineItems.push({ name: "성형틀 (최초 1회)", qty: "1", unit: moldCost, supply: moldCost, vat: Math.round(moldCost*0.1), total: moldCost + Math.round(moldCost*0.1) });
-    }
-    // 3) 인쇄제판 (레이즈 아닌 경우만)
-    if (plateCost > 0 && !isRaise) {
-      lineItems.push({ name: "인쇄제판 (최초 1회)", qty: "1", unit: plateCost, supply: plateCost, vat: Math.round(plateCost*0.1), total: plateCost + Math.round(plateCost*0.1) });
+
+    // 인쇄제판 (레이즈 아닌 경우만, plateCost > 0)
+    if (item.plateCost > 0 && !item.isRaise) {
+      lineItems.push({
+        name: "인쇄제판 (최초 1회)", qty: "1",
+        unit: item.plateCost, supply: item.plateCost,
+        vat: Math.round(item.plateCost * 0.1),
+        total: item.plateCost + Math.round(item.plateCost * 0.1),
+      });
     }
   }
 
-  // ── 아이스박스 ──
+  // 아이스박스
   if (iceboxPrice > 0) {
     const supply = Math.round(iceboxPrice / 1.1);
     const vat = iceboxPrice - supply;
     lineItems.push({ name: "아이스박스/택배포장(5~10월)", qty: "1", unit: iceboxPrice, supply, vat, total: iceboxPrice });
   }
 
-  // ── 택배비 ──
+  // 택배비
   if (deliveryPrice > 0) {
     const supply = Math.round(deliveryPrice / 1.1);
     const vat = deliveryPrice - supply;
@@ -169,8 +156,6 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   const sumSupply = lineItems.reduce((a, r) => a + r.supply, 0);
   const sumVat    = lineItems.reduce((a, r) => a + r.vat, 0);
   const sumTotal  = lineItems.reduce((a, r) => a + r.total, 0);
-
-  // 빈 행 (최소 8행)
   const emptyRows = Math.max(0, 8 - lineItems.length);
 
   // ── 인쇄 ──
@@ -239,7 +224,6 @@ table { border-collapse: collapse; width: 100%; }
             <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 8 }}>
               <tbody>
                 <tr>
-                  {/* 좌: 견적일, 업체명 */}
                   <td style={{ border: "none", verticalAlign: "top", width: "44%", paddingRight: 10 }}>
                     <div style={{ fontSize: 9, marginBottom: 4 }}>견적일 : {formatDateKorean(quoteDate)}</div>
                     <div style={{ fontSize: 10, marginBottom: 4 }}>
@@ -248,8 +232,6 @@ table { border-collapse: collapse; width: 100%; }
                     <div style={{ fontSize: 9, color: "#555", marginBottom: 4 }}>아래와 같이 견적합니다.</div>
                     <div style={{ fontSize: 8, color: "#c00" }}>※ 주문제작은 선결제 후 진행됩니다.</div>
                   </td>
-
-                  {/* 우: 발신자 */}
                   <td style={{ border: "none", verticalAlign: "top", width: "56%" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 8.5 }}>
                       <tbody>
@@ -263,7 +245,6 @@ table { border-collapse: collapse; width: 100%; }
                           </td>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", width: 44, padding: "2px 3px" }}>상호</td>
                           <td style={{ border: "1px solid #999", padding: "2px 5px" }}>{OUR.nameShort}</td>
-                          {/* 성명 | 조대성 — 도장 글자 바로 옆 */}
                           <td style={{ border: "1px solid #999", padding: "2px 5px 2px 3px", minWidth: 80, whiteSpace: "nowrap" }}>
                             <span style={{ display: "inline-block", paddingRight: 4, borderRight: "1px solid #bbb", marginRight: 4 }}>성명</span>
                             <span style={{ position: "relative", display: "inline-block" }}>
@@ -273,7 +254,6 @@ table { border-collapse: collapse; width: 100%; }
                             </span>
                           </td>
                         </tr>
-                        {/* 사업장주소 — 한 줄로 */}
                         <tr>
                           <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "2px 3px", whiteSpace: "nowrap" }}>사업장주소</td>
                           <td style={{ border: "1px solid #999", padding: "2px 5px", fontSize: 8 }} colSpan={2}>{OUR.address}</td>
@@ -322,7 +302,7 @@ table { border-collapse: collapse; width: 100%; }
               </tbody>
             </table>
 
-            {/* 품목 테이블 — 규격 컬럼 없음 */}
+            {/* 품목 테이블 */}
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 8.5, marginBottom: 6 }}>
               <thead>
                 <tr style={{ background: "#f0f0f0" }}>
@@ -345,21 +325,15 @@ table { border-collapse: collapse; width: 100%; }
                     <td style={{ ...cellBase, textAlign: "right" }}>{fmt(r.total)}</td>
                   </tr>
                 ))}
-
-                {/* 빈 행 */}
                 {Array.from({ length: emptyRows }).map((_, i) => (
                   <tr key={`e-${i}`} style={{ height: 20 }}>
-                    <td style={{ ...cellBase }} /><td style={{ ...cellBase }} />
-                    <td style={{ ...cellBase }} /><td style={{ ...cellBase }} />
-                    <td style={{ ...cellBase }} /><td style={{ ...cellBase }} />
+                    {[0,1,2,3,4,5].map(j => <td key={j} style={{ ...cellBase }} />)}
                   </tr>
                 ))}
 
                 {/* 식품유형 */}
                 <tr>
-                  <td style={{ ...cellBase, color: "#333" }} colSpan={6}>
-                    *식품유형 - {foodType}
-                  </td>
+                  <td style={{ ...cellBase, color: "#333" }} colSpan={6}>*식품유형 - {foodType}</td>
                 </tr>
 
                 {/* 주의사항 */}
@@ -368,20 +342,6 @@ table { border-collapse: collapse; width: 100%; }
                     <td style={{ ...cellBase, color: "#555" }} colSpan={6}>*{c}</td>
                   </tr>
                 ))}
-
-                {/* 기성 성형틀 사용 시 */}
-                {useStockMold && (
-                  <tr>
-                    <td style={{ ...cellBase, color: "#555" }} colSpan={6}>*기성 성형틀 사용</td>
-                  </tr>
-                )}
-
-                {/* 디자인 변경 */}
-                {designChanged && (
-                  <tr>
-                    <td style={{ ...cellBase, color: "#555" }} colSpan={6}>*디자인 변경 재주문 (인쇄제판 재발생)</td>
-                  </tr>
-                )}
 
                 {/* 메모 */}
                 {memo && (
@@ -405,11 +365,6 @@ table { border-collapse: collapse; width: 100%; }
               <div style={{ fontWeight: "bold", marginBottom: 4 }}>[비 고]</div>
               <p style={{ margin: "2px 0" }}>* 세금계산서 발행시 사업자등록증을 이메일로 보내주세요</p>
               <p style={{ margin: "2px 0", color: "#c00", fontWeight: "bold" }}>* 주문제작은 선결제입니다.</p>
-              {V_stock && (
-                <p style={{ margin: "2px 0", color: "#555" }}>
-                  * 기성 성형틀 적용 시 단가: {fmt(V_stock)}원/개
-                </p>
-              )}
             </div>
 
             {/* 푸터 */}

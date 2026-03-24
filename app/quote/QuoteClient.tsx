@@ -112,51 +112,59 @@ export default function QuoteClient() {
     ? selectedPartner?.id ?? null
     : null;
 
+  // ─── 품목 타입 ───
+  type QuoteItem = {
+    id: string;
+    productType: string;
+    colorType: "dark" | "white";
+    widthMm: string;
+    heightMm: string;
+    quantity: string;
+    isNew: boolean;
+    designChanged: boolean;
+    useStockMold: boolean;
+    reuseExistingMold: boolean;
+    calcResult: any;
+    calcLoading: boolean;
+    manualV: string;
+  };
+
+  const newItem = (): QuoteItem => ({
+    id: crypto.randomUUID(),
+    productType: "전사3mm", colorType: "dark",
+    widthMm: "", heightMm: "", quantity: "",
+    isNew: true, designChanged: false,
+    useStockMold: false, reuseExistingMold: false,
+    calcResult: null, calcLoading: false, manualV: "",
+  });
+
   // 견적 입력 폼
-  const [requestType, setRequestType] = useState<"product" | "sheet">("product");
-  const [inputMode, setInputMode] = useState<"auto" | "manual">("auto"); // 자동계산 / 수동입력
-  const [productType, setProductType] = useState("전사3mm");
-  const [colorType, setColorType] = useState<"dark" | "white">("dark");
-  const [widthMm, setWidthMm] = useState("");
-  const [heightMm, setHeightMm] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [isNew, setIsNew] = useState(true);
-  const [designChanged, setDesignChanged] = useState(false);
-  const [useStockMold, setUseStockMold] = useState(false);
-  const [reuseExistingMold, setReuseExistingMold] = useState(false);
-  const [moldQty, setMoldQty] = useState("1");
-  const [shape, setShape] = useState("정사각형");
+  const [inputMode, setInputMode] = useState<"auto" | "manual">("auto");
+  const [items, setItems] = useState<QuoteItem[]>([newItem()]);
   const [memo, setMemo] = useState("");
 
-  // 아이스박스 옵션 (부가세 포함)
+  // 아이스박스 / 택배비
   const ICEBOX_OPTIONS = [
     { label: "소 (4,620원)", value: 4620 },
     { label: "중 (6,930원)", value: 6930 },
     { label: "대 (9,230원)", value: 9230 },
   ];
-  const [useIcebox, setUseIcebox] = useState(false);
-  const [iceboxPrice, setIceboxPrice] = useState(4620);
-
-  // 택배비 옵션 (부가세 포함)
   const DELIVERY_OPTIONS = [
     { label: "없음", value: 0 },
     { label: "3,300원", value: 3300 },
     { label: "4,000원", value: 4000 },
   ];
+  const [useIcebox, setUseIcebox] = useState(false);
+  const [iceboxPrice, setIceboxPrice] = useState(4620);
   const [deliveryPrice, setDeliveryPrice] = useState(0);
 
-  // 수동 입력 품목 목록
-  type ManualItem = { id: string; name: string; qty: string; unitPrice: string };
-  const newManualItem = (): ManualItem => ({ id: crypto.randomUUID(), name: "", qty: "", unitPrice: "" });
-  const [manualItems, setManualItems] = useState<ManualItem[]>([newManualItem()]);
-  const [manualMoldCost, setManualMoldCost] = useState(false);
-  const [manualPlateCost, setManualPlateCost] = useState(false);
-  const [manualColorType, setManualColorType] = useState<"dark" | "white">("dark");
-  const [manualIsRaise, setManualIsRaise] = useState(false);
+  // 전사지 탭용 레거시
+  const [quantity, setQuantity] = useState("");
 
-  // 계산 결과
-  const [calcResult, setCalcResult] = useState<any>(null);
-  const [calcLoading, setCalcLoading] = useState(false);
+  // 품목 업데이트 헬퍼
+  function updateItem(id: string, patch: Partial<QuoteItem>) {
+    setItems(prev => prev.map(x => x.id === id ? { ...x, ...patch } : x));
+  }
 
   // 견적 목록
   const [quoteList, setQuoteList] = useState<QuoteRequestRow[]>([]);
@@ -216,32 +224,8 @@ export default function QuoteClient() {
   useEffect(() => { if (tab === "list") loadQuoteList(); }, [tab, statusFilter]);
   useEffect(() => { if (tab === "sheet") loadSheetList(); }, [tab]);
 
-  // ─── 계산 (API 호출) ───
-  async function handleCalc() {
-    if (!activeCustomerName) return setMsg("업체명을 입력하거나 거래처를 선택하세요.");
-    if (!isFixed && (!widthMm || !heightMm)) return setMsg("크기를 입력하세요.");
-    if (!quantity) return setMsg("수량을 입력하세요.");
-    setCalcLoading(true); setCalcResult(null);
-    try {
-      const res = await fetch("/api/quote/calculate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productKey: productType,
-          width: parseFloat(widthMm),
-          height: parseFloat(heightMm),
-          quantity: parseInt(quantity),
-          isNew, designChanged, useStockMold, reuseExistingMold,
-          moldQty: parseInt(moldQty) || 1,
-        }),
-      });
-      const data = await res.json();
-      if (data.error) return setMsg(data.error);
-      setCalcResult(data);
-    } catch (e: any) {
-      setMsg(e.message);
-    } finally { setCalcLoading(false); }
-  }
+  // ─── 계산 (API 호출) — 품목별로 inline 처리 ───
+  // (각 품목의 계산 버튼에서 직접 fetch 호출)
 
   // ─── 전사지 계산 ───
   async function handleSheetCalc() {
@@ -254,45 +238,48 @@ export default function QuoteClient() {
     setSheetCalcResult({ sheets, plateCost, sheetCost, supplyPrice, delivery, total, totalWithVat: Math.round(total * 1.1) });
   }
 
-  // ─── 견적 저장 ───
+  // ─── 견적 저장 (다품목 — 첫 품목 기준으로 저장) ───
   async function handleSave() {
     if (!activeCustomerName) return setMsg("업체명을 입력하거나 거래처를 선택하세요.");
-    if (!calcResult) return setMsg("먼저 계산을 실행하세요.");
+    const firstCalc = items.find(x => x.calcResult || x.manualV);
+    if (!firstCalc) return setMsg("먼저 계산을 실행하거나 단가를 입력하세요.");
     setMsg(null);
-    const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
-      customer_id: activeCustomerId,
-      customer_name: activeCustomerName,
-      request_type: "product",
-      product_type: productType,
-      width_mm: parseFloat(widthMm) || null,
-      height_mm: parseFloat(heightMm) || null,
-      quantity: parseInt(quantity) || null,
-      is_new: isNew,
-      design_changed: designChanged,
-      use_stock_mold: useStockMold,
-      reuse_existing_mold: reuseExistingMold,
-      mold_qty: parseInt(moldQty) || 1,
-      shape, memo: memo || null,
-      status: "견적완료",
-    }).select("id").single();
-    if (reqErr) return setMsg(reqErr.message);
-
-    const { error: quoteErr } = await supabase.from("quotes").insert({
-      request_id: req.id,
-      unit_price: calcResult.unitPrice,
-      mold_cost: calcResult.moldCost,
-      plate_cost: calcResult.plateCost,
-      transfer_sheets: calcResult.sheetCount,
-      transfer_cost: calcResult.sheetCost,
-      work_fee: calcResult.workFee,
-      packaging_cost: calcResult.packaging,
-      total: calcResult.totalActual,
-      t_price: calcResult.T,
-      u_price: calcResult.U,
-      final_price: calcResult.V,
-      final_price_stock: calcResult.V_stock,
-    });
-    if (quoteErr) return setMsg(quoteErr.message);
+    for (const item of items) {
+      const cr = item.calcResult;
+      if (!cr && !item.manualV) continue;
+      const V = item.useStockMold && cr?.V_stock ? cr.V_stock : (cr?.V ?? parseInt(item.manualV) ?? 0);
+      const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
+        customer_id: activeCustomerId,
+        customer_name: activeCustomerName,
+        request_type: "product",
+        product_type: item.productType,
+        width_mm: parseFloat(item.widthMm) || null,
+        height_mm: parseFloat(item.heightMm) || null,
+        quantity: parseInt(item.quantity) || null,
+        is_new: item.isNew,
+        design_changed: item.designChanged,
+        use_stock_mold: item.useStockMold,
+        reuse_existing_mold: item.reuseExistingMold,
+        mold_qty: 1,
+        memo: memo || null,
+        status: "견적완료",
+      }).select("id").single();
+      if (reqErr) { setMsg(reqErr.message); return; }
+      await supabase.from("quotes").insert({
+        request_id: req.id,
+        unit_price: cr?.unitPrice ?? 0,
+        mold_cost: cr?.moldCost ?? 0,
+        plate_cost: cr?.plateCost ?? 0,
+        transfer_sheets: cr?.sheetCount ?? 0,
+        transfer_cost: cr?.sheetCost ?? 0,
+        work_fee: cr?.workFee ?? 0,
+        total: cr?.totalActual ?? 0,
+        t_price: cr?.T ?? 0,
+        u_price: cr?.U ?? 0,
+        final_price: V,
+        final_price_stock: cr?.V_stock ?? null,
+      });
+    }
     setMsg("✅ 견적이 저장됐어요!");
     resetForm();
   }
@@ -336,11 +323,8 @@ export default function QuoteClient() {
   }
 
   function resetForm() {
-    setWidthMm(""); setHeightMm(""); setQuantity(""); setMemo("");
-    setIsNew(true); setDesignChanged(false); setUseStockMold(false);
-    setReuseExistingMold(false); setMoldQty("1"); setCalcResult(null);
+    setItems([newItem()]); setMemo("");
     setUseIcebox(false); setIceboxPrice(4620); setDeliveryPrice(0);
-    setManualItems([newManualItem()]); setManualMoldCost(false); setManualPlateCost(false);
   }
 
   const filteredList = quoteList.filter(r => {
@@ -351,9 +335,9 @@ export default function QuoteClient() {
       (r.memo ?? "").toLowerCase().includes(q);
   });
 
-  // 도눔 고정사이즈 여부
-  const isFixed = productType.startsWith("도눔1000") && !productType.includes("별도");
-  const isManual = productType === "입체초콜릿";
+  // 첫 번째 품목 기준 (레거시 호환)
+  const firstItem = items[0];
+  const isRaise = firstItem.productType.startsWith("레이즈");
 
   // 식품유형 자동 판별
   function getFoodType(pt: string, ct: "dark" | "white"): string {
@@ -368,9 +352,6 @@ export default function QuoteClient() {
     if (pt.includes("5mm")) return "5mm";
     return "";
   }
-
-  // 레이즈 여부
-  const isRaise = productType.startsWith("레이즈");
 
   // 견적서 인쇄 모달
   const [printOpen, setPrintOpen] = useState(false);
@@ -472,12 +453,13 @@ export default function QuoteClient() {
             {/* 견적 입력 폼 */}
             <div className="space-y-4">
               <div className={`${card} p-4`}>
+
+                {/* 헤더: 제목 + 자동/수동 토글 */}
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="text-lg font-semibold">견적 입력</div>
                     {activeCustomerName && <span className={pill}>{activeCustomerName}</span>}
                   </div>
-                  {/* 자동/수동 토글 */}
                   <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
                     <button type="button"
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${inputMode === "auto" ? "bg-white shadow text-blue-700 border border-blue-200" : "text-slate-500 hover:text-slate-700"}`}
@@ -492,149 +474,200 @@ export default function QuoteClient() {
                   </div>
                 </div>
 
-                {/* 제품 선택 */}
-                {inputMode === "auto" && (
-                <div className="mb-4">
-                  <div className="mb-1 text-xs font-semibold text-slate-600">제품 종류</div>
-                  <select className={inp} value={productType} onChange={e => {
-                    const pt = e.target.value;
-                    setProductType(pt);
-                    setCalcResult(null);
-                    if (pt.startsWith("레이즈")) setColorType("white");
-                  }}>
-                    {PRODUCT_TYPES.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-                  </select>
-                </div>
-                )}
-
-                {/* 다크/화이트 선택 (레이즈는 자동 화이트) */}
-                {!isManual && (
-                  <div className="mb-4">
-                    <div className="mb-1 text-xs font-semibold text-slate-600">색상</div>
-                    <div className="flex gap-2">
-                      <button type="button"
-                        disabled={isRaise}
-                        className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${colorType === "dark" ? "border-slate-700 bg-slate-800 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"} ${isRaise ? "opacity-40 cursor-not-allowed" : ""}`}
-                        onClick={() => setColorType("dark")}>
-                        🍫 다크 (준초콜릿)
-                      </button>
-                      <button type="button"
-                        className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${colorType === "white" ? "border-amber-400 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
-                        onClick={() => setColorType("white")}>
-                        🤍 화이트 (당류가공품)
-                      </button>
-                    </div>
-                    {isRaise && (
-                      <div className="mt-1 text-xs text-slate-400">레이즈(컬러인쇄)는 화이트 초콜릿 전용입니다.</div>
-                    )}
-                  </div>
-                )}
-
-                {isManual && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                    ⚠️ 입체초콜릿은 수동 계산 제품입니다. 메모에 내용을 기록하고 저장하세요.
-                  </div>
-                )}
-
-                {!isManual && (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    {/* 크기 */}
-                    {isFixed ? (
-                      <div className="md:col-span-2">
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                          📐 크기 고정: 50 × 35mm
+                {/* 품목 목록 */}
+                <div className="space-y-3 mb-3">
+                  {items.map((item, idx) => {
+                    const isRaiseItem = item.productType.startsWith("레이즈");
+                    const isManualItem = item.productType === "입체초콜릿";
+                    return (
+                      <div key={item.id} className={`rounded-2xl border p-3 ${inputMode === "manual" ? "border-orange-200 bg-orange-50/30" : "border-slate-200 bg-slate-50/50"}`}>
+                        {/* 품목 헤더 */}
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-500">품목 {idx + 1}</span>
+                          {items.length > 1 && (
+                            <button className="text-xs text-red-400 hover:text-red-600"
+                              onClick={() => setItems(prev => prev.filter(x => x.id !== item.id))}>
+                              삭제
+                            </button>
+                          )}
                         </div>
+
+                        {/* 입력 그리드: 제품 | 색상 | 가로 | 세로 | 수량 | 단가 */}
+                        <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr" }}>
+                          {/* 제품 */}
+                          <div>
+                            <div className="mb-1 text-[10px] font-semibold text-slate-500">제품</div>
+                            <select className={inp} value={item.productType}
+                              onChange={e => {
+                                const pt = e.target.value;
+                                updateItem(item.id, {
+                                  productType: pt,
+                                  colorType: pt.startsWith("레이즈") ? "white" : item.colorType,
+                                  calcResult: null,
+                                });
+                              }}>
+                              {PRODUCT_TYPES.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                            </select>
+                          </div>
+
+                          {/* 색상 */}
+                          <div>
+                            <div className="mb-1 text-[10px] font-semibold text-slate-500">색상</div>
+                            <select className={inp} value={item.colorType}
+                              disabled={isRaiseItem}
+                              onChange={e => updateItem(item.id, { colorType: e.target.value as "dark"|"white", calcResult: null })}>
+                              <option value="dark">다크</option>
+                              <option value="white">화이트</option>
+                            </select>
+                          </div>
+
+                          {/* 가로 */}
+                          <div>
+                            <div className="mb-1 text-[10px] font-semibold text-slate-500">가로(mm)</div>
+                            <input className={inp} type="number" placeholder="예: 30" value={item.widthMm}
+                              onChange={e => updateItem(item.id, { widthMm: e.target.value, calcResult: null })} />
+                          </div>
+
+                          {/* 세로 */}
+                          <div>
+                            <div className="mb-1 text-[10px] font-semibold text-slate-500">세로(mm)</div>
+                            <input className={inp} type="number" placeholder="예: 30" value={item.heightMm}
+                              onChange={e => updateItem(item.id, { heightMm: e.target.value, calcResult: null })} />
+                          </div>
+
+                          {/* 수량 */}
+                          <div>
+                            <div className="mb-1 text-[10px] font-semibold text-slate-500">수량</div>
+                            <input className={inp} type="number" placeholder="예: 500" value={item.quantity}
+                              onChange={e => updateItem(item.id, { quantity: e.target.value, calcResult: null })} />
+                          </div>
+
+                          {/* 단가 */}
+                          <div>
+                            {inputMode === "manual" ? (
+                              <>
+                                <div className="mb-1 text-[10px] font-semibold text-orange-600">단가(원) ✏️</div>
+                                <input className={`${inp} border-orange-300 bg-orange-50`} type="number" placeholder="직접 입력"
+                                  value={item.manualV}
+                                  onChange={e => updateItem(item.id, { manualV: e.target.value })} />
+                              </>
+                            ) : (
+                              <>
+                                <div className="mb-1 text-[10px] font-semibold text-slate-500">단가(원)</div>
+                                <div className={`rounded-xl border px-3 py-2 text-sm tabular-nums ${item.calcResult ? "border-blue-200 bg-blue-50 font-semibold text-blue-700" : "border-slate-200 bg-slate-100 text-slate-400"}`}>
+                                  {item.calcResult
+                                    ? fmt(item.useStockMold && item.calcResult.V_stock ? item.calcResult.V_stock : item.calcResult.V) + "원"
+                                    : "계산 후 표시"}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 옵션 행 */}
+                        <div className="mt-2 flex flex-wrap gap-2 items-center">
+                          {/* 신규/재주문 토글 */}
+                          <button type="button"
+                            className={`rounded-lg border px-3 py-1 text-xs font-semibold ${item.isNew ? "border-blue-300 bg-blue-50 text-blue-700" : "border-amber-300 bg-amber-50 text-amber-700"}`}
+                            onClick={() => updateItem(item.id, { isNew: !item.isNew, designChanged: false, calcResult: null })}>
+                            {item.isNew ? "신규" : "재주문"}
+                          </button>
+
+                          {/* 디자인 변경 (재주문 시) */}
+                          {!item.isNew && (
+                            <label className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-orange-700">
+                              <input type="checkbox" checked={item.designChanged}
+                                onChange={e => updateItem(item.id, { designChanged: e.target.checked, calcResult: null })} />
+                              디자인변경
+                            </label>
+                          )}
+
+                          {/* 기성 성형틀 */}
+                          <label className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-purple-700">
+                            <input type="checkbox" checked={item.useStockMold}
+                              onChange={e => updateItem(item.id, {
+                                useStockMold: e.target.checked,
+                                reuseExistingMold: e.target.checked ? false : item.reuseExistingMold,
+                                calcResult: null,
+                              })} />
+                            기성 성형틀
+                          </label>
+
+                          {/* 타업체 성형틀 */}
+                          <label className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-teal-700">
+                            <input type="checkbox" checked={item.reuseExistingMold}
+                              onChange={e => updateItem(item.id, {
+                                reuseExistingMold: e.target.checked,
+                                useStockMold: e.target.checked ? false : item.useStockMold,
+                                calcResult: null,
+                              })} />
+                            기존 성형틀 재사용
+                          </label>
+
+                          {/* 자동 계산 결과 요약 표시 */}
+                          {inputMode === "auto" && item.calcResult && (
+                            <span className="ml-auto text-xs text-slate-500">
+                              K:{fmt(item.calcResult.moldCost)} L:{fmt(item.calcResult.plateCost)} T:{fmt(item.calcResult.T)} U:{fmt(item.calcResult.U)}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 자동 계산 버튼 (품목별) */}
+                        {inputMode === "auto" && !isManualItem && (
+                          <button className={`mt-2 w-full rounded-xl border px-3 py-1.5 text-xs font-semibold ${item.calcLoading ? "bg-slate-100 text-slate-400" : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"}`}
+                            disabled={item.calcLoading}
+                            onClick={async () => {
+                              if (!item.widthMm || !item.heightMm) return setMsg("가로/세로를 입력하세요.");
+                              if (!item.quantity) return setMsg("수량을 입력하세요.");
+                              updateItem(item.id, { calcLoading: true, calcResult: null });
+                              try {
+                                const res = await fetch("/api/quote/calculate", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    productKey: item.productType,
+                                    width: parseFloat(item.widthMm),
+                                    height: parseFloat(item.heightMm),
+                                    quantity: parseInt(item.quantity),
+                                    isNew: item.isNew,
+                                    designChanged: item.designChanged,
+                                    useStockMold: item.useStockMold,
+                                    reuseExistingMold: item.reuseExistingMold,
+                                    moldQty: 1,
+                                  }),
+                                });
+                                const data = await res.json();
+                                if (data.error) { setMsg(data.error); updateItem(item.id, { calcLoading: false }); return; }
+                                updateItem(item.id, { calcResult: data, calcLoading: false });
+                              } catch (e: any) {
+                                setMsg(e.message); updateItem(item.id, { calcLoading: false });
+                              }
+                            }}>
+                            {item.calcLoading ? "계산 중..." : "🔢 계산"}
+                          </button>
+                        )}
                       </div>
-                    ) : (
-                      <>
-                        <div>
-                          <div className="mb-1 text-xs font-semibold text-slate-600">가로 (mm)</div>
-                          <input className={inp} inputMode="decimal" placeholder="예: 30" value={widthMm}
-                            onChange={e => { setWidthMm(e.target.value); setCalcResult(null); }} />
-                        </div>
-                        <div>
-                          <div className="mb-1 text-xs font-semibold text-slate-600">세로 (mm)</div>
-                          <input className={inp} inputMode="decimal" placeholder="예: 30" value={heightMm}
-                            onChange={e => { setHeightMm(e.target.value); setCalcResult(null); }} />
-                        </div>
-                      </>
-                    )}
-
-                    {/* 수량 */}
-                    <div>
-                      <div className="mb-1 text-xs font-semibold text-slate-600">수량 (개)</div>
-                      <input className={inp} inputMode="numeric" placeholder="예: 1000" value={quantity}
-                        onChange={e => { setQuantity(e.target.value); setCalcResult(null); }} />
-                    </div>
-
-                    {/* 모양 */}
-                    <div>
-                      <div className="mb-1 text-xs font-semibold text-slate-600">모양</div>
-                      <select className={inp} value={shape} onChange={e => setShape(e.target.value)}>
-                        {SHAPES.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
-
-                    {/* 성형틀 수량 */}
-                    <div>
-                      <div className="mb-1 text-xs font-semibold text-slate-600">성형틀 수량</div>
-                      <select className={inp} value={moldQty} onChange={e => { setMoldQty(e.target.value); setCalcResult(null); }}>
-                        {[1,2,3,4,5,6,7,8,9].map(n => <option key={n} value={n}>{n}개</option>)}
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                {/* 옵션 */}
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="mb-3 text-sm font-semibold">주문 옵션</div>
-                  <div className="flex flex-wrap gap-3">
-                    {/* 신규/재주문 */}
-                    <button type="button"
-                      onClick={() => { setIsNew(v => !v); setDesignChanged(false); setCalcResult(null); }}
-                      style={{ padding: "4px 14px", borderRadius: 10, fontSize: 12, fontWeight: "bold", cursor: "pointer", border: "none",
-                        background: isNew ? "#dbeafe" : "#fef3c7", color: isNew ? "#1d4ed8" : "#b45309",
-                        outline: `1px solid ${isNew ? "#93c5fd" : "#fcd34d"}` }}>
-                      {isNew ? "신규" : "재주문"}
-                    </button>
-
-                    {/* 디자인 변경 (재주문 시만) */}
-                    {!isNew && (
-                      <label className="flex cursor-pointer items-center gap-2 text-sm">
-                        <input type="checkbox" checked={designChanged}
-                          onChange={e => { setDesignChanged(e.target.checked); setCalcResult(null); }} />
-                        <span className="font-semibold text-orange-700">디자인 변경 (판비 발생)</span>
-                      </label>
-                    )}
-
-                    {/* 기성 성형틀 */}
-                    <label className="flex cursor-pointer items-center gap-2 text-sm">
-                      <input type="checkbox" checked={useStockMold}
-                        onChange={e => { setUseStockMold(e.target.checked); if (e.target.checked) setReuseExistingMold(false); setCalcResult(null); }} />
-                      <span className="font-semibold text-purple-700">기성 성형틀 사용 (+20%)</span>
-                    </label>
-
-                    {/* 타 제품 성형틀 재사용 */}
-                    <label className="flex cursor-pointer items-center gap-2 text-sm">
-                      <input type="checkbox" checked={reuseExistingMold}
-                        onChange={e => { setReuseExistingMold(e.target.checked); if (e.target.checked) setUseStockMold(false); setCalcResult(null); }} />
-                      <span className="font-semibold text-teal-700">기존 성형틀 재사용 (K 면제)</span>
-                    </label>
-                  </div>
+                    );
+                  })}
                 </div>
+
+                {/* 품목 추가 버튼 */}
+                <button className={`${btn} w-full mb-4`}
+                  onClick={() => setItems(prev => [...prev, newItem()])}>
+                  + 품목 추가
+                </button>
 
                 {/* 메모 */}
-                <div className="mt-4">
+                <div className="mb-4">
                   <div className="mb-1 text-xs font-semibold text-slate-600">메모</div>
                   <textarea className={`${inp} resize-none`} rows={2} placeholder="기타 요청사항" value={memo}
                     onChange={e => setMemo(e.target.value)} />
                 </div>
 
-                {/* 아이스박스 / 택배비 옵션 */}
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="mb-2 text-sm font-semibold">추가 옵션</div>
+                {/* 추가 옵션: 아이스박스 / 택배비 */}
+                <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-2 text-sm font-semibold text-slate-600">추가 옵션</div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    {/* 아이스박스 */}
                     <div>
                       <label className="flex cursor-pointer items-center gap-2 text-sm mb-2">
                         <input type="checkbox" checked={useIcebox} onChange={e => setUseIcebox(e.target.checked)} />
@@ -652,7 +685,6 @@ export default function QuoteClient() {
                         </div>
                       )}
                     </div>
-                    {/* 택배비 */}
                     <div>
                       <div className="mb-2 text-sm font-semibold text-slate-700">🚚 택배비</div>
                       <div className="flex gap-2 flex-wrap">
@@ -668,145 +700,28 @@ export default function QuoteClient() {
                   </div>
                 </div>
 
-                {/* ── 수동 입력 폼 ── */}
-                {inputMode === "manual" && (
-                  <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 p-3">
-                    <div className="mb-3 text-sm font-semibold text-orange-800">✏️ 수동 입력 품목</div>
-
-                    {/* 색상/식품유형 선택 */}
-                    <div className="mb-3 flex gap-2">
-                      <button type="button"
-                        disabled={manualIsRaise}
-                        className={`flex-1 rounded-xl border px-3 py-2 text-xs font-semibold ${manualColorType === "dark" ? "border-slate-700 bg-slate-800 text-white" : "border-slate-200 bg-white text-slate-600"} ${manualIsRaise ? "opacity-40" : ""}`}
-                        onClick={() => setManualColorType("dark")}>
-                        🍫 다크
-                      </button>
-                      <button type="button"
-                        className={`flex-1 rounded-xl border px-3 py-2 text-xs font-semibold ${manualColorType === "white" ? "border-amber-400 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600"}`}
-                        onClick={() => setManualColorType("white")}>
-                        🤍 화이트
-                      </button>
-                      <label className="flex items-center gap-1 text-xs font-semibold text-purple-700 cursor-pointer px-2">
-                        <input type="checkbox" checked={manualIsRaise}
-                          onChange={e => { setManualIsRaise(e.target.checked); if (e.target.checked) setManualColorType("white"); }} />
-                        레이즈
-                      </label>
-                    </div>
-
-                    {/* 성형틀 / 인쇄제판 옵션 */}
-                    <div className="mb-3 flex gap-4">
-                      <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                        <input type="checkbox" checked={manualMoldCost} onChange={e => setManualMoldCost(e.target.checked)} />
-                        성형틀 200,000원
-                      </label>
-                      {!manualIsRaise && (
-                        <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                          <input type="checkbox" checked={manualPlateCost} onChange={e => setManualPlateCost(e.target.checked)} />
-                          인쇄제판 95,000원
-                        </label>
-                      )}
-                    </div>
-
-                    {/* 품목 목록 */}
-                    <div className="space-y-2 mb-3">
-                      {manualItems.map((item, i) => (
-                        <div key={item.id} className="flex gap-2 items-center">
-                          <input className={`${inp} flex-1`} placeholder="품명 (예: 다크(30×30mm, 두께 3mm))"
-                            value={item.name} onChange={e => setManualItems(prev => prev.map((x, j) => j===i ? {...x, name: e.target.value} : x))} />
-                          <input className={`${inp} w-24`} placeholder="단가" inputMode="numeric"
-                            value={item.unitPrice} onChange={e => setManualItems(prev => prev.map((x, j) => j===i ? {...x, unitPrice: e.target.value.replace(/[^\d]/g,"")} : x))} />
-                          <input className={`${inp} w-24`} placeholder="수량" inputMode="numeric"
-                            value={item.qty} onChange={e => setManualItems(prev => prev.map((x, j) => j===i ? {...x, qty: e.target.value.replace(/[^\d]/g,"")} : x))} />
-                          {manualItems.length > 1 && (
-                            <button className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100"
-                              onClick={() => setManualItems(prev => prev.filter((_, j) => j !== i))}>✕</button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    <button className={`${btn} w-full text-sm`} onClick={() => setManualItems(prev => [...prev, newManualItem()])}>
-                      + 품목 추가
-                    </button>
-                  </div>
-                )}
-
-                {/* 계산 버튼 */}
-                {!isManual && inputMode === "auto" && (
-                  <div className="mt-4 flex gap-2">
-                    <button className={`${btnOn} flex-1`} onClick={handleCalc} disabled={calcLoading}>
-                      {calcLoading ? "계산 중..." : "🔢 자동 계산"}
-                    </button>
-                    <button className={btn} onClick={resetForm}>초기화</button>
-                  </div>
-                )}
-
-                {/* 수동 입력 모드 출력 버튼 */}
-                {inputMode === "manual" && (
-                  <div className="mt-4 flex gap-2">
+                {/* 하단 버튼 */}
+                <div className="flex gap-2">
+                  {inputMode === "manual" ? (
                     <button className="flex-1 rounded-xl border border-orange-300 bg-orange-500 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-600"
                       onClick={() => { if (!activeCustomerName) return setMsg("업체명을 입력하세요."); setPrintOpen(true); }}>
                       🖨️ 견적서 출력
                     </button>
-                    <button className={btn} onClick={resetForm}>초기화</button>
-                  </div>
-                )}
-              </div>
-
-              {/* 계산 결과 */}
-              {calcResult && (
-                <div className={`${card} p-4`}>
-                  <div className="mb-3 text-lg font-semibold">계산 결과</div>
-                  <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-                    {[
-                      { label: "단가 (I)", value: fmt(calcResult.unitPrice)+"원" },
-                      { label: "전사지", value: `${calcResult.sheetCount}장 / ${fmt(calcResult.sheetCost)}원` },
-                      { label: "성형틀 (K)", value: fmt(calcResult.moldCost)+"원" },
-                      { label: "판비 (L)", value: fmt(calcResult.plateCost)+"원" },
-                      { label: "기본작업비", value: fmt(calcResult.workFee)+"원" },
-                      { label: "합계 (S)", value: fmt(calcResult.totalActual)+"원" },
-                      { label: "부가세 포함", value: fmt(calcResult.totalWithVat)+"원" },
-                      { label: "T / U", value: `${fmt(calcResult.T)} / ${fmt(calcResult.U)}원` },
-                    ].map(({ label, value }) => (
-                      <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <div className="text-xs text-slate-500">{label}</div>
-                        <div className="font-semibold tabular-nums">{value}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* 고객 제시가 */}
-                  <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                    {/* 기성 성형틀이면 V_stock을 메인으로 표시 */}
-                    {useStockMold && calcResult.V_stock ? (
-                      <>
-                        <div className="rounded-2xl border-2 border-purple-300 bg-purple-50 px-4 py-3 text-center">
-                          <div className="text-xs text-purple-600 font-semibold">★ 고객 제시가 (기성 성형틀)</div>
-                          <div className="text-2xl font-black text-purple-700 tabular-nums">{fmt(calcResult.V_stock)}원</div>
-                        </div>
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-                          <div className="text-xs text-slate-500 font-semibold">일반 성형틀 제작 시 단가</div>
-                          <div className="text-lg font-bold text-slate-500 tabular-nums">{fmt(calcResult.V)}원</div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="rounded-2xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-center md:col-span-2">
-                        <div className="text-xs text-blue-600 font-semibold">★ 고객 제시가 (V)</div>
-                        <div className="text-2xl font-black text-blue-700 tabular-nums">{fmt(calcResult.V)}원</div>
-                      </div>
-                    )}
-                  </div>
-
-                  <button className={`${btnOn} mt-3 w-full`} onClick={handleSave}>
-                    💾 견적 저장
-                  </button>
-                  <button className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    onClick={() => setPrintOpen(true)}>
-                    🖨️ 견적서 출력
+                  ) : (
+                    <button className={`${btnOn} flex-1`}
+                      onClick={() => { if (!activeCustomerName) return setMsg("업체명을 입력하세요."); setPrintOpen(true); }}
+                      disabled={items.every(x => !x.calcResult)}>
+                      🖨️ 견적서 출력
+                    </button>
+                  )}
+                  <button className={btn} onClick={() => { setItems([newItem()]); setMemo(""); setUseIcebox(false); setIceboxPrice(4620); setDeliveryPrice(0); }}>
+                    초기화
                   </button>
                 </div>
-              )}
+              </div>
             </div>
           </div>
+        )}
         )}
 
         {/* ───────────── 탭 2: 견적 목록 ───────────── */}
@@ -1074,37 +989,34 @@ export default function QuoteClient() {
       </div>
 
       {/* 견적서 인쇄 모달 */}
-      {printOpen && (inputMode === "manual" || calcResult) && (
+      {printOpen && (
         <QuotePrintModal
           onClose={() => setPrintOpen(false)}
           quoteData={{
             customerName: activeCustomerName,
             quoteDate: new Date().toISOString().slice(0, 10),
-            productType: PRODUCT_TYPES.find(p => p.key === productType)?.label ?? productType,
-            colorType: inputMode === "manual" ? manualColorType : colorType,
-            isRaise: inputMode === "manual" ? manualIsRaise : isRaise,
-            widthMm: parseFloat(widthMm) || null,
-            heightMm: parseFloat(heightMm) || null,
-            thickness: getThickness(productType),
-            quantity: parseInt(quantity) || 0,
-            isNew,
-            designChanged,
-            useStockMold,
+            inputMode,
+            items: items.map(item => ({
+              productType: PRODUCT_TYPES.find(p => p.key === item.productType)?.label ?? item.productType,
+              colorType: item.colorType,
+              isRaise: item.productType.startsWith("레이즈"),
+              widthMm: parseFloat(item.widthMm) || null,
+              heightMm: parseFloat(item.heightMm) || null,
+              thickness: getThickness(item.productType),
+              quantity: parseInt(item.quantity) || 0,
+              isNew: item.isNew,
+              designChanged: item.designChanged,
+              useStockMold: item.useStockMold,
+              moldCost: item.calcResult?.moldCost ?? 0,
+              plateCost: item.calcResult?.plateCost ?? 0,
+              sheetCost: item.calcResult?.sheetCost ?? 0,
+              workFee: item.calcResult?.workFee ?? 0,
+              V: item.useStockMold && item.calcResult?.V_stock
+                ? item.calcResult.V_stock
+                : (item.calcResult?.V ?? 0),
+              manualV: parseInt(item.manualV) || 0,
+            })),
             memo: memo || null,
-            // 자동 계산 모드
-            moldCost: inputMode === "manual"
-              ? (manualMoldCost ? 200000 : 0)
-              : calcResult?.moldCost ?? 0,
-            plateCost: inputMode === "manual"
-              ? (manualPlateCost && !manualIsRaise ? 95000 : 0)
-              : calcResult?.plateCost ?? 0,
-            sheetCost: inputMode === "manual" ? 0 : calcResult?.sheetCost ?? 0,
-            workFee: inputMode === "manual" ? 0 : calcResult?.workFee ?? 0,
-            V: inputMode === "manual" ? 0 : (useStockMold && calcResult?.V_stock ? calcResult.V_stock : calcResult?.V ?? 0),
-            V_stock: null,
-            // 수동 입력 품목
-            manualItems: inputMode === "manual" ? manualItems : null,
-            // 추가 옵션
             iceboxPrice: useIcebox ? iceboxPrice : 0,
             deliveryPrice,
           }}
