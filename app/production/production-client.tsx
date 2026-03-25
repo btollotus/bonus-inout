@@ -216,6 +216,10 @@ export default function ProductionClient() {
   // ── 수정 모드 ──
   const [isEditMode, setIsEditMode] = useState(false);
 
+  // ── 생산중 카운트 / 정렬 ──
+  const [productionCount, setProductionCount] = useState(0);
+  const [sortBy, setSortBy] = useState<"created_at" | "delivery_date">("created_at");
+
   // 필터
   const [filterStatus, setFilterStatus] = useState<"전체" | "생산중" | "완료">("생산중");
   const [filterSearch, setFilterSearch] = useState("");
@@ -423,6 +427,18 @@ export default function ProductionClient() {
       if (error) return setMsg(error.message);
       const list = (data ?? []) as WorkOrderRow[];
       setWoList(list);
+
+      // 생산중 전체 건수는 필터와 무관하게 별도 조회
+      if (filterStatus !== "생산중") {
+        supabase
+          .from("work_orders")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "생산중")
+          .then(({ count }) => setProductionCount(count ?? 0));
+      } else {
+        setProductionCount(list.filter((w) => w.status === "생산중").length);
+      }
+
       const ids = list.map((w) => w.id);
       await loadReadMap(ids);
       if (selectedWo) {
@@ -445,12 +461,23 @@ export default function ProductionClient() {
   // ── 필터링 ──
   const filteredList = useMemo(() => {
     const q = filterSearch.trim().toLowerCase();
-    if (!q) return woList;
-    return woList.filter((wo) =>
-      [wo.client_name, wo.sub_name, wo.product_name, wo.barcode_no, wo.work_order_no, wo.food_type]
-        .filter(Boolean).join(" ").toLowerCase().includes(q)
-    );
-  }, [woList, filterSearch]);
+    let list = q
+      ? woList.filter((wo) =>
+          [wo.client_name, wo.sub_name, wo.product_name, wo.barcode_no, wo.work_order_no, wo.food_type]
+            .filter(Boolean).join(" ").toLowerCase().includes(q)
+        )
+      : [...woList];
+
+    if (sortBy === "delivery_date") {
+      list.sort((a, b) => {
+        const aDate = (a.work_order_items ?? []).map((i) => i.delivery_date).filter(Boolean).sort()[0] ?? "";
+        const bDate = (b.work_order_items ?? []).map((i) => i.delivery_date).filter(Boolean).sort()[0] ?? "";
+        return aDate.localeCompare(bDate);
+      });
+    }
+
+    return list;
+  }, [woList, filterSearch, sortBy]);
 
   // ── 작업지시서 선택 ──
   function applySelection(wo: WorkOrderRow, resetEdit = true) {
@@ -904,14 +931,22 @@ export default function ProductionClient() {
               <div className="flex gap-1">
                 {(["전체", "생산중", "완료"] as const).map((s) => (
                   <button key={s} className={filterStatus === s ? btnOn : btn} onClick={() => setFilterStatus(s)}>
-  {s}{s === "생산중" && (
-    <span className={`ml-1 tabular-nums ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>
-      {woList.filter((w) => w.status === "생산중").length}
-    </span>
-  )}
-</button>
+                    {s}{s === "생산중" && (
+                      <span className={`ml-1 tabular-nums ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>
+                        {productionCount}
+                      </span>
+                    )}
+                  </button>
                 ))}
               </div>
+
+              {filterStatus === "생산중" && (
+                <div className="flex gap-1">
+                  <button className={sortBy === "created_at" ? btnOn : btn} onClick={() => setSortBy("created_at")}>주문일순</button>
+                  <button className={sortBy === "delivery_date" ? btnOn : btn} onClick={() => setSortBy("delivery_date")}>납기일순</button>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <div className="mb-1 text-xs text-slate-500">주문일 From</div>
@@ -978,27 +1013,27 @@ export default function ProductionClient() {
                               {wo.packaging_type ? <span className={`${pill} text-[10px]`}>{wo.packaging_type}</span> : null}
                             </div>
                             <div className="mt-1 text-[11px] text-slate-400">
-  주문일 {wo.order_date}
-  {totalOrder > 0 ? ` · ${fmt(totalOrder)}개` : ""}
-  {allItemsDone ? " · ✅생산완료" : ""}
-  {(() => {
-    const dates = (wo.work_order_items ?? [])
-      .map((i) => i.delivery_date)
-      .filter(Boolean)
-      .sort();
-    if (dates.length === 0) return null;
-    return (
-      <span className="ml-1 font-semibold text-orange-500">
-        · 납기 {dates[0]}
-      </span>
-    );
-  })()}
-  {readMap[wo.id] && (
-    <span className="ml-1 text-green-500">
-      · 확인 {new Date(readMap[wo.id].read_at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
-    </span>
-  )}
-</div>
+                              주문일 {wo.order_date}
+                              {totalOrder > 0 ? ` · ${fmt(totalOrder)}개` : ""}
+                              {allItemsDone ? " · ✅생산완료" : ""}
+                              {(() => {
+                                const dates = (wo.work_order_items ?? [])
+                                  .map((i) => i.delivery_date)
+                                  .filter(Boolean)
+                                  .sort();
+                                if (dates.length === 0) return null;
+                                return (
+                                  <span className="ml-1 font-semibold text-orange-500">
+                                    · 납기 {dates[0]}
+                                  </span>
+                                );
+                              })()}
+                              {readMap[wo.id] && (
+                                <span className="ml-1 text-green-500">
+                                  · 확인 {new Date(readMap[wo.id].read_at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <div className="shrink-0 flex flex-col items-end gap-1.5">
                             <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusCls}`}>{wo.status}</span>
