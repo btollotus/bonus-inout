@@ -2016,7 +2016,22 @@ if (woSubNameVal) {
               })}
             </div>
             <div className="mt-3 flex gap-2">
-            <button className={`${btn} flex-1`} onClick={() => { setSelectedPartner(null); setPartnerFilter(""); setTradeSearch(""); }}>선택 해제</button>
+            <button className={`${btn} flex-1`} onClick={() => {
+  setSelectedPartner(null);
+  setPartnerFilter("");
+  setTradeSearch("");
+  // ── 폼 초기화 ──
+  setShipDate(todayYMD()); setOrdererName(""); setShipMethod("택배"); setOrderTitle("");
+  setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
+  setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
+  setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
+  setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoNote("");
+  setOrderIsReorder(false); setOrderWoEnabled(true);
+  setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({});
+  setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
+  setManualCounterpartyName(""); setManualBusinessNo("");
+  setAmountStr(""); setLedgerMemo(""); setVatFree(false); setSalaryEmployeeId("");
+}}>선택 해제</button>
               <button className={`${btn} flex-1`} onClick={loadTrades}>조회 갱신</button>
             </div>
           </div>
