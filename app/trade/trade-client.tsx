@@ -2249,10 +2249,6 @@ if (woSubNameVal) {
                   return (
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right text-sm space-y-2">
                       <div>
-                        <div className="text-xs text-slate-500">출고(출금) 누적</div>
-                        <div className="font-semibold tabular-nums text-red-600">{fmt(unifiedTotals.minus + Math.abs(Math.min(openingBalance, 0)))}</div>
-                      </div>
-                      <div>
                         <div className={`text-xs font-semibold ${isMisu ? "text-red-600" : "text-blue-600"}`}>
                           {isMisu ? "미수금" : "초과입금"}
                         </div>
