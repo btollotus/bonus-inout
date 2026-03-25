@@ -2379,8 +2379,9 @@ function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: (
       const isNeoColor = foodType.includes("네오컬러");
       if (!isChocBase && mold > 0 && qty > 0) {
         if (isNeoColor) {
-          const perRow = mold === 108 ? 9 : mold === 88 ? 8 : mold === 63 ? 7 : Math.round(Math.sqrt(mold));
-          const buffer = mold === 63 ? 20 : 30;
+          const perRow = mold === 108 ? 9 : mold === 88 ? 8 : mold === 66 ? 6 : mold === 63 ? 7 : Math.round(Math.sqrt(mold));
+          const buffer = mold === 63 || mold === 66 ? 20 : 30;
+
           const totalNeeded = qty + buffer;
           const sheets = totalNeeded / mold;
           const fullSheets = Math.floor(sheets);
