@@ -978,15 +978,27 @@ export default function ProductionClient() {
                               {wo.packaging_type ? <span className={`${pill} text-[10px]`}>{wo.packaging_type}</span> : null}
                             </div>
                             <div className="mt-1 text-[11px] text-slate-400">
-                              주문일 {wo.order_date}
-                              {totalOrder > 0 ? ` · ${fmt(totalOrder)}개` : ""}
-                              {allItemsDone ? " · ✅생산완료" : ""}
-                              {readMap[wo.id] && (
-                                <span className="ml-1 text-green-500">
-                                  · 확인 {new Date(readMap[wo.id].read_at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                                </span>
-                              )}
-                            </div>
+  주문일 {wo.order_date}
+  {totalOrder > 0 ? ` · ${fmt(totalOrder)}개` : ""}
+  {allItemsDone ? " · ✅생산완료" : ""}
+  {(() => {
+    const dates = (wo.work_order_items ?? [])
+      .map((i) => i.delivery_date)
+      .filter(Boolean)
+      .sort();
+    if (dates.length === 0) return null;
+    return (
+      <span className="ml-1 font-semibold text-orange-500">
+        · 납기 {dates[0]}
+      </span>
+    );
+  })()}
+  {readMap[wo.id] && (
+    <span className="ml-1 text-green-500">
+      · 확인 {new Date(readMap[wo.id].read_at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+    </span>
+  )}
+</div>
                           </div>
                           <div className="shrink-0 flex flex-col items-end gap-1.5">
                             <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusCls}`}>{wo.status}</span>
