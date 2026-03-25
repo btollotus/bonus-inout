@@ -208,6 +208,13 @@ export default function ProductionClient() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // ── 토스트 ──
+const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+function showToast(msg: string, type: "success" | "error" = "success") {
+  setToast({ msg, type });
+  setTimeout(() => setToast(null), 2500);
+}
+
   // 필터
   const [filterStatus, setFilterStatus] = useState<"전체" | "생산중" | "완료">("생산중");
   const [filterSearch, setFilterSearch] = useState("");
@@ -760,9 +767,9 @@ if (userId && !readMap[wo.id]) {
       if (statusErr) return setMsg("상태 변경 실패: " + statusErr.message);
 
      if (stockErrors.length > 0) {
-        setMsg("⚠️ 저장 완료됐으나 재고 연동 오류: " + stockErrors.join(" / "));
+      showToast("⚠️ 저장됐으나 재고 연동 오류: " + stockErrors.join(" / "), "error");
       } else {
-        setMsg("✅ 생산완료 처리 완료! 기본정보·담당자·생산입력 저장 및 재고대장 입고 반영됐습니다.");
+        showToast("✅ 생산입력 완료!");
       }
 
       // ===== PDF → 구글드라이브 업로드 트리거 =====
@@ -889,6 +896,12 @@ const unreadCount = useMemo(() => {
             <button className="ml-3 text-xs opacity-60 hover:opacity-100" onClick={() => setMsg(null)}>✕</button>
           </div>
         ) : null}
+
+{toast ? (
+  <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] rounded-2xl border px-5 py-3 text-sm font-semibold shadow-xl ${toast.type === "success" ? "border-green-300 bg-green-600 text-white" : "border-red-300 bg-red-600 text-white"}`}>
+    {toast.msg}
+  </div>
+) : null}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[420px_minmax(0,1fr)]">
 
@@ -1368,13 +1381,69 @@ const unreadCount = useMemo(() => {
                 )}
               </div>
 
-              {/* 생산완료 버튼 - 모든 저장 포함 */}
-              <div className={`${card} p-4`}>
+{/* 생산완료 버튼 + 수정 버튼 */}
+<div className={`${card} p-4 flex gap-3`}>
                 <button
-                  className="w-full rounded-xl border border-green-500 bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800"
+                  className="flex-1 rounded-xl border border-green-500 bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800"
                   onClick={markProductionComplete}
                 >
-                  ✅ 생산완료 처리 (기본정보 · 담당자 · 생산입력 저장 포함)
+                  ✅ 생산완료 처리
+                </button>
+                <button
+                  className="rounded-xl border border-blue-400 bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 hover:bg-blue-100 active:bg-blue-200"
+                  onClick={async () => {
+                    if (!selectedWo) return;
+                    try {
+                      if (isAdminOrSubadmin) {
+                        const { error } = await supabase.from("work_orders").update({
+                          sub_name: eSubName.trim() || null,
+                          product_name: eProductName.trim(),
+                          food_type: eFoodType.trim() || null,
+                          logo_spec: eLogoSpec.trim() || null,
+                          thickness: eThickness || null,
+                          delivery_method: eDeliveryMethod || null,
+                          packaging_type: ePackagingType || null,
+                          tray_slot: ePackagingType === "트레이" ? eTraySlot : null,
+                          package_unit: ePackageUnit || null,
+                          mold_per_sheet: eMoldPerSheet ? Number(eMoldPerSheet) : null,
+                          note: eNote.trim() || null,
+                          reference_note: eReferenceNote.trim() || null,
+                          updated_at: new Date().toISOString(),
+                        }).eq("id", selectedWo.id);
+                        if (error) { showToast("❌ 수정 실패: " + error.message, "error"); return; }
+                      }
+                      if (woChecks) {
+                        const { error } = await supabase.from("work_orders").update({
+                          assignee_transfer: woChecks.assignee_transfer || null,
+                          assignee_print_check: woChecks.assignee_print_check || null,
+                          assignee_production: woChecks.assignee_production || null,
+                          assignee_input: woChecks.assignee_input || null,
+                          updated_at: new Date().toISOString(),
+                        }).eq("id", selectedWo.id);
+                        if (error) { showToast("❌ 수정 실패: " + error.message, "error"); return; }
+                      }
+                      const items = (selectedWo.work_order_items ?? []).filter((item) => {
+                        const name = (item.sub_items ?? [])[0]?.name ?? "";
+                        return !name.startsWith("성형틀") && !name.startsWith("인쇄제판");
+                      });
+                      for (const item of items) {
+                        const pi = prodInputs[item.id];
+                        if (!pi || (!pi.actual_qty && !pi.unit_weight && !pi.expiry_date)) continue;
+                        const { error } = await supabase.from("work_order_items").update({
+                          actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null,
+                          unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null,
+                          expiry_date: pi.expiry_date || null,
+                        }).eq("id", item.id);
+                        if (error) { showToast("❌ 수정 실패: " + error.message, "error"); return; }
+                      }
+                      showToast("✅ 수정완료!");
+                      await loadWoList();
+                    } catch (e: any) {
+                      showToast("❌ 수정 오류: " + (e?.message ?? e), "error");
+                    }
+                  }}
+                >
+                  ✏️ 수정
                 </button>
               </div>
 
