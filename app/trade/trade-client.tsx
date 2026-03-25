@@ -2240,14 +2240,31 @@ if (woSubNameVal) {
                   <div className="mt-2"><span className={pill}>조회대상: {targetLabel}</span></div>
                   <div className="mt-2 text-xs text-slate-600">표시: {mode === "ORDERS" ? "주문/출고" : mode === "LEDGER" ? "금전출납" : "통합"}{includeOpening ? " · 기초잔액 포함" : ""}</div>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right text-sm">
-                  <div className="text-xs text-slate-600">기간 시작 전 기초잔액</div>
-                  <div className="font-semibold tabular-nums">{fmt(openingBalance)}</div>
-                  <div className="mt-2">
-                    <div className="text-xs text-slate-600">입금 {fmt(unifiedTotals.plus)} · 출금 {fmt(unifiedTotals.minus)}</div>
-                    <div className="text-sm font-semibold tabular-nums">잔액(최신) {fmt(unifiedTotals.endBalance)}</div>
-                  </div>
-                </div>
+                {(() => {
+                  // 최초 기록부터 누적 계산 (기초잔액 포함 = 전체 누적)
+                  const totalOut = unifiedTotals.minus + Math.abs(Math.min(openingBalance, 0));
+                  const totalIn = unifiedTotals.plus + Math.max(openingBalance, 0);
+                  const net = totalIn - totalOut; // 양수 = 초과입금, 음수 = 미수금
+                  const isMisu = net < 0;
+                  return (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right text-sm space-y-2">
+                      <div>
+                        <div className="text-xs text-slate-500">출고(출금) 누적</div>
+                        <div className="font-semibold tabular-nums text-red-600">{fmt(unifiedTotals.minus + Math.abs(Math.min(openingBalance, 0)))}</div>
+                      </div>
+                      <div>
+                        <div className={`text-xs font-semibold ${isMisu ? "text-red-600" : "text-blue-600"}`}>
+                          {isMisu ? "미수금" : "초과입금"}
+                        </div>
+                        <div className={`text-base font-bold tabular-nums ${isMisu ? "text-red-600" : "text-blue-600"}`}>
+                          {fmt(Math.abs(net))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+
               </div>
               <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
                 <div><div className="mb-1 text-xs text-slate-600">From</div><input type="date" className={inp} value={fromYMD} onChange={(e) => { setToTouched(false); setFromYMD(e.target.value); }} /></div>
@@ -2257,7 +2274,7 @@ if (woSubNameVal) {
                   <button className={btnOn} onClick={loadTrades}>조회</button>
                   {/* ── 새로고침 버튼 추가 ── */}
                   <button className={btn} onClick={loadTrades}>🔄 새로고침</button>
-                  <button className={includeOpening ? btnOn : btn} onClick={() => setIncludeOpening((v) => !v)}>기초잔액 포함 러닝잔액</button>
+             
                 </div>
               </div>
               <div className="mb-3"><input className={inp} value={tradeSearch} onChange={(e) => setTradeSearch(e.target.value)} placeholder="검색: 매입처/사업자번호/메모/품목명/카테고리/방법" /></div>
