@@ -2367,6 +2367,7 @@ function parseLogoSize(logoSpec: string | null): { width: string; height: string
 function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: () => void; employees: EmployeeRow[]; }) {
   const items = (wo.work_order_items ?? []).slice().sort((a, b) => (a.barcode_no ?? "").localeCompare(b.barcode_no ?? ""));
   const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
+
   const [itemNotes, setItemNotes] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const item of items) {
@@ -2385,9 +2386,13 @@ function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: (
           const fullSheets = Math.floor(sheets);
           const remainder = sheets - fullSheets;
           const extraRows = remainder > 0 ? Math.ceil(remainder * mold / perRow) : 0;
-          init[item.id] = extraRows > 0 ? `전사지: ${fullSheets}장 ${extraRows}줄` : `전사지: ${fullSheets}장`;
+          const totalProduced = (fullSheets * mold) + (extraRows * perRow);
+          init[item.id] = extraRows > 0
+            ? `전사지: ${fullSheets}장 ${extraRows}줄  참고: ${totalProduced.toLocaleString("ko-KR")}개`
+            : `전사지: ${fullSheets}장  참고: ${(fullSheets * mold).toLocaleString("ko-KR")}개`;
         } else {
-          init[item.id] = `전사지: ${Math.ceil(qty / mold)}장`;
+          const sheets2 = Math.ceil(qty / mold);
+          init[item.id] = `전사지: ${sheets2}장  참고: ${(sheets2 * mold).toLocaleString("ko-KR")}개`;
         }
       } else {
         init[item.id] = item.note ?? "";
