@@ -904,8 +904,12 @@ export default function ProductionClient() {
               <div className="flex gap-1">
                 {(["전체", "생산중", "완료"] as const).map((s) => (
                   <button key={s} className={filterStatus === s ? btnOn : btn} onClick={() => setFilterStatus(s)}>
-                    {s}
-                  </button>
+  {s}{s === "생산중" && (
+    <span className={`ml-1 tabular-nums ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>
+      {woList.filter((w) => w.status === "생산중").length}
+    </span>
+  )}
+</button>
                 ))}
               </div>
               <div className="grid grid-cols-2 gap-2">
