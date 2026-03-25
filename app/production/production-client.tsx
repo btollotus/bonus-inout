@@ -1198,7 +1198,7 @@ export default function ProductionClient() {
                           <select
                             className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 transition-colors ${isDone ? "border-current bg-white/70 text-slate-700 font-medium" : "border-slate-200 bg-white text-slate-500"} ${isSaving ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                             value={assigneeVal}
-                            disabled={isSaving}
+                            disabled={isSaving || !isEditMode}
                             onChange={(e) => handleAssigneeChange(step.assigneeKey, step.statusKey, e.target.value)}
                           >
                             <option value="">— 담당자 선택 —</option>
