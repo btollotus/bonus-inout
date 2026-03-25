@@ -786,7 +786,10 @@ async function loadSignageList() {
                 <div className="flex gap-2">
                   <button
                     className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-white ${inputMode === "manual" ? "border border-orange-300 bg-orange-500 hover:bg-orange-600" : `${btnOn}`}`}
-                    disabled={inputMode === "auto" && items.every(x => !x.calcResult)}
+                    disabled={
+                      (inputMode === "auto" && items.every(x => !x.calcResult)) ||
+                      (inputMode === "manual" && items.every(x => !x.manualV))
+                    }
                     onClick={async () => {
                       if (!activeCustomerName) return setMsg("업체명을 입력하세요.");
                       setMsg(null);
@@ -822,6 +825,41 @@ async function loadSignageList() {
                               total: cr.totalActual ?? 0,
                               final_price: V,
                               final_price_stock: cr.V_stock ?? null,
+                            });
+                            if (quoteErr) setMsg("⚠️ 견적 상세 저장 오류: " + quoteErr.message);
+                            setLastQuoteRequestId(req.id);
+                            loadQuoteList();
+                          }
+                        }
+                      }
+                      // ─── 수동 입력 모드: DB 저장 ───
+                      if (inputMode === "manual") {
+                        const manualItems = items.filter(x => x.manualV);
+                        if (manualItems.length > 0) {
+                          const firstManualItem = manualItems[0];
+                          const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
+                            customer_id: activeCustomerId,
+                            customer_name: activeCustomerName,
+                            request_type: "product",
+                            product_type: firstManualItem.productType,
+                            width_mm: parseFloat(firstManualItem.widthMm) || null,
+                            height_mm: parseFloat(firstManualItem.heightMm) || null,
+                            quantity: parseInt(firstManualItem.quantity) || null,
+                            is_new: firstManualItem.isNew,
+                            design_changed: firstManualItem.designChanged,
+                            use_stock_mold: firstManualItem.useStockMold,
+                            reuse_existing_mold: firstManualItem.reuseExistingMold,
+                            mold_qty: 1,
+                            memo: memo || null,
+                            status: "견적완료",
+                            updated_at: new Date().toISOString(),
+                          }).select("id").single();
+                          if (reqErr) {
+                            setMsg("⚠️ 저장 오류: " + reqErr.message);
+                          } else if (req?.id) {
+                            const { error: quoteErr } = await supabase.from("quotes").insert({
+                              request_id: req.id,
+                              final_price: parseInt(firstManualItem.manualV) || 0,
                             });
                             if (quoteErr) setMsg("⚠️ 견적 상세 저장 오류: " + quoteErr.message);
                             setLastQuoteRequestId(req.id);
