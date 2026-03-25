@@ -298,10 +298,12 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
         onBlur={() => onUpdate(i, { weight_g: toNum(l.weight_g) })}
       />
       <div className="flex items-center gap-1">
-        <input className={inputRightCls} inputMode="numeric"
-          value={l.qty ? fmt(l.qty) : ""}
-          onChange={(e) => { const raw = e.target.value.replace(/[^\d,]/g, ""); onUpdate(i, { qty: raw === "" ? 0 : toInt(raw) }); }}
-        />
+      <input className={inputRightCls} inputMode="numeric"
+  value={l.qty ? fmt(l.qty) : ""}
+  onChange={(e) => { const raw = e.target.value.replace(/[^\d,]/g, ""); onUpdate(i, { qty: raw === "" ? 0 : toInt(raw) }); }}
+  onBlur={(e) => { if (!l.qty || l.qty <= 0) onUpdate(i, { qty: 1 }); }}
+  placeholder="수량"
+/>
         <span className={qtyBadgeCls}>{pack > 1 ? "BOX" : "EA"}</span>
       </div>
       <input className={inputRightCls} inputMode="text"
@@ -887,6 +889,12 @@ export default function TradeClient() {
       const r = calcLineAmounts(qty, unit, l.total_incl_vat);
       return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total };
     }).filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) !== 0);
+    const zeroQtyLine = lines.find((l) => l.name.trim() && toInt(l.qty) <= 0);
+    if (zeroQtyLine) return setMsg(`"${zeroQtyLine.name.trim()}" 품목의 수량을 입력하세요. (0 또는 빈칸 불가)`);
+    
+    const noAmountLine = lines.find((l) => l.name.trim() && toInt(l.qty) > 0 && calcLineAmounts(toInt(l.qty), toIntSigned(l.unit), l.total_incl_vat).total === 0);
+    if (noAmountLine) return setMsg(`"${noAmountLine.name.trim()}" 품목의 단가 또는 총액을 입력하세요.`);
+    
     if (cleanLines.length === 0) return setMsg("품목명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
 
     const { data: createdOrder, error: oErr } = await supabase.from("orders").insert({
