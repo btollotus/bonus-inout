@@ -2289,15 +2289,18 @@ if (woSubNameVal) {
                       <col style={{ width: "110px" }} /><col style={{ width: "110px" }} /><col style={{ width: "130px" }} /><col style={{ width: "220px" }} />
                     </colgroup>
                     <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                      <tr>
-                        <th className="px-3 py-2 text-left">날짜</th><th className="px-3 py-2 text-left">거래처</th>
-                        <th className="px-3 py-2 text-left">주문자</th><th className="px-3 py-2 text-left">적요</th>
-                        <th className="px-3 py-2 text-left">카테고리</th><th className="px-3 py-2 text-left">방법</th>
-                        <th className="sticky right-[460px] z-20 bg-slate-50 px-3 py-2 text-right">입금</th>
-                        <th className="sticky right-[350px] z-20 bg-slate-50 px-3 py-2 text-right">출금(출고)</th>
-                        <th className="sticky right-[220px] z-20 bg-slate-50 px-3 py-2 text-right">잔액</th>
-                        <th className="sticky right-0 z-30 bg-slate-50 px-3 py-2 text-center">작업</th>
-                      </tr>
+  <tr>
+    <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-left">날짜</th>
+    <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-left">거래처</th>
+    <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-left">주문자</th>
+    <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-left">적요</th>
+    <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-left">카테고리</th>
+    <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-left">방법</th>
+    <th className="sticky top-0 right-[460px] z-20 bg-slate-50 px-3 py-2 text-right">입금</th>
+    <th className="sticky top-0 right-[350px] z-20 bg-slate-50 px-3 py-2 text-right">출금(출고)</th>
+    <th className="sticky top-0 right-[220px] z-20 bg-slate-50 px-3 py-2 text-right">잔액</th>
+    <th className="sticky top-0 right-0 z-30 bg-slate-50 px-3 py-2 text-center">작업</th>
+  </tr>
                     </thead>
                     <tbody>
                       {unifiedRows.filter((x) => {
