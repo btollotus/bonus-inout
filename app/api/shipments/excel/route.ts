@@ -186,7 +186,6 @@ export async function GET(req: Request) {
 
     ws.columns = COLUMNS;
     ws.getRow(1).font = { bold: true };
-    ws.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
     ws.views = [{ state: "frozen", ySplit: 1 }];
     ws.getColumn("box_qty").numFmt = "0";
     ws.getColumn("fee").numFmt = "#,##0";
@@ -203,24 +202,25 @@ export async function GET(req: Request) {
         : buildProductName(o.customer_name, null);
 
         for (const s of targetShips) {
-          ws.addRow([
-            s ? safeStr(s.ship_to_name) : "",
-            s ? buildAddress(s.ship_to_address1, s.ship_to_address2) : "",
-            s ? safeStr(s.ship_to_mobile) : "",
-            s ? safeStr(s.ship_to_phone) : "",
-            FIX_QTY,
-            FIX_FEE,
-            FIX_PREPAID,
-            FIX_JEJU_PREPAID,
-            productName,
-            FIX_DELIVERY_MESSAGE,
-          ]);
+          ws.addRow({
+            ship_to_name: s ? safeStr(s.ship_to_name) : "",
+            address1: s ? buildAddress(s.ship_to_address1, s.ship_to_address2) : "",
+            mobile: s ? safeStr(s.ship_to_mobile) : "",
+            phone: s ? safeStr(s.ship_to_phone) : "",
+            box_qty: FIX_QTY,
+            fee: FIX_FEE,
+            prepaid: FIX_PREPAID,
+            jeju_prepaid: FIX_JEJU_PREPAID,
+            product_name: productName,
+            delivery_message: FIX_DELIVERY_MESSAGE,
+          });
+          // ✅ row.getCell(10).value 제거
         }
     }
 
     ws.eachRow((row, rowNumber) => {
       row.height = rowNumber === 1 ? 18 : 16;
-      row.eachCell({ includeEmpty: true }, (cell) => {
+      row.eachCell((cell) => {
         cell.alignment = { vertical: "middle" };
       });
     });
