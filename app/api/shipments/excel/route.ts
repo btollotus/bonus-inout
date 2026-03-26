@@ -231,7 +231,7 @@ export async function GET(req: Request) {
 
   } catch (e: any) {
     const msg = String(e?.message ?? e ?? "unknown error");
-    return new Response(`출고 엑셀 생성 오류: ${msg}`, { status: 500 });
+    return new Response(`출고 엑셀 생성 오류!: ${msg}`, { status: 500 });
   }
 }
 
