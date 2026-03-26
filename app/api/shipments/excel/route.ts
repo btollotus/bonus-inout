@@ -22,18 +22,6 @@ type OrderRow = {
   customer_name: string | null;
 };
 
-type LineRow = {
-  order_id: string;
-  line_no: number | null;
-  name: string | null;
-  qty: number | null;
-  unit: string | null;
-  unit_type: string | null;
-  pack_ea: number | null;
-  actual_ea: number | null;
-};
-
-// ✅ 추가: work_orders 서브네임 조회용
 type WorkOrderRow = {
   linked_order_id: string | null;
   client_name: string | null;
@@ -46,7 +34,6 @@ const FIX_QTY = 1;
 const FIX_FEE = 3300;
 const FIX_PREPAID = "010";
 const FIX_JEJU_PREPAID = "010";
-// ✅ 배송메시지 고정값
 const FIX_DELIVERY_MESSAGE = "당일배송바랍니다";
 
 function ymdToday() {
@@ -73,8 +60,6 @@ function buildAddress(a1: string | null, a2: string | null) {
   return [s1, s2].filter(Boolean).join(" ");
 }
 
-// ✅ 수정: 거래처명/서브네임 형태로 제품명 생성
-// 예) 라끄루뜨 서울/베이글리스트  또는  라끄루뜨 서울 (서브네임 없을 때)
 function buildProductName(clientName: string | null, subName: string | null): string {
   const client = safeStr(clientName);
   const sub = safeStr(subName);
@@ -108,7 +93,6 @@ export async function GET(req: Request) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // 1) 해당 날짜 orders
     const { data: ordersData, error: oErr } = await supabase
       .from("orders")
       .select("id,ship_date,customer_name")
@@ -126,27 +110,18 @@ export async function GET(req: Request) {
 
     const orderIds = orders.map((o) => o.id);
 
-    // ✅ 빈 파일 응답 공통 함수
-    function makeEmptyWorkbook() {
+    if (orderIds.length === 0) {
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("출고");
       ws.columns = COLUMNS;
       ws.getRow(1).font = { bold: true };
-      return wb;
-    }
-
-    if (orderIds.length === 0) {
-      const wb = makeEmptyWorkbook();
       const buf = await wb.xlsx.writeBuffer();
       return makeResponse(buf, date);
     }
 
-    // 2) order_shipments
     const { data: shipData, error: sErr } = await supabase
       .from("order_shipments")
-      .select(
-        "id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,delivery_message"
-      )
+      .select("id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,delivery_message")
       .in("order_id", orderIds)
       .order("order_id", { ascending: true })
       .order("seq", { ascending: true })
@@ -162,14 +137,12 @@ export async function GET(req: Request) {
       shipsByOrder.set(s.order_id, arr);
     }
 
-    // ✅ 3) work_orders에서 서브네임 조회 (linked_order_id 기준)
     const { data: woData } = await supabase
       .from("work_orders")
       .select("linked_order_id,client_name,sub_name")
       .in("linked_order_id", orderIds)
       .limit(20000);
 
-    // order_id → { client_name, sub_name } 매핑 (주문당 첫 번째 작업지시서 기준)
     const woByOrder = new Map<string, { client_name: string | null; sub_name: string | null }>();
     for (const wo of ((woData ?? []) as WorkOrderRow[])) {
       if (wo.linked_order_id && !woByOrder.has(wo.linked_order_id)) {
@@ -180,7 +153,6 @@ export async function GET(req: Request) {
       }
     }
 
-    // 4) 엑셀 생성
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("출고");
 
@@ -195,26 +167,24 @@ export async function GET(req: Request) {
       const shipRows = shipsByOrder.get(oid) ?? [];
       const targetShips = shipRows.length ? shipRows.slice(0, 2) : [null];
 
-      // ✅ 제품명: work_orders의 거래처명/서브네임, 없으면 orders.customer_name
       const wo = woByOrder.get(oid);
       const productName = wo
         ? buildProductName(wo.client_name, wo.sub_name)
         : buildProductName(o.customer_name, null);
 
       for (const s of targetShips) {
-        ws.addRow({
-          ship_to_name: s ? safeStr(s.ship_to_name) : "",
-          address1: s ? buildAddress(s.ship_to_address1, s.ship_to_address2) : "",
-          mobile: s ? safeStr(s.ship_to_mobile) : "",
-          phone: s ? safeStr(s.ship_to_phone) : "",
-          box_qty: FIX_QTY,
-          fee: FIX_FEE,
-          prepaid: FIX_PREPAID,
-          jeju_prepaid: FIX_JEJU_PREPAID,
-          product_name: productName,
-          // ✅ 배송메시지: 고정값으로 대체
-          delivery_message: FIX_DELIVERY_MESSAGE,
-        });
+        ws.addRow([
+          s ? safeStr(s.ship_to_name) : "",
+          s ? buildAddress(s.ship_to_address1, s.ship_to_address2) : "",
+          s ? safeStr(s.ship_to_mobile) : "",
+          s ? safeStr(s.ship_to_phone) : "",
+          FIX_QTY,
+          FIX_FEE,
+          FIX_PREPAID,
+          FIX_JEJU_PREPAID,
+          productName,
+          FIX_DELIVERY_MESSAGE,
+        ]);
       }
     }
 
