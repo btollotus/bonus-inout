@@ -316,7 +316,7 @@ useEffect(() => {
         const customerName = String(r?.customer_name ?? "").trim() || "(거래처 미지정)";
         const method = normalizeShipMethod(r?.ship_method);
 
-        if (HIDE_CUSTOMERS.has(customerName) && method === "택배") continue;
+        if (HIDE_CUSTOMERS.has(customerName) && method === "택배" && String(r?.ship_method ?? "").trim() !== "택배-쇼핑몰") continue;
 
         const partnerId = r?.customer_id == null ? null : String(r.customer_id);
 
@@ -419,8 +419,12 @@ useEffect(() => {
         partner_name: String(r?.customer_name ?? "").trim() || "(거래처 미지정)",
         ship_method: normalizeShipMethod(r?.ship_method),
       }));
-
-      const rows = rowsAll.filter((r) => !(HIDE_CUSTOMERS.has(r.partner_name) && r.ship_method === "택배"));
+      
+      const rows = rowsAll.filter((_, idx) => {
+        const r = rowsAll[idx];
+        const rawMethod = String((data ?? [])[idx]?.ship_method ?? "").trim();
+        return !(HIDE_CUSTOMERS.has(r.partner_name) && r.ship_method === "택배" && rawMethod !== "택배-쇼핑몰");
+      });
       setShipRows(rows);
 
       // ✅ partner_id가 있는 거래처만 일괄출력 대상 → 기본 전체 선택
