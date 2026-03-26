@@ -202,21 +202,20 @@ export async function GET(req: Request) {
         ? buildProductName(wo.client_name, wo.sub_name)
         : buildProductName(o.customer_name, null);
 
-      for (const s of targetShips) {
-        ws.addRow({
-          ship_to_name: s ? safeStr(s.ship_to_name) : "",
-          address1: s ? buildAddress(s.ship_to_address1, s.ship_to_address2) : "",
-          mobile: s ? safeStr(s.ship_to_mobile) : "",
-          phone: s ? safeStr(s.ship_to_phone) : "",
-          box_qty: FIX_QTY,
-          fee: FIX_FEE,
-          prepaid: FIX_PREPAID,
-          jeju_prepaid: FIX_JEJU_PREPAID,
-          product_name: productName,
-          // ✅ 배송메시지: 고정값으로 대체
-          delivery_message: FIX_DELIVERY_MESSAGE,
-        });
-      }
+        for (const s of targetShips) {
+          ws.addRow([
+            s ? safeStr(s.ship_to_name) : "",
+            s ? buildAddress(s.ship_to_address1, s.ship_to_address2) : "",
+            s ? safeStr(s.ship_to_mobile) : "",
+            s ? safeStr(s.ship_to_phone) : "",
+            FIX_QTY,
+            FIX_FEE,
+            FIX_PREPAID,
+            FIX_JEJU_PREPAID,
+            productName,
+            FIX_DELIVERY_MESSAGE,
+          ]);
+        }
     }
 
     ws.eachRow((row, rowNumber) => {
