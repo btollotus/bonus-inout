@@ -2294,7 +2294,7 @@ if (woSubNameVal) {
                         <th className="px-3 py-2 text-left">주문자</th><th className="px-3 py-2 text-left">적요</th>
                         <th className="px-3 py-2 text-left">카테고리</th><th className="px-3 py-2 text-left">방법</th>
                         <th className="sticky right-[460px] z-20 bg-slate-50 px-3 py-2 text-right">입금</th>
-                        <th className="sticky right-[350px] z-20 bg-slate-50 px-3 py-2 text-right">출금</th>
+                        <th className="sticky right-[350px] z-20 bg-slate-50 px-3 py-2 text-right">출금(출고)</th>
                         <th className="sticky right-[220px] z-20 bg-slate-50 px-3 py-2 text-right">잔액</th>
                         <th className="sticky right-0 z-30 bg-slate-50 px-3 py-2 text-center">작업</th>
                       </tr>
@@ -2371,7 +2371,7 @@ if (woSubNameVal) {
                   </table>
                 </div>
               </div>
-              <div className="mt-2 text-xs text-slate-500">※ 주문/출고는 출금으로 표시됩니다.</div>
+              <div className="mt-2 text-xs text-slate-500">※ 주문/출고는 출금(출고)으로 표시됩니다.</div>
             </div>
           </div>
         </div>
