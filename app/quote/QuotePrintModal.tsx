@@ -399,7 +399,12 @@ table { border-collapse: collapse; width: 100%; }
                 <tr>
                   <td style={{ ...cellBase, color: "#333" }} colSpan={6}>*식품유형 - {foodType}</td>
                 </tr>
-
+{/* 기성 성형틀 사용 표시 */}
+{items.some(item => item.useStockMold) && (
+  <tr>
+    <td style={{ ...cellBase, color: "#555" }} colSpan={6}>*기성 성형틀 사용</td>
+  </tr>
+)}
                 {/* 주의사항 */}
                 {cautions.map((c, i) => (
                   <tr key={`c-${i}`}>
