@@ -1705,7 +1705,7 @@ if (woSubNameVal) {
                         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
                           <table className="w-full table-fixed text-sm">
                             <colgroup><col style={{ width: "160px" }} /><col style={{ width: "140px" }} /><col style={{ width: "auto" }} /><col style={{ width: "140px" }} /><col style={{ width: "140px" }} /></colgroup>
-                            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                            <thead className="sticky top-0 z-30 bg-slate-50 text-xs font-semibold text-slate-600">
                               <tr>{["변경시각", "수화주명", "주소1", "휴대폰", "전화"].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr>
                             </thead>
                             <tbody>
