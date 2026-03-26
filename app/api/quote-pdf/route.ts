@@ -140,6 +140,10 @@ export async function GET(req: NextRequest) {
     "<tr style='height:22px;'>" + ("<td style='" + cb + "'></td>").repeat(6) + "</tr>"
   ).join("");
 
+  const useStockMoldHtml = qr.use_stock_mold
+    ? "<tr><td colspan='6' style='" + cb + "color:#555;'>*기성 성형틀 사용</td></tr>"
+    : "";
+
   const cautionsHtml = cautions.map(c =>
     "<tr><td colspan='6' style='" + cb + "color:#555;'>*" + c + "</td></tr>"
   ).join("");
@@ -253,6 +257,7 @@ table { border-collapse: collapse; width: 100%; }
     ${lineRowsHtml}
     ${emptyRowsHtml}
     <tr><td colspan="6" style="${cb}color:#333;">*식품유형 - ${foodType}</td></tr>
+    ${useStockMoldHtml}
     ${cautionsHtml}
     ${memoHtml}
     <tr style="background:#f5f5f5;font-weight:bold;">
