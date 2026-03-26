@@ -2,7 +2,7 @@
 import ExcelJS from "exceljs";
 import { createClient } from "@supabase/supabase-js";
 
-export const runtime = "nodejs"; // exceljs는 node 런타임 권장
+export const runtime = "nodejs";
 
 type ShipRow = {
   id: string;
@@ -33,14 +33,21 @@ type LineRow = {
   actual_ea: number | null;
 };
 
-// ✅ 숨길 판매채널
+// ✅ 추가: work_orders 서브네임 조회용
+type WorkOrderRow = {
+  linked_order_id: string | null;
+  client_name: string | null;
+  sub_name: string | null;
+};
+
 const HIDE_CUSTOMERS = new Set(["카카오플러스-판매", "네이버-판매", "쿠팡-판매"]);
 
-// ✅ 고정값 규칙
 const FIX_QTY = 1;
 const FIX_FEE = 3300;
 const FIX_PREPAID = "010";
 const FIX_JEJU_PREPAID = "010";
+// ✅ 배송메시지 고정값
+const FIX_DELIVERY_MESSAGE = "당일배송바랍니다";
 
 function ymdToday() {
   const d = new Date();
@@ -66,18 +73,27 @@ function buildAddress(a1: string | null, a2: string | null) {
   return [s1, s2].filter(Boolean).join(" ");
 }
 
-function buildProductName(lines: LineRow[]) {
-  // 요구사항: order_lines 모두 합쳐서 1칸 (✅ 수량/단위 등 숫자 표시 금지 → name만 합침)
-  const parts = lines
-    .slice()
-    .sort((a, b) => Number(a.line_no ?? 9999) - Number(b.line_no ?? 9999))
-    .map((l) => {
-      const n = safeStr(l.name) || "(품목명없음)";
-      return n;
-    });
-
-  return parts.join(", ");
+// ✅ 수정: 거래처명/서브네임 형태로 제품명 생성
+// 예) 라끄루뜨 서울/베이글리스트  또는  라끄루뜨 서울 (서브네임 없을 때)
+function buildProductName(clientName: string | null, subName: string | null): string {
+  const client = safeStr(clientName);
+  const sub = safeStr(subName);
+  if (client && sub) return `${client}/${sub}`;
+  return client || "(거래처명없음)";
 }
+
+const COLUMNS = [
+  { header: "수화주명", key: "ship_to_name", width: 18 },
+  { header: "주소1", key: "address1", width: 50 },
+  { header: "휴대폰", key: "mobile", width: 16 },
+  { header: "전화", key: "phone", width: 16 },
+  { header: "택배수량", key: "box_qty", width: 10 },
+  { header: "택배요금", key: "fee", width: 10 },
+  { header: "선착불", key: "prepaid", width: 8 },
+  { header: "제주선착불", key: "jeju_prepaid", width: 10 },
+  { header: "제품명", key: "product_name", width: 45 },
+  { header: "배송메세지", key: "delivery_message", width: 30 },
+];
 
 export async function GET(req: Request) {
   try {
@@ -108,39 +124,23 @@ export async function GET(req: Request) {
     });
 
     const orderIds = orders.map((o) => o.id);
-    if (orderIds.length === 0) {
-      // 빈 파일도 내려주기(실패 대신)
+
+    // ✅ 빈 파일 응답 공통 함수
+    function makeEmptyWorkbook() {
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("출고");
-      ws.columns = [
-        { header: "수화주명", key: "ship_to_name", width: 18 },
-        { header: "주소1", key: "address1", width: 50 },
-        { header: "휴대폰", key: "mobile", width: 16 },
-        { header: "전화", key: "phone", width: 16 },
-        { header: "택배수량", key: "box_qty", width: 10 },
-        { header: "택배요금", key: "fee", width: 10 },
-        { header: "선착불", key: "prepaid", width: 8 },
-        { header: "제주선착불", key: "jeju_prepaid", width: 10 },
-        { header: "제품명", key: "product_name", width: 45 },
-        { header: "배송메세지", key: "delivery_message", width: 30 },
-      ];
+      ws.columns = COLUMNS;
       ws.getRow(1).font = { bold: true };
-
-      const buf = await wb.xlsx.writeBuffer();
-      return new Response(buf, {
-        status: 200,
-        headers: {
-          "Content-Type":
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(
-            `출고_${date}.xlsx`
-          )}`,
-          "Cache-Control": "no-store",
-        },
-      });
+      return wb;
     }
 
-    // 2) order_shipments (배송지 1~2)
+    if (orderIds.length === 0) {
+      const wb = makeEmptyWorkbook();
+      const buf = await wb.xlsx.writeBuffer();
+      return makeResponse(buf, date);
+    }
+
+    // 2) order_shipments
     const { data: shipData, error: sErr } = await supabase
       .from("order_shipments")
       .select(
@@ -161,102 +161,84 @@ export async function GET(req: Request) {
       shipsByOrder.set(s.order_id, arr);
     }
 
-    // 3) order_lines (제품명 합치기)
-    const { data: lineData, error: lErr } = await supabase
-      .from("order_lines")
-      .select("order_id,line_no,name,qty,unit,unit_type,pack_ea,actual_ea")
-      .in("order_id", orderIds)
-      .order("order_id", { ascending: true })
-      .order("line_no", { ascending: true })
-      .limit(200000);
+    // ✅ 3) work_orders에서 서브네임 조회 (linked_order_id 기준)
+    const { data: woData } = await supabase
+      .from("work_orders")
+      .select("linked_order_id,client_name,sub_name")
+      .in("linked_order_id", orderIds)
+      .limit(20000);
 
-    if (lErr) throw lErr;
-    const lines = (lineData ?? []) as LineRow[];
-
-    const linesByOrder = new Map<string, LineRow[]>();
-    for (const l of lines) {
-      const arr = linesByOrder.get(l.order_id) ?? [];
-      arr.push(l);
-      linesByOrder.set(l.order_id, arr);
+    // order_id → { client_name, sub_name } 매핑 (주문당 첫 번째 작업지시서 기준)
+    const woByOrder = new Map<string, { client_name: string | null; sub_name: string | null }>();
+    for (const wo of ((woData ?? []) as WorkOrderRow[])) {
+      if (wo.linked_order_id && !woByOrder.has(wo.linked_order_id)) {
+        woByOrder.set(wo.linked_order_id, {
+          client_name: wo.client_name,
+          sub_name: wo.sub_name,
+        });
+      }
     }
 
     // 4) 엑셀 생성
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("출고");
 
-    ws.columns = [
-      { header: "수화주명", key: "ship_to_name", width: 18 },
-      { header: "주소1", key: "address1", width: 50 },
-      { header: "휴대폰", key: "mobile", width: 16 },
-      { header: "전화", key: "phone", width: 16 },
-      { header: "택배수량", key: "box_qty", width: 10 },
-      { header: "택배요금", key: "fee", width: 10 },
-      { header: "선착불", key: "prepaid", width: 8 },
-      { header: "제주선착불", key: "jeju_prepaid", width: 10 },
-      { header: "제품명", key: "product_name", width: 45 },
-      { header: "배송메세지", key: "delivery_message", width: 30 },
-    ];
-
+    ws.columns = COLUMNS;
     ws.getRow(1).font = { bold: true };
     ws.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
     ws.views = [{ state: "frozen", ySplit: 1 }];
-
-    // 숫자컬럼은 숫자로
     ws.getColumn("box_qty").numFmt = "0";
     ws.getColumn("fee").numFmt = "#,##0";
 
     for (const o of orders) {
       const oid = o.id;
-
       const shipRows = shipsByOrder.get(oid) ?? [];
-      // 배송지 2개면 2줄 / 없으면 1줄(빈값)
       const targetShips = shipRows.length ? shipRows.slice(0, 2) : [null];
 
-      const productName = buildProductName(linesByOrder.get(oid) ?? []);
+      // ✅ 제품명: work_orders의 거래처명/서브네임, 없으면 orders.customer_name
+      const wo = woByOrder.get(oid);
+      const productName = wo
+        ? buildProductName(wo.client_name, wo.sub_name)
+        : buildProductName(o.customer_name, null);
 
       for (const s of targetShips) {
-        const ship_to_name = s ? safeStr(s.ship_to_name) : "";
-        const address1 = s ? buildAddress(s.ship_to_address1, s.ship_to_address2) : "";
-        const mobile = s ? safeStr(s.ship_to_mobile) : "";
-        const phone = s ? safeStr(s.ship_to_phone) : "";
-        const delivery_message = s ? safeStr(s.delivery_message) : "";
-
         ws.addRow({
-          ship_to_name,
-          address1,
-          mobile,
-          phone,
+          ship_to_name: s ? safeStr(s.ship_to_name) : "",
+          address1: s ? buildAddress(s.ship_to_address1, s.ship_to_address2) : "",
+          mobile: s ? safeStr(s.ship_to_mobile) : "",
+          phone: s ? safeStr(s.ship_to_phone) : "",
           box_qty: FIX_QTY,
           fee: FIX_FEE,
           prepaid: FIX_PREPAID,
           jeju_prepaid: FIX_JEJU_PREPAID,
           product_name: productName,
-          delivery_message,
+          // ✅ 배송메시지: 고정값으로 대체
+          delivery_message: FIX_DELIVERY_MESSAGE,
         });
       }
     }
 
-    // 보기 좋게 행 높이
     ws.eachRow((row, rowNumber) => {
       row.height = rowNumber === 1 ? 18 : 16;
       row.alignment = { vertical: "middle" };
     });
 
     const buf = await wb.xlsx.writeBuffer();
+    return makeResponse(buf, date);
 
-    return new Response(buf, {
-      status: 200,
-      headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(
-          `출고_${date}.xlsx`
-        )}`,
-        "Cache-Control": "no-store",
-      },
-    });
   } catch (e: any) {
     const msg = String(e?.message ?? e ?? "unknown error");
     return new Response(`출고 엑셀 생성 오류: ${msg}`, { status: 500 });
   }
+}
+
+function makeResponse(buf: ExcelJS.Buffer, date: string) {
+  return new Response(buf, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(`출고_${date}.xlsx`)}`,
+      "Cache-Control": "no-store",
+    },
+  });
 }
