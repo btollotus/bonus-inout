@@ -78,8 +78,8 @@ function buildAddress(a1: string | null, a2: string | null) {
 function buildProductName(clientName: string | null, subName: string | null): string {
   const client = safeStr(clientName);
   const sub = safeStr(subName);
-  if (client && sub) return `${client}/${sub}`;
-  return client || "(거래처명없음)";
+  if (client && sub) return `*****${client}/${sub}`;
+  return `*****${client}` || "(거래처명없음)";
 }
 
 const COLUMNS = [
