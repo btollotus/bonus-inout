@@ -156,11 +156,21 @@ export async function GET(req: Request) {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("출고");
 
-    ws.columns = COLUMNS;
+    ws.addRow(["수화주명","주소1","휴대폰","전화","택배수량","택배요금","선착불","제주선착불","제품명","배송메세지"]);
     ws.getRow(1).font = { bold: true };
+    ws.getColumn(1).width = 18;
+    ws.getColumn(2).width = 50;
+    ws.getColumn(3).width = 16;
+    ws.getColumn(4).width = 16;
+    ws.getColumn(5).width = 10;
+    ws.getColumn(6).width = 10;
+    ws.getColumn(7).width = 8;
+    ws.getColumn(8).width = 10;
+    ws.getColumn(9).width = 45;
+    ws.getColumn(10).width = 30;
     ws.views = [{ state: "frozen", ySplit: 1 }];
-    ws.getColumn("box_qty").numFmt = "0";
-    ws.getColumn("fee").numFmt = "#,##0";
+    ws.getColumn(5).numFmt = "0";
+    ws.getColumn(6).numFmt = "#,##0";
 
     for (const o of orders) {
       const oid = o.id;
