@@ -20,6 +20,7 @@ type OrderRow = {
   id: string;
   ship_date: string | null;
   customer_name: string | null;
+  ship_method: string | null;
 };
 
 type WorkOrderRow = {
@@ -95,7 +96,7 @@ export async function GET(req: Request) {
 
     const { data: ordersData, error: oErr } = await supabase
       .from("orders")
-      .select("id,ship_date,customer_name")
+      .select("id,ship_date,customer_name,ship_method")
       .eq("ship_date", date)
       .not("ship_date", "is", null)
       .limit(20000);
@@ -105,7 +106,9 @@ export async function GET(req: Request) {
     const ordersAll = (ordersData ?? []) as OrderRow[];
     const orders = ordersAll.filter((o) => {
       const name = safeStr(o.customer_name) || "(거래처 미지정)";
-      return !HIDE_CUSTOMERS.has(name);
+      const rawMethod = safeStr(o.ship_method);
+      if (HIDE_CUSTOMERS.has(name) && rawMethod !== "택배-쇼핑몰") return false;
+      return true;
     });
 
     const orderIds = orders.map((o) => o.id);
