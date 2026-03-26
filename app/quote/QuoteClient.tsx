@@ -19,6 +19,7 @@ type QuoteRequestRow = {
   customer_name: string;
   request_type: string;
   product_type: string | null;
+  color_type: string | null;
   width_mm: number | null;
   height_mm: number | null;
   quantity: number | null;
@@ -281,6 +282,7 @@ async function loadSignageList() {
         customer_name: activeCustomerName,
         request_type: "product",
         product_type: item.productType,
+        color_type: item.colorType,
         width_mm: parseFloat(item.widthMm) || null,
         height_mm: parseFloat(item.heightMm) || null,
         quantity: parseInt(item.quantity) || null,
@@ -370,7 +372,7 @@ async function loadSignageList() {
     setItems([{
       id: crypto.randomUUID(),
       productType: pt,
-      colorType: "dark",
+      colorType: (r.color_type as "dark" | "white") ?? "dark",
       widthMm: r.width_mm ? String(r.width_mm) : "",
       heightMm: r.height_mm ? String(r.height_mm) : "",
       quantity: r.quantity ? String(r.quantity) : "",
@@ -804,6 +806,7 @@ async function loadSignageList() {
                             customer_name: activeCustomerName,
                             request_type: "product",
                             product_type: firstItem.productType,
+                            color_type: firstItem.colorType, 
                             width_mm: parseFloat(firstItem.widthMm) || null,
                             height_mm: parseFloat(firstItem.heightMm) || null,
                             quantity: parseInt(firstItem.quantity) || null,
@@ -842,6 +845,7 @@ async function loadSignageList() {
                             customer_name: activeCustomerName,
                             request_type: "product",
                             product_type: firstManualItem.productType,
+                            color_type: firstManualItem.colorType,
                             width_mm: parseFloat(firstManualItem.widthMm) || null,
                             height_mm: parseFloat(firstManualItem.heightMm) || null,
                             quantity: parseInt(firstManualItem.quantity) || null,
@@ -1255,7 +1259,7 @@ async function loadSignageList() {
               inputMode: "auto" as const,
               items: [{
                 productType: pt,
-                colorType: "dark" as const,
+                colorType: ((r.color_type as "dark" | "white") ?? "dark"),
                 isRaise,
                 widthMm: r.width_mm,
                 heightMm: r.height_mm,
