@@ -78,8 +78,9 @@ function buildAddress(a1: string | null, a2: string | null) {
 function buildProductName(clientName: string | null, subName: string | null): string {
   const client = safeStr(clientName);
   const sub = safeStr(subName);
-  if (client && sub) return `*****${client}/${sub}`;
-  return `*****${client}` || "(거래처명없음)";
+  if (!client) return "(거래처명없음)";
+  if (sub) return `*****${client}/${sub}`;
+  return `*****${client}`;
 }
 
 const COLUMNS = [
@@ -220,7 +221,9 @@ export async function GET(req: Request) {
 
     ws.eachRow((row, rowNumber) => {
       row.height = rowNumber === 1 ? 18 : 16;
-      row.alignment = { vertical: "middle" };
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.alignment = { vertical: "middle" };
+      });
     });
 
     const buf = await wb.xlsx.writeBuffer();
