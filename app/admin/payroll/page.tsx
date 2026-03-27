@@ -522,6 +522,54 @@ export default function PayrollPage() {
     setFetchLoading(false)
   }
 
+  async function copyFromLastMonth() {
+    const lastMonth = selectedMonth === 1 ? 12 : selectedMonth - 1
+    const lastYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear
+    const pay_month = `${lastYear}-${String(lastMonth).padStart(2, '0')}`
+  
+    if (!confirm(`${lastYear}년 ${lastMonth}월 데이터를 ${selectedYear}년 ${selectedMonth}월로 복사할까요?\n(현재 입력된 내용은 덮어씌워집니다)`)) return
+  
+    setFetchLoading(true)
+    const { data, error } = await supabase
+      .from('payroll_draft')
+      .select('*')
+      .eq('pay_month', pay_month)
+  
+    if (error || !data || data.length === 0) {
+      setError(`${lastYear}년 ${lastMonth}월 데이터가 없습니다.`)
+      setFetchLoading(false)
+      return
+    }
+  
+    const lastMap = new Map(data.map((r: PayrollRow) => [r.employee_id, r]))
+    const newRows: PayrollRow[] = employees.map((emp) => {
+      const last = lastMap.get(emp.id)
+      if (last) {
+        return {
+          ...last,
+          id: undefined,            // 새 row로 insert되도록 id 제거
+          pay_month: `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`,
+          year: selectedYear,
+          month: selectedMonth,
+          status: 'draft' as const,
+          fuel_pay: 0,              // 유류지원비 — 출근일수·연차에 따라 매달 달라짐
+          work_days: monthWorkDays, // 이번달 공통 출근일수로 초기화
+          bonus_pay: 0,             // 상여금 — 매달 달라짐
+          income_tax_settle: 0,     // 연말정산
+          local_tax_settle: 0,
+          special_tax_settle: 0,
+          memo: '',
+        }
+      }
+      // 지난달에 없는 신규 직원은 빈 row
+      return { ...emptyRow(emp, selectedYear, selectedMonth), work_days: monthWorkDays }
+    })
+  
+    setRows(newRows)
+    setSuccess(`${lastYear}년 ${lastMonth}월 데이터를 불러왔습니다. 유류지원비·상여금을 확인 후 저장하세요.`)
+    setFetchLoading(false)
+  }
+
   function updateRow(idx: number, fields: Partial<PayrollRow>) {
     setRows(prev => { const next = [...prev]; next[idx] = { ...next[idx], ...fields }; return next })
   }
@@ -841,8 +889,18 @@ export default function PayrollPage() {
                       {MONTHS.map(m=><option key={m} value={m}>{m}월</option>)}
                     </select>
                   </div>
-                  {isFinalized&&<span className="bg-green-100 text-green-700 text-xs font-medium px-2.5 py-1 rounded-full">✓ 최종 확정됨</span>}
-                  <div className="ml-auto flex items-center gap-2">
+                  {isFinalized && <span className="bg-green-100 text-green-700 text-xs font-medium px-2.5 py-1 rounded-full">✓ 최종 확정됨</span>}
+{!isFinalized && (
+  <button
+    onClick={copyFromLastMonth}
+    disabled={fetchLoading || loading}
+    className="flex items-center gap-1.5 bg-violet-500 hover:bg-violet-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+  >
+    📋 지난달 복사
+  </button>
+)}
+<div className="ml-auto flex items-center gap-2">
+
                     <button onClick={()=>{ setShowWorkDaysPanel(v=>!v); setShowFuelPanel(false) }}
                       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm ${monthWorkDays>0?'bg-blue-600 hover:bg-blue-700 text-white':'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300'}`}>
                       📅 {selectedYear}년 {selectedMonth}월 출근일수 {monthWorkDays>0?`${monthWorkDays}일 ✓`:'설정'}
