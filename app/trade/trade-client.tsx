@@ -1792,7 +1792,7 @@ if (woSubNameVal) {
                       <div><div className="mb-1 text-xs text-slate-600">주문자</div><input className={inp} value={eOrdererName} onChange={(e) => setEOrdererName(e.target.value)} /></div>
                       <div><div className="mb-1 text-xs text-slate-600">출고방법</div>
                         <select className={inp} value={eShipMethod} onChange={(e) => setEShipMethod(e.target.value)}>
-                          {["택배", "택배-쇼핑몰", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                          {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                         </select>
                       </div>
                       <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} value={eOrderTitle} onChange={(e) => setEOrderTitle(e.target.value)} /></div>
@@ -1876,7 +1876,7 @@ if (woSubNameVal) {
                           </div>
                           <div><div className="mb-1 text-xs text-slate-600">납품방법</div>
                             <select className={inp} value={eWoDeliveryMethod} onChange={(e) => setEWoDeliveryMethod(e.target.value)}>
-                              {["택배", "택배-쇼핑몰", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                              {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                             </select>
                           </div>
                           <div><div className="mb-1 text-xs text-slate-600">성형틀 장당 생산수</div><input className={inpR} inputMode="numeric" value={eWoMoldPerSheet} onChange={(e) => setEWoMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} /></div>
@@ -2092,7 +2092,7 @@ if (woSubNameVal) {
                   <div><div className="mb-1 text-xs text-slate-600">주문자</div><input className={inp} value={ordererName} onChange={(e) => setOrdererName(e.target.value)} /></div>
                   <div><div className="mb-1 text-xs text-slate-600">출고방법</div>
                     <select className={inp} value={shipMethod} onChange={(e) => setShipMethod(e.target.value)}>
-                      {["택배", "택배-쇼핑몰", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                      {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                     </select>
                   </div>
                   <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} /></div>
