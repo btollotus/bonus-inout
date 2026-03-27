@@ -29,7 +29,14 @@ type WorkOrderRow = {
   sub_name: string | null;
 };
 
-const HIDE_CUSTOMERS = new Set(["카카오플러스-판매", "네이버-판매", "쿠팡-판매"]);
+type OrderLineRow = {
+  order_id: string;
+  name: string | null;
+  qty: number | null;
+};
+
+// ✅ 이 3개 거래처는 제품명을 "품목명-수량" 형식으로 표시
+const ITEM_NAME_CUSTOMERS = new Set(["카카오플러스-판매", "네이버-판매", "쿠팡-판매"]);
 
 const FIX_QTY = 1;
 const FIX_FEE = 3300;
@@ -69,6 +76,24 @@ function buildProductName(clientName: string | null, subName: string | null): st
   return `*****${client}`;
 }
 
+// ✅ 3개 거래처용: 품목명-수량 형식 (전체 표시, 택배비/성형틀/인쇄제판 제외)
+const EXCLUDE_ITEM_PREFIXES = ["택배비", "성형틀", "인쇄제판"];
+
+function isExcludedItem(name: string): boolean {
+  const n = name.trim();
+  return EXCLUDE_ITEM_PREFIXES.some((ex) => n.startsWith(ex));
+}
+
+function buildItemProductName(lines: OrderLineRow[]): string {
+  const validLines = lines
+    .filter((l) => safeStr(l.name))
+    .filter((l) => !isExcludedItem(safeStr(l.name)));
+  if (validLines.length === 0) return "";
+  return validLines
+    .map((l) => `${safeStr(l.name)}-${Number(l.qty ?? 0)}`)
+    .join(" / ");
+}
+
 const COLUMNS = [
   { header: "수화주명", key: "ship_to_name", width: 18 },
   { header: "주소1", key: "address1", width: 50 },
@@ -103,10 +128,7 @@ export async function GET(req: Request) {
 
     if (oErr) throw oErr;
 
-    const ordersAll = (ordersData ?? []) as OrderRow[];
-    const orders = ordersAll;
-  
-
+    const orders = (ordersData ?? []) as OrderRow[];
     const orderIds = orders.map((o) => o.id);
 
     if (orderIds.length === 0) {
@@ -152,6 +174,27 @@ export async function GET(req: Request) {
       }
     }
 
+    // ✅ 3개 거래처 주문의 order_lines 조회
+    const itemCustomerOrderIds = orders
+      .filter((o) => ITEM_NAME_CUSTOMERS.has(safeStr(o.customer_name)))
+      .map((o) => o.id);
+
+    const linesByOrder = new Map<string, OrderLineRow[]>();
+    if (itemCustomerOrderIds.length > 0) {
+      const { data: lineData } = await supabase
+        .from("order_lines")
+        .select("order_id,name,qty")
+        .in("order_id", itemCustomerOrderIds)
+        .order("line_no", { ascending: true })
+        .limit(100000);
+
+      for (const l of ((lineData ?? []) as OrderLineRow[])) {
+        const arr = linesByOrder.get(l.order_id) ?? [];
+        arr.push(l);
+        linesByOrder.set(l.order_id, arr);
+      }
+    }
+
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("출고");
 
@@ -176,10 +219,20 @@ export async function GET(req: Request) {
       const shipRows = shipsByOrder.get(oid) ?? [];
       const targetShips = shipRows.length ? shipRows.slice(0, 2) : [null];
 
-      const wo = woByOrder.get(oid);
-      const productName = wo
-        ? buildProductName(wo.client_name, wo.sub_name)
-        : buildProductName(o.customer_name, null);
+      const customerName = safeStr(o.customer_name);
+      let productName: string;
+
+      if (ITEM_NAME_CUSTOMERS.has(customerName)) {
+        // ✅ 3개 거래처: 품목명-수량 형식
+        const lines = linesByOrder.get(oid) ?? [];
+        productName = buildItemProductName(lines);
+      } else {
+        // 일반 거래처: 기존 방식
+        const wo = woByOrder.get(oid);
+        productName = wo
+          ? buildProductName(wo.client_name, wo.sub_name)
+          : buildProductName(o.customer_name, null);
+      }
 
       for (const s of targetShips) {
         ws.addRow([
