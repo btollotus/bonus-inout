@@ -100,6 +100,16 @@ type PartnerType = (typeof PARTNER_TYPES)[number];
 const LS_RECENT_PARTNERS = "bonus_trade_recent_partners_v1";
 const TRADE_TABLE_MIN_WIDTH = 1330;
 const SUBADMIN_PINNED_TOP_NAMES = ["네이버-판매", "카카오플러스-판매", "쿠팡-판매"];
+// 식품유형 → 분류 판별 함수
+const DARK_FOOD_TYPES = ["다크화이트","다크옐로우","데코초콜릿","롤리팝다크화이트","다크핑크","다크연두","롤리팝다크핑크"];
+
+function getFoodCategory(foodType: string | null | undefined): "다크" | "화이트" | "전사지" | null {
+  const ft = (foodType ?? "").trim();
+  if (!ft) return null;
+  if (ft.includes("초콜릿중간재")) return "전사지";
+  if (DARK_FOOD_TYPES.some((d) => ft.includes(d))) return "다크";
+  return "화이트";
+}
 
 // ─────────────────────── Helpers ───────────────────────
 const fmt = (n: number | null | undefined) => Number(n ?? 0).toLocaleString("ko-KR");

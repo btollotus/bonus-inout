@@ -169,6 +169,17 @@ const PROGRESS_STEPS = [
   },
 ] as const;
 
+// 식품유형 → 분류 판별 함수
+const DARK_FOOD_TYPES = ["다크화이트","다크옐로우","데코초콜릿","롤리팝다크화이트","다크핑크","다크연두","롤리팝다크핑크"];
+
+function getFoodCategory(foodType: string | null | undefined): "다크" | "화이트" | "전사지" | null {
+  const ft = (foodType ?? "").trim();
+  if (!ft) return null;
+  if (ft.includes("초콜릿중간재")) return "전사지";
+  if (DARK_FOOD_TYPES.some((d) => ft.includes(d))) return "다크";
+  return "화이트";
+}
+
 type WoChecks = {
   status_transfer: boolean;
   status_print_check: boolean;
@@ -222,6 +233,7 @@ export default function ProductionClient() {
 
   // 필터
   const [filterStatus, setFilterStatus] = useState<"전체" | "생산중" | "완료">("생산중");
+  const [filterFoodCategory, setFilterFoodCategory] = useState<"전체" | "다크" | "화이트" | "전사지">("전체");
   const [filterSearch, setFilterSearch] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
@@ -468,16 +480,23 @@ export default function ProductionClient() {
         )
       : [...woList];
 
-    if (sortBy === "delivery_date") {
-      list.sort((a, b) => {
-        const aDate = (a.work_order_items ?? []).map((i) => i.delivery_date).filter(Boolean).sort()[0] ?? "";
-        const bDate = (b.work_order_items ?? []).map((i) => i.delivery_date).filter(Boolean).sort()[0] ?? "";
-        return aDate.localeCompare(bDate);
-      });
-    }
+       // ✅ 식품유형 분류 필터 추가
+  if (filterFoodCategory !== "전체") {
+    list = list.filter((wo) => getFoodCategory(wo.food_type) === filterFoodCategory);
+  }
 
-    return list;
-  }, [woList, filterSearch, sortBy]);
+  if (sortBy === "delivery_date") {
+    list.sort((a, b) => {
+      const aDate = (a.work_order_items ?? []).map((i) => i.delivery_date).filter(Boolean).sort()[0] ?? "";
+      const bDate = (b.work_order_items ?? []).map((i) => i.delivery_date).filter(Boolean).sort()[0] ?? "";
+      return aDate.localeCompare(bDate);
+    });
+  }
+
+  return list;
+}, [woList, filterSearch, sortBy, filterFoodCategory]); // ✅ filterFoodCategory 추가
+
+
 
   // ── 작업지시서 선택 ──
   function applySelection(wo: WorkOrderRow, resetEdit = true) {
@@ -946,6 +965,17 @@ export default function ProductionClient() {
                   <button className={sortBy === "delivery_date" ? btnOn : btn} onClick={() => setSortBy("delivery_date")}>납기일순</button>
                 </div>
               )}
+
+              {/* 식품유형 분류 필터 */}
+<div className="mb-3 flex gap-1 flex-wrap">
+  {(["전체", "다크", "화이트", "전사지"] as const).map((c) => (
+    <button key={c} className={filterFoodCategory === c ? btnOn : btn}
+      onClick={() => setFilterFoodCategory(c)}>
+      {c === "다크" ? "🍫 다크" : c === "화이트" ? "🤍 화이트" : c === "전사지" ? "🖨️ 전사지" : "전체"}
+    </button>
+  ))}
+</div>
+
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
