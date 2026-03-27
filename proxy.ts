@@ -7,7 +7,7 @@ import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 const ADMIN_ONLY_PATHS = [
   "/admin/employees",
   "/admin/payroll",
-  "/products",
+ 
   // "/trade" 제거 → SUBADMIN도 접근 가능하도록 아래로 이동
 ];
 
@@ -19,7 +19,7 @@ const SUBADMIN_PATHS = [
   "/tax/statement",
   "/production",
   "/trade", // ✅ ADMIN_ONLY에서 이동 — SUBADMIN도 접근 가능
-  // ✅ /leave 제거 — USER도 접근 가능
+  "/products", // ✅ /leave 제거 — USER도 접근 가능
 ];
 
 export async function proxy(req: NextRequest) {

@@ -23,6 +23,9 @@ export default function InventoryClient() {
     return "SCAN";
   });
 
+  // ✅ useEffect보다 먼저 선언 (참조 오류 방지)
+  const canSeeProducts = role === "ADMIN" || role === "SUBADMIN";
+
   // ── role 조회 ──
   useEffect(() => {
     let active = true;
@@ -39,22 +42,22 @@ export default function InventoryClient() {
     return () => { active = false; };
   }, [supabase]);
 
-  // ── role 로드 후: URL에 tab=products 있고 ADMIN이면 PRODUCTS로 이동 ──
-  useEffect(() => {
-    if (role === null) return; // 아직 로딩중
-    const t = searchParams?.get("tab");
-    if (t === "products" && role === "ADMIN") {
-      setTab("PRODUCTS");
-    }
-  }, [role, searchParams]);
-
-  // ── PRODUCTS 탭인데 ADMIN 아닌 경우 강제 SCAN ──
+  // ── role 로드 후: URL에 tab=products 있고 권한 있으면 PRODUCTS로 이동 ──
   useEffect(() => {
     if (role === null) return;
-    if (tab === "PRODUCTS" && role !== "ADMIN") {
+    const t = searchParams?.get("tab");
+    if (t === "products" && canSeeProducts) {
+      setTab("PRODUCTS");
+    }
+  }, [role, searchParams, canSeeProducts]);
+
+  // ── PRODUCTS 탭인데 권한 없는 경우 강제 SCAN ──
+  useEffect(() => {
+    if (role === null) return;
+    if (tab === "PRODUCTS" && !canSeeProducts) {
       setTab("SCAN");
     }
-  }, [role, tab]);
+  }, [role, tab, canSeeProducts]);
 
   // ── 탭 타이틀 업데이트 ──
   useEffect(() => {
@@ -66,12 +69,10 @@ export default function InventoryClient() {
     document.title = titles[tab];
   }, [tab]);
 
-  const isAdmin = role === "ADMIN";
-
-  const tabs: { key: Tab; label: string; adminOnly?: boolean }[] = [
+  const tabs: { key: Tab; label: string; productsOnly?: boolean }[] = [
     { key: "SCAN",     label: "📦 스캔"          },
     { key: "REPORT",   label: "📋 재고대장"      },
-    { key: "PRODUCTS", label: "🏷️ 품목/바코드", adminOnly: true },
+    { key: "PRODUCTS", label: "🏷️ 품목/바코드", productsOnly: true },
   ];
 
   return (
@@ -104,12 +105,12 @@ export default function InventoryClient() {
 
         {/* role 로딩 중엔 기본 탭만 표시 (깜빡임 방지) */}
         {tabs
-          .filter((t) => !t.adminOnly || isAdmin)
+          .filter((t) => !t.productsOnly || canSeeProducts)
           .map((t) => (
             <button
               key={t.key}
               type="button"
-              onClick={() => setTab(t.key)}
+              onClick={() => setTab(t.key as Tab)}
               style={{
                 padding: "4px 14px",
                 borderRadius: 8,
@@ -134,9 +135,9 @@ export default function InventoryClient() {
       </div>
 
       {/* ── 탭 콘텐츠: 기존 컴포넌트 그대로 렌더링 ── */}
-      {tab === "SCAN"                && <ScanClient />}
-      {tab === "REPORT"              && <ReportClient />}
-      {tab === "PRODUCTS" && isAdmin && <ProductsClient />}
+      {tab === "SCAN"                     && <ScanClient />}
+      {tab === "REPORT"                   && <ReportClient />}
+      {tab === "PRODUCTS" && canSeeProducts && <ProductsClient />}
     </>
   );
 }
