@@ -6,10 +6,10 @@ import React from "react";
 import { createClient } from "@/lib/supabase/browser";
 
 const nav = [
-  { href: "/inventory",       label: "재고관리",      allowedRoles: ["ADMIN", "SUBADMIN"] }, // ✅ 스캔+재고대장 통합
+  { href: "/inventory",       label: "재고관리",      allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/products",        label: "품목/바코드",    allowedRoles: ["ADMIN"]             },
   { href: "/quote",           label: "견적서",         allowedRoles: ["ADMIN"]             },
-  { href: "/trade",           label: "거래내역(통합)", allowedRoles: ["ADMIN"]             },
+  { href: "/trade",           label: "거래내역(통합)", allowedRoles: ["ADMIN", "SUBADMIN"] }, // ✅ SUBADMIN 접근 허용
   { href: "/production",      label: "작업지시서",     allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/tax",             label: "세무사",         allowedRoles: ["ADMIN"]             },
   { href: "/tax/spec",        label: "거래명세서",     allowedRoles: ["ADMIN", "SUBADMIN"] },
@@ -101,7 +101,6 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
             {nav
               .filter((x) => canSee(userRole, x.allowedRoles))
               .map((x) => {
-                // ✅ /inventory 활성 판정: /scan, /report 접속 시에도 활성 표시
                 const active =
                   x.href === "/inventory"
                     ? pathname === "/inventory" ||

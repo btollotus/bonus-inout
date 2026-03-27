@@ -99,6 +99,7 @@ const PARTNER_TYPES = ["CUSTOMER", "VENDOR", "BOTH"] as const;
 type PartnerType = (typeof PARTNER_TYPES)[number];
 const LS_RECENT_PARTNERS = "bonus_trade_recent_partners_v1";
 const TRADE_TABLE_MIN_WIDTH = 1330;
+const SUBADMIN_PINNED_TOP_NAMES = ["네이버-판매", "카카오플러스-판매", "쿠팡-판매"];
 
 // ─────────────────────── Helpers ───────────────────────
 const fmt = (n: number | null | undefined) => Number(n ?? 0).toLocaleString("ko-KR");
@@ -355,7 +356,8 @@ function ShipBlock({ s1, setS1, s2, setS2, two, setTwo, prefix, inpClass }: {
 }
 
 // ─────────────────────── Main Component ───────────────────────
-export default function TradeClient() {
+export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
+  const isSubAdmin = role === "SUBADMIN";
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => { if (typeof document !== "undefined") document.title = "BONUSMATE ERP 거래내역(통합)"; }, []);
@@ -363,7 +365,7 @@ export default function TradeClient() {
 
   const [msg, setMsg] = useState<string | null>(null);
   const [showTopBtn, setShowTopBtn] = useState(false);
-  const [mode, setMode] = useState<Mode>("UNIFIED");
+  const [mode, setMode] = useState<Mode>(isSubAdmin ? "ORDERS" : "UNIFIED");
   const [memoOpen, setMemoOpen] = useState(false);
   const [memoTitle, setMemoTitle] = useState("");
   const [memoBody, setMemoBody] = useState("");
@@ -383,7 +385,7 @@ export default function TradeClient() {
 
   useEffect(() => { if (!msg) return; setAlertText(msg); setAlertOpen(true); setMsg(null); }, [msg]);
 
-  const [partnerView, setPartnerView] = useState<PartnerView>("ALL");
+  const [partnerView, setPartnerView] = useState<PartnerView>(isSubAdmin ? "PINNED" : "ALL");
   const [partnerFilter, setPartnerFilter] = useState("");
   const [partners, setPartners] = useState<PartnerRow[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<PartnerRow | null>(null);
@@ -423,7 +425,7 @@ export default function TradeClient() {
   const [orderWoMoldPerSheet, setOrderWoMoldPerSheet] = useState("");
   const [orderWoPackagingType, setOrderWoPackagingType] = useState("");
   const [orderWoNote, setOrderWoNote] = useState("");
-  const [orderWoEnabled, setOrderWoEnabled] = useState(true);
+  const [orderWoEnabled, setOrderWoEnabled] = useState(!isSubAdmin);
   const [orderIsReorder, setOrderIsReorder] = useState(false);
   const orderWoFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -548,10 +550,21 @@ export default function TradeClient() {
   const editLedgerSplit = useMemo(() => splitVatFromTotalFlexible(eAmountStr, eVatFree), [eAmountStr, eVatFree]);
 
   const partnersToShow = useMemo(() => {
-    if (partnerView === "PINNED") return partners.filter((p) => !!p.is_pinned);
+    if (partnerView === "PINNED") {
+      const pinned = partners.filter((p) => !!p.is_pinned);
+      if (isSubAdmin) {
+        const top = SUBADMIN_PINNED_TOP_NAMES
+          .map((name) => pinned.find((p) => p.name === name))
+          .filter(Boolean) as PartnerRow[];
+        const topIds = new Set(top.map((p) => p.id));
+        const rest = pinned.filter((p) => !topIds.has(p.id));
+        return [...top, ...rest];
+      }
+      return pinned;
+    }
     if (partnerView === "RECENT") { const map = new Map(partners.map((p) => [p.id, p])); return recentPartnerIds.map((id) => map.get(id)).filter(Boolean) as PartnerRow[]; }
     return partners;
-  }, [partners, partnerView, recentPartnerIds]);
+  }, [partners, partnerView, recentPartnerIds, isSubAdmin]);
 
   const unifiedRows = useMemo<UnifiedRow[]>(() => {
     const normalizeIso = (s: string | null | undefined) => {
@@ -2000,7 +2013,7 @@ if (woSubNameVal) {
   setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
   setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
   setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoNote("");
-  setOrderIsReorder(false); setOrderWoEnabled(true);
+  setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin);
   setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({});
   setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
 }}>
@@ -2026,7 +2039,7 @@ if (woSubNameVal) {
   setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
   setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
   setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoNote("");
-  setOrderIsReorder(false); setOrderWoEnabled(true);
+  setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin);
   setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({});
   setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
   setManualCounterpartyName(""); setManualBusinessNo("");
@@ -2039,7 +2052,9 @@ if (woSubNameVal) {
           {/* RIGHT */}
           <div className="min-w-0 space-y-6">
             <div className="flex flex-wrap gap-2">
-              {(["ORDERS", "LEDGER", "UNIFIED"] as Mode[]).map((m) => {
+            {(["ORDERS", "LEDGER", "UNIFIED"] as Mode[])
+              .filter((m) => !isSubAdmin || m === "ORDERS")
+              .map((m) => {
                 const labels: Record<string, string> = { ORDERS: "주문/출고", LEDGER: "금전출납", UNIFIED: "통합" };
                 return <button key={m} className={mode === m ? btnOn : btn} onClick={() => setMode(m)}>{labels[m]}</button>;
               })}
@@ -2124,12 +2139,19 @@ if (woSubNameVal) {
                       <div className="text-sm font-semibold text-orange-800">📋 작업지시서 자동생성</div>
                       <span className="text-xs text-orange-600">주문 저장 시 함께 생성됩니다</span>
                     </div>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input type="checkbox" checked={orderWoEnabled} onChange={(e) => setOrderWoEnabled(e.target.checked)} />
-                      <span className={orderWoEnabled ? "font-semibold text-orange-700" : "text-slate-500"}>{orderWoEnabled ? "생성 ON" : "생성 OFF"}</span>
-                    </label>
+                    {isSubAdmin ? (
+                      <label className="flex items-center gap-2 text-sm cursor-not-allowed opacity-50">
+                        <input type="checkbox" checked={false} disabled />
+                        <span className="text-slate-500">생성 OFF (권한 없음)</span>
+                      </label>
+                    ) : (
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" checked={orderWoEnabled} onChange={(e) => setOrderWoEnabled(e.target.checked)} />
+                        <span className={orderWoEnabled ? "font-semibold text-orange-700" : "text-slate-500"}>{orderWoEnabled ? "생성 ON" : "생성 OFF"}</span>
+                      </label>
+                    )}
                   </div>
-                  {orderWoEnabled ? (
+                  {!isSubAdmin && orderWoEnabled ? (
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                       <div><div className="mb-1 text-xs text-slate-600">서브네임</div><input className={inp} placeholder="예: COS, 크로버, 삼광초" value={orderWoSubName} onChange={(e) => setOrderWoSubName(e.target.value)} /></div>
                       <div><div className="mb-1 text-xs text-slate-600">규격(로고스펙)</div><input className={inp} placeholder="예: 40x40mm" value={orderWoLogoSpec} onChange={(e) => setOrderWoLogoSpec(e.target.value)} /></div>
@@ -2157,7 +2179,11 @@ if (woSubNameVal) {
                         💡 인쇄 디자인 이미지는 아래 각 품목별로 업로드하세요.
                       </div>
                     </div>
-                  ) : <div className="text-xs text-slate-500">작업지시서 없이 주문/출고만 저장됩니다.</div>}
+                   ) : (
+                    <div className="text-xs text-slate-500">
+                      {isSubAdmin ? "주문/출고만 저장됩니다. (작업지시서 자동생성 권한 없음)" : "작업지시서 없이 주문/출고만 저장됩니다."}
+                    </div>
+                  )}         
                 </div>
 
                 <div className="mt-4 flex items-center justify-end gap-4 text-sm">
@@ -2167,14 +2193,14 @@ if (woSubNameVal) {
                   <button type="button" onClick={() => setOrderIsReorder((v) => !v)} style={{ padding: "3px 12px", borderRadius: "12px", fontSize: "12px", fontWeight: "bold", cursor: "pointer", border: "none", background: orderIsReorder ? "#fef3c7" : "#dbeafe", color: orderIsReorder ? "#b45309" : "#1d4ed8", outline: `1px solid ${orderIsReorder ? "#fcd34d" : "#93c5fd"}` }}>
                       {orderIsReorder ? "재주문" : "신규"}
                     </button>
-                    <button className={btnOn} onClick={createOrder}>주문/출고 생성{orderWoEnabled ? " + 작업지시서" : ""}</button>
+                    <button className={btnOn} onClick={createOrder}>주문/출고 생성{!isSubAdmin && orderWoEnabled ? " + 작업지시서" : ""}</button>
                   </div>
                 </div>
               </div>
             ) : null}
 
-            {/* Ledger input */}
-            {mode !== "ORDERS" ? (
+           {/* Ledger input: SUBADMIN에게는 숨김 */}
+           {mode !== "ORDERS" && !isSubAdmin ? (
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center gap-3"><div className="text-lg font-semibold">금전출납 입력</div><span className={pill}>조회대상: {targetLabel}</span></div>
                 <div className="mb-2 flex items-center justify-end">
@@ -2303,7 +2329,8 @@ if (woSubNameVal) {
   </tr>
                     </thead>
                     <tbody>
-                      {unifiedRows.filter((x) => {
+                    {unifiedRows.filter((x) => {
+                        if (isSubAdmin && x.kind === "LEDGER") return false; // SUBADMIN: LEDGER 행 숨김
                         if (mode === "ORDERS") return x.kind === "ORDER";
                         if (mode === "LEDGER") return x.kind === "LEDGER";
                         return true;
