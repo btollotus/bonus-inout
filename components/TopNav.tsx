@@ -15,15 +15,14 @@ const nav = [
   { href: "/tax/statement",   label: "거래원장",       allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/calendar",        label: "출고 캘린더",    allowedRoles: ["ADMIN", "SUBADMIN", "USER"] },
   { href: "/leave",           label: "연차신청",       allowedRoles: ["ADMIN", "SUBADMIN", "USER"] },
-  { href: "/admin/employees", label: "인사관리",       allowedRoles: ["ADMIN"]             },
-  { href: "/admin/payroll",   label: "급여관리",       allowedRoles: ["ADMIN"]             },
+  { href: "/admin/hr", label: "인사/급여", allowedRoles: ["ADMIN"] },
 ];
 
 function canSee(userRole: string, allowedRoles: string[]) {
   return allowedRoles.includes(userRole);
 }
 
-const HR_MENUS    = ["/leave", "/admin/employees", "/admin/payroll"];
+const HR_MENUS = ["/leave", "/admin/hr"];
 const QUOTE_MENUS = ["/quote"];
 
 const linkBase: React.CSSProperties = {
