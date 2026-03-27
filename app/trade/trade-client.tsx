@@ -551,16 +551,13 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
 
   const partnersToShow = useMemo(() => {
     if (partnerView === "PINNED") {
-      const pinned = partners.filter((p) => !!p.is_pinned);
       if (isSubAdmin) {
-        const top = SUBADMIN_PINNED_TOP_NAMES
-          .map((name) => pinned.find((p) => p.name === name))
+        // 즐겨찾기 여부 무관하게 지정 3개만 항상 표시
+        return SUBADMIN_PINNED_TOP_NAMES
+          .map((name) => partners.find((p) => p.name === name))
           .filter(Boolean) as PartnerRow[];
-        const topIds = new Set(top.map((p) => p.id));
-        const rest = pinned.filter((p) => !topIds.has(p.id));
-        return [...top, ...rest];
       }
-      return pinned;
+      return partners.filter((p) => !!p.is_pinned);
     }
     if (partnerView === "RECENT") { const map = new Map(partners.map((p) => [p.id, p])); return recentPartnerIds.map((id) => map.get(id)).filter(Boolean) as PartnerRow[]; }
     return partners;
@@ -1990,7 +1987,9 @@ if (woSubNameVal) {
               </div>
             </div>
             <div className="mb-3 flex gap-2">
-              {(["PINNED", "RECENT", "ALL"] as PartnerView[]).map((v) => {
+            {(["PINNED", "RECENT", "ALL"] as PartnerView[])
+  .filter((v) => !isSubAdmin || v === "PINNED")
+  .map((v) => {
                 const labels: Record<PartnerView, string> = { PINNED: "즐겨찾기", RECENT: "최근", ALL: "전체" };
                 return <button key={v} className={partnerView === v ? btnOn : btn} onClick={() => setPartnerView(v)}>{labels[v]}</button>;
               })}
