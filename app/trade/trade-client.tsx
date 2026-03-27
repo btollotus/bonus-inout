@@ -714,13 +714,20 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
     const f = fromYMD || addDays(todayYMD(), -30);
     const selectedBusinessNo = selectedPartner?.business_no ?? null;
     const selectedPartnerId = selectedPartner?.id ?? null;
+    const subAdminPartnerNames = isSubAdmin && !selectedPartnerId
+    ? SUBADMIN_PINNED_TOP_NAMES
+    : null;
     let t = toYMD || todayYMD();
 
     if (!toTouched) {
 
       let latestOrderDate = "", latestLedgerDate = "";
       let oqLatest = supabase.from("orders").select("ship_date,customer_id,customer_name").not("ship_date", "is", null).order("ship_date", { ascending: false }).limit(1);
-      if (selectedPartnerId) oqLatest = oqLatest.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+      if (selectedPartnerId) {
+        oqLatest = oqLatest.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+      } else if (subAdminPartnerNames) {
+        oqLatest = oqLatest.in("customer_name", subAdminPartnerNames);
+      } 
       const { data: oLatest, error: oLatestErr } = await oqLatest;
       if (!oLatestErr && oLatest && oLatest[0]?.ship_date) latestOrderDate = String(oLatest[0].ship_date);
 
@@ -731,6 +738,8 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
         if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
         if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
         lqLatest = lqLatest.or(ors.join(","));
+      } else if (subAdminPartnerNames) {
+        lqLatest = lqLatest.in("counterparty_name", subAdminPartnerNames);
       }
       const { data: lLatest, error: lLatestErr } = await lqLatest;
       if (!lLatestErr && lLatest && lLatest[0]?.entry_date) latestLedgerDate = String(lLatest[0].entry_date);
@@ -742,7 +751,11 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
       const pageSize = 500; let from = 0; const all: any[] = [];
       while (true) {
         let oq = supabase.from("orders").select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,tax_invoice_issued,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)").gte("ship_date", f).lte("ship_date", t).order("ship_date", { ascending: false }).range(from, from + pageSize - 1);
-        if (selectedPartnerId) oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+        if (selectedPartnerId) {
+          oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+        } else if (subAdminPartnerNames) {
+          oq = oq.in("customer_name", subAdminPartnerNames);
+        }
         const { data, error } = await oq;
         if (error) { if (error.message?.includes("aborted")) return; return setMsg(error.message); }
 
@@ -764,6 +777,8 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
           if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
           if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
           lq = lq.or(ors.join(","));
+        } else if (subAdminPartnerNames) {
+          lq = lq.in("counterparty_name", subAdminPartnerNames);
         }
         const { data, error } = await lq;
         if (error) return setMsg(error.message);
@@ -779,7 +794,11 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
       const pageSize = 1000; let from = 0;
       while (true) {
         let oq2 = supabase.from("orders").select("id,ship_date,total_amount,customer_id,customer_name").lt("ship_date", f).order("ship_date", { ascending: false }).range(from, from + pageSize - 1);
-        if (selectedPartnerId) oq2 = oq2.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+        if (selectedPartnerId) {
+          oq2 = oq2.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+        } else if (subAdminPartnerNames) {
+          oq2 = oq2.in("customer_name", subAdminPartnerNames);
+        }
         const { data: oPrev, error: oPrevErr } = await oq2;
         if (oPrevErr) break;
         if (oPrev && oPrev.length) opening += -(oPrev.reduce((acc: number, r: any) => acc + Number(r.total_amount ?? 0), 0));
@@ -797,6 +816,8 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
           if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
           if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
           lq2 = lq2.or(ors.join(","));
+        } else if (subAdminPartnerNames) {
+          lq2 = lq2.in("counterparty_name", subAdminPartnerNames);
         }
         const { data: lPrev, error: lPrevErr } = await lq2;
         if (lPrevErr) break;
