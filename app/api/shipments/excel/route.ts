@@ -104,11 +104,7 @@ export async function GET(req: Request) {
     if (oErr) throw oErr;
 
     const ordersAll = (ordersData ?? []) as OrderRow[];
-    const orders = ordersAll.filter((o) => {
-      const name = safeStr(o.customer_name) || "(거래처 미지정)";
-      const rawMethod = safeStr(o.ship_method);
-      if (HIDE_CUSTOMERS.has(name) && rawMethod !== "택배-쇼핑몰") return false;
-      return true;
+    const orders = ordersAll;
     });
 
     const orderIds = orders.map((o) => o.id);
