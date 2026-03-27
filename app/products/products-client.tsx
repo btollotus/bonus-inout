@@ -21,10 +21,10 @@ function codeToAscii(code: string, shift: boolean, caps: boolean) {
 type VariantRow = {
   variant_id: string;
   product_id: string;
-  product_name: string;       // products.name (내부용)
+  product_name: string;
   product_category: string | null;
   product_food_type: string | null;
-  variant_name: string;       // 화면 표시용 제품명
+  variant_name: string;
   barcode: string;
   pack_unit: number;
   pack_ea: number | null;
@@ -32,6 +32,7 @@ type VariantRow = {
   unit_type: string | null;
 };
 
+// ✅ 1. '기타'를 '전사지' 오른쪽으로 이동 (순서 유지 — 기존과 동일하므로 변경 없음)
 const CATEGORIES = ["기성", "업체", "전사지", "기타"] as const;
 
 function hangulToQwerty(input: string) {
@@ -59,11 +60,8 @@ function hangulToQwerty(input: string) {
   return out.join("");
 }
 
-// ✅ variant_name이 unit_type 값이면 product_name으로 대체
 function getDisplayName(variant_name: string, product_name: string, category?: string | null): string {
-  // 기성/전사지 카테고리는 무조건 product_name 표시
   if (category === "기성" || category === "전사지") return product_name;
-  // 그 외: variant_name이 unit_type 값이면 product_name 표시
   const unitTypes = ["EA", "BOX", "ea", "box", ""];
   if (unitTypes.includes((variant_name ?? "").trim())) return product_name;
   return variant_name;
@@ -85,7 +83,8 @@ export default function ProductsClient() {
   const [category, setCategory] = useState<(typeof CATEGORIES)[number] | "">("기성");
   const [variantName, setVariantName] = useState("");
   const [barcode, setBarcode] = useState("");
-  const [packUnit, setPackUnit] = useState<number>(100);
+  // ✅ 2. 수량 기본값 100 → 1
+  const [packUnit, setPackUnit] = useState<number>(1);
   const [weightG, setWeightG] = useState<number>(3);
 
   const [rows, setRows] = useState<VariantRow[]>([]);
@@ -97,7 +96,7 @@ export default function ProductsClient() {
 
   const [rowMetaEditOpen, setRowMetaEditOpen] = useState<Record<string, boolean>>({});
   const [rowMetaDraft, setRowMetaDraft] = useState<Record<string, {
-    variant_name: string;   // ✅ 화면 표시/수정용 (variant_name 기준)
+    variant_name: string;
     category: (typeof CATEGORIES)[number] | "";
     food_type: string;
     weight_g: string;
@@ -222,7 +221,7 @@ export default function ProductsClient() {
       product_name: r.products?.name ?? "",
       product_category: r.products?.category ?? null,
       product_food_type: r.products?.food_type ?? null,
-      variant_name: r.variant_name,              // ✅ 화면 표시용
+      variant_name: r.variant_name,
       barcode: bcMap.get(r.id) ?? (r?.barcode ? String(r.barcode) : ""),
       pack_unit: typeof r.pack_unit === "number" ? r.pack_unit : 1,
       pack_ea: typeof r.pack_ea === "number" ? r.pack_ea : r.pack_ea ?? null,
@@ -255,7 +254,6 @@ export default function ProductsClient() {
     finally { setLoading(false); }
   };
 
-  // ✅ 수정 저장: 기성/전사지는 product_name 업데이트, 업체는 variant_name 업데이트
   const saveVariantMeta = async (r: VariantRow) => {
     setMsg(null);
     const draft = rowMetaDraft[r.variant_id];
@@ -275,13 +273,9 @@ export default function ProductsClient() {
 
     setLoading(true);
     try {
-      // 1) product_variants.variant_name + weight_g + pack_ea 업데이트
       const { error: vnUpdErr } = await supabase.from("product_variants").update({ variant_name: vn, weight_g: wg, pack_ea: pe }).eq("id", r.variant_id);
       if (vnUpdErr) throw vnUpdErr;
 
-      // 2) products 업데이트
-      // 기성/전사지: product_name 기준 → products.name도 업데이트
-      // 업체/기타: variant_name 기준 → products.name은 건드리지 않음 (다른 품목 영향 방지)
       if (ct === "기성" || ct === "전사지") {
         const { error: pUpdErr } = await supabase.from("products").update({ name: vn, category: ct, food_type: ft }).eq("id", r.product_id);
         if (pUpdErr) throw pUpdErr;
@@ -358,7 +352,6 @@ export default function ProductsClient() {
     if (listCategory) base = base.filter((r) => (r.product_category ?? "") === listCategory);
     if (t) {
       base = base.filter((r) =>
-        // ✅ variant_name으로 검색
         getDisplayName(r.variant_name, r.product_name, r.product_category).toLowerCase().includes(t) ||
         (r.product_food_type ?? "").toLowerCase().includes(t) ||
         r.barcode.toLowerCase().includes(t)
@@ -378,7 +371,7 @@ export default function ProductsClient() {
     const lines = [header.map(esc).join(",")];
     for (const r of filtered) {
       lines.push([
-        esc(getDisplayName(r.variant_name, r.product_name, r.product_category) ?? ""),       // ✅ variant_name 또는 product_name
+        esc(getDisplayName(r.variant_name, r.product_name, r.product_category) ?? ""),
         esc(r.product_category ?? ""),
         esc(r.product_food_type ?? ""),
         esc(r.weight_g ?? ""),
@@ -406,22 +399,43 @@ export default function ProductsClient() {
       <p className="text-slate-600 mt-2">제품명 + 식품유형 + 바코드 + 수량 + 무게를 등록합니다. (바코드는 중복 불가)</p>
 
       <div className="mt-6 max-w-2xl grid gap-3">
+
+        {/* ── 줄 1: 제품명 + 구분 ── */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-sm text-slate-600">제품명</label>
-            <input className="mt-1 w-full rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
-              value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="예: 생일축하" />
+            <input
+              className="mt-1 w-full rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+              value={productName}
+              onChange={(e) => setProductName(e.target.value)}
+              placeholder="예: 생일축하"
+            />
           </div>
           <div>
             <label className="text-sm text-slate-600 block mb-2">구분</label>
-            <div className="flex flex-wrap items-center gap-2">
+            {/* ✅ 3. flex-nowrap 으로 '기타'가 줄바꿈 없이 한 줄에 표시 */}
+            <div className="flex flex-nowrap items-center gap-2">
               {CATEGORIES.map((c) => {
                 const checked = category === c;
                 return (
-                  <label key={c} className={["flex items-center justify-center gap-2 cursor-pointer select-none rounded-xl border whitespace-nowrap px-3 py-1.5 min-w-[72px]", checked ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"].join(" ")}>
-                    <input type="radio" name="category" value={c} checked={checked} onChange={(e) => setCategory(e.target.value as any)} className="accent-blue-600" />
-                    <span className="text-sm font-medium whitespace-nowrap">{c}</span>
-                    <span className={["ml-1 text-xs rounded-md px-2 py-0.5 whitespace-nowrap", checked ? "bg-white/20" : "hidden"].join(" ")}>선택됨</span>
+                  <label
+                    key={c}
+                    className={[
+                      "flex items-center justify-center gap-1 cursor-pointer select-none rounded-xl border whitespace-nowrap px-3 py-1.5",
+                      checked
+                        ? "bg-blue-600 text-white border-blue-600 shadow"
+                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100",
+                    ].join(" ")}
+                  >
+                    <input
+                      type="radio"
+                      name="category"
+                      value={c}
+                      checked={checked}
+                      onChange={(e) => setCategory(e.target.value as any)}
+                      className="accent-blue-600"
+                    />
+                    <span className="text-sm font-medium">{c}</span>
                   </label>
                 );
               })}
@@ -429,10 +443,13 @@ export default function ProductsClient() {
           </div>
         </div>
 
+        {/* ✅ 4. 줄 2: 식품유형(col-span-2) + 무게 + 수량 — 4칸 grid */}
         <div className="grid grid-cols-4 gap-3">
-          <div ref={vnWrapRef} className="relative">
+          {/* 식품유형: 2칸 (제품명과 동일한 너비) */}
+          <div ref={vnWrapRef} className="relative col-span-2">
             <label className="text-sm text-slate-600">식품유형</label>
-            <input className="mt-1 w-full rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+            <input
+              className="mt-1 w-full rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
               value={variantName}
               onChange={async (e) => { setVariantName(e.target.value); setVnActive(-1); setVnOpen(true); await loadVariantSuggest(e.target.value); }}
               onFocus={async () => { setVnOpen(true); await loadVariantSuggest(variantName); }}
@@ -444,49 +461,74 @@ export default function ProductsClient() {
                 else if (e.key === "Enter") { if (vnActive >= 0) { e.preventDefault(); setVariantName(vnItems[vnActive]); setVnOpen(false); } }
                 else if (e.key === "Escape") setVnOpen(false);
               }}
-              placeholder="예: 다크화이트 / 네오화이트다크" />
+              placeholder="예: 다크화이트 / 네오화이트다크"
+            />
             {vnOpen && vnItems.length > 0 ? (
               <div className="absolute z-50 mt-2 w-full rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
                 <div className="max-h-60 overflow-auto">
                   {vnItems.map((item, idx) => (
-                    <button key={`${item}-${idx}`} type="button"
+                    <button
+                      key={`${item}-${idx}`}
+                      type="button"
                       className={["w-full text-left px-3 py-2 text-sm", idx === vnActive ? "bg-blue-600 text-white" : "hover:bg-slate-100 text-slate-800"].join(" ")}
-                      onMouseEnter={() => setVnActive(idx)} onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => { setVariantName(item); setVnOpen(false); }}>{item}</button>
+                      onMouseEnter={() => setVnActive(idx)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { setVariantName(item); setVnOpen(false); }}
+                    >
+                      {item}
+                    </button>
                   ))}
                 </div>
               </div>
             ) : null}
           </div>
 
+          {/* 무게: 1칸 */}
           <div>
             <label className="text-sm text-slate-600">무게(g)</label>
-            <input className="mt-1 w-full rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
-              type="number" min={0} value={weightG}
+            <input
+              className="mt-1 w-full rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+              type="number"
+              min={0}
+              value={weightG}
               onChange={(e) => { const n = parseFloat(e.target.value || "0"); setWeightG(Number.isFinite(n) ? Math.max(0, n) : 0); }}
-              placeholder="예: 3" />
+              placeholder="예: 3"
+            />
           </div>
 
+          {/* 수량: 1칸 */}
           <div>
             <label className="text-sm text-slate-600">수량(ea)</label>
-            <input className="mt-1 w-full rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
-              type="number" min={1} value={packUnit}
+            <input
+              className="mt-1 w-full rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+              type="number"
+              min={1}
+              value={packUnit}
               onChange={(e) => { const n = parseInt(e.target.value || "1", 10); setPackUnit(Number.isFinite(n) ? Math.max(1, n) : 1); }}
-              placeholder="예: 100" />
+              placeholder="예: 1"
+            />
           </div>
+        </div>
 
-          <div>
+        {/* ✅ 5. 줄 3: 바코드(col-span-2) — 제품명과 동일한 너비, 나머지 2칸 비움 */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="col-span-2">
             <label className="text-sm text-slate-600 flex items-center justify-between">
               <span>바코드</span>
-              <button type="button"
+              <button
+                type="button"
                 className={["text-xs rounded-lg border px-2 py-1 transition", isScanMode ? "bg-blue-600 text-white border-blue-600 shadow" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"].join(" ")}
-                onClick={() => { setIsScanMode((v) => !v); requestAnimationFrame(() => { barcodeRef.current?.focus(); barcodeRef.current?.select(); }); }}>
+                onClick={() => { setIsScanMode((v) => !v); requestAnimationFrame(() => { barcodeRef.current?.focus(); barcodeRef.current?.select(); }); }}
+              >
                 {isScanMode ? "스캔 모드 ON" : "스캔 모드"}
               </button>
             </label>
-            <input readOnly={isScanMode} ref={barcodeRef}
+            <input
+              readOnly={isScanMode}
+              ref={barcodeRef}
               className={["mt-1 w-full rounded-xl bg-white border px-3 py-2 outline-none font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20", isScanMode ? "border-blue-300" : "border-slate-200"].join(" ")}
-              value={barcode} placeholder="스캐너로 찍어도 입력됨"
+              value={barcode}
+              placeholder="스캐너로 찍어도 입력됨"
               onChange={(e) => { if (isScanMode) return; setBarcode(normalizeBarcode(e.target.value || "")); }}
               onFocus={(e) => e.currentTarget.select()}
               onKeyDown={(e) => {
@@ -501,34 +543,70 @@ export default function ProductsClient() {
                 e.preventDefault();
                 setBarcode((prev) => { const base = prev && gap > SCAN_GAP_MS ? "" : prev; return (base + ch).toUpperCase().replace(/[^0-9A-Z_-]/g, ""); });
               }}
-              onPaste={(e) => { e.preventDefault(); setBarcode(normalizeBarcode(e.clipboardData.getData("text") || "")); }} />
+              onPaste={(e) => { e.preventDefault(); setBarcode(normalizeBarcode(e.clipboardData.getData("text") || "")); }}
+            />
           </div>
         </div>
 
         {msg ? <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{msg}</div> : null}
 
         <div className="flex gap-2">
-          <button className="rounded-xl bg-blue-600 text-white px-4 py-2 font-medium hover:bg-blue-700 disabled:opacity-60" disabled={loading} onClick={upsertProductAndVariant}>
+          <button
+            className="rounded-xl bg-blue-600 text-white px-4 py-2 font-medium hover:bg-blue-700 disabled:opacity-60"
+            disabled={loading}
+            onClick={upsertProductAndVariant}
+          >
             {loading ? "저장 중..." : "등록"}
           </button>
-          <button className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:bg-slate-100" onClick={load}>새로고침</button>
+          <button
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:bg-slate-100"
+            onClick={load}
+          >
+            새로고침
+          </button>
         </div>
       </div>
 
+      {/* ── 등록 목록 ── */}
       <div className="mt-10">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">등록 목록</h2>
           <div className="flex items-center gap-2">
-            <button type="button" className={["rounded-xl border px-3 py-2 text-sm", listCategory === "" ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"].join(" ")} onClick={() => setListCategory("")}>전체</button>
+            <button
+              type="button"
+              className={["rounded-xl border px-3 py-2 text-sm", listCategory === "" ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"].join(" ")}
+              onClick={() => setListCategory("")}
+            >
+              전체
+            </button>
             {CATEGORIES.map((c) => (
-              <button key={c} type="button" className={["rounded-xl border px-3 py-2 text-sm", listCategory === c ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"].join(" ")} onClick={() => setListCategory(c)}>{c}</button>
+              <button
+                key={c}
+                type="button"
+                className={["rounded-xl border px-3 py-2 text-sm", listCategory === c ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"].join(" ")}
+                onClick={() => setListCategory(c)}
+              >
+                {c}
+              </button>
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-60"
-              disabled={filtered.length === 0} onClick={exportToExcelCsv} title="현재 필터/검색된 목록을 CSV(엑셀)로 저장">엑셀 저장</button>
-            <input className="w-full max-w-sm rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
-              value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색(제품명/식품유형/바코드)" onFocus={() => setIsScanMode(false)} />
+            <button
+              type="button"
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+              disabled={filtered.length === 0}
+              onClick={exportToExcelCsv}
+              title="현재 필터/검색된 목록을 CSV(엑셀)로 저장"
+            >
+              엑셀 저장
+            </button>
+            <input
+              className="w-full max-w-sm rounded-xl bg-white border border-slate-200 px-3 py-2 outline-none text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="검색(제품명/식품유형/바코드)"
+              onFocus={() => setIsScanMode(false)}
+            />
           </div>
         </div>
 
@@ -556,10 +634,10 @@ export default function ProductsClient() {
 
                 return (
                   <tr key={r.variant_id} className="border-t border-slate-200">
-                    {/* ✅ 제품명 컬럼: variant_name 표시/수정 */}
                     <td className="p-3">
                       {metaEditing ? (
-                        <input className="w-full max-w-xs rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                        <input
+                          className="w-full max-w-xs rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
                           value={metaDraft?.variant_name ?? r.variant_name ?? ""}
                           onChange={(e) => {
                             const v = e.target.value;
@@ -570,15 +648,17 @@ export default function ProductsClient() {
                               weight_g: prev[r.variant_id]?.weight_g ?? (r.weight_g ?? "").toString(),
                               pack_ea: prev[r.variant_id]?.pack_ea ?? (r.pack_ea ?? "").toString(),
                             }}));
-                          }} />
+                          }}
+                        />
                       ) : (
-                        getDisplayName(r.variant_name, r.product_name, r.product_category)  // ✅ 기성=product_name, 업체=variant_name
+                        getDisplayName(r.variant_name, r.product_name, r.product_category)
                       )}
                     </td>
 
                     <td className="p-3">
                       {metaEditing ? (
-                        <select className="rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                        <select
+                          className="rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
                           value={metaDraft?.category ?? ((r.product_category as any) ?? "")}
                           onChange={(e) => {
                             const v = e.target.value as any;
@@ -589,7 +669,8 @@ export default function ProductsClient() {
                               weight_g: prev[r.variant_id]?.weight_g ?? (r.weight_g ?? "").toString(),
                               pack_ea: prev[r.variant_id]?.pack_ea ?? (r.pack_ea ?? "").toString(),
                             }}));
-                          }}>
+                          }}
+                        >
                           <option value="">선택</option>
                           {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                         </select>
@@ -598,7 +679,8 @@ export default function ProductsClient() {
 
                     <td className="p-3">
                       {metaEditing ? (
-                        <input className="w-full max-w-xs rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                        <input
+                          className="w-full max-w-xs rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
                           value={metaDraft?.food_type ?? r.product_food_type ?? ""}
                           onChange={(e) => {
                             const v = e.target.value;
@@ -609,13 +691,15 @@ export default function ProductsClient() {
                               weight_g: prev[r.variant_id]?.weight_g ?? (r.weight_g ?? "").toString(),
                               pack_ea: prev[r.variant_id]?.pack_ea ?? (r.pack_ea ?? "").toString(),
                             }}));
-                          }} />
+                          }}
+                        />
                       ) : (r.product_food_type ?? "-")}
                     </td>
 
                     <td className="p-3 text-right">
                       {metaEditing ? (
-                        <input className="w-24 rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-right text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                        <input
+                          className="w-24 rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-right text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
                           value={metaDraft?.weight_g ?? (r.weight_g ?? "").toString()}
                           onChange={(e) => {
                             const v = e.target.value;
@@ -626,13 +710,16 @@ export default function ProductsClient() {
                               weight_g: v,
                               pack_ea: prev[r.variant_id]?.pack_ea ?? (r.pack_ea ?? "").toString(),
                             }}));
-                          }} placeholder="0" />
+                          }}
+                          placeholder="0"
+                        />
                       ) : (r.weight_g ?? "-").toString()}
                     </td>
 
                     <td className="p-3 text-right">
                       {metaEditing ? (
-                        <input className="w-24 rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-right text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                        <input
+                          className="w-24 rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none text-right text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
                           value={metaDraft?.pack_ea ?? (r.pack_ea ?? "").toString()}
                           onChange={(e) => {
                             const v = e.target.value;
@@ -643,41 +730,71 @@ export default function ProductsClient() {
                               weight_g: prev[r.variant_id]?.weight_g ?? (r.weight_g ?? "").toString(),
                               pack_ea: v,
                             }}));
-                          }} placeholder="1" />
+                          }}
+                          placeholder="1"
+                        />
                       ) : (r.pack_ea ?? "-").toString()}
                     </td>
 
                     <td className="p-3 font-mono">
                       {!r.barcode && !isEditing ? (
                         <div className="flex items-center gap-2">
-                          <input className="w-full max-w-xs rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
-                            value={draft ?? ""} onChange={(e) => setRowBarcodeDraft((prev) => ({ ...prev, [r.variant_id]: e.target.value }))}
+                          <input
+                            className="w-full max-w-xs rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                            value={draft ?? ""}
+                            onChange={(e) => setRowBarcodeDraft((prev) => ({ ...prev, [r.variant_id]: e.target.value }))}
                             placeholder="바코드 입력"
                             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveVariantBarcode(r.variant_id, rowBarcodeDraft[r.variant_id] ?? ""); } }}
-                            onPaste={(e) => { e.preventDefault(); setRowBarcodeDraft((prev) => ({ ...prev, [r.variant_id]: normalizeBarcode(e.clipboardData.getData("text") || "") })); }} />
-                          <button className="rounded-lg bg-blue-600 text-white px-3 py-1 text-xs font-medium hover:bg-blue-700 disabled:opacity-60" disabled={loading}
-                            onClick={() => saveVariantBarcode(r.variant_id, rowBarcodeDraft[r.variant_id] ?? "")}>저장</button>
+                            onPaste={(e) => { e.preventDefault(); setRowBarcodeDraft((prev) => ({ ...prev, [r.variant_id]: normalizeBarcode(e.clipboardData.getData("text") || "") })); }}
+                          />
+                          <button
+                            className="rounded-lg bg-blue-600 text-white px-3 py-1 text-xs font-medium hover:bg-blue-700 disabled:opacity-60"
+                            disabled={loading}
+                            onClick={() => saveVariantBarcode(r.variant_id, rowBarcodeDraft[r.variant_id] ?? "")}
+                          >
+                            저장
+                          </button>
                         </div>
                       ) : isEditing ? (
                         <div className="flex items-center gap-2">
-                          <input className="w-full max-w-xs rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
-                            value={draft ?? r.barcode ?? ""} onChange={(e) => setRowBarcodeDraft((prev) => ({ ...prev, [r.variant_id]: e.target.value }))}
-                            placeholder="바코드 수정" autoFocus onFocus={(e) => e.currentTarget.select()}
+                          <input
+                            className="w-full max-w-xs rounded-lg bg-white border border-slate-200 px-2 py-1 outline-none font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                            value={draft ?? r.barcode ?? ""}
+                            onChange={(e) => setRowBarcodeDraft((prev) => ({ ...prev, [r.variant_id]: e.target.value }))}
+                            placeholder="바코드 수정"
+                            autoFocus
+                            onFocus={(e) => e.currentTarget.select()}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") { e.preventDefault(); saveVariantBarcode(r.variant_id, rowBarcodeDraft[r.variant_id] ?? r.barcode ?? ""); }
                               else if (e.key === "Escape") { e.preventDefault(); setRowBarcodeEditOpen((prev) => ({ ...prev, [r.variant_id]: false })); setRowBarcodeDraft((prev) => { const next = { ...prev }; delete next[r.variant_id]; return next; }); }
                             }}
-                            onPaste={(e) => { e.preventDefault(); setRowBarcodeDraft((prev) => ({ ...prev, [r.variant_id]: normalizeBarcode(e.clipboardData.getData("text") || "") })); }} />
-                          <button className="rounded-lg bg-blue-600 text-white px-3 py-1 text-xs font-medium hover:bg-blue-700 disabled:opacity-60" disabled={loading}
-                            onClick={() => saveVariantBarcode(r.variant_id, rowBarcodeDraft[r.variant_id] ?? r.barcode ?? "")}>저장</button>
-                          <button className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-60" disabled={loading}
-                            onClick={() => { setRowBarcodeEditOpen((prev) => ({ ...prev, [r.variant_id]: false })); setRowBarcodeDraft((prev) => { const next = { ...prev }; delete next[r.variant_id]; return next; }); }}>취소</button>
+                            onPaste={(e) => { e.preventDefault(); setRowBarcodeDraft((prev) => ({ ...prev, [r.variant_id]: normalizeBarcode(e.clipboardData.getData("text") || "") })); }}
+                          />
+                          <button
+                            className="rounded-lg bg-blue-600 text-white px-3 py-1 text-xs font-medium hover:bg-blue-700 disabled:opacity-60"
+                            disabled={loading}
+                            onClick={() => saveVariantBarcode(r.variant_id, rowBarcodeDraft[r.variant_id] ?? r.barcode ?? "")}
+                          >
+                            저장
+                          </button>
+                          <button
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                            disabled={loading}
+                            onClick={() => { setRowBarcodeEditOpen((prev) => ({ ...prev, [r.variant_id]: false })); setRowBarcodeDraft((prev) => { const next = { ...prev }; delete next[r.variant_id]; return next; }); }}
+                          >
+                            취소
+                          </button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-3">
                           <span>{r.barcode}</span>
-                          <button className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-60" disabled={loading}
-                            onClick={() => { setRowBarcodeEditOpen((prev) => ({ ...prev, [r.variant_id]: true })); setRowBarcodeDraft((prev) => ({ ...prev, [r.variant_id]: r.barcode ?? "" })); }}>수정</button>
+                          <button
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                            disabled={loading}
+                            onClick={() => { setRowBarcodeEditOpen((prev) => ({ ...prev, [r.variant_id]: true })); setRowBarcodeDraft((prev) => ({ ...prev, [r.variant_id]: r.barcode ?? "" })); }}
+                          >
+                            수정
+                          </button>
                         </div>
                       )}
                     </td>
@@ -685,25 +802,46 @@ export default function ProductsClient() {
                     <td className="p-3 text-right">
                       {metaEditing ? (
                         <div className="flex justify-end gap-2">
-                          <button className="rounded-lg bg-blue-600 text-white px-3 py-1 text-xs font-medium hover:bg-blue-700 disabled:opacity-60" disabled={loading} onClick={() => saveVariantMeta(r)}>저장</button>
-                          <button className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-60" disabled={loading}
-                            onClick={() => { setRowMetaEditOpen((prev) => ({ ...prev, [r.variant_id]: false })); setRowMetaDraft((prev) => { const next = { ...prev }; delete next[r.variant_id]; return next; }); }}>취소</button>
+                          <button
+                            className="rounded-lg bg-blue-600 text-white px-3 py-1 text-xs font-medium hover:bg-blue-700 disabled:opacity-60"
+                            disabled={loading}
+                            onClick={() => saveVariantMeta(r)}
+                          >
+                            저장
+                          </button>
+                          <button
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                            disabled={loading}
+                            onClick={() => { setRowMetaEditOpen((prev) => ({ ...prev, [r.variant_id]: false })); setRowMetaDraft((prev) => { const next = { ...prev }; delete next[r.variant_id]; return next; }); }}
+                          >
+                            취소
+                          </button>
                         </div>
                       ) : (
                         <div className="flex justify-end gap-2">
-                          <button className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-60" disabled={loading}
+                          <button
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                            disabled={loading}
                             onClick={() => {
                               setRowMetaEditOpen((prev) => ({ ...prev, [r.variant_id]: true }));
                               setRowMetaDraft((prev) => ({ ...prev, [r.variant_id]: {
-                                variant_name: getDisplayName(r.variant_name, r.product_name, r.product_category) ?? "",   // ✅ variant_name
+                                variant_name: getDisplayName(r.variant_name, r.product_name, r.product_category) ?? "",
                                 category: ((r.product_category as any) ?? "") as any,
                                 food_type: r.product_food_type ?? "",
                                 weight_g: (r.weight_g ?? "").toString(),
                                 pack_ea: (r.pack_ea ?? "").toString(),
                               }}));
-                            }}>수정</button>
-                          <button className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-60" disabled={loading}
-                            onClick={() => removeVariant(r.variant_id, r.barcode)}>삭제</button>
+                            }}
+                          >
+                            수정
+                          </button>
+                          <button
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                            disabled={loading}
+                            onClick={() => removeVariant(r.variant_id, r.barcode)}
+                          >
+                            삭제
+                          </button>
                         </div>
                       )}
                     </td>
@@ -717,8 +855,13 @@ export default function ProductsClient() {
       </div>
 
       {showTop ? (
-        <button type="button" className="fixed right-6 bottom-6 z-50 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 shadow hover:bg-slate-100"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>TOP</button>
+        <button
+          type="button"
+          className="fixed right-6 bottom-6 z-50 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 shadow hover:bg-slate-100"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        >
+          TOP
+        </button>
       ) : null}
     </div>
   );
