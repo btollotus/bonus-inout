@@ -138,7 +138,7 @@ export default function ScanClient() {
   const [type, setType] = useState<MovementType>("IN");
 
   // ✅ 박스 개념 제거: EA 수량만 입력
-  const [qtyEa, setQtyEa] = useState(1);
+  const [qtyEa, setQtyEa] = useState<number | "">("");
 
   // IN/DISCARD는 소비기한 필수
   const [expiry, setExpiry] = useState(""); // YYYY-MM-DD
@@ -344,7 +344,8 @@ useEffect(() => {
     try {
       if (!inputCode) throw new Error("바코드를 입력하세요.");
 
-      const qty = intMin(qtyEa, 1);
+      if (qtyEa === "" || qtyEa < 1) throw new Error("수량을 입력하세요. (1EA 이상)");
+const qty = intMin(qtyEa, 1);
 
       const resolved = await resolveVariantInfo(raw);
       if (!resolved)
@@ -398,9 +399,9 @@ useEffect(() => {
       setVariantInfo(vInfo);
 
       setBarcode("");
-      setQtyEa(1);
+      setQtyEa("");  // 빈값으로 리셋
       setNote("");
-
+      
       setMsg(`목록에 추가 ✅ (${type}) ${code} / 수량 ${fmtInt(qty)}EA`);
       focusBarcode();
     } catch (e: any) {
@@ -639,8 +640,8 @@ useEffect(() => {
         if (topField === "note") setNote(st.snapshotValue ?? "");
         if (topField === "expiry") setExpiry(st.snapshotValue ?? "");
         if (topField === "qtyEa") {
-          const n = parseInt(st.snapshotValue || "1", 10);
-          setQtyEa(intMin(n, 1));
+          const n = parseInt(st.snapshotValue || "", 10);
+          setQtyEa(Number.isFinite(n) && n >= 1 ? n : "");
         }
       }
     };
@@ -913,21 +914,36 @@ useEffect(() => {
           </div>
 
           <div>
-            <label className="text-sm text-slate-600">수량(EA)</label>
-            <input
-              ref={qtyRef}
-              data-top-field="qtyEa"
-              className={input}
-              type="number"
-              min={1}
-              value={qtyEa}
-              onChange={(e) => setQtyEa(parseInt(e.target.value || "1", 10))}
-            />
-            <div className="mt-1 text-xs text-slate-500">
-              저장/재고 계산 기준:{" "}
-              <span className="text-slate-900">EA(낱개)</span>
-            </div>
-          </div>
+  <label className="text-sm text-slate-600">수량(EA)</label>
+  <input
+    ref={qtyRef}
+    data-top-field="qtyEa"
+    className={[
+      "mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
+      qtyEa === "" 
+        ? "border-red-300 focus:border-red-400 focus:ring-red-500/20" 
+        : "border-slate-200 focus:border-blue-300",
+    ].join(" ")}
+    type="number"
+    min={1}
+    value={qtyEa}
+    placeholder="수량 입력"
+    onChange={(e) => {
+      const v = e.target.value;
+      if (v === "") { setQtyEa(""); return; }
+      const n = parseInt(v, 10);
+      setQtyEa(Number.isFinite(n) && n >= 1 ? n : "");
+    }}
+  />
+  {qtyEa === "" && (
+    <div className="mt-1 text-xs text-red-500">⚠ 수량을 입력하세요. (1 이상)</div>
+  )}
+  {qtyEa !== "" && (
+    <div className="mt-1 text-xs text-slate-500">
+      저장/재고 계산 기준: <span className="text-slate-900">EA(낱개)</span>
+    </div>
+  )}
+</div>
 
           <div className="md:col-span-2">
             <label className="text-sm text-slate-600">
