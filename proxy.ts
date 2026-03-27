@@ -8,7 +8,7 @@ const ADMIN_ONLY_PATHS = [
   "/admin/employees",
   "/admin/payroll",
   "/products",
-  "/trade",
+  // "/trade" 제거 → SUBADMIN도 접근 가능하도록 아래로 이동
 ];
 
 // ADMIN + SUBADMIN만 접근 가능 (USER 차단)
@@ -18,6 +18,7 @@ const SUBADMIN_PATHS = [
   "/tax/spec",
   "/tax/statement",
   "/production",
+  "/trade", // ✅ ADMIN_ONLY에서 이동 — SUBADMIN도 접근 가능
   // ✅ /leave 제거 — USER도 접근 가능
 ];
 
