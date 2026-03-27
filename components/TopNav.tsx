@@ -7,7 +7,6 @@ import { createClient } from "@/lib/supabase/browser";
 
 const nav = [
   { href: "/inventory",       label: "재고관리",      allowedRoles: ["ADMIN", "SUBADMIN"] },
-  { href: "/products",        label: "품목/바코드",    allowedRoles: ["ADMIN"]             },
   { href: "/quote",           label: "견적서",         allowedRoles: ["ADMIN"]             },
   { href: "/trade",           label: "거래내역(통합)", allowedRoles: ["ADMIN", "SUBADMIN"] }, // ✅ SUBADMIN 접근 허용
   { href: "/production",      label: "작업지시서",     allowedRoles: ["ADMIN", "SUBADMIN"] },

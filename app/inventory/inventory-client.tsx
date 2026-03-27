@@ -1,31 +1,78 @@
 "use client";
 
 // app/inventory/inventory-client.tsx
-// 기존 scan-client, report-client 를 그대로 import해서 탭으로 묶음
-// 기존 파일은 일절 수정하지 않음
-
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/browser";
 import ScanClient from "@/app/scan/scan-client";
 import ReportClient from "@/app/report/report-client";
+import ProductsClient from "@/app/products/products-client";
 
-type Tab = "SCAN" | "REPORT";
+type Tab = "SCAN" | "REPORT" | "PRODUCTS";
 
 export default function InventoryClient() {
   const searchParams = useSearchParams();
+  const supabase = useMemo(() => createClient(), []);
 
-  const [tab, setTab] = useState<Tab>(() =>
-    searchParams?.get("tab") === "report" ? "REPORT" : "SCAN"
-  );
+  // role: null = 로딩중, string = 로드완료
+  const [role, setRole] = useState<string | null>(null);
 
-  // 탭 전환 시 브라우저 탭 타이틀 업데이트
-  // (layout template "%s | BONUSMATE ERP" 형식에 맞춤)
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = searchParams?.get("tab");
+    if (t === "report") return "REPORT";
+    return "SCAN";
+  });
+
+  // ── role 조회 ──
   useEffect(() => {
-    document.title =
-      tab === "SCAN"
-        ? "재고관리 · 스캔 | BONUSMATE ERP"
-        : "재고관리 · 재고대장 | BONUSMATE ERP";
+    let active = true;
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!active || !data?.user) return;
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", data.user.id)
+        .single();
+      if (!active) return;
+      setRole(roleData?.role ?? "USER");
+    });
+    return () => { active = false; };
+  }, [supabase]);
+
+  // ── role 로드 후: URL에 tab=products 있고 ADMIN이면 PRODUCTS로 이동 ──
+  useEffect(() => {
+    if (role === null) return; // 아직 로딩중
+    const t = searchParams?.get("tab");
+    if (t === "products" && role === "ADMIN") {
+      setTab("PRODUCTS");
+    }
+  }, [role, searchParams]);
+
+  // ── PRODUCTS 탭인데 ADMIN 아닌 경우 강제 SCAN ──
+  useEffect(() => {
+    if (role === null) return;
+    if (tab === "PRODUCTS" && role !== "ADMIN") {
+      setTab("SCAN");
+    }
+  }, [role, tab]);
+
+  // ── 탭 타이틀 업데이트 ──
+  useEffect(() => {
+    const titles: Record<Tab, string> = {
+      SCAN:     "재고관리 · 스캔 | BONUSMATE ERP",
+      REPORT:   "재고관리 · 재고대장 | BONUSMATE ERP",
+      PRODUCTS: "재고관리 · 품목/바코드 | BONUSMATE ERP",
+    };
+    document.title = titles[tab];
   }, [tab]);
+
+  const isAdmin = role === "ADMIN";
+
+  const tabs: { key: Tab; label: string; adminOnly?: boolean }[] = [
+    { key: "SCAN",     label: "📦 스캔"          },
+    { key: "REPORT",   label: "📋 재고대장"      },
+    { key: "PRODUCTS", label: "🏷️ 품목/바코드", adminOnly: true },
+  ];
 
   return (
     <>
@@ -55,37 +102,41 @@ export default function InventoryClient() {
           재고관리
         </span>
 
-        {(["SCAN", "REPORT"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            style={{
-              padding: "4px 14px",
-              borderRadius: 8,
-              border: "1px solid",
-              borderColor:
-                tab === t
-                  ? "rgba(255,255,255,0.40)"
-                  : "rgba(255,255,255,0.16)",
-              backgroundColor:
-                tab === t
-                  ? "rgba(255,255,255,0.16)"
-                  : "rgba(255,255,255,0.04)",
-              color: "white",
-              fontWeight: 700,
-              fontSize: 12,
-              cursor: "pointer",
-            }}
-          >
-            {t === "SCAN" ? "📦 스캔" : "📋 재고대장"}
-          </button>
-        ))}
+        {/* role 로딩 중엔 기본 탭만 표시 (깜빡임 방지) */}
+        {tabs
+          .filter((t) => !t.adminOnly || isAdmin)
+          .map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              style={{
+                padding: "4px 14px",
+                borderRadius: 8,
+                border: "1px solid",
+                borderColor:
+                  tab === t.key
+                    ? "rgba(255,255,255,0.40)"
+                    : "rgba(255,255,255,0.16)",
+                backgroundColor:
+                  tab === t.key
+                    ? "rgba(255,255,255,0.16)"
+                    : "rgba(255,255,255,0.04)",
+                color: "white",
+                fontWeight: 700,
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
       </div>
 
       {/* ── 탭 콘텐츠: 기존 컴포넌트 그대로 렌더링 ── */}
-      {tab === "SCAN" && <ScanClient />}
-      {tab === "REPORT" && <ReportClient />}
+      {tab === "SCAN"                && <ScanClient />}
+      {tab === "REPORT"              && <ReportClient />}
+      {tab === "PRODUCTS" && isAdmin && <ProductsClient />}
     </>
   );
 }
