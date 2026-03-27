@@ -930,14 +930,12 @@ export default function ProductionClient() {
 
           {/* ── LEFT: 목록 ── */}
           <div className={`${card} flex flex-col p-4`} style={{ maxHeight: "calc(100vh - 140px)", overflowY: "auto" }}>
-            {unreadCount > 0 && (
-              <div className="mb-3 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
-                <span className="text-xs font-semibold text-red-700">
-                  미확인 작업지시서 {unreadCount}건
-                </span>
-              </div>
-            )}
+          <div className={`mb-3 flex items-center gap-2 rounded-xl border px-3 py-2 ${unreadCount > 0 ? "border-red-200 bg-red-50" : "border-slate-200 bg-slate-50"}`}>
+  <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${unreadCount > 0 ? "bg-red-500 animate-pulse" : "bg-slate-300"}`} />
+  <span className={`text-xs font-semibold ${unreadCount > 0 ? "text-red-700" : "text-slate-400"}`}>
+    미확인 작업지시서 {unreadCount}건
+  </span>
+</div>
             <div className="mb-3 text-base font-semibold">작업지시서 목록</div>
 
             <div className="mb-3 space-y-2">
