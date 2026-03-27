@@ -7,6 +7,7 @@ import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 const ADMIN_ONLY_PATHS = [
   "/admin/employees",
   "/admin/payroll",
+  "/admin/hr",  
  
   // "/trade" 제거 → SUBADMIN도 접근 가능하도록 아래로 이동
 ];
