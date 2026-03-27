@@ -287,17 +287,18 @@ export default function ProductionClient() {
 
   const loadReadMap = useCallback(async (woIds: string[]) => {
     if (woIds.length === 0) return;
-    const userId = currentUserIdRef.current;
-    if (!userId) return;
+    // user_id 필터 없이 해당 작업지시서들의 모든 읽음 기록 조회
     const { data } = await supabase
       .from("work_order_reads")
       .select("work_order_id, read_at")
-      .eq("user_id", userId)
       .in("work_order_id", woIds);
     if (!data) return;
     const map: Record<string, WoReadInfo> = {};
     for (const row of data) {
-      map[row.work_order_id] = { read_at: row.read_at };
+      // 같은 work_order_id가 여러 명 읽었으면 가장 먼저 읽은 시간으로 저장
+      if (!map[row.work_order_id] || row.read_at < map[row.work_order_id].read_at) {
+        map[row.work_order_id] = { read_at: row.read_at };
+      }
     }
     setReadMap(map);
   }, []);
