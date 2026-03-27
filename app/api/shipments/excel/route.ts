@@ -33,6 +33,7 @@ type OrderLineRow = {
   order_id: string;
   name: string | null;
   qty: number | null;
+  unit_type: string | null;
 };
 
 // ✅ 이 3개 거래처는 제품명을 "품목명-수량" 형식으로 표시
@@ -90,7 +91,10 @@ function buildItemProductName(lines: OrderLineRow[]): string {
     .filter((l) => !isExcludedItem(safeStr(l.name)));
   if (validLines.length === 0) return "";
   return validLines
-    .map((l) => `${safeStr(l.name)}-${Number(l.qty ?? 0)}`)
+    .map((l) => {
+      const unit = safeStr(l.unit_type).toUpperCase() === "BOX" ? "BOX" : "EA";
+      return `${safeStr(l.name)}-${Number(l.qty ?? 0)}${unit}`;
+    })
     .join(" / ");
 }
 
@@ -183,7 +187,7 @@ export async function GET(req: Request) {
     if (itemCustomerOrderIds.length > 0) {
       const { data: lineData } = await supabase
         .from("order_lines")
-        .select("order_id,name,qty")
+        .select("order_id,name,qty,unit_type")
         .in("order_id", itemCustomerOrderIds)
         .order("line_no", { ascending: true })
         .limit(100000);
