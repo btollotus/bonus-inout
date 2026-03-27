@@ -5,7 +5,7 @@ import TradeClient from "./trade-client";
 export const metadata = { title: "거래내역(통합) | BONUSMATE ERP" };
 
 export default async function TradePage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   let role = "USER";
