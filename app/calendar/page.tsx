@@ -125,7 +125,6 @@ function normalizeShipMethod(v: any): ShipMethod {
   return "기타";
 }
 
-const HIDE_CUSTOMERS = new Set(["카카오플러스-판매", "네이버-판매", "쿠팡-판매"]);
 
 export default function CalendarPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -316,9 +315,7 @@ useEffect(() => {
         const customerName = String(r?.customer_name ?? "").trim() || "(거래처 미지정)";
         const method = normalizeShipMethod(r?.ship_method);
 
-        if (HIDE_CUSTOMERS.has(customerName) && method === "택배" && String(r?.ship_method ?? "").trim() !== "택배-쇼핑몰") continue;
-
-        const partnerId = r?.customer_id == null ? null : String(r.customer_id);
+       const partnerId = r?.customer_id == null ? null : String(r.customer_id);
 
         const cur = map.get(d) ?? {
           total: 0,
@@ -420,17 +417,13 @@ useEffect(() => {
         ship_method: normalizeShipMethod(r?.ship_method),
       }));
       
-      const rows = rowsAll.filter((_, idx) => {
-        const r = rowsAll[idx];
-        const rawMethod = String((data ?? [])[idx]?.ship_method ?? "").trim();
-        return !(HIDE_CUSTOMERS.has(r.partner_name) && r.ship_method === "택배" && rawMethod !== "택배-쇼핑몰");
-      });
-      setShipRows(rows);
+      setShipRows(rowsAll);
 
       // ✅ partner_id가 있는 거래처만 일괄출력 대상 → 기본 전체 선택
       const printableIds = new Set(
-        rows.filter((r) => r.partner_id).map((r) => r.partner_id as string)
-      );
+        rowsAll.filter((r) => r.partner_id).map((r) => r.partner_id as string)  // ← rowsAll로 변경
+      );  
+
       setBulkPrintSelected(printableIds);
     } catch (e: any) {
       setShipListErr(e?.message ?? "출고 목록 조회 중 오류");
@@ -963,7 +956,7 @@ useEffect(() => {
           </div>
 
           <div className="mt-2 text-xs text-slate-500">
-            ※ 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다. · 출고는 <span className="font-semibold">orders.ship_date</span> 기준이며, <span className="font-semibold">카카오플러스-판매/네이버-판매/쿠팡-판매</span>는 <span className="font-semibold">택배만 숨김</span> 처리합니다.
+            ※ 날짜를 클릭하면 메모를 추가/수정/삭제할 수 있습니다. · 출고는 <span className="font-semibold">orders.ship_date</span> 기준이며, 모든 거래처의 출고가 표시됩니다.
           </div>
         </div>
 
