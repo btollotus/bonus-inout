@@ -105,7 +105,7 @@ export async function GET(req: Request) {
 
     const ordersAll = (ordersData ?? []) as OrderRow[];
     const orders = ordersAll;
-    });
+  
 
     const orderIds = orders.map((o) => o.id);
 
