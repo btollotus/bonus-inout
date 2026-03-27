@@ -90,7 +90,7 @@ function buildItemProductName(lines: OrderLineRow[]): string {
     .filter((l) => safeStr(l.name))
     .filter((l) => !isExcludedItem(safeStr(l.name)));
   if (validLines.length === 0) return "";
-  return validLines
+  return "*****" + validLines
     .map((l) => {
       const unit = safeStr(l.unit_type).toUpperCase() === "BOX" ? "BOX" : "EA";
       return `${safeStr(l.name)}-${Number(l.qty ?? 0)}${unit}`;
