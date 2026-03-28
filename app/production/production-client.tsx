@@ -684,8 +684,7 @@ export default function ProductionClient() {
   // ── 작업지시서 선택 ──
   function applySelection(wo: WorkOrderRow, resetEdit = true) {
     setIsKiseongForm(false); // 기성 폼 닫기
-    // 생산중이면 바로 입력 가능, 완료면 비활성(수정 버튼으로 활성화)
-    setIsEditMode(wo.status !== "완료");
+    setIsEditMode(false);
     setSelectedWo(wo);
     setESubName(wo.sub_name ?? "");
 
@@ -1469,64 +1468,64 @@ export default function ProductionClient() {
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <div>
                       <div className="mb-1 text-xs text-slate-500">품목명 *</div>
-                      <input className={inp} value={eProductName} disabled={!isEditMode} onChange={(e) => setEProductName(e.target.value)} />
+                      <input className={inp} value={eProductName} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEProductName(e.target.value)} />
                     </div>
                     <div>
                       <div className="mb-1 text-xs text-slate-500">서브네임</div>
-                      <input className={inp} placeholder="예: COS, 크로버" value={eSubName} disabled={!isEditMode} onChange={(e) => setESubName(e.target.value)} />
+                      <input className={inp} placeholder="예: COS, 크로버" value={eSubName} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setESubName(e.target.value)} />
                     </div>
                     <div>
                       <div className="mb-1 text-xs text-slate-500">식품유형</div>
-                      <input className={inp} placeholder="예: 화이트초콜릿" value={eFoodType} disabled={!isEditMode} onChange={(e) => setEFoodType(e.target.value)} />
+                      <input className={inp} placeholder="예: 화이트초콜릿" value={eFoodType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEFoodType(e.target.value)} />
                     </div>
                     <div>
                       <div className="mb-1 text-xs text-slate-500">규격(로고스펙)</div>
-                      <input className={inp} placeholder="예: 40x40mm" value={eLogoSpec} disabled={!isEditMode} onChange={(e) => setELogoSpec(e.target.value)} />
+                      <input className={inp} placeholder="예: 40x40mm" value={eLogoSpec} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setELogoSpec(e.target.value)} />
                     </div>
                     <div>
                       <div className="mb-1 text-xs text-slate-500">두께</div>
-                      <select className={inp} value={eThickness} disabled={!isEditMode} onChange={(e) => setEThickness(e.target.value)}>
+                      <select className={inp} value={eThickness} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEThickness(e.target.value)}>
                         {["2mm", "3mm", "5mm", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </div>
                     <div>
                       <div className="mb-1 text-xs text-slate-500">납품방법</div>
-                      <select className={inp} value={eDeliveryMethod} disabled={!isEditMode} onChange={(e) => setEDeliveryMethod(e.target.value)}>
+                      <select className={inp} value={eDeliveryMethod} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEDeliveryMethod(e.target.value)}>
                         {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </div>
                     <div>
                       <div className="mb-1 text-xs text-slate-500">포장방법</div>
-                      <select className={inp} value={ePackagingType} disabled={!isEditMode} onChange={(e) => setEPackagingType(e.target.value)}>
+                      <select className={inp} value={ePackagingType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEPackagingType(e.target.value)}>
                         {["트레이-정사각20구", "트레이-직사각20구", "트레이-35구", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </div>
                     {ePackagingType === "트레이" ? (
                       <div>
                         <div className="mb-1 text-xs text-slate-500">트레이 구수</div>
-                        <select className={inp} value={eTraySlot} disabled={!isEditMode} onChange={(e) => setETraySlot(e.target.value)}>
+                        <select className={inp} value={eTraySlot} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setETraySlot(e.target.value)}>
                           {["정사각20구", "직사각20구", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                         </select>
                       </div>
                     ) : null}
                     <div>
                       <div className="mb-1 text-xs text-slate-500">포장단위</div>
-                      <select className={inp} value={ePackageUnit} disabled={!isEditMode} onChange={(e) => setEPackageUnit(e.target.value)}>
+                      <select className={inp} value={ePackageUnit} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEPackageUnit(e.target.value)}>
                         {["100ea", "200ea", "300ea", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                       </select>
                     </div>
                     <div>
                       <div className="mb-1 text-xs text-slate-500">성형틀 장당 생산수</div>
-                      <input className={inpR} inputMode="numeric" placeholder="" value={eMoldPerSheet} disabled={!isEditMode}
+                      <input className={inpR} inputMode="numeric" placeholder="" value={eMoldPerSheet} disabled={selectedWo?.status === "완료" && !isEditMode}
                         onChange={(e) => setEMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} />
                     </div>
                     <div>
                       <div className="mb-1 text-xs text-slate-500">비고</div>
-                      <input className={inp} value={eNote} disabled={!isEditMode} onChange={(e) => setENote(e.target.value)} />
+                      <input className={inp} value={eNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setENote(e.target.value)} />
                     </div>
                     <div>
                       <div className="mb-1 text-xs text-slate-500">참고사항</div>
-                      <input className={inp} value={eReferenceNote} disabled={!isEditMode} onChange={(e) => setEReferenceNote(e.target.value)} />
+                      <input className={inp} value={eReferenceNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEReferenceNote(e.target.value)} />
                     </div>
                   </div>
                 ) : (
@@ -1619,7 +1618,7 @@ export default function ProductionClient() {
                           <select
                             className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 transition-colors ${isDone ? "border-current bg-white/70 text-slate-700 font-medium" : "border-slate-200 bg-white text-slate-500"} ${isSaving ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                             value={assigneeVal}
-                            disabled={isSaving || !isEditMode}
+                            disabled={isSaving || (selectedWo?.status === "완료" && !isEditMode)}
                             onChange={(e) => handleAssigneeChange(step.assigneeKey, step.statusKey, e.target.value)}
                           >
                             <option value="">— 담당자 선택 —</option>
@@ -1702,7 +1701,7 @@ export default function ProductionClient() {
                                   inputMode="numeric"
                                   placeholder=""
                                   value={pi.actual_qty}
-                                  disabled={!isEditMode}
+                                  disabled={selectedWo?.status === "완료" && !isEditMode}
                                   onChange={(e) => setProdInputs((prev) => ({
                                     ...prev,
                                     [item.id]: { ...pi, actual_qty: e.target.value.replace(/[^\d]/g, "") }
@@ -1717,7 +1716,7 @@ export default function ProductionClient() {
                                   inputMode="decimal"
                                   placeholder=""
                                   value={pi.unit_weight}
-                                  disabled={!isEditMode}
+                                  disabled={selectedWo?.status === "완료" && !isEditMode}
                                   onChange={(e) => setProdInputs((prev) => ({
                                     ...prev,
                                     [item.id]: { ...pi, unit_weight: e.target.value.replace(/[^\d.]/g, "") }
@@ -1735,7 +1734,7 @@ export default function ProductionClient() {
                                   <span className="text-xs text-slate-500">소비기한</span>
                                   <button
                                     type="button"
-                                    disabled={!isEditMode}
+                                    disabled={selectedWo?.status === "완료" && !isEditMode}
                                     className={`rounded-lg border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-200 active:bg-slate-300 ${!isEditMode ? "opacity-40 cursor-not-allowed" : ""}`}
                                     onClick={() => {
                                       const d = new Date();
@@ -1753,7 +1752,7 @@ export default function ProductionClient() {
                                   type="date"
                                   className={inp}
                                   value={pi.expiry_date}
-                                  disabled={!isEditMode}
+                                  disabled={selectedWo?.status === "완료" && !isEditMode}
                                   onChange={(e) => setProdInputs((prev) => ({
                                     ...prev,
                                     [item.id]: { ...pi, expiry_date: e.target.value }
