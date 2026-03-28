@@ -317,6 +317,38 @@ export default function ProductionClient() {
   // 기성 전용 입력
   const [kActualQty, setKActualQty] = useState("");
 
+  // 전사지 장수 자동 계산 (WoPrintModal의 itemNotes 초기화 로직과 동일)
+  function calcKiseongNote(foodType: string, qty: number, mold: number): string {
+    if (!mold || mold <= 0 || !qty || qty <= 0) return "";
+    const isChocBase = foodType.includes("초콜릿중간재");
+    if (isChocBase) return "";
+    const isNeoColor = foodType.includes("네오컬러");
+    if (isNeoColor) {
+      const perRow = mold === 108 ? 9 : mold === 88 ? 8 : mold === 66 ? 6 : mold === 63 ? 7 : Math.round(Math.sqrt(mold));
+      const buffer = mold === 63 || mold === 66 ? 20 : 30;
+      const totalNeeded = qty + buffer;
+      const sheets = totalNeeded / mold;
+      const fullSheets = Math.floor(sheets);
+      const remainder = sheets - fullSheets;
+      const extraRows = remainder > 0 ? Math.ceil(remainder * mold / perRow) : 0;
+      const totalProduced = (fullSheets * mold) + (extraRows * perRow);
+      return extraRows > 0
+        ? `전사지: ${fullSheets}장 ${extraRows}줄  참고: ${totalProduced.toLocaleString("ko-KR")}개`
+        : `전사지: ${fullSheets}장  참고: ${(fullSheets * mold).toLocaleString("ko-KR")}개`;
+    } else {
+      const sheets2 = Math.ceil(qty / mold);
+      return `전사지: ${sheets2}장  참고: ${(sheets2 * mold).toLocaleString("ko-KR")}개`;
+    }
+  }
+
+  // 성형틀/수량/식품유형 변경 시 비고 자동 계산
+  useEffect(() => {
+    const mold = parseInt(kMoldPerSheet || "0", 10);
+    const qty = parseInt(kActualQty || "0", 10);
+    const auto = calcKiseongNote(kFoodType, qty, mold);
+    if (auto) setKNote(auto);
+  }, [kMoldPerSheet, kActualQty, kFoodType]); // eslint-disable-line
+
   // 기성 제품 목록 로드
   useEffect(() => {
     (async () => {
@@ -1381,8 +1413,13 @@ export default function ProductionClient() {
                         <input className={inpR} inputMode="numeric" value={kMoldPerSheet} onChange={(e) => setKMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} placeholder="" />
                       </div>
                       <div>
-                        <div className="mb-1 text-xs text-slate-500">비고</div>
-                        <input className={inp} value={kNote} onChange={(e) => setKNote(e.target.value)} />
+                        <div className="mb-1 text-xs text-slate-500 flex items-center justify-between">
+                          <span>비고</span>
+                          {kMoldPerSheet && kActualQty && (
+                            <span className="text-emerald-600 text-[10px] font-medium">✅ 전사지 장수 자동계산</span>
+                          )}
+                        </div>
+                        <input className={inp} value={kNote} onChange={(e) => setKNote(e.target.value)} placeholder="성형틀+수량 입력 시 자동계산" />
                       </div>
                       <div>
                         <div className="mb-1 text-xs text-slate-500">참고사항</div>
