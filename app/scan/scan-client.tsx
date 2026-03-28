@@ -1228,15 +1228,12 @@ const qty = intMin(qtyEa, 1);
             <thead className={thead}>
               <tr>
                 <th className="p-3 text-left">유형</th>
-                <th className="p-3 text-left">제품명</th>
                 <th className="p-3 text-left">구분</th>
+                <th className="p-3 text-left">제품명</th>
                 <th className="p-3 text-left">식품유형</th>
-                <th className="p-3 text-left">바코드</th>
-
-                {/* ✅ 수량(EA) 1번만 (소비기한 앞) */}
                 <th className="p-3 text-right">수량(EA)</th>
-
                 <th className="p-3 text-left">소비기한</th>
+                <th className="p-3 text-left">바코드</th>
                 <th className="p-3 text-left">비고</th>
                 <th className="p-3 text-right">삭제</th>
               </tr>
@@ -1256,12 +1253,11 @@ const qty = intMin(qtyEa, 1);
                   return (
                     <tr key={r.id} className={`${tr} align-top`}>
                       <td className="p-3">{r.type}</td>
-                      <td className="p-3">{r.variantInfo.product_name}</td>
                       <td className="p-3">{r.variantInfo.product_category ?? "-"}</td>
+                      <td className="p-3">{r.variantInfo.product_name}</td>
                       <td className="p-3">{r.variantInfo.food_type ?? "-"}</td>
-                      <td className="p-3">{r.barcode}</td>
 
-                      {/* ✅ EA 수량만 표시/수정 + 천단위 콤마 */}
+                      {/* 수량(EA) */}
                       <td className="p-3 text-right">
                         <input
                           data-cart-id={r.id}
@@ -1284,6 +1280,7 @@ const qty = intMin(qtyEa, 1);
                         </div>
                       </td>
 
+                      {/* 소비기한 */}
                       <td className="p-3">
                         {needExpiry ? (
                           <input
@@ -1311,6 +1308,10 @@ const qty = intMin(qtyEa, 1);
                         )}
                       </td>
 
+                      {/* 바코드 */}
+                      <td className="p-3">{r.barcode}</td>
+
+                      {/* 비고 */}
                       <td className="p-3">
                         <input
                           data-cart-id={r.id}
@@ -1327,6 +1328,7 @@ const qty = intMin(qtyEa, 1);
                         />
                       </td>
 
+                      {/* 삭제 */}
                       <td className="p-3 text-right">
                         <button
                           className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs hover:bg-slate-50 active:bg-slate-100"
