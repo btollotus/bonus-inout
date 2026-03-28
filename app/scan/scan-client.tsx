@@ -40,13 +40,13 @@ type LotRow = {
   lot_id: string;
   product_id: string;
   product_name: string;
-  product_category: string | null;
+  product_category: string | null; // 화면에 "구분"으로 표시
   variant_id: string;
   variant_name: string;
   barcode: string;
   expiry_date: string;
-  pack_unit: number;
-  stock_qty: number;
+  pack_unit: number; // (참고 정보로만 유지)
+  stock_qty: number; // EA(낱개) 기준 재고
 };
 
 type VariantInfo = {
@@ -55,20 +55,22 @@ type VariantInfo = {
   product_category: string | null;
   variant_name: string;
   barcode: string;
-  pack_unit: number;
+  pack_unit: number; // (참고 정보로만 유지)
 };
 
 type CartRow = {
-  id: string;
+  id: string; // client-side id
   type: MovementType;
   barcode: string;
-  expiry: string;
-  qty_ea: number;
+  expiry: string; // IN/DISCARD만 의미있음
+  qty_ea: number; // ✅ EA 수량(박스 개념 제거)
   note: string;
+
+  // 표시용(조회된 정보)
   variantInfo: VariantInfo;
 };
 
-// ✅ NEW: 제품명 검색 자동완성용 타입
+// ✅ 제품명 검색 자동완성용 타입
 type ProductSuggestItem = {
   variant_id: string;
   product_name: string;
@@ -135,9 +137,13 @@ function barcodeCandidates(code: string) {
   const c = normalizeBarcode(code);
   const list: string[] = [];
   if (c) list.push(c);
+
+  // ✅ 스캐너가 숫자만 보내는 경우(예: 202602090007) → BO 접두어 폴백
   if (/^\d{12}$/.test(c) && !c.startsWith("BO")) {
     list.push(`BO${c}`);
   }
+
+  // 중복 제거
   return Array.from(new Set(list));
 }
 
@@ -146,8 +152,12 @@ export default function ScanClient() {
 
   const [barcode, setBarcode] = useState("");
   const [type, setType] = useState<MovementType>("IN");
+
+  // ✅ 박스 개념 제거: EA 수량만 입력
   const [qtyEa, setQtyEa] = useState<number | "">("");
-  const [expiry, setExpiry] = useState("");
+
+  // IN/DISCARD는 소비기한 필수
+  const [expiry, setExpiry] = useState(""); // YYYY-MM-DD
   const [note, setNote] = useState("");
 
   const [lots, setLots] = useState<LotRow[]>([]);
@@ -159,11 +169,11 @@ export default function ScanClient() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const [newWoNotifications, setNewWoNotifications] = useState<NewWoNotification[]>([]);
-  const [showNewWoModal, setShowNewWoModal] = useState(false);
-  const insertChannelRef = useRef<RealtimeChannel | null>(null);
-  const pageLoadTimeRef = useRef<string>(new Date().toISOString());
+const [showNewWoModal, setShowNewWoModal] = useState(false);
+const insertChannelRef = useRef<RealtimeChannel | null>(null);
+const pageLoadTimeRef = useRef<string>(new Date().toISOString());
 
-  // ✅ NEW: 제품명 검색 자동완성 상태
+  // ✅ 제품명 검색 자동완성 상태
   const [productSearch, setProductSearch] = useState("");
   const [productSuggestions, setProductSuggestions] = useState<ProductSuggestItem[]>([]);
   const [productSuggestOpen, setProductSuggestOpen] = useState(false);
@@ -171,21 +181,21 @@ export default function ScanClient() {
   const productSearchRef = useRef<HTMLInputElement>(null);
   const productSuggestWrapRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("wo_scan_insert_notify")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "work_orders" }, (payload) => {
-        const d = payload.new as Record<string, unknown>;
-        const createdAt = String(d.created_at ?? "");
-        if (createdAt && createdAt < pageLoadTimeRef.current) return;
-        setNewWoNotifications((prev) => [{ id: String(d.id ?? ""), client_name: String(d.client_name ?? ""), product_name: String(d.product_name ?? ""), work_order_no: String(d.work_order_no ?? ""), order_date: String(d.order_date ?? ""), created_at: createdAt }, ...prev]);
-        setShowNewWoModal(true);
-        playNotificationSound();
-      })
-      .subscribe((status, err) => { console.log("🔔 [scan INSERT채널]", status, err ?? ""); });
-    insertChannelRef.current = channel;
-    return () => { supabase.removeChannel(channel); insertChannelRef.current = null; };
-  }, []); // eslint-disable-line
+useEffect(() => {
+  const channel = supabase
+    .channel("wo_scan_insert_notify")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "work_orders" }, (payload) => {
+      const d = payload.new as Record<string, unknown>;
+      const createdAt = String(d.created_at ?? "");
+      if (createdAt && createdAt < pageLoadTimeRef.current) return;
+      setNewWoNotifications((prev) => [{ id: String(d.id ?? ""), client_name: String(d.client_name ?? ""), product_name: String(d.product_name ?? ""), work_order_no: String(d.work_order_no ?? ""), order_date: String(d.order_date ?? ""), created_at: createdAt }, ...prev]);
+      setShowNewWoModal(true);
+      playNotificationSound();
+    })
+    .subscribe((status, err) => { console.log("🔔 [scan INSERT채널]", status, err ?? ""); });
+  insertChannelRef.current = channel;
+  return () => { supabase.removeChannel(channel); insertChannelRef.current = null; };
+}, []); // eslint-disable-line
 
   const barcodeRef = useRef<HTMLInputElement | null>(null);
   const qtyRef = useRef<HTMLInputElement | null>(null);
@@ -213,6 +223,7 @@ export default function ScanClient() {
   }, []);
 
   useEffect(() => {
+    // OUT/GIFT는 소비기한 입력 없음
     if (type === "OUT" || type === "GIFT") setExpiry("");
   }, [type]);
 
@@ -227,21 +238,19 @@ export default function ScanClient() {
     });
   };
 
-  // ✅ NEW: 제품명/식품유형/바코드로 product_variants + products 검색
+  // ✅ 제품명/식품유형/바코드로 product_variants + products 검색
   const loadProductSuggestions = async (keyword: string) => {
     const k = keyword.trim();
     if (!k) {
       setProductSuggestions([]);
       return;
     }
-
     try {
       // 전체 조회 후 클라이언트 사이드 필터 — products.name ilike는 PostgREST에서 미지원
       const { data, error } = await supabase
         .from("product_variants")
         .select("id, variant_name, barcode, products(name, category, food_type)")
         .limit(500);
-
       if (error) throw error;
 
       const kLower = k.toLowerCase();
@@ -252,13 +261,12 @@ export default function ScanClient() {
         if (seen.has(r.id)) continue;
         const p = (r as any).products;
         const bc = ((r as any).barcode ?? "") as string;
-        if (!bc || bc.startsWith("AUTO-")) continue; // 바코드 없는 항목 제외
+        if (!bc || bc.startsWith("AUTO-")) continue;
 
         const pName = (p?.name ?? "") as string;
         const vName = ((r as any).variant_name ?? "") as string;
         const displayName = getDisplayName(vName, pName, p?.category ?? null);
 
-        // 제품명(표시명), variant_name, barcode, food_type 중 하나라도 매칭되면 포함
         const matched =
           displayName.toLowerCase().includes(kLower) ||
           vName.toLowerCase().includes(kLower) ||
@@ -278,7 +286,6 @@ export default function ScanClient() {
         });
       }
 
-      // 표시명 기준 정렬
       unique.sort((a, b) => {
         const an = getDisplayName(a.variant_name, a.product_name, a.product_category).toLowerCase();
         const bn = getDisplayName(b.variant_name, b.product_name, b.product_category).toLowerCase();
@@ -293,17 +300,17 @@ export default function ScanClient() {
     }
   };
 
-  // ✅ NEW: 자동완성 항목 선택 시 바코드 입력창에 자동입력
+  // ✅ 자동완성 항목 선택 시 바코드 입력창에 자동입력
   const selectProductSuggestion = (item: ProductSuggestItem) => {
     setBarcode(item.barcode);
     setProductSearch("");
     setProductSuggestions([]);
     setProductSuggestOpen(false);
     setProductSuggestActive(-1);
-    // 바코드 세팅 후 포커스를 수량 또는 바코드로
     requestAnimationFrame(() => barcodeRef.current?.focus());
   };
 
+  // variants에서 "등록 여부 + 제품정보" 확인 (LOT가 없어도 확인 가능)
   const fetchVariantInfo = async (code: string): Promise<VariantInfo | null> => {
     const { data, error } = await supabase
       .from("product_variants")
@@ -325,6 +332,7 @@ export default function ScanClient() {
     };
   };
 
+  // ✅ 바코드 후보(원본/BO접두어)로 등록여부를 찾아 "정답 바코드"를 확정
   const resolveVariantInfo = async (
     raw: string
   ): Promise<{ code: string; vInfo: VariantInfo } | null> => {
@@ -336,6 +344,7 @@ export default function ScanClient() {
     return null;
   };
 
+  // 재고 조회(LOT 표시) + LOT 없으면 variants로 fallback
   const searchLotsByCode = async (raw: string) => {
     setMsg(null);
 
@@ -357,6 +366,7 @@ export default function ScanClient() {
         return;
       }
 
+      // ✅ 숫자만 들어온 경우라도, 등록된 "정답 바코드(BO...)"로 입력값을 교정
       setVariantInfo(resolved.vInfo);
       if (normalizeBarcode(barcode) !== resolved.code) {
         setBarcode(resolved.code);
@@ -393,6 +403,7 @@ export default function ScanClient() {
     scrollToLots();
   };
 
+  // 스캔(입력)하면 자동 조회 (디바운스)
   useEffect(() => {
     const code = normalizeBarcode(barcode);
     if (!code) {
@@ -406,6 +417,7 @@ export default function ScanClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [barcode]);
 
+  // FEFO LOT 목록(폴백용)
   const pickFefoLots = async (code: string) => {
     const { data, error } = await supabase
       .from("v_stock_by_lot")
@@ -418,6 +430,7 @@ export default function ScanClient() {
     return (data ?? []) as LotRow[];
   };
 
+  // ✅ 장바구니에 추가
   const addToCart = async (overrideRawBarcode?: string) => {
     setMsg(null);
 
@@ -428,7 +441,7 @@ export default function ScanClient() {
       if (!inputCode) throw new Error("바코드를 입력하세요.");
 
       if (qtyEa === "" || qtyEa < 1) throw new Error("수량을 입력하세요. (1EA 이상)");
-      const qty = intMin(qtyEa, 1);
+const qty = intMin(qtyEa, 1);
 
       const resolved = await resolveVariantInfo(raw);
       if (!resolved)
@@ -482,7 +495,7 @@ export default function ScanClient() {
       setVariantInfo(vInfo);
 
       setBarcode("");
-      setQtyEa("");
+      setQtyEa("");  // 빈값으로 리셋
       setNote("");
 
       setMsg(`목록에 추가 ✅ (${type}) ${code} / 수량 ${fmtInt(qty)}EA`);
@@ -493,6 +506,7 @@ export default function ScanClient() {
     }
   };
 
+  // ✅ OUT/GIFT 저장 (EA 기준)
   const issueOutGift = async (row: CartRow) => {
     const requestEA = intMin(row.qty_ea, 1);
 
@@ -505,6 +519,7 @@ export default function ScanClient() {
 
     if (!rpcErr) return { requestEA };
 
+    // 폴백: FEFO 분할 insert
     const fefoLots = await pickFefoLots(row.barcode);
     if (fefoLots.length === 0)
       throw new Error(
@@ -554,6 +569,7 @@ export default function ScanClient() {
     return { requestEA };
   };
 
+  // ✅ IN/DISCARD 저장 (EA 기준)
   const saveInDiscard = async (row: CartRow) => {
     if (!row.expiry) throw new Error(`소비기한 누락: ${row.barcode}`);
     if (!isValidDateYYYYMMDD(row.expiry))
@@ -584,6 +600,7 @@ export default function ScanClient() {
     return { eachQty };
   };
 
+  // ✅ 일괄 저장
   const commitCart = async () => {
     setMsg(null);
     if (cart.length === 0) {
@@ -633,6 +650,9 @@ export default function ScanClient() {
     }
   };
 
+  /**
+   * ✅ 스캐너 오입력 방지(중요)
+   */
   const scanStateRef = useRef<{
     buf: string;
     startedAt: number;
@@ -746,7 +766,7 @@ export default function ScanClient() {
       const active = document.activeElement;
       const isBarcodeFocused = active === barcodeRef.current;
 
-      // ✅ NEW: 제품명 검색창에 포커스가 있으면 스캐너 처리 제외
+      // ✅ 제품명 검색창에 포커스가 있으면 스캐너 처리 제외
       const isProductSearchFocused = active === productSearchRef.current;
       if (isProductSearchFocused) return;
 
@@ -787,6 +807,8 @@ export default function ScanClient() {
           restoreDomIfNeeded();
           restoreStateIfNeeded();
 
+          // ✅ 입고(IN)/폐기(DISCARD)는 "바코드만 채우고" → 커서를 수량으로 이동
+          // ✅ 출고/증정은 바로 목록에 추가(기존 동작 유지)
           const cands = barcodeCandidates(code);
           const first = cands[0] ?? code;
 
@@ -819,6 +841,7 @@ export default function ScanClient() {
 
   const cartTotalLines = cart.length;
 
+  // ✅ TaxClient(세무) 테마 참고해서 컬러/컴포넌트 톤 맞춤
   const pageBg = "min-h-screen bg-slate-50 text-slate-900";
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const input =
@@ -842,40 +865,40 @@ export default function ScanClient() {
 
   return (
     <div className={`${pageBg} p-6`}>
-      {showNewWoModal && newWoNotifications.length > 0 && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-[480px] rounded-2xl border border-orange-200 bg-white shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between gap-3 bg-orange-500 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl animate-bounce">🔔</span>
-                <div><div className="text-base font-bold text-white">새 작업지시서 도착!</div><div className="text-xs text-orange-100">새 주문이 등록됐습니다</div></div>
-              </div>
-              <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-sm font-bold text-white">{newWoNotifications.length}건</span>
-            </div>
-            <div className="max-h-[320px] overflow-y-auto divide-y divide-slate-100">
-              {newWoNotifications.map((n, idx) => (
-                <div key={n.id} className="px-5 py-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-slate-800 truncate">{n.client_name}</div>
-                      <div className="text-sm text-slate-600 truncate mt-0.5">{n.product_name}</div>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        <span className="text-[11px] text-slate-400 font-mono">{n.work_order_no}</span>
-                        <span className="text-[11px] text-slate-400">· 주문일 {n.order_date}</span>
-                      </div>
-                    </div>
-                    {idx === 0 && <span className="shrink-0 rounded-full bg-orange-100 border border-orange-200 px-2 py-0.5 text-[11px] font-semibold text-orange-700">NEW</span>}
-                  </div>
+{showNewWoModal && newWoNotifications.length > 0 && (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+    <div className="w-full max-w-[480px] rounded-2xl border border-orange-200 bg-white shadow-2xl overflow-hidden">
+      <div className="flex items-center justify-between gap-3 bg-orange-500 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl animate-bounce">🔔</span>
+          <div><div className="text-base font-bold text-white">새 작업지시서 도착!</div><div className="text-xs text-orange-100">새 주문이 등록됐습니다</div></div>
+        </div>
+        <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-sm font-bold text-white">{newWoNotifications.length}건</span>
+      </div>
+      <div className="max-h-[320px] overflow-y-auto divide-y divide-slate-100">
+        {newWoNotifications.map((n, idx) => (
+          <div key={n.id} className="px-5 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-slate-800 truncate">{n.client_name}</div>
+                <div className="text-sm text-slate-600 truncate mt-0.5">{n.product_name}</div>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  <span className="text-[11px] text-slate-400 font-mono">{n.work_order_no}</span>
+                  <span className="text-[11px] text-slate-400">· 주문일 {n.order_date}</span>
                 </div>
-              ))}
-            </div>
-            <div className="border-t border-slate-100 px-5 py-3 flex gap-2">
-              <button className="flex-1 rounded-xl bg-orange-500 py-2.5 text-sm font-bold text-white hover:bg-orange-600" onClick={() => { setShowNewWoModal(false); setNewWoNotifications([]); }}>확인 ({newWoNotifications.length}건)</button>
-              <button className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50" onClick={() => setShowNewWoModal(false)}>나중에</button>
+              </div>
+              {idx === 0 && <span className="shrink-0 rounded-full bg-orange-100 border border-orange-200 px-2 py-0.5 text-[11px] font-semibold text-orange-700">NEW</span>}
             </div>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
+      <div className="border-t border-slate-100 px-5 py-3 flex gap-2">
+        <button className="flex-1 rounded-xl bg-orange-500 py-2.5 text-sm font-bold text-white hover:bg-orange-600" onClick={() => { setShowNewWoModal(false); setNewWoNotifications([]); }}>확인 ({newWoNotifications.length}건)</button>
+        <button className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50" onClick={() => setShowNewWoModal(false)}>나중에</button>
+      </div>
+    </div>
+  </div>
+)}
 
       <h1 className="text-2xl font-semibold">스캔 입력</h1>
       <p className="mt-2 text-slate-600">
@@ -904,7 +927,7 @@ export default function ScanClient() {
               placeholder="스캐너로 찍거나 직접 입력 (Enter=목록추가)"
             />
 
-            {/* ✅ NEW: 제품명으로 바코드 검색 자동완성 */}
+            {/* ✅ 제품명으로 바코드 검색 자동완성 */}
             <div ref={productSuggestWrapRef} className="relative mt-2">
               <input
                 ref={productSearchRef}
@@ -1019,6 +1042,7 @@ export default function ScanClient() {
                       <span className="text-slate-500">바코드:</span>{" "}
                       {variantInfo.barcode}
                     </div>
+                    {/* pack_unit은 참고 정보로만 */}
                     <div className="text-slate-700">
                       <span className="text-slate-500">참고(포장단위):</span>{" "}
                       {variantInfo.pack_unit} EA/BOX
@@ -1045,6 +1069,8 @@ export default function ScanClient() {
           <div className={`${card} p-4`}>
             <div className="text-sm text-slate-600">스캔 목록</div>
             <div className="mt-1 text-2xl font-semibold">{cartTotalLines}건</div>
+
+            {/* ✅ "총 포장수량" 제거 */}
 
             <div className="mt-3 flex gap-2">
               <button
@@ -1085,51 +1111,68 @@ export default function ScanClient() {
           </div>
 
           <div>
-            <label className="text-sm text-slate-600">수량(EA)</label>
-            <input
-              ref={qtyRef}
-              data-top-field="qtyEa"
-              className={[
-                "mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
-                qtyEa === ""
-                  ? "border-red-300 focus:border-red-400 focus:ring-red-500/20"
-                  : "border-slate-200 focus:border-blue-300",
-              ].join(" ")}
-              type="number"
-              min={1}
-              value={qtyEa}
-              placeholder="수량 입력"
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v === "") { setQtyEa(""); return; }
-                const n = parseInt(v, 10);
-                setQtyEa(Number.isFinite(n) && n >= 1 ? n : "");
-              }}
-            />
-            {qtyEa === "" && (
-              <div className="mt-1 text-xs text-red-500">⚠ 수량을 입력하세요. (1 이상)</div>
-            )}
-            {qtyEa !== "" && (
-              <div className="mt-1 text-xs text-slate-500">
-                저장/재고 계산 기준: <span className="text-slate-900">EA(낱개)</span>
-              </div>
-            )}
-          </div>
+  <label className="text-sm text-slate-600">수량(EA)</label>
+  <input
+    ref={qtyRef}
+    data-top-field="qtyEa"
+    className={[
+      "mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
+      qtyEa === "" 
+        ? "border-red-300 focus:border-red-400 focus:ring-red-500/20" 
+        : "border-slate-200 focus:border-blue-300",
+    ].join(" ")}
+    type="number"
+    min={1}
+    value={qtyEa}
+    placeholder="수량 입력"
+    onChange={(e) => {
+      const v = e.target.value;
+      if (v === "") { setQtyEa(""); return; }
+      const n = parseInt(v, 10);
+      setQtyEa(Number.isFinite(n) && n >= 1 ? n : "");
+    }}
+  />
+  {qtyEa === "" && (
+    <div className="mt-1 text-xs text-red-500">⚠ 수량을 입력하세요. (1 이상)</div>
+  )}
+  {qtyEa !== "" && (
+    <div className="mt-1 text-xs text-slate-500">
+      저장/재고 계산 기준: <span className="text-slate-900">EA(낱개)</span>
+    </div>
+  )}
+</div>
 
           <div className="md:col-span-2">
-            <label className="text-sm text-slate-600">
-              소비기한 (YYYY-MM-DD)
-              {expiryDisabled && (
-                <span className="ml-2 text-xs text-slate-500">
-                  (출고/증정은 자동 선택)
-                </span>
+            {/* ✅ 소비기한: production-client 방식 — 레이블 옆에 +1년-1일 버튼, 입고/폐기만 표시 */}
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-sm text-slate-600">
+                소비기한 (YYYY-MM-DD)
+                {expiryDisabled && (
+                  <span className="ml-2 text-xs text-slate-500">
+                    (출고/증정은 자동 선택)
+                  </span>
+                )}
+              </label>
+              {!expiryDisabled && (
+                <button
+                  type="button"
+                  className="rounded-lg border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-200 active:bg-slate-300"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setFullYear(d.getFullYear() + 1);
+                    d.setDate(d.getDate() - 1);
+                    const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                    setExpiry(ymd);
+                  }}
+                >
+                  +1년-1일
+                </button>
               )}
-            </label>
-
+            </div>
             <input
               data-top-field="expiry"
               className={[
-                "mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
+                "w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
                 expiryDisabled
                   ? "border-slate-200 text-slate-400"
                   : "border-slate-200 focus:border-blue-300",
@@ -1174,7 +1217,7 @@ export default function ScanClient() {
         </div>
       </div>
 
-      {/* 스캔 목록 */}
+      {/* ✅ 스캔 목록 */}
       <div className="mt-10">
         <h2 className="text-lg font-semibold">스캔 목록 (최종 확인 후 일괄 저장)</h2>
 
@@ -1187,7 +1230,10 @@ export default function ScanClient() {
                 <th className="p-3 text-left">구분</th>
                 <th className="p-3 text-left">옵션</th>
                 <th className="p-3 text-left">바코드</th>
+
+                {/* ✅ 수량(EA) 1번만 (소비기한 앞) */}
                 <th className="p-3 text-right">수량(EA)</th>
+
                 <th className="p-3 text-left">소비기한</th>
                 <th className="p-3 text-left">비고</th>
                 <th className="p-3 text-right">삭제</th>
@@ -1213,6 +1259,7 @@ export default function ScanClient() {
                       <td className="p-3">{r.variantInfo.variant_name}</td>
                       <td className="p-3">{r.barcode}</td>
 
+                      {/* ✅ EA 수량만 표시/수정 + 천단위 콤마 */}
                       <td className="p-3 text-right">
                         <input
                           data-cart-id={r.id}
@@ -1317,7 +1364,7 @@ export default function ScanClient() {
         </div>
       </div>
 
-      {/* 재고 테이블 */}
+      {/* ✅ 재고 테이블 */}
       <div className="mt-10" ref={lotsSectionRef}>
         <h2 className="text-lg font-semibold">해당 바코드 LOT 재고</h2>
 
