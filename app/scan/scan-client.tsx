@@ -53,6 +53,7 @@ type VariantInfo = {
   variant_id: string;
   product_name: string;
   product_category: string | null;
+  food_type: string | null;
   variant_name: string;
   barcode: string;
   pack_unit: number; // (참고 정보로만 유지)
@@ -314,7 +315,7 @@ useEffect(() => {
   const fetchVariantInfo = async (code: string): Promise<VariantInfo | null> => {
     const { data, error } = await supabase
       .from("product_variants")
-      .select("id, variant_name, barcode, pack_unit, products(name, category)")
+      .select("id, variant_name, barcode, pack_unit, products(name, category, food_type)")
       .eq("barcode", code)
       .maybeSingle();
 
@@ -326,6 +327,7 @@ useEffect(() => {
       variant_id: data.id as string,
       product_name: (p?.name ?? "") as string,
       product_category: (p?.category ?? null) as string | null,
+      food_type: (p?.food_type ?? null) as string | null,
       variant_name: (data as any).variant_name ?? "",
       barcode: (data as any).barcode ?? code,
       pack_unit: intMin((data as any).pack_unit ?? 1, 1),
@@ -1228,7 +1230,7 @@ const qty = intMin(qtyEa, 1);
                 <th className="p-3 text-left">유형</th>
                 <th className="p-3 text-left">제품명</th>
                 <th className="p-3 text-left">구분</th>
-                <th className="p-3 text-left">옵션</th>
+                <th className="p-3 text-left">식품유형</th>
                 <th className="p-3 text-left">바코드</th>
 
                 {/* ✅ 수량(EA) 1번만 (소비기한 앞) */}
@@ -1256,7 +1258,7 @@ const qty = intMin(qtyEa, 1);
                       <td className="p-3">{r.type}</td>
                       <td className="p-3">{r.variantInfo.product_name}</td>
                       <td className="p-3">{r.variantInfo.product_category ?? "-"}</td>
-                      <td className="p-3">{r.variantInfo.variant_name}</td>
+                      <td className="p-3">{r.variantInfo.food_type ?? "-"}</td>
                       <td className="p-3">{r.barcode}</td>
 
                       {/* ✅ EA 수량만 표시/수정 + 천단위 콤마 */}
