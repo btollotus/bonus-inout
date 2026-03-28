@@ -828,6 +828,42 @@ export default function ProductionClient() {
     }
   }
 
+  // ── PDF 드라이브 업로드 트리거 ──
+  async function triggerPdfUpload(wo: WorkOrderRow, productName: string, foodType: string, logoSpec: string) {
+    try {
+      const woDateMatch = wo.work_order_no?.match(/WO-(\d{8})-/);
+      const dateStr = woDateMatch
+        ? woDateMatch[1]
+        : new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const sanitize = (str: string) =>
+        str.replace(/[*×]/g, "x").replace(/[\\/:?"<>|]/g, "").replace(/\s+/g, "_");
+      const clientName = wo.client_name ?? "업체미상";
+      const cleanProductName = productName.startsWith(clientName)
+        ? productName.slice(clientName.length).replace(/^[-_\s]+/, "")
+        : productName;
+      const fileName = [
+        dateStr,
+        sanitize(clientName),
+        sanitize(cleanProductName || "품목미상"),
+        sanitize(foodType ?? ""),
+        sanitize(logoSpec ?? ""),
+        "작업지시서",
+      ].filter(Boolean).join("-");
+      const triggerRes = await fetch("/api/trigger-work-order-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workOrderId: wo.id, fileName }),
+      });
+      if (triggerRes.ok) {
+        console.log("✅ PDF 드라이브 업로드 트리거 성공:", fileName);
+      } else {
+        console.error("❌ PDF 드라이브 업로드 트리거 실패");
+      }
+    } catch (pdfErr) {
+      console.error("PDF 업로드 트리거 오류 (무시):", pdfErr);
+    }
+  }
+
   // ── 생산완료 버튼 핸들러 ──
   async function markProductionComplete() {
     if (!selectedWo) return;
@@ -989,47 +1025,7 @@ export default function ProductionClient() {
 
       setIsEditMode(false);
 
-      // ✅ 기성 제품은 PDF 트리거 스킵
-      if (selectedWo.order_type !== "기성") {
-        try {
-          const woDateMatch = selectedWo.work_order_no?.match(/WO-(\d{8})-/);
-          const today = woDateMatch
-            ? woDateMatch[1]
-            : new Date().toISOString().slice(0, 10).replace(/-/g, "");
-          const sanitize = (str: string) =>
-            str
-              .replace(/[*×]/g, "x")
-              .replace(/[\\/:?"<>|]/g, "")
-              .replace(/\s+/g, "_");
-          const clientName = selectedWo.client_name ?? "업체미상";
-          const rawProductName = eProductName ?? "품목미상";
-          const cleanProductName = rawProductName.startsWith(clientName)
-            ? rawProductName.slice(clientName.length).replace(/^[-_\s]+/, "")
-            : rawProductName;
-          const fileName = [
-            today,
-            sanitize(clientName),
-            sanitize(cleanProductName || "품목미상"),
-            sanitize(eFoodType ?? ""),
-            sanitize(eLogoSpec ?? ""),
-            "작업지시서",
-          ].filter(Boolean).join("-");
-          const triggerRes = await fetch("/api/trigger-work-order-pdf", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ workOrderId: selectedWo.id, fileName }),
-          });
-          if (triggerRes.ok) {
-            console.log("✅ PDF 드라이브 업로드 트리거 성공:", fileName);
-          } else {
-            console.error("❌ PDF 드라이브 업로드 트리거 실패");
-          }
-        } catch (pdfErr) {
-          console.error("PDF 업로드 트리거 오류 (무시):", pdfErr);
-        }
-      } else {
-        console.log("ℹ️ 기성 제품 — PDF 드라이브 업로드 스킵");
-      }
+      await triggerPdfUpload(selectedWo, eProductName ?? "품목미상", eFoodType ?? "", eLogoSpec ?? "");
 
       await loadWoList();
     } catch (e: any) {
@@ -1846,6 +1842,10 @@ export default function ProductionClient() {
                           }
                           showToast("✅ 수정완료!");
                           setIsEditMode(false);
+                          // 완료 상태에서 수정저장 시 PDF 재생성
+                          if (selectedWo.status === "완료") {
+                            await triggerPdfUpload(selectedWo, eProductName ?? "품목미상", eFoodType ?? "", eLogoSpec ?? "");
+                          }
                           await loadWoList();
                         } catch (e: any) {
                           showToast("❌ 수정 오류: " + (e?.message ?? e), "error");
