@@ -327,7 +327,7 @@ export default function ProductsClient() {
         if (pUpdErr) throw pUpdErr;
       }
 
-      const { data: vIns, error: vInsErr } = await supabase.from("product_variants").insert({ product_id: productId, variant_name: vn, pack_unit: 1, pack_ea: pu, unit_type: "EA", weight_g: wg, barcode: bc }).select("id").single();
+      const { data: vIns, error: vInsErr } = await supabase.from("product_variants").insert({ product_id: productId, variant_name: pn, pack_unit: 1, pack_ea: pu, unit_type: "EA", weight_g: wg, barcode: bc }).select("id").single();
       if (vInsErr) throw vInsErr;
 
       const { error: bcInsErr } = await supabase.from("product_barcodes").insert({ variant_id: vIns.id, barcode: bc, is_primary: true, is_active: true });
