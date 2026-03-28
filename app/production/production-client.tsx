@@ -1735,7 +1735,7 @@ export default function ProductionClient() {
                                   <button
                                     type="button"
                                     disabled={selectedWo?.status === "완료" && !isEditMode}
-                                    className={`rounded-lg border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-200 active:bg-slate-300 ${!isEditMode ? "opacity-40 cursor-not-allowed" : ""}`}
+                                    className={`rounded-lg border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-200 active:bg-slate-300 ${selectedWo?.status === "완료" && !isEditMode ? "opacity-40 cursor-not-allowed" : ""}`}
                                     onClick={() => {
                                       const d = new Date();
                                       d.setFullYear(d.getFullYear() + 1);
