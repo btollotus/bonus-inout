@@ -1776,7 +1776,8 @@ export default function ProductionClient() {
 
               {/* 하단 버튼 */}
               <div className={`${card} p-4 flex gap-3`}>
-                {!isEditMode ? (
+                {selectedWo.status !== "완료" && !isEditMode ? (
+                  // 생산중 + 입력 모드 → 생산완료 처리 버튼
                   <>
                     <button
                       className="flex-1 rounded-xl border border-green-500 bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800"
@@ -1784,6 +1785,10 @@ export default function ProductionClient() {
                     >
                       ✅ 생산완료 처리 (기본정보 · 담당자 · 생산입력 저장 포함)
                     </button>
+                  </>
+                ) : selectedWo.status === "완료" && !isEditMode ? (
+                  // 완료 + 비활성 모드 → 수정 버튼만
+                  <>
                     <button
                       className="rounded-xl border border-blue-400 bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 hover:bg-blue-100 active:bg-blue-200"
                       onClick={() => setIsEditMode(true)}
