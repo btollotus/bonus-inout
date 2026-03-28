@@ -684,7 +684,8 @@ export default function ProductionClient() {
   // ── 작업지시서 선택 ──
   function applySelection(wo: WorkOrderRow, resetEdit = true) {
     setIsKiseongForm(false); // 기성 폼 닫기
-    setIsEditMode(false);
+    // 생산중이면 바로 입력 가능, 완료면 비활성(수정 버튼으로 활성화)
+    setIsEditMode(wo.status !== "완료");
     setSelectedWo(wo);
     setESubName(wo.sub_name ?? "");
 
