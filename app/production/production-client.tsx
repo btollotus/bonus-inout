@@ -59,6 +59,8 @@ type WorkOrderRow = {
   assignee_input?: string | null;
   linked_order?: { memo: string | null } | { memo: string | null }[] | null;
   work_order_items?: WoItemRow[];
+  // ✅ 추가
+  order_type: string;
 };
 
 type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
@@ -70,6 +72,16 @@ type NewWoNotification = {
 
 type WoReadInfo = {
   read_at: string;
+};
+
+// ─────────────────────── 기성 제품 타입 ───────────────────────
+type KiseongVariant = {
+  variant_id: string;
+  product_id: string;
+  product_name: string;
+  food_type: string | null;
+  weight_g: number | null;
+  barcode: string;
 };
 
 // ─────────────────────── Helpers ───────────────────────
@@ -285,9 +297,188 @@ export default function ProductionClient() {
     });
   }, []);
 
+  // ─────────────────────── ✅ 기성생산 State ───────────────────────
+  const [isKiseongForm, setIsKiseongForm] = useState(false);
+  const [kiseongVariants, setKiseongVariants] = useState<KiseongVariant[]>([]);
+  const [kiseongSearch, setKiseongSearch] = useState("");
+  const [kiseongSelected, setKiseongSelected] = useState<KiseongVariant | null>(null);
+  const [kiseongSaving, setKiseongSaving] = useState(false);
+
+  // 기성 폼 필드 (최근 작업지시서에서 불러옴)
+  const [kSubName, setKSubName] = useState("");
+  const [kFoodType, setKFoodType] = useState("");
+  const [kLogoSpec, setKLogoSpec] = useState("");
+  const [kThickness, setKThickness] = useState("3mm");
+  const [kPackagingType, setKPackagingType] = useState("트레이-정사각20구");
+  const [kPackageUnit, setKPackageUnit] = useState("100ea");
+  const [kMoldPerSheet, setKMoldPerSheet] = useState("");
+  const [kNote, setKNote] = useState("");
+  const [kReferenceNote, setKReferenceNote] = useState("");
+  // 기성 전용 입력
+  const [kActualQty, setKActualQty] = useState("");
+  const [kExpiryDate, setKExpiryDate] = useState("");
+
+  // 기성 제품 목록 로드
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
+        .from("product_variants")
+        .select("id, variant_name, weight_g, barcode, product_id, products(name, food_type, category)")
+        .order("variant_name");
+      if (error || !data) return;
+      const mapped: KiseongVariant[] = (data as any[])
+        .filter((r) => r.products?.category === "기성")
+        .map((r) => ({
+          variant_id: r.id,
+          product_id: r.product_id,
+          product_name: r.products?.name ?? r.variant_name,
+          food_type: r.products?.food_type ?? null,
+          weight_g: r.weight_g ?? null,
+          barcode: r.barcode ?? "",
+        }));
+      setKiseongVariants(mapped);
+    })();
+  }, []);
+
+  // 기성 제품 선택 → 최근 작업지시서 자동 불러오기
+  const handleKiseongVariantSelect = async (variant: KiseongVariant) => {
+    setKiseongSelected(variant);
+    setKFoodType(variant.food_type ?? "");
+
+    // 같은 variant_id의 가장 최근 작업지시서 조회
+    const { data, error } = await supabase
+      .from("work_orders")
+      .select("sub_name, food_type, logo_spec, thickness, packaging_type, tray_slot, package_unit, mold_per_sheet, note, reference_note")
+      .eq("variant_id", variant.variant_id)
+      .eq("order_type", "기성")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data) {
+      setKSubName(data.sub_name ?? "");
+      setKFoodType(data.food_type ?? variant.food_type ?? "");
+      setKLogoSpec(data.logo_spec ?? "");
+      setKThickness(data.thickness ?? "3mm");
+      setKPackagingType(data.packaging_type ?? "트레이-정사각20구");
+      setKPackageUnit(data.package_unit ?? "100ea");
+      setKMoldPerSheet(data.mold_per_sheet ? String(data.mold_per_sheet) : "");
+      setKNote(data.note ?? "");
+      setKReferenceNote(data.reference_note ?? "");
+    } else {
+      // 이전 작업지시서 없으면 기본값
+      setKSubName("");
+      setKLogoSpec("");
+      setKThickness("3mm");
+      setKPackagingType("트레이-정사각20구");
+      setKPackageUnit("100ea");
+      setKMoldPerSheet("");
+      setKNote("");
+      setKReferenceNote("");
+    }
+    // 생산수량/소비기한은 매번 새로 입력
+    setKActualQty("");
+    setKExpiryDate("");
+  };
+
+  // 기성생산 폼 초기화
+  const resetKiseongForm = () => {
+    setIsKiseongForm(false);
+    setKiseongSearch("");
+    setKiseongSelected(null);
+    setKSubName(""); setKFoodType(""); setKLogoSpec("");
+    setKThickness("3mm"); setKPackagingType("트레이-정사각20구");
+    setKPackageUnit("100ea"); setKMoldPerSheet("");
+    setKNote(""); setKReferenceNote("");
+    setKActualQty(""); setKExpiryDate("");
+  };
+
+  // 기성 작업지시서 저장
+  const saveKiseongOrder = async () => {
+    if (!kiseongSelected) return setMsg("제품을 선택하세요.");
+    if (!kActualQty || toInt(kActualQty) < 1) return setMsg("생산수량을 입력하세요.");
+    if (!kExpiryDate) return setMsg("소비기한을 입력하세요.");
+    if (!kFoodType.trim()) return setMsg("식품유형을 입력하세요.");
+
+    setKiseongSaving(true);
+    setMsg(null);
+    try {
+      // work_order_no 생성
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,"0")}${String(today.getDate()).padStart(2,"0")}`;
+      const { count } = await supabase
+        .from("work_orders")
+        .select("id", { count: "exact", head: true })
+        .like("work_order_no", `WO-${dateStr}-%`);
+      const seq = String((count ?? 0) + 1).padStart(4, "0");
+      const workOrderNo = `WO-${dateStr}-${seq}`;
+
+      // work_orders insert
+      const { data: wo, error: woErr } = await supabase
+        .from("work_orders")
+        .insert({
+          work_order_no: workOrderNo,
+          barcode_no: kiseongSelected.barcode,
+          client_id: null,
+          client_name: "기성생산",
+          sub_name: kSubName.trim() || null,
+          order_date: today.toISOString().slice(0, 10),
+          food_type: kFoodType.trim() || null,
+          product_name: kiseongSelected.product_name,
+          logo_spec: kLogoSpec.trim() || null,
+          thickness: kThickness || null,
+          delivery_method: null,
+          packaging_type: kPackagingType || null,
+          tray_slot: null,
+          package_unit: kPackageUnit || null,
+          mold_per_sheet: kMoldPerSheet ? Number(kMoldPerSheet) : null,
+          note: kNote.trim() || null,
+          reference_note: kReferenceNote.trim() || null,
+          status: "생산중",
+          variant_id: kiseongSelected.variant_id,
+          order_type: "기성",
+        })
+        .select("id")
+        .single();
+      if (woErr) throw woErr;
+
+      // work_order_items insert (납기일 없이 생산수량/소비기한만)
+      const { error: itemErr } = await supabase
+        .from("work_order_items")
+        .insert({
+          work_order_id: wo.id,
+          delivery_date: kExpiryDate, // 소비기한을 delivery_date로 임시 사용 (또는 별도 처리)
+          sub_items: [{ name: kiseongSelected.product_name, qty: toInt(kActualQty) }],
+          order_qty: toInt(kActualQty),
+          barcode_no: kiseongSelected.barcode,
+          actual_qty: toInt(kActualQty),
+          unit_weight: kiseongSelected.weight_g ?? null,
+          expiry_date: kExpiryDate,
+        });
+      if (itemErr) throw itemErr;
+
+      showToast("✅ 기성 작업지시서가 등록되었습니다!");
+      resetKiseongForm();
+      await loadWoList();
+    } catch (e: any) {
+      setMsg("저장 오류: " + (e?.message ?? e));
+    } finally {
+      setKiseongSaving(false);
+    }
+  };
+
+  const kiseongFilteredVariants = useMemo(() => {
+    const q = kiseongSearch.trim().toLowerCase();
+    if (!q) return kiseongVariants;
+    return kiseongVariants.filter(
+      (v) => v.product_name.toLowerCase().includes(q) || v.barcode.includes(q)
+    );
+  }, [kiseongVariants, kiseongSearch]);
+
+  // ─────────────────────── 기존 로직 (그대로) ───────────────────────
+
   const loadReadMap = useCallback(async (woIds: string[]) => {
     if (woIds.length === 0) return;
-    // user_id 필터 없이 해당 작업지시서들의 모든 읽음 기록 조회
     const { data } = await supabase
       .from("work_order_reads")
       .select("work_order_id, read_at")
@@ -295,7 +486,6 @@ export default function ProductionClient() {
     if (!data) return;
     const map: Record<string, WoReadInfo> = {};
     for (const row of data) {
-      // 같은 work_order_id가 여러 명 읽었으면 가장 먼저 읽은 시간으로 저장
       if (!map[row.work_order_id] || row.read_at < map[row.work_order_id].read_at) {
         map[row.work_order_id] = { read_at: row.read_at };
       }
@@ -326,7 +516,6 @@ export default function ProductionClient() {
     return () => { supabase.removeChannel(channel); insertChannelRef.current = null; };
   }, []); // eslint-disable-line
 
-  // ── Realtime 구독: selectedWo가 바뀔 때마다 재구독 ──
   useEffect(() => {
     if (realtimeChannelRef.current) {
       supabase.removeChannel(realtimeChannelRef.current);
@@ -386,7 +575,6 @@ export default function ProductionClient() {
     };
   }, [selectedWo?.id]);
 
-  // ── 담당자 선택 → 즉시 DB 저장 ──
   async function handleAssigneeChange(
     assigneeKey: keyof WoChecks,
     statusKey: keyof WoChecks,
@@ -426,6 +614,7 @@ export default function ProductionClient() {
           status_production,status_input,is_reorder,original_work_order_id,
           variant_id,images,linked_order_id,created_at,
           assignee_transfer,assignee_print_check,assignee_production,assignee_input,
+          order_type,
           work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images),
           linked_order:orders!linked_order_id(memo)
         `)
@@ -441,7 +630,6 @@ export default function ProductionClient() {
       const list = (data ?? []) as WorkOrderRow[];
       setWoList(list);
 
-      // 생산중 전체 건수는 필터와 무관하게 별도 조회
       if (filterStatus !== "생산중") {
         supabase
           .from("work_orders")
@@ -481,27 +669,25 @@ export default function ProductionClient() {
         )
       : [...woList];
 
-       // ✅ 식품유형 분류 필터 추가
-  if (filterFoodCategory !== "전체") {
-    list = list.filter((wo) => getFoodCategory(wo.food_type) === filterFoodCategory);
-  }
+    if (filterFoodCategory !== "전체") {
+      list = list.filter((wo) => getFoodCategory(wo.food_type) === filterFoodCategory);
+    }
 
-  if (sortBy === "delivery_date") {
-    list.sort((a, b) => {
-      const aDate = (a.work_order_items ?? []).map((i) => i.delivery_date).filter(Boolean).sort()[0] ?? "";
-      const bDate = (b.work_order_items ?? []).map((i) => i.delivery_date).filter(Boolean).sort()[0] ?? "";
-      return aDate.localeCompare(bDate);
-    });
-  }
+    if (sortBy === "delivery_date") {
+      list.sort((a, b) => {
+        const aDate = (a.work_order_items ?? []).map((i) => i.delivery_date).filter(Boolean).sort()[0] ?? "";
+        const bDate = (b.work_order_items ?? []).map((i) => i.delivery_date).filter(Boolean).sort()[0] ?? "";
+        return aDate.localeCompare(bDate);
+      });
+    }
 
-  return list;
-}, [woList, filterSearch, sortBy, filterFoodCategory]); // ✅ filterFoodCategory 추가
-
-
+    return list;
+  }, [woList, filterSearch, sortBy, filterFoodCategory]);
 
   // ── 작업지시서 선택 ──
   function applySelection(wo: WorkOrderRow, resetEdit = true) {
-    setIsEditMode(false); // 선택 시 항상 비활성 모드로 초기화
+    setIsKiseongForm(false); // 기성 폼 닫기
+    setIsEditMode(false);
     setSelectedWo(wo);
     setESubName(wo.sub_name ?? "");
 
@@ -804,43 +990,48 @@ export default function ProductionClient() {
         showToast("✅ 생산입력 완료!");
       }
 
-      setIsEditMode(false); // 생산완료 후 비활성 모드
+      setIsEditMode(false);
 
-      try {
-        const woDateMatch = selectedWo.work_order_no?.match(/WO-(\d{8})-/);
-        const today = woDateMatch
-          ? woDateMatch[1]
-          : new Date().toISOString().slice(0, 10).replace(/-/g, "");
-        const sanitize = (str: string) =>
-          str
-            .replace(/[*×]/g, "x")
-            .replace(/[\\/:?"<>|]/g, "")
-            .replace(/\s+/g, "_");
-        const clientName = selectedWo.client_name ?? "업체미상";
-        const rawProductName = eProductName ?? "품목미상";
-        const cleanProductName = rawProductName.startsWith(clientName)
-          ? rawProductName.slice(clientName.length).replace(/^[-_\s]+/, "")
-          : rawProductName;
-        const fileName = [
-          today,
-          sanitize(clientName),
-          sanitize(cleanProductName || "품목미상"),
-          sanitize(eFoodType ?? ""),
-          sanitize(eLogoSpec ?? ""),
-          "작업지시서",
-        ].filter(Boolean).join("-");
-        const triggerRes = await fetch("/api/trigger-work-order-pdf", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ workOrderId: selectedWo.id, fileName }),
-        });
-        if (triggerRes.ok) {
-          console.log("✅ PDF 드라이브 업로드 트리거 성공:", fileName);
-        } else {
-          console.error("❌ PDF 드라이브 업로드 트리거 실패");
+      // ✅ 기성 제품은 PDF 트리거 스킵
+      if (selectedWo.order_type !== "기성") {
+        try {
+          const woDateMatch = selectedWo.work_order_no?.match(/WO-(\d{8})-/);
+          const today = woDateMatch
+            ? woDateMatch[1]
+            : new Date().toISOString().slice(0, 10).replace(/-/g, "");
+          const sanitize = (str: string) =>
+            str
+              .replace(/[*×]/g, "x")
+              .replace(/[\\/:?"<>|]/g, "")
+              .replace(/\s+/g, "_");
+          const clientName = selectedWo.client_name ?? "업체미상";
+          const rawProductName = eProductName ?? "품목미상";
+          const cleanProductName = rawProductName.startsWith(clientName)
+            ? rawProductName.slice(clientName.length).replace(/^[-_\s]+/, "")
+            : rawProductName;
+          const fileName = [
+            today,
+            sanitize(clientName),
+            sanitize(cleanProductName || "품목미상"),
+            sanitize(eFoodType ?? ""),
+            sanitize(eLogoSpec ?? ""),
+            "작업지시서",
+          ].filter(Boolean).join("-");
+          const triggerRes = await fetch("/api/trigger-work-order-pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ workOrderId: selectedWo.id, fileName }),
+          });
+          if (triggerRes.ok) {
+            console.log("✅ PDF 드라이브 업로드 트리거 성공:", fileName);
+          } else {
+            console.error("❌ PDF 드라이브 업로드 트리거 실패");
+          }
+        } catch (pdfErr) {
+          console.error("PDF 업로드 트리거 오류 (무시):", pdfErr);
         }
-      } catch (pdfErr) {
-        console.error("PDF 업로드 트리거 오류 (무시):", pdfErr);
+      } else {
+        console.log("ℹ️ 기성 제품 — PDF 드라이브 업로드 스킵");
       }
 
       await loadWoList();
@@ -910,6 +1101,23 @@ export default function ProductionClient() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* ✅ 기성생산 버튼 추가 */}
+            <button
+              className={isKiseongForm
+                ? "rounded-xl border border-emerald-500 bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700"
+                : "rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+              }
+              onClick={() => {
+                if (isKiseongForm) {
+                  resetKiseongForm();
+                } else {
+                  setIsKiseongForm(true);
+                  setSelectedWo(null);
+                }
+              }}
+            >
+              📦 기성생산
+            </button>
             <button className={btn} onClick={loadWoList}>🔄 새로고침</button>
           </div>
         </div>
@@ -931,12 +1139,12 @@ export default function ProductionClient() {
 
           {/* ── LEFT: 목록 ── */}
           <div className={`${card} flex flex-col p-4`} style={{ maxHeight: "calc(100vh - 140px)", overflowY: "auto" }}>
-          <div className={`mb-3 flex items-center gap-2 rounded-xl border px-3 py-2 ${unreadCount > 0 ? "border-red-200 bg-red-50" : "border-slate-200 bg-slate-50"}`}>
-  <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${unreadCount > 0 ? "bg-red-500 animate-pulse" : "bg-slate-300"}`} />
-  <span className={`text-xs font-semibold ${unreadCount > 0 ? "text-red-700" : "text-slate-400"}`}>
-    미확인 작업지시서 {unreadCount}건
-  </span>
-</div>
+            <div className={`mb-3 flex items-center gap-2 rounded-xl border px-3 py-2 ${unreadCount > 0 ? "border-red-200 bg-red-50" : "border-slate-200 bg-slate-50"}`}>
+              <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${unreadCount > 0 ? "bg-red-500 animate-pulse" : "bg-slate-300"}`} />
+              <span className={`text-xs font-semibold ${unreadCount > 0 ? "text-red-700" : "text-slate-400"}`}>
+                미확인 작업지시서 {unreadCount}건
+              </span>
+            </div>
             <div className="mb-3 text-base font-semibold">작업지시서 목록</div>
 
             <div className="mb-3 space-y-2">
@@ -965,16 +1173,14 @@ export default function ProductionClient() {
                 </div>
               )}
 
-              {/* 식품유형 분류 필터 */}
-<div className="mb-3 flex gap-1 flex-wrap">
-  {(["전체", "다크", "화이트", "전사지"] as const).map((c) => (
-    <button key={c} className={filterFoodCategory === c ? btnOn : btn}
-      onClick={() => setFilterFoodCategory(c)}>
-      {c === "다크" ? "🍫 다크" : c === "화이트" ? "🤍 화이트" : c === "전사지" ? "🖨️ 전사지" : "전체"}
-    </button>
-  ))}
-</div>
-
+              <div className="mb-3 flex gap-1 flex-wrap">
+                {(["전체", "다크", "화이트", "전사지"] as const).map((c) => (
+                  <button key={c} className={filterFoodCategory === c ? btnOn : btn}
+                    onClick={() => setFilterFoodCategory(c)}>
+                    {c === "다크" ? "🍫 다크" : c === "화이트" ? "🤍 화이트" : c === "전사지" ? "🖨️ 전사지" : "전체"}
+                  </button>
+                ))}
+              </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -1028,6 +1234,10 @@ export default function ProductionClient() {
                                 })()}
                               </span>
                               {wo.sub_name ? <span className="text-xs text-slate-500">· {wo.sub_name}</span> : null}
+                              {/* ✅ 기성 배지 */}
+                              {wo.order_type === "기성" && (
+                                <span className="rounded-full bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">기성</span>
+                              )}
                               {wo.status === "생산중" && !readMap[wo.id] && (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-red-100 border border-red-200 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
                                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
@@ -1083,8 +1293,161 @@ export default function ProductionClient() {
             )}
           </div>
 
-          {/* ── RIGHT: 상세 ── */}
-          {selectedWo ? (
+          {/* ── RIGHT: 상세 or 기성폼 ── */}
+          {isKiseongForm ? (
+            /* ✅ 기성생산 폼 */
+            <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 140px)" }}>
+              <div className={`${card} p-4`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-emerald-700">📦 기성생산 등록</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">재고 생산용 작업지시서입니다. 거래처 없이 등록됩니다.</p>
+                  </div>
+                  <button className={btn} onClick={resetKiseongForm}>✕ 닫기</button>
+                </div>
+
+                {/* 제품 검색/선택 */}
+                <div className="mb-4">
+                  <div className="mb-1 text-sm font-semibold text-slate-700">제품 선택 *</div>
+                  <input
+                    className={inp}
+                    placeholder="제품명 또는 바코드로 검색"
+                    value={kiseongSearch}
+                    onChange={(e) => setKiseongSearch(e.target.value)}
+                  />
+                  {kiseongFilteredVariants.length > 0 && !kiseongSelected && (
+                    <div className="mt-1 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden max-h-48 overflow-y-auto">
+                      {kiseongFilteredVariants.map((v) => (
+                        <button
+                          key={v.variant_id}
+                          className="w-full text-left px-3 py-2.5 text-sm hover:bg-emerald-50 border-b border-slate-100 last:border-0"
+                          onClick={() => {
+                            setKiseongSearch(v.product_name);
+                            handleKiseongVariantSelect(v);
+                          }}
+                        >
+                          <span className="font-medium text-slate-800">{v.product_name}</span>
+                          {v.food_type && <span className="ml-2 text-xs text-slate-500">{v.food_type}</span>}
+                          {v.barcode && <span className="ml-2 text-xs font-mono text-slate-400">{v.barcode}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {kiseongSelected && (
+                    <div className="mt-2 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <span className="text-emerald-700 font-semibold text-sm">✅ {kiseongSelected.product_name}</span>
+                      <span className="text-xs text-slate-500 font-mono">{kiseongSelected.barcode}</span>
+                      <button
+                        className="ml-auto text-xs text-slate-400 hover:text-red-500"
+                        onClick={() => { setKiseongSelected(null); setKiseongSearch(""); }}
+                      >변경</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 기본정보 (최근 작업지시서에서 자동 불러옴) */}
+                {kiseongSelected && (
+                  <>
+                    <div className="mb-3 flex items-center gap-2">
+                      <div className="text-sm font-semibold text-slate-700">기본정보</div>
+                      <span className="text-xs text-slate-400">이전 작업지시서에서 자동 불러옴</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3 mb-4">
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">서브네임</div>
+                        <input className={inp} value={kSubName} onChange={(e) => setKSubName(e.target.value)} placeholder="예: COS, 크로버" />
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">식품유형 *</div>
+                        <input className={inp} value={kFoodType} onChange={(e) => setKFoodType(e.target.value)} placeholder="예: 화이트초콜릿" />
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">규격(로고스펙)</div>
+                        <input className={inp} value={kLogoSpec} onChange={(e) => setKLogoSpec(e.target.value)} placeholder="예: 40x40mm" />
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">두께</div>
+                        <select className={inp} value={kThickness} onChange={(e) => setKThickness(e.target.value)}>
+                          {["2mm", "3mm", "5mm", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">포장방법</div>
+                        <select className={inp} value={kPackagingType} onChange={(e) => setKPackagingType(e.target.value)}>
+                          {["트레이-정사각20구", "트레이-직사각20구", "트레이-35구", "벌크"].map((v) => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">포장단위</div>
+                        <select className={inp} value={kPackageUnit} onChange={(e) => setKPackageUnit(e.target.value)}>
+                          {["100ea", "200ea", "300ea", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">성형틀 장당 생산수</div>
+                        <input className={inpR} inputMode="numeric" value={kMoldPerSheet} onChange={(e) => setKMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} placeholder="" />
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">비고</div>
+                        <input className={inp} value={kNote} onChange={(e) => setKNote(e.target.value)} />
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">참고사항</div>
+                        <input className={inp} value={kReferenceNote} onChange={(e) => setKReferenceNote(e.target.value)} />
+                      </div>
+                    </div>
+
+                    {/* 생산수량 + 소비기한 (매번 새로 입력) */}
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 mb-4">
+                      <div className="mb-3 text-sm font-semibold text-emerald-700">🏭 생산 정보 (매번 입력)</div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="mb-1 text-xs text-slate-600">생산수량 *</div>
+                          <input
+                            className={inpR}
+                            inputMode="numeric"
+                            placeholder="예: 3000"
+                            value={kActualQty}
+                            onChange={(e) => setKActualQty(e.target.value.replace(/[^\d]/g, ""))}
+                          />
+                        </div>
+                        <div>
+                          <div className="mb-1 flex items-center justify-between">
+                            <span className="text-xs text-slate-600">소비기한 *</span>
+                            <button
+                              type="button"
+                              className="rounded-lg border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-200"
+                              onClick={() => {
+                                const d = new Date();
+                                d.setFullYear(d.getFullYear() + 1);
+                                d.setDate(d.getDate() - 1);
+                                const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                                setKExpiryDate(ymd);
+                              }}
+                            >+1년-1일</button>
+                          </div>
+                          <input
+                            type="date"
+                            className={inp}
+                            value={kExpiryDate}
+                            onChange={(e) => setKExpiryDate(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+                      disabled={kiseongSaving}
+                      onClick={saveKiseongOrder}
+                    >
+                      {kiseongSaving ? "저장 중..." : "📦 기성 작업지시서 등록"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : selectedWo ? (
             <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 140px)" }}>
 
               {/* 헤더 카드 */}
@@ -1097,6 +1460,9 @@ export default function ProductionClient() {
                       <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusColors[selectedWo.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
                         {selectedWo.status}
                       </span>
+                      {selectedWo.order_type === "기성" && (
+                        <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">기성</span>
+                      )}
                       {selectedWo.is_reorder ? <span className="rounded-full bg-amber-100 border border-amber-200 px-2.5 py-0.5 text-xs font-semibold text-amber-700">재주문</span> : null}
                     </div>
                     <div className="mt-1 font-semibold text-slate-700">{selectedWo.product_name}</div>
@@ -1524,7 +1890,7 @@ export default function ProductionClient() {
             <div className={`${card} flex items-center justify-center p-12`}>
               <div className="text-center text-slate-400">
                 <div className="text-4xl mb-3">📋</div>
-                <div className="text-sm">왼쪽 목록에서 작업지시서를 선택하세요</div>
+                <div className="text-sm">왼쪽 목록에서 작업지시서를 선택하거나<br/>📦 기성생산 버튼으로 새 작업지시서를 등록하세요</div>
               </div>
             </div>
           )}
