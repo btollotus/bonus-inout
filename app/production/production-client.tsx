@@ -316,7 +316,6 @@ export default function ProductionClient() {
   const [kReferenceNote, setKReferenceNote] = useState("");
   // 기성 전용 입력
   const [kActualQty, setKActualQty] = useState("");
-  const [kExpiryDate, setKExpiryDate] = useState("");
 
   // 기성 제품 목록 로드
   useEffect(() => {
@@ -376,9 +375,8 @@ export default function ProductionClient() {
       setKNote("");
       setKReferenceNote("");
     }
-    // 생산수량/소비기한은 매번 새로 입력
+    // 생산수량은 매번 새로 입력
     setKActualQty("");
-    setKExpiryDate("");
   };
 
   // 기성생산 폼 초기화
@@ -390,14 +388,13 @@ export default function ProductionClient() {
     setKThickness("3mm"); setKPackagingType("트레이-정사각20구");
     setKPackageUnit("100ea"); setKMoldPerSheet("");
     setKNote(""); setKReferenceNote("");
-    setKActualQty(""); setKExpiryDate("");
+    setKActualQty("");
   };
 
   // 기성 작업지시서 저장
   const saveKiseongOrder = async () => {
     if (!kiseongSelected) return setMsg("제품을 선택하세요.");
     if (!kActualQty || toInt(kActualQty) < 1) return setMsg("생산수량을 입력하세요.");
-    if (!kExpiryDate) return setMsg("소비기한을 입력하세요.");
     if (!kFoodType.trim()) return setMsg("식품유형을 입력하세요.");
 
     setKiseongSaving(true);
@@ -442,18 +439,18 @@ export default function ProductionClient() {
         .single();
       if (woErr) throw woErr;
 
-      // work_order_items insert (납기일 없이 생산수량/소비기한만)
+      // work_order_items insert (생산수량만, 소비기한은 생산완료 처리 시 입력)
       const { error: itemErr } = await supabase
         .from("work_order_items")
         .insert({
           work_order_id: wo.id,
-          delivery_date: kExpiryDate, // 소비기한을 delivery_date로 임시 사용 (또는 별도 처리)
+          delivery_date: today.toISOString().slice(0, 10),
           sub_items: [{ name: kiseongSelected.product_name, qty: toInt(kActualQty) }],
           order_qty: toInt(kActualQty),
           barcode_no: kiseongSelected.barcode,
           actual_qty: toInt(kActualQty),
           unit_weight: kiseongSelected.weight_g ?? null,
-          expiry_date: kExpiryDate,
+          expiry_date: null,
         });
       if (itemErr) throw itemErr;
 
@@ -1397,42 +1394,19 @@ export default function ProductionClient() {
                       </div>
                     </div>
 
-                    {/* 생산수량 + 소비기한 (매번 새로 입력) */}
+                    {/* 생산수량 (매번 새로 입력, 소비기한은 생산완료 처리 시 입력) */}
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 mb-4">
                       <div className="mb-3 text-sm font-semibold text-emerald-700">🏭 생산 정보 (매번 입력)</div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <div className="mb-1 text-xs text-slate-600">생산수량 *</div>
-                          <input
-                            className={inpR}
-                            inputMode="numeric"
-                            placeholder="예: 3000"
-                            value={kActualQty}
-                            onChange={(e) => setKActualQty(e.target.value.replace(/[^\d]/g, ""))}
-                          />
-                        </div>
-                        <div>
-                          <div className="mb-1 flex items-center justify-between">
-                            <span className="text-xs text-slate-600">소비기한 *</span>
-                            <button
-                              type="button"
-                              className="rounded-lg border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-200"
-                              onClick={() => {
-                                const d = new Date();
-                                d.setFullYear(d.getFullYear() + 1);
-                                d.setDate(d.getDate() - 1);
-                                const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-                                setKExpiryDate(ymd);
-                              }}
-                            >+1년-1일</button>
-                          </div>
-                          <input
-                            type="date"
-                            className={inp}
-                            value={kExpiryDate}
-                            onChange={(e) => setKExpiryDate(e.target.value)}
-                          />
-                        </div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">생산수량 *</div>
+                        <input
+                          className={inpR}
+                          inputMode="numeric"
+                          placeholder="예: 3000"
+                          value={kActualQty}
+                          onChange={(e) => setKActualQty(e.target.value.replace(/[^\d]/g, ""))}
+                        />
+                        <div className="mt-2 text-xs text-slate-400">※ 소비기한은 생산완료 처리 시 입력합니다.</div>
                       </div>
                     </div>
 
