@@ -448,7 +448,7 @@ export default function ProductionClient() {
           work_order_no: workOrderNo,
           barcode_no: kiseongSelected.barcode,
           client_id: null,
-          client_name: "기성생산",
+          client_name: "재고생산",
           sub_name: kSubName.trim() || null,
           order_date: today.toISOString().slice(0, 10),
           food_type: kFoodType.trim() || null,
@@ -1140,7 +1140,7 @@ export default function ProductionClient() {
                 }
               }}
             >
-              📦 기성생산
+              📦 재고생산
             </button>
             <button className={btn} onClick={loadWoList}>🔄 새로고침</button>
           </div>
@@ -1324,7 +1324,7 @@ export default function ProductionClient() {
               <div className={`${card} p-4`}>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-lg font-bold text-emerald-700">📦 기성생산 등록</h2>
+                    <h2 className="text-lg font-bold text-emerald-700">📦 재고생산 등록</h2>
                     <p className="text-xs text-slate-500 mt-0.5">재고 생산용 작업지시서입니다. 거래처 없이 등록됩니다.</p>
                   </div>
                   <button className={btn} onClick={resetKiseongForm}>✕ 닫기</button>
@@ -1905,7 +1905,7 @@ export default function ProductionClient() {
             <div className={`${card} flex items-center justify-center p-12`}>
               <div className="text-center text-slate-400">
                 <div className="text-4xl mb-3">📋</div>
-                <div className="text-sm">왼쪽 목록에서 작업지시서를 선택하거나<br/>📦 기성생산 버튼으로 새 작업지시서를 등록하세요</div>
+                <div className="text-sm">왼쪽 목록에서 작업지시서를 선택하거나<br/>📦 재고생산 버튼으로 새 작업지시서를 등록하세요</div>
               </div>
             </div>
           )}
