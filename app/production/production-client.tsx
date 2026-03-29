@@ -380,7 +380,7 @@ export default function ProductionClient() {
       .from("work_orders")
       .select("sub_name, food_type, logo_spec, thickness, packaging_type, tray_slot, package_unit, mold_per_sheet, note, reference_note")
       .eq("variant_id", variant.variant_id)
-      .eq("order_type", "기성")
+      .eq("order_type", "재고")
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -410,7 +410,7 @@ export default function ProductionClient() {
     setKActualQty("");
   };
 
-  // 기성생산 폼 초기화
+  // 재고생산 폼 초기화
   const resetKiseongForm = () => {
     setIsKiseongForm(false);
     setKiseongSearch("");
@@ -422,7 +422,7 @@ export default function ProductionClient() {
     setKActualQty("");
   };
 
-  // 기성 작업지시서 저장
+  // 재고 작업지시서 저장
   const saveKiseongOrder = async () => {
     if (!kiseongSelected) return setMsg("제품을 선택하세요.");
     if (!kActualQty || toInt(kActualQty) < 1) return setMsg("생산수량을 입력하세요.");
@@ -464,7 +464,7 @@ export default function ProductionClient() {
           reference_note: kReferenceNote.trim() || null,
           status: "생산중",
           variant_id: kiseongSelected.variant_id,
-          order_type: "기성",
+          order_type: "재고",
         })
         .select("id")
         .single();
@@ -485,7 +485,7 @@ export default function ProductionClient() {
         });
       if (itemErr) throw itemErr;
 
-      showToast("✅ 기성 작업지시서가 등록되었습니다!");
+      showToast("✅ 재고 작업지시서가 등록되었습니다!");
       resetKiseongForm();
       await loadWoList();
     } catch (e: any) {
@@ -1259,7 +1259,7 @@ export default function ProductionClient() {
                               </span>
                               {wo.sub_name ? <span className="text-xs text-slate-500">· {wo.sub_name}</span> : null}
                               {/* ✅ 기성 배지 */}
-                              {wo.order_type === "기성" && (
+                              {wo.order_type === "재고" && (
                                 <span className="rounded-full bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">기성</span>
                               )}
                               {wo.status === "생산중" && !readMap[wo.id] && (
@@ -1339,34 +1339,37 @@ export default function ProductionClient() {
                     value={kiseongSearch}
                     onChange={(e) => setKiseongSearch(e.target.value)}
                   />
-                  {kiseongFilteredVariants.length > 0 && !kiseongSelected && (
-                    <div className="mt-1 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden max-h-48 overflow-y-auto">
-                      {kiseongFilteredVariants.map((v) => (
-                        <button
-                          key={v.variant_id}
-                          className="w-full text-left px-3 py-2.5 text-sm hover:bg-emerald-50 border-b border-slate-100 last:border-0"
-                          onClick={() => {
-                            setKiseongSearch(v.product_name);
-                            handleKiseongVariantSelect(v);
-                          }}
-                        >
-                          <span className="font-medium text-slate-800">{v.product_name}</span>
-                          {v.food_type && <span className="ml-2 text-xs text-slate-500">{v.food_type}</span>}
-                          {v.barcode && <span className="ml-2 text-xs font-mono text-slate-400">{v.barcode}</span>}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {kiseongSelected && (
-                    <div className="mt-2 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                      <span className="text-emerald-700 font-semibold text-sm">✅ {kiseongSelected.product_name}</span>
-                      <span className="text-xs text-slate-500 font-mono">{kiseongSelected.barcode}</span>
-                      <button
-                        className="ml-auto text-xs text-slate-400 hover:text-red-500"
-                        onClick={() => { setKiseongSelected(null); setKiseongSearch(""); }}
-                      >변경</button>
-                    </div>
-                  )}
+     // 변경 후 — 항상 검색 가능, 선택 시 초록 배지만 추가로 표시
+{kiseongSearch.trim() && kiseongFilteredVariants.length > 0 && (
+  <div className="mt-1 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden max-h-48 overflow-y-auto">
+    {kiseongFilteredVariants.map((v) => (
+      <button
+        key={v.variant_id}
+        className={`w-full text-left px-3 py-2.5 text-sm border-b border-slate-100 last:border-0 ${kiseongSelected?.variant_id === v.variant_id ? "bg-emerald-50 font-semibold" : "hover:bg-emerald-50"}`}
+        onClick={() => {
+          setKiseongSearch(v.product_name);
+          handleKiseongVariantSelect(v);
+        }}
+      >
+        <span className="font-medium text-slate-800">{v.product_name}</span>
+        {v.food_type && <span className="ml-2 text-xs text-slate-500">{v.food_type}</span>}
+        {v.barcode && <span className="ml-2 text-xs font-mono text-slate-400">{v.barcode}</span>}
+      </button>
+    ))}
+  </div>
+)}
+{kiseongSelected && (
+  <div className="mt-2 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+    <span className="text-emerald-700 font-semibold text-sm">✅ {kiseongSelected.product_name}</span>
+    <span className="text-xs text-slate-500 font-mono">{kiseongSelected.barcode}</span>
+    <button
+      className="ml-auto text-xs text-slate-400 hover:text-red-500"
+      onClick={() => { setKiseongSelected(null); setKiseongSearch(""); }}
+    >초기화</button>
+  </div>
+)}        
+
+
                 </div>
 
                 {/* 기본정보 (최근 작업지시서에서 자동 불러옴) */}
@@ -1447,7 +1450,7 @@ export default function ProductionClient() {
                       disabled={kiseongSaving}
                       onClick={saveKiseongOrder}
                     >
-                      {kiseongSaving ? "저장 중..." : "📦 기성 작업지시서 등록"}
+                      {kiseongSaving ? "저장 중..." : "📦 재고 작업지시서 등록"}
                     </button>
                   </>
                 )}
@@ -1466,8 +1469,8 @@ export default function ProductionClient() {
                       <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusColors[selectedWo.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
                         {selectedWo.status}
                       </span>
-                      {selectedWo.order_type === "기성" && (
-                        <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">기성</span>
+                      {selectedWo.order_type === "재고" && (
+                        <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">재고</span>
                       )}
                       {selectedWo.is_reorder ? <span className="rounded-full bg-amber-100 border border-amber-200 px-2.5 py-0.5 text-xs font-semibold text-amber-700">재주문</span> : null}
                     </div>
