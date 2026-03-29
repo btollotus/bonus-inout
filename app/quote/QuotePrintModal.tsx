@@ -95,10 +95,11 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
 
   // ── 식품유형 (첫 품목 기준) ──
   const firstItem = items[0];
-  const foodType = firstItem
-    ? (firstItem.colorType === "dark" && !firstItem.isRaise ? "준초콜릿" : "당류가공품")
-    : "준초콜릿";
-
+  const foodTypes = [...new Set(
+    items.map(item =>
+      item.colorType === "dark" && !item.isRaise ? "준초콜릿" : "당류가공품"
+    )
+  )];
   // ── 주의사항 (첫 품목 기준) ──
   const cautions: string[] = [];
   if (firstItem?.isRaise) {
@@ -397,7 +398,7 @@ table { border-collapse: collapse; width: 100%; }
 
                 {/* 식품유형 */}
                 <tr>
-                  <td style={{ ...cellBase, color: "#333" }} colSpan={6}>*식품유형 - {foodType}</td>
+                <td style={{ ...cellBase, color: "#333" }} colSpan={6}>*식품유형 - {foodTypes.join(", ")}</td>
                 </tr>
 {/* 기성 성형틀 사용 표시 */}
 {items.some(item => item.useStockMold) && (
