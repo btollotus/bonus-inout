@@ -326,7 +326,11 @@ export default function ReportClient() {
         }
       }
 
-      let listAgg = Array.from(agg.values());
+      let listAgg = Array.from(agg.values()).filter((r) =>
+        intMin(r.period_in_ea) > 0 ||
+        intMin(r.period_out_ea) > 0 ||
+        intMin(r.end_stock_ea) > 0
+      );
       if (isAdmin && listAgg.length > 0) {
         const barcodes = listAgg.map((r) => r.barcode).filter(Boolean);
         const { data: lotData } = await supabase
