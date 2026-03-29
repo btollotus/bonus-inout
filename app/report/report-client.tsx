@@ -332,27 +332,25 @@ export default function ReportClient() {
         intMin(r.end_stock_ea) > 0
       );
       if (isAdmin && listAgg.length > 0) {
-        const barcodes = listAgg.map((r) => r.barcode).filter(Boolean);
-        const { data: lotData } = await supabase
-          .from("lots")
-          .select("id, expiry_date, variant_id, product_variants(barcode)")
-          .in("variant_id", (
-            await supabase
-              .from("product_variants")
-              .select("id")
-              .in("barcode", barcodes)
-          ).data?.map((v: any) => v.id) ?? []);
-
-        if (lotData) {
-          for (const row of listAgg) {
-            const lot = (lotData as any[]).find((l) =>
-              (l.product_variants as any)?.barcode === row.barcode &&
-              l.expiry_date === row.expiry_date
-            );
-            if (lot) {
-              row.lot_id = lot.id;
-              row.variant_id = lot.variant_id;
-            }
+        for (const row of listAgg) {
+          const { data: pvData } = await supabase
+            .from("product_variants")
+            .select("id")
+            .eq("barcode", row.barcode)
+            .maybeSingle();
+      
+          if (!pvData) continue;
+      
+          const { data: lotData } = await supabase
+            .from("lots")
+            .select("id, variant_id")
+            .eq("variant_id", pvData.id)
+            .eq("expiry_date", row.expiry_date)
+            .maybeSingle();
+      
+          if (lotData) {
+            row.lot_id = lotData.id;
+            row.variant_id = lotData.variant_id;
           }
         }
       }
@@ -874,7 +872,7 @@ export default function ReportClient() {
       <button
         type="button"
         onClick={scrollTop}
-        className="no-print fixed bottom-6 right-6 z-50 rounded-2xl bg-black text-white px-5 py-4 shadow-lg hover:bg-black/85 active:scale-[0.99]"
+        className="no-print fixed bottom-24 right-6 z-50 rounded-2xl bg-black text-white px-5 py-4 shadow-lg hover:bg-black/85 active:scale-[0.99]"
         aria-label="TOP"
         title="TOP"
       >
