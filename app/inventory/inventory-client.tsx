@@ -59,7 +59,7 @@ export default function InventoryClient() {
     }
   }, [role, tab, canSeeProducts]);
 
-  // ── 탭 타이틀 업데이트 ──
+  // ── 탭 타이틀 업데이트 (ScanClient/ReportClient 내부 document.title 제거했으므로 여기서만 관리) ──
   useEffect(() => {
     const titles: Record<Tab, string> = {
       SCAN:     "재고관리 · 스캔 | BONUSMATE ERP",
@@ -134,10 +134,18 @@ export default function InventoryClient() {
           ))}
       </div>
 
-      {/* ── 탭 콘텐츠: 기존 컴포넌트 그대로 렌더링 ── */}
-      {tab === "SCAN"                     && <ScanClient />}
-      {tab === "REPORT"                   && <ReportClient />}
-      {tab === "PRODUCTS" && canSeeProducts && <ProductsClient />}
+      {/* ── 탭 콘텐츠: unmount 방지 → display none으로 숨겨서 state 유지 ── */}
+      <div style={{ display: tab === "SCAN" ? "block" : "none" }}>
+        <ScanClient />
+      </div>
+      <div style={{ display: tab === "REPORT" ? "block" : "none" }}>
+        <ReportClient />
+      </div>
+      {canSeeProducts && (
+        <div style={{ display: tab === "PRODUCTS" ? "block" : "none" }}>
+          <ProductsClient />
+        </div>
+      )}
     </>
   );
 }

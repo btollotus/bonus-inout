@@ -214,9 +214,6 @@ export default function ScanClient() {
       }
     });
 
-  useEffect(() => {
-    document.title = "BONUSMATE ERP 스캔";
-  }, []);
 
   useEffect(() => {
     focusBarcode();

@@ -57,7 +57,6 @@ type AggRow = {
   barcode: string;
   note: string | null;
   pack_unit?: number | null;
-  // 수정/삭제용 lot_id 추가
   lot_id?: string | null;
   variant_id?: string | null;
 };
@@ -177,7 +176,6 @@ function getCols(cat: Category) {
   return COLS[cat];
 }
 
-// ── 수정 모달 타입 ──
 type EditModalState = {
   open: boolean;
   row: AggRow | null;
@@ -201,30 +199,28 @@ export default function ReportClient() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const [newWoNotifications, setNewWoNotifications] = useState<NewWoNotification[]>([]);
-const [showNewWoModal, setShowNewWoModal] = useState(false);
-const insertChannelRef = useRef<RealtimeChannel | null>(null);
-const pageLoadTimeRef = useRef<string>(new Date().toISOString());
+  const [showNewWoModal, setShowNewWoModal] = useState(false);
+  const insertChannelRef = useRef<RealtimeChannel | null>(null);
+  const pageLoadTimeRef = useRef<string>(new Date().toISOString());
 
-useEffect(() => {
-  const channel = supabase
-    .channel("wo_report_insert_notify")
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "work_orders" }, (payload) => {
-      const d = payload.new as Record<string, unknown>;
-      const createdAt = String(d.created_at ?? "");
-      if (createdAt && createdAt < pageLoadTimeRef.current) return;
-      setNewWoNotifications((prev) => [{ id: String(d.id ?? ""), client_name: String(d.client_name ?? ""), product_name: String(d.product_name ?? ""), work_order_no: String(d.work_order_no ?? ""), order_date: String(d.order_date ?? ""), created_at: createdAt }, ...prev]);
-      setShowNewWoModal(true);
-      playNotificationSound();
-    })
-    .subscribe((status, err) => { console.log("🔔 [report INSERT채널]", status, err ?? ""); });
-  insertChannelRef.current = channel;
-  return () => { supabase.removeChannel(channel); insertChannelRef.current = null; };
-}, []); // eslint-disable-line
+  useEffect(() => {
+    const channel = supabase
+      .channel("wo_report_insert_notify")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "work_orders" }, (payload) => {
+        const d = payload.new as Record<string, unknown>;
+        const createdAt = String(d.created_at ?? "");
+        if (createdAt && createdAt < pageLoadTimeRef.current) return;
+        setNewWoNotifications((prev) => [{ id: String(d.id ?? ""), client_name: String(d.client_name ?? ""), product_name: String(d.product_name ?? ""), work_order_no: String(d.work_order_no ?? ""), order_date: String(d.order_date ?? ""), created_at: createdAt }, ...prev]);
+        setShowNewWoModal(true);
+        playNotificationSound();
+      })
+      .subscribe((status, err) => { console.log("🔔 [report INSERT채널]", status, err ?? ""); });
+    insertChannelRef.current = channel;
+    return () => { supabase.removeChannel(channel); insertChannelRef.current = null; };
+  }, []); // eslint-disable-line
 
-  // ADMIN 여부
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // 수정 모달
   const [editModal, setEditModal] = useState<EditModalState>({
     open: false, row: null,
     product_name: "", food_type: "", end_stock_ea: "", expiry_date: "", note: "",
@@ -233,11 +229,8 @@ useEffect(() => {
 
   const printedAt = formatYYYYMMDD(new Date());
 
-  useEffect(() => {
-    document.title = "BONUSMATE ERP 재고대장";
-  }, []);
+  // ✅ document.title 제거 — inventory-client.tsx의 탭 useEffect에서 관리
 
-  // ADMIN 여부 확인
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -333,7 +326,6 @@ useEffect(() => {
         }
       }
 
-      // lot_id, variant_id 보강 (수정/삭제용)
       let listAgg = Array.from(agg.values());
       if (isAdmin && listAgg.length > 0) {
         const barcodes = listAgg.map((r) => r.barcode).filter(Boolean);
@@ -387,7 +379,6 @@ useEffect(() => {
     }
   };
 
-  // ── 수정 모달 열기 ──
   function openEdit(r: AggRow) {
     setEditModal({
       open: true,
@@ -400,14 +391,12 @@ useEffect(() => {
     });
   }
 
-  // ── 수정 저장 ──
   async function saveEdit() {
     const { row } = editModal;
     if (!row) return;
     setEditSaving(true);
     setMsg(null);
     try {
-      // 1. product_variants.variant_name, food_type 수정 (barcode 기준)
       const { data: pvData } = await supabase
         .from("product_variants")
         .select("id, product_id")
@@ -415,20 +404,17 @@ useEffect(() => {
         .maybeSingle();
 
       if (pvData) {
-        // variant_name 수정
         await supabase
           .from("product_variants")
           .update({ variant_name: editModal.product_name.trim() })
           .eq("id", pvData.id);
 
-        // products.food_type 수정
         await supabase
           .from("products")
           .update({ food_type: editModal.food_type.trim() })
           .eq("id", pvData.product_id);
       }
 
-      // 2. lots.expiry_date 수정 (lot_id 기준)
       if (row.lot_id) {
         await supabase
           .from("lots")
@@ -436,7 +422,6 @@ useEffect(() => {
           .eq("id", row.lot_id);
       }
 
-      // 3. 수량 수정: movements에 보정 movement 추가
       if (row.lot_id) {
         const newQty = intMin(Number(editModal.end_stock_ea), 0);
         const currentQty = intMin(row.end_stock_ea, 0);
@@ -464,15 +449,12 @@ useEffect(() => {
     }
   }
 
-  // ── 삭제 ──
   async function deleteRow(r: AggRow) {
     if (!window.confirm(`"${r.product_name}" 항목을 삭제하시겠습니까?\n관련 movements와 lot이 모두 삭제됩니다.`)) return;
     setMsg(null);
     try {
       if (r.lot_id) {
-        // movements 먼저 삭제
         await supabase.from("movements").delete().eq("lot_id", r.lot_id);
-        // lot 삭제
         await supabase.from("lots").delete().eq("id", r.lot_id);
       }
       setMsg("🗑️ 삭제 완료");
@@ -537,7 +519,6 @@ useEffect(() => {
   const cols = getCols(categoryFilter);
   const isRightAlign = (key: ColKey) => ["prev_stock", "in", "out", "stock"].includes(key);
 
-  // ADMIN일 때 작업 컬럼 추가
   const displayCols = isAdmin
     ? [...cols, { key: "actions" as any, label: "작업" }]
     : cols;
@@ -545,39 +526,40 @@ useEffect(() => {
   return (
     <div className="min-h-screen bg-white text-black p-6 print:bg-white print:text-black print:p-0 print:min-h-0">
       {showNewWoModal && newWoNotifications.length > 0 && (
-  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-    <div className="w-full max-w-[480px] rounded-2xl border border-orange-200 bg-white shadow-2xl overflow-hidden">
-      <div className="flex items-center justify-between gap-3 bg-orange-500 px-5 py-4">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl animate-bounce">🔔</span>
-          <div><div className="text-base font-bold text-white">새 작업지시서 도착!</div><div className="text-xs text-orange-100">새 주문이 등록됐습니다</div></div>
-        </div>
-        <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-sm font-bold text-white">{newWoNotifications.length}건</span>
-      </div>
-      <div className="max-h-[320px] overflow-y-auto divide-y divide-slate-100">
-        {newWoNotifications.map((n, idx) => (
-          <div key={n.id} className="px-5 py-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold text-slate-800 truncate">{n.client_name}</div>
-                <div className="text-sm text-slate-600 truncate mt-0.5">{n.product_name}</div>
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  <span className="text-[11px] text-slate-400 font-mono">{n.work_order_no}</span>
-                  <span className="text-[11px] text-slate-400">· 주문일 {n.order_date}</span>
-                </div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-[480px] rounded-2xl border border-orange-200 bg-white shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between gap-3 bg-orange-500 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl animate-bounce">🔔</span>
+                <div><div className="text-base font-bold text-white">새 작업지시서 도착!</div><div className="text-xs text-orange-100">새 주문이 등록됐습니다</div></div>
               </div>
-              {idx === 0 && <span className="shrink-0 rounded-full bg-orange-100 border border-orange-200 px-2 py-0.5 text-[11px] font-semibold text-orange-700">NEW</span>}
+              <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-sm font-bold text-white">{newWoNotifications.length}건</span>
+            </div>
+            <div className="max-h-[320px] overflow-y-auto divide-y divide-slate-100">
+              {newWoNotifications.map((n, idx) => (
+                <div key={n.id} className="px-5 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-slate-800 truncate">{n.client_name}</div>
+                      <div className="text-sm text-slate-600 truncate mt-0.5">{n.product_name}</div>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        <span className="text-[11px] text-slate-400 font-mono">{n.work_order_no}</span>
+                        <span className="text-[11px] text-slate-400">· 주문일 {n.order_date}</span>
+                      </div>
+                    </div>
+                    {idx === 0 && <span className="shrink-0 rounded-full bg-orange-100 border border-orange-200 px-2 py-0.5 text-[11px] font-semibold text-orange-700">NEW</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-slate-100 px-5 py-3 flex gap-2">
+              <button className="flex-1 rounded-xl bg-orange-500 py-2.5 text-sm font-bold text-white hover:bg-orange-600" onClick={() => { setShowNewWoModal(false); setNewWoNotifications([]); }}>확인 ({newWoNotifications.length}건)</button>
+              <button className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50" onClick={() => setShowNewWoModal(false)}>나중에</button>
             </div>
           </div>
-        ))}
-      </div>
-      <div className="border-t border-slate-100 px-5 py-3 flex gap-2">
-        <button className="flex-1 rounded-xl bg-orange-500 py-2.5 text-sm font-bold text-white hover:bg-orange-600" onClick={() => { setShowNewWoModal(false); setNewWoNotifications([]); }}>확인 ({newWoNotifications.length}건)</button>
-        <button className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50" onClick={() => setShowNewWoModal(false)}>나중에</button>
-      </div>
-    </div>
-  </div>
-)}
+        </div>
+      )}
+
       <style jsx global>{`
         @media print {
           header, nav { display: none !important; }
@@ -606,7 +588,6 @@ useEffect(() => {
         .print-only { display: none; }
       `}</style>
 
-      {/* 수정 모달 */}
       {editModal.open && editModal.row ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl border border-black/10 bg-white shadow-xl">
@@ -702,7 +683,6 @@ useEffect(() => {
           </a>
         </div>
 
-        {/* 조회/필터 */}
         <div className="mt-6 flex flex-wrap items-end gap-3 no-print">
           <div>
             <label className="text-sm text-black/70">조회 방식</label>
@@ -783,7 +763,6 @@ useEffect(() => {
           )}
         </div>
 
-        {/* 테이블 */}
         <div className="mt-6 rounded-2xl border border-black/10 overflow-hidden print-tight print:border-black/20">
           <table className="w-full text-sm">
             <thead className="bg-black/5 print:bg-black/5">
@@ -814,7 +793,6 @@ useEffect(() => {
                   const eEA = intMin(r.end_stock_ea ?? 0, 0);
                   const unit = intMin(r.pack_unit ?? 0, 0);
 
-                  // 제품명 = product_name (variant_name), 식품유형 = food_type (products.food_type)
                   const nameCell = safeStr(r.product_name ?? "-");
                   const foodTypeCell = safeStr(r.food_type ?? "-");
 
