@@ -358,8 +358,7 @@ export default function ProductionClient() {
         .order("variant_name");
       if (error || !data) return;
       const mapped: KiseongVariant[] = (data as any[])
-        .filter((r) => r.products?.category === "기성")
-        .map((r) => ({
+         .map((r) => ({
           variant_id: r.id,
           product_id: r.product_id,
           product_name: r.products?.name ?? r.variant_name,
