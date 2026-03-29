@@ -499,7 +499,7 @@ export default function ProductionClient() {
     const q = kiseongSearch.trim().toLowerCase();
     if (!q) return kiseongVariants;
     return kiseongVariants.filter(
-      (v) => v.product_name.toLowerCase().includes(q) || v.barcode.includes(q)
+      (v) => v.product_name.toLowerCase().includes(q) || v.barcode.toLowerCase().includes(q)
     );
   }, [kiseongVariants, kiseongSearch]);
 
