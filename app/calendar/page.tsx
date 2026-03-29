@@ -751,12 +751,27 @@ useEffect(() => {
                 <div>업종: {p.bizType} / 업태: {p.bizItem}</div>
               </div>
               <div style={{ fontSize: "13px", lineHeight: "1.8", textAlign: "right" }}>
-                <div style={{ fontWeight: "bold" }}>{OUR.name}</div>
-                <div>{OUR.business_no}</div>
-                <div>대표: {OUR.ceo}</div>
-                <div>주소: {OUR.address1}</div>
-                <div>{OUR.biz}</div>
-              </div>
+  <div style={{ fontWeight: "bold" }}>{OUR.name}</div>
+  <div>{OUR.business_no}</div>
+  <div style={{ position: "relative", display: "inline-block", paddingRight: "52px" }}>
+    대표: {OUR.ceo}
+    <img
+      src="/stamp.png"
+      alt="stamp"
+      style={{
+        position: "absolute",
+        right: 0,
+        top: "-6px",
+        width: "48px",
+        height: "48px",
+        opacity: 0.9,
+        pointerEvents: "none",
+      }}
+    />
+  </div>
+  <div>주소: {OUR.address1}</div>
+  <div>{OUR.biz}</div>
+</div>
             </div>
 
             {/* 품목 테이블 */}
