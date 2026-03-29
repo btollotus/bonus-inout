@@ -800,9 +800,6 @@ export default function ReportClient() {
               - 시작재고/기간입고합/기간출고합/종료재고를 LOT(소비기한) 단위로 표시합니다.
             </p>
           </div>
-          <a href="/" className="no-print inline-flex rounded-xl border border-black/15 px-4 py-2 hover:bg-black/5 print:hidden">
-            홈
-          </a>
         </div>
 
         <div className="mt-6 flex flex-wrap items-end gap-3 no-print">
