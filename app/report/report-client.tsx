@@ -332,28 +332,42 @@ export default function ReportClient() {
         intMin(r.end_stock_ea) > 0
       );
       if (isAdmin && listAgg.length > 0) {
-        for (const row of listAgg) {
-          const { data: pvData } = await supabase
-            .from("product_variants")
-            .select("id")
-            .eq("barcode", row.barcode)
-            .maybeSingle();
+        const barcodes = [...new Set(listAgg.map((r) => r.barcode).filter(Boolean))];
       
-          if (!pvData) continue;
+        // 1번 쿼리: 바코드 → variant_id 매핑
+        const { data: pvList } = await supabase
+          .from("product_variants")
+          .select("id, barcode")
+          .in("barcode", barcodes);
       
-          const { data: lotData } = await supabase
+        if (pvList && pvList.length > 0) {
+          const variantIds = pvList.map((v: any) => v.id);
+          const barcodeToVariantId: Record<string, string> = {};
+          for (const pv of pvList as any[]) {
+            barcodeToVariantId[pv.barcode] = pv.id;
+          }
+      
+          // 2번 쿼리: variant_id 목록으로 lots 한번에 조회
+          const { data: lotList } = await supabase
             .from("lots")
-            .select("id, variant_id")
-            .eq("variant_id", pvData.id)
-            .eq("expiry_date", row.expiry_date)
-            .maybeSingle();
+            .select("id, variant_id, expiry_date")
+            .in("variant_id", variantIds);
       
-          if (lotData) {
-            row.lot_id = lotData.id;
-            row.variant_id = lotData.variant_id;
+          if (lotList) {
+            for (const row of listAgg) {
+              const variantId = barcodeToVariantId[row.barcode];
+              if (!variantId) continue;
+              const lot = (lotList as any[]).find(
+                (l) => l.variant_id === variantId && l.expiry_date === row.expiry_date
+              );
+              if (lot) {
+                row.lot_id = lot.id;
+                row.variant_id = lot.variant_id;
+              }
+            }
           }
         }
-      }
+      }    
 
       listAgg.sort((a, b) => {
         const pn = safeStr(a.product_name).localeCompare(safeStr(b.product_name), "ko");
