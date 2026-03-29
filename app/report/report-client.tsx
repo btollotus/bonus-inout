@@ -176,14 +176,20 @@ function getCols(cat: Category) {
   return COLS[cat];
 }
 
+// ── 수정 모달: 제품명·식품유형·재고수량만 ──
 type EditModalState = {
   open: boolean;
   row: AggRow | null;
   product_name: string;
   food_type: string;
   end_stock_ea: string;
-  expiry_date: string;
-  note: string;
+};
+
+// ── 소비기한 전용 모달 ──
+type ExpiryModalState = {
+  open: boolean;
+  row: AggRow | null;
+  newExpiry: string;
 };
 
 export default function ReportClient() {
@@ -221,15 +227,21 @@ export default function ReportClient() {
 
   const [isAdmin, setIsAdmin] = useState(false);
 
+  // ── 수정 모달 state (소비기한 제외) ──
   const [editModal, setEditModal] = useState<EditModalState>({
     open: false, row: null,
-    product_name: "", food_type: "", end_stock_ea: "", expiry_date: "", note: "",
+    product_name: "", food_type: "", end_stock_ea: "",
   });
+
+  // ── 소비기한 전용 모달 state ──
+  const [expiryModal, setExpiryModal] = useState<ExpiryModalState>({
+    open: false, row: null, newExpiry: "",
+  });
+
   const [editSaving, setEditSaving] = useState(false);
+  const [expirySaving, setExpirySaving] = useState(false);
 
   const printedAt = formatYYYYMMDD(new Date());
-
-  // ✅ document.title 제거 — inventory-client.tsx의 탭 useEffect에서 관리
 
   useEffect(() => {
     (async () => {
@@ -326,33 +338,34 @@ export default function ReportClient() {
         }
       }
 
+      // 입고·출고·재고 중 하나라도 있는 행만 표시
       let listAgg = Array.from(agg.values()).filter((r) =>
         intMin(r.period_in_ea) > 0 ||
         intMin(r.period_out_ea) > 0 ||
         intMin(r.end_stock_ea) > 0
       );
+
+      // ADMIN: lot_id·variant_id 매핑 (쿼리 2번으로 처리)
       if (isAdmin && listAgg.length > 0) {
         const barcodes = [...new Set(listAgg.map((r) => r.barcode).filter(Boolean))];
-      
-        // 1번 쿼리: 바코드 → variant_id 매핑
+
         const { data: pvList } = await supabase
           .from("product_variants")
           .select("id, barcode")
           .in("barcode", barcodes);
-      
+
         if (pvList && pvList.length > 0) {
           const variantIds = pvList.map((v: any) => v.id);
           const barcodeToVariantId: Record<string, string> = {};
           for (const pv of pvList as any[]) {
             barcodeToVariantId[pv.barcode] = pv.id;
           }
-      
-          // 2번 쿼리: variant_id 목록으로 lots 한번에 조회
+
           const { data: lotList } = await supabase
             .from("lots")
             .select("id, variant_id, expiry_date")
             .in("variant_id", variantIds);
-      
+
           if (lotList) {
             for (const row of listAgg) {
               const variantId = barcodeToVariantId[row.barcode];
@@ -367,7 +380,7 @@ export default function ReportClient() {
             }
           }
         }
-      }    
+      }
 
       listAgg.sort((a, b) => {
         const pn = safeStr(a.product_name).localeCompare(safeStr(b.product_name), "ko");
@@ -395,6 +408,7 @@ export default function ReportClient() {
     }
   };
 
+  // ── 수정 모달 열기 (소비기한 제외) ──
   function openEdit(r: AggRow) {
     setEditModal({
       open: true,
@@ -402,11 +416,10 @@ export default function ReportClient() {
       product_name: r.product_name ?? "",
       food_type: r.food_type ?? "",
       end_stock_ea: String(r.end_stock_ea ?? 0),
-      expiry_date: r.expiry_date ?? "",
-      note: r.note ?? "",
     });
   }
 
+  // ── 수정 저장 (제품명·식품유형·재고수량만) ──
   async function saveEdit() {
     const { row } = editModal;
     if (!row) return;
@@ -431,13 +444,7 @@ export default function ReportClient() {
           .eq("id", pvData.product_id);
       }
 
-      if (row.lot_id) {
-        await supabase
-          .from("lots")
-          .update({ expiry_date: editModal.expiry_date })
-          .eq("id", row.lot_id);
-      }
-
+      // 재고 수량 조정 (movements IN/OUT)
       if (row.lot_id) {
         const newQty = intMin(Number(editModal.end_stock_ea), 0);
         const currentQty = intMin(row.end_stock_ea, 0);
@@ -462,6 +469,67 @@ export default function ReportClient() {
       setMsg("수정 오류: " + (e?.message ?? e));
     } finally {
       setEditSaving(false);
+    }
+  }
+
+  // ── 소비기한 전용 모달 열기 ──
+  function openExpiryModal(r: AggRow) {
+    setExpiryModal({ open: true, row: r, newExpiry: r.expiry_date });
+  }
+
+  // ── 소비기한 저장 (LOT 병합 처리 포함) ──
+  async function saveExpiry() {
+    const { row, newExpiry } = expiryModal;
+    if (!row || !row.lot_id || !row.variant_id) {
+      setMsg("lot 정보가 없어 소비기한을 수정할 수 없습니다.");
+      return;
+    }
+    if (!newExpiry) { setMsg("소비기한을 입력해주세요."); return; }
+    if (newExpiry === row.expiry_date) { setMsg("변경사항이 없습니다."); return; }
+
+    setExpirySaving(true);
+    setMsg(null);
+    try {
+      // 변경하려는 소비기한 LOT이 이미 있는지 확인
+      const { data: existingLot } = await supabase
+        .from("lots")
+        .select("id")
+        .eq("variant_id", row.variant_id)
+        .eq("expiry_date", newExpiry)
+        .maybeSingle();
+
+      if (existingLot) {
+        // 이미 존재 → movements를 기존 LOT으로 이동 후 현재 LOT 삭제
+        const { error: mvErr } = await supabase
+          .from("movements")
+          .update({ lot_id: existingLot.id })
+          .eq("lot_id", row.lot_id);
+        if (mvErr) throw new Error("movements 이동 실패: " + mvErr.message);
+
+        const { error: delErr } = await supabase
+          .from("lots")
+          .delete()
+          .eq("id", row.lot_id);
+        if (delErr) throw new Error("lot 삭제 실패: " + delErr.message);
+
+        setMsg("✅ 소비기한 변경 완료 (기존 LOT에 병합됨)");
+      } else {
+        // 없으면 단순 UPDATE
+        const { error: updateErr } = await supabase
+          .from("lots")
+          .update({ expiry_date: newExpiry })
+          .eq("id", row.lot_id);
+        if (updateErr) throw new Error("소비기한 수정 실패: " + updateErr.message);
+
+        setMsg("✅ 소비기한 변경 완료");
+      }
+
+      setExpiryModal({ open: false, row: null, newExpiry: "" });
+      await fetchReport();
+    } catch (e: any) {
+      setMsg("오류: " + (e?.message ?? e));
+    } finally {
+      setExpirySaving(false);
     }
   }
 
@@ -604,6 +672,7 @@ export default function ReportClient() {
         .print-only { display: none; }
       `}</style>
 
+      {/* ── 수정 모달 (제품명·식품유형·재고수량) ── */}
       {editModal.open && editModal.row ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl border border-black/10 bg-white shadow-xl">
@@ -641,22 +710,8 @@ export default function ReportClient() {
                 />
                 <div className="mt-1 text-xs text-black/40">현재: {fmt(intMin(editModal.row.end_stock_ea))} EA → 차이만큼 movements에 IN/OUT 자동 추가</div>
               </div>
-              <div>
-                <div className="mb-1 text-xs text-black/60">소비기한</div>
-                <input
-                  type="date"
-                  className="w-full rounded-xl border border-black/15 px-3 py-2 text-sm outline-none focus:border-blue-400"
-                  value={editModal.expiry_date}
-                  onChange={(e) => setEditModal((prev) => ({ ...prev, expiry_date: e.target.value }))}
-                />
-              </div>
-              <div>
-                <div className="mb-1 text-xs text-black/60">비고</div>
-                <input
-                  className="w-full rounded-xl border border-black/15 px-3 py-2 text-sm outline-none focus:border-blue-400"
-                  value={editModal.note}
-                  onChange={(e) => setEditModal((prev) => ({ ...prev, note: e.target.value }))}
-                />
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-600">
+                ℹ 소비기한 수정은 별도 "소비기한" 버튼을 사용하세요.
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-black/10 px-5 py-3">
@@ -669,6 +724,57 @@ export default function ReportClient() {
                 onClick={saveEdit}
                 disabled={editSaving}
               >{editSaving ? "저장 중..." : "저장"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── 소비기한 전용 모달 ── */}
+      {expiryModal.open && expiryModal.row ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-black/10 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-black/10 px-5 py-4">
+              <div className="font-semibold">소비기한 수정 · ADMIN</div>
+              <button
+                className="rounded-lg border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5"
+                onClick={() => setExpiryModal({ open: false, row: null, newExpiry: "" })}
+              >닫기</button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="text-sm font-medium text-slate-700 truncate">
+                {expiryModal.row.product_name}
+              </div>
+              <div className="text-xs text-slate-500">
+                현재 소비기한: <span className="font-semibold text-slate-700">{expiryModal.row.expiry_date}</span>
+              </div>
+              {!expiryModal.row.lot_id && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+                  ⚠ lot 정보를 찾을 수 없습니다. 조회 후 다시 시도해주세요.
+                </div>
+              )}
+              <div>
+                <div className="mb-1 text-xs text-black/60">변경할 소비기한</div>
+                <input
+                  type="date"
+                  className="w-full rounded-xl border border-black/15 px-3 py-2 text-sm outline-none focus:border-amber-400"
+                  value={expiryModal.newExpiry}
+                  onChange={(e) => setExpiryModal((prev) => ({ ...prev, newExpiry: e.target.value }))}
+                />
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                ⚠ 동일 제품·다른 소비기한 LOT이 이미 존재하면 자동으로 병합됩니다.
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-black/10 px-5 py-3">
+              <button
+                className="rounded-xl border border-black/15 px-4 py-2 text-sm hover:bg-black/5"
+                onClick={() => setExpiryModal({ open: false, row: null, newExpiry: "" })}
+              >취소</button>
+              <button
+                className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+                onClick={saveExpiry}
+                disabled={expirySaving || !expiryModal.row.lot_id}
+              >{expirySaving ? "저장 중..." : "소비기한 변경"}</button>
             </div>
           </div>
         </div>
@@ -849,6 +955,10 @@ export default function ReportClient() {
                           onClick={() => openEdit(r)}
                         >수정</button>
                         <button
+                          className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                          onClick={() => openExpiryModal(r)}
+                        >소비기한</button>
+                        <button
                           className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
                           onClick={() => deleteRow(r)}
                         >삭제</button>
@@ -879,7 +989,7 @@ export default function ReportClient() {
 
         <div className="mt-2 text-xs text-black/50 no-print">
           ※ 선택한 "구분 필터"가 화면/엑셀/인쇄에 동일하게 적용됩니다. / 기간 조회는 내부적으로 날짜별 재고리포트를 집계합니다.
-          {isAdmin && " / ADMIN: 수정·삭제 기능 활성화됨"}
+          {isAdmin && " / ADMIN: 수정(제품명·식품유형·재고수량) · 소비기한 · 삭제 기능 활성화됨"}
         </div>
       </div>
 
