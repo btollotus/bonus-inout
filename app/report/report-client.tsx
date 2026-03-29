@@ -882,9 +882,10 @@ export default function ReportClient() {
           )}
         </div>
 
-        <div className="mt-6 rounded-2xl border border-black/10 overflow-hidden print-tight print:border-black/20">
+        <div className="mt-6 rounded-2xl border border-black/10 overflow-x-auto print-tight print:border-black/20">
+
           <table className="w-full text-sm">
-          <thead className="bg-black/5 print:bg-black/5 sticky z-10" style={{ top: "110px" }}>
+          <thead className="bg-black/5 print:bg-black/5 sticky z-10" style={{ top: "88px" }}>
 
               <tr>
                 {displayCols.map((col) => (
