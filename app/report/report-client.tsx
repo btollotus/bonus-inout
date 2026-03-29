@@ -884,7 +884,7 @@ export default function ReportClient() {
 
         <div className="mt-6 rounded-2xl border border-black/10 overflow-hidden print-tight print:border-black/20">
           <table className="w-full text-sm">
-            <thead className="bg-black/5 print:bg-black/5">
+          <thead className="bg-black/5 print:bg-black/5 sticky top-0 z-10">
               <tr>
                 {displayCols.map((col) => (
                   <th
