@@ -95,11 +95,12 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
 
   // ── 식품유형 (첫 품목 기준) ──
   const firstItem = items[0];
-  const foodTypes = [...new Set(
-    items.map(item =>
-      item.colorType === "dark" && !item.isRaise ? "준초콜릿" : "당류가공품"
-    )
-  )];
+  const foodTypes = [...new Map(
+    items.map(item => [
+      item.colorType === "dark" && !item.isRaise ? "준초콜릿" : "당류가공품",
+      item.isRaise ? "컬러인쇄" : item.colorType === "dark" ? "다크" : "화이트",
+    ])
+  ).entries()].map(([food, color]) => `${color}(${food})`);
   // ── 주의사항 (첫 품목 기준) ──
   const cautions: string[] = [];
   if (firstItem?.isRaise) {
