@@ -829,7 +829,7 @@ async function loadSignageList() {
                       // 자동 계산 모드: DB 저장 후 quoteRequestId 획득
                       if (inputMode === "auto") {
                         const calcItems = items.filter(x => x.calcResult);
-                        if (calcItems.length === 0) break;
+                        if (calcItems.length === 0) return;
                         const firstItem = calcItems[0];
                         const firstCr = firstItem.calcResult;
                         const firstV = firstItem.useStockMold && firstCr.V_stock ? firstCr.V_stock : firstCr.V;
