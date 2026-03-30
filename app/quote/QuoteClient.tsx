@@ -354,6 +354,7 @@ async function loadSignageList() {
       .eq("id", id);
     if (error) return setMsg(error.message);
     loadQuoteList();
+    loadSheetList();  // ← 추가
   }
 
   // ─── 견적 삭제 ───
