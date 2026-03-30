@@ -16,6 +16,8 @@ type PrintItem = {
   useStockMold: boolean;
   moldCost: number;
   plateCost: number;
+  sheetCost: number;
+  workFee: number;
   V: number;
   manualV: number;
 };
