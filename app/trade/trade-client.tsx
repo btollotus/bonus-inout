@@ -2460,7 +2460,7 @@ function parseLogoSize(logoSpec: string | null): { width: string; height: string
 
 // ─────────────────────── WoPrintModal ───────────────────────
 function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: () => void; employees: EmployeeRow[]; }) {
-  const items = (wo.work_order_items ?? []).slice().sort((a, b) => (a.barcode_no ?? "").localeCompare(b.barcode_no ?? ""));
+  const items = (wo.work_order_items ?? []).slice().sort((a, b) => (a.barcode_no ?? "").localeCompare(b.barcode_no ?? "")).filter((i) => !isSpecialItem((i.sub_items ?? [])[0]?.name || ""));
   const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
 
   const [itemNotes, setItemNotes] = useState<Record<string, string>>(() => {
