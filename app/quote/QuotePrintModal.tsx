@@ -113,6 +113,27 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   const lineItems: LineItem[] = [];
 
   for (const item of items) {
+    // ── 전사지 단독 품목 처리 ──
+    if (item.productType === "전사지") {
+      if (item.plateCost > 0) {
+        lineItems.push({
+          name: "인쇄판비 (최초 1회)", qty: "1",
+          unit: item.plateCost,
+          supply: item.plateCost,
+          vat: Math.round(item.plateCost * 0.1),
+          total: item.plateCost + Math.round(item.plateCost * 0.1),
+        });
+      }
+      const sheetSupply = item.quantity * 3000;
+      lineItems.push({
+        name: `전사지 (${item.quantity}장 × 3,000원)`, qty: String(item.quantity),
+        unit: 3000,
+        supply: sheetSupply,
+        vat: Math.round(sheetSupply * 0.1),
+        total: sheetSupply + Math.round(sheetSupply * 0.1),
+      });
+      continue;
+    }
     const isDoneum = item.productType.includes("도눔");
     const colorLabel = (isDoneum ? "도눔 " : "") + (item.isRaise ? "컬러인쇄" : item.colorType === "dark" ? "다크" : "화이트");
     const sizeStr = item.widthMm && item.heightMm
@@ -398,9 +419,12 @@ table { border-collapse: collapse; width: 100%; }
                 ))}
 
                 {/* 식품유형 */}
-                <tr>
-                <td style={{ ...cellBase, color: "#333" }} colSpan={6}>*식품유형 - {foodTypes.join(", ")}</td>
-                </tr>
+{/* 식품유형 — 전사지일 때 숨김 */}
+{items[0]?.productType !== "전사지" && (
+                  <tr>
+                    <td style={{ ...cellBase, color: "#333" }} colSpan={6}>*식품유형 - {foodTypes.join(", ")}</td>
+                  </tr>
+                )}
 {/* 기성 성형틀 사용 표시 */}
 {items.some(item => item.useStockMold) && (
   <tr>
