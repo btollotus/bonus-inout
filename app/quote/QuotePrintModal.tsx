@@ -105,10 +105,12 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   ).entries()].map(([food, color]) => `${color}(${food})`);
   // ── 주의사항 (첫 품목 기준) ──
   const cautions: string[] = [];
-  if (firstItem?.isRaise) {
-    cautions.push("본 제품은 인쇄면에 물이 묻으면 번지거나 지워질 수 있으니 주의하셔야되고, 특히 냉동,냉장 보관시 결로에 의해 번질 수 있으니 주의하셔야됩니다.");
+  if (firstItem?.productType !== "전사지") {
+    if (firstItem?.isRaise) {
+      cautions.push("본 제품은 인쇄면에 물이 묻으면 번지거나 지워질 수 있으니 주의하셔야되고, 특히 냉동,냉장 보관시 결로에 의해 번질 수 있으니 주의하셔야됩니다.");
+    }
+    cautions.push("27도 이하 건조한 곳에 보관하세요.");
   }
-  cautions.push("27도 이하 건조한 곳에 보관하세요.");
 
   // ── 품목 행 구성 ──
   type LineItem = { name: string; qty: string; unit: number; supply: number; vat: number; total: number };
