@@ -195,6 +195,11 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
     const safe = (s: string) => s.replace(/[\\/:*?"<>|×x]/g, "x").replace(/\s+/g, "_").slice(0, 20);
     const first = items[0];
     if (!first) return `${today}-${safe(customerName)}-견적서`;
+    // 전사지 전용 파일명
+    if (first.productType === "전사지") {
+      const qty = first.quantity ? `${first.quantity}장` : "";
+      return [today, safe(customerName), "전사지", qty, "견적서"].filter(Boolean).join("-");
+    }
     const isDoneumFirst = first.productType.includes("도눔");
     const colorLabel = (isDoneumFirst ? "도눔-" : "") + (first.isRaise ? "컬러인쇄" : first.colorType === "dark" ? "다크" : "화이트");
     const sizeStr = first.widthMm && first.heightMm ? `${first.widthMm}x${first.heightMm}mm` : "";
