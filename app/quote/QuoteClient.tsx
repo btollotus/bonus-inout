@@ -1361,7 +1361,7 @@ async function loadSignageList() {
                 plateCost: q?.plate_cost ?? 0,
                 sheetCost: q?.transfer_cost ?? 0,
                 workFee: q?.work_fee ?? 0,
-                V: q?.total ?? 0,
+                V: r.request_type === "sheet" ? (q?.total ?? 0) : (q?.final_price ?? 0),
                 manualV: 0,
               }],  
               memo: r.memo,
