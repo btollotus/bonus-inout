@@ -339,7 +339,8 @@ async function loadSignageList() {
     });
     if (quoteErr) return setMsg(quoteErr.message);
     setMsg("✅ 전사지 견적이 저장됐어요!");
-    setSheetCalcResult(null); setSheetCount("5"); setSheetIsNew(true);
+    setLastQuoteRequestId(req.id);
+    // setSheetCalcResult(null) 은 모달 닫을 때 처리 — 여기서 초기화하면 모달 데이터 사라짐
     loadSheetList();
   }
 
@@ -1128,7 +1129,13 @@ async function loadSignageList() {
                       <div className="text-2xl font-black text-slate-700 tabular-nums">{fmt(sheetCalcResult.totalWithVat)}원</div>
                     </div>
                   </div>
-                  <button className={`${btnOn} mt-3 w-full`} onClick={handleSheetSave}>💾 견적 저장</button>
+                  <div className="flex gap-2 mt-3">
+                    <button className={`${btnOn} flex-1`} onClick={async () => {
+                      await handleSheetSave();
+                      setPrintOpen(true);
+                    }}>🖨️ 견적서 출력</button>
+                    <button className={btn} onClick={handleSheetSave}>💾 저장만</button>
+                  </div>
                 </div>
               )}
 
@@ -1240,20 +1247,17 @@ async function loadSignageList() {
 
       </div>
 
-
-
-      {/* 견적서 인쇄 모달 */}
-      {printOpen && (
-        <QuotePrintModal
-          onClose={() => { setPrintOpen(false); setSelectedQuoteRow(null); }}
-          quoteData={selectedQuoteRow ? (() => {
-            // 목록에서 불러온 저장된 견적
-            const r = selectedQuoteRow;
-            const q = r.quotes?.[0];
-            const pt = r.product_type ?? "";
-            const isRaise = pt.startsWith("레이즈");
-            const thickness = pt.includes("2mm") ? "2mm" : pt.includes("3mm") ? "3mm" : pt.includes("5mm") ? "5mm" : "";
-            return {
+{/* 견적서 인쇄 모달 — 목록에서 불러온 견적 */}
+{printOpen && selectedQuoteRow && (() => {
+        const r = selectedQuoteRow;
+        const q = r.quotes?.[0];
+        const pt = r.product_type ?? "";
+        const isRaise = pt.startsWith("레이즈");
+        const thickness = pt.includes("2mm") ? "2mm" : pt.includes("3mm") ? "3mm" : pt.includes("5mm") ? "5mm" : "";
+        return (
+          <QuotePrintModal
+            onClose={() => { setPrintOpen(false); setSelectedQuoteRow(null); }}
+            quoteData={{
               customerName: r.customer_name,
               quoteDate: r.created_at.slice(0, 10),
               inputMode: "auto" as const,
@@ -1279,9 +1283,50 @@ async function loadSignageList() {
               iceboxPrice: 0,
               deliveryPrice: 0,
               quoteRequestId: r.id,
-            };
-          })() : {
-            // 새로 입력한 견적
+            }}
+          />
+        );
+      })()}
+
+      {/* 견적서 인쇄 모달 — 전사지 탭 */}
+      {printOpen && !selectedQuoteRow && tab === "sheet" && sheetCalcResult && (
+        <QuotePrintModal
+        onClose={() => { setPrintOpen(false); setSheetCalcResult(null); setSheetCount("5"); setSheetIsNew(true); }}
+          quoteData={{
+            customerName: activeCustomerName,
+            quoteDate: new Date().toISOString().slice(0, 10),
+            inputMode: "auto" as const,
+            items: [{
+              productType: "전사지",
+              colorType: "dark" as const,
+              isRaise: false,
+              widthMm: null,
+              heightMm: null,
+              thickness: "",
+              quantity: sheetCalcResult.sheets,
+              isNew: sheetIsNew,
+              designChanged: false,
+              useStockMold: false,
+              moldCost: 0,
+              plateCost: sheetCalcResult.plateCost,
+              sheetCost: sheetCalcResult.sheetCost,
+              workFee: 0,
+              V: sheetCalcResult.total,
+              manualV: 0,
+            }],
+            memo: memo || null,
+            iceboxPrice: 0,
+            deliveryPrice: sheetCalcResult.delivery,
+            quoteRequestId: lastQuoteRequestId,
+          }}
+        />
+      )}
+
+      {/* 견적서 인쇄 모달 — 견적입력 탭 */}
+      {printOpen && !selectedQuoteRow && tab !== "sheet" && (
+        <QuotePrintModal
+          onClose={() => { setPrintOpen(false); }}
+          quoteData={{
             customerName: activeCustomerName,
             quoteDate: new Date().toISOString().slice(0, 10),
             inputMode,
@@ -1315,3 +1360,5 @@ async function loadSignageList() {
     </div>
   );
 }
+
+  
