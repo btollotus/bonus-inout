@@ -178,6 +178,9 @@ export default function QuoteClient() {
   const [sheetIsNew, setSheetIsNew] = useState(true);
   const [sheetCalcResult, setSheetCalcResult] = useState<any>(null);
   const [sheetList, setSheetList] = useState<QuoteRequestRow[]>([]);
+  const [sheetSearch, setSheetSearch] = useState("");
+  const [sheetStatusFilter, setSheetStatusFilter] = useState<string>("전체");
+
 
   // ─── 제작문의 (사인판) ───
 const [signageList, setSignageList] = useState<any[]>([]);
@@ -1142,7 +1145,24 @@ async function loadSignageList() {
  {/* 전사지 목록 */}
  {sheetList.length > 0 && (
                 <div className={`${card} p-4`}>
-                  <div className="mb-3 text-base font-semibold">최근 전사지 견적</div>
+<div className="mb-3 flex flex-wrap items-center gap-3">
+                    <div className="text-base font-semibold">최근 전사지 견적</div>
+                    <div className="flex gap-2">
+                      {["전체", ...STATUS_LIST].map(s => (
+                        <button key={s} className={sheetStatusFilter === s ? btnOn : btn}
+                          onClick={() => setSheetStatusFilter(s)}>{s}</button>
+                      ))}
+                    </div>
+                    <div className="relative">
+                      <input className={`${inp} max-w-[200px] pr-7`} placeholder="업체명 검색"
+                        value={sheetSearch} onChange={e => setSheetSearch(e.target.value)} />
+                      {sheetSearch && (
+                        <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                          onClick={() => setSheetSearch("")}>✕</button>
+                      )}
+                    </div>
+                    <button className={btn} onClick={loadSheetList}>🔄 새로고침</button>
+                  </div>
                   <div className="overflow-x-auto rounded-2xl border border-slate-200">
                     <table className="w-full table-fixed text-sm">
                       <colgroup>
@@ -1166,7 +1186,13 @@ async function loadSignageList() {
                         </tr>
                       </thead>
                       <tbody>
-                        {sheetList.map(r => {
+                      {sheetList
+                          .filter(r => {
+                            const matchStatus = sheetStatusFilter === "전체" || r.status === sheetStatusFilter;
+                            const matchSearch = !sheetSearch.trim() || r.customer_name.toLowerCase().includes(sheetSearch.toLowerCase());
+                            return matchStatus && matchSearch;
+                          })
+                          .map(r => {                 
                           const q = r.quotes?.[0];
                           const sc = STATUS_COLOR[r.status] ?? STATUS_COLOR["견적완료"];
                           return (
