@@ -365,6 +365,7 @@ async function loadSignageList() {
     if (error) return setMsg(error.message);
     setMsg("🗑️ 견적이 삭제됐어요.");
     loadQuoteList();
+    loadSheetList();  // ← 추가
   }
 
   // ─── 기존 견적 불러오기 (견적 입력 탭으로 이동) ───
