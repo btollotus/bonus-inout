@@ -1139,36 +1139,93 @@ async function loadSignageList() {
                 </div>
               )}
 
-              {/* 전사지 목록 */}
-              {sheetList.length > 0 && (
+ {/* 전사지 목록 */}
+ {sheetList.length > 0 && (
                 <div className={`${card} p-4`}>
                   <div className="mb-3 text-base font-semibold">최근 전사지 견적</div>
-                  <div className="space-y-2">
-                    {sheetList.slice(0, 10).map(r => {
-                      const q = r.quotes?.[0];
-                      const sc = STATUS_COLOR[r.status] ?? STATUS_COLOR["견적완료"];
-                      return (
-                        <div key={r.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
-                          <div>
-                            <span className="font-semibold">{r.customer_name}</span>
-                            <span className="ml-2 text-slate-500">{r.quantity}장</span>
-                            <span className="ml-2 text-xs text-slate-400">{r.created_at.slice(0,10)}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="tabular-nums text-blue-700 font-semibold">
-                              {q?.total ? fmt(q.total)+"원" : "—"}
-                            </span>
-                            <span style={{ padding: "2px 8px", borderRadius: 8, fontSize: 11, fontWeight: "bold",
-                              background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
-                              {r.status}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                    <table className="w-full table-fixed text-sm">
+                      <colgroup>
+                        <col style={{ width: 100 }} />
+                        <col style={{ width: 140 }} />
+                        <col style={{ width: 80 }} />
+                        <col style={{ width: 80 }} />
+                        <col style={{ width: 100 }} />
+                        <col style={{ width: 100 }} />
+                        <col style={{ width: 200 }} />
+                      </colgroup>
+                      <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                        <tr>
+                          <th className="px-3 py-2 text-left">날짜</th>
+                          <th className="px-3 py-2 text-left">업체명</th>
+                          <th className="px-3 py-2 text-center">장수</th>
+                          <th className="px-3 py-2 text-center">신규</th>
+                          <th className="px-3 py-2 text-right">합계금액</th>
+                          <th className="px-3 py-2 text-center">상태</th>
+                          <th className="px-3 py-2 text-center">상태 변경</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sheetList.map(r => {
+                          const q = r.quotes?.[0];
+                          const sc = STATUS_COLOR[r.status] ?? STATUS_COLOR["견적완료"];
+                          return (
+                            <tr key={r.id} className="border-t border-slate-200 bg-white hover:bg-slate-50">
+                              <td className="px-3 py-2 tabular-nums text-xs text-slate-500">{r.created_at.slice(0,10)}</td>
+                              <td className="px-3 py-2 font-semibold truncate">{r.customer_name}</td>
+                              <td className="px-3 py-2 text-center text-xs">{r.quantity}장</td>
+                              <td className="px-3 py-2 text-center text-xs">
+                                <span style={{ padding: "2px 8px", borderRadius: 8, fontSize: 11, fontWeight: "bold",
+                                  background: r.is_new ? "#dbeafe" : "#fef3c7",
+                                  color: r.is_new ? "#1d4ed8" : "#b45309" }}>
+                                  {r.is_new ? "신규" : "재주문"}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-right font-semibold tabular-nums text-blue-700">
+                                {q?.total ? fmt(q.total)+"원" : "—"}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span style={{ padding: "2px 8px", borderRadius: 8, fontSize: 11, fontWeight: "bold",
+                                  background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
+                                  {r.status}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex flex-wrap gap-1 justify-center">
+                                  <button className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                                    onClick={() => { setSelectedQuoteRow(r); setLastQuoteRequestId(r.id); setPrintOpen(true); }}>
+                                    🖨️ 견적서
+                                  </button>
+                                  {r.status !== "수주" && (
+                                    <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-1 text-[11px] font-semibold text-green-700 hover:bg-green-100"
+                                      onClick={() => updateStatus(r.id, "수주")}>수주</button>
+                                  )}
+                                  {r.status !== "미수주" && (
+                                    <select className="rounded-lg border border-red-200 bg-red-50 px-1 py-1 text-[11px] text-red-700"
+                                      defaultValue=""
+                                      onChange={e => { if (e.target.value) updateStatus(r.id, "미수주", e.target.value); e.target.value = ""; }}>
+                                      <option value="" disabled>미수주▼</option>
+                                      {LOST_REASONS.map(reason => <option key={reason} value={reason}>{reason}</option>)}
+                                    </select>
+                                  )}
+                                  {r.status !== "견적완료" && (
+                                    <button className="rounded-lg border border-slate-300 bg-slate-50 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100"
+                                      onClick={() => updateStatus(r.id, "견적완료")}>견적완료</button>
+                                  )}
+                                  <button className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-500 hover:bg-red-100"
+                                    onClick={() => deleteQuote(r.id)}>
+                                    🗑️
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              )}
+              )}     
             </div>
           </div>
         )}
