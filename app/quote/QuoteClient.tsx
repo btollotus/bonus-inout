@@ -35,6 +35,7 @@ type QuoteRequestRow = {
   created_at: string;
   updated_at: string;
   quotes?: QuoteRow[];
+  quote_items?: QuoteItemRow[];
 };
 
 type QuoteRow = {
@@ -58,6 +59,30 @@ type QuoteRow = {
 };
 
 // ─────────────────────── 제품 파라미터 ───────────────────────
+
+type QuoteItemRow = {
+  id: string;
+  request_id: string;
+  product_type: string | null;
+  color_type: string | null;
+  width_mm: number | null;
+  height_mm: number | null;
+  quantity: number | null;
+  is_new: boolean;
+  design_changed: boolean;
+  use_stock_mold: boolean;
+  reuse_existing_mold: boolean;
+  unit_price: number;
+  mold_cost: number;
+  plate_cost: number;
+  transfer_cost: number;
+  work_fee: number;
+  total: number;
+  final_price: number;
+  final_price_stock: number | null;
+  sort_order: number;
+};
+
 const PRODUCT_TYPES = [
   { key: "전사2mm",  label: "전사 1도 (2mm)" },
   { key: "전사3mm",  label: "전사 1도 (3mm)" },
@@ -208,8 +233,8 @@ const [signageSearch, setSignageSearch] = useState("");
     setListLoading(true);
     try {
       let q = supabase.from("quote_requests")
-        .select("*,quotes(*)")
-        .eq("request_type", "product")
+      .select("*,quotes(*),quote_items(*)")
+      .eq("request_type", "product")
         .order("created_at", { ascending: false })
         .limit(200);
       if (statusFilter !== "전체") q = q.eq("status", statusFilter);
@@ -803,44 +828,74 @@ async function loadSignageList() {
                       setMsg(null);
                       // 자동 계산 모드: DB 저장 후 quoteRequestId 획득
                       if (inputMode === "auto") {
-                        const firstItem = items.find(x => x.calcResult);
-                        if (firstItem?.calcResult) {
-                          const cr = firstItem.calcResult;
-                          const V = firstItem.useStockMold && cr.V_stock ? cr.V_stock : cr.V;
-                          const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
-                            customer_id: activeCustomerId,
-                            customer_name: activeCustomerName,
-                            request_type: "product",
-                            product_type: firstItem.productType,
-                            color_type: firstItem.colorType, 
-                            width_mm: parseFloat(firstItem.widthMm) || null,
-                            height_mm: parseFloat(firstItem.heightMm) || null,
-                            quantity: parseInt(firstItem.quantity) || null,
-                            is_new: firstItem.isNew,
-                            design_changed: firstItem.designChanged,
-                            use_stock_mold: firstItem.useStockMold,
-                            reuse_existing_mold: firstItem.reuseExistingMold,
-                            mold_qty: 1, memo: memo || null, status: "견적완료",
-                            updated_at: new Date().toISOString(),
-                          }).select("id").single();
-                          if (reqErr) {
-                            setMsg("⚠️ 저장 오류: " + reqErr.message);
-                          } else if (req?.id) {
-                            const { error: quoteErr } = await supabase.from("quotes").insert({
+                        const calcItems = items.filter(x => x.calcResult);
+                        if (calcItems.length === 0) break;
+                        const firstItem = calcItems[0];
+                        const firstCr = firstItem.calcResult;
+                        const firstV = firstItem.useStockMold && firstCr.V_stock ? firstCr.V_stock : firstCr.V;
+                        // 헤더(첫 품목 기준)로 quote_requests 1건 저장
+                        const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
+                          customer_id: activeCustomerId,
+                          customer_name: activeCustomerName,
+                          request_type: "product",
+                          product_type: firstItem.productType,
+                          color_type: firstItem.colorType,
+                          width_mm: parseFloat(firstItem.widthMm) || null,
+                          height_mm: parseFloat(firstItem.heightMm) || null,
+                          quantity: parseInt(firstItem.quantity) || null,
+                          is_new: firstItem.isNew,
+                          design_changed: firstItem.designChanged,
+                          use_stock_mold: firstItem.useStockMold,
+                          reuse_existing_mold: firstItem.reuseExistingMold,
+                          mold_qty: 1, memo: memo || null, status: "견적완료",
+                          updated_at: new Date().toISOString(),
+                        }).select("id").single();
+                        if (reqErr) { setMsg("⚠️ 저장 오류: " + reqErr.message); }
+                        else if (req?.id) {
+                          // quotes 1건 (첫 품목 기준)
+                          await supabase.from("quotes").insert({
+                            request_id: req.id,
+                            unit_price: firstCr.unitPrice ?? 0,
+                            mold_cost: firstCr.moldCost ?? 0,
+                            plate_cost: firstCr.plateCost ?? 0,
+                            total: firstCr.totalActual ?? 0,
+                            final_price: firstV,
+                            final_price_stock: firstCr.V_stock ?? null,
+                          });
+                          // quote_items — 전체 품목 저장
+                          const itemRows = calcItems.map((fi, idx) => {
+                            const cr = fi.calcResult;
+                            const V = fi.useStockMold && cr.V_stock ? cr.V_stock : cr.V;
+                            return {
                               request_id: req.id,
+                              product_type: fi.productType,
+                              color_type: fi.colorType,
+                              width_mm: parseFloat(fi.widthMm) || null,
+                              height_mm: parseFloat(fi.heightMm) || null,
+                              quantity: parseInt(fi.quantity) || null,
+                              is_new: fi.isNew,
+                              design_changed: fi.designChanged,
+                              use_stock_mold: fi.useStockMold,
+                              reuse_existing_mold: fi.reuseExistingMold,
                               unit_price: cr.unitPrice ?? 0,
                               mold_cost: cr.moldCost ?? 0,
                               plate_cost: cr.plateCost ?? 0,
+                              transfer_cost: cr.sheetCost ?? 0,
+                              work_fee: cr.workFee ?? 0,
                               total: cr.totalActual ?? 0,
                               final_price: V,
                               final_price_stock: cr.V_stock ?? null,
-                            });
-                            if (quoteErr) setMsg("⚠️ 견적 상세 저장 오류: " + quoteErr.message);
-                            setLastQuoteRequestId(req.id);
-                            loadQuoteList();
-                          }
+                              sort_order: idx,
+                            };
+                          });
+                          const { error: itemErr } = await supabase.from("quote_items").insert(itemRows);
+                          if (itemErr) setMsg("⚠️ 품목 저장 오류: " + itemErr.message);
+                          setLastQuoteRequestId(req.id);
+                          loadQuoteList();
                         }
                       }
+
+                      
                       // ─── 수동 입력 모드: DB 저장 ───
                       if (inputMode === "manual") {
                         const manualItems = items.filter(x => x.manualV);
@@ -1339,6 +1394,52 @@ async function loadSignageList() {
         const pt = r.product_type ?? "";
         const isRaise = pt.startsWith("레이즈");
         const thickness = pt.includes("2mm") ? "2mm" : pt.includes("3mm") ? "3mm" : pt.includes("5mm") ? "5mm" : "";
+
+        // quote_items 있으면 전체 품목, 없으면 기존 단일 품목
+        const printItems = (r.quote_items && r.quote_items.length > 0)
+          ? r.quote_items
+              .sort((a, b) => a.sort_order - b.sort_order)
+              .map(qi => {
+                const qiPt = qi.product_type ?? "";
+                const qiThickness = qiPt.includes("2mm") ? "2mm" : qiPt.includes("3mm") ? "3mm" : qiPt.includes("5mm") ? "5mm" : "";
+                return {
+                  productType: qiPt,
+                  colorType: (qi.color_type as "dark" | "white") ?? "dark",
+                  isRaise: qiPt.startsWith("레이즈"),
+                  widthMm: qi.width_mm,
+                  heightMm: qi.height_mm,
+                  thickness: qiThickness,
+                  quantity: qi.quantity ?? 0,
+                  isNew: qi.is_new,
+                  designChanged: qi.design_changed,
+                  useStockMold: qi.use_stock_mold,
+                  moldCost: qi.mold_cost,
+                  plateCost: qi.plate_cost,
+                  sheetCost: qi.transfer_cost,
+                  workFee: qi.work_fee,
+                  V: qi.final_price,
+                  manualV: 0,
+                };
+              })
+          : [{
+              productType: r.request_type === "sheet" ? "전사지" : pt,
+              colorType: ((r.color_type as "dark" | "white") ?? "dark"),
+              isRaise,
+              widthMm: r.width_mm,
+              heightMm: r.height_mm,
+              thickness,
+              quantity: r.quantity ?? 0,
+              isNew: r.is_new,
+              designChanged: r.design_changed,
+              useStockMold: r.use_stock_mold,
+              moldCost: q?.mold_cost ?? 0,
+              plateCost: q?.plate_cost ?? 0,
+              sheetCost: q?.transfer_cost ?? 0,
+              workFee: q?.work_fee ?? 0,
+              V: r.request_type === "sheet" ? (q?.total ?? 0) : (q?.final_price ?? 0),
+              manualV: 0,
+            }];
+
         return (
           <QuotePrintModal
             onClose={() => { setPrintOpen(false); setSelectedQuoteRow(null); }}
@@ -1346,24 +1447,7 @@ async function loadSignageList() {
               customerName: r.customer_name,
               quoteDate: r.created_at.slice(0, 10),
               inputMode: "auto" as const,
-              items: [{
-                productType: r.request_type === "sheet" ? "전사지" : pt,
-                colorType: ((r.color_type as "dark" | "white") ?? "dark"),
-                isRaise,
-                widthMm: r.width_mm,
-                heightMm: r.height_mm,
-                thickness,
-                quantity: r.quantity ?? 0,
-                isNew: r.is_new,
-                designChanged: r.design_changed,
-                useStockMold: r.use_stock_mold,
-                moldCost: q?.mold_cost ?? 0,
-                plateCost: q?.plate_cost ?? 0,
-                sheetCost: q?.transfer_cost ?? 0,
-                workFee: q?.work_fee ?? 0,
-                V: r.request_type === "sheet" ? (q?.total ?? 0) : (q?.final_price ?? 0),
-                manualV: 0,
-              }],  
+              items: printItems,
               memo: r.memo,
               iceboxPrice: 0,
               deliveryPrice: 0,
