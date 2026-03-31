@@ -1366,7 +1366,15 @@ async function loadSignageList() {
               .map((r, i) => (
                 <tr key={i} className="border-t border-slate-200 bg-white hover:bg-slate-50">
                   <td className="px-3 py-2 text-xs text-slate-500 tabular-nums">
-                    {r[0] ? r[0].slice(0, 10) : "—"}
+                  {r[0] ? (() => {
+  // "26. 3. 30. AM 11:57 제출됨" 형식 파싱
+  const m = r[0].match(/(\d{2,4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
+  if (m) {
+    const year = m[1].length === 2 ? `20${m[1]}` : m[1];
+    return `${year}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
+  }
+  return r[0].slice(0, 10);
+})() : "—"}
                   </td>
                   <td className="px-3 py-2 font-semibold truncate">{r[1] ?? "—"}</td>
                   <td className="px-3 py-2 truncate">{r[2] ?? "—"}</td>
