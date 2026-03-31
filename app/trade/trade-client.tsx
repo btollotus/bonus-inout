@@ -370,9 +370,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const isSubAdmin = role === "SUBADMIN";
   const supabase = useMemo(() => createClient(), []);
 
-  useEffect(() => { if (typeof document !== "undefined") document.title = "BONUSMATE ERP 거래내역(통합)"; }, []);
-
-
+ 
   const [msg, setMsg] = useState<string | null>(null);
   const [showTopBtn, setShowTopBtn] = useState(false);
   const [mode, setMode] = useState<Mode>(isSubAdmin ? "ORDERS" : "UNIFIED");
