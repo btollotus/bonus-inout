@@ -726,18 +726,19 @@ useEffect(() => {
 )}
       {/* ✅ 인쇄용 CSS */}
       <style>{`
-        @media print {
-          body * { visibility: hidden !important; }
-          #bulk-print-area, #bulk-print-area * { visibility: visible !important; }
-          #bulk-print-area {
-            position: absolute !important;
-            left: 0 !important; top: 0 !important;
-            width: 100% !important;
-          }
-          body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .bulk-print-page { page-break-after: always; }
-          .bulk-print-page:last-child { page-break-after: avoid; }
-        }
+@media print {
+  body * { visibility: hidden !important; }
+  #bulk-print-area, #bulk-print-area * { visibility: visible !important; }
+  #bulk-print-area {
+    position: absolute !important;
+    left: 0 !important; top: 0 !important;
+    width: 100% !important;
+    overflow: hidden !important;
+  }
+  body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .bulk-print-page { page-break-after: always; }
+  .bulk-print-page:last-child { page-break-after: avoid; page-break-inside: avoid; }
+}
         #bulk-print-area { display: none; }
         @media print { #bulk-print-area { display: block !important; } }
       `}</style>
