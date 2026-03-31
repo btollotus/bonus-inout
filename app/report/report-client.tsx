@@ -126,7 +126,7 @@ type ColKey = "name" | "food_type" | "prev_stock" | "in" | "out" | "stock" | "ex
 
 const COLS: Record<Exclude<Category, "ALL">, { key: ColKey; label: string }[]> = {
   기성: [
-    { key: "name",       label: "품목명" },
+    { key: "name",       label: "제품명" },
     { key: "food_type",  label: "식품유형" },
     { key: "prev_stock", label: "전일재고" },
     { key: "in",         label: "입고" },
@@ -148,7 +148,7 @@ const COLS: Record<Exclude<Category, "ALL">, { key: ColKey; label: string }[]> =
     { key: "note",       label: "비고" },
   ],
   전사지: [
-    { key: "name",      label: "품목명" },
+    { key: "name",      label: "제품명" },
     { key: "food_type", label: "식품유형" },
     { key: "in",        label: "입고" },
     { key: "out",       label: "출고" },
