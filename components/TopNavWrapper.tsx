@@ -286,7 +286,8 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
 
           {/* 플로팅 버튼 */}
           {photoStatus === "idle" || photoStatus === "success" ? (
-            <div className="fixed bottom-6 right-6 z-[190] flex gap-2">
+            <div className="fixed bottom-24 right-6 z-[190] flex gap-2">
+
               {/* 카메라 버튼 */}
               <button
                 onClick={() => cameraRef.current?.click()}
