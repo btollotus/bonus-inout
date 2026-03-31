@@ -421,7 +421,7 @@ useEffect(() => {
 
       // ✅ partner_id가 있는 거래처만 일괄출력 대상 → 기본 전체 선택
       const printableIds = new Set(
-        rowsAll.filter((r) => r.partner_id).map((r) => r.partner_id as string)  // ← rowsAll로 변경
+        rowsAll.filter((r) => r.partner_id).map((r) => r.partner_id as string)
       );  
 
       setBulkPrintSelected(printableIds);
@@ -576,14 +576,20 @@ useEffect(() => {
     [shipLines]
   );
 
-  async function downloadShipExcel(date: string) {
+  // ✅ 수정: customerIds 파라미터 추가 (없으면 전체 다운로드, 있으면 선택 거래처만)
+  async function downloadShipExcel(date: string, customerIds?: string[]) {
     if (!date) return;
     setDownloadingExcel(true);
     setDownloadingExcelDate(date);
     setMsg(null);
 
     try {
-      const res = await fetch(`/api/shipments/excel?date=${encodeURIComponent(date)}`, { method: "GET" });
+      const params = new URLSearchParams({ date });
+      if (customerIds && customerIds.length > 0) {
+        params.set("customer_ids", customerIds.join(","));
+      }
+
+      const res = await fetch(`/api/shipments/excel?${params.toString()}`, { method: "GET" });
 
       if (!res.ok) {
         let errText = `엑셀 다운로드 실패 (HTTP ${res.status})`;
@@ -602,7 +608,10 @@ useEffect(() => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `송장_${date}.xlsx`;
+      // ✅ 선택 다운로드면 파일명에 건수 표시, 아니면 기존과 동일
+      a.download = customerIds && customerIds.length > 0
+        ? `송장_${date}_선택${customerIds.length}건.xlsx`
+        : `송장_${date}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -907,7 +916,7 @@ useEffect(() => {
                             출고 <span className="tabular-nums">{shipCnt}</span>건
                           </div>
                           <div className="flex gap-1">
-                            {/* ✅ 명세서 일괄출력 버튼 - 눈에 잘 띄게 */}
+                            {/* ✅ 명세서 일괄출력 버튼 */}
                             <button
                               type="button"
                               className="rounded-lg border border-blue-400 bg-blue-500 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-blue-600 active:bg-blue-700"
@@ -919,6 +928,7 @@ useEffect(() => {
                             >
                               명세서
                             </button>
+                            {/* ✅ 캘린더 셀 송장엑셀 버튼 - 전체 다운로드 유지 */}
                             <button
                               type="button"
                               className={btnMini}
@@ -1015,12 +1025,15 @@ useEffect(() => {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
+                  {/* ✅ 수정: 선택된 거래처만 엑셀 다운로드 */}
                   <button
                     className={btnOn}
-                    onClick={() => downloadShipExcel(selShipDate)}
-                    disabled={downloadingExcel || !selShipDate}
+                    onClick={() => downloadShipExcel(selShipDate, Array.from(bulkPrintSelected))}
+                    disabled={downloadingExcel || !selShipDate || bulkPrintSelected.size === 0}
                   >
-                    {downloadingExcel ? "엑셀 생성중..." : "엑셀 다운로드"}
+                    {downloadingExcel
+                      ? "엑셀 생성중..."
+                      : `엑셀 다운로드 (${bulkPrintSelected.size}건)`}
                   </button>
                   <button className={btn} onClick={() => setOpenShip(false)} disabled={downloadingExcel || bulkPrinting}>닫기</button>
                 </div>

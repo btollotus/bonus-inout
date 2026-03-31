@@ -18,6 +18,7 @@ type ShipRow = {
 
 type OrderRow = {
   id: string;
+  customer_id: string | null; // ✅ 추가 (거래처 필터링용)
   ship_date: string | null;
   customer_name: string | null;
   ship_method: string | null;
@@ -116,6 +117,12 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const date = safeStr(url.searchParams.get("date")) || ymdToday();
 
+    // ✅ 추가: customer_ids 파라미터 파싱 (없으면 null → 전체 조회)
+    const customerIdsParam = url.searchParams.get("customer_ids");
+    const customerIds = customerIdsParam
+      ? customerIdsParam.split(",").map((s) => s.trim()).filter(Boolean)
+      : null;
+
     const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL");
     const serviceKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
 
@@ -123,12 +130,19 @@ export async function GET(req: Request) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const { data: ordersData, error: oErr } = await supabase
+    // ✅ select에 customer_id 추가, customer_ids 있으면 .in() 필터 추가
+    let ordersQuery = supabase
       .from("orders")
-      .select("id,ship_date,customer_name,ship_method")
+      .select("id,customer_id,ship_date,customer_name,ship_method")
       .eq("ship_date", date)
       .not("ship_date", "is", null)
       .limit(20000);
+
+    if (customerIds && customerIds.length > 0) {
+      ordersQuery = ordersQuery.in("customer_id", customerIds);
+    }
+
+    const { data: ordersData, error: oErr } = await ordersQuery;
 
     if (oErr) throw oErr;
 
