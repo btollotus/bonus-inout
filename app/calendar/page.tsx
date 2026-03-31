@@ -736,7 +736,7 @@ useEffect(() => {
           }
           body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .bulk-print-page { page-break-after: always; }
-          .bulk-print-page:last-child { page-break-after: auto; }
+          .bulk-print-page:last-child { page-break-after: avoid; }
         }
         #bulk-print-area { display: none; }
         @media print { #bulk-print-area { display: block !important; } }
