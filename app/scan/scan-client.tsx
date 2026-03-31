@@ -67,6 +67,8 @@ type CartRow = {
   qty_ea: number;
   note: string;
   variantInfo: VariantInfo;
+  // ▼ 추가: LOT 직접 지정 시 사용 (없으면 FEFO 자동)
+  selectedLotId?: string;
 };
 
 type ProductSuggestItem = {
@@ -148,6 +150,9 @@ function barcodeCandidates(code: string) {
   return Array.from(new Set(list));
 }
 
+// LOT 직접 지정이 가능한 유형
+const LOT_SELECTABLE_TYPES: MovementType[] = ["OUT", "GIFT", "DISCARD"];
+
 export default function ScanClient() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -180,6 +185,9 @@ export default function ScanClient() {
   const [productSuggestActive, setProductSuggestActive] = useState(-1);
   const productSearchRef = useRef<HTMLInputElement>(null);
   const productSuggestWrapRef = useRef<HTMLDivElement>(null);
+
+  // ▼ 추가: LOT 직접 선택 state ("AUTO" = FEFO 자동, lot_id = 직접 지정)
+  const [selectedLotId, setSelectedLotId] = useState<string>("AUTO");
 
   useEffect(() => {
     const channel = supabase
@@ -214,7 +222,6 @@ export default function ScanClient() {
       }
     });
 
-
   useEffect(() => {
     focusBarcode();
   }, []);
@@ -223,7 +230,21 @@ export default function ScanClient() {
     if (type === "OUT" || type === "GIFT") setExpiry("");
   }, [type]);
 
+  // ▼ 추가: 유형 또는 바코드가 바뀌면 LOT 선택 초기화
+  useEffect(() => {
+    setSelectedLotId("AUTO");
+  }, [type, barcode]);
+
   const expiryDisabled = type === "OUT" || type === "GIFT";
+
+  // ▼ 추가: LOT 직접 선택이 활성화된 상태인지
+  const isLotSelectable = LOT_SELECTABLE_TYPES.includes(type) && lots.length > 0;
+
+  // ▼ 추가: 현재 선택된 LOT의 재고 수량 (수량 입력 max 제한용)
+  const selectedLot = selectedLotId !== "AUTO"
+    ? lots.find((l) => l.lot_id === selectedLotId) ?? null
+    : null;
+  const selectedLotMaxQty = selectedLot ? intMin(selectedLot.stock_qty, 0) : undefined;
 
   const scrollToLots = () => {
     requestAnimationFrame(() => {
@@ -446,12 +467,28 @@ export default function ScanClient() {
           throw new Error("소비기한 형식은 YYYY-MM-DD 입니다.");
       }
 
+      // ▼ 추가: LOT 직접 지정 시 재고 수량 초과 검증
+      const lotIdToUse = LOT_SELECTABLE_TYPES.includes(type) && selectedLotId !== "AUTO"
+        ? selectedLotId
+        : undefined;
+
+      if (lotIdToUse) {
+        const lot = lots.find((l) => l.lot_id === lotIdToUse);
+        if (lot && qty > intMin(lot.stock_qty, 0)) {
+          throw new Error(
+            `재고 초과: 선택한 LOT(${lot.expiry_date}) 재고는 ${fmtInt(lot.stock_qty)}EA 입니다.`
+          );
+        }
+      }
+
       setCart((prev) => {
         const keyMatch = (r: CartRow) => {
           if (r.type !== type) return false;
           if (r.barcode !== code) return false;
+          // ▼ 수정: LOT 직접 지정 시 같은 lot_id끼리만 합산
+          if (lotIdToUse) return r.selectedLotId === lotIdToUse;
           if (needExpiry) return r.expiry === exp;
-          return true;
+          return !r.selectedLotId; // FEFO 자동끼리만 합산
         };
 
         const idx = prev.findIndex(keyMatch);
@@ -475,6 +512,7 @@ export default function ScanClient() {
             qty_ea: qty,
             note: note || "",
             variantInfo: vInfo,
+            selectedLotId: lotIdToUse, // ▼ 추가
           },
         ];
       });
@@ -484,8 +522,12 @@ export default function ScanClient() {
       setBarcode("");
       setQtyEa("");
       setNote("");
+      setSelectedLotId("AUTO"); // ▼ 추가: 목록 추가 후 초기화
 
-      setMsg(`목록에 추가 ✅ (${type}) ${code} / 수량 ${fmtInt(qty)}EA`);
+      const lotLabel = lotIdToUse
+        ? ` (LOT: ${lots.find((l) => l.lot_id === lotIdToUse)?.expiry_date ?? lotIdToUse})`
+        : "";
+      setMsg(`목록에 추가 ✅ (${type}) ${code} / 수량 ${fmtInt(qty)}EA${lotLabel}`);
       focusBarcode();
     } catch (e: any) {
       setMsg(e?.message ?? "목록 추가 중 오류");
@@ -493,19 +535,105 @@ export default function ScanClient() {
     }
   };
 
+  // ▼ 추가: 전량 버튼 클릭 핸들러
+  const handleFullQty = async (lot: LotRow) => {
+    setMsg(null);
+    const qty = intMin(lot.stock_qty, 0);
+    if (qty <= 0) {
+      setMsg("재고가 없습니다.");
+      return;
+    }
+
+    const raw = lot.barcode;
+    try {
+      const resolved = await resolveVariantInfo(raw);
+      if (!resolved) throw new Error("등록되지 않은 바코드입니다.");
+
+      const code = resolved.code;
+      const vInfo = resolved.vInfo;
+
+      setCart((prev) => {
+        const keyMatch = (r: CartRow) =>
+          r.type === type && r.barcode === code && r.selectedLotId === lot.lot_id;
+        const idx = prev.findIndex(keyMatch);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = { ...next[idx], qty_ea: qty };
+          return next;
+        }
+        return [
+          ...prev,
+          {
+            id: uid(),
+            type,
+            barcode: code,
+            expiry: "",
+            qty_ea: qty,
+            note: note || "",
+            variantInfo: vInfo,
+            selectedLotId: lot.lot_id,
+          },
+        ];
+      });
+
+      setBarcode("");
+      setQtyEa("");
+      setNote("");
+      setSelectedLotId("AUTO");
+
+      setMsg(
+        `전량 추가 ✅ (${type}) ${code} / ${fmtInt(qty)}EA (LOT: ${lot.expiry_date})`
+      );
+      focusBarcode();
+    } catch (e: any) {
+      setMsg(e?.message ?? "전량 추가 중 오류");
+    }
+  };
+
   // ✅ workDate를 TIMESTAMPTZ 문자열로 변환 (해당 날짜 자정 KST 기준)
   const workDateTimestamp = () => `${workDate}T00:00:00+09:00`;
 
-  // ✅ OUT/GIFT 저장 — p_created_at 파라미터 추가
+  // ✅ OUT/GIFT 저장 — selectedLotId 직접 지정 분기 추가
   const issueOutGift = async (row: CartRow) => {
     const requestEA = intMin(row.qty_ea, 1);
 
+    // ▼ 추가: LOT 직접 지정인 경우 해당 lot_id로 직접 insert
+    if (row.selectedLotId) {
+      // 최신 재고 재확인
+      const { data: lotData, error: lotErr } = await supabase
+        .from("v_stock_by_lot")
+        .select("stock_qty")
+        .eq("lot_id", row.selectedLotId)
+        .maybeSingle();
+
+      if (lotErr) throw new Error(lotErr.message);
+
+      const currentStock = intMin((lotData as any)?.stock_qty ?? 0, 0);
+      if (requestEA > currentStock) {
+        throw new Error(
+          `재고 부족(LOT: ${row.selectedLotId}): 현재 ${fmtInt(currentStock)}EA / 요청 ${fmtInt(requestEA)}EA`
+        );
+      }
+
+      const { error: mErr } = await supabase.from("movements").insert({
+        lot_id: row.selectedLotId,
+        type: row.type,
+        qty: requestEA,
+        note: row.note || null,
+        created_at: workDateTimestamp(),
+      });
+      if (mErr) throw new Error(mErr.message);
+
+      return { requestEA };
+    }
+
+    // 기존 FEFO 자동 로직 (변경 없음)
     const { error: rpcErr } = await supabase.rpc("fefo_issue_by_barcode", {
       p_barcode: row.barcode,
       p_type: row.type,
       p_qty_ea: requestEA,
       p_note: row.note || null,
-      p_created_at: workDateTimestamp(), // ✅ 작업일자 전달
+      p_created_at: workDateTimestamp(),
     });
 
     if (!rpcErr) return { requestEA };
@@ -535,7 +663,7 @@ export default function ScanClient() {
       type: MovementType;
       qty: number;
       note?: string | null;
-      created_at: string; // ✅ 추가
+      created_at: string;
     }[] = [];
 
     for (const lot of fefoLots) {
@@ -549,7 +677,7 @@ export default function ScanClient() {
         type: row.type,
         qty: use,
         note: row.note || null,
-        created_at: workDateTimestamp(), // ✅ 작업일자 전달
+        created_at: workDateTimestamp(),
       });
       remain -= use;
     }
@@ -562,7 +690,7 @@ export default function ScanClient() {
     return { requestEA };
   };
 
-  // ✅ IN/DISCARD 저장 — created_at 추가
+  // ✅ IN/DISCARD 저장 — 변경 없음
   const saveInDiscard = async (row: CartRow) => {
     if (!row.expiry) throw new Error(`소비기한 누락: ${row.barcode}`);
     if (!isValidDateYYYYMMDD(row.expiry))
@@ -586,7 +714,7 @@ export default function ScanClient() {
       type: row.type,
       qty: eachQty,
       note: row.note || null,
-      created_at: workDateTimestamp(), // ✅ 작업일자 전달
+      created_at: workDateTimestamp(),
     });
 
     if (mErr) throw new Error(mErr.message);
@@ -625,6 +753,9 @@ export default function ScanClient() {
 
       for (const row of cart) {
         if (row.type === "OUT" || row.type === "GIFT") {
+          await issueOutGift(row);
+        } else if (row.type === "DISCARD" && row.selectedLotId) {
+          // ▼ 추가: DISCARD도 LOT 직접 지정인 경우 issueOutGift 방식으로 처리
           await issueOutGift(row);
         } else {
           await saveInDiscard(row);
@@ -1144,6 +1275,8 @@ export default function ScanClient() {
               ].join(" ")}
               type="number"
               min={1}
+              // ▼ 추가: LOT 직접 지정 시 해당 LOT 재고를 max로 제한
+              max={selectedLotMaxQty}
               value={qtyEa}
               placeholder="수량 입력"
               onChange={(e) => {
@@ -1156,7 +1289,13 @@ export default function ScanClient() {
             {qtyEa === "" && (
               <div className="mt-1 text-xs text-red-500">⚠ 수량을 입력하세요. (1 이상)</div>
             )}
-            {qtyEa !== "" && (
+            {/* ▼ 추가: LOT 직접 지정 시 최대 수량 안내 */}
+            {qtyEa !== "" && selectedLotMaxQty !== undefined && (
+              <div className="mt-1 text-xs text-amber-600">
+                ⚠ 선택 LOT 최대 {fmtInt(selectedLotMaxQty)}EA
+              </div>
+            )}
+            {qtyEa !== "" && selectedLotMaxQty === undefined && (
               <div className="mt-1 text-xs text-slate-500">
                 저장/재고 계산 기준: <span className="text-slate-900">EA(낱개)</span>
               </div>
@@ -1265,7 +1404,7 @@ export default function ScanClient() {
                 </tr>
               ) : (
                 cart.map((r) => {
-                  const needExpiry = r.type === "IN" || r.type === "DISCARD";
+                  const needExpiry = r.type === "IN" || (r.type === "DISCARD" && !r.selectedLotId);
                   const expiryOk = !needExpiry || isValidDateYYYYMMDD(r.expiry);
 
                   return (
@@ -1319,6 +1458,11 @@ export default function ScanClient() {
                               );
                             }}
                           />
+                        ) : r.selectedLotId ? (
+                          // ▼ 추가: LOT 직접 지정인 경우 소비기한 표시
+                          <span className="text-slate-700 font-mono text-xs">
+                            {lots.find((l) => l.lot_id === r.selectedLotId)?.expiry_date ?? "LOT 지정"}
+                          </span>
                         ) : (
                           <span className="text-slate-400">자동(FEFO)</span>
                         )}
@@ -1381,7 +1525,7 @@ export default function ScanClient() {
         </div>
       </div>
 
-      {/* 재고 테이블 */}
+      {/* 재고 테이블 — LOT 선택 UI 추가 */}
       <div className="mt-10" ref={lotsSectionRef}>
         <h2 className="text-lg font-semibold">해당 바코드 LOT 재고</h2>
 
@@ -1389,28 +1533,111 @@ export default function ScanClient() {
           <table className="w-full text-sm">
             <thead className={thead}>
               <tr>
+                {/* ▼ 추가: LOT 선택 가능한 유형일 때 선택 컬럼 표시 */}
+                {isLotSelectable && (
+                  <th className="p-3 text-left w-10">선택</th>
+                )}
                 <th className="p-3 text-left">제품명</th>
                 <th className="p-3 text-left">구분</th>
                 <th className="p-3 text-left">소비기한</th>
                 <th className="p-3 text-right">재고(EA)</th>
+                {/* ▼ 추가: 전량 버튼 컬럼 */}
+                {isLotSelectable && (
+                  <th className="p-3 text-center">전량 출고</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {lots.length === 0 ? (
                 <tr>
-                  <td className="p-3 text-slate-500" colSpan={4}>
+                  <td className="p-3 text-slate-500" colSpan={isLotSelectable ? 6 : 4}>
                     바코드를 스캔하면 자동으로 조회됩니다. (재고 0 LOT은 표시되지 않습니다)
                   </td>
                 </tr>
               ) : (
-                lots.map((r) => (
-                  <tr key={r.lot_id} className={tr}>
-                    <td className="p-3">{r.product_name}</td>
-                    <td className="p-3">{r.product_category ?? "-"}</td>
-                    <td className="p-3">{r.expiry_date}</td>
-                    <td className="p-3 text-right">{fmtInt(intMin(r.stock_qty ?? 0, 0))}</td>
-                  </tr>
-                ))
+                <>
+                  {/* ▼ 추가: 자동(FEFO) 선택 행 */}
+                  {isLotSelectable && (
+                    <tr className={tr}>
+                      <td className="p-3">
+                        <input
+                          type="radio"
+                          name="lot-select"
+                          checked={selectedLotId === "AUTO"}
+                          onChange={() => {
+                            setSelectedLotId("AUTO");
+                            setQtyEa("");
+                          }}
+                          className="accent-blue-600"
+                        />
+                      </td>
+                      <td className="p-3 text-slate-500 italic" colSpan={3}>
+                        자동(FEFO) — 소비기한 빠른 순으로 자동 차감
+                      </td>
+                      <td className="p-3 text-right text-slate-400">
+                        {fmtInt(lots.reduce((s, l) => s + intMin(l.stock_qty, 0), 0))} EA 합계
+                      </td>
+                      <td className="p-3" />
+                    </tr>
+                  )}
+                  {lots.map((r) => {
+                    const isSelected = selectedLotId === r.lot_id;
+                    return (
+                      <tr
+                        key={r.lot_id}
+                        className={[
+                          tr,
+                          isLotSelectable && isSelected
+                            ? "bg-blue-50"
+                            : "",
+                        ].join(" ")}
+                      >
+                        {/* ▼ 추가: 라디오 선택 */}
+                        {isLotSelectable && (
+                          <td className="p-3">
+                            <input
+                              type="radio"
+                              name="lot-select"
+                              checked={isSelected}
+                              onChange={() => {
+                                setSelectedLotId(r.lot_id);
+                                setQtyEa("");
+                              }}
+                              className="accent-blue-600"
+                            />
+                          </td>
+                        )}
+                        <td className="p-3">{r.product_name}</td>
+                        <td className="p-3">{r.product_category ?? "-"}</td>
+                        <td className={[
+                          "p-3 font-mono",
+                          isLotSelectable && isSelected ? "font-semibold text-blue-700" : "",
+                        ].join(" ")}>
+                          {r.expiry_date}
+                        </td>
+                        <td className="p-3 text-right">
+                          {fmtInt(intMin(r.stock_qty ?? 0, 0))}
+                          {isLotSelectable && isSelected && (
+                            <span className="ml-1 text-xs text-blue-600">← 선택됨</span>
+                          )}
+                        </td>
+                        {/* ▼ 추가: 전량 버튼 */}
+                        {isLotSelectable && (
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100 active:bg-amber-200 disabled:opacity-40"
+                              disabled={loading || intMin(r.stock_qty, 0) <= 0}
+                              onClick={() => handleFullQty(r)}
+                            >
+                              전량 ({fmtInt(intMin(r.stock_qty, 0))}EA)
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </>
               )}
             </tbody>
           </table>
@@ -1419,6 +1646,12 @@ export default function ScanClient() {
         {variantInfo && (
           <div className="mt-2 text-xs text-slate-500">
             ※ 참고사항(품목 등록값): ea/box={variantInfo.pack_unit} (현재 화면/저장은 EA만 사용)
+          </div>
+        )}
+        {/* ▼ 추가: LOT 선택 안내 */}
+        {isLotSelectable && (
+          <div className="mt-1 text-xs text-slate-500">
+            ※ 출고/증정/폐기 시 특정 소비기한 LOT을 직접 선택할 수 있습니다. 선택한 LOT의 재고 수량 범위 내에서만 출고 가능합니다.
           </div>
         )}
       </div>
