@@ -964,8 +964,9 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
         const workOrderNo = `WO-${todayStr}-${barcodeNo.slice(-4)}`;
 
         const firstItemName = cleanLines[0]?.name ?? "";
-        const productName = orderTitle.trim()
-          || (firstItemName ? `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${firstItemName}` : selectedPartner.name);
+        const productName = firstItemName
+  ? `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${firstItemName}`
+  : selectedPartner.name;
         const foodType = cleanLines[0]?.food_type || null;
 
         const { data: createdWo, error: woErr } = await supabase.from("work_orders").insert({
