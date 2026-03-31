@@ -1,8 +1,5 @@
 "use client";
 
-import type { Metadata } from "next";
-export const metadata: Metadata = { title: "세무 | BONUSMATE ERP" };
-
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
@@ -179,7 +176,7 @@ export default function TaxClient() {
 
   // ✅ 탭 타이틀
   useEffect(() => {
-    document.title = "BONUSMATE ERP 세무";
+    document.title = "세무 | BONUSMATE ERP";
   }, []);
 
   function normCat(s: string | null | undefined) {
