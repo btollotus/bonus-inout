@@ -597,14 +597,14 @@ export default function PayrollPage() {
       for (let i = 0; i < updatedRows.length; i++) {
         const row = updatedRows[i]
         const payload = { ...buildPayload(row), status: row.status }
-        if (row.id) {
-          const { error } = await supabase.from('payroll_draft').update(payload).eq('id', row.id)
-          if (error) throw new Error(`${row.employee_name} 저장 실패: ${error.message}`)
-        } else {
-          const { data, error } = await supabase.from('payroll_draft').insert([payload]).select().single()
-          if (error) throw new Error(`${row.employee_name} 저장 실패: ${error.message}`)
-          if (data) updatedRows[i] = { ...row, id: data.id }
-        }
+        const { data, error } = await supabase
+        .from('payroll_draft')
+        .upsert([payload], { onConflict: 'employee_id,pay_month' })
+        .select()
+        .single()
+      
+      if (error) throw new Error(`${row.employee_name} 저장 실패: ${error.message}`)
+      if (data) updatedRows[i] = { ...row, id: data.id }
       }
       setRows(updatedRows)
       if (updatedRows.some(r => r.status === 'final')) {
@@ -1251,7 +1251,7 @@ export default function PayrollPage() {
                         </>
                       ):(
                         <>
-                          <button onClick={handleSaveDraft} disabled={loading} className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-5 py-2 rounded-lg disabled:opacity-50">{loading?'저장 중...':'💾 전체 저장'}</button>
+                          <button onClick={handleSaveDraft} disabled={loading} className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-5 py-2 rounded-lg disabled:opacity-50">{loading?'저장 중...':'💾 임시 저장'}</button>
                           <button onClick={handleFinalize} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2 rounded-lg disabled:opacity-50">✓ 최종 확정</button>
                         </>
                       )}
