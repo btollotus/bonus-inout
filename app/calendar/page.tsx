@@ -1,9 +1,6 @@
 // app/calendar/page.tsx
 "use client";
 
-import type { Metadata } from "next";
-export const metadata: Metadata = { title: "출고캘린더 | BONUSMATE ERP" };
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
@@ -240,7 +237,7 @@ useEffect(() => {
     sumTotal: number;
   };
   const [bulkSpecData, setBulkSpecData] = useState<BulkSpecPartner[]>([]);
-  const [bulkSpecLoading, setBulkSpecLoading] = useState(false);
+ // const [bulkSpecLoading, setBulkSpecLoading] = useState(false);
   const [bulkSpecDate, setBulkSpecDate] = useState("");
 
   const OUR = {
@@ -270,7 +267,7 @@ useEffect(() => {
   }, [memos]);
 
   useEffect(() => {
-    document.title = "BONUSMATE ERP 출고캘린더";
+    document.title = "출고캘린더 | BONUSMATE ERP";
   }, []);
 
   function openSpec(partnerId: string | null, date: string) {
@@ -404,7 +401,7 @@ useEffect(() => {
     setShipRows([]);
     setOpenShip(true);
     // ✅ 모달 열릴 때 기본적으로 전체 선택
-    setBulkPrintSelected(new Set());
+   // setBulkPrintSelected(new Set());
 
     try {
       const { data, error } = await supabase
@@ -443,7 +440,7 @@ useEffect(() => {
     }
 
     setBulkPrinting(true);
-    setBulkSpecLoading(true);
+   // setBulkSpecLoading(true);
     setBulkSpecDate(selShipDate);
     setBulkSpecData([]);
 
@@ -543,8 +540,8 @@ useEffect(() => {
     } catch (e: any) {
       setMsg(e?.message ?? "일괄출력 오류");
     } finally {
-      setBulkPrinting(false);
-      setBulkSpecLoading(false);
+     setBulkPrinting(false);
+  //    setBulkSpecLoading(false);
     }
   }
 
@@ -1084,9 +1081,9 @@ useEffect(() => {
                           onClick={doBulkPrint}
                           disabled={bulkPrinting || bulkPrintSelected.size === 0}
                         >
-                          {bulkPrinting
-                            ? `출력중... (${bulkPrintSelected.size}건)`
-                            : bulkSpecLoading ? "데이터 로딩중..." : `선택 ${bulkPrintSelected.size}건 일괄출력`}
+{bulkPrinting
+  ? `출력중... (${bulkPrintSelected.size}건)`
+  : `선택 ${bulkPrintSelected.size}건 일괄출력`}
                         </button>
                       </div>
                     </div>
