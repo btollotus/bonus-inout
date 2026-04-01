@@ -923,26 +923,26 @@ export default function ReportClient() {
                     food_type: foodTypeCell,
                     prev_stock: (
                       <div className="text-right leading-tight">
-                        <div>{toBoxAndEa(sEA, unit).boxText}</div>
-                        <div className="text-xs text-black/60 print-sub">{toBoxAndEa(sEA, unit).eaText}</div>
+                        <div className="font-semibold">{toBoxAndEa(sEA, unit).boxText}</div>
+                        <div className="text-sm font-medium text-black/80 print-sub">{toBoxAndEa(sEA, unit).eaText}</div>
                       </div>
                     ),
                     in: (
                       <div className="text-right leading-tight">
-                        <div>{toBoxAndEa(inEA, unit).boxText}</div>
-                        <div className="text-xs text-black/60 print-sub">{toBoxAndEa(inEA, unit).eaText}</div>
+                        <div className="font-semibold">{toBoxAndEa(inEA, unit).boxText}</div>
+                        <div className="text-sm font-medium text-black/80 print-sub">{toBoxAndEa(inEA, unit).eaText}</div>
                       </div>
                     ),
                     out: (
                       <div className="text-right leading-tight">
-                        <div>{toBoxAndEa(outEA, unit).boxText}</div>
-                        <div className="text-xs text-black/60 print-sub">{toBoxAndEa(outEA, unit).eaText}</div>
+                        <div className="font-semibold">{toBoxAndEa(outEA, unit).boxText}</div>
+                        <div className="text-sm font-medium text-black/80 print-sub">{toBoxAndEa(outEA, unit).eaText}</div>
                       </div>
                     ),
                     stock: (
                       <div className="text-right leading-tight">
-                        <div>{toBoxAndEa(eEA, unit).boxText}</div>
-                        <div className="text-xs text-black/60 print-sub">{toBoxAndEa(eEA, unit).eaText}</div>
+                        <div className="font-semibold">{toBoxAndEa(eEA, unit).boxText}</div>
+                        <div className="text-sm font-medium text-black/80 print-sub">{toBoxAndEa(eEA, unit).eaText}</div>
                       </div>
                     ),
                     expiry: safeStr(r.expiry_date),
