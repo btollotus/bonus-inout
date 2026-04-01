@@ -535,13 +535,17 @@ useEffect(() => {
       setBulkSpecData(result);
 
       // 데이터 렌더링 후 인쇄
-      await new Promise<void>((resolve) => {
-        const img = document.querySelector<HTMLImageElement>("#bulk-print-area img[src='/stamp.png']");
-        if (!img || img.complete) return resolve();
-        img.onload = () => resolve();
-        img.onerror = () => resolve(); // 오류여도 진행
-      });
-      window.print();
+// 데이터 렌더링 후 인쇄 (이미지 로드 완료 또는 300ms 중 먼저 완료되는 것을 기다림)
+await Promise.race([
+  new Promise<void>((resolve) => {
+    const img = document.querySelector<HTMLImageElement>("#bulk-print-area img[src='/stamp.png']");
+    if (!img || img.complete) return resolve();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+  }),
+  new Promise<void>((resolve) => setTimeout(resolve, 300)),
+]);
+window.print();
 
     } catch (e: any) {
       setMsg(e?.message ?? "일괄출력 오류");
