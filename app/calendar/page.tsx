@@ -235,6 +235,7 @@ useEffect(() => {
     sumSupply: number;
     sumVat: number;
     sumTotal: number;
+    ordererName: string; // ✅ 추가
   };
   const [bulkSpecData, setBulkSpecData] = useState<BulkSpecPartner[]>([]);
  // const [bulkSpecLoading, setBulkSpecLoading] = useState(false);
@@ -458,16 +459,42 @@ useEffect(() => {
       for (const p of (partnerData ?? [])) partnerMap.set(String(p.id), p);
 
       // 2) 주문 조회
+      const CHANNEL_CUSTOMERS = new Set(["네이버-판매", "쿠팡-판매", "카카오플러스-판매"]);
+
+      function extractOrdererName(memo: string | null | undefined) {
+        const s = String(memo ?? "").trim();
+        if (!s) return "";
+        if (s.startsWith("{") && s.endsWith("}")) {
+          try {
+            const obj = JSON.parse(s);
+            const v = obj?.orderer_name;
+            if (v !== undefined && v !== null && String(v).trim() !== "") return String(v).trim();
+          } catch {}
+        }
+        const m = s.match(/"orderer_name"\s*:\s*"([^"]*)"/);
+        if (m && m[1] !== undefined) return String(m[1]).trim();
+        return "";
+      }
+      
       const { data: orderData, error: oErr } = await supabase
         .from("orders")
-        .select("id,customer_id,customer_name")
+        .select("id,customer_id,customer_name,memo") // ✅ memo 추가
         .eq("ship_date", selShipDate)
         .in("customer_id", ids);
       if (oErr) throw oErr;
-
+      
       const orderIds = (orderData ?? []).map((o: any) => String(o.id));
       const orderToPartner = new Map<string, string>();
       for (const o of (orderData ?? [])) orderToPartner.set(String(o.id), String(o.customer_id));
+      
+      // ✅ 파트너별 첫 번째 주문의 orderer_name 추출
+      const orderMemoMap = new Map<string, string>();
+      for (const o of (orderData ?? []) as any[]) {
+        const pid = String(o.customer_id);
+        if (!orderMemoMap.has(pid)) {
+          orderMemoMap.set(pid, extractOrdererName(o.memo));
+        }
+      }
 
       // 3) 주문 라인 조회
       const { data: lineData, error: lErr } = await supabase
@@ -529,6 +556,9 @@ useEffect(() => {
             sumSupply,
             sumVat,
             sumTotal,
+            ordererName: CHANNEL_CUSTOMERS.has(String(p.name ?? "")) // ✅ 추가
+            ? (orderMemoMap.get(id) ?? "")
+            : "",
           };
         });
 
@@ -746,9 +776,9 @@ useEffect(() => {
       <div id="bulk-print-area">
         {bulkSpecData.map((p) => (
           <div key={p.partnerId} className="bulk-print-page" style={{ padding: "24px", fontFamily: "sans-serif" }}>
-            <div style={{ fontSize: "18px", fontWeight: "bold", marginBottom: "16px" }}>
-              거래명세서 {bulkSpecDate.replaceAll("-", "/")}
-            </div>
+<div style={{ fontSize: "18px", fontWeight: "bold", marginBottom: "16px" }}>
+  거래명세서 {bulkSpecDate.replaceAll("-", "/")}{p.ordererName ? ` ${p.ordererName}` : ""}
+</div>
 
             {/* 양측 정보 */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "16px" }}>
