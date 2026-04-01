@@ -204,7 +204,7 @@ function buildMemoText(r: UnifiedRow) {
       .map((s) => {
         const msg = String(s.delivery_message ?? "").trim();
         const mobile = String(s.ship_to_mobile ?? "").trim(), phone = String(s.ship_to_phone ?? "").trim();
-        return `- 배송지${s.seq}: ${s.ship_to_name}\n  주소: ${s.ship_to_address1}\n  연락처: ${mobile || "-"} / ${phone || "-"}${msg ? `\n  요청사항: ${msg}` : ""}`;
+        return `- 배송지${s.seq}: ${s.ship_to_name}\n  주소: ${s.ship_to_address1}\n  연락처: ${mobile || "-"} / ${phone || "-"}${msg ? `\n  배송메세지: ${msg}` : ""}`;
       }).join("\n");
     const rows = (r.order_lines ?? []).map((l, idx) => {
       const qty = Number(l.qty ?? 0), unit = Number(l.unit ?? 0), totalAmount = Number(l.total_amount ?? 0);
@@ -275,7 +275,7 @@ function ShipmentForm({ label, value, onChange, cls, namePrefix }: {
       <div className="mb-2 text-sm font-semibold">{label}</div>
       <ImeSafeInput className={cls} placeholder="수화주명" value={value.name} name={`${namePrefix}_name`} autoComplete="off" onValueChange={(v) => onChange({ name: v })} />
       <ImeSafeInput className={cls} placeholder="주소1" value={value.addr} name={`${namePrefix}_addr`} autoComplete="off" onValueChange={(v) => onChange({ addr: v })} />
-      <ImeSafeInput className={cls} placeholder="요청사항" value={value.msg} name={`${namePrefix}_msg`} autoComplete="off" onValueChange={(v) => onChange({ msg: v })} />
+      <ImeSafeInput className={cls} placeholder="배송메세지" value={value.msg} name={`${namePrefix}_msg`} autoComplete="off" onValueChange={(v) => onChange({ msg: v })} />
       <div className="grid grid-cols-2 gap-2">
         <ImeSafeInput className={cls} placeholder="휴대폰" value={value.mobile} name={`${namePrefix}_mobile`} autoComplete="off" onValueChange={(v) => onChange({ mobile: v })} />
         <ImeSafeInput className={cls} placeholder="전화" value={value.phone} name={`${namePrefix}_phone`} autoComplete="off" onValueChange={(v) => onChange({ phone: v })} />
@@ -334,7 +334,7 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
 
 const LineHeader = ({ gridCols }: { gridCols: string }) => (
   <div className={`mt-3 grid ${gridCols} gap-2 text-xs text-slate-600`}>
-    {["식품유형", "품목명", "무게(g)", "수량", "단가", "공급가", "부가세", "총액(입력)", ""].map((h, i) => (
+    {["식품유형", "제품명", "무게(g)", "수량", "단가", "공급가", "부가세", "총액(입력)", ""].map((h, i) => (
       <div key={i} className={i < 8 ? "pl-3" : ""}>{h}</div>
     ))}
   </div>
@@ -933,7 +933,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
     const noAmountLine = lines.find((l) => l.name.trim() && toInt(l.qty) > 0 && calcLineAmounts(toInt(l.qty), toIntSigned(l.unit), l.total_incl_vat).total === 0);
     if (noAmountLine) return setMsg(`"${noAmountLine.name.trim()}" 품목의 단가 또는 총액을 입력하세요.`);
     
-    if (cleanLines.length === 0) return setMsg("품목명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
+    if (cleanLines.length === 0) return setMsg("제품명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
 
     const { data: createdOrder, error: oErr } = await supabase.from("orders").insert({
       customer_id: selectedPartner.id, customer_name: selectedPartner.name, title: null,
@@ -1529,7 +1529,7 @@ if (woSubNameVal) {
         const r = calcLineAmounts(qty, unit, l.total_incl_vat);
         return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total };
       }).filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) !== 0);
-      if (cleanLines.length === 0) return setMsg("품목명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
+      if (cleanLines.length === 0) return setMsg("제품명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
       const { error } = await supabase.from("orders").update({ ship_date: eShipDate, ship_method: eShipMethod, memo: JSON.stringify({ title: eOrderTitle.trim() || null, orderer_name: eOrdererName.trim() || null }), supply_amount: editOrderTotals.supply, vat_amount: editOrderTotals.vat, total_amount: editOrderTotals.total }).eq("id", editRow.rawId);
       if (error) return setMsg(error.message);
       await supabase.from("order_lines").delete().eq("order_id", editRow.rawId);
@@ -1869,7 +1869,7 @@ if (woSubNameVal) {
                           <span className="text-xs text-orange-600">주문과 연결된 작업지시서도 함께 저장됩니다</span>
                         </div>
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                          <div><div className="mb-1 text-xs text-slate-600">품목명</div><input className={inp} value={eWoProductName} onChange={(e) => setEWoProductName(e.target.value)} /></div>
+                          <div><div className="mb-1 text-xs text-slate-600">제품명</div><input className={inp} value={eWoProductName} onChange={(e) => setEWoProductName(e.target.value)} /></div>
                           <div><div className="mb-1 text-xs text-slate-600">서브네임</div><input className={inp} placeholder="예: COS, 크로버" value={eWoSubName} onChange={(e) => setEWoSubName(e.target.value)} /></div>
                           <div><div className="mb-1 text-xs text-slate-600">식품유형</div><input className={inp} list="food-types-list" placeholder="예: 화이트초콜릿" value={eWoFoodType} onChange={(e) => setEWoFoodType(e.target.value)} /></div>
                           <div><div className="mb-1 text-xs text-slate-600">규격(로고스펙)</div><input className={inp} placeholder="예: 40x40mm" value={eWoLogoSpec} onChange={(e) => setEWoLogoSpec(e.target.value)} /></div>
@@ -2328,7 +2328,7 @@ if (woSubNameVal) {
              
                 </div>
               </div>
-              <div className="mb-3"><input className={inp} value={tradeSearch} onChange={(e) => setTradeSearch(e.target.value)} placeholder="검색: 매입처/사업자번호/메모/품목명/카테고리/방법" /></div>
+              <div className="mb-3"><input className={inp} value={tradeSearch} onChange={(e) => setTradeSearch(e.target.value)} placeholder="검색: 매입처/사업자번호/메모/제품명/카테고리/방법" /></div>
 
               <div className="rounded-2xl border border-slate-200">
                 <div ref={tradeTopScrollRef} className="overflow-x-auto"
@@ -2625,7 +2625,7 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
         <tbody>
           <tr><td style={thS}>거래처명</td><td style={tdS}>{wo.client_name}{wo.sub_name ? ` (${wo.sub_name})` : ""}</td><td style={thS}>납기일</td><td style={{ ...tdS, fontWeight: "bold" }}>{deliveryDate}{deliveryDate ? ` (${["일","월","화","수","목","금","토"][new Date(deliveryDate + "T00:00:00+09:00").getDay()]})` : ""}</td></tr>
-          <tr><td style={thS}>품목명</td><td style={tdS} colSpan={3}>{productNameDisplay}</td></tr>
+          <tr><td style={thS}>제품명</td><td style={tdS} colSpan={3}>{productNameDisplay}</td></tr>
           <tr><td style={thS}>식품유형</td><td style={tdS}>{wo.food_type ?? "—"}</td><td style={thS}>두께</td><td style={tdS}>{wo.thickness ?? "—"}</td></tr>
           <tr><td style={thS}>규격(로고)</td><td style={tdS}>{wo.logo_spec ?? "—"}</td><td style={thS}>포장방법</td><td style={tdS}>{wo.packaging_type ?? "—"}{wo.packaging_type === "트레이" && wo.tray_slot ? ` / ${wo.tray_slot}` : ""}</td></tr>
           <tr><td style={thS}>포장단위</td><td style={tdS}>{wo.package_unit ?? "—"}</td><td style={thS}>장/성형틀</td><td style={tdS}>{wo.mold_per_sheet ? `${wo.mold_per_sheet}개` : "—"}</td></tr>

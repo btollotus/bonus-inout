@@ -142,12 +142,11 @@ export async function GET(req: Request) {
     });
 
     let ordersQuery = supabase
-    .from("orders")
-    .select("id,customer_id,ship_date,customer_name,ship_method")
-    .eq("ship_date", date)
-    .not("ship_date", "is", null)
-    .order("created_at", { ascending: true }) // ✅ 입력 순서 보장
-    .limit(20000);
+      .from("orders")
+      .select("id,customer_id,ship_date,customer_name,ship_method")
+      .eq("ship_date", date)
+      .not("ship_date", "is", null)
+      .limit(20000);
 
     if (customerIds && customerIds.length > 0) {
       ordersQuery = ordersQuery.in("customer_id", customerIds);
@@ -157,14 +156,7 @@ export async function GET(req: Request) {
 
     if (oErr) throw oErr;
 
-    const ordersAll = (ordersData ?? []) as OrderRow[];
-
-    // ✅ 일반 거래처 먼저, 3개 특정 거래처(네이버/카카오/쿠팡) 나중 — 각 그룹 내 입력 순서 유지
-    const orders = [
-      ...ordersAll.filter((o) => !ITEM_NAME_CUSTOMERS.has(safeStr(o.customer_name))),
-      ...ordersAll.filter((o) => ITEM_NAME_CUSTOMERS.has(safeStr(o.customer_name))),
-    ];
-
+    const orders = (ordersData ?? []) as OrderRow[];
     const orderIds = orders.map((o) => o.id);
 
     if (orderIds.length === 0) {
