@@ -157,6 +157,12 @@ export async function GET(req: Request) {
     if (oErr) throw oErr;
 
     const orders = (ordersData ?? []) as OrderRow[];
+    // ✅ 일반 거래처 먼저, 3개 특정 거래처(네이버/카카오/쿠팡) 나중 — 각 그룹 내 입력 순서 유지
+    const orders = [
+      ...ordersRaw.filter((o) => !ITEM_NAME_CUSTOMERS.has(safeStr(o.customer_name))),
+      ...ordersRaw.filter((o) => ITEM_NAME_CUSTOMERS.has(safeStr(o.customer_name))),
+    ];
+
     const orderIds = orders.map((o) => o.id);
 
     if (orderIds.length === 0) {
