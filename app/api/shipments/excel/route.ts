@@ -35,17 +35,17 @@ type OrderLineRow = {
   name: string | null;
   qty: number | null;
   unit_type: string | null;
-  total_amount: number | null; // ✅ 추가: 택배비 금액 읽기용
+  total_amount: number | null;
 };
 
 // ✅ 이 3개 거래처는 제품명을 "품목명-수량" 형식으로 표시
 const ITEM_NAME_CUSTOMERS = new Set(["카카오플러스-판매", "네이버-판매", "쿠팡-판매"]);
 
 const FIX_QTY = 1;
-const DEFAULT_FEE = 3300; // ✅ 기본값 (택배비 품목이 없을 때 fallback)
+const DEFAULT_FEE = 3300;
+const DEFAULT_DELIVERY_MESSAGE = "당일배송바랍니다";
 const FIX_PREPAID = "010";
 const FIX_JEJU_PREPAID = "010";
-const FIX_DELIVERY_MESSAGE = "당일배송바랍니다";
 
 function ymdToday() {
   const d = new Date();
@@ -79,7 +79,6 @@ function buildProductName(clientName: string | null, subName: string | null): st
   return `*****${client}`;
 }
 
-// ✅ 3개 거래처용: 품목명-수량 형식 (전체 표시, 택배비/성형틀/인쇄제판 제외)
 const EXCLUDE_ITEM_PREFIXES = ["택배비", "성형틀", "인쇄제판"];
 
 function isExcludedItem(name: string): boolean {
@@ -100,9 +99,6 @@ function buildItemProductName(lines: OrderLineRow[]): string {
     .join(" / ");
 }
 
-// ✅ 주문의 order_lines에서 택배비 품목의 total_amount 추출
-// "택배비"로 시작하는 라인 중 첫 번째 항목의 total_amount 반환
-// 없으면 DEFAULT_FEE(3300) 반환
 function getShippingFee(lines: OrderLineRow[]): number {
   const feeLine = lines.find((l) => safeStr(l.name).startsWith("택배비"));
   if (!feeLine) return DEFAULT_FEE;
@@ -128,7 +124,6 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const date = safeStr(url.searchParams.get("date")) || ymdToday();
 
-    // 추가: customer_ids 파라미터 파싱 (없으면 null → 전체 조회)
     const customerIdsParam = url.searchParams.get("customer_ids");
     const customerIds = customerIdsParam
       ? customerIdsParam.split(",").map((s) => s.trim()).filter(Boolean)
@@ -146,6 +141,7 @@ export async function GET(req: Request) {
       .select("id,customer_id,ship_date,customer_name,ship_method")
       .eq("ship_date", date)
       .not("ship_date", "is", null)
+      .order("created_at", { ascending: true })
       .limit(20000);
 
     if (customerIds && customerIds.length > 0) {
@@ -156,7 +152,13 @@ export async function GET(req: Request) {
 
     if (oErr) throw oErr;
 
-    const orders = (ordersData ?? []) as OrderRow[];
+    const ordersAll = (ordersData ?? []) as OrderRow[];
+
+    const orders = [
+      ...ordersAll.filter((o) => !ITEM_NAME_CUSTOMERS.has(safeStr(o.customer_name))),
+      ...ordersAll.filter((o) => ITEM_NAME_CUSTOMERS.has(safeStr(o.customer_name))),
+    ];
+
     const orderIds = orders.map((o) => o.id);
 
     if (orderIds.length === 0) {
@@ -202,7 +204,6 @@ export async function GET(req: Request) {
       }
     }
 
-    // ✅ 전체 주문의 order_lines 조회 (택배비 + 3개 거래처 품목명 모두 처리)
     const { data: lineData } = await supabase
       .from("order_lines")
       .select("order_id,name,qty,unit_type,total_amount")
@@ -246,31 +247,31 @@ export async function GET(req: Request) {
       let productName: string;
 
       if (ITEM_NAME_CUSTOMERS.has(customerName)) {
-        // 3개 거래처: 품목명-수량 형식
         productName = buildItemProductName(lines);
       } else {
-        // 일반 거래처: 기존 방식
         const wo = woByOrder.get(oid);
         productName = wo
           ? buildProductName(wo.client_name, wo.sub_name)
           : buildProductName(o.customer_name, null);
       }
 
-      // ✅ 해당 주문의 택배비 라인에서 실제 금액 추출 (없으면 3300 기본값)
       const shippingFee = getShippingFee(lines);
 
       for (const s of targetShips) {
+        // delivery_message가 있으면 그 값, 없으면 기본값 사용
+        const deliveryMessage = safeStr(s?.delivery_message) || DEFAULT_DELIVERY_MESSAGE;
+
         ws.addRow([
           s ? safeStr(s.ship_to_name) : "",
           s ? buildAddress(s.ship_to_address1, s.ship_to_address2) : "",
           s ? safeStr(s.ship_to_mobile) : "",
           s ? safeStr(s.ship_to_phone) : "",
           FIX_QTY,
-          shippingFee, // ✅ 하드코딩 FIX_FEE 대신 실제 주문별 택배비 사용
+          shippingFee,
           FIX_PREPAID,
           FIX_JEJU_PREPAID,
           productName,
-          FIX_DELIVERY_MESSAGE,
+          deliveryMessage,
         ]);
       }
     }
