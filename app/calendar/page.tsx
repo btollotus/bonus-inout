@@ -220,7 +220,6 @@ useEffect(() => {
   // ✅ 일괄출력 관련 상태
   const [bulkPrintSelected, setBulkPrintSelected] = useState<Set<string>>(new Set());
   const [bulkPrinting, setBulkPrinting] = useState(false);
-  const [printTrigger, setPrintTrigger] = useState(false);
 
   // ✅ 인쇄용 명세서 데이터
   type SpecLine = { itemName: string; qty: number; unitPrice: number; supply: number; vat: number; total: number };
@@ -270,14 +269,6 @@ useEffect(() => {
   useEffect(() => {
     document.title = "출고캘린더 | BONUSMATE ERP";
   }, []);
-  
-  useEffect(() => {
-    if (!printTrigger) return;
-    if (bulkSpecData.length === 0) return;
-    setPrintTrigger(false);
-    const t = setTimeout(() => window.print(), 100);
-    return () => clearTimeout(t);
-  }, [printTrigger, bulkSpecData]);
 
   function openSpec(partnerId: string | null, date: string) {
     if (!partnerId) return;
@@ -449,14 +440,14 @@ useEffect(() => {
     }
 
     setBulkPrinting(true);
+   // setBulkSpecLoading(true);
     setBulkSpecDate(selShipDate);
     setBulkSpecData([]);
-
-    let printReady = false;  // ← 추가
 
     try {
       const ids = Array.from(bulkPrintSelected);
 
+      // 1) 거래처 정보 조회
       const { data: partnerData, error: pErr } = await supabase
         .from("partners")
         .select("id,name,business_no,ceo_name,address1,biz_type,biz_item")
@@ -466,6 +457,7 @@ useEffect(() => {
       const partnerMap = new Map<string, any>();
       for (const p of (partnerData ?? [])) partnerMap.set(String(p.id), p);
 
+      // 2) 주문 조회
       const { data: orderData, error: oErr } = await supabase
         .from("orders")
         .select("id,customer_id,customer_name")
@@ -477,6 +469,7 @@ useEffect(() => {
       const orderToPartner = new Map<string, string>();
       for (const o of (orderData ?? [])) orderToPartner.set(String(o.id), String(o.customer_id));
 
+      // 3) 주문 라인 조회
       const { data: lineData, error: lErr } = await supabase
         .from("order_lines")
         .select("*")
@@ -484,12 +477,14 @@ useEffect(() => {
         .order("order_id", { ascending: true });
       if (lErr) throw lErr;
 
+      // 4) 거래처별 집계
       const partnerLines = new Map<string, SpecLine[]>();
       for (const id of ids) partnerLines.set(id, []);
 
       for (const row of (lineData ?? []) as any[]) {
         const pid = orderToPartner.get(String(row.order_id));
         if (!pid) continue;
+        // spec-client.tsx의 pickString/pickNumber 동일 로직
         const name = String(row.item_name ?? row.product_name ?? row.variant_name ?? row.name ?? row.title ?? "").trim();
         if (!name) continue;
         const qty = Number(row.qty ?? row.quantity ?? row.ea ?? 0);
@@ -500,6 +495,7 @@ useEffect(() => {
         if (unitPrice === 0 && qty > 0 && supply > 0) unitPrice = Math.round(supply / qty);
 
         const arr = partnerLines.get(pid) ?? [];
+        // 같은 품목+단가 합산
         const existing = arr.find(l => l.itemName === name && l.unitPrice === unitPrice);
         if (existing) {
           existing.qty += qty;
@@ -512,6 +508,7 @@ useEffect(() => {
         partnerLines.set(pid, arr);
       }
 
+      // 5) 최종 데이터 조합
       const result: BulkSpecPartner[] = ids
         .filter(id => (partnerLines.get(id) ?? []).length > 0)
         .map(id => {
@@ -536,15 +533,16 @@ useEffect(() => {
         });
 
       setBulkSpecData(result);
-      if (result.length > 0) printReady = true;  // ← 추가
 
+      // 데이터 렌더링 후 인쇄
+      await new Promise(r => setTimeout(r, 300));
+      window.print();
     } catch (e: any) {
       setMsg(e?.message ?? "일괄출력 오류");
     } finally {
-      setBulkPrinting(false);
+     setBulkPrinting(false);
+  //    setBulkSpecLoading(false);
     }
-
-    if (printReady) setPrintTrigger(true);  // ← finally 밖에서 호출
   }
 
   const shipSummary = useMemo(() => {
@@ -728,22 +726,20 @@ useEffect(() => {
 )}
       {/* ✅ 인쇄용 CSS */}
       <style>{`
-@media print {
-  body * { visibility: hidden !important; }
-  #bulk-print-area, #bulk-print-area * { visibility: visible !important; }
-  #bulk-print-area {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-  }
-  body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  @page { margin: 10mm; }
-  .bulk-print-page { page-break-after: always; }
-  .bulk-print-page:last-child { page-break-after: avoid; }
-}
-#bulk-print-area { display: none; }
-@media print { #bulk-print-area { display: block !important; } }
+        @media print {
+          body * { visibility: hidden !important; }
+          #bulk-print-area, #bulk-print-area * { visibility: visible !important; }
+          #bulk-print-area {
+            position: absolute !important;
+            left: 0 !important; top: 0 !important;
+            width: 100% !important;
+          }
+          body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .bulk-print-page { page-break-after: always; }
+          .bulk-print-page:last-child { page-break-after: avoid; }
+        }
+        #bulk-print-area { display: none; }
+        @media print { #bulk-print-area { display: block !important; } }
       `}</style>
 
       {/* ✅ 인쇄용 숨김 영역 - 거래처별 명세서 */}
