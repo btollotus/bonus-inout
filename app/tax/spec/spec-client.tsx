@@ -881,7 +881,7 @@ useEffect(() => {
         {/* ===================== 화면용(통합 1장 화면 유지) ===================== */}
         <div className="screen-only">
           <div className={`${card} p-4`}>
-            <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}${screenTitleSuffix}`}</div>
+          <div className="mb-4 text-lg font-bold">{`거래명세서 ${ymdSlash(dateYMD)}${screenTitleSuffix}`}</div>
 
             <div className={`${card} mb-4 p-4`}>
               <div className="spec-party-grid grid grid-cols-2 gap-4">
@@ -1024,7 +1024,7 @@ useEffect(() => {
 
               return (
                 <div key={o.id} className={`print-page ${card} p-4`}>
-                  <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}${titleSuffix}`}</div>
+                  <div className="mb-4 text-lg font-bold">{`거래명세서 ${ymdSlash(dateYMD)}${titleSuffix}`}</div>
 
                   <div className={`${card} mb-4 p-4`}>
                     <div className="spec-party-grid grid grid-cols-2 gap-4">
@@ -1141,7 +1141,7 @@ useEffect(() => {
           ) : (
             // ✅ 일반 거래처: 선택된 여러 주문을 "1건"으로 통합 출력 (요청사항)
             <div className={`${card} p-4`}>
-              <div className="mb-4 text-base font-bold">{`거래명세서 ${ymdSlash(dateYMD)}`}</div>
+              <div className="mb-4 text-lg font-bold">{`거래명세서 ${ymdSlash(dateYMD)}`}</div>
 
               <div className={`${card} mb-4 p-4`}>
                 <div className="spec-party-grid grid grid-cols-2 gap-4">
