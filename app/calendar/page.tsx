@@ -449,14 +449,14 @@ useEffect(() => {
     }
 
     setBulkPrinting(true);
-   // setBulkSpecLoading(true);
     setBulkSpecDate(selShipDate);
     setBulkSpecData([]);
+
+    let printReady = false;  // ← 추가
 
     try {
       const ids = Array.from(bulkPrintSelected);
 
-      // 1) 거래처 정보 조회
       const { data: partnerData, error: pErr } = await supabase
         .from("partners")
         .select("id,name,business_no,ceo_name,address1,biz_type,biz_item")
@@ -466,7 +466,6 @@ useEffect(() => {
       const partnerMap = new Map<string, any>();
       for (const p of (partnerData ?? [])) partnerMap.set(String(p.id), p);
 
-      // 2) 주문 조회
       const { data: orderData, error: oErr } = await supabase
         .from("orders")
         .select("id,customer_id,customer_name")
@@ -478,7 +477,6 @@ useEffect(() => {
       const orderToPartner = new Map<string, string>();
       for (const o of (orderData ?? [])) orderToPartner.set(String(o.id), String(o.customer_id));
 
-      // 3) 주문 라인 조회
       const { data: lineData, error: lErr } = await supabase
         .from("order_lines")
         .select("*")
@@ -486,14 +484,12 @@ useEffect(() => {
         .order("order_id", { ascending: true });
       if (lErr) throw lErr;
 
-      // 4) 거래처별 집계
       const partnerLines = new Map<string, SpecLine[]>();
       for (const id of ids) partnerLines.set(id, []);
 
       for (const row of (lineData ?? []) as any[]) {
         const pid = orderToPartner.get(String(row.order_id));
         if (!pid) continue;
-        // spec-client.tsx의 pickString/pickNumber 동일 로직
         const name = String(row.item_name ?? row.product_name ?? row.variant_name ?? row.name ?? row.title ?? "").trim();
         if (!name) continue;
         const qty = Number(row.qty ?? row.quantity ?? row.ea ?? 0);
@@ -504,7 +500,6 @@ useEffect(() => {
         if (unitPrice === 0 && qty > 0 && supply > 0) unitPrice = Math.round(supply / qty);
 
         const arr = partnerLines.get(pid) ?? [];
-        // 같은 품목+단가 합산
         const existing = arr.find(l => l.itemName === name && l.unitPrice === unitPrice);
         if (existing) {
           existing.qty += qty;
@@ -517,7 +512,6 @@ useEffect(() => {
         partnerLines.set(pid, arr);
       }
 
-      // 5) 최종 데이터 조합
       const result: BulkSpecPartner[] = ids
         .filter(id => (partnerLines.get(id) ?? []).length > 0)
         .map(id => {
@@ -542,17 +536,15 @@ useEffect(() => {
         });
 
       setBulkSpecData(result);
-      setPrintTrigger(true);
-
-      // 데이터 렌더링 후 인쇄
-// 데이터 렌더링 후 인쇄 (이미지 로드 완료 또는 300ms 중 먼저 완료되는 것을 기다림)
+      if (result.length > 0) printReady = true;  // ← 추가
 
     } catch (e: any) {
       setMsg(e?.message ?? "일괄출력 오류");
     } finally {
-     setBulkPrinting(false);
-  //    setBulkSpecLoading(false);
+      setBulkPrinting(false);
     }
+
+    if (printReady) setPrintTrigger(true);  // ← finally 밖에서 호출
   }
 
   const shipSummary = useMemo(() => {
