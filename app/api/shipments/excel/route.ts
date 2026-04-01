@@ -18,7 +18,7 @@ type ShipRow = {
 
 type OrderRow = {
   id: string;
-  customer_id: string | null; // ✅ 추가 (거래처 필터링용)
+  customer_id: string | null;
   ship_date: string | null;
   customer_name: string | null;
   ship_method: string | null;
@@ -35,13 +35,14 @@ type OrderLineRow = {
   name: string | null;
   qty: number | null;
   unit_type: string | null;
+  total_amount: number | null; // ✅ 추가: 택배비 금액 읽기용
 };
 
 // ✅ 이 3개 거래처는 제품명을 "품목명-수량" 형식으로 표시
 const ITEM_NAME_CUSTOMERS = new Set(["카카오플러스-판매", "네이버-판매", "쿠팡-판매"]);
 
 const FIX_QTY = 1;
-const FIX_FEE = 3300;
+const DEFAULT_FEE = 3300; // ✅ 기본값 (택배비 품목이 없을 때 fallback)
 const FIX_PREPAID = "010";
 const FIX_JEJU_PREPAID = "010";
 const FIX_DELIVERY_MESSAGE = "당일배송바랍니다";
@@ -99,6 +100,16 @@ function buildItemProductName(lines: OrderLineRow[]): string {
     .join(" / ");
 }
 
+// ✅ 주문의 order_lines에서 택배비 품목의 total_amount 추출
+// "택배비"로 시작하는 라인 중 첫 번째 항목의 total_amount 반환
+// 없으면 DEFAULT_FEE(3300) 반환
+function getShippingFee(lines: OrderLineRow[]): number {
+  const feeLine = lines.find((l) => safeStr(l.name).startsWith("택배비"));
+  if (!feeLine) return DEFAULT_FEE;
+  const amt = Number(feeLine.total_amount ?? 0);
+  return amt > 0 ? amt : DEFAULT_FEE;
+}
+
 const COLUMNS = [
   { header: "수화주명", key: "ship_to_name", width: 18 },
   { header: "주소1", key: "address1", width: 50 },
@@ -117,7 +128,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const date = safeStr(url.searchParams.get("date")) || ymdToday();
 
-    // ✅ 추가: customer_ids 파라미터 파싱 (없으면 null → 전체 조회)
+    // 추가: customer_ids 파라미터 파싱 (없으면 null → 전체 조회)
     const customerIdsParam = url.searchParams.get("customer_ids");
     const customerIds = customerIdsParam
       ? customerIdsParam.split(",").map((s) => s.trim()).filter(Boolean)
@@ -130,7 +141,6 @@ export async function GET(req: Request) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // ✅ select에 customer_id 추가, customer_ids 있으면 .in() 필터 추가
     let ordersQuery = supabase
       .from("orders")
       .select("id,customer_id,ship_date,customer_name,ship_method")
@@ -192,25 +202,19 @@ export async function GET(req: Request) {
       }
     }
 
-    // ✅ 3개 거래처 주문의 order_lines 조회
-    const itemCustomerOrderIds = orders
-      .filter((o) => ITEM_NAME_CUSTOMERS.has(safeStr(o.customer_name)))
-      .map((o) => o.id);
+    // ✅ 전체 주문의 order_lines 조회 (택배비 + 3개 거래처 품목명 모두 처리)
+    const { data: lineData } = await supabase
+      .from("order_lines")
+      .select("order_id,name,qty,unit_type,total_amount")
+      .in("order_id", orderIds)
+      .order("line_no", { ascending: true })
+      .limit(100000);
 
     const linesByOrder = new Map<string, OrderLineRow[]>();
-    if (itemCustomerOrderIds.length > 0) {
-      const { data: lineData } = await supabase
-        .from("order_lines")
-        .select("order_id,name,qty,unit_type")
-        .in("order_id", itemCustomerOrderIds)
-        .order("line_no", { ascending: true })
-        .limit(100000);
-
-      for (const l of ((lineData ?? []) as OrderLineRow[])) {
-        const arr = linesByOrder.get(l.order_id) ?? [];
-        arr.push(l);
-        linesByOrder.set(l.order_id, arr);
-      }
+    for (const l of ((lineData ?? []) as OrderLineRow[])) {
+      const arr = linesByOrder.get(l.order_id) ?? [];
+      arr.push(l);
+      linesByOrder.set(l.order_id, arr);
     }
 
     const wb = new ExcelJS.Workbook();
@@ -236,13 +240,13 @@ export async function GET(req: Request) {
       const oid = o.id;
       const shipRows = shipsByOrder.get(oid) ?? [];
       const targetShips = shipRows.length ? shipRows.slice(0, 2) : [null];
+      const lines = linesByOrder.get(oid) ?? [];
 
       const customerName = safeStr(o.customer_name);
       let productName: string;
 
       if (ITEM_NAME_CUSTOMERS.has(customerName)) {
-        // ✅ 3개 거래처: 품목명-수량 형식
-        const lines = linesByOrder.get(oid) ?? [];
+        // 3개 거래처: 품목명-수량 형식
         productName = buildItemProductName(lines);
       } else {
         // 일반 거래처: 기존 방식
@@ -252,6 +256,9 @@ export async function GET(req: Request) {
           : buildProductName(o.customer_name, null);
       }
 
+      // ✅ 해당 주문의 택배비 라인에서 실제 금액 추출 (없으면 3300 기본값)
+      const shippingFee = getShippingFee(lines);
+
       for (const s of targetShips) {
         ws.addRow([
           s ? safeStr(s.ship_to_name) : "",
@@ -259,7 +266,7 @@ export async function GET(req: Request) {
           s ? safeStr(s.ship_to_mobile) : "",
           s ? safeStr(s.ship_to_phone) : "",
           FIX_QTY,
-          FIX_FEE,
+          shippingFee, // ✅ 하드코딩 FIX_FEE 대신 실제 주문별 택배비 사용
           FIX_PREPAID,
           FIX_JEJU_PREPAID,
           productName,
