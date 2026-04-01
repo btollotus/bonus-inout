@@ -142,11 +142,12 @@ export async function GET(req: Request) {
     });
 
     let ordersQuery = supabase
-      .from("orders")
-      .select("id,customer_id,ship_date,customer_name,ship_method")
-      .eq("ship_date", date)
-      .not("ship_date", "is", null)
-      .limit(20000);
+    .from("orders")
+    .select("id,customer_id,ship_date,customer_name,ship_method")
+    .eq("ship_date", date)
+    .not("ship_date", "is", null)
+    .order("created_at", { ascending: true }) // ✅ 입력 순서 보장
+    .limit(20000);
 
     if (customerIds && customerIds.length > 0) {
       ordersQuery = ordersQuery.in("customer_id", customerIds);
