@@ -730,17 +730,18 @@ useEffect(() => {
   body * { visibility: hidden !important; }
   #bulk-print-area, #bulk-print-area * { visibility: visible !important; }
   #bulk-print-area {
-    position: fixed !important;
-    left: 0 !important; top: 0 !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
     width: 100% !important;
-    height: auto !important;
   }
   body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { margin: 10mm; }
   .bulk-print-page { page-break-after: always; }
   .bulk-print-page:last-child { page-break-after: avoid; }
 }
-        #bulk-print-area { display: none; }
-        @media print { #bulk-print-area { display: block !important; } }
+#bulk-print-area { display: none; }
+@media print { #bulk-print-area { display: block !important; } }
       `}</style>
 
       {/* ✅ 인쇄용 숨김 영역 - 거래처별 명세서 */}
