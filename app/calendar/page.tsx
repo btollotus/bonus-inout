@@ -220,6 +220,7 @@ useEffect(() => {
   // ✅ 일괄출력 관련 상태
   const [bulkPrintSelected, setBulkPrintSelected] = useState<Set<string>>(new Set());
   const [bulkPrinting, setBulkPrinting] = useState(false);
+  const [printTrigger, setPrintTrigger] = useState(false);
 
   // ✅ 인쇄용 명세서 데이터
   type SpecLine = { itemName: string; qty: number; unitPrice: number; supply: number; vat: number; total: number };
@@ -269,6 +270,14 @@ useEffect(() => {
   useEffect(() => {
     document.title = "출고캘린더 | BONUSMATE ERP";
   }, []);
+  
+  useEffect(() => {
+    if (!printTrigger) return;
+    if (bulkSpecData.length === 0) return;
+    setPrintTrigger(false);
+    const t = setTimeout(() => window.print(), 100);
+    return () => clearTimeout(t);
+  }, [printTrigger, bulkSpecData]);
 
   function openSpec(partnerId: string | null, date: string) {
     if (!partnerId) return;
@@ -533,19 +542,10 @@ useEffect(() => {
         });
 
       setBulkSpecData(result);
+      setPrintTrigger(true);
 
       // 데이터 렌더링 후 인쇄
 // 데이터 렌더링 후 인쇄 (이미지 로드 완료 또는 300ms 중 먼저 완료되는 것을 기다림)
-await Promise.race([
-  new Promise<void>((resolve) => {
-    const img = document.querySelector<HTMLImageElement>("#bulk-print-area img[src='/stamp.png']");
-    if (!img || img.complete) return resolve();
-    img.onload = () => resolve();
-    img.onerror = () => resolve();
-  }),
-  new Promise<void>((resolve) => setTimeout(resolve, 300)),
-]);
-window.print();
 
     } catch (e: any) {
       setMsg(e?.message ?? "일괄출력 오류");
