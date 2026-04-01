@@ -8,13 +8,11 @@ type EmployeeRow = {
   name: string;
   employee_code: string | null;
   auth_user_id: string | null;
-
   rrn: string | null;
   mobile: string | null;
   address: string | null;
   hire_date: string | null;
   resign_date: string | null;
-
   created_at?: string;
   updated_at?: string;
 };
@@ -24,8 +22,15 @@ function safeStr(v: any) {
 }
 
 function isUuid(v: string) {
-  // RFC 4122 v1~v5
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
+// ── 추가: 주민번호 마스킹 (앞 6자리 + - + *******)
+function maskRrn(rrn: string | null) {
+  if (!rrn) return "";
+  const clean = rrn.replace("-", "");
+  if (clean.length <= 6) return rrn;
+  return clean.slice(0, 6) + "-" + "*".repeat(clean.length - 6);
 }
 
 export default function EmployeesAdminClient() {
@@ -57,6 +62,18 @@ export default function EmployeesAdminClient() {
   // edit
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  // ── 추가: 주민번호 표시 토글
+  const [showFormRrn, setShowFormRrn] = useState(false);
+  const [visibleRrnIds, setVisibleRrnIds] = useState<Set<string>>(new Set());
+
+  function toggleRowRrn(id: string) {
+    setVisibleRrnIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
   async function load() {
     setMsg(null);
     setLoading(true);
@@ -86,6 +103,7 @@ export default function EmployeesAdminClient() {
     setHireDate("");
     setResignDate("");
     setEditingId(null);
+    setShowFormRrn(false); // ── 추가: 폼 초기화 시 마스킹 복원
   }
 
   function fillForm(r: EmployeeRow) {
@@ -98,6 +116,7 @@ export default function EmployeesAdminClient() {
     setAddress(safeStr(r.address));
     setHireDate(safeStr(r.hire_date));
     setResignDate(safeStr(r.resign_date));
+    setShowFormRrn(false); // ── 추가: 수정 폼 열 때 마스킹 복원
   }
 
   async function save() {
@@ -112,7 +131,6 @@ export default function EmployeesAdminClient() {
     const code = safeStr(employeeCode) || null;
 
     const au = safeStr(authUserId);
-    // ✅ auth_user_id는 "비워두거나" "진짜 uuid"만 허용
     if (au && !isUuid(au)) {
       setMsg('auth_user_id는 Supabase Auth Users의 "id(uuid)"만 입력 가능합니다. (예: 2c1d...-....) 20240301_0001 같은 사번은 employee_code에 입력하세요.');
       return;
@@ -221,9 +239,27 @@ export default function EmployeesAdminClient() {
                 </div>
               </div>
 
+              {/* ── 수정: 주민번호 input 마스킹+토글 */}
               <div>
                 <div className="mb-1 text-xs font-semibold text-slate-700">주민번호(rrn)</div>
-                <input className={input} value={rrn} onChange={(e) => setRrn(e.target.value)} placeholder="민감정보: 운영에선 마스킹/암호화 권장" />
+                <div className="relative">
+                  <input
+                    className={input}
+                    type={showFormRrn ? "text" : "password"}
+                    value={rrn}
+                    onChange={(e) => setRrn(e.target.value)}
+                    placeholder="민감정보: 운영에선 마스킹/암호화 권장"
+                    style={{ paddingRight: "2.5rem" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowFormRrn((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-base select-none"
+                    title={showFormRrn ? "숨기기" : "보기"}
+                  >
+                    {showFormRrn ? "🙈" : "👁"}
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -268,6 +304,7 @@ export default function EmployeesAdminClient() {
                   <th className="px-3 py-2">auth_user_id</th>
                   <th className="px-3 py-2">휴대폰</th>
                   <th className="px-3 py-2">입사일</th>
+                  <th className="px-3 py-2">주민번호</th>{/* ── 추가 */}
                   <th className="px-3 py-2">퇴사일</th>
                   <th className="px-3 py-2">작업</th>
                 </tr>
@@ -275,7 +312,7 @@ export default function EmployeesAdminClient() {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-3 text-slate-500" colSpan={7}>
+                    <td className="px-3 py-3 text-slate-500" colSpan={8}>
                       {loading ? "불러오는 중..." : "직원 데이터가 없습니다."}
                     </td>
                   </tr>
@@ -287,6 +324,24 @@ export default function EmployeesAdminClient() {
                       <td className="px-3 py-2 font-mono text-xs">{r.auth_user_id ?? ""}</td>
                       <td className="px-3 py-2">{r.mobile ?? ""}</td>
                       <td className="px-3 py-2">{r.hire_date ?? ""}</td>
+                      {/* ── 추가: 주민번호 셀 */}
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1">
+                          <span className="font-mono text-xs">
+                            {visibleRrnIds.has(r.id) ? (r.rrn ?? "") : maskRrn(r.rrn)}
+                          </span>
+                          {r.rrn && (
+                            <button
+                              type="button"
+                              onClick={() => toggleRowRrn(r.id)}
+                              className="text-slate-400 hover:text-slate-700 text-base select-none"
+                              title={visibleRrnIds.has(r.id) ? "숨기기" : "보기"}
+                            >
+                              {visibleRrnIds.has(r.id) ? "🙈" : "👁"}
+                            </button>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-3 py-2">{r.resign_date ?? ""}</td>
                       <td className="px-3 py-2">
                         <div className="flex gap-2">
