@@ -710,7 +710,7 @@ useEffect(() => {
 
   // ✅ 탭(브라우저 타이틀) 변경
   useEffect(() => {
-    document.title = "BONUSMATE ERP 거래원장";
+    document.title = "거래원장 | BONUSMATE ERP";
   }, []);
 
   // ✅ 입력 검색 필터

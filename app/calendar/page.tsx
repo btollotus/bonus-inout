@@ -535,8 +535,14 @@ useEffect(() => {
       setBulkSpecData(result);
 
       // 데이터 렌더링 후 인쇄
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise<void>((resolve) => {
+        const img = document.querySelector<HTMLImageElement>("#bulk-print-area img[src='/stamp.png']");
+        if (!img || img.complete) return resolve();
+        img.onload = () => resolve();
+        img.onerror = () => resolve(); // 오류여도 진행
+      });
       window.print();
+
     } catch (e: any) {
       setMsg(e?.message ?? "일괄출력 오류");
     } finally {
