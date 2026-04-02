@@ -2146,7 +2146,7 @@ function WoPrintContent({
             <td style={{ ...tdS, fontWeight: "bold" }}>{deliveryDate}{deliveryDate ? ` (${["일","월","화","수","목","금","토"][new Date(deliveryDate).getDay()]})` : ""}</td>
           </tr>
           <tr>
-            <td style={thS}>품목명</td>
+            <td style={thS}>제품명</td>
             <td style={tdS} colSpan={3}>{productNameDisplay}</td>
           </tr>
           <tr>
@@ -2156,7 +2156,7 @@ function WoPrintContent({
             <td style={tdS}>{wo.thickness ?? "—"}</td>
           </tr>
           <tr>
-            <td style={thS}>규격(로고)</td>
+            <td style={thS}>규격</td>
             <td style={tdS}>{wo.logo_spec ?? "—"}</td>
             <td style={thS}>포장방법</td>
             <td style={tdS}>{wo.packaging_type ?? "—"}{wo.packaging_type === "트레이" && wo.tray_slot ? ` / ${wo.tray_slot}` : ""}</td>
