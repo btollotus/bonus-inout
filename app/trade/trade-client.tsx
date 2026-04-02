@@ -958,7 +958,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
         const { data: barcodeData, error: barcodeErr } = await supabase.rpc("generate_work_order_barcode");
         if (barcodeErr) throw new Error("바코드 생성 실패: " + barcodeErr.message);
         const barcodeNo = barcodeData as string;
-        const todayStr = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+        const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`; })();
         const workOrderNo = `WO-${todayStr}-${barcodeNo.slice(-4)}`;
 
         const firstItemName = cleanLines[0]?.name ?? "";
@@ -1205,7 +1205,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
       const { data: barcodeData, error: barcodeErr } = await supabase.rpc("generate_work_order_barcode");
       if (barcodeErr) return setMsg("바코드 생성 실패: " + barcodeErr.message);
       const barcodeNo = barcodeData as string;
-      const todayStr2 = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+      const todayStr2 = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`; })();
       const workOrderNo = `WO-${todayStr2}-${barcodeNo.slice(-4)}`;
 
       const { data: createdWo, error: woErr } = await supabase.from("work_orders").insert({
