@@ -99,7 +99,9 @@ async function fetchKoreaHolidays(year: number, month: number): Promise<Record<s
     const data = await res.json();
     for (const item of (data.items ?? [])) {
       const dateStr = item.start?.date as string | undefined;
-      if (dateStr) map[dateStr] = item.summary ?? "공휴일";
+      if (dateStr && item.eventType === "publicHoliday") {
+        map[dateStr] = item.summary ?? "공휴일";
+      }
     }
   } catch (e) {
     console.warn("공휴일 조회 실패, 빈 맵 반환:", e);
