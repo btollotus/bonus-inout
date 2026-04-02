@@ -104,14 +104,7 @@ export default function ProductsClient() {
   }>>({});
 
   const [listCategory, setListCategory] = useState<"" | (typeof CATEGORIES)[number]>("");
-  const [showTop, setShowTop] = useState(false);
 
-  useEffect(() => {
-    const onScroll = () => setShowTop(window.scrollY > 400);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll as any);
-  }, []);
 
   const loadVariantSuggest = async (keyword: string) => {
     const k = keyword.trim();
@@ -854,15 +847,16 @@ export default function ProductsClient() {
         <p className="text-xs text-slate-500 mt-3">※ 바코드는 유니크입니다. 목록에서 바코드가 있어도 "수정"으로 변경할 수 있습니다.</p>
       </div>
 
-      {showTop ? (
-        <button
-          type="button"
-          className="fixed right-6 bottom-6 z-50 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 shadow hover:bg-slate-100"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        >
-          TOP
-        </button>
-      ) : null}
+      <button
+  type="button"
+  onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+  className="fixed bottom-24 right-6 z-50 rounded-2xl bg-black text-white px-5 py-4 shadow-lg hover:bg-black/85 active:scale-[0.99]"
+  aria-label="TOP"
+  title="TOP"
+>
+  <div className="text-sm font-semibold leading-none">TOP</div>
+  <div className="text-[11px] opacity-80 mt-1 leading-none">맨 위로</div>
+</button>
     </div>
   );
 }
