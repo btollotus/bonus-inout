@@ -620,7 +620,7 @@ export default function ScanClient() {
         type: row.type,
         qty: requestEA,
         note: row.note || null,
-        created_at: workDateTimestamp(),
+        happened_at: workDateTimestamp(),
       });
       if (mErr) throw new Error(mErr.message);
 
