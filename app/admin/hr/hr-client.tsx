@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
-import EmployeesPage from "@/app/admin/employees/employees-admin-client";
+import EmployeesPage from "@/app/admin/hr/employees-page";
 import PayrollPage from "@/app/admin/payroll/page";
 
 type Tab = "EMPLOYEES" | "PAYROLL";
