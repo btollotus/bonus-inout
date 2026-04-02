@@ -84,6 +84,20 @@ function build42Days(monthDate: Date) {
 const GCAL_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_API_KEY ?? "";
 const KR_HOLIDAY_CAL = "ko.south_korea%23holiday%40group.v.calendar.google.com";
 
+const KR_PUBLIC_HOLIDAYS = new Set([
+  "신정", "설날", "설날 연휴", "삼일절", "어린이날", "부처님오신날",
+  "현충일", "광복절", "추석", "추석 연휴", "개천절", "한글날", "성탄절",
+  "대체 공휴일", "대통령 선거일", "국회의원 선거일", "지방 선거일",
+]);
+
+function isPublicHoliday(summary: string): boolean {
+  if (!summary) return false;
+  for (const h of KR_PUBLIC_HOLIDAYS) {
+    if (summary.includes(h)) return true;
+  }
+  return false;
+}
+
 async function fetchKoreaHolidays(year: number, month: number): Promise<Record<string, string>> {
   const map: Record<string, string> = {};
 
@@ -99,8 +113,9 @@ async function fetchKoreaHolidays(year: number, month: number): Promise<Record<s
     const data = await res.json();
     for (const item of (data.items ?? [])) {
       const dateStr = item.start?.date as string | undefined;
-      if (dateStr && item.eventType !== "observance") {
-        map[dateStr] = item.summary ?? "공휴일";
+      const summary = String(item.summary ?? "").trim();
+      if (dateStr && isPublicHoliday(summary)) {
+        map[dateStr] = summary;
       }
     }
   } catch (e) {
