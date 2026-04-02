@@ -111,6 +111,7 @@ async function fetchKoreaHolidays(year: number, month: number): Promise<Record<s
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Google Calendar API error: ${res.status}`);
     const data = await res.json();
+    console.log("🗓️ Google 공휴일 원본:", data.items?.map((i: any) => `${i.start?.date} | ${i.summary} | ${i.eventType}`));
     for (const item of (data.items ?? [])) {
       const dateStr = item.start?.date as string | undefined;
       const summary = String(item.summary ?? "").trim();
