@@ -284,6 +284,20 @@ export default function ProductsClient() {
     finally { setLoading(false); }
   };
 
+  const generateBarcode = async () => {
+    setMsg(null);
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("generate_work_order_barcode");
+      if (error) throw new Error("바코드 생성 실패: " + error.message);
+      setBarcode(data as string);
+    } catch (e: any) {
+      setMsg(e?.message ?? "바코드 생성 오류");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const upsertProductAndVariant = async () => {
     setMsg(null);
     const pn = productName.trim();
@@ -508,13 +522,23 @@ export default function ProductsClient() {
           <div className="col-span-2">
             <label className="text-sm text-slate-600 flex items-center justify-between">
               <span>바코드</span>
-              <button
-                type="button"
-                className={["text-xs rounded-lg border px-2 py-1 transition", isScanMode ? "bg-blue-600 text-white border-blue-600 shadow" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"].join(" ")}
-                onClick={() => { setIsScanMode((v) => !v); requestAnimationFrame(() => { barcodeRef.current?.focus(); barcodeRef.current?.select(); }); }}
-              >
-                {isScanMode ? "스캔 모드 ON" : "스캔 모드"}
-              </button>
+              <div className="flex items-center gap-2">
+  <button
+    type="button"
+    className="text-xs rounded-lg border border-slate-300 bg-white text-slate-700 px-2 py-1 hover:bg-slate-100 disabled:opacity-60"
+    disabled={loading}
+    onClick={generateBarcode}
+  >
+    자동생성
+  </button>
+  <button
+    type="button"
+    className={["text-xs rounded-lg border px-2 py-1 transition", isScanMode ? "bg-blue-600 text-white border-blue-600 shadow" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"].join(" ")}
+    onClick={() => { setIsScanMode((v) => !v); requestAnimationFrame(() => { barcodeRef.current?.focus(); barcodeRef.current?.select(); }); }}
+  >
+    {isScanMode ? "스캔 모드 ON" : "스캔 모드"}
+  </button>
+</div>
             </label>
             <input
               readOnly={isScanMode}
