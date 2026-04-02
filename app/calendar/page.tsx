@@ -81,39 +81,32 @@ function build42Days(monthDate: Date) {
   });
 }
 
-function getKoreaHolidaysMap(year: number): Record<string, string> {
+const GCAL_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_API_KEY ?? "";
+const KR_HOLIDAY_CAL = "ko.south_korea%23holiday%40group.v.calendar.google.com";
+
+async function fetchKoreaHolidays(year: number, month: number): Promise<Record<string, string>> {
   const map: Record<string, string> = {};
 
-  const fixed = [
-    [`${year}-01-01`, "신정"],
-    [`${year}-03-01`, "삼일절"],
-    [`${year}-05-05`, "어린이날"],
-    [`${year}-06-06`, "현충일"],
-    [`${year}-08-15`, "광복절"],
-    [`${year}-10-03`, "개천절"],
-    [`${year}-10-09`, "한글날"],
-    [`${year}-12-25`, "성탄절"],
-    [`${year}-01-02`, "창립기념일"],
-  ];
-  for (const [d, name] of fixed) map[d] = name;
+  // 창립기념일은 구글 캘린더에 없으므로 직접 유지
+  map[`${year}-01-02`] = "창립기념일";
 
-  if (year === 2026) {
-    map["2026-02-16"] = "설날(연휴)";
-    map["2026-02-17"] = "설날";
-    map["2026-02-18"] = "설날(연휴)";
-    map["2026-05-24"] = "부처님오신날";
-    map["2026-09-24"] = "추석(연휴)";
-    map["2026-09-25"] = "추석";
-    map["2026-09-26"] = "추석(연휴)";
-    map["2026-03-02"] = "대체공휴일(삼일절)";
-    map["2026-05-25"] = "대체공휴일(부처님오신날)";
-    map["2026-08-17"] = "대체공휴일(광복절)";
-    map["2026-10-05"] = "대체공휴일(개천절)";
+  try {
+    const from = new Date(year, month - 1, 1).toISOString();
+    const to = new Date(year, month, 1).toISOString();
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${KR_HOLIDAY_CAL}/events?key=${GCAL_API_KEY}&timeMin=${from}&timeMax=${to}&singleEvents=true&maxResults=50`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Google Calendar API error: ${res.status}`);
+    const data = await res.json();
+    for (const item of (data.items ?? [])) {
+      const dateStr = item.start?.date as string | undefined;
+      if (dateStr) map[dateStr] = item.summary ?? "공휴일";
+    }
+  } catch (e) {
+    console.warn("공휴일 조회 실패, 빈 맵 반환:", e);
   }
 
   return map;
 }
-
 function normalizeShipMethod(v: any): ShipMethod {
   const s = String(v ?? "").trim();
   if (!s) return "기타";
@@ -184,7 +177,14 @@ useEffect(() => {
 
   const curMonthDate = useMemo(() => firstOfMonth(curMonth), [curMonth]);
   const days42 = useMemo(() => build42Days(curMonthDate), [curMonthDate]);
-  const holidays = useMemo(() => getKoreaHolidaysMap(curMonthDate.getFullYear()), [curMonthDate]);
+  const [holidays, setHolidays] = useState<Record<string, string>>({});
+
+useEffect(() => {
+  const y = curMonthDate.getFullYear();
+  const m = curMonthDate.getMonth() + 1;
+  fetchKoreaHolidays(y, m).then(setHolidays);
+}, [curMonthDate]);
+
 
   const [memos, setMemos] = useState<CalendarMemoRow[]>([]);
 
@@ -1203,3 +1203,4 @@ useEffect(() => {
     </div>
   );
 }
+//실사용 페이지
