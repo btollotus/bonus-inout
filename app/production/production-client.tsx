@@ -61,6 +61,7 @@ type WorkOrderRow = {
   work_order_items?: WoItemRow[];
   // ✅ 추가
   order_type: string;
+  ccp_slot_id?: string | null;
 };
 
 type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
@@ -282,6 +283,9 @@ export default function ProductionClient() {
   }>>({});
   const [printOpen, setPrintOpen] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
+  // ── CCP 온장고 슬롯 ──
+  const [warmerSlots, setWarmerSlots] = useState<{ id: string; slot_name: string; purpose: string }[]>([]);
+  const [eCcpSlotId, setECcpSlotId] = useState<string>("");
 
   // ── Realtime 진행상태 전용 state ──
   const [realtimeConnected, setRealtimeConnected] = useState(false);
@@ -650,8 +654,8 @@ export default function ProductionClient() {
           note,reference_note,status,status_transfer,status_print_check,
           status_production,status_input,is_reorder,original_work_order_id,
           variant_id,images,linked_order_id,created_at,
-          assignee_transfer,assignee_print_check,assignee_production,assignee_input,
-          order_type,
+         assignee_transfer,assignee_print_check,assignee_production,assignee_input,
+          order_type,ccp_slot_id,
           work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images),
           linked_order:orders!linked_order_id(memo)
         `)
@@ -694,6 +698,14 @@ export default function ProductionClient() {
       .is("resign_date", null)
       .order("name").limit(500)
       .then(({ data }) => { if (data) setEmployees(data); });
+  }, []);
+
+  useEffect(() => {
+    supabase.from("warmer_slots")
+      .select("id,slot_name,purpose")
+      .eq("is_active", true)
+      .order("slot_no")
+      .then(({ data }) => { if (data) setWarmerSlots(data); });
   }, []);
 
   // ── 필터링 ──
@@ -751,6 +763,7 @@ export default function ProductionClient() {
     setEMoldPerSheet(wo.mold_per_sheet ? String(wo.mold_per_sheet) : "");
     setENote(wo.note ?? "");
     setEReferenceNote(wo.reference_note ?? "");
+    setECcpSlotId(wo.ccp_slot_id ?? "");
     setWoChecks({
       status_transfer: wo.status_transfer,
       status_print_check: wo.status_print_check,
@@ -1053,11 +1066,60 @@ export default function ProductionClient() {
         if (movErr) stockErrors.push("입고 기록 실패 (" + expiry_date + "): " + movErr.message);
       }
 
-      const { error: statusErr } = await supabase.from("work_orders").update({
-        status: "완료",
-        status_production: true,
-        updated_at: new Date().toISOString(),
-      }).eq("id", selectedWo.id);
+    // ── CCP-1B 세션 자동 생성 (당류가공품·준초콜릿 + 슬롯 지정된 경우)
+    const ccpCategory = getFoodCategory(selectedWo.food_type);
+    const ccpSlotId = eCcpSlotId || selectedWo.ccp_slot_id; 
+    if ((ccpCategory === "다크" || ccpCategory === "화이트") && ccpSlotId) {
+      const today = new Date().toISOString().slice(0, 10);
+      // 오늘 동일 슬롯 세션이 있으면 재사용, 없으면 생성
+      const { data: existSession } = await supabase
+        .from("ccp_heating_sessions")
+        .select("id")
+        .eq("session_date", today)
+        .eq("slot_id", ccpSlotId)
+        .eq("status", "active")
+        .maybeSingle();
+
+      let sessionId = existSession?.id ?? null;
+      if (!sessionId) {
+        const { data: newSession } = await supabase
+          .from("ccp_heating_sessions")
+          .insert({
+            session_date: today,
+            slot_id: ccpSlotId,
+            status: "active",
+            created_by: userId,
+          })
+          .select("id")
+          .single();
+        sessionId = newSession?.id ?? null;
+      }
+
+      if (sessionId) {
+        // 작업지시서 ↔ 세션 연결 (중복 방지)
+        const { data: existLink } = await supabase
+          .from("ccp_heating_session_orders")
+          .select("id")
+          .eq("session_id", sessionId)
+          .eq("work_order_ref", selectedWo.work_order_no)
+          .maybeSingle();
+
+        if (!existLink) {
+          await supabase.from("ccp_heating_session_orders").insert({
+            session_id: sessionId,
+            work_order_ref: selectedWo.work_order_no,
+            client_name: selectedWo.client_name,
+            product_name: selectedWo.product_name,
+          });
+        }
+      }
+    }
+
+    const { error: statusErr } = await supabase.from("work_orders").update({
+      status: "완료",
+      status_production: true,
+      updated_at: new Date().toISOString(),
+    }).eq("id", selectedWo.id);
       if (statusErr) return setMsg("상태 변경 실패: " + statusErr.message);
 
       if (stockErrors.length > 0) {
@@ -1576,6 +1638,40 @@ export default function ProductionClient() {
                       <div className="mb-1 text-xs text-slate-500">참고사항</div>
                       <input className={inp} value={eReferenceNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEReferenceNote(e.target.value)} />
                     </div>
+                    {/* CCP-1B 슬롯 지정 — 당류가공품·준초콜릿만 */}
+                    {(getFoodCategory(eFoodType) === "다크" || getFoodCategory(eFoodType) === "화이트") && (
+                      <div className="md:col-span-3">
+                        <div className="mb-1 text-xs text-slate-500 flex items-center gap-1">
+                          🌡️ CCP-1B 온장고 슬롯 지정
+                          <span className="text-slate-400">(당류가공품·준초콜릿)</span>
+                        </div>
+                        <select
+                          className={inp}
+                          value={eCcpSlotId}
+                          disabled={selectedWo?.status === "완료" && !isEditMode}
+                          onChange={async (e) => {
+                            const slotId = e.target.value;
+                            setECcpSlotId(slotId);
+                            await supabase.from("work_orders")
+                              .update({ ccp_slot_id: slotId || null, updated_at: new Date().toISOString() })
+                              .eq("id", selectedWo!.id);
+                          }}
+                        >
+                          <option value="">— 슬롯 미지정 —</option>
+                          {warmerSlots
+                            .filter((s) =>
+                              getFoodCategory(eFoodType) === "다크"
+                                ? s.purpose === "다크컴파운드"
+                                : s.purpose === "화이트컴파운드" || s.purpose === "유동"
+                            )
+                            .map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.slot_name} ({s.purpose})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-sm sm:grid-cols-3 md:grid-cols-4">
