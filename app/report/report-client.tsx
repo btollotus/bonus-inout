@@ -929,21 +929,22 @@ export default function ReportClient() {
                     ),
                     in: (
                       <div className="text-right leading-tight">
-                        <div className="font-semibold">{toBoxAndEa(inEA, unit).boxText}</div>
-                        <div className="text-sm font-medium text-black/80 print-sub">{toBoxAndEa(inEA, unit).eaText}</div>
+                        <div className="font-bold">{toBoxAndEa(inEA, unit).boxText}</div>
+                        <div className="text-sm font-bold text-black/80 print-sub">{toBoxAndEa(inEA, unit).eaText}</div>
                       </div>
                     ),
                     out: (
                       <div className="text-right leading-tight">
-                        <div className="font-semibold">{toBoxAndEa(outEA, unit).boxText}</div>
-                        <div className="text-sm font-medium text-black/80 print-sub">{toBoxAndEa(outEA, unit).eaText}</div>
+                        <div className="font-bold">{toBoxAndEa(outEA, unit).boxText}</div>
+                        <div className="text-sm font-bold text-black/80 print-sub">{toBoxAndEa(outEA, unit).eaText}</div>
                       </div>
                     ),
                     stock: (
                       <div className="text-right leading-tight">
-                        <div className="font-semibold">{toBoxAndEa(eEA, unit).boxText}</div>
-                        <div className="text-sm font-medium text-black/80 print-sub">{toBoxAndEa(eEA, unit).eaText}</div>
+                        <div className="font-bold">{toBoxAndEa(eEA, unit).boxText}</div>
+                        <div className="text-sm font-bold text-black/80 print-sub">{toBoxAndEa(eEA, unit).eaText}</div>
                       </div>
+                    
                     ),
                     expiry: safeStr(r.expiry_date),
                     barcode: safeStr(r.barcode),
