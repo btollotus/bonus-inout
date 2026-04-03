@@ -10,6 +10,7 @@ const nav = [
   { href: "/quote",           label: "견적서",         allowedRoles: ["ADMIN"]             },
   { href: "/trade",           label: "거래내역(통합)", allowedRoles: ["ADMIN", "SUBADMIN"] }, // ✅ SUBADMIN 접근 허용
   { href: "/production",      label: "작업지시서",     allowedRoles: ["ADMIN", "SUBADMIN"] },
+  { href: "/production-log",  label: "생산관리",       allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/tax",             label: "세무사",         allowedRoles: ["ADMIN"]             },
   { href: "/tax/spec",        label: "거래명세서",     allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/tax/statement",   label: "거래원장",       allowedRoles: ["ADMIN", "SUBADMIN"] },
