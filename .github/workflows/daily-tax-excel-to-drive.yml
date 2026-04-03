@@ -118,7 +118,7 @@ jobs:
 
           echo "Downloading: $URL"
           curl -L --fail \
-            -H "x-api-key: ${{ secrets.INTERNAL_API_TOKEN }}" \
+            -H "x-vercel-protection-bypass: ${{ secrets.VERCEL_BYPASS_SECRET }}" \
             -o "$FILENAME" \
             "$URL"
           ls -al
