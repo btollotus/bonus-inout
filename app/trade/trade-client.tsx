@@ -2489,7 +2489,15 @@ function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: (
           const sheets2 = Math.ceil(qty / mold);
           init[item.id] = `전사지: ${sheets2}장  참고: ${(sheets2 * mold).toLocaleString("ko-KR")}개`;
         }
+        // ── 라벨 수량 추가 (포장방법이 벌크인 경우) ──
+        const needsLabel = (wo.packaging_type ?? "").includes("벌크");
+        if (needsLabel) {
+          const labelQty = Math.ceil(qty / (6 * mold));
+          init[item.id] = init[item.id] + `  라벨: ${labelQty}장`;
+        }
       } else {
+
+
         init[item.id] = item.note ?? "";
       }
     }
