@@ -49,7 +49,59 @@ type EmployeeSummary = {
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 
+const GCAL_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_API_KEY ?? "";
+const KR_HOLIDAY_CAL = "ko.south_korea%23holiday%40group.v.calendar.google.com";
+
+const KR_PUBLIC_HOLIDAYS = new Set([
+  "새해첫날", "신정",
+  "설날", "설날 연휴", "설날 전날",
+  "삼일절", "어린이날", "부처님오신날",
+  "현충일", "광복절", "제헌절",
+  "추석", "추석 연휴", "추석 전날",
+  "개천절", "한글날", "크리스마스",
+  "대체 공휴일", "대체공휴일",
+  "선거일", "지방선거", "대통령선거", "국회의원선거",
+  "임시공휴일",
+]);
+
+const MANUAL_HOLIDAYS: Record<string, string> = {
+  "2027-02-09": "대체공휴일(설날)",
+};
+
+function isPublicHoliday(summary: string): boolean {
+  if (!summary) return false;
+  if (summary === "크리스마스 이브") return false;
+  for (const h of KR_PUBLIC_HOLIDAYS) {
+    if (summary.includes(h)) return true;
+  }
+  return false;
+}
+
+async function fetchKoreaHolidays(year: number, month: number): Promise<Record<string, string>> {
+  const map: Record<string, string> = {};
+  map[`${year}-01-02`] = "창립기념일";
+  try {
+    const from = new Date(year, month - 1, 1).toISOString();
+    const to = new Date(year, month, 1).toISOString();
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${KR_HOLIDAY_CAL}/events?key=${GCAL_API_KEY}&timeMin=${from}&timeMax=${to}&singleEvents=true&maxResults=50`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Google Calendar API error: ${res.status}`);
+    const data = await res.json();
+    for (const item of (data.items ?? [])) {
+      const dateStr = item.start?.date as string | undefined;
+      const summary = String(item.summary ?? "").trim();
+      if (dateStr && isPublicHoliday(summary)) map[dateStr] = summary;
+    }
+  } catch (e) {
+    console.warn("공휴일 조회 실패:", e);
+  }
+  Object.assign(map, MANUAL_HOLIDAYS);
+  return map;
+}
+
 export default function LeaveStatusPage({ role }: { role?: string }) {
+ 
+
   const supabase = createClient()
   const isAdmin = role === 'ADMIN'
 
@@ -62,8 +114,12 @@ export default function LeaveStatusPage({ role }: { role?: string }) {
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
   const [error, setError] = useState('')
   const years = [new Date().getFullYear(), new Date().getFullYear() - 1]
+  const [holidays, setHolidays] = useState<Record<string, string>>({});
 
   useEffect(() => { fetchLeaveData() }, [selectedYear])
+  useEffect(() => {
+    fetchKoreaHolidays(calendarYear, normalizedMonth + 1).then(setHolidays);
+  }, [calendarYear, normalizedMonth]);
 
   async function fetchLeaveData() {
     setLoading(true); setError('')
@@ -223,6 +279,9 @@ export default function LeaveStatusPage({ role }: { role?: string }) {
                   const col = idx % 7
                   const isSun = col === 0
                   const isSat = col === 6
+                  const dateStr = day ? `${calendarYear}-${String(normalizedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
+const isHoliday = day ? !!holidays[dateStr] : false;
+const holidayName = day ? (holidays[dateStr] ?? '') : '';
                   const reqs = day ? (dayMap[day] || []) : []
                   return (
                     <div key={idx}
@@ -235,9 +294,13 @@ export default function LeaveStatusPage({ role }: { role?: string }) {
                       }`}>
                       {day && (
                         <>
-                          <div className={`text-xs font-semibold mb-1 ${isToday(day) ? 'text-blue-600' : isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-700'}`}>
+                          <div className={`text-xs font-semibold mb-1 ${isToday(day) ? 'text-blue-600' : (isSun || isHoliday) ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-700'}`}>
                             {day}
                           </div>
+
+{holidayName && (
+  <div className="text-[10px] text-red-500 font-semibold truncate">{holidayName}</div>
+)}
                           <div className="space-y-0.5">
                             {reqs.slice(0, 3).map((req, i) => (
                               <div key={i} title={`${req.employee_name} · ${LEAVE_TYPE_LABELS[req.leave_type] ?? req.leave_type}`}
