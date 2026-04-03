@@ -81,10 +81,16 @@ type ShipRow = {
 };
 
 export async function GET(req: Request) {
-  // ✅ (추가) GitHub Actions 등 외부 자동화용 API Key 인증
-  const authHeader = req.headers.get("x-api-key");
-  const internalApiKey = process.env.INTERNAL_API_TOKEN;
-  const isAuthorized = !!internalApiKey && authHeader === internalApiKey;
+  const supabase = (() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !serviceKey) {
+      throw new Error("SUPABASE_SERVICE_ROLE_KEY 또는 NEXT_PUBLIC_SUPABASE_URL 누락");
+    }
+    return createSupabaseClient(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  })();
 
   const { searchParams } = new URL(req.url);
 
@@ -102,23 +108,6 @@ export async function GET(req: Request) {
   if (!from || !to) {
     return NextResponse.json({ error: "from/to 파라미터가 필요합니다." }, { status: 400 });
   }
-
-  // ✅ (추가) 키가 맞으면 Service Role로 Supabase 연결 (세션/쿠키/RLS 영향 최소화)
-  // ❌ 키가 없거나 틀리면 기존 createClient() 흐름 유지 (로그인 세션 기반)
-  const supabase = isAuthorized
-    ? (() => {
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-        if (!url || !serviceKey) {
-          // 서버 설정 누락이면 즉시 오류 반환
-          // (GitHub Actions 백업이 "조용히 HTML 저장" 같은 문제로 이어지지 않게)
-          throw new Error("SUPABASE_SERVICE_ROLE_KEY 또는 NEXT_PUBLIC_SUPABASE_URL 누락");
-        }
-        return createSupabaseClient(url, serviceKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-      })()
-    : await createClient();
 
   // =============================
   // 1) 매출(orders)
