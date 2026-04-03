@@ -25,6 +25,7 @@ type Employee = {
   encrypted_rrn: string | null
   birthday: string | null
   birthday_type: 'solar' | 'lunar' | null
+  signature_url: string | null
   created_at: string
 }
 
@@ -164,6 +165,8 @@ export default function EmployeesPage() {
   const [leaveSaving, setLeaveSaving] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [showHealthEmpId, setShowHealthEmpId] = useState<string | null>(null)
+  const [signatureFile, setSignatureFile] = useState<File | null>(null)
+const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
   const [healthFormEmpId, setHealthFormEmpId] = useState<string | null>(null)
   const [healthDate, setHealthDate] = useState('')
   const [healthNote, setHealthNote] = useState('')
@@ -395,6 +398,28 @@ export default function EmployeesPage() {
     setForm({ ...form, [name]: value })
   }
 
+  function handleSignatureChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      setError('JPG 또는 PNG 파일만 업로드 가능합니다.')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError('파일 크기는 2MB 이하여야 합니다.')
+      return
+    }
+    setSignatureFile(file)
+    setSignaturePreview(URL.createObjectURL(file))
+  }
+  
+  async function getSignatureUrl(path: string) {
+    const { data } = await supabase.storage
+      .from('employee-signatures')
+      .createSignedUrl(path, 60 * 60) // 1시간 유효
+    return data?.signedUrl ?? null
+  }
+
   function handleEdit(emp: Employee) {
     setEditingId(emp.id)
     setEditingEmployee(emp)
@@ -422,6 +447,8 @@ export default function EmployeesPage() {
     setShowForm(true)
     setError('')
     setSuccess('')
+    setSignatureFile(null)
+  setSignaturePreview(emp.signature_url ?? null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -441,6 +468,8 @@ export default function EmployeesPage() {
     setEditingAuthId(null)
     setForm(EMPTY_FORM)
     setShowForm(false)
+    setSignatureFile(null)
+  setSignaturePreview(null)
     setError('')
   }
 
@@ -483,6 +512,23 @@ export default function EmployeesPage() {
         if (!res.ok) { setError(json.error || '계정 생성 실패'); setLoading(false); return }
         authUserId = json.userId
       }
+      let signatureUrl: string | null = editingEmployee?.signature_url ?? null
+
+      if (signatureFile) {
+        const ext = signatureFile.name.split('.').pop()
+        const path = `signatures/${editingId ?? 'new'}_${Date.now()}.${ext}`
+
+        const { error: uploadError } = await supabase.storage
+          .from('employee-signatures')
+          .upload(path, signatureFile, { upsert: true })
+
+        if (uploadError) {
+          setError('서명 이미지 업로드 실패: ' + uploadError.message)
+          setLoading(false)
+          return
+        }
+        signatureUrl = path
+      }
 
       let encryptedRrn: string | null = null
       if (form.rrn.trim()) {
@@ -513,6 +559,7 @@ export default function EmployeesPage() {
         emergency_contact: form.emergency_contact || null,
         bank_name: form.bank_name || null,
         bank_account: form.bank_account || null,
+        signature_url: signatureUrl,
       }
       if (encryptedRrn) basePayload.encrypted_rrn = encryptedRrn
 
@@ -841,6 +888,45 @@ export default function EmployeesPage() {
                 )
               })()}
 
+{/* 서명 이미지 */}
+<div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">서명 이미지</p>
+                <div className="flex items-start gap-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      서명 파일 업로드
+                      <span className="text-xs text-gray-400 ml-1">· JPG/PNG, 최대 2MB</span>
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      onChange={handleSignatureChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">투명 배경 PNG 권장</p>
+                  </div>
+                  {signaturePreview && (
+                    <div className="shrink-0">
+                      <p className="text-xs text-gray-500 mb-1">미리보기</p>
+                      <div className="border-2 border-dashed border-gray-200 rounded-lg p-2 bg-gray-50 w-40 h-20 flex items-center justify-center">
+                        <img
+                          src={signaturePreview}
+                          alt="서명 미리보기"
+                          className="max-w-full max-h-full object-contain"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setSignatureFile(null); setSignaturePreview(null) }}
+                        className="text-xs text-red-400 hover:text-red-600 mt-1"
+                      >
+                        ✕ 제거
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* 차량/통근 정보 */}
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">차량 / 통근 정보</p>
@@ -973,6 +1059,17 @@ export default function EmployeesPage() {
                             }`}>
                             📋 이력
                           </button>
+                          {emp.signature_url && (
+  <button
+    onClick={async () => {
+      const url = await getSignatureUrl(emp.signature_url!)
+      if (url) window.open(url, '_blank')
+    }}
+    className="text-xs font-medium px-2.5 py-1 rounded-full border text-purple-600 border-purple-300 hover:bg-purple-50 transition-colors"
+  >
+    ✍️ 서명
+  </button>
+)}
                           <button onClick={() => handleDelete(emp.id, emp.name)}
                             className="text-xs text-red-400 hover:text-red-600 font-medium">삭제</button>
                         </div>
