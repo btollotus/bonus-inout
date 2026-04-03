@@ -117,9 +117,7 @@ export default function LeaveStatusPage({ role }: { role?: string }) {
   const [holidays, setHolidays] = useState<Record<string, string>>({});
 
   useEffect(() => { fetchLeaveData() }, [selectedYear])
-  useEffect(() => {
-    fetchKoreaHolidays(calendarYear, normalizedMonth + 1).then(setHolidays);
-  }, [calendarYear, normalizedMonth]);
+
 
   async function fetchLeaveData() {
     setLoading(true); setError('')
@@ -177,6 +175,10 @@ export default function LeaveStatusPage({ role }: { role?: string }) {
     : selectedYear
 
   const normalizedMonth = ((calendarMonth % 12) + 12) % 12
+
+  useEffect(() => {
+    fetchKoreaHolidays(calendarYear, normalizedMonth + 1).then(setHolidays);
+  }, [calendarYear, normalizedMonth]);
 
   const firstDay = new Date(calendarYear, normalizedMonth, 1).getDay()
   const daysInMonth = new Date(calendarYear, normalizedMonth + 1, 0).getDate()
