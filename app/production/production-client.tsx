@@ -610,6 +610,14 @@ export default function ProductionClient() {
     value: string
   ) {
     if (!woChecks || !selectedWo) return;
+  
+    // ✅ confirm 팝업 추가
+    if (value !== "") {
+      const stepLabel = PROGRESS_STEPS.find((s) => s.assigneeKey === assigneeKey)?.label ?? assigneeKey;
+      const confirmed = confirm(`[${stepLabel}] 담당자를 "${value}"로 저장합니다.\n본인이 맞습니까?`);
+      if (!confirmed) return;
+    }
+  
     const isDone = value !== "";
     setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: value, [statusKey]: isDone } : prev);
     setStepSaving(assigneeKey);
