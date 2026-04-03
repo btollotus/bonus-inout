@@ -92,6 +92,7 @@ const KR_PUBLIC_HOLIDAYS = new Set([
   "부처님오신날",
   "현충일",
   "광복절",
+  "제헌절",
   "추석", "추석 연휴", "추석 전날",
   "개천절",
   "한글날",
@@ -101,8 +102,15 @@ const KR_PUBLIC_HOLIDAYS = new Set([
   "임시공휴일",
 ]);
 
+// 구글 캘린더 누락 대체공휴일 수동 보완
+const MANUAL_HOLIDAYS: Record<string, string> = {
+  "2027-02-09": "대체공휴일(설날)",
+};
+
 function isPublicHoliday(summary: string): boolean {
   if (!summary) return false;
+  // 크리스마스 이브 명시적 제외
+  if (summary === "크리스마스 이브") return false;
   for (const h of KR_PUBLIC_HOLIDAYS) {
     if (summary.includes(h)) return true;
   }
@@ -134,6 +142,7 @@ async function fetchKoreaHolidays(year: number, month: number): Promise<Record<s
     console.warn("공휴일 조회 실패, 빈 맵 반환:", e);
   }
 
+  Object.assign(map, MANUAL_HOLIDAYS);
   return map;
 }
 function normalizeShipMethod(v: any): ShipMethod {
