@@ -283,9 +283,20 @@ export default function ProductionClient() {
   }>>({});
   const [printOpen, setPrintOpen] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
-  // ── CCP 온장고 슬롯 ──
-  const [warmerSlots, setWarmerSlots] = useState<{ id: string; slot_name: string; purpose: string }[]>([]);
-  const [eCcpSlotId, setECcpSlotId] = useState<string>("");
+ // ── CCP 온장고 슬롯 ──
+ const [warmerSlots, setWarmerSlots] = useState<{ id: string; slot_name: string; purpose: string }[]>([]);
+ const [eCcpSlotId, setECcpSlotId] = useState<string>("");
+
+ // ── 소비기한/안전재고 알림 ──
+ const [stockAlerts, setStockAlerts] = useState<{
+   id: string;
+   item_name: string;
+   status: string;
+   expiry_date: string | null;
+   action: string | null;
+   log_date: string;
+ }[]>([]);
+ const [showAlertPanel, setShowAlertPanel] = useState(false);
 
   // ── Realtime 진행상태 전용 state ──
   const [realtimeConnected, setRealtimeConnected] = useState(false);
@@ -706,6 +717,16 @@ export default function ProductionClient() {
       .eq("is_active", true)
       .order("slot_no")
       .then(({ data }) => { if (data) setWarmerSlots(data); });
+  }, []);
+
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    supabase.from("expiry_mgmt_logs")
+      .select("id,item_name,status,expiry_date,action,log_date")
+      .eq("log_date", today)
+      .in("status", ["D-30 경보", "만료", "안전재고 미달"])
+      .order("status")
+      .then(({ data }) => { if (data) setStockAlerts(data); });
   }, []);
 
   // ── 필터링 ──
@@ -1222,8 +1243,70 @@ export default function ProductionClient() {
           </div>
         </div>
 
+  {/* ── 소비기한/안전재고 알림 배지 ── */}
+  {stockAlerts.length > 0 && (
+          <div>
+            <button
+              className={`w-full flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all ${
+                stockAlerts.some((a) => a.status === "만료")
+                  ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+                  : stockAlerts.some((a) => a.status === "안전재고 미달")
+                  ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  : "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"
+              }`}
+              onClick={() => setShowAlertPanel((v) => !v)}
+            >
+              <span className="text-base animate-pulse">
+                {stockAlerts.some((a) => a.status === "만료") ? "🚨" : "⚠️"}
+              </span>
+              <span>
+                {stockAlerts.filter((a) => a.status === "만료").length > 0 &&
+                  `소비기한 만료 ${stockAlerts.filter((a) => a.status === "만료").length}건 `}
+                {stockAlerts.filter((a) => a.status === "D-30 경보").length > 0 &&
+                  `D-30 경보 ${stockAlerts.filter((a) => a.status === "D-30 경보").length}건 `}
+                {stockAlerts.filter((a) => a.status === "안전재고 미달").length > 0 &&
+                  `안전재고 미달 ${stockAlerts.filter((a) => a.status === "안전재고 미달").length}건`}
+              </span>
+              <span className="ml-auto text-xs opacity-60">{showAlertPanel ? "▲ 닫기" : "▼ 상세보기"}</span>
+            </button>
+
+            {showAlertPanel && (
+              <div className="mt-1 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500">
+                  오늘({new Date().toISOString().slice(0, 10)}) 기준 알림
+                </div>
+                <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                  {stockAlerts.map((alert) => (
+                    <div key={alert.id} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className="text-sm">
+                        {alert.status === "만료" ? "🚨" : alert.status === "D-30 경보" ? "⏰" : "📉"}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-slate-800 truncate">{alert.item_name}</div>
+                        {alert.expiry_date && (
+                          <div className="text-xs text-slate-500">소비기한: {alert.expiry_date}</div>
+                        )}
+                        {alert.action && (
+                          <div className="text-xs text-slate-500">{alert.action}</div>
+                        )}
+                      </div>
+                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                        alert.status === "만료"
+                          ? "bg-red-100 border-red-200 text-red-700"
+                          : alert.status === "D-30 경보"
+                          ? "bg-orange-100 border-orange-200 text-orange-700"
+                          : "bg-amber-100 border-amber-200 text-amber-700"
+                      }`}>{alert.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {msg ? (
-          <div className={`rounded-xl border px-4 py-3 text-sm font-medium ${msg.startsWith("✅") ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}>
+          <div className={`rounded-xl border px-4 py-3 text-sm font-medium ${msg.startsWith("✅") ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}> 
             {msg}
             <button className="ml-3 text-xs opacity-60 hover:opacity-100" onClick={() => setMsg(null)}>✕</button>
           </div>
