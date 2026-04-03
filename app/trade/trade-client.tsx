@@ -1977,6 +1977,7 @@ if (woSubNameVal) {
 
 <div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={eBusinessNo} onChange={(e) => setEBusinessNo(e.target.value)} /></div>
 <div className="md:col-span-3"><div className="mb-1 text-xs text-slate-600">메모</div><input className={inp} lang="ko" value={eLedgerMemo} onChange={(e) => setELedgerMemo(e.target.value)} /></div>
+                    </div>
                   </>
 
                 )}
