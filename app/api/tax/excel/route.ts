@@ -1,7 +1,6 @@
 // app/api/tax/excel/route.ts
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 function toYmd(d: string) {
