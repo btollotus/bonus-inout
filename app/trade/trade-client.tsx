@@ -248,18 +248,18 @@ function buildOrderSummaryText(r: UnifiedRow) {
 // ─────────────────────── Sub-components ───────────────────────
 type ShipFormState = { name: string; addr: string; mobile: string; phone: string; msg: string };
 const emptyShip = (): ShipFormState => ({ name: "", addr: "", mobile: "", phone: "", msg: "" });
-
-function ImeSafeInput({ value, onValueChange, className, placeholder, name, autoComplete, inputMode, disabled }: {
+function ImeSafeInput({ value, onValueChange, className, placeholder, name, autoComplete, inputMode, disabled, lang }: {
   value: string; onValueChange: (v: string) => void; className: string;
   placeholder?: string; name?: string; autoComplete?: string;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"]; disabled?: boolean;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"]; disabled?: boolean; lang?: string;
 }) {
   const [local, setLocal] = useState<string>(value ?? "");
   const composingRef = useRef(false);
   useEffect(() => { if (!composingRef.current) setLocal(value ?? ""); }, [value]);
   return (
     <input className={className} placeholder={placeholder} name={name} autoComplete={autoComplete}
-      inputMode={inputMode} disabled={disabled} value={local}
+      inputMode={inputMode} disabled={disabled} value={local} lang={lang}
+
       onCompositionStart={() => { composingRef.current = true; }}
       onCompositionEnd={(e) => { composingRef.current = false; const v = (e.currentTarget as HTMLInputElement).value; setLocal(v); onValueChange(v); }}
       onChange={(e) => { const v = e.target.value; setLocal(v); if (!composingRef.current) onValueChange(v); }}
@@ -273,9 +273,9 @@ function ShipmentForm({ label, value, onChange, cls, namePrefix }: {
   return (
     <div className="space-y-2">
       <div className="mb-2 text-sm font-semibold">{label}</div>
-      <ImeSafeInput className={cls} placeholder="수화주명" value={value.name} name={`${namePrefix}_name`} autoComplete="off" onValueChange={(v) => onChange({ name: v })} />
-      <ImeSafeInput className={cls} placeholder="주소1" value={value.addr} name={`${namePrefix}_addr`} autoComplete="off" onValueChange={(v) => onChange({ addr: v })} />
-      <ImeSafeInput className={cls} placeholder="배송메세지" value={value.msg} name={`${namePrefix}_msg`} autoComplete="off" onValueChange={(v) => onChange({ msg: v })} />
+      <ImeSafeInput className={cls} placeholder="수화주명" lang="ko" value={value.name} name={`${namePrefix}_name`} autoComplete="off" onValueChange={(v) => onChange({ name: v })} />
+<ImeSafeInput className={cls} placeholder="주소1" lang="ko" value={value.addr} name={`${namePrefix}_addr`} autoComplete="off" onValueChange={(v) => onChange({ addr: v })} />
+<ImeSafeInput className={cls} placeholder="배송메세지" lang="ko" value={value.msg} name={`${namePrefix}_msg`} autoComplete="off" onValueChange={(v) => onChange({ msg: v })} />
       <div className="grid grid-cols-2 gap-2">
         <ImeSafeInput className={cls} placeholder="휴대폰" value={value.mobile} name={`${namePrefix}_mobile`} autoComplete="off" onValueChange={(v) => onChange({ mobile: v })} />
         <ImeSafeInput className={cls} placeholder="전화" value={value.phone} name={`${namePrefix}_phone`} autoComplete="off" onValueChange={(v) => onChange({ phone: v })} />
@@ -294,8 +294,8 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
   const pack = inferPackEaFromName(l.name);
   return (
     <div className={`grid ${gridCols} gap-2`}>
-      <input className={inputCls} list="food-types-list" value={l.food_type} onChange={(e) => onUpdate(i, { food_type: e.target.value })} />
-      <input className={inputCls} list="preset-products-list" value={l.name}
+<input className={inputCls} lang="ko" list="food-types-list" value={l.food_type} onChange={(e) => onUpdate(i, { food_type: e.target.value })} />
+<input className={inputCls} lang="ko" list="preset-products-list" value={l.name}    
         onChange={(e) => {
           const v = e.target.value; onUpdate(i, { name: v });
           const hitPreset = presetByName.get(v);
@@ -1870,9 +1870,9 @@ if (woSubNameVal) {
                         </div>
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                           <div><div className="mb-1 text-xs text-slate-600">제품명</div><input className={inp} value={eWoProductName} onChange={(e) => setEWoProductName(e.target.value)} /></div>
-                          <div><div className="mb-1 text-xs text-slate-600">서브네임</div><input className={inp} placeholder="예: COS, 크로버" value={eWoSubName} onChange={(e) => setEWoSubName(e.target.value)} /></div>
-                          <div><div className="mb-1 text-xs text-slate-600">식품유형</div><input className={inp} list="food-types-list" placeholder="예: 화이트초콜릿" value={eWoFoodType} onChange={(e) => setEWoFoodType(e.target.value)} /></div>
-                          <div><div className="mb-1 text-xs text-slate-600">규격(로고스펙)</div><input className={inp} placeholder="예: 40x40mm" value={eWoLogoSpec} onChange={(e) => setEWoLogoSpec(e.target.value)} /></div>
+                          <div><div className="mb-1 text-xs text-slate-600">서브네임</div><input className={inp} lang="ko" placeholder="예: COS, 크로버, 삼광초" value={eWoSubName} onChange={(e) => setEWoSubName(e.target.value)} /></div>
+                          <div><div className="mb-1 text-xs text-slate-600">식품유형</div><input className={inp} list="food-types-list" placeholder="예: 다크화이트" value={eWoFoodType} onChange={(e) => setEWoFoodType(e.target.value)} /></div>
+                          <div><div className="mb-1 text-xs text-slate-600">규격</div><input className={inp} placeholder="예: 40x40mm" value={eWoLogoSpec} onChange={(e) => setEWoLogoSpec(e.target.value)} /></div>
                           <div><div className="mb-1 text-xs text-slate-600">두께</div>
                             <select className={inp} value={eWoThickness} onChange={(e) => setEWoThickness(e.target.value)}>
                               {["2mm", "3mm", "5mm", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
@@ -1971,11 +1971,13 @@ if (woSubNameVal) {
                           </div>
                         </div>
                       </div>
-                      <div><div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div><input className={inp} value={eCounterpartyName} onChange={(e) => setECounterpartyName(e.target.value)} /></div>
-                      <div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={eBusinessNo} onChange={(e) => setEBusinessNo(e.target.value)} /></div>
-                      <div className="md:col-span-3"><div className="mb-1 text-xs text-slate-600">메모</div><input className={inp} value={eLedgerMemo} onChange={(e) => setELedgerMemo(e.target.value)} /></div>
-                    </div>
+                      <div><div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div>
+  <input className={inp} lang="ko" value={eCounterpartyName} onChange={(e) => setECounterpartyName(e.target.value)} />
+</div>
+<div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={eBusinessNo} onChange={(e) => setEBusinessNo(e.target.value)} /></div>
+<div className="md:col-span-3"><div className="mb-1 text-xs text-slate-600">메모</div><input className={inp} lang="ko" value={eLedgerMemo} onChange={(e) => setELedgerMemo(e.target.value)} /></div>
                   </>
+
                 )}
               </div>
               <Datalists />
@@ -2024,7 +2026,7 @@ if (woSubNameVal) {
                 </div>
               </div>
             ) : null}
-            <input className={`${inp} mb-3`} placeholder="목록 필터(이름/사업자번호)" value={partnerFilter}
+<input className={`${inp} mb-3`} lang="ko" placeholder="목록 필터(이름/사업자번호)" value={partnerFilter}  
               onChange={(e) => { setTradeSearch(""); setPartnerFilter(e.target.value); }} />
             <div className="mb-2 text-xs text-slate-600">선택된 거래처: {selectedPartner ? `${selectedPartner.name}${selectedPartner.business_no ? ` · ${selectedPartner.business_no}` : ""}` : "없음"}</div>
             <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
@@ -2098,13 +2100,13 @@ if (woSubNameVal) {
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                   <div><div className="mb-1 text-xs text-slate-600">출고일(주문일)</div><input type="date" className={inp} value={shipDate} onChange={(e) => setShipDate(e.target.value)} /></div>
-                  <div><div className="mb-1 text-xs text-slate-600">주문자</div><input className={inp} value={ordererName} onChange={(e) => setOrdererName(e.target.value)} /></div>
-                  <div><div className="mb-1 text-xs text-slate-600">출고방법</div>
+                  <div><div className="mb-1 text-xs text-slate-600">주문자</div><input className={inp} lang="ko" value={ordererName} onChange={(e) => setOrdererName(e.target.value)} /></div>   
+                     <div><div className="mb-1 text-xs text-slate-600">출고방법</div>
                     <select className={inp} value={shipMethod} onChange={(e) => setShipMethod(e.target.value)}>
                       {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                     </select>
                   </div>
-                  <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} /></div>
+                  <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} lang="ko" value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} /></div>  
                 </div>
                 <ShipBlock s1={ship1} setS1={setShip1} s2={ship2} setS2={setShip2} two={twoShip} setTwo={setTwoShip} prefix="create" inpClass={inp} />
                 <div className="mt-4 flex items-center justify-between">
@@ -2197,7 +2199,7 @@ if (woSubNameVal) {
                       <div><div className="mb-1 text-xs text-slate-600">성형틀 장당 생산수</div><input className={inpR} inputMode="numeric" value={orderWoMoldPerSheet} onChange={(e) => setOrderWoMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} /></div>
                       <div className="md:col-span-3">
                         <div className="mb-1 text-xs text-slate-600">메모</div>
-                        <textarea className={`${inp} resize-none`} rows={2} placeholder="전달할 메모나 특이사항" value={orderWoNote} onChange={(e) => setOrderWoNote(e.target.value)} />
+                        <textarea className={`${inp} resize-none`} lang="ko" rows={2} placeholder="전달할 메모나 특이사항" value={orderWoNote} onChange={(e) => setOrderWoNote(e.target.value)} />   
                         {(() => {
                           const firstFoodType = lines[0]?.food_type ?? "";
                           if (!firstFoodType.includes("리얼")) return null;
@@ -2279,10 +2281,11 @@ if (woSubNameVal) {
                       </div>
                     </div>
                   </div>
-                  <div><div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div><input className={inp} value={manualCounterpartyName} onChange={(e) => setManualCounterpartyName(e.target.value)} placeholder="예: 쿠팡 / 이마트" /></div>
-                  <div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={manualBusinessNo} onChange={(e) => setManualBusinessNo(e.target.value)} /></div>
-                  <div className="md:col-span-3"><div className="mb-1 text-xs text-slate-600">메모</div><input className={inp} value={ledgerMemo} onChange={(e) => setLedgerMemo(e.target.value)} /></div>
-                </div>
+                  <div><div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div>
+  <input className={inp} lang="ko" value={manualCounterpartyName} onChange={(e) => setManualCounterpartyName(e.target.value)} placeholder="예: 쿠팡 / 이마트" />
+</div>
+<div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={manualBusinessNo} onChange={(e) => setManualBusinessNo(e.target.value)} /></div>
+<div className="md:col-span-3"><div className="mb-1 text-xs text-slate-600">메모</div><input className={inp} lang="ko" value={ledgerMemo} onChange={(e) => setLedgerMemo(e.target.value)} /></div>
                 <div className="mt-4 flex justify-end"><button className={btnOn} onClick={createLedger}>금전출납 기록</button></div>
               </div>
             ) : null}
@@ -2328,7 +2331,7 @@ if (woSubNameVal) {
              
                 </div>
               </div>
-              <div className="mb-3"><input className={inp} value={tradeSearch} onChange={(e) => setTradeSearch(e.target.value)} placeholder="검색: 매입처/사업자번호/메모/제품명/카테고리/방법" /></div>
+              <div className="mb-3"><input className={inp} lang="ko" value={tradeSearch} onChange={(e) => setTradeSearch(e.target.value)} placeholder="검색: 매입처/사업자번호/메모/제품명/카테고리/방법" /></div>
 
               <div className="rounded-2xl border border-slate-200">
                 <div ref={tradeTopScrollRef} className="overflow-x-auto"
