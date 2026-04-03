@@ -1974,6 +1974,7 @@ if (woSubNameVal) {
                       <div><div className="mb-1 text-xs text-slate-600">업체명(매입처/상대방)</div>
   <input className={inp} lang="ko" value={eCounterpartyName} onChange={(e) => setECounterpartyName(e.target.value)} />
 </div>
+
 <div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={eBusinessNo} onChange={(e) => setEBusinessNo(e.target.value)} /></div>
 <div className="md:col-span-3"><div className="mb-1 text-xs text-slate-600">메모</div><input className={inp} lang="ko" value={eLedgerMemo} onChange={(e) => setELedgerMemo(e.target.value)} /></div>
                   </>
@@ -2286,6 +2287,7 @@ if (woSubNameVal) {
 </div>
 <div><div className="mb-1 text-xs text-slate-600">사업자등록번호</div><input className={inp} value={manualBusinessNo} onChange={(e) => setManualBusinessNo(e.target.value)} /></div>
 <div className="md:col-span-3"><div className="mb-1 text-xs text-slate-600">메모</div><input className={inp} lang="ko" value={ledgerMemo} onChange={(e) => setLedgerMemo(e.target.value)} /></div>
+                </div>
                 <div className="mt-4 flex justify-end"><button className={btnOn} onClick={createLedger}>금전출납 기록</button></div>
               </div>
             ) : null}
