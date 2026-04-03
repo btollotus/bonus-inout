@@ -1180,7 +1180,7 @@ export default function ProductionClient() {
             <div className="mb-3 space-y-2">
               <input
                 className={inp}
-                placeholder="거래처명 / 품목명 / 바코드 검색"
+                placeholder="거래처명 / 제품명 / 바코드 검색"
                 value={filterSearch}
                 onChange={(e) => setFilterSearch(e.target.value)}
               />
@@ -1508,7 +1508,7 @@ export default function ProductionClient() {
                 {isAdminOrSubadmin ? (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <div>
-                      <div className="mb-1 text-xs text-slate-500">품목명 *</div>
+                      <div className="mb-1 text-xs text-slate-500">제품명 *</div>
                       <input className={inp} value={eProductName} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEProductName(e.target.value)} />
                     </div>
                     <div>
