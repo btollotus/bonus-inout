@@ -238,6 +238,7 @@ export default function ProductionClient() {
 
   // ── 수정 모드 ──
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   // ── 생산중 카운트 / 정렬 ──
   const [productionCount, setProductionCount] = useState(0);
@@ -897,6 +898,9 @@ export default function ProductionClient() {
 
   // ── 생산완료 버튼 핸들러 ──
   async function markProductionComplete() {
+    if (isCompleting) return;  // ← 이 줄 추가
+    setIsCompleting(true);     // ← 이 줄 추가
+
     if (!selectedWo) return;
 
     if (!isAdmin && woChecks) {
@@ -1061,6 +1065,8 @@ export default function ProductionClient() {
       await loadWoList();
     } catch (e: any) {
       setMsg("오류: " + (e?.message ?? e));
+    } finally {
+      setIsCompleting(false);   // ← 추가 (이미 있는 finally 블록 안에)
     }
   }
 
@@ -1813,12 +1819,13 @@ export default function ProductionClient() {
                 {selectedWo.status !== "완료" && !isEditMode ? (
                   // 생산중 + 입력 모드 → 생산완료 처리 버튼
                   <>
-                    <button
-                      className="flex-1 rounded-xl border border-green-500 bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800"
-                      onClick={markProductionComplete}
-                    >
-                      ✅ 생산완료 처리 (기본정보 · 담당자 · 생산입력 저장 포함)
-                    </button>
+<button
+  className="flex-1 rounded-xl border border-green-500 bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed"
+  onClick={markProductionComplete}
+  disabled={isCompleting}
+>
+  {isCompleting ? "⏳ 처리 중..." : "✅ 생산완료 처리 (기본정보 · 담당자 · 생산입력 저장 포함)"}
+</button>
                   </>
                 ) : selectedWo.status === "완료" && !isEditMode ? (
                   // 완료 + 비활성 모드 → 수정 버튼만
