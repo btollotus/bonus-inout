@@ -145,15 +145,18 @@ export async function GET(req: Request) {
 
   let orderLines: any[] = [];
   if (orderIds.length) {
-    const { data: lines, error: linesErr } = await supabase
-      .from("order_lines")
-      // ✅ unit_type, pack_ea 추가 (무게 계산 시 unit_type 기반으로 처리하기 위함)
-      .select("order_id,line_no,name,food_type,weight_g,qty,unit,unit_type,pack_ea,supply_amount,vat_amount,total_amount")
-      .in("order_id", orderIds)
-      .limit(200000);
+    const chunkSize = 200;
+    for (let i = 0; i < orderIds.length; i += chunkSize) {
+      const chunk = orderIds.slice(i, i + chunkSize);
+      const { data: lines, error: linesErr } = await supabase
+        .from("order_lines")
+        .select("order_id,line_no,name,food_type,weight_g,qty,unit,unit_type,pack_ea,supply_amount,vat_amount,total_amount")
+        .in("order_id", chunk)
+        .limit(200000);
 
-    if (!linesErr && lines) {
-      orderLines = lines as any[];
+      if (!linesErr && lines) {
+        orderLines = orderLines.concat(lines);
+      }
     }
   }
 
@@ -169,28 +172,32 @@ export async function GET(req: Request) {
   >();
 
   if (orderIds.length) {
-    const { data: shipData, error: shipErr } = await supabase
-      .from("order_shipments")
-      .select(
-        "id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message"
-      )
-      .in("order_id", orderIds)
-      .order("order_id", { ascending: true })
-      .order("seq", { ascending: true })
-      .limit(200000);
+    const chunkSize = 200;
+    for (let i = 0; i < orderIds.length; i += chunkSize) {
+      const chunk = orderIds.slice(i, i + chunkSize);
+      const { data: shipData, error: shipErr } = await supabase
+        .from("order_shipments")
+        .select(
+          "id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message"
+        )
+        .in("order_id", chunk)
+        .order("order_id", { ascending: true })
+        .order("seq", { ascending: true })
+        .limit(200000);
 
-    if (!shipErr && shipData) {
-      for (const r of shipData as any[]) {
-        const oid = String(r.order_id ?? "");
-        if (!oid) continue;
+      if (!shipErr && shipData) {
+        for (const r of shipData as any[]) {
+          const oid = String(r.order_id ?? "");
+          if (!oid) continue;
 
-        const seq = safeNum(r.seq);
-        const cur = shipByOrder.get(oid) ?? { s1: null, s2: null };
+          const seq = safeNum(r.seq);
+          const cur = shipByOrder.get(oid) ?? { s1: null, s2: null };
 
-        if (seq === 1 && !cur.s1) cur.s1 = r as ShipRow;
-        else if (seq === 2 && !cur.s2) cur.s2 = r as ShipRow;
+          if (seq === 1 && !cur.s1) cur.s1 = r as ShipRow;
+          else if (seq === 2 && !cur.s2) cur.s2 = r as ShipRow;
 
-        shipByOrder.set(oid, cur);
+          shipByOrder.set(oid, cur);
+        }
       }
     }
   }
