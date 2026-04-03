@@ -83,7 +83,7 @@ type ShipRow = {
 export async function GET(req: Request) {
   // ✅ (추가) GitHub Actions 등 외부 자동화용 API Key 인증
   const authHeader = req.headers.get("x-api-key");
-  const internalApiKey = process.env.INTERNAL_API_KEY;
+  const internalApiKey = process.env.INTERNAL_API_TOKEN;
   const isAuthorized = !!internalApiKey && authHeader === internalApiKey;
 
   const { searchParams } = new URL(req.url);
@@ -484,57 +484,7 @@ export async function GET(req: Request) {
       요청사항2: "",
     });
   }
-// =============================
-// ✅ [추가] 선발행_입금대기 시트용 데이터
-// 조건: tax_invoice_issued=true 이면서 같은 거래처의 IN 입금이 없는 주문
-// =============================
-const { data: inLedgers } = await supabase
-  .from("ledger_entries")
-  .select("partner_id,counterparty_name,amount")
-  .eq("direction", "IN")
-  .gte("entry_date", from)
-  .lte("entry_date", to)
-  .limit(200000);
 
-// 거래처별 입금 합계 맵
-// 수정 후 (partner_id와 counterparty_name 둘 다 등록)
-const inAmtByPartner = new Map<string, number>();
-for (const il of (inLedgers ?? []) as any[]) {
-  const amt = safeNum(il.amount);
-  if (il.partner_id) {
-    const k = String(il.partner_id);
-    inAmtByPartner.set(k, (inAmtByPartner.get(k) ?? 0) + amt);
-  }
-  if (il.counterparty_name) {
-    const k = String(il.counterparty_name);
-    inAmtByPartner.set(k, (inAmtByPartner.get(k) ?? 0) + amt);
-  }
-}
-
-const preIssueRows: any[] = [];
-for (const o of orders) {
-  if (!o.tax_invoice_issued) continue;
-  const cid = String(o.customer_id ?? "");
-  const cName = String(o.customer_name ?? "");
-  const key = cid || cName;
-  const inAmt = inAmtByPartner.get(key) ?? 0;
-  if (inAmt >= safeNum(o.total_amount)) continue; // 입금 충분하면 제외
-
-  const partnerBizNo = cid ? partnersById.get(cid)?.business_no ?? "" : "";
-
-  preIssueRows.push({
-    날짜: toYmd(o.ship_date),
-    거래처: cName,
-    사업자등록번호: normalizeBizNo(partnerBizNo),
-    매출_총액: safeNum(o.total_amount),
-    매출_공급가: safeNum(o.supply_amount),
-    매출_VAT: safeNum(o.vat_amount),
-    입금합계: inAmt,
-    미수금: safeNum(o.total_amount) - inAmt,
-    세금계산서발행: "✅",
-    비고: "선발행 후 입금 미확인",
-  });
-}
   // 날짜순 정렬(같은 날짜면 구분 문자열 기준)
   rows.sort((a, b) => {
     if (a.날짜 === b.날짜) return String(a.구분).localeCompare(String(b.구분));
@@ -689,53 +639,6 @@ for (const o of orders) {
   }
 
   const wb = XLSX.utils.book_new();
-  // ✅ [추가] 선발행_입금대기 시트
-if (preIssueRows.length > 0) {
-  preIssueRows.sort((a, b) => String(a.날짜).localeCompare(String(b.날짜)));
-
-  const preHeader = [
-    "날짜", "거래처", "사업자등록번호",
-    "매출_공급가", "매출_VAT", "매출_총액",
-    "입금합계", "미수금", "세금계산서발행", "비고",
-  ];
-
-  const wsPreIssue = XLSX.utils.json_to_sheet(preIssueRows, { header: preHeader });
-
-  (wsPreIssue as any)["!cols"] = [
-    { wch: 12 }, { wch: 26 }, { wch: 16 },
-    { wch: 14 }, { wch: 12 }, { wch: 14 },
-    { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 24 },
-  ];
-
-  // 숫자 컬럼 천단위 포맷
-  const preRef = wsPreIssue["!ref"];
-  if (preRef) {
-    const preRange = XLSX.utils.decode_range(preRef);
-    const numIdxs = ["매출_공급가","매출_VAT","매출_총액","입금합계","미수금"]
-      .map(h => preHeader.indexOf(h)).filter(x => x >= 0);
-
-    for (let r = preRange.s.r + 1; r <= preRange.e.r; r++) {
-      for (const c of numIdxs) {
-        const addr = XLSX.utils.encode_cell({ r, c });
-        const cell = (wsPreIssue as any)[addr];
-        if (!cell) continue;
-        if (cell.t === "n") cell.z = "#,##0";
-        cell.s = { font: { name: "굴림", sz: 10 } };
-      }
-      // 미수금 컬럼 빨강
-      const misuIdx = preHeader.indexOf("미수금");
-      if (misuIdx >= 0) {
-        const addr = XLSX.utils.encode_cell({ r, c: misuIdx });
-        const cell = (wsPreIssue as any)[addr];
-        if (cell) {
-          cell.s = { font: { name: "굴림", sz: 10, color: { rgb: "FFFF0000" } } };
-        }
-      }
-    }
-  }
-
-  XLSX.utils.book_append_sheet(wb, wsPreIssue, "선발행_입금대기");
-}
   XLSX.utils.book_append_sheet(wb, ws, "세무사_통합");
 
   const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx", cellStyles: true });

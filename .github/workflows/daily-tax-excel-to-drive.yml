@@ -117,7 +117,10 @@ jobs:
           FILENAME="세무사_통합_${FROM}_${TO}_생성일_${TODAY}.xlsx"
 
           echo "Downloading: $URL"
-          curl -L --fail -o "$FILENAME" "$URL"
+          curl -L --fail \
+            -H "x-api-key: ${{ secrets.INTERNAL_API_TOKEN }}" \
+            -o "$FILENAME" \
+            "$URL"
           ls -al
 
       - name: Upload to Google Drive (Shared Drive folder)
