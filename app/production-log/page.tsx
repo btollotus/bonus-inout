@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import { Ccp1bTab, Ccp1pTab, OtherHeatingTab, CompressorTab, PetLedgerTab } from "./tabs-extra";
+import { ExpiryMgmtTab, WarmerCleaningTab, PestTab, ForeignMatterTab, HygieneCheckTab, TempHumidityTab, StorageTempTab } from "./tabs-hygiene";
 
 const supabase = createClient();
 
@@ -16,7 +17,8 @@ const btnSm = "rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs f
 
 type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
 
-type Tab = "production" | "material" | "work" | "ccp1b" | "ccp1p" | "other_heating" | "compressor" | "pet";
+type Tab = "production" | "material" | "work" | "ccp1b" | "ccp1p" | "other_heating" | "compressor" | "pet"
+  | "expiry" | "warmer_clean" | "pest" | "foreign" | "hygiene" | "temp_humidity" | "storage_temp";
 
 // ─────────────────────── 생산일지 Types ───────────────────────
 type ProductionLog = {
@@ -157,6 +159,13 @@ export default function ProductionLogPage() {
             { key: "other_heating", label: "🔥 가열공정" },
             { key: "compressor",    label: "💨 압축공기" },
             { key: "pet",           label: "📦 PET수불부" },
+            { key: "expiry",       label: "📅 소비기한" },
+{ key: "warmer_clean", label: "🧹 온장고세척" },
+{ key: "pest",         label: "🪲 방충방서" },
+{ key: "foreign",      label: "🔍 이물관리" },
+{ key: "hygiene",      label: "🧼 위생관리" },
+{ key: "temp_humidity",label: "🌡️ 온습도" },
+{ key: "storage_temp", label: "❄️ 냉장온도" },
           ] as { key: Tab; label: string }[]).map((t) => (    
             <button key={t.key}
               className={activeTab === t.key ? btnOn : btn}
@@ -190,6 +199,13 @@ export default function ProductionLogPage() {
         {activeTab === "pet" && (
           <PetLedgerTab role={role} userId={userId} showToast={showToast} />
         )}
+        {activeTab === "expiry"        && <ExpiryMgmtTab role={role} userId={userId} showToast={showToast} />}
+{activeTab === "warmer_clean"  && <WarmerCleaningTab role={role} userId={userId} showToast={showToast} />}
+{activeTab === "pest"          && <PestTab role={role} userId={userId} showToast={showToast} />}
+{activeTab === "foreign"       && <ForeignMatterTab role={role} userId={userId} showToast={showToast} />}
+{activeTab === "hygiene"       && <HygieneCheckTab role={role} userId={userId} showToast={showToast} />}
+{activeTab === "temp_humidity" && <TempHumidityTab role={role} userId={userId} showToast={showToast} />}
+{activeTab === "storage_temp"  && <StorageTempTab role={role} userId={userId} showToast={showToast} />}
 
         {/* 토스트 */} 
         {toast && (
