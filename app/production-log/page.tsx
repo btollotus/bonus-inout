@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import { Ccp1bTab, Ccp1pTab, OtherHeatingTab, CompressorTab, PetLedgerTab } from "./tabs-extra";
 
 const supabase = createClient();
 
@@ -15,7 +16,7 @@ const btnSm = "rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs f
 
 type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
 
-type Tab = "production" | "material" | "work";
+type Tab = "production" | "material" | "work" | "ccp1b" | "ccp1p" | "other_heating" | "compressor" | "pet";
 
 // ─────────────────────── 생산일지 Types ───────────────────────
 type ProductionLog = {
@@ -124,6 +125,17 @@ export default function ProductionLogPage() {
     })();
   }, []);
 
+  if (role === "USER") {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="text-center text-slate-400">
+          <div className="text-4xl mb-3">🔒</div>
+          <div className="text-sm">접근 권한이 없습니다.</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-4">
       <div className="mx-auto max-w-[1400px] space-y-4">
@@ -136,11 +148,16 @@ export default function ProductionLogPage() {
 
         {/* 탭 */}
         <div className="flex gap-2">
-          {([
-            { key: "production", label: "📝 생산일지" },
-            { key: "material",   label: "🧪 원료수불부" },
-            { key: "work",       label: "👷 근무일지" },
-          ] as { key: Tab; label: string }[]).map((t) => (
+        {([
+            { key: "production",    label: "📝 생산일지" },
+            { key: "material",      label: "🧪 원료수불부" },
+            { key: "work",          label: "👷 근무일지" },
+            { key: "ccp1b",         label: "🌡️ CCP-1B" },
+            { key: "ccp1p",         label: "🔍 CCP-1P" },
+            { key: "other_heating", label: "🔥 가열공정" },
+            { key: "compressor",    label: "💨 압축공기" },
+            { key: "pet",           label: "📦 PET수불부" },
+          ] as { key: Tab; label: string }[]).map((t) => (    
             <button key={t.key}
               className={activeTab === t.key ? btnOn : btn}
               onClick={() => setActiveTab(t.key)}
@@ -155,11 +172,26 @@ export default function ProductionLogPage() {
         {activeTab === "material" && (
           <MaterialLedgerTab role={role} userId={userId} showToast={showToast} />
         )}
-        {activeTab === "work" && (
+       {activeTab === "work" && (
           <WorkLogTab role={role} userId={userId} showToast={showToast} />
         )}
+        {activeTab === "ccp1b" && (
+          <Ccp1bTab role={role} userId={userId} showToast={showToast} />
+        )}
+        {activeTab === "ccp1p" && (
+          <Ccp1pTab role={role} userId={userId} showToast={showToast} />
+        )}
+        {activeTab === "other_heating" && (
+          <OtherHeatingTab role={role} userId={userId} showToast={showToast} />
+        )}
+        {activeTab === "compressor" && (
+          <CompressorTab role={role} userId={userId} showToast={showToast} />
+        )}
+        {activeTab === "pet" && (
+          <PetLedgerTab role={role} userId={userId} showToast={showToast} />
+        )}
 
-        {/* 토스트 */}
+        {/* 토스트 */} 
         {toast && (
           <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] rounded-2xl border px-5 py-3 text-sm font-semibold shadow-xl
             ${toast.type === "success" ? "border-green-300 bg-green-600 text-white" : "border-red-300 bg-red-600 text-white"}`}>
