@@ -413,6 +413,16 @@ export default function ProductionClient() {
   async function saveCcpEvent() {
     if (!ccpSessionId) return showToast("CCP 세션이 없습니다. 슬롯을 먼저 지정해주세요.", "error");
     const needsTemp = !["vat_refill", "move", "material_in"].includes(ccpEventType);
+    if (!ccpTime || ccpTime.length < 4) return showToast("측정시각을 입력하세요. (예: 1430)", "error");
+    // ── 시각 순서 검증: 항상 마지막 기록보다 늦어야 함 ──
+    if (ccpEvents.length > 0) {
+      const lastEvent = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at)).slice(-1)[0];
+      const lastTimeStr = lastEvent.measured_at.slice(11, 16); // "HH:MM"
+      const newTimeStr = `${ccpTime.slice(0,2)}:${ccpTime.slice(2,4)}`;
+      if (newTimeStr <= lastTimeStr) {
+        return showToast(`⚠ 측정시각은 마지막 기록(${lastTimeStr})보다 늦어야 합니다.`, "error");
+      }
+    }
     if (needsTemp && !ccpTemp) return showToast("온도를 입력하세요.", "error");
     const temp = needsTemp ? Number(ccpTemp) : null;
     if (needsTemp && temp !== null && (temp < 40 || temp > 50)) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
@@ -1068,16 +1078,31 @@ export default function ProductionClient() {
                     <div className="font-semibold text-sm">🌡️ CCP-1B 온장고 슬롯 지정</div>
                     <span className="text-xs text-slate-400">(당류가공품·준초콜릿)</span>
                   </div>
-                  <select className={inp} value={eCcpSlotId} disabled={selectedWo?.status === "완료" && !isEditMode}
-                    onChange={async (e) => {
-                      const slotId = e.target.value;
-                      setECcpSlotId(slotId);
-                      await supabase.from("work_orders").update({ ccp_slot_id: slotId || null, updated_at: new Date().toISOString() }).eq("id", selectedWo!.id);
-                      loadCcpSession({ ...selectedWo, ccp_slot_id: slotId || null });
-                    }}>
-                    <option value="">— 슬롯 미지정 —</option>
-                    {warmerSlots.filter((s) => getFoodCategory(selectedWo.food_type) === "다크" ? s.purpose === "다크컴파운드" : s.purpose === "화이트컴파운드" || s.purpose === "유동").map((s) => <option key={s.id} value={s.id}>{s.slot_name} ({s.purpose})</option>)}
-                  </select>
+                  <div className="flex flex-wrap gap-2">
+                    {warmerSlots
+                      .filter((s) => getFoodCategory(selectedWo.food_type) === "다크" ? s.purpose === "다크컴파운드" : s.purpose === "화이트컴파운드" || s.purpose === "유동")
+                      .map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          disabled={selectedWo?.status === "완료" && !isEditMode}
+                          className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                            eCcpSlotId === s.id
+                              ? "border-blue-500 bg-blue-600 text-white shadow-sm scale-105"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
+                          }`}
+                          onClick={async () => {
+                            const slotId = eCcpSlotId === s.id ? "" : s.id;
+                            setECcpSlotId(slotId);
+                            await supabase.from("work_orders").update({ ccp_slot_id: slotId || null, updated_at: new Date().toISOString() }).eq("id", selectedWo!.id);
+                            loadCcpSession({ ...selectedWo, ccp_slot_id: slotId || null });
+                          }}
+                        >
+                          {s.slot_name}
+                          <span className="ml-1 text-[10px] opacity-70">({s.purpose})</span>
+                        </button>
+                      ))}
+                  </div>
                 </div>
               )}
 
@@ -1116,18 +1141,34 @@ export default function ProductionClient() {
                 {/* 입력 폼 */}
                 {showCcpForm && ccpSessionId && (
                   <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 space-y-3">
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                      <div>
-                        <div className="mb-1 text-xs text-slate-500">유형</div>
-                        <select className={inp} value={ccpEventType} onChange={(e) => setCcpEventType(e.target.value)}>
-                          <option value="start">시작</option>
-                          <option value="mid_check">중간점검</option>
-                          <option value="end">종료</option>
-                          <option value="material_in">원료투입</option>
-                          <option value="vat_refill">밧트교체</option>
-                          <option value="move">슬롯이동</option>
-                        </select>
+                    {/* 유형 탭 */}
+                    <div>
+                      <div className="mb-1 text-xs text-slate-500">유형</div>
+                      <div className="flex flex-wrap gap-1">
+                        {([
+                          { value: "material_in", label: "원료투입", cls: "bg-green-100 border-green-400 text-green-800" },
+                          { value: "start",       label: "시작",     cls: "bg-blue-100 border-blue-400 text-blue-800" },
+                          { value: "mid_check",   label: "중간점검", cls: "bg-slate-100 border-slate-400 text-slate-700" },
+                          { value: "end",         label: "종료",     cls: "bg-purple-100 border-purple-400 text-purple-800" },
+                          { value: "vat_refill",  label: "밧트교체", cls: "bg-amber-100 border-amber-400 text-amber-800" },
+                          { value: "move",        label: "슬롯이동", cls: "bg-teal-100 border-teal-400 text-teal-800" },
+                        ] as { value: string; label: string; cls: string }[]).map((t) => (
+                          <button
+                            key={t.value}
+                            type="button"
+                            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all ${
+                              ccpEventType === t.value
+                                ? t.cls + " shadow-sm scale-105"
+                                : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                            }`}
+                            onClick={() => setCcpEventType(t.value)}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
                       </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                       <div>
                         <div className="mb-1 text-xs text-slate-500">측정시각 (HHmm)</div>
                         <input
@@ -1179,16 +1220,27 @@ export default function ProductionClient() {
                           </div>
                         </>
                       )}
-                      {/* 슬롯이동 선택 시 이동 대상 슬롯 드롭다운 */}
+                      {/* 슬롯이동 선택 시 이동 대상 슬롯 탭 */}
                       {ccpEventType === "move" && (
-                        <div className="md:col-span-2">
+                        <div className="col-span-2 md:col-span-4">
                           <div className="mb-1 text-xs text-slate-500">이동할 슬롯 *</div>
-                          <select className={inp} value={ccpMoveTargetSlotId} onChange={(e) => setCcpMoveTargetSlotId(e.target.value)}>
-                            <option value="">— 슬롯 선택 —</option>
+                          <div className="flex flex-wrap gap-2">
                             {warmerSlots.map((s) => (
-                              <option key={s.id} value={s.id}>{s.slot_name} ({s.purpose})</option>
+                              <button
+                                key={s.id}
+                                type="button"
+                                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
+                                  ccpMoveTargetSlotId === s.id
+                                    ? "border-teal-500 bg-teal-600 text-white shadow-sm scale-105"
+                                    : "border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:bg-teal-50"
+                                }`}
+                                onClick={() => setCcpMoveTargetSlotId(ccpMoveTargetSlotId === s.id ? "" : s.id)}
+                              >
+                                {s.slot_name}
+                                <span className="ml-1 text-[10px] opacity-70">({s.purpose})</span>
+                              </button>
                             ))}
-                          </select>
+                          </div>
                         </div>
                       )}
                     </div>
