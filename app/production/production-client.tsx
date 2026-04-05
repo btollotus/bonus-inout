@@ -418,9 +418,13 @@ export default function ProductionClient() {
     if (needsTemp && temp !== null && (temp < 40 || temp > 50)) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
     if (ccpEventType === "move" && !ccpMoveTargetSlotId) return showToast("이동할 슬롯을 선택하세요.", "error");
 
-    // ── 시작 기록 시: 원료투입 기록이 없으면 차단 ──
+    // ── 시작 기록 시: 원료투입 기록이 없으면 차단 (슬롯이동 후에도 재확인) ──
     if (ccpEventType === "start") {
-      const hasMaterialIn = ccpEvents.some((e) => e.event_type === "material_in");
+      // 마지막 슬롯이동 이후 기록만 체크 (슬롯이동 없으면 전체 체크)
+      const sortedEvents = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+      const lastMoveIdx = sortedEvents.map((e) => e.event_type).lastIndexOf("move");
+      const relevantEvents = lastMoveIdx >= 0 ? sortedEvents.slice(lastMoveIdx + 1) : sortedEvents;
+      const hasMaterialIn = relevantEvents.some((e) => e.event_type === "material_in");
       if (!hasMaterialIn) {
         return showToast("⚠ 원료투입 기록을 먼저 추가해주세요.", "error");
       }
@@ -1131,13 +1135,18 @@ export default function ProductionClient() {
                               onChange={(e) => {
                                 const raw = e.target.value.replace(/[^\d]/g, "");
                                 if (!raw) { setCcpTemp(""); return; }
-                                // 자동 소수점: 끝에서 1자리를 소수점 이하로
-                                const intPart = raw.slice(0, -1) || "0";
-                                const decPart = raw.slice(-1);
-                                const v = `${intPart}.${decPart}`;
+                                // 3자리 이상 입력 시 자동 소수점: 451 → 45.1
+                                let v: string;
+                                if (raw.length >= 3) {
+                                  const intPart = raw.slice(0, -1);
+                                  const decPart = raw.slice(-1);
+                                  v = `${intPart}.${decPart}`;
+                                } else {
+                                  v = raw;
+                                }
                                 setCcpTemp(v);
                                 const n = Number(v);
-                                setCcpIsOk(n >= 40 && n <= 50);
+                                if (raw.length >= 3) setCcpIsOk(n >= 40 && n <= 50);
                               }} />
                           </div>
                           <div>
@@ -1220,11 +1229,16 @@ export default function ProductionClient() {
                                     onChange={(e) => {
                                       const raw = e.target.value.replace(/[^\d]/g, "");
                                       if (!raw) { setCcpEditTemp(""); return; }
-                                      const intPart = raw.slice(0, -1) || "0";
-                                      const decPart = raw.slice(-1);
-                                      const v = `${intPart}.${decPart}`;
+                                      let v: string;
+                                      if (raw.length >= 3) {
+                                        const intPart = raw.slice(0, -1);
+                                        const decPart = raw.slice(-1);
+                                        v = `${intPart}.${decPart}`;
+                                      } else {
+                                        v = raw;
+                                      }
                                       setCcpEditTemp(v);
-                                      setCcpEditIsOk(Number(v) >= 40 && Number(v) <= 50);
+                                      if (raw.length >= 3) setCcpEditIsOk(Number(v) >= 40 && Number(v) <= 50);
                                     }} />
                                 ) : ev.temperature != null ? (
                                   <span className={`text-sm font-bold tabular-nums ${isNG ? "text-red-600" : "text-blue-700"}`}>{ev.temperature}°C</span>
