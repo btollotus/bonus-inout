@@ -224,6 +224,7 @@ export default function ProductionClient() {
   // ── CCP-1B 온도 기록 ──
   const [ccpSessionId, setCcpSessionId] = useState<string | null>(null);
   const [ccpSessionSlotId, setCcpSessionSlotId] = useState<string | null>(null); // 현재 세션의 실제 slot_id
+  const [ccpIsOriginalWo, setCcpIsOriginalWo] = useState(true); // 세션의 첫 번째 연결 작업지시서 여부
   const [ccpEvents, setCcpEvents] = useState<{
     id: string; event_type: string; measured_at: string;
     temperature: number | null; is_ok: boolean | null; action_note: string | null;
@@ -365,6 +366,7 @@ export default function ProductionClient() {
       .maybeSingle();
 
     let sessionId: string | null = linkData?.session_id ?? null;
+    let isOriginalWo = !!linkData?.session_id; // 1단계에서 찾으면 기존 연결 작업지시서
 
     // 2) 연결 세션 없고 슬롯 있으면 오늘 active 세션 찾기
     if (!sessionId && wo.ccp_slot_id) {
@@ -376,6 +378,7 @@ export default function ProductionClient() {
         .eq("status", "active")
         .maybeSingle();
       sessionId = sessData?.id ?? null;
+      if (sessionId) isOriginalWo = false; // 2단계에서 찾으면 나중에 연결된 작업지시서
       // 기존 세션을 찾았으면 이 work_order도 연결 추가 (없는 경우에만)
       if (sessionId) {
         const { data: existLink } = await supabase
@@ -393,8 +396,9 @@ export default function ProductionClient() {
       }
     }
 
-    // 3) 세션 없고 슬롯 있으면 새로 생성
+    // 3) 세션 없고 슬롯 있으면 새로 생성 (최초 생성이므로 원래 작업지시서)
     if (!sessionId && wo.ccp_slot_id) {
+      isOriginalWo = true;
       const { data: newSess } = await supabase
         .from("ccp_heating_sessions")
         .insert({ session_date: today, slot_id: wo.ccp_slot_id, status: "active", created_by: currentUserIdRef.current })
@@ -409,6 +413,7 @@ export default function ProductionClient() {
     }
 
     setCcpSessionId(sessionId);
+    setCcpIsOriginalWo(isOriginalWo);
 
     // 현재 세션의 실제 slot_id 조회
     if (sessionId) {
@@ -1303,9 +1308,8 @@ export default function ProductionClient() {
                      - 세션 슬롯 !== 작업지시서 슬롯: 마지막 슬롯이동부터 표시 (이동 후 연결된 작업지시서) */}
                 {(() => {
                   const sorted = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
-                  const isOriginalWo = ccpSessionSlotId === (eCcpSlotId || selectedWo.ccp_slot_id);
                   const lastMoveIdx = sorted.map((e) => e.event_type).lastIndexOf("move");
-                  const visibleEvents = (!isOriginalWo && lastMoveIdx >= 0) ? sorted.slice(lastMoveIdx) : sorted;
+                  const visibleEvents = (!ccpIsOriginalWo && lastMoveIdx >= 0) ? sorted.slice(lastMoveIdx) : sorted;
                   return visibleEvents.length === 0 ? (
                   <div className="py-4 text-center text-sm text-slate-400">
                     {"기록된 온도가 없습니다."}
