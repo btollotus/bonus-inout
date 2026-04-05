@@ -417,6 +417,11 @@ export default function ProductionClient() {
     const temp = needsTemp ? Number(ccpTemp) : null;
     if (needsTemp && temp !== null && (temp < 40 || temp > 50)) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
     if (ccpEventType === "move" && !ccpMoveTargetSlotId) return showToast("이동할 슬롯을 선택하세요.", "error");
+    // ── 슬롯이동: 종료 기록이 있어야 가능 ──
+    if (ccpEventType === "move") {
+      const hasEnd = ccpEvents.some((e) => e.event_type === "end");
+      if (!hasEnd) return showToast("⚠ 종료 기록 후에 슬롯이동을 할 수 있습니다.", "error");
+    }
 
     // ── 시작 기록 시: 원료투입 기록이 없으면 차단 (슬롯이동 후에도 재확인) ──
     if (ccpEventType === "start") {
