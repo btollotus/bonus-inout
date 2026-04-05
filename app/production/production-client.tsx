@@ -472,11 +472,16 @@ export default function ProductionClient() {
     // KST 로컬 날짜 사용 (UTC toISOString 날짜와 혼용 방지)
     const nowLocal = new Date();
     const localDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth()+1).padStart(2,"0")}-${String(nowLocal.getDate()).padStart(2,"0")}`;
-    // 슬롯이동 시 이동 슬롯명을 action_note에 자동 기록
-    const moveSlotName = ccpEventType === "move" && ccpMoveTargetSlotId
+    // 슬롯이동 시 출발→도착 슬롯명을 action_note에 자동 기록
+    const moveToSlotName = ccpEventType === "move" && ccpMoveTargetSlotId
       ? (warmerSlots.find((s) => s.id === ccpMoveTargetSlotId)?.slot_name ?? ccpMoveTargetSlotId)
       : null;
-    const finalActionNote = moveSlotName ? `→ ${moveSlotName}` : (ccpActionNote.trim() || null);
+    const moveFromSlotName = ccpEventType === "move"
+      ? (warmerSlots.find((s) => s.id === (eCcpSlotId || selectedWo?.ccp_slot_id))?.slot_name ?? "")
+      : null;
+    const finalActionNote = moveToSlotName
+      ? (moveFromSlotName ? `${moveFromSlotName} → ${moveToSlotName}` : `→ ${moveToSlotName}`)
+      : (ccpActionNote.trim() || null);
     const { error } = await supabase.from("ccp_heating_events").insert({
       session_id: ccpSessionId, event_type: ccpEventType,
       measured_at: `${localDate}T${ccpTime.slice(0,2)}:${ccpTime.slice(2,4)}:00`,
