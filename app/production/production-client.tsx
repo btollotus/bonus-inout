@@ -426,16 +426,24 @@ export default function ProductionClient() {
     const temp = needsTemp ? Number(ccpTemp) : null;
     if (needsTemp && temp !== null && (temp < 40 || temp > 50)) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
     if (ccpEventType === "move" && !ccpMoveTargetSlotId) return showToast("이동할 슬롯을 선택하세요.", "error");
-    // ── 슬롯이동: 종료 기록이 있어야 가능 ──
+    // ── 슬롯이동: 마지막 기록이 종료여야 가능 ──
     if (ccpEventType === "move") {
-      const hasEnd = ccpEvents.some((e) => e.event_type === "end");
-      if (!hasEnd) return showToast("⚠ 종료 기록 후에 슬롯이동을 할 수 있습니다.", "error");
+      const sorted = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+      const lastEvent = sorted[sorted.length - 1];
+      if (!lastEvent || lastEvent.event_type !== "end") {
+        return showToast("⚠ 마지막 기록이 종료여야 슬롯이동을 할 수 있습니다.", "error");
+      }
     }
 
-    // ── 시작 기록 시: 원료투입 기록이 없으면 차단 (슬롯이동 후에도 재확인) ──
+    // ── 시작 기록 시 검증 ──
     if (ccpEventType === "start") {
-      // 마지막 슬롯이동 이후 기록만 체크 (슬롯이동 없으면 전체 체크)
       const sortedEvents = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+      const lastEvent = sortedEvents[sortedEvents.length - 1];
+      // 마지막 기록이 종료인 경우 → 슬롯이동 없이 재시작 불가
+      if (lastEvent && lastEvent.event_type === "end") {
+        return showToast("⚠ 종료 후에는 슬롯이동을 먼저 해주세요.", "error");
+      }
+      // 마지막 슬롯이동 이후 원료투입 없으면 차단
       const lastMoveIdx = sortedEvents.map((e) => e.event_type).lastIndexOf("move");
       const relevantEvents = lastMoveIdx >= 0 ? sortedEvents.slice(lastMoveIdx + 1) : sortedEvents;
       const hasMaterialIn = relevantEvents.some((e) => e.event_type === "material_in");
