@@ -1298,11 +1298,14 @@ export default function ProductionClient() {
                   </div>
                 )}
 
-                {/* 기록 테이블 - 마지막 슬롯이동 이후 기록만 표시 (슬롯이동 포함) */}
+                {/* 기록 테이블
+                     - 세션 원래 슬롯 === 작업지시서 슬롯: 전체 기록 표시 (원래 작업지시서)
+                     - 세션 슬롯 !== 작업지시서 슬롯: 마지막 슬롯이동부터 표시 (이동 후 연결된 작업지시서) */}
                 {(() => {
                   const sorted = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+                  const isOriginalWo = ccpSessionSlotId === (eCcpSlotId || selectedWo.ccp_slot_id);
                   const lastMoveIdx = sorted.map((e) => e.event_type).lastIndexOf("move");
-                  const visibleEvents = lastMoveIdx >= 0 ? sorted.slice(lastMoveIdx) : sorted;
+                  const visibleEvents = (!isOriginalWo && lastMoveIdx >= 0) ? sorted.slice(lastMoveIdx) : sorted;
                   return visibleEvents.length === 0 ? (
                   <div className="py-4 text-center text-sm text-slate-400">
                     {"기록된 온도가 없습니다."}
