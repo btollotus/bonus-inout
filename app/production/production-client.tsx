@@ -458,8 +458,8 @@ export default function ProductionClient() {
     if (ccpEventType === "move") {
       const sorted = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
       const lastEvent = sorted[sorted.length - 1];
-      if (!lastEvent || lastEvent.event_type !== "end") {
-        return showToast("⚠ 마지막 기록이 종료여야 슬롯이동을 할 수 있습니다.", "error");
+      if (!lastEvent || !["end", "move"].includes(lastEvent.event_type)) {
+        return showToast("⚠ 종료 또는 슬롯이동 후에 슬롯이동을 할 수 있습니다.", "error");
       }
     }
 
