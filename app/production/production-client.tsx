@@ -376,6 +376,21 @@ export default function ProductionClient() {
         .eq("status", "active")
         .maybeSingle();
       sessionId = sessData?.id ?? null;
+      // 기존 세션을 찾았으면 이 work_order도 연결 추가 (없는 경우에만)
+      if (sessionId) {
+        const { data: existLink } = await supabase
+          .from("ccp_heating_session_orders")
+          .select("id")
+          .eq("session_id", sessionId)
+          .eq("work_order_ref", wo.work_order_no)
+          .maybeSingle();
+        if (!existLink) {
+          await supabase.from("ccp_heating_session_orders").insert({
+            session_id: sessionId, work_order_ref: wo.work_order_no,
+            client_name: wo.client_name, product_name: wo.product_name,
+          });
+        }
+      }
     }
 
     // 3) 세션 없고 슬롯 있으면 새로 생성
