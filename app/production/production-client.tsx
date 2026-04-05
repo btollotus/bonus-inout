@@ -393,7 +393,46 @@ export default function ProductionClient() {
       }
     }
 
-    // 3) 세션 없고 슬롯 있으면 새로 생성
+    // 3) 세션 없고 슬롯 있으면 → 이 슬롯으로 이동한 기록이 있는 세션 찾기
+    if (!sessionId && wo.ccp_slot_id) {
+      const targetSlotName = (await supabase.from("warmer_slots").select("slot_name").eq("id", wo.ccp_slot_id).maybeSingle())?.data?.slot_name ?? null;
+      if (targetSlotName) {
+        // action_note에 "→ {슬롯명}" 포함된 move 이벤트가 있는 오늘 세션 찾기
+        const { data: moveEvData } = await supabase
+          .from("ccp_heating_events")
+          .select("session_id")
+          .eq("event_type", "move")
+          .like("action_note", `%→ ${targetSlotName}`)
+          .order("measured_at", { ascending: false })
+          .limit(10);
+        if (moveEvData && moveEvData.length > 0) {
+          // 오늘 날짜 세션인지 확인
+          for (const ev of moveEvData) {
+            const { data: sess } = await supabase
+              .from("ccp_heating_sessions")
+              .select("id")
+              .eq("id", ev.session_id)
+              .eq("session_date", today)
+              .maybeSingle();
+            if (sess) { sessionId = sess.id; break; }
+          }
+        }
+      }
+      // 연결 추가
+      if (sessionId) {
+        const { data: existLink } = await supabase
+          .from("ccp_heating_session_orders").select("id")
+          .eq("session_id", sessionId).eq("work_order_ref", wo.work_order_no).maybeSingle();
+        if (!existLink) {
+          await supabase.from("ccp_heating_session_orders").insert({
+            session_id: sessionId, work_order_ref: wo.work_order_no,
+            client_name: wo.client_name, product_name: wo.product_name,
+          });
+        }
+      }
+    }
+
+    // 4) 그래도 세션 없으면 새로 생성
     if (!sessionId && wo.ccp_slot_id) {
       const { data: newSess } = await supabase
         .from("ccp_heating_sessions")
