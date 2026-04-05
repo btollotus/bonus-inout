@@ -479,7 +479,7 @@ export default function ProductionClient() {
     setCcpSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
     showToast("✅ CCP 온도 기록 완료!");
-    setShowCcpForm(false); setCcpTemp(""); setCcpActionNote(""); setCcpIsOk(true); setCcpMoveTargetSlotId("");
+    setCcpTemp(""); setCcpActionNote(""); setCcpIsOk(true); setCcpMoveTargetSlotId(""); setCcpTime("");
     if (selectedWo) loadCcpSession(selectedWo);
   }
 
@@ -671,7 +671,6 @@ export default function ProductionClient() {
     })();
     // ── CCP 세션 로드 ──
     loadCcpSession(wo);
-    setShowCcpForm(false);
     setCcpTemp("");
     setCcpActionNote("");
     setCcpIsOk(true);
@@ -1122,24 +1121,11 @@ export default function ProductionClient() {
                       </div>
                     )}
                   </div>
-                  {ccpSessionId && (
-                    <button
-                      className={showCcpForm
-                        ? "rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-50"
-                        : "rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                      }
-                      onClick={() => {
-                        setShowCcpForm((v) => !v);
-                        setCcpTime("");
-                      }}
-                    >
-                      {showCcpForm ? "✕ 닫기" : "✚ 기록 추가"}
-                    </button>
-                  )}
+
                 </div>
 
-                {/* 입력 폼 */}
-                {showCcpForm && ccpSessionId && (
+                {/* 입력 폼 - 항상 표시 */}
+                {ccpSessionId && (
                   <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 space-y-3">
                     {/* 유형 탭 */}
                     <div>
@@ -1252,7 +1238,6 @@ export default function ProductionClient() {
                     )}
                     <div className="flex gap-2">
                       <button className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60" disabled={ccpSaving} onClick={saveCcpEvent}>{ccpSaving ? "저장 중..." : "💾 기록"}</button>
-                      <button className={btn} onClick={() => setShowCcpForm(false)}>취소</button>
                     </div>
                   </div>
                 )}
@@ -1260,7 +1245,7 @@ export default function ProductionClient() {
                 {/* 기록 테이블 */}
                 {ccpEvents.length === 0 ? (
                   <div className="py-4 text-center text-sm text-slate-400">
-                    {ccpSessionId ? "기록된 온도가 없습니다. 기록 추가를 눌러 입력하세요." : "슬롯을 지정하면 온도를 기록할 수 있습니다."}
+                    {"기록된 온도가 없습니다."}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
