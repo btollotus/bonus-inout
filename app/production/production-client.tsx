@@ -154,14 +154,13 @@ type WoChecks = {
 
 const CCP_EVENT_LABELS: Record<string, string> = {
   start: "시작", mid_check: "중간점검", end: "종료",
-  material_in: "원료투입", vat_refill: "밧트교체", move: "슬롯이동",
+  material_in: "원료투입", move: "슬롯이동",
 };
 
 function ccpEventBadgeCls(type: string) {
   if (type === "start") return "bg-blue-100 border-blue-200 text-blue-700";
   if (type === "end") return "bg-purple-100 border-purple-200 text-purple-700";
   if (type === "material_in") return "bg-green-100 border-green-200 text-green-700";
-  if (type === "vat_refill") return "bg-amber-100 border-amber-200 text-amber-700";
   if (type === "move") return "bg-teal-100 border-teal-200 text-teal-700";
   return "bg-slate-100 border-slate-200 text-slate-600";
 }
@@ -412,7 +411,7 @@ export default function ProductionClient() {
   // ── CCP 이벤트 저장 ──
   async function saveCcpEvent() {
     if (!ccpSessionId) return showToast("CCP 세션이 없습니다. 슬롯을 먼저 지정해주세요.", "error");
-    const needsTemp = !["vat_refill", "move", "material_in"].includes(ccpEventType);
+    const needsTemp = !["move", "material_in"].includes(ccpEventType);
     if (!ccpTime || ccpTime.length < 4) return showToast("측정시각을 입력하세요. (예: 1430)", "error");
     // ── 시각 순서 검증: 항상 마지막 기록보다 늦어야 함 ──
     if (ccpEvents.length > 0) {
@@ -500,7 +499,7 @@ export default function ProductionClient() {
   }
 
   async function saveCcpEdit(ev: { id: string; event_type: string; measured_at: string }) {
-    const needsTemp = !["vat_refill", "move", "material_in"].includes(ev.event_type);
+    const needsTemp = !["move", "material_in"].includes(ev.event_type);
     if (needsTemp && !ccpEditTemp) return showToast("온도를 입력하세요.", "error");
     const temp = needsTemp ? Number(ccpEditTemp) : null;
     if (needsTemp && temp !== null && (temp < 40 || temp > 50)) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
@@ -1136,7 +1135,6 @@ export default function ProductionClient() {
                           { value: "start",       label: "시작",     cls: "bg-blue-100 border-blue-400 text-blue-800" },
                           { value: "mid_check",   label: "중간점검", cls: "bg-slate-100 border-slate-400 text-slate-700" },
                           { value: "end",         label: "종료",     cls: "bg-purple-100 border-purple-400 text-purple-800" },
-                          { value: "vat_refill",  label: "밧트교체", cls: "bg-amber-100 border-amber-400 text-amber-800" },
                           { value: "move",        label: "슬롯이동", cls: "bg-teal-100 border-teal-400 text-teal-800" },
                         ] as { value: string; label: string; cls: string }[]).map((t) => (
                           <button
@@ -1174,7 +1172,7 @@ export default function ProductionClient() {
                           </div>
                         )}
                       </div>
-                      {!["vat_refill", "move", "material_in"].includes(ccpEventType) && (
+                      {!["move", "material_in"].includes(ccpEventType) && (
                         <>
                           <div>
                             <div className="mb-1 text-xs text-slate-500">온도 (40~50°C)</div>
@@ -1230,7 +1228,7 @@ export default function ProductionClient() {
                         </div>
                       )}
                     </div>
-                    {!["vat_refill", "move", "material_in"].includes(ccpEventType) && !ccpIsOk && (
+                    {!["move", "material_in"].includes(ccpEventType) && !ccpIsOk && (
                       <div>
                         <div className="mb-1 text-xs text-red-600 font-semibold">⚠ 한계기준 이탈 — 조치사항 *</div>
                         <input className="w-full rounded-xl border border-red-300 bg-white px-3 py-2 text-sm focus:outline-none" value={ccpActionNote} onChange={(e) => setCcpActionNote(e.target.value)} placeholder="온도 이탈 조치 내용" />
@@ -1264,7 +1262,7 @@ export default function ProductionClient() {
                         {ccpEvents.map((ev, idx) => {
                           const isNG = ev.is_ok === false;
                           const isEditing = ccpEditingId === ev.id;
-                          const needsTemp = !["vat_refill", "move", "material_in"].includes(ev.event_type);
+                          const needsTemp = !["move", "material_in"].includes(ev.event_type);
                           return (
                             <tr key={ev.id} className={`border-b border-slate-100 transition-colors ${isEditing ? "bg-blue-50" : isNG ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
                               {/* 시각 */}
