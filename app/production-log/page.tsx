@@ -148,8 +148,10 @@ export default function ProductionLogPage() {
           <div className="mt-0.5 text-xs text-slate-500">생산일지 · 원료수불부 · 근무일지</div>
         </div>
 
-        {/* 탭 */}
-        <div className="flex gap-2">
+        {/* 탭 + 컨텐츠 레이아웃 */}
+        <div className="flex gap-4 items-start">
+        {/* 왼쪽 사이드바 탭 */}
+        <div className="flex flex-col gap-1 w-36 shrink-0">
         {([
             { key: "production",    label: "📝 생산일지" },
             { key: "material",      label: "🧪 원료수불부" },
@@ -166,15 +168,17 @@ export default function ProductionLogPage() {
 { key: "hygiene",      label: "🧼 위생관리" },
 { key: "temp_humidity",label: "🌡️ 온습도" },
 { key: "storage_temp", label: "❄️ 냉장온도" },
-          ] as { key: Tab; label: string }[]).map((t) => (    
-            <button key={t.key}
-              className={activeTab === t.key ? btnOn : btn}
-              onClick={() => setActiveTab(t.key)}
-            >{t.label}</button>
-          ))}
-        </div>
+] as { key: Tab; label: string }[]).map((t) => (    
+  <button key={t.key}
+    className={`w-full text-left ${activeTab === t.key ? btnOn : btn}`}
+    onClick={() => setActiveTab(t.key)}
+  >{t.label}</button>
+))}
+</div>
 
-        {/* 탭 컨텐츠 */}
+{/* 오른쪽 컨텐츠 */}
+<div className="flex-1 min-w-0">
+{/* 탭 컨텐츠 */}
         {activeTab === "production" && (
           <ProductionLogTab role={role} userId={userId} showToast={showToast} />
         )}
@@ -206,6 +210,9 @@ export default function ProductionLogPage() {
 {activeTab === "hygiene"       && <HygieneCheckTab role={role} userId={userId} showToast={showToast} />}
 {activeTab === "temp_humidity" && <TempHumidityTab role={role} userId={userId} showToast={showToast} />}
 {activeTab === "storage_temp"  && <StorageTempTab role={role} userId={userId} showToast={showToast} />}
+
+</div>{/* 오른쪽 컨텐츠 끝 */}
+        </div>{/* 탭+컨텐츠 레이아웃 끝 */}
 
         {/* 토스트 */} 
         {toast && (
