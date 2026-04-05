@@ -406,7 +406,7 @@ export default function ProductionClient() {
       const hasStart = events.some((e) => e.event_type === "start");
       setCcpEventType(hasStart ? "mid_check" : "start");
     }
-    setCcpTime(new Date().toTimeString().slice(0, 5));
+    const nowCcp = new Date(); setCcpTime(`${String(nowCcp.getHours()).padStart(2,"0")}${String(nowCcp.getMinutes()).padStart(2,"0")}`);
   }, []);
 
   // ── CCP 이벤트 저장 ──
@@ -443,7 +443,7 @@ export default function ProductionClient() {
         const nowLocal2 = new Date();
         const localDate2 = `${nowLocal2.getFullYear()}-${String(nowLocal2.getMonth()+1).padStart(2,"0")}-${String(nowLocal2.getDate()).padStart(2,"0")}`;
         const startTime = new Date(`${localDate2}T${startEv.measured_at.slice(11, 16)}:00`);
-        const endTime = new Date(`${localDate2}T${ccpTime}:00`);
+        const endTime = new Date(`${localDate2}T${ccpTime.slice(0,2)}:${ccpTime.slice(2,4)}:00`);
         const diffMin = (endTime.getTime() - startTime.getTime()) / 1000 / 60;
         if (diffMin >= 120) {
           return showToast("⚠ 시작~종료 시간이 2시간 이상입니다. 중간점검 기록을 먼저 추가해주세요.", "error");
@@ -462,7 +462,7 @@ export default function ProductionClient() {
     const finalActionNote = moveSlotName ? `→ ${moveSlotName}` : (ccpActionNote.trim() || null);
     const { error } = await supabase.from("ccp_heating_events").insert({
       session_id: ccpSessionId, event_type: ccpEventType,
-      measured_at: `${localDate}T${ccpTime}:00`,
+      measured_at: `${localDate}T${ccpTime.slice(0,2)}:${ccpTime.slice(2,4)}:00`,
       temperature: temp, is_ok: needsTemp ? ccpIsOk : null,
       action_note: finalActionNote, created_by: currentUserIdRef.current,
     });
@@ -483,7 +483,7 @@ export default function ProductionClient() {
 
   function startCcpEdit(ev: { id: string; event_type: string; measured_at: string; temperature: number | null; is_ok: boolean | null; action_note: string | null }) {
     setCcpEditingId(ev.id);
-    setCcpEditTime(ev.measured_at.slice(11, 16));
+    setCcpEditTime(ev.measured_at.slice(11, 13) + ev.measured_at.slice(14, 16));
     setCcpEditTemp(ev.temperature != null ? String(ev.temperature) : "");
     setCcpEditIsOk(ev.is_ok ?? true);
     setCcpEditActionNote(ev.action_note ?? "");
@@ -497,7 +497,7 @@ export default function ProductionClient() {
     setCcpEditSaving(true);
     const dateStr = ev.measured_at.slice(0, 10);
     const { error } = await supabase.from("ccp_heating_events").update({
-      measured_at: `${dateStr}T${ccpEditTime}:00`,
+      measured_at: `${dateStr}T${ccpEditTime.slice(0,2)}:${ccpEditTime.slice(2,4)}:00`,
       temperature: temp,
       is_ok: needsTemp ? ccpEditIsOk : null,
       action_note: ccpEditActionNote.trim() || null,
@@ -1105,7 +1105,7 @@ export default function ProductionClient() {
                       }
                       onClick={() => {
                         setShowCcpForm((v) => !v);
-                        setCcpTime(new Date().toTimeString().slice(0, 5));
+                        const nowT = new Date(); setCcpTime(`${String(nowT.getHours()).padStart(2,"0")}${String(nowT.getMinutes()).padStart(2,"0")}`);
                       }}
                     >
                       {showCcpForm ? "✕ 닫기" : "✚ 기록 추가"}
@@ -1129,8 +1129,23 @@ export default function ProductionClient() {
                         </select>
                       </div>
                       <div>
-                        <div className="mb-1 text-xs text-slate-500">측정시각</div>
-                        <input type="time" className={inp} value={ccpTime} onChange={(e) => setCcpTime(e.target.value)} />
+                        <div className="mb-1 text-xs text-slate-500">측정시각 (HHmm)</div>
+                        <input
+                          className={inp}
+                          inputMode="numeric"
+                          placeholder="예: 1430"
+                          maxLength={4}
+                          value={ccpTime}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
+                            setCcpTime(raw);
+                          }}
+                        />
+                        {ccpTime.length === 4 && (
+                          <div className="mt-0.5 text-xs text-slate-400 text-right">
+                            {ccpTime.slice(0, 2)}:{ccpTime.slice(2, 4)}
+                          </div>
+                        )}
                       </div>
                       {!["vat_refill", "move", "material_in"].includes(ccpEventType) && (
                         <>
@@ -1218,8 +1233,12 @@ export default function ProductionClient() {
                               {/* 시각 */}
                               <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">
                                 {isEditing ? (
-                                  <input type="time" className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
-                                    value={ccpEditTime} onChange={(e) => setCcpEditTime(e.target.value)} />
+                                  <input
+                                    className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
+                                    inputMode="numeric" placeholder="HHmm" maxLength={4}
+                                    value={ccpEditTime}
+                                    onChange={(e) => setCcpEditTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+                                  />
                                 ) : ev.measured_at.slice(11, 16)}
                               </td>
                               {/* 유형 */}
