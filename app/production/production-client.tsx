@@ -406,7 +406,7 @@ export default function ProductionClient() {
       const hasStart = events.some((e) => e.event_type === "start");
       setCcpEventType(hasStart ? "mid_check" : "start");
     }
-    const nowCcp = new Date(); setCcpTime(`${String(nowCcp.getHours()).padStart(2,"0")}${String(nowCcp.getMinutes()).padStart(2,"0")}`);
+    setCcpTime("");
   }, []);
 
   // ── CCP 이벤트 저장 ──
@@ -1105,7 +1105,7 @@ export default function ProductionClient() {
                       }
                       onClick={() => {
                         setShowCcpForm((v) => !v);
-                        const nowT = new Date(); setCcpTime(`${String(nowT.getHours()).padStart(2,"0")}${String(nowT.getMinutes()).padStart(2,"0")}`);
+                        setCcpTime("");
                       }}
                     >
                       {showCcpForm ? "✕ 닫기" : "✚ 기록 추가"}
