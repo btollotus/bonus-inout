@@ -113,9 +113,10 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
 
                 return (
                   <Link
-                    key={x.href}
-                    href={x.href}
-                    style={{
+                  key={x.href}
+                  href={x.href}
+                  target="_blank"
+                  style={{
                       ...linkBase,
                       borderColor: active
                         ? "rgba(255,255,255,0.40)"
