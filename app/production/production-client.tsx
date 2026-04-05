@@ -393,46 +393,7 @@ export default function ProductionClient() {
       }
     }
 
-    // 3) 세션 없고 슬롯 있으면 → 이 슬롯으로 이동한 기록이 있는 세션 찾기
-    if (!sessionId && wo.ccp_slot_id) {
-      const targetSlotName = (await supabase.from("warmer_slots").select("slot_name").eq("id", wo.ccp_slot_id).maybeSingle())?.data?.slot_name ?? null;
-      if (targetSlotName) {
-        // action_note에 "→ {슬롯명}" 포함된 move 이벤트가 있는 오늘 세션 찾기
-        const { data: moveEvData } = await supabase
-          .from("ccp_heating_events")
-          .select("session_id")
-          .eq("event_type", "move")
-          .like("action_note", `%→ ${targetSlotName}`)
-          .order("measured_at", { ascending: false })
-          .limit(10);
-        if (moveEvData && moveEvData.length > 0) {
-          // 오늘 날짜 세션인지 확인
-          for (const ev of moveEvData) {
-            const { data: sess } = await supabase
-              .from("ccp_heating_sessions")
-              .select("id")
-              .eq("id", ev.session_id)
-              .eq("session_date", today)
-              .maybeSingle();
-            if (sess) { sessionId = sess.id; break; }
-          }
-        }
-      }
-      // 연결 추가
-      if (sessionId) {
-        const { data: existLink } = await supabase
-          .from("ccp_heating_session_orders").select("id")
-          .eq("session_id", sessionId).eq("work_order_ref", wo.work_order_no).maybeSingle();
-        if (!existLink) {
-          await supabase.from("ccp_heating_session_orders").insert({
-            session_id: sessionId, work_order_ref: wo.work_order_no,
-            client_name: wo.client_name, product_name: wo.product_name,
-          });
-        }
-      }
-    }
-
-    // 4) 그래도 세션 없으면 새로 생성
+    // 3) 세션 없고 슬롯 있으면 새로 생성
     if (!sessionId && wo.ccp_slot_id) {
       const { data: newSess } = await supabase
         .from("ccp_heating_sessions")
@@ -557,6 +518,23 @@ export default function ProductionClient() {
     });
     setCcpSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
+
+    // ── 슬롯이동 시: 세션의 slot_id를 이동한 슬롯으로 업데이트 ──
+    if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
+      await supabase
+        .from("ccp_heating_sessions")
+        .update({ slot_id: ccpMoveTargetSlotId })
+        .eq("id", ccpSessionId);
+      // 작업지시서의 ccp_slot_id도 이동 슬롯으로 업데이트
+      if (selectedWo) {
+        await supabase
+          .from("work_orders")
+          .update({ ccp_slot_id: ccpMoveTargetSlotId, updated_at: new Date().toISOString() })
+          .eq("id", selectedWo.id);
+        setECcpSlotId(ccpMoveTargetSlotId);
+      }
+    }
+
     showToast("✅ CCP 온도 기록 완료!");
     setCcpTemp(""); setCcpActionNote(""); setCcpIsOk(true); setCcpMoveTargetSlotId(""); setCcpTime("");
     if (selectedWo) loadCcpSession(selectedWo);
@@ -1320,8 +1298,12 @@ export default function ProductionClient() {
                   </div>
                 )}
 
-                {/* 기록 테이블 */}
-                {ccpEvents.length === 0 ? (
+                {/* 기록 테이블 - 마지막 슬롯이동 이후 기록만 표시 (슬롯이동 포함) */}
+                {(() => {
+                  const sorted = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+                  const lastMoveIdx = sorted.map((e) => e.event_type).lastIndexOf("move");
+                  const visibleEvents = lastMoveIdx >= 0 ? sorted.slice(lastMoveIdx) : sorted;
+                  return visibleEvents.length === 0 ? (
                   <div className="py-4 text-center text-sm text-slate-400">
                     {"기록된 온도가 없습니다."}
                   </div>
@@ -1339,7 +1321,7 @@ export default function ProductionClient() {
                         </tr>
                       </thead>
                       <tbody>
-                        {ccpEvents.map((ev, idx) => {
+                        {visibleEvents.map((ev, idx) => {
                           const isNG = ev.is_ok === false;
                           const isEditing = ccpEditingId === ev.id;
                           const needsTemp = !["move", "material_in"].includes(ev.event_type);
@@ -1434,8 +1416,8 @@ export default function ProductionClient() {
                     {/* 요약 */}
                     <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-400">
                       {(() => {
-                        const temps = ccpEvents.filter((e) => e.temperature != null).map((e) => e.temperature as number);
-                        const ngCount = ccpEvents.filter((e) => e.is_ok === false).length;
+                        const temps = visibleEvents.filter((e) => e.temperature != null).map((e) => e.temperature as number);
+                        const ngCount = visibleEvents.filter((e) => e.is_ok === false).length;
                         return (
                           <>
                             <span>측정 {temps.length}회</span>
@@ -1447,7 +1429,8 @@ export default function ProductionClient() {
                       })()}
                     </div>
                   </div>
-                )}
+                );
+                })()}
               </div>
 
               {/* 납기일별 생산 입력 카드 */}
