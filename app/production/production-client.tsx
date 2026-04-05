@@ -611,8 +611,8 @@ export default function ProductionClient() {
 
   async function markProductionComplete() {
     if (isCompleting) return;
-    setIsCompleting(true);
     if (!selectedWo) return;
+    setIsCompleting(true);
     if (!isAdmin && woChecks) {
       const missing = [!woChecks.assignee_transfer && "전사인쇄", !woChecks.assignee_print_check && "인쇄검수", !woChecks.assignee_production && "생산완료", !woChecks.assignee_input && "입력완료"].filter(Boolean) as string[];
       if (missing.length > 0) { setMsg(`담당자를 모두 선택해주세요: ${missing.join(", ")}`); setIsCompleting(false); return; }
@@ -723,14 +723,12 @@ export default function ProductionClient() {
           <div>
             <h1 className="text-xl font-bold text-slate-800">📋 작업지시서 관리</h1>
             <div className="mt-0.5 text-xs text-slate-500">
-              {role === "ADMIN" ? "ADMIN — 목록조회 · 기본정보수정 · 생산입력" : role === "SUBADMIN" ? "SUBADMIN — 목록조회 · 기본정보수정 · 생산입력" : "로딩 중..."}
+              {role === "ADMIN" ? "ADMIN — 목록조회 · 기본정보수정 · 생산입력" : role === "SUBADMIN" ? "SUBADMIN — 목록조회 · 기본정보수정 · 생산입력" : role === "USER" ? "목록조회 · 온도기록 · 담당자선택" : "로딩 중..."}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {isAdminOrSubadmin && (
-              <button className={isKiseongForm ? "rounded-xl border border-emerald-500 bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700" : "rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"}
-                onClick={() => { if (isKiseongForm) resetKiseongForm(); else { setIsKiseongForm(true); setSelectedWo(null); } }}>📦 재고생산</button>
-            )}
+            <button className={isKiseongForm ? "rounded-xl border border-emerald-500 bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700" : "rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"}
+              onClick={() => { if (isKiseongForm) resetKiseongForm(); else { setIsKiseongForm(true); setSelectedWo(null); } }}>📦 재고생산</button>
             <button className={btn} onClick={loadWoList}>🔄 새로고침</button>
           </div>
         </div>
@@ -1210,7 +1208,7 @@ export default function ProductionClient() {
             <div className={`${card} flex items-center justify-center p-12`}>
               <div className="text-center text-slate-400">
                 <div className="text-4xl mb-3">📋</div>
-                <div className="text-sm">왼쪽 목록에서 작업지시서를 선택하거나<br/>{isAdminOrSubadmin && "📦 재고생산 버튼으로 새 작업지시서를 등록하세요"}</div>
+                <div className="text-sm">왼쪽 목록에서 작업지시서를 선택하거나<br/>📦 재고생산 버튼으로 새 작업지시서를 등록하세요</div>
               </div>
             </div>
           )}
