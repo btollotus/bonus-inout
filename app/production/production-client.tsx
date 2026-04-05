@@ -1072,38 +1072,6 @@ export default function ProductionClient() {
                 </div>
               )}
 
-              {/* 납기일별 생산 입력 카드 */}
-              <div className={`${card} p-4`}>
-                <div className="mb-3 flex items-center justify-between"><div className="font-semibold text-sm">🏭 납기일별 생산 입력</div><div className="text-xs text-slate-400">{isEditMode ? "✏️ 수정 모드" : "수정 버튼을 눌러 편집하세요"}</div></div>
-                {(selectedWo.work_order_items ?? []).length === 0 ? <div className="py-4 text-center text-sm text-slate-400">납기일별 항목이 없습니다.</div> : (
-                  <div className="space-y-3">
-                    {(selectedWo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date)).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); }).map((item) => {
-                      const pi = prodInputs[item.id] ?? { actual_qty: "", unit_weight: "", expiry_date: "" };
-                      const actualQty = toInt(pi.actual_qty); const unitWeight = toNum(pi.unit_weight);
-                      const totalWeight = actualQty > 0 && unitWeight > 0 ? actualQty * unitWeight : null;
-                      const isDone = !!(pi.actual_qty && pi.unit_weight && pi.expiry_date);
-                      return (
-                        <div key={item.id} className={`rounded-2xl border p-3 ${isDone ? "border-green-200 bg-green-50" : "border-slate-200 bg-slate-50"}`}>
-                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <div><div className="font-semibold text-sm">📅 납기일: <span className="tabular-nums">{item.delivery_date}</span></div>{(item.sub_items ?? [])[0]?.name ? <div className="mt-0.5 text-sm font-medium text-slate-700">{(item.sub_items[0]).name}</div> : null}</div>
-                            <div className="flex items-center gap-2 text-xs"><span className={pill}>주문 {fmt(item.order_qty)}개</span>{isDone ? <span className="rounded-full bg-green-100 border border-green-200 px-2 py-0.5 text-xs font-semibold text-green-700">완료</span> : null}</div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                            <div><div className="mb-1 text-xs text-slate-500">출고수량 (실생산)</div><input className={inpR} inputMode="numeric" value={pi.actual_qty} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, actual_qty: e.target.value.replace(/[^\d]/g, "") } }))} /><div className="mt-1 text-xs text-slate-400">주문수량: <span className="font-semibold text-slate-600">{fmt(item.order_qty)}개</span></div></div>
-                            <div><div className="mb-1 text-xs text-slate-500">개당 중량 (g)</div><input className={inpR} inputMode="decimal" value={pi.unit_weight} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, unit_weight: e.target.value.replace(/[^\d.]/g, "") } }))} /></div>
-                            <div><div className="mb-1 text-xs text-slate-500">총 중량 (자동)</div><div className={`rounded-xl border px-3 py-2 text-sm text-right tabular-nums font-semibold ${totalWeight ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-100 text-slate-400"}`}>{totalWeight ? fmt(Math.round(totalWeight)) + "g" : "—"}</div></div>
-                            <div>
-                              <div className="mb-1 flex items-center justify-between"><span className="text-xs text-slate-500">소비기한</span><button type="button" disabled={selectedWo?.status === "완료" && !isEditMode} className={`rounded-lg border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-200 ${selectedWo?.status === "완료" && !isEditMode ? "opacity-40 cursor-not-allowed" : ""}`} onClick={() => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); d.setDate(d.getDate() - 1); const ymd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, expiry_date: ymd } })); }}>+1년-1일</button></div>
-                              <input type="date" className={inp} value={pi.expiry_date} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, expiry_date: e.target.value } }))} />
-                            </div>
-                          </div>
-                          {(item.images ?? []).length > 0 ? <ItemImages images={item.images ?? []} logoSpec={selectedWo.logo_spec} /> : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
 
               {/* ── CCP-1B 온도 기록 카드 ── */}
               <div className={`${card} p-4`}>
@@ -1325,6 +1293,39 @@ export default function ProductionClient() {
                         );
                       })()}
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 납기일별 생산 입력 카드 */}
+              <div className={`${card} p-4`}>
+                <div className="mb-3 flex items-center justify-between"><div className="font-semibold text-sm">🏭 납기일별 생산 입력</div><div className="text-xs text-slate-400">{isEditMode ? "✏️ 수정 모드" : "수정 버튼을 눌러 편집하세요"}</div></div>
+                {(selectedWo.work_order_items ?? []).length === 0 ? <div className="py-4 text-center text-sm text-slate-400">납기일별 항목이 없습니다.</div> : (
+                  <div className="space-y-3">
+                    {(selectedWo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date)).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); }).map((item) => {
+                      const pi = prodInputs[item.id] ?? { actual_qty: "", unit_weight: "", expiry_date: "" };
+                      const actualQty = toInt(pi.actual_qty); const unitWeight = toNum(pi.unit_weight);
+                      const totalWeight = actualQty > 0 && unitWeight > 0 ? actualQty * unitWeight : null;
+                      const isDone = !!(pi.actual_qty && pi.unit_weight && pi.expiry_date);
+                      return (
+                        <div key={item.id} className={`rounded-2xl border p-3 ${isDone ? "border-green-200 bg-green-50" : "border-slate-200 bg-slate-50"}`}>
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <div><div className="font-semibold text-sm">📅 납기일: <span className="tabular-nums">{item.delivery_date}</span></div>{(item.sub_items ?? [])[0]?.name ? <div className="mt-0.5 text-sm font-medium text-slate-700">{(item.sub_items[0]).name}</div> : null}</div>
+                            <div className="flex items-center gap-2 text-xs"><span className={pill}>주문 {fmt(item.order_qty)}개</span>{isDone ? <span className="rounded-full bg-green-100 border border-green-200 px-2 py-0.5 text-xs font-semibold text-green-700">완료</span> : null}</div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                            <div><div className="mb-1 text-xs text-slate-500">출고수량 (실생산)</div><input className={inpR} inputMode="numeric" value={pi.actual_qty} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, actual_qty: e.target.value.replace(/[^\d]/g, "") } }))} /><div className="mt-1 text-xs text-slate-400">주문수량: <span className="font-semibold text-slate-600">{fmt(item.order_qty)}개</span></div></div>
+                            <div><div className="mb-1 text-xs text-slate-500">개당 중량 (g)</div><input className={inpR} inputMode="decimal" value={pi.unit_weight} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, unit_weight: e.target.value.replace(/[^\d.]/g, "") } }))} /></div>
+                            <div><div className="mb-1 text-xs text-slate-500">총 중량 (자동)</div><div className={`rounded-xl border px-3 py-2 text-sm text-right tabular-nums font-semibold ${totalWeight ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-100 text-slate-400"}`}>{totalWeight ? fmt(Math.round(totalWeight)) + "g" : "—"}</div></div>
+                            <div>
+                              <div className="mb-1 flex items-center justify-between"><span className="text-xs text-slate-500">소비기한</span><button type="button" disabled={selectedWo?.status === "완료" && !isEditMode} className={`rounded-lg border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-200 ${selectedWo?.status === "완료" && !isEditMode ? "opacity-40 cursor-not-allowed" : ""}`} onClick={() => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); d.setDate(d.getDate() - 1); const ymd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, expiry_date: ymd } })); }}>+1년-1일</button></div>
+                              <input type="date" className={inp} value={pi.expiry_date} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, expiry_date: e.target.value } }))} />
+                            </div>
+                          </div>
+                          {(item.images ?? []).length > 0 ? <ItemImages images={item.images ?? []} logoSpec={selectedWo.logo_spec} /> : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
