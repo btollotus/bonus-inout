@@ -223,6 +223,7 @@ export default function ProductionClient() {
 
   // ── CCP-1B 온도 기록 ──
   const [ccpSessionId, setCcpSessionId] = useState<string | null>(null);
+  const [ccpSessionSlotId, setCcpSessionSlotId] = useState<string | null>(null); // 현재 세션의 실제 slot_id
   const [ccpEvents, setCcpEvents] = useState<{
     id: string; event_type: string; measured_at: string;
     temperature: number | null; is_ok: boolean | null; action_note: string | null;
@@ -394,6 +395,18 @@ export default function ProductionClient() {
 
     setCcpSessionId(sessionId);
 
+    // 현재 세션의 실제 slot_id 조회
+    if (sessionId) {
+      const { data: sessDetail } = await supabase
+        .from("ccp_heating_sessions")
+        .select("slot_id")
+        .eq("id", sessionId)
+        .maybeSingle();
+      setCcpSessionSlotId(sessDetail?.slot_id ?? null);
+    } else {
+      setCcpSessionSlotId(null);
+    }
+
     if (sessionId) {
       const { data: evData } = await supabase
         .from("ccp_heating_events")
@@ -477,7 +490,7 @@ export default function ProductionClient() {
       ? (warmerSlots.find((s) => s.id === ccpMoveTargetSlotId)?.slot_name ?? ccpMoveTargetSlotId)
       : null;
     const moveFromSlotName = ccpEventType === "move"
-      ? (warmerSlots.find((s) => s.id === (eCcpSlotId || selectedWo?.ccp_slot_id))?.slot_name ?? "")
+      ? (warmerSlots.find((s) => s.id === (ccpSessionSlotId ?? eCcpSlotId ?? selectedWo?.ccp_slot_id))?.slot_name ?? "")
       : null;
     const finalActionNote = moveToSlotName
       ? (moveFromSlotName ? `${moveFromSlotName} → ${moveToSlotName}` : `→ ${moveToSlotName}`)
