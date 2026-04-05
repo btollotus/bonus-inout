@@ -235,6 +235,7 @@ export default function ProductionClient() {
   const [ccpIsOk, setCcpIsOk] = useState(true);
   const [ccpActionNote, setCcpActionNote] = useState("");
   const [ccpSaving, setCcpSaving] = useState(false);
+  const [ccpMoveTargetSlotId, setCcpMoveTargetSlotId] = useState(""); // 슬롯이동 대상
 
   const [stockAlerts, setStockAlerts] = useState<{ id: string; item_name: string; status: string; expiry_date: string | null; action: string | null; log_date: string }[]>([]);
   const [showAlertPanel, setShowAlertPanel] = useState(false);
@@ -415,18 +416,70 @@ export default function ProductionClient() {
     if (needsTemp && !ccpTemp) return showToast("온도를 입력하세요.", "error");
     const temp = needsTemp ? Number(ccpTemp) : null;
     if (needsTemp && temp !== null && (temp < 40 || temp > 50)) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
+    if (ccpEventType === "move" && !ccpMoveTargetSlotId) return showToast("이동할 슬롯을 선택하세요.", "error");
     setCcpSaving(true);
-    const today = new Date().toISOString().slice(0, 10);
+    // KST 로컬 날짜 사용 (UTC toISOString 날짜와 혼용 방지)
+    const nowLocal = new Date();
+    const localDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth()+1).padStart(2,"0")}-${String(nowLocal.getDate()).padStart(2,"0")}`;
+    // 슬롯이동 시 이동 슬롯명을 action_note에 자동 기록
+    const moveSlotName = ccpEventType === "move" && ccpMoveTargetSlotId
+      ? (warmerSlots.find((s) => s.id === ccpMoveTargetSlotId)?.slot_name ?? ccpMoveTargetSlotId)
+      : null;
+    const finalActionNote = moveSlotName ? `→ ${moveSlotName}` : (ccpActionNote.trim() || null);
     const { error } = await supabase.from("ccp_heating_events").insert({
       session_id: ccpSessionId, event_type: ccpEventType,
-      measured_at: `${today}T${ccpTime}:00`,
+      measured_at: `${localDate}T${ccpTime}:00`,
       temperature: temp, is_ok: needsTemp ? ccpIsOk : null,
-      action_note: ccpActionNote.trim() || null, created_by: currentUserIdRef.current,
+      action_note: finalActionNote, created_by: currentUserIdRef.current,
     });
     setCcpSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
     showToast("✅ CCP 온도 기록 완료!");
-    setShowCcpForm(false); setCcpTemp(""); setCcpActionNote(""); setCcpIsOk(true);
+    setShowCcpForm(false); setCcpTemp(""); setCcpActionNote(""); setCcpIsOk(true); setCcpMoveTargetSlotId("");
+    if (selectedWo) loadCcpSession(selectedWo);
+  }
+
+  // ── CCP 이벤트 수정/삭제 ──
+  const [ccpEditingId, setCcpEditingId] = useState<string | null>(null);
+  const [ccpEditTime, setCcpEditTime] = useState("");
+  const [ccpEditTemp, setCcpEditTemp] = useState("");
+  const [ccpEditIsOk, setCcpEditIsOk] = useState(true);
+  const [ccpEditActionNote, setCcpEditActionNote] = useState("");
+  const [ccpEditSaving, setCcpEditSaving] = useState(false);
+
+  function startCcpEdit(ev: { id: string; event_type: string; measured_at: string; temperature: number | null; is_ok: boolean | null; action_note: string | null }) {
+    setCcpEditingId(ev.id);
+    setCcpEditTime(ev.measured_at.slice(11, 16));
+    setCcpEditTemp(ev.temperature != null ? String(ev.temperature) : "");
+    setCcpEditIsOk(ev.is_ok ?? true);
+    setCcpEditActionNote(ev.action_note ?? "");
+  }
+
+  async function saveCcpEdit(ev: { id: string; event_type: string; measured_at: string }) {
+    const needsTemp = !["vat_refill", "move", "material_in"].includes(ev.event_type);
+    if (needsTemp && !ccpEditTemp) return showToast("온도를 입력하세요.", "error");
+    const temp = needsTemp ? Number(ccpEditTemp) : null;
+    if (needsTemp && temp !== null && (temp < 40 || temp > 50)) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
+    setCcpEditSaving(true);
+    const dateStr = ev.measured_at.slice(0, 10);
+    const { error } = await supabase.from("ccp_heating_events").update({
+      measured_at: `${dateStr}T${ccpEditTime}:00`,
+      temperature: temp,
+      is_ok: needsTemp ? ccpEditIsOk : null,
+      action_note: ccpEditActionNote.trim() || null,
+    }).eq("id", ev.id);
+    setCcpEditSaving(false);
+    if (error) return showToast("수정 실패: " + error.message, "error");
+    showToast("✅ 수정 완료!");
+    setCcpEditingId(null);
+    if (selectedWo) loadCcpSession(selectedWo);
+  }
+
+  async function deleteCcpEvent(eventId: string) {
+    if (!confirm("이 기록을 삭제하시겠습니까?")) return;
+    const { error } = await supabase.from("ccp_heating_events").delete().eq("id", eventId);
+    if (error) return showToast("삭제 실패: " + error.message, "error");
+    showToast("🗑️ 삭제 완료!");
     if (selectedWo) loadCcpSession(selectedWo);
   }
 
@@ -1093,6 +1146,18 @@ export default function ProductionClient() {
                           </div>
                         </>
                       )}
+                      {/* 슬롯이동 선택 시 이동 대상 슬롯 드롭다운 */}
+                      {ccpEventType === "move" && (
+                        <div className="md:col-span-2">
+                          <div className="mb-1 text-xs text-slate-500">이동할 슬롯 *</div>
+                          <select className={inp} value={ccpMoveTargetSlotId} onChange={(e) => setCcpMoveTargetSlotId(e.target.value)}>
+                            <option value="">— 슬롯 선택 —</option>
+                            {warmerSlots.map((s) => (
+                              <option key={s.id} value={s.id}>{s.slot_name} ({s.purpose})</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
                     {!["vat_refill", "move", "material_in"].includes(ccpEventType) && !ccpIsOk && (
                       <div>
@@ -1122,24 +1187,80 @@ export default function ProductionClient() {
                           <th className="py-2 px-3 text-right text-xs font-semibold text-slate-500 whitespace-nowrap">온도</th>
                           <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">판정</th>
                           <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">조치</th>
+                          <th className="py-2 px-2 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">관리</th>
                         </tr>
                       </thead>
                       <tbody>
                         {ccpEvents.map((ev, idx) => {
                           const isNG = ev.is_ok === false;
+                          const isEditing = ccpEditingId === ev.id;
+                          const needsTemp = !["vat_refill", "move", "material_in"].includes(ev.event_type);
                           return (
-                            <tr key={ev.id} className={`border-b border-slate-100 ${isNG ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                              <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">{ev.measured_at.slice(11, 16)}</td>
+                            <tr key={ev.id} className={`border-b border-slate-100 transition-colors ${isEditing ? "bg-blue-50" : isNG ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                              {/* 시각 */}
+                              <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">
+                                {isEditing ? (
+                                  <input type="time" className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
+                                    value={ccpEditTime} onChange={(e) => setCcpEditTime(e.target.value)} />
+                                ) : ev.measured_at.slice(11, 16)}
+                              </td>
+                              {/* 유형 */}
                               <td className="py-2 px-3 whitespace-nowrap">
                                 <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ccpEventBadgeCls(ev.event_type)}`}>{CCP_EVENT_LABELS[ev.event_type] ?? ev.event_type}</span>
                               </td>
+                              {/* 온도 */}
                               <td className="py-2 px-3 text-right whitespace-nowrap">
-                                {ev.temperature != null ? <span className={`text-sm font-bold tabular-nums ${isNG ? "text-red-600" : "text-blue-700"}`}>{ev.temperature}°C</span> : <span className="text-slate-300">—</span>}
+                                {isEditing && needsTemp ? (
+                                  <input className="w-20 rounded-lg border border-blue-300 px-2 py-1 text-xs text-right tabular-nums focus:outline-none"
+                                    inputMode="decimal" value={ccpEditTemp}
+                                    onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setCcpEditTemp(v); if (v) setCcpEditIsOk(Number(v) >= 40 && Number(v) <= 50); }} />
+                                ) : ev.temperature != null ? (
+                                  <span className={`text-sm font-bold tabular-nums ${isNG ? "text-red-600" : "text-blue-700"}`}>{ev.temperature}°C</span>
+                                ) : <span className="text-slate-300">—</span>}
                               </td>
+                              {/* 판정 */}
                               <td className="py-2 px-3 text-center whitespace-nowrap">
-                                {ev.is_ok != null ? <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ev.is_ok ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>{ev.is_ok ? "O" : "X"}</span> : <span className="text-slate-300 text-xs">—</span>}
+                                {isEditing && needsTemp ? (
+                                  <select className={`rounded-lg border px-1.5 py-1 text-xs focus:outline-none ${ccpEditIsOk ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}
+                                    value={ccpEditIsOk ? "ok" : "ng"} onChange={(e) => setCcpEditIsOk(e.target.value === "ok")}>
+                                    <option value="ok">O 적합</option>
+                                    <option value="ng">X 부적합</option>
+                                  </select>
+                                ) : ev.is_ok != null ? (
+                                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ev.is_ok ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>{ev.is_ok ? "O" : "X"}</span>
+                                ) : <span className="text-slate-300 text-xs">—</span>}
                               </td>
-                              <td className="py-2 px-3 text-xs text-red-600">{ev.action_note ?? ""}</td>
+                              {/* 조치/이동슬롯 */}
+                              <td className="py-2 px-3 text-xs">
+                                {isEditing ? (
+                                  <input className="w-full rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
+                                    value={ccpEditActionNote} onChange={(e) => setCcpEditActionNote(e.target.value)} placeholder="조치사항" />
+                                ) : ev.event_type === "move" && ev.action_note ? (
+                                  <span className="font-semibold text-teal-700">{ev.action_note}</span>
+                                ) : (
+                                  <span className="text-red-600">{ev.action_note ?? ""}</span>
+                                )}
+                              </td>
+                              {/* 수정/삭제 버튼 */}
+                              <td className="py-2 px-2 text-center whitespace-nowrap">
+                                {isEditing ? (
+                                  <div className="flex gap-1">
+                                    <button className="rounded-lg border border-blue-400 bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                                      disabled={ccpEditSaving} onClick={() => saveCcpEdit(ev)}>
+                                      {ccpEditSaving ? "..." : "저장"}
+                                    </button>
+                                    <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50"
+                                      onClick={() => setCcpEditingId(null)}>취소</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex gap-1">
+                                    <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600"
+                                      onClick={() => startCcpEdit(ev)}>수정</button>
+                                    <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500"
+                                      onClick={() => deleteCcpEvent(ev.id)}>삭제</button>
+                                  </div>
+                                )}
+                              </td>
                             </tr>
                           );
                         })}
