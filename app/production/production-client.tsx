@@ -1308,8 +1308,13 @@ export default function ProductionClient() {
                      - 세션 슬롯 !== 작업지시서 슬롯: 마지막 슬롯이동부터 표시 (이동 후 연결된 작업지시서) */}
                 {(() => {
                   const sorted = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
-                  const lastMoveIdx = sorted.map((e) => e.event_type).lastIndexOf("move");
-                  const visibleEvents = (!ccpIsOriginalWo && lastMoveIdx >= 0) ? sorted.slice(lastMoveIdx) : sorted;
+                  // 현재 작업지시서 슬롯이 도착지인 마지막 move 이벤트 인덱스 찾기
+                  const mySlotName = warmerSlots.find((s) => s.id === (eCcpSlotId || selectedWo.ccp_slot_id))?.slot_name ?? "";
+                  const myMoveIdx = mySlotName
+                    ? sorted.reduce((found, e, i) => e.event_type === "move" && (e.action_note ?? "").endsWith(`→ ${mySlotName}`) ? i : found, -1)
+                    : -1;
+                  // 내 슬롯으로 이동한 기록이 있으면 그 이후부터만 표시, 없으면 전체 표시
+                  const visibleEvents = myMoveIdx >= 0 ? sorted.slice(myMoveIdx) : sorted;
                   return visibleEvents.length === 0 ? (
                   <div className="py-4 text-center text-sm text-slate-400">
                     {"기록된 온도가 없습니다."}
