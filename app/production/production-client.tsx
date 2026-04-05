@@ -1002,22 +1002,7 @@ export default function ProductionClient() {
                     <div><div className="mb-1 text-xs text-slate-500">성형틀 장당 생산수</div><input className={inpR} inputMode="numeric" value={eMoldPerSheet} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} /></div>
                     <div><div className="mb-1 text-xs text-slate-500">비고</div><input className={inp} value={eNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setENote(e.target.value)} /></div>
                     <div><div className="mb-1 text-xs text-slate-500">참고사항</div><input className={inp} value={eReferenceNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEReferenceNote(e.target.value)} /></div>
-                    {(getFoodCategory(eFoodType) === "다크" || getFoodCategory(eFoodType) === "화이트") && (
-                      <div className="md:col-span-3">
-                        <div className="mb-1 text-xs text-slate-500 flex items-center gap-1">🌡️ CCP-1B 온장고 슬롯 지정<span className="text-slate-400">(당류가공품·준초콜릿)</span></div>
-                        <select className={inp} value={eCcpSlotId} disabled={selectedWo?.status === "완료" && !isEditMode}
-                          onChange={async (e) => {
-                            const slotId = e.target.value;
-                            setECcpSlotId(slotId);
-                            await supabase.from("work_orders").update({ ccp_slot_id: slotId || null, updated_at: new Date().toISOString() }).eq("id", selectedWo!.id);
-                            // 슬롯 변경 시 CCP 세션 재로드
-                            loadCcpSession({ ...selectedWo, ccp_slot_id: slotId || null });
-                          }}>
-                          <option value="">— 슬롯 미지정 —</option>
-                          {warmerSlots.filter((s) => getFoodCategory(eFoodType) === "다크" ? s.purpose === "다크컴파운드" : s.purpose === "화이트컴파운드" || s.purpose === "유동").map((s) => <option key={s.id} value={s.id}>{s.slot_name} ({s.purpose})</option>)}
-                        </select>
-                      </div>
-                    )}
+
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-sm sm:grid-cols-3 md:grid-cols-4">
@@ -1067,6 +1052,26 @@ export default function ProductionClient() {
                 )}
               </div>
 
+              {/* ── CCP-1B 온장고 슬롯 지정 카드 ── */}
+              {(getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트") && (
+                <div className={`${card} p-4`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="font-semibold text-sm">🌡️ CCP-1B 온장고 슬롯 지정</div>
+                    <span className="text-xs text-slate-400">(당류가공품·준초콜릿)</span>
+                  </div>
+                  <select className={inp} value={eCcpSlotId} disabled={selectedWo?.status === "완료" && !isEditMode}
+                    onChange={async (e) => {
+                      const slotId = e.target.value;
+                      setECcpSlotId(slotId);
+                      await supabase.from("work_orders").update({ ccp_slot_id: slotId || null, updated_at: new Date().toISOString() }).eq("id", selectedWo!.id);
+                      loadCcpSession({ ...selectedWo, ccp_slot_id: slotId || null });
+                    }}>
+                    <option value="">— 슬롯 미지정 —</option>
+                    {warmerSlots.filter((s) => getFoodCategory(selectedWo.food_type) === "다크" ? s.purpose === "다크컴파운드" : s.purpose === "화이트컴파운드" || s.purpose === "유동").map((s) => <option key={s.id} value={s.id}>{s.slot_name} ({s.purpose})</option>)}
+                  </select>
+                </div>
+              )}
+
               {/* 납기일별 생산 입력 카드 */}
               <div className={`${card} p-4`}>
                 <div className="mb-3 flex items-center justify-between"><div className="font-semibold text-sm">🏭 납기일별 생산 입력</div><div className="text-xs text-slate-400">{isEditMode ? "✏️ 수정 모드" : "수정 버튼을 눌러 편집하세요"}</div></div>
@@ -1111,7 +1116,7 @@ export default function ProductionClient() {
                       </div>
                     ) : (
                       <div className="mt-0.5 text-xs text-amber-500">
-                        ⚠ {selectedWo.ccp_slot_id ? "세션 로딩 중..." : "기본정보에서 슬롯을 지정하면 기록할 수 있습니다"}
+                        ⚠ {selectedWo.ccp_slot_id ? "세션 로딩 중..." : "위의 슬롯 지정에서 온장고를 선택하면 기록할 수 있습니다"}
                       </div>
                     )}
                   </div>
