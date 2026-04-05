@@ -417,6 +417,31 @@ export default function ProductionClient() {
     const temp = needsTemp ? Number(ccpTemp) : null;
     if (needsTemp && temp !== null && (temp < 40 || temp > 50)) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
     if (ccpEventType === "move" && !ccpMoveTargetSlotId) return showToast("이동할 슬롯을 선택하세요.", "error");
+
+    // ── 시작 기록 시: 원료투입 기록이 없으면 차단 ──
+    if (ccpEventType === "start") {
+      const hasMaterialIn = ccpEvents.some((e) => e.event_type === "material_in");
+      if (!hasMaterialIn) {
+        return showToast("⚠ 원료투입 기록을 먼저 추가해주세요.", "error");
+      }
+    }
+
+    // ── 종료 기록 시: 시작~종료 2시간 이상 & 중간점검 없으면 차단 ──
+    if (ccpEventType === "end") {
+      const startEv = ccpEvents.find((e) => e.event_type === "start");
+      const hasMidCheck = ccpEvents.some((e) => e.event_type === "mid_check");
+      if (startEv && !hasMidCheck) {
+        const nowLocal2 = new Date();
+        const localDate2 = `${nowLocal2.getFullYear()}-${String(nowLocal2.getMonth()+1).padStart(2,"0")}-${String(nowLocal2.getDate()).padStart(2,"0")}`;
+        const startTime = new Date(`${localDate2}T${startEv.measured_at.slice(11, 16)}:00`);
+        const endTime = new Date(`${localDate2}T${ccpTime}:00`);
+        const diffMin = (endTime.getTime() - startTime.getTime()) / 1000 / 60;
+        if (diffMin >= 120) {
+          return showToast("⚠ 시작~종료 시간이 2시간 이상입니다. 중간점검 기록을 먼저 추가해주세요.", "error");
+        }
+      }
+    }
+
     setCcpSaving(true);
     // KST 로컬 날짜 사용 (UTC toISOString 날짜와 혼용 방지)
     const nowLocal = new Date();
@@ -1129,11 +1154,17 @@ export default function ProductionClient() {
                         <>
                           <div>
                             <div className="mb-1 text-xs text-slate-500">온도 (40~50°C)</div>
-                            <input className={inpR} inputMode="decimal" placeholder="예: 45" value={ccpTemp}
+                            <input className={inpR} inputMode="numeric" placeholder="예: 45.0" value={ccpTemp}
                               onChange={(e) => {
-                                const v = e.target.value.replace(/[^\d.]/g, "");
+                                const raw = e.target.value.replace(/[^\d]/g, "");
+                                if (!raw) { setCcpTemp(""); return; }
+                                // 자동 소수점: 끝에서 1자리를 소수점 이하로
+                                const intPart = raw.slice(0, -1) || "0";
+                                const decPart = raw.slice(-1);
+                                const v = `${intPart}.${decPart}`;
                                 setCcpTemp(v);
-                                if (v) setCcpIsOk(Number(v) >= 40 && Number(v) <= 50);
+                                const n = Number(v);
+                                setCcpIsOk(n >= 40 && n <= 50);
                               }} />
                           </div>
                           <div>
@@ -1213,7 +1244,15 @@ export default function ProductionClient() {
                                 {isEditing && needsTemp ? (
                                   <input className="w-20 rounded-lg border border-blue-300 px-2 py-1 text-xs text-right tabular-nums focus:outline-none"
                                     inputMode="decimal" value={ccpEditTemp}
-                                    onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setCcpEditTemp(v); if (v) setCcpEditIsOk(Number(v) >= 40 && Number(v) <= 50); }} />
+                                    onChange={(e) => {
+                                      const raw = e.target.value.replace(/[^\d]/g, "");
+                                      if (!raw) { setCcpEditTemp(""); return; }
+                                      const intPart = raw.slice(0, -1) || "0";
+                                      const decPart = raw.slice(-1);
+                                      const v = `${intPart}.${decPart}`;
+                                      setCcpEditTemp(v);
+                                      setCcpEditIsOk(Number(v) >= 40 && Number(v) <= 50);
+                                    }} />
                                 ) : ev.temperature != null ? (
                                   <span className={`text-sm font-bold tabular-nums ${isNG ? "text-red-600" : "text-blue-700"}`}>{ev.temperature}°C</span>
                                 ) : <span className="text-slate-300">—</span>}
