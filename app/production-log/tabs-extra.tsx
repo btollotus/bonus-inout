@@ -133,6 +133,17 @@ export function Ccp1bTab({ role, userId, showToast }: {
     showToast("✅ 수정 완료!");
     setEditingEventId(null);
     await loadSessions();
+    setSelectedSession((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        events: (prev.events ?? []).map((e) =>
+          e.id === ev.id
+            ? { ...e, measured_at: `${filterDate}T${editTime}:00`, temperature: !["vat_refill","move","material_in"].includes(ev.event_type) ? Number(editTemp) : null, is_ok: !["vat_refill","move","material_in"].includes(ev.event_type) ? editIsOk : null, action_note: editActionNote.trim() || null }
+            : e
+        ),
+      };
+    });
   }
 
   async function deleteEvent(eventId: string) {
