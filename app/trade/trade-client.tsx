@@ -2571,15 +2571,36 @@ if (needsLabel) {
     const _san = (s: string) => (s ?? "").replace(/[\\/:*?"<>|]/g, "").trim();
     const _orderDate = wo.order_date ?? "";
     const _datePart = _orderDate.slice(2,4) + _orderDate.slice(5,7) + _orderDate.slice(8,10);
-    const _visItems = (wo.work_order_items ?? []).filter((i: any) => { const n = (i.sub_items ?? [])[0]?.name ?? ""; return !n.startsWith("성형틀") && !n.startsWith("인쇄제판"); });
-    const _firstName = _visItems[0]?.sub_items?.[0]?.name ?? wo.product_name ?? "";
+ 
+      
+    
+    // 성형틀/인쇄제판/아이스박스 제외한 품목명 나열
+    const EXCLUDE_PREFIXES = ["성형틀", "인쇄제판", "아이스박스"];
+    const _visItems = (wo.work_order_items ?? []).filter((i: any) => {
+      const n = (i.sub_items ?? [])[0]?.name ?? "";
+      return !EXCLUDE_PREFIXES.some(p => n.startsWith(p));
+    });
+    const _itemNames = _visItems
+      .map((i: any) => _san((i.sub_items ?? [])[0]?.name ?? ""))
+      .filter(Boolean)
+      .join("_");
+    
+    // logo_spec에서 x, ×, *, X를 -로 변환하고 mm 제거
+    const _logoSpec = _san(wo.logo_spec ?? "")
+      .replace(/[xX×*]/g, "-")
+      .replace(/mm/gi, "")
+      .trim();
+    
     const _title = [
       "작업지시서",
       _datePart,
       _san(wo.client_name),
       wo.sub_name ? _san(wo.sub_name) : "",
-      _firstName ? `(${_san(_firstName)}${wo.food_type ? "-" + _san(wo.food_type) : ""})` : ""
+      _logoSpec,
+      _itemNames ? `(${_itemNames}${wo.food_type ? "-" + _san(wo.food_type) : ""})` : ""
     ].filter(Boolean).join("-");
+
+
     doc.open();
     doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${_title}</title>
       <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
