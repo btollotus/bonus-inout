@@ -460,7 +460,31 @@ export default function ProductionClient() {
 
   // ── CCP 이벤트 저장 ──
   async function saveCcpEvent() {
-    if (!ccpSessionId) return showToast("CCP 세션이 없습니다. 슬롯을 먼저 지정해주세요.", "error");
+    if (!ccpSessionId) {
+      if (!eCcpSlotId && !selectedWo?.ccp_slot_id) 
+        return showToast("슬롯을 먼저 지정해주세요.", "error");
+      const slotId = eCcpSlotId || selectedWo?.ccp_slot_id;
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: newSess } = await supabase
+        .from("ccp_heating_sessions")
+        .insert({ session_date: today, slot_id: slotId, status: "active", created_by: currentUserIdRef.current })
+        .select("id").single();
+      if (!newSess?.id) return showToast("세션 생성 실패", "error");
+      setCcpSessionId(newSess.id);
+      setCcpSessionSlotId(slotId ?? null);
+      if (selectedWo) {
+        await supabase.from("ccp_heating_session_orders").insert({
+          session_id: newSess.id, work_order_ref: selectedWo.work_order_no,
+          client_name: selectedWo.client_name, product_name: selectedWo.product_name,
+        });
+      }
+      // 이후 저장 로직이 ccpSessionId를 참조하므로 직접 변수 사용
+      // saveCcpEvent를 재귀 호출하면 state 반영 전이라 다시 실행
+      // 대신 아래처럼 sessionId를 변수로 넘기도록 리팩터링이 필요하므로
+      // 간단하게: 세션 생성 후 토스트로 안내하고 다시 기록하도록 유도
+      showToast("✅ 세션이 생성됐습니다. 다시 기록 버튼을 눌러주세요.");
+      return;
+    }
     const needsTemp = !["move", "material_in"].includes(ccpEventType);
     if (!ccpTime || ccpTime.length < 4) return showToast("측정시각을 입력하세요. (예: 1430)", "error");
     // ── 시각 순서 검증: 항상 마지막 기록보다 늦어야 함 ──
@@ -1244,7 +1268,7 @@ export default function ProductionClient() {
                 </div>
 
                 {/* 입력 폼 - 항상 표시 */}
-                {ccpSessionId && (
+                {(ccpSessionId || eCcpSlotId) && (
                   <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 space-y-3">
                     {/* 유형 탭 */}
                     <div>
