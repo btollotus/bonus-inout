@@ -52,12 +52,14 @@ const PET_LOG_TYPE_LABELS: Record<string, string> = {
 };
 const CCP_EVENT_LABELS: Record<string, string> = {
   start: "시작", mid_check: "중간점검", end: "종료",
-  material_in: "원료투입", vat_refill: "밧트교체", move: "슬롯이동",
+  material_in: "원료투입", material_out: "원료소진", vat_refill: "밧트교체", move: "슬롯이동",
 };
+
 function eventBadgeCls(type: string) {
   if (type === "start") return "bg-blue-100 border-blue-200 text-blue-700";
   if (type === "end") return "bg-purple-100 border-purple-200 text-purple-700";
   if (type === "material_in") return "bg-green-100 border-green-200 text-green-700";
+  if (type === "material_out") return "bg-orange-100 border-orange-200 text-orange-700";
   if (type === "vat_refill") return "bg-amber-100 border-amber-200 text-amber-700";
   if (type === "move") return "bg-teal-100 border-teal-200 text-teal-700";
   return "bg-slate-100 border-slate-200 text-slate-600";

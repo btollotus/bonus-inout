@@ -171,13 +171,14 @@ type WoChecks = {
 
 const CCP_EVENT_LABELS: Record<string, string> = {
   start: "시작", mid_check: "중간점검", end: "종료",
-  material_in: "원료투입", move: "슬롯이동",
+  material_in: "원료투입", material_out: "원료소진", move: "슬롯이동",
 };
 
 function ccpEventBadgeCls(type: string) {
   if (type === "start") return "bg-blue-100 border-blue-200 text-blue-700";
   if (type === "end") return "bg-purple-100 border-purple-200 text-purple-700";
   if (type === "material_in") return "bg-green-100 border-green-200 text-green-700";
+  if (type === "material_out") return "bg-orange-100 border-orange-200 text-orange-700";
   if (type === "move") return "bg-teal-100 border-teal-200 text-teal-700";
   return "bg-slate-100 border-slate-200 text-slate-600";
 }
@@ -485,7 +486,7 @@ export default function ProductionClient() {
       showToast("✅ 세션이 생성됐습니다. 다시 기록 버튼을 눌러주세요.");
       return;
     }
-    const needsTemp = !["move", "material_in"].includes(ccpEventType);
+    const needsTemp = !["move", "material_in", "material_out"].includes(ccpEventType);
     if (!ccpTime || ccpTime.length < 4) return showToast("측정시각을 입력하세요. (예: 1430)", "error");
     // ── 시각 순서 검증: 항상 마지막 기록보다 늦어야 함 ──
     if (ccpEvents.length > 0) {
@@ -499,37 +500,51 @@ export default function ProductionClient() {
     if (needsTemp && !ccpTemp) return showToast("온도를 입력하세요.", "error");
     const temp = needsTemp ? Number(ccpTemp) : null;
     if (needsTemp && temp !== null && (temp < 40 || temp > 50)) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
+   
     if (ccpEventType === "move" && !ccpMoveTargetSlotId) return showToast("이동할 슬롯을 선택하세요.", "error");
-    // ── 슬롯이동: 마지막 기록이 종료여야 가능 ──
-    if (ccpEventType === "move") {
-      const sorted = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
-      const lastEvent = sorted[sorted.length - 1];
-      if (!lastEvent || !["end", "move"].includes(lastEvent.event_type)) {
-        return showToast("⚠ 종료 또는 슬롯이동 후에 슬롯이동을 할 수 있습니다.", "error");
+
+    const sortedForValidation = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+    const lastEv = sortedForValidation[sortedForValidation.length - 1];
+
+    // ── 원료투입 검증 ──
+    // 가능 조건: 빈 슬롯(기록 없음) | 마지막 이벤트가 원료소진 | 마지막 이벤트가 슬롯이동
+    if (ccpEventType === "material_in") {
+      if (lastEv && !["material_out", "move"].includes(lastEv.event_type)) {
+        return showToast("⚠ 원료투입은 빈 슬롯이거나, 원료소진 또는 슬롯이동 후에만 가능합니다.", "error");
       }
     }
 
-    // ── 시작 기록 시 검증 ──
+    // ── 시작 검증 ──
+    // 가능 조건: 마지막 이벤트가 원료투입 | 마지막 이벤트가 슬롯이동(원료투입 간주)
     if (ccpEventType === "start") {
-      const sortedEvents = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
-      const lastEvent = sortedEvents[sortedEvents.length - 1];
-      // 마지막 기록이 종료인 경우 → 슬롯이동 없이 재시작 불가
-      if (lastEvent && lastEvent.event_type === "end") {
-        return showToast("⚠ 종료 후에는 슬롯이동을 먼저 해주세요.", "error");
+      if (!lastEv || !["material_in", "move"].includes(lastEv.event_type)) {
+        return showToast("⚠ 시작은 원료투입 또는 슬롯이동 후에만 가능합니다.", "error");
       }
-      // 마지막 슬롯이동 이후 원료투입 없으면 차단
-      const lastMoveIdx = sortedEvents.map((e) => e.event_type).lastIndexOf("move");
-      const relevantEvents = lastMoveIdx >= 0 ? sortedEvents.slice(lastMoveIdx + 1) : sortedEvents;
-      const hasMaterialIn = relevantEvents.some((e) => e.event_type === "material_in");
-      if (!hasMaterialIn) {
-        return showToast("⚠ 원료투입 기록을 먼저 추가해주세요.", "error");
+    }
+
+    // ── 슬롯이동 검증 ──
+    // 가능 조건: 마지막 이벤트가 종료 | 마지막 이벤트가 원료소진
+    if (ccpEventType === "move") {
+      if (!lastEv || !["end", "material_out"].includes(lastEv.event_type)) {
+        return showToast("⚠ 슬롯이동은 종료 후에만 가능합니다.", "error");
+      }
+    }
+
+    // ── 원료소진 검증 ──
+    // 가능 조건: 마지막 이벤트가 종료
+    if (ccpEventType === "material_out") {
+      if (!lastEv || lastEv.event_type !== "end") {
+        return showToast("⚠ 원료소진은 종료 후에만 기록할 수 있습니다.", "error");
       }
     }
 
     // ── 종료 기록 시: 시작~종료 2시간 이상 & 중간점검 없으면 차단 ──
     if (ccpEventType === "end") {
-      const startEv = ccpEvents.find((e) => e.event_type === "start");
-      const hasMidCheck = ccpEvents.some((e) => e.event_type === "mid_check");
+      if (!lastEv || lastEv.event_type !== "start" && lastEv.event_type !== "mid_check") {
+        return showToast("⚠ 종료는 시작 또는 중간점검 후에만 가능합니다.", "error");
+      }
+      const startEv = [...sortedForValidation].reverse().find((e) => e.event_type === "start");
+      const hasMidCheck = sortedForValidation.some((e) => e.event_type === "mid_check");
       if (startEv && !hasMidCheck) {
         const nowLocal2 = new Date();
         const localDate2 = `${nowLocal2.getFullYear()}-${String(nowLocal2.getMonth()+1).padStart(2,"0")}-${String(nowLocal2.getDate()).padStart(2,"0")}`;
@@ -636,7 +651,7 @@ if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
   }
 
   async function saveCcpEdit(ev: { id: string; event_type: string; measured_at: string }) {
-    const needsTemp = !["move", "material_in"].includes(ev.event_type);
+    const needsTemp = !["move", "material_in", "material_out"].includes(ev.event_type); 
     if (needsTemp && !ccpEditTemp) return showToast("온도를 입력하세요.", "error");
     const temp = needsTemp ? Number(ccpEditTemp) : null;
     if (needsTemp && temp !== null && (temp < 40 || temp > 50)) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
@@ -1369,13 +1384,14 @@ if (eCcpSlotId && eCcpSlotId !== s.id && ccpSessionId) {
                     <div>
                       <div className="mb-1 text-xs text-slate-500">유형</div>
                       <div className="flex flex-wrap gap-1">
-                        {([
-                          { value: "material_in", label: "원료투입", cls: "bg-green-100 border-green-400 text-green-800" },
-                          { value: "start",       label: "시작",     cls: "bg-blue-100 border-blue-400 text-blue-800" },
-                          { value: "mid_check",   label: "중간점검", cls: "bg-slate-100 border-slate-400 text-slate-700" },
-                          { value: "end",         label: "종료",     cls: "bg-purple-100 border-purple-400 text-purple-800" },
-                          { value: "move",        label: "슬롯이동", cls: "bg-teal-100 border-teal-400 text-teal-800" },
-                        ] as { value: string; label: string; cls: string }[]).map((t) => (
+                      {([
+  { value: "material_in",  label: "원료투입", cls: "bg-green-100 border-green-400 text-green-800" },
+  { value: "start",        label: "시작",     cls: "bg-blue-100 border-blue-400 text-blue-800" },
+  { value: "mid_check",    label: "중간점검", cls: "bg-slate-100 border-slate-400 text-slate-700" },
+  { value: "end",          label: "종료",     cls: "bg-purple-100 border-purple-400 text-purple-800" },
+  { value: "material_out", label: "원료소진", cls: "bg-orange-100 border-orange-400 text-orange-800" },
+  { value: "move",         label: "슬롯이동", cls: "bg-teal-100 border-teal-400 text-teal-800" },
+] as { value: string; label: string; cls: string }[]).map((t) => (
                           <button
                             key={t.value}
                             type="button"
