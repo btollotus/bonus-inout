@@ -494,13 +494,13 @@ if (!sessionId && wo.ccp_slot_id) {
       }
     }
 
-    // ── 슬롯이동 검증 ──
-    // 가능 조건: 마지막 이벤트가 종료 | 마지막 이벤트가 원료소진
-    if (ccpEventType === "move") {
-      if (!lastEv || !["end", "material_out"].includes(lastEv.event_type)) {
-        return showToast("⚠ 슬롯이동은 종료 후에만 가능합니다.", "error");
-      }
-    }
+// ── 슬롯이동 검증 ──
+// 가능 조건: 원료투입 후(보관 중 이동) | 종료 후 | 원료소진 후
+if (ccpEventType === "move") {
+  if (!lastEv || !["material_in", "end", "material_out"].includes(lastEv.event_type)) {
+    return showToast("⚠ 슬롯이동은 원료투입, 종료, 원료소진 후에만 가능합니다.", "error");
+  }
+}
 
     // ── 원료소진 검증 ──
     // 가능 조건: 마지막 이벤트가 종료
