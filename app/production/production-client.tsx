@@ -1300,6 +1300,17 @@ if (eCcpSlotId && eCcpSlotId !== s.id && ccpSessionId) {
       .delete()
       .eq("session_id", ccpSessionId)
       .eq("work_order_ref", selectedWo!.work_order_no);
+  
+    // 이전 세션에 다른 연결이 없으면 세션도 삭제
+    const { data: remainLinks } = await supabase
+      .from("ccp_heating_session_orders")
+      .select("id")
+      .eq("session_id", ccpSessionId);
+    if (!remainLinks || remainLinks.length === 0) {
+      await supabase.from("ccp_heating_sessions")
+        .delete()
+        .eq("id", ccpSessionId);
+    }
   }
 }                       
 
@@ -1327,23 +1338,41 @@ if (eCcpSlotId && eCcpSlotId !== s.id && ccpSessionId) {
                               .eq("status", "active")
                               .maybeSingle();
                           
-                            if (sessData?.id) {
-                              setCcpSessionId(sessData.id);
-                              setCcpSessionSlotId(sessData.slot_id ?? null);
-                              const { data: evData } = await supabase
-                                .from("ccp_heating_events")
-                                .select("id, event_type, measured_at, temperature, is_ok, action_note")
-                                .eq("session_id", sessData.id)
-                                .order("measured_at", { ascending: true });
-                              setCcpEvents((evData ?? []) as any[]);
-                              const hasStart = (evData ?? []).some((e: any) => e.event_type === "start");
-                              setCcpEventType(hasStart ? "mid_check" : "start");
-                            } else {
-                              setCcpSessionId(null);
-                              setCcpSessionSlotId(null);
-                              setCcpEvents([]);
-                              setCcpEventType("start");
-                            }
+                              if (sessData?.id) {
+                                setCcpSessionId(sessData.id);
+                                setCcpSessionSlotId(sessData.slot_id ?? null);
+                                const { data: evData } = await supabase
+                                  .from("ccp_heating_events")
+                                  .select("id, event_type, measured_at, temperature, is_ok, action_note")
+                                  .eq("session_id", sessData.id)
+                                  .order("measured_at", { ascending: true });
+                                setCcpEvents((evData ?? []) as any[]);
+                                const hasStart = (evData ?? []).some((e: any) => e.event_type === "start");
+                                setCcpEventType(hasStart ? "mid_check" : "start");
+                              
+                                // 새 슬롯 세션에 이 작업지시서 연결 추가 (없는 경우에만)
+                                if (selectedWo) {
+                                  const { data: existLink } = await supabase
+                                    .from("ccp_heating_session_orders")
+                                    .select("id")
+                                    .eq("session_id", sessData.id)
+                                    .eq("work_order_ref", selectedWo.work_order_no)
+                                    .maybeSingle();
+                                  if (!existLink) {
+                                    await supabase.from("ccp_heating_session_orders").insert({
+                                      session_id: sessData.id,
+                                      work_order_ref: selectedWo.work_order_no,
+                                      client_name: selectedWo.client_name,
+                                      product_name: selectedWo.product_name,
+                                    });
+                                  }
+                                }
+                              } else {
+                                setCcpSessionId(null);
+                                setCcpSessionSlotId(null);
+                                setCcpEvents([]);
+                                setCcpEventType("start");
+                              }  
                           }}
        
 
