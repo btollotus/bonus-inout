@@ -256,6 +256,11 @@ export default function ProductionClient() {
   const [ccpSaving, setCcpSaving] = useState(false);
   const [ccpMoveTargetSlotId, setCcpMoveTargetSlotId] = useState(""); // 슬롯이동 대상
 
+  // ── 사전 원료투입 state ──
+const [preSlotId, setPreSlotId] = useState("");
+const [preTime, setPreTime] = useState("");
+const [preSaving, setPreSaving] = useState(false);
+
   const [stockAlerts, setStockAlerts] = useState<{ id: string; item_name: string; status: string; expiry_date: string | null; action: string | null; log_date: string }[]>([]);
   const [showAlertPanel, setShowAlertPanel] = useState(false);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
@@ -612,6 +617,63 @@ if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
     if (selectedWo) loadCcpSession(selectedWo);
   }
 
+// ── 사전 원료투입 저장 ──
+async function savePreMaterialIn() {
+  if (!preSlotId) return showToast("슬롯을 선택하세요.", "error");
+  if (!preTime || preTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
+  const timeStr = `${preTime.slice(0,2)}:${preTime.slice(2,4)}`;
+  if (parseInt(preTime.slice(0,2)) > 23 || parseInt(preTime.slice(2,4)) > 59)
+    return showToast("올바른 시각을 입력하세요.", "error");
+
+  setPreSaving(true);
+  try {
+    const nowLocal = new Date();
+    const localDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth()+1).padStart(2,"0")}-${String(nowLocal.getDate()).padStart(2,"0")}`;
+
+    // 해당 슬롯의 오늘 active 세션 조회
+    const { data: existSess } = await supabase
+      .from("ccp_heating_sessions")
+      .select("id")
+      .eq("session_date", localDate)
+      .eq("slot_id", preSlotId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    let sessionId: string;
+    if (existSess?.id) {
+      sessionId = existSess.id;
+    } else {
+      // 세션 없으면 새로 생성
+      const { data: newSess, error: sessErr } = await supabase
+        .from("ccp_heating_sessions")
+        .insert({ session_date: localDate, slot_id: preSlotId, status: "active", created_by: currentUserIdRef.current })
+        .select("id").single();
+      if (sessErr || !newSess?.id) return showToast("세션 생성 실패: " + sessErr?.message, "error");
+      sessionId = newSess.id;
+    }
+
+    // 원료투입 이벤트 기록
+    const { error: evErr } = await supabase.from("ccp_heating_events").insert({
+      session_id: sessionId,
+      event_type: "material_in",
+      measured_at: `${localDate}T${preTime.slice(0,2)}:${preTime.slice(2,4)}:00`,
+      temperature: null,
+      is_ok: null,
+      action_note: null,
+      created_by: currentUserIdRef.current,
+    });
+    if (evErr) return showToast("원료투입 기록 실패: " + evErr.message, "error");
+
+    showToast("✅ 원료투입이 기록됐습니다!");
+    setPreSlotId("");
+    setPreTime("");
+  } catch (e: any) {
+    showToast("오류: " + (e?.message ?? e), "error");
+  } finally {
+    setPreSaving(false);
+  }
+}
+
   // ── CCP 이벤트 수정/삭제 ──
   const [ccpEditingId, setCcpEditingId] = useState<string | null>(null);
   const [ccpEditTime, setCcpEditTime] = useState("");
@@ -942,6 +1004,57 @@ if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
             </div>
           </div>
         )}
+
+{/* ── 사전 원료투입 카드 ── */}
+<div className={`${card} p-4`}>
+  <div className="flex items-center gap-2 mb-3">
+    <div className="font-semibold text-sm">🧪 사전 원료투입</div>
+    <span className="text-xs text-slate-400">작업지시서 없이 온장고에 원료를 미리 투입할 때 사용하세요</span>
+  </div>
+  <div className="flex flex-wrap gap-2 mb-3">
+    {warmerSlots.map((s) => (
+      <button
+        key={s.id}
+        type="button"
+        className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
+          preSlotId === s.id
+            ? "border-green-500 bg-green-600 text-white shadow-sm scale-105"
+            : "border-slate-200 bg-white text-slate-600 hover:border-green-300 hover:bg-green-50"
+        }`}
+        onClick={() => setPreSlotId(preSlotId === s.id ? "" : s.id)}
+      >
+        {s.slot_name}
+        <span className="ml-1 text-[10px] opacity-70">({s.purpose})</span>
+      </button>
+    ))}
+  </div>
+  <div className="flex gap-3 items-end">
+    <div>
+      <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
+      <input
+        className={inp}
+        style={{ width: 140 }}
+        inputMode="numeric"
+        placeholder="예: 1430"
+        maxLength={4}
+        value={preTime}
+        onChange={(e) => setPreTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+      />
+      {preTime.length === 4 && (
+        <div className="mt-0.5 text-xs text-slate-400 text-right">
+          {preTime.slice(0, 2)}:{preTime.slice(2, 4)}
+        </div>
+      )}
+    </div>
+    <button
+      className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
+      disabled={preSaving || !preSlotId || preTime.length < 4}
+      onClick={savePreMaterialIn}
+    >
+      {preSaving ? "저장 중..." : "🧪 원료투입 기록"}
+    </button>
+  </div>
+</div>
 
         {/* 헤더 */}
         <div className="flex items-center justify-between">
