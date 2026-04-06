@@ -2586,10 +2586,11 @@ if (needsLabel) {
       .join("_");
     
     // logo_spec에서 x, ×, *, X를 -로 변환하고 mm 제거
-    const _logoSpec = _san(wo.logo_spec ?? "")
-      .replace(/[xX×*]/g, "-")
-      .replace(/mm/gi, "")
-      .trim();
+    const _logoSpec = (wo.logo_spec ?? "")
+    .replace(/[xX×*]/g, "-")  // 먼저 변환
+    .replace(/mm/gi, "")
+    .replace(/[\\/:?"<>|]/g, "")  // _san에서 * 제외하고 적용
+    .trim();
     
     const _title = [
       "작업지시서",
