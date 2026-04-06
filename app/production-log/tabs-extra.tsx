@@ -152,6 +152,9 @@ export function Ccp1bTab({ role, userId, showToast }: {
     if (error) return showToast("삭제 실패: " + error.message, "error");
     showToast("🗑️ 삭제 완료!");
     await loadSessions();
+    setSelectedSession((prev) =>
+      prev ? { ...prev, events: (prev.events ?? []).filter((e) => e.id !== eventId) } : prev
+    );
   }
 
   async function closeSession(sessionId: string) {
