@@ -2616,6 +2616,7 @@ if (needsLabel) {
       document.title = _origTitle; // 원래 title 복원
       onClose();
     }, 1500);
+  }
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", background: "#f1f5f9" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "#1e3a5f", color: "#fff", flexShrink: 0 }}>
