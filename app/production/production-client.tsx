@@ -1228,23 +1228,66 @@ if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
                           }`}
                           onClick={async () => {
                             const slotId = eCcpSlotId === s.id ? "" : s.id;
-                          
-                            // ── 이전 슬롯에 기록 있으면 경고, 없으면 연결 자동 삭제 ──
-                            if (eCcpSlotId && eCcpSlotId !== s.id && ccpSessionId) {
-                              if (ccpEvents.length > 0) {
-                                const prevSlotName = warmerSlots.find((w) => w.id === eCcpSlotId)?.slot_name ?? eCcpSlotId;
-                                const ok = confirm(
-                                  `⚠ 현재 슬롯(${prevSlotName})에 이미 온도 기록이 있습니다.\n슬롯을 변경하면 기존 기록은 그대로 남습니다.\n정말 변경하시겠습니까?`
-                                );
-                                if (!ok) return;
-                              } else {
-                                // 기록 없으면 이전 세션 연결 자동 삭제
-                                await supabase.from("ccp_heating_session_orders")
-                                  .delete()
-                                  .eq("session_id", ccpSessionId)
-                                  .eq("work_order_ref", selectedWo!.work_order_no);
-                              }
-                            }
+   // ── 이전 슬롯 처리: 기록 있으면 이동, 없으면 연결 삭제 ──
+if (eCcpSlotId && eCcpSlotId !== s.id && ccpSessionId) {
+  if (ccpEvents.length > 0) {
+    const prevSlotName = warmerSlots.find((w) => w.id === eCcpSlotId)?.slot_name ?? eCcpSlotId;
+    const newSlotName = s.slot_name;
+    const ok = confirm(
+      `⚠ 현재 슬롯(${prevSlotName})에 이미 온도 기록이 있습니다.\n확인 시 모든 기록이 ${newSlotName} 슬롯으로 이동됩니다.\n정말 변경하시겠습니까?`
+    );
+    if (!ok) return;
+
+    // 이동 대상 슬롯에 active 세션 있는지 확인
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const { data: existSess } = await supabase
+      .from("ccp_heating_sessions")
+      .select("id")
+      .eq("session_date", todayStr)
+      .eq("slot_id", slotId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    let targetSessionId: string;
+    if (existSess?.id) {
+      targetSessionId = existSess.id;
+    } else {
+      const { data: newSess } = await supabase
+        .from("ccp_heating_sessions")
+        .insert({ session_date: todayStr, slot_id: slotId, status: "active", created_by: currentUserIdRef.current })
+        .select("id").single();
+      if (!newSess?.id) { showToast("세션 생성 실패", "error"); return; }
+      targetSessionId = newSess.id;
+    }
+
+    // 이벤트 이동
+    await supabase.from("ccp_heating_events")
+      .update({ session_id: targetSessionId })
+      .eq("session_id", ccpSessionId);
+
+    // 연결 작업지시서 이동
+    await supabase.from("ccp_heating_session_orders")
+      .update({ session_id: targetSessionId })
+      .eq("session_id", ccpSessionId);
+
+    // 기존 세션 삭제
+    await supabase.from("ccp_heating_sessions")
+      .delete()
+      .eq("id", ccpSessionId);
+
+    // state를 새 세션으로 전환
+    setCcpSessionId(targetSessionId);
+    setCcpSessionSlotId(slotId);
+
+  } else {
+    // 기록 없으면 이전 세션 연결만 삭제
+    await supabase.from("ccp_heating_session_orders")
+      .delete()
+      .eq("session_id", ccpSessionId)
+      .eq("work_order_ref", selectedWo!.work_order_no);
+  }
+}                       
+
                           
                             setECcpSlotId(slotId);
                             await supabase.from("work_orders")
