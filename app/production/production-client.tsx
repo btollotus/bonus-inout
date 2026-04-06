@@ -1308,13 +1308,20 @@ export default function ProductionClient() {
                      - 세션 슬롯 !== 작업지시서 슬롯: 마지막 슬롯이동부터 표시 (이동 후 연결된 작업지시서) */}
                 {(() => {
                   const sorted = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
-                  // 현재 작업지시서 슬롯이 도착지인 마지막 move 이벤트 인덱스 찾기
                   const mySlotName = warmerSlots.find((s) => s.id === (eCcpSlotId || selectedWo.ccp_slot_id))?.slot_name ?? "";
-                  const myMoveIdx = mySlotName
+                  // 내 슬롯으로 도착한 이동 인덱스 (시작점)
+                  const arriveMoveIdx = mySlotName
                     ? sorted.reduce((found, e, i) => e.event_type === "move" && (e.action_note ?? "").endsWith(`→ ${mySlotName}`) ? i : found, -1)
                     : -1;
-                  // 내 슬롯으로 이동한 기록이 있으면 그 이후부터만 표시, 없으면 전체 표시
-                  const visibleEvents = myMoveIdx >= 0 ? sorted.slice(myMoveIdx) : sorted;
+                  // 내 슬롯에서 떠나는 첫 번째 이동 인덱스 (끝점) - 도착 이후에서만 찾기
+                  const startSearch = arriveMoveIdx >= 0 ? arriveMoveIdx + 1 : 0;
+                  const departMoveIdx = mySlotName
+                    ? sorted.slice(startSearch).reduce((found, e, i) => e.event_type === "move" && (e.action_note ?? "").startsWith(`${mySlotName} →`) ? startSearch + i : found, -1)
+                    : -1;
+                  // 시작: 도착 이동부터 / 끝: 떠나는 이동까지 (포함)
+                  const startIdx = arriveMoveIdx >= 0 ? arriveMoveIdx : 0;
+                  const endIdx = departMoveIdx >= 0 ? departMoveIdx + 1 : sorted.length;
+                  const visibleEvents = sorted.slice(startIdx, endIdx);
                   return visibleEvents.length === 0 ? (
                   <div className="py-4 text-center text-sm text-slate-400">
                     {"기록된 온도가 없습니다."}
