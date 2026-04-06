@@ -597,16 +597,22 @@ if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
     })
     .select("id").single();
 
-  if (newSess?.id && selectedWo) {
-    // 3) 새 세션에 작업지시서 연결
-    await supabase.from("ccp_heating_session_orders").insert({
-      session_id: newSess.id,
-      work_order_ref: selectedWo.work_order_no,
-      client_name: selectedWo.client_name,
-      product_name: selectedWo.product_name,
-    });
+    if (newSess?.id && selectedWo) {
+      // 3) 기존 세션에서 이 작업지시서 연결 삭제
+      await supabase.from("ccp_heating_session_orders")
+        .delete()
+        .eq("session_id", ccpSessionId)
+        .eq("work_order_ref", selectedWo.work_order_no);
+    
+      // 4) 새 세션에 작업지시서 연결
+      await supabase.from("ccp_heating_session_orders").insert({
+        session_id: newSess.id,
+        work_order_ref: selectedWo.work_order_no,
+        client_name: selectedWo.client_name,
+        product_name: selectedWo.product_name,
+      });
 
-    // 4) 새 세션에 슬롯이동 이벤트 복사 (16:20 1-1→1-2 기록)
+ // 5) 새 세션에 슬롯이동 이벤트 복사
     await supabase.from("ccp_heating_events").insert({
       session_id: newSess.id,
       event_type: "move",
@@ -617,12 +623,12 @@ if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
       created_by: currentUserIdRef.current,
     });
 
-    // 5) 작업지시서의 ccp_slot_id를 새 슬롯으로 업데이트
+  // 6) 작업지시서의 ccp_slot_id를 새 슬롯으로 업데이트
     await supabase.from("work_orders")
       .update({ ccp_slot_id: ccpMoveTargetSlotId, updated_at: new Date().toISOString() })
       .eq("id", selectedWo.id);
 
-    // 6) ccpSessionId를 새 세션으로 전환
+   // 7) ccpSessionId를 새 세션으로 전환
     setCcpSessionId(newSess.id);
     setCcpSessionSlotId(ccpMoveTargetSlotId);
     setECcpSlotId(ccpMoveTargetSlotId);
