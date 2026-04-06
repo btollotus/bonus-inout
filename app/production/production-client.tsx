@@ -386,49 +386,21 @@ export default function ProductionClient() {
     let sessionId: string | null = linkData?.session_id ?? null;
     let isOriginalWo = !!linkData?.session_id; // 1단계에서 찾으면 기존 연결 작업지시서
 
-    // 2) 연결 세션 없고 슬롯 있으면 오늘 active 세션 찾기
-    if (!sessionId && wo.ccp_slot_id) {
-      const { data: sessData } = await supabase
-        .from("ccp_heating_sessions")
-        .select("id")
-        .eq("session_date", today)
-        .eq("slot_id", wo.ccp_slot_id)
-        .eq("status", "active")
-        .maybeSingle();
-      sessionId = sessData?.id ?? null;
-      if (sessionId) isOriginalWo = false; // 2단계에서 찾으면 나중에 연결된 작업지시서
-      // 기존 세션을 찾았으면 이 work_order도 연결 추가 (없는 경우에만)
-      if (sessionId) {
-        const { data: existLink } = await supabase
-          .from("ccp_heating_session_orders")
-          .select("id")
-          .eq("session_id", sessionId)
-          .eq("work_order_ref", wo.work_order_no)
-          .maybeSingle();
-        if (!existLink) {
-          await supabase.from("ccp_heating_session_orders").insert({
-            session_id: sessionId, work_order_ref: wo.work_order_no,
-            client_name: wo.client_name, product_name: wo.product_name,
-          });
-        }
-      }
-    }
+   // 2) 연결 세션 없고 슬롯 있으면 오늘 active 세션 찾기 (연결 추가는 하지 않음)
+if (!sessionId && wo.ccp_slot_id) {
+  const { data: sessData } = await supabase
+    .from("ccp_heating_sessions")
+    .select("id")
+    .eq("session_date", today)
+    .eq("slot_id", wo.ccp_slot_id)
+    .eq("status", "active")
+    .maybeSingle();
+  sessionId = sessData?.id ?? null;
+  if (sessionId) isOriginalWo = false;
+  // ※ 자동 연결 추가 제거 — 슬롯 버튼 클릭 시에만 연결
+}
 
-    // 3) 세션 없고 슬롯 있으면 새로 생성 (최초 생성이므로 원래 작업지시서)
-    if (!sessionId && wo.ccp_slot_id) {
-      isOriginalWo = true;
-      const { data: newSess } = await supabase
-        .from("ccp_heating_sessions")
-        .insert({ session_date: today, slot_id: wo.ccp_slot_id, status: "active", created_by: currentUserIdRef.current })
-        .select("id").single();
-      sessionId = newSess?.id ?? null;
-      if (sessionId) {
-        await supabase.from("ccp_heating_session_orders").insert({
-          session_id: sessionId, work_order_ref: wo.work_order_no,
-          client_name: wo.client_name, product_name: wo.product_name,
-        });
-      }
-    }
+// 3) 세션 없고 슬롯 있으면 새로 생성하지 않음 (슬롯 버튼 클릭 또는 첫 기록 시에만 생성)
 
     setCcpSessionId(sessionId);
     setCcpIsOriginalWo(isOriginalWo);
