@@ -566,20 +566,53 @@ export default function ProductionClient() {
     if (error) return showToast("저장 실패: " + error.message, "error");
 
     // ── 슬롯이동 시: 세션의 slot_id를 이동한 슬롯으로 업데이트 ──
-    if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
-      await supabase
-        .from("ccp_heating_sessions")
-        .update({ slot_id: ccpMoveTargetSlotId })
-        .eq("id", ccpSessionId);
-      // 작업지시서의 ccp_slot_id도 이동 슬롯으로 업데이트
-      if (selectedWo) {
-        await supabase
-          .from("work_orders")
-          .update({ ccp_slot_id: ccpMoveTargetSlotId, updated_at: new Date().toISOString() })
-          .eq("id", selectedWo.id);
-        setECcpSlotId(ccpMoveTargetSlotId);
-      }
-    }
+// ── 슬롯이동 시: 기존 세션 유지 + 새 세션 생성 ──
+if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 1) 기존 세션 slot_id는 그대로 유지 (수정하지 않음)
+  // 2) 이동 대상 슬롯에 새 세션 생성
+  const { data: newSess } = await supabase
+    .from("ccp_heating_sessions")
+    .insert({
+      session_date: today,
+      slot_id: ccpMoveTargetSlotId,
+      status: "active",
+      created_by: currentUserIdRef.current,
+    })
+    .select("id").single();
+
+  if (newSess?.id && selectedWo) {
+    // 3) 새 세션에 작업지시서 연결
+    await supabase.from("ccp_heating_session_orders").insert({
+      session_id: newSess.id,
+      work_order_ref: selectedWo.work_order_no,
+      client_name: selectedWo.client_name,
+      product_name: selectedWo.product_name,
+    });
+
+    // 4) 새 세션에 슬롯이동 이벤트 복사 (16:20 1-1→1-2 기록)
+    await supabase.from("ccp_heating_events").insert({
+      session_id: newSess.id,
+      event_type: "move",
+      measured_at: `${today}T${ccpTime.slice(0,2)}:${ccpTime.slice(2,4)}:00`,
+      temperature: null,
+      is_ok: null,
+      action_note: finalActionNote,
+      created_by: currentUserIdRef.current,
+    });
+
+    // 5) 작업지시서의 ccp_slot_id를 새 슬롯으로 업데이트
+    await supabase.from("work_orders")
+      .update({ ccp_slot_id: ccpMoveTargetSlotId, updated_at: new Date().toISOString() })
+      .eq("id", selectedWo.id);
+
+    // 6) ccpSessionId를 새 세션으로 전환
+    setCcpSessionId(newSess.id);
+    setCcpSessionSlotId(ccpMoveTargetSlotId);
+    setECcpSlotId(ccpMoveTargetSlotId);
+  }
+}
 
     showToast("✅ CCP 온도 기록 완료!");
     setCcpTemp(""); setCcpActionNote(""); setCcpIsOk(true); setCcpMoveTargetSlotId(""); setCcpTime("");
