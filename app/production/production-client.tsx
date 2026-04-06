@@ -261,6 +261,9 @@ const [preSlotId, setPreSlotId] = useState("");
 const [preTime, setPreTime] = useState("");
 const [preSaving, setPreSaving] = useState(false);
 
+// ── 슬롯 현황 state ──
+const [slotStatus, setSlotStatus] = useState<Record<string, { date: string; daysAgo: number } | null>>({});
+
   const [stockAlerts, setStockAlerts] = useState<{ id: string; item_name: string; status: string; expiry_date: string | null; action: string | null; log_date: string }[]>([]);
   const [showAlertPanel, setShowAlertPanel] = useState(false);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
@@ -616,6 +619,53 @@ if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
     setCcpTemp(""); setCcpActionNote(""); setCcpIsOk(true); setCcpMoveTargetSlotId(""); setCcpTime("");
     if (selectedWo) loadCcpSession(selectedWo);
   }
+
+  // ── 슬롯 현황 로드 ──
+const loadSlotStatus = useCallback(async () => {
+  if (warmerSlots.length === 0) return;
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+
+  const { data: sessions } = await supabase
+    .from("ccp_heating_sessions")
+    .select(`id, slot_id, session_date, status,
+      events:ccp_heating_events(event_type, measured_at)`)
+    .eq("status", "active");
+
+  const map: Record<string, { date: string; daysAgo: number } | null> = {};
+
+  for (const slot of warmerSlots) {
+    // 해당 슬롯의 모든 active 세션 중 material_in 이벤트 찾기
+    const slotSessions = (sessions ?? []).filter((s) => s.slot_id === slot.id);
+    let latestMaterialIn: string | null = null;
+
+    for (const sess of slotSessions) {
+      const events = (sess.events ?? []) as any[];
+      const materialIns = events
+        .filter((e) => e.event_type === "material_in")
+        .map((e) => e.measured_at)
+        .sort()
+        .reverse();
+      if (materialIns.length > 0) {
+        if (!latestMaterialIn || materialIns[0] > latestMaterialIn) {
+          latestMaterialIn = materialIns[0];
+        }
+      }
+    }
+
+    if (!latestMaterialIn) {
+      map[slot.id] = null; // 비어있음
+    } else {
+      const materialDate = latestMaterialIn.slice(0, 10);
+      const diffMs = new Date(todayStr).getTime() - new Date(materialDate).getTime();
+      const daysAgo = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      map[slot.id] = { date: materialDate, daysAgo };
+    }
+  }
+  setSlotStatus(map);
+}, [warmerSlots]);
+
+useEffect(() => { loadSlotStatus(); }, [loadSlotStatus]);
 
 // ── 사전 원료투입 저장 ──
 async function savePreMaterialIn() {
@@ -1005,29 +1055,88 @@ async function savePreMaterialIn() {
           </div>
         )}
 
+{/* ── 온장고 슬롯 현황 카드 ── */}
+<div className={`${card} p-4`}>
+  <div className="flex items-center justify-between mb-3">
+    <div className="font-semibold text-sm">🌡️ 온장고 슬롯 현황</div>
+    <button className={btnSm} onClick={loadSlotStatus}>🔄 갱신</button>
+  </div>
+  {(() => {
+    const groups = Array.from(new Set(warmerSlots.map((s) => s.purpose)));
+    return (
+      <div className="space-y-3">
+        {groups.map((purpose) => (
+          <div key={purpose}>
+            <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
+            <div className="flex flex-wrap gap-2">
+              {warmerSlots.filter((s) => s.purpose === purpose).map((s) => {
+                const st = slotStatus[s.id];
+                const isEmpty = st === null || st === undefined;
+                const daysAgo = st?.daysAgo ?? 0;
+                const statusIcon = isEmpty ? "⚫" : daysAgo === 0 ? "🟢" : daysAgo <= 1 ? "🟡" : daysAgo <= 3 ? "🟠" : "🔴";
+                const statusCls = isEmpty
+                  ? "border-slate-200 bg-slate-50 text-slate-400"
+                  : daysAgo === 0
+                  ? "border-green-200 bg-green-50 text-green-700"
+                  : daysAgo <= 1
+                  ? "border-yellow-200 bg-yellow-50 text-yellow-700"
+                  : daysAgo <= 3
+                  ? "border-orange-200 bg-orange-50 text-orange-700"
+                  : "border-red-200 bg-red-50 text-red-700";
+                return (
+                  <div key={s.id} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${statusCls}`}>
+                    <div className="flex items-center gap-1">
+                      <span>{statusIcon}</span>
+                      <span>{s.slot_name}</span>
+                    </div>
+                    <div className="mt-0.5 text-[10px] font-normal opacity-80">
+                      {isEmpty ? "비어있음" : daysAgo === 0 ? `오늘 투입` : `${daysAgo}일 경과`}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  })()}
+</div>
+
 {/* ── 사전 원료투입 카드 ── */}
 <div className={`${card} p-4`}>
   <div className="flex items-center gap-2 mb-3">
     <div className="font-semibold text-sm">🧪 사전 원료투입</div>
     <span className="text-xs text-slate-400">작업지시서 없이 온장고에 원료를 미리 투입할 때 사용하세요</span>
   </div>
-  <div className="flex flex-wrap gap-2 mb-3">
-    {warmerSlots.map((s) => (
-      <button
-        key={s.id}
-        type="button"
-        className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
-          preSlotId === s.id
-            ? "border-green-500 bg-green-600 text-white shadow-sm scale-105"
-            : "border-slate-200 bg-white text-slate-600 hover:border-green-300 hover:bg-green-50"
-        }`}
-        onClick={() => setPreSlotId(preSlotId === s.id ? "" : s.id)}
-      >
-        {s.slot_name}
-        <span className="ml-1 text-[10px] opacity-70">({s.purpose})</span>
-      </button>
-    ))}
-  </div>
+  {(() => {
+    const groups = Array.from(new Set(warmerSlots.map((s) => s.purpose)));
+    return (
+      <div className="space-y-3 mb-4">
+        {groups.map((purpose) => (
+          <div key={purpose}>
+            <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
+            <div className="flex flex-wrap gap-2">
+              {warmerSlots.filter((s) => s.purpose === purpose).map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
+                    preSlotId === s.id
+                      ? "border-green-500 bg-green-600 text-white shadow-sm scale-105"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-green-300 hover:bg-green-50"
+                  }`}
+                  onClick={() => setPreSlotId(preSlotId === s.id ? "" : s.id)}
+                >
+                  {s.slot_name}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  })()}
   <div className="flex gap-3 items-end">
     <div>
       <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
