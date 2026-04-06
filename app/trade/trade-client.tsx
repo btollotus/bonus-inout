@@ -2568,8 +2568,20 @@ if (needsLabel) {
     document.body.appendChild(iframe);
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) return;
+    const _san = (s: string) => (s ?? "").replace(/[\\/:*?"<>|]/g, "").trim();
+    const _orderDate = wo.order_date ?? "";
+    const _datePart = _orderDate.slice(2,4) + _orderDate.slice(5,7) + _orderDate.slice(8,10);
+    const _visItems = (wo.work_order_items ?? []).filter((i: any) => { const n = (i.sub_items ?? [])[0]?.name ?? ""; return !n.startsWith("성형틀") && !n.startsWith("인쇄제판"); });
+    const _firstName = _visItems[0]?.sub_items?.[0]?.name ?? wo.product_name ?? "";
+    const _title = [
+      "작업지시서",
+      _datePart,
+      _san(wo.client_name),
+      wo.sub_name ? _san(wo.sub_name) : "",
+      _firstName ? `(${_san(_firstName)}${wo.food_type ? "-" + _san(wo.food_type) : ""})` : ""
+    ].filter(Boolean).join("-");
     doc.open();
-    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${pdfTitle}</title>
+    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${_title}</title>
       <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
 <style>@page{size:A4 portrait;margin:12mm 14mm;}body{margin:0;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:10pt;color:#111;}*{box-sizing:border-box;}img{max-width:none;}div[style*="overflow:hidden"] img,div[style*="overflow: hidden"] img{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:cover!important;object-position:top left!important;}textarea{border:1px solid #cbd5e1!important;background:#fff!important;}</style>
     </head><body>${content.innerHTML}
