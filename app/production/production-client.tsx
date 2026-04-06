@@ -1427,10 +1427,10 @@ if (eCcpSlotId && eCcpSlotId !== s.id && ccpSessionId) {
                           </div>
                         )}
                       </div>
-                      {!["move", "material_in"].includes(ccpEventType) && (
-                        <>
-                          <div>
-                            <div className="mb-1 text-xs text-slate-500">온도 (40~50°C)</div>
+                      {!["move", "material_in", "material_out"].includes(ccpEventType) && (
+  <>
+    <div>
+      <div className="mb-1 text-xs text-slate-500">온도 (40~50°C)</div>
                             <input className={inpR} inputMode="numeric" placeholder="예: 45.0" value={ccpTemp}
                               onChange={(e) => {
                                 const raw = e.target.value.replace(/[^\d]/g, "");
