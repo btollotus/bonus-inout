@@ -1226,9 +1226,26 @@ if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
                               ? "border-blue-500 bg-blue-600 text-white shadow-sm scale-105"
                               : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
                           }`}
-
                           onClick={async () => {
                             const slotId = eCcpSlotId === s.id ? "" : s.id;
+                          
+                            // ── 이전 슬롯에 기록 있으면 경고, 없으면 연결 자동 삭제 ──
+                            if (eCcpSlotId && eCcpSlotId !== s.id && ccpSessionId) {
+                              if (ccpEvents.length > 0) {
+                                const prevSlotName = warmerSlots.find((w) => w.id === eCcpSlotId)?.slot_name ?? eCcpSlotId;
+                                const ok = confirm(
+                                  `⚠ 현재 슬롯(${prevSlotName})에 이미 온도 기록이 있습니다.\n슬롯을 변경하면 기존 기록은 그대로 남습니다.\n정말 변경하시겠습니까?`
+                                );
+                                if (!ok) return;
+                              } else {
+                                // 기록 없으면 이전 세션 연결 자동 삭제
+                                await supabase.from("ccp_heating_session_orders")
+                                  .delete()
+                                  .eq("session_id", ccpSessionId)
+                                  .eq("work_order_ref", selectedWo!.work_order_no);
+                              }
+                            }
+                          
                             setECcpSlotId(slotId);
                             await supabase.from("work_orders")
                               .update({ ccp_slot_id: slotId || null, updated_at: new Date().toISOString() })
@@ -1264,13 +1281,15 @@ if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
                               const hasStart = (evData ?? []).some((e: any) => e.event_type === "start");
                               setCcpEventType(hasStart ? "mid_check" : "start");
                             } else {
-                              // 해당 슬롯에 세션 없음 → 빈 상태
                               setCcpSessionId(null);
                               setCcpSessionSlotId(null);
                               setCcpEvents([]);
                               setCcpEventType("start");
                             }
                           }}
+       
+
+
 
                         >
                           {s.slot_name}

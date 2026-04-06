@@ -86,6 +86,17 @@ export function Ccp1bTab({ role, userId, showToast }: {
   const [editActionNote, setEditActionNote] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
+  const [showMoveSession, setShowMoveSession] = useState(false);
+const [moveTargetSlotId, setMoveTargetSlotId] = useState("");
+const [moveSessionSaving, setMoveSessionSaving] = useState(false);
+const [allSlots, setAllSlots] = useState<WarmSlot[]>([]);
+
+useEffect(() => {
+  supabase.from("warmer_slots").select("id,slot_name,purpose")
+    .eq("is_active", true).order("slot_no")
+    .then(({ data }) => setAllSlots(data ?? []));
+}, []);
+
   const loadSessions = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
@@ -155,6 +166,65 @@ export function Ccp1bTab({ role, userId, showToast }: {
     setSelectedSession((prev) =>
       prev ? { ...prev, events: (prev.events ?? []).filter((e) => e.id !== eventId) } : prev
     );
+  }
+
+  async function moveSession(sessionId: string) {
+    if (!moveTargetSlotId) return showToast("이동할 슬롯을 선택하세요.", "error");
+    const targetSlot = allSlots.find((s) => s.id === moveTargetSlotId);
+    if (!confirm(`세션의 모든 기록을 "${targetSlot?.slot_name}" 슬롯으로 이동하시겠습니까?\n기존 세션은 삭제됩니다.`)) return;
+  
+    setMoveSessionSaving(true);
+    try {
+      const { data: existSess } = await supabase
+        .from("ccp_heating_sessions")
+        .select("id")
+        .eq("session_date", filterDate)
+        .eq("slot_id", moveTargetSlotId)
+        .eq("status", "active")
+        .maybeSingle();
+  
+      let targetSessionId: string;
+      if (existSess?.id) {
+        targetSessionId = existSess.id;
+      } else {
+        const { data: newSess } = await supabase
+          .from("ccp_heating_sessions")
+          .insert({ session_date: filterDate, slot_id: moveTargetSlotId, status: "active", created_by: null })
+          .select("id").single();
+        if (!newSess?.id) throw new Error("새 세션 생성 실패");
+        targetSessionId = newSess.id;
+      }
+  
+      await supabase.from("ccp_heating_events")
+        .update({ session_id: targetSessionId }).eq("session_id", sessionId);
+  
+      await supabase.from("ccp_heating_session_orders")
+        .update({ session_id: targetSessionId }).eq("session_id", sessionId);
+  
+      await supabase.from("ccp_heating_sessions").delete().eq("id", sessionId);
+  
+      const { data: orders } = await supabase
+        .from("ccp_heating_session_orders")
+        .select("work_order_ref").eq("session_id", targetSessionId);
+      if (orders && orders.length > 0) {
+        const refs = orders.map((o: any) => o.work_order_ref).filter(Boolean);
+        if (refs.length > 0) {
+          await supabase.from("work_orders")
+            .update({ ccp_slot_id: moveTargetSlotId, updated_at: new Date().toISOString() })
+            .in("work_order_no", refs);
+        }
+      }
+  
+      showToast(`✅ 세션을 ${targetSlot?.slot_name}으로 이동했습니다!`);
+      setShowMoveSession(false);
+      setMoveTargetSlotId("");
+      setSelectedSession(null);
+      await loadSessions();
+    } catch (e: any) {
+      showToast("이동 실패: " + (e?.message ?? e), "error");
+    } finally {
+      setMoveSessionSaving(false);
+    }
   }
 
   async function closeSession(sessionId: string) {
@@ -264,8 +334,61 @@ export function Ccp1bTab({ role, userId, showToast }: {
                     <button className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100"
                       onClick={() => reopenSession(selectedSession.id)}>재활성화</button>
                   )}
+
+{isAdminOrSubadmin && (
+  <button
+    className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-600 hover:bg-amber-100"
+    onClick={() => { setShowMoveSession(true); setMoveTargetSlotId(""); }}
+  >
+    🔄 슬롯 변경
+  </button>
+)}
+
                 </div>
               </div>
+
+              {showMoveSession && (
+  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-3">
+    <div className="text-xs font-semibold text-amber-700">
+      🔄 슬롯 변경 — 모든 기록이 선택한 슬롯으로 이동됩니다
+    </div>
+    <div className="flex flex-wrap gap-2">
+      {allSlots
+        .filter((s) => s.id !== selectedSession.slot_id)
+        .map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
+              moveTargetSlotId === s.id
+                ? "border-amber-500 bg-amber-600 text-white shadow-sm scale-105"
+                : "border-slate-200 bg-white text-slate-600 hover:border-amber-300 hover:bg-amber-50"
+            }`}
+            onClick={() => setMoveTargetSlotId(moveTargetSlotId === s.id ? "" : s.id)}
+          >
+            {s.slot_name}
+            <span className="ml-1 text-[10px] opacity-70">({s.purpose})</span>
+          </button>
+        ))}
+    </div>
+    <div className="flex gap-2">
+      <button
+        className="flex-1 rounded-xl bg-amber-600 py-2 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-60"
+        disabled={moveSessionSaving || !moveTargetSlotId}
+        onClick={() => moveSession(selectedSession.id)}
+      >
+        {moveSessionSaving ? "이동 중..." : "✅ 이동 확정"}
+      </button>
+      <button
+        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500 hover:bg-slate-50"
+        onClick={() => { setShowMoveSession(false); setMoveTargetSlotId(""); }}
+      >
+        취소
+      </button>
+    </div>
+  </div>
+)}
+
               {(selectedSession.orders ?? []).length > 0 && (
                 <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                   <div className="text-[11px] font-semibold text-slate-500 mb-1">📋 연결된 작업지시서</div>
