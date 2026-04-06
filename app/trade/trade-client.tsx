@@ -2609,8 +2609,13 @@ if (needsLabel) {
     <script>window.onload=function(){if(typeof JsBarcode!=="undefined"){document.querySelectorAll("svg[data-barcode]").forEach(function(el){JsBarcode(el,el.getAttribute("data-barcode"),{format:"CODE128",displayValue:false,width:2,height:26,margin:0});});}window.print();};<\/script>
     </body></html>`);
     doc.close();
-    setTimeout(() => onClose(), 1500);
-  }
+    // 부모 페이지 title을 임시로 변경 → 인쇄 파일명 적용
+    const _origTitle = document.title;
+    document.title = _title;
+    setTimeout(() => {
+      document.title = _origTitle; // 원래 title 복원
+      onClose();
+    }, 1500);
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", background: "#f1f5f9" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "#1e3a5f", color: "#fff", flexShrink: 0 }}>
