@@ -1169,12 +1169,52 @@ export default function ProductionClient() {
                               ? "border-blue-500 bg-blue-600 text-white shadow-sm scale-105"
                               : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
                           }`}
+
                           onClick={async () => {
                             const slotId = eCcpSlotId === s.id ? "" : s.id;
                             setECcpSlotId(slotId);
-                            await supabase.from("work_orders").update({ ccp_slot_id: slotId || null, updated_at: new Date().toISOString() }).eq("id", selectedWo!.id);
-                            loadCcpSession({ ...selectedWo, ccp_slot_id: slotId || null });
+                            await supabase.from("work_orders")
+                              .update({ ccp_slot_id: slotId || null, updated_at: new Date().toISOString() })
+                              .eq("id", selectedWo!.id);
+                          
+                            // 슬롯 해제 시 CCP 상태 초기화
+                            if (!slotId) {
+                              setCcpSessionId(null);
+                              setCcpSessionSlotId(null);
+                              setCcpEvents([]);
+                              return;
+                            }
+                          
+                            // 세션 자동생성 없이 조회만
+                            const today = new Date().toISOString().slice(0, 10);
+                            const { data: sessData } = await supabase
+                              .from("ccp_heating_sessions")
+                              .select("id, slot_id")
+                              .eq("session_date", today)
+                              .eq("slot_id", slotId)
+                              .eq("status", "active")
+                              .maybeSingle();
+                          
+                            if (sessData?.id) {
+                              setCcpSessionId(sessData.id);
+                              setCcpSessionSlotId(sessData.slot_id ?? null);
+                              const { data: evData } = await supabase
+                                .from("ccp_heating_events")
+                                .select("id, event_type, measured_at, temperature, is_ok, action_note")
+                                .eq("session_id", sessData.id)
+                                .order("measured_at", { ascending: true });
+                              setCcpEvents((evData ?? []) as any[]);
+                              const hasStart = (evData ?? []).some((e: any) => e.event_type === "start");
+                              setCcpEventType(hasStart ? "mid_check" : "start");
+                            } else {
+                              // 해당 슬롯에 세션 없음 → 빈 상태
+                              setCcpSessionId(null);
+                              setCcpSessionSlotId(null);
+                              setCcpEvents([]);
+                              setCcpEventType("start");
+                            }
                           }}
+
                         >
                           {s.slot_name}
                           <span className="ml-1 text-[10px] opacity-70">({s.purpose})</span>
