@@ -66,8 +66,10 @@ function eventBadgeCls(type: string) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// CCP-1B — 조회 + 수정 + 삭제
+// CCP-1B 조회 탭 — 새 구조 (ccp_slot_events + ccp_wo_events)
+// 기존 Ccp1bTab 전체를 이 코드로 교체하세요
 // ═══════════════════════════════════════════════════════════
+
 export function Ccp1bTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
@@ -75,12 +77,25 @@ export function Ccp1bTab({ role, userId, showToast }: {
   const isAdmin = role === "ADMIN";
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
 
-  const [sessions, setSessions] = useState<CcpSession[]>([]);
   const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(false);
-  const [selectedSession, setSelectedSession] = useState<CcpSession | null>(null);
+  const [allSlots, setAllSlots] = useState<WarmSlot[]>([]);
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
 
-  // 수정 state
+  // 슬롯 이벤트 (원료투입/소진/이동) — 슬롯 기준
+  const [slotEvents, setSlotEvents] = useState<{
+    id: string; slot_id: string; event_date: string; event_type: string;
+    measured_at: string; work_order_no: string | null; action_note: string | null;
+  }[]>([]);
+
+  // 작업지시서 온도기록 — 작업지시서 기준
+  const [woEvents, setWoEvents] = useState<{
+    id: string; work_order_no: string; slot_id: string; event_type: string;
+    measured_at: string; temperature: number | null; is_ok: boolean | null;
+    action_note: string | null;
+  }[]>([]);
+
+  // 수정 state (wo_events 수정용)
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editTemp, setEditTemp] = useState("");
   const [editTime, setEditTime] = useState("");
@@ -88,39 +103,61 @@ export function Ccp1bTab({ role, userId, showToast }: {
   const [editActionNote, setEditActionNote] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
-  const [showMoveSession, setShowMoveSession] = useState(false);
-const [moveTargetSlotId, setMoveTargetSlotId] = useState("");
-const [moveSessionSaving, setMoveSessionSaving] = useState(false);
-const [allSlots, setAllSlots] = useState<WarmSlot[]>([]);
+  useEffect(() => {
+    supabase.from("warmer_slots").select("id,slot_name,purpose")
+      .eq("is_active", true).order("slot_no")
+      .then(({ data }) => setAllSlots(data ?? []));
+  }, []);
 
-useEffect(() => {
-  supabase.from("warmer_slots").select("id,slot_name,purpose")
-    .eq("is_active", true).order("slot_no")
-    .then(({ data }) => setAllSlots(data ?? []));
-}, []);
-
-  const loadSessions = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("ccp_heating_sessions")
-      .select(`id, session_date, slot_id, status, note,
-        slot:warmer_slots(id, slot_name, purpose),
-        events:ccp_heating_events(id, session_id, event_type, measured_at, temperature, is_ok, action_note, created_by),
-        orders:ccp_heating_session_orders(id, work_order_ref, client_name, product_name)`)
-      .eq("session_date", filterDate)
-      .order("created_at", { ascending: true });
-    const list = (data ?? []) as unknown as CcpSession[];
-    setSessions(list);
-    if (selectedSession) {
-      const refreshed = list.find((s) => s.id === selectedSession.id);
-      if (refreshed) setSelectedSession(refreshed);
-    }
+    const [slotRes, woRes] = await Promise.all([
+      supabase.from("ccp_slot_events")
+        .select("id, slot_id, event_date, event_type, measured_at, work_order_no, action_note")
+        .eq("event_date", filterDate)
+        .order("measured_at", { ascending: true }),
+      supabase.from("ccp_wo_events")
+        .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
+        .order("measured_at", { ascending: true }),
+    ]);
+    setSlotEvents((slotRes.data ?? []) as any[]);
+    // wo_events는 날짜 필터가 없으므로 measured_at 기준으로 필터
+    const filtered = (woRes.data ?? []).filter((e: any) =>
+      e.measured_at.slice(0, 10) === filterDate
+    );
+    setWoEvents(filtered as any[]);
     setLoading(false);
-  }, [filterDate]); // eslint-disable-line
+  }, [filterDate]);
 
-  useEffect(() => { loadSessions(); }, [loadSessions]);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  function startEdit(ev: CcpEvent) {
+  // 슬롯별 마지막 상태 (원료 있는지)
+  function slotHasMaterial(slotId: string) {
+    const events = slotEvents.filter((e) => e.slot_id === slotId)
+      .sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+    const last = events[events.length - 1];
+    return last && last.event_type !== "material_out";
+  }
+
+  // 선택된 슬롯의 슬롯 이벤트
+  const selectedSlotEvents = selectedSlotId
+    ? slotEvents.filter((e) => e.slot_id === selectedSlotId)
+        .sort((a, b) => a.measured_at.localeCompare(b.measured_at))
+    : [];
+
+  // 선택된 슬롯에서 작업한 작업지시서 온도기록
+  const selectedWoEvents = selectedSlotId
+    ? woEvents.filter((e) => e.slot_id === selectedSlotId)
+        .sort((a, b) => a.measured_at.localeCompare(b.measured_at))
+    : [];
+
+  // 선택된 슬롯에서 작업한 작업지시서 번호 목록
+  const relatedWoNos = [...new Set([
+    ...selectedSlotEvents.map((e) => e.work_order_no).filter(Boolean),
+    ...selectedWoEvents.map((e) => e.work_order_no),
+  ])] as string[];
+
+  function startEdit(ev: typeof woEvents[0]) {
     setEditingEventId(ev.id);
     setEditTemp(ev.temperature != null ? String(ev.temperature) : "");
     setEditTime(ev.measured_at.slice(11, 16));
@@ -128,134 +165,69 @@ useEffect(() => {
     setEditActionNote(ev.action_note ?? "");
   }
 
-  async function saveEditEvent(ev: CcpEvent) {
-    const needsTemp = !["vat_refill", "move", "material_in"].includes(ev.event_type);
-    if (needsTemp && !editTemp) return showToast("온도를 입력하세요.", "error");
-    const temp = needsTemp ? Number(editTemp) : null;
-    if (needsTemp && temp !== null && (temp < 40 || temp > 50))
-      return showToast("온도는 40~50°C 범위여야 합니다.", "error");
+  async function saveEditEvent(ev: typeof woEvents[0]) {
+    if (!editTemp) return showToast("온도를 입력하세요.", "error");
+    const temp = Number(editTemp);
+    if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
     setEditSaving(true);
-    const { error } = await supabase.from("ccp_heating_events").update({
+    const { error } = await supabase.from("ccp_wo_events").update({
       measured_at: `${filterDate}T${editTime}:00`,
       temperature: temp,
-      is_ok: needsTemp ? editIsOk : null,
+      is_ok: editIsOk,
       action_note: editActionNote.trim() || null,
     }).eq("id", ev.id);
     setEditSaving(false);
     if (error) return showToast("수정 실패: " + error.message, "error");
     showToast("✅ 수정 완료!");
     setEditingEventId(null);
-    await loadSessions();
-    setSelectedSession((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        events: (prev.events ?? []).map((e) =>
-          e.id === ev.id
-            ? { ...e, measured_at: `${filterDate}T${editTime}:00`, temperature: !["vat_refill","move","material_in"].includes(ev.event_type) ? Number(editTemp) : null, is_ok: !["vat_refill","move","material_in"].includes(ev.event_type) ? editIsOk : null, action_note: editActionNote.trim() || null }
-            : e
-        ),
-      };
-    });
+    await loadData();
   }
 
-  async function deleteEvent(eventId: string) {
+  async function deleteWoEvent(eventId: string) {
     if (!confirm("이 기록을 삭제하시겠습니까?")) return;
-    const { error } = await supabase.from("ccp_heating_events").delete().eq("id", eventId);
+    const { error } = await supabase.from("ccp_wo_events").delete().eq("id", eventId);
     if (error) return showToast("삭제 실패: " + error.message, "error");
     showToast("🗑️ 삭제 완료!");
-    await loadSessions();
-    setSelectedSession((prev) =>
-      prev ? { ...prev, events: (prev.events ?? []).filter((e) => e.id !== eventId) } : prev
-    );
+    await loadData();
   }
 
-  async function moveSession(sessionId: string) {
-    if (!moveTargetSlotId) return showToast("이동할 슬롯을 선택하세요.", "error");
-    const targetSlot = allSlots.find((s) => s.id === moveTargetSlotId);
-    if (!confirm(`세션의 모든 기록을 "${targetSlot?.slot_name}" 슬롯으로 이동하시겠습니까?\n기존 세션은 삭제됩니다.`)) return;
-  
-    setMoveSessionSaving(true);
-    try {
-      const { data: existSess } = await supabase
-        .from("ccp_heating_sessions")
-        .select("id")
-        .eq("session_date", filterDate)
-        .eq("slot_id", moveTargetSlotId)
-        .eq("status", "active")
-        .maybeSingle();
-  
-      let targetSessionId: string;
-      if (existSess?.id) {
-        targetSessionId = existSess.id;
-      } else {
-        const { data: newSess } = await supabase
-          .from("ccp_heating_sessions")
-          .insert({ session_date: filterDate, slot_id: moveTargetSlotId, status: "active", created_by: null })
-          .select("id").single();
-        if (!newSess?.id) throw new Error("새 세션 생성 실패");
-        targetSessionId = newSess.id;
-      }
-  
-      await supabase.from("ccp_heating_events")
-        .update({ session_id: targetSessionId }).eq("session_id", sessionId);
-  
-      await supabase.from("ccp_heating_session_orders")
-        .update({ session_id: targetSessionId }).eq("session_id", sessionId);
-  
-      await supabase.from("ccp_heating_sessions").delete().eq("id", sessionId);
-  
-      const { data: orders } = await supabase
-        .from("ccp_heating_session_orders")
-        .select("work_order_ref").eq("session_id", targetSessionId);
-      if (orders && orders.length > 0) {
-        const refs = orders.map((o: any) => o.work_order_ref).filter(Boolean);
-        if (refs.length > 0) {
-          await supabase.from("work_orders")
-            .update({ ccp_slot_id: moveTargetSlotId, updated_at: new Date().toISOString() })
-            .in("work_order_no", refs);
-        }
-      }
-  
-      showToast(`✅ 세션을 ${targetSlot?.slot_name}으로 이동했습니다!`);
-      setShowMoveSession(false);
-      setMoveTargetSlotId("");
-      setSelectedSession(null);
-      await loadSessions();
-    } catch (e: any) {
-      showToast("이동 실패: " + (e?.message ?? e), "error");
-    } finally {
-      setMoveSessionSaving(false);
-    }
+  async function deleteSlotEvent(eventId: string) {
+    if (!confirm("이 슬롯 기록을 삭제하시겠습니까?")) return;
+    const { error } = await supabase.from("ccp_slot_events").delete().eq("id", eventId);
+    if (error) return showToast("삭제 실패: " + error.message, "error");
+    showToast("🗑️ 삭제 완료!");
+    await loadData();
   }
 
-  async function closeSession(sessionId: string) {
-    if (!confirm("세션을 종료하시겠습니까?")) return;
-    const { error } = await supabase.from("ccp_heating_sessions").update({ status: "done" }).eq("id", sessionId);
-    if (error) return showToast("실패: " + error.message, "error");
-    showToast("✅ 세션 종료!");
-    await loadSessions();
+  const CCP_WO_EVENT_LABELS: Record<string, string> = { start: "시작", mid_check: "중간점검", end: "종료" };
+  const CCP_SLOT_EVENT_LABELS: Record<string, string> = { material_in: "원료투입", material_out: "원료소진", move: "슬롯이동" };
+
+  function woBadgeCls(type: string) {
+    if (type === "start") return "bg-blue-100 border-blue-200 text-blue-700";
+    if (type === "end") return "bg-purple-100 border-purple-200 text-purple-700";
+    return "bg-slate-100 border-slate-200 text-slate-600";
+  }
+  function slotBadgeCls(type: string) {
+    if (type === "material_in") return "bg-green-100 border-green-200 text-green-700";
+    if (type === "material_out") return "bg-orange-100 border-orange-200 text-orange-700";
+    if (type === "move") return "bg-teal-100 border-teal-200 text-teal-700";
+    return "bg-slate-100 border-slate-200 text-slate-600";
   }
 
-  async function reopenSession(sessionId: string) {
-    if (!isAdmin) return;
-    if (!confirm("세션을 다시 활성화하시겠습니까?")) return;
-    const { error } = await supabase.from("ccp_heating_sessions").update({ status: "active" }).eq("id", sessionId);
-    if (error) return showToast("실패: " + error.message, "error");
-    showToast("✅ 재활성화!");
-    await loadSessions();
-  }
+  // 슬롯 목록에서 오늘 활동있는 슬롯 구분
+  const activeSlotsToday = new Set(slotEvents.map((e) => e.slot_id));
 
   return (
     <div className="space-y-4">
+      {/* 날짜 필터 */}
       <div className={`${card} p-4`}>
         <div className="flex flex-wrap gap-3 items-end">
           <div>
             <div className="mb-1 text-xs text-slate-500">날짜</div>
             <input type="date" className={inp} style={{ width: 160 }} value={filterDate}
-              onChange={(e) => { setFilterDate(e.target.value); setSelectedSession(null); setEditingEventId(null); }} />
+              onChange={(e) => { setFilterDate(e.target.value); setSelectedSlotId(null); setEditingEventId(null); }} />
           </div>
-          <button className={btn} onClick={loadSessions}>🔄 조회</button>
+          <button className={btn} onClick={loadData}>🔄 조회</button>
           <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
         </div>
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
@@ -264,12 +236,12 @@ useEffect(() => {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
-        {/* 좌: 세션 목록 */}
+        {/* 좌: 슬롯 목록 */}
         <div className={`${card} p-4`} style={{ maxHeight: "calc(100vh - 260px)", overflowY: "auto" }}>
-          <div className="mb-3 font-semibold text-sm">🌡️ 세션 목록 — {filterDate}</div>
+          <div className="mb-3 font-semibold text-sm">🌡️ 슬롯 목록 — {filterDate}</div>
           {loading ? (
             <div className="py-6 text-center text-sm text-slate-400">불러오는 중...</div>
-          ) : sessions.length === 0 ? (
+          ) : activeSlotsToday.size === 0 ? (
             <div className="py-6 text-center text-sm text-slate-400">
               <div className="text-2xl mb-2">🌡️</div>
               <div>세션이 없습니다.</div>
@@ -277,31 +249,35 @@ useEffect(() => {
             </div>
           ) : (
             <div className="space-y-2">
-              {sessions.map((s) => {
-                const events = s.events ?? [];
-                const tempEvents = events.filter((e) => e.temperature != null);
-                const hasNG = events.some((e) => e.is_ok === false);
-                const lastTemp = [...tempEvents].sort((a, b) => b.measured_at.localeCompare(a.measured_at))[0];
+              {allSlots.filter((s) => activeSlotsToday.has(s.id)).map((s) => {
+                const sEvents = slotEvents.filter((e) => e.slot_id === s.id);
+                const wEvents = woEvents.filter((e) => e.slot_id === s.id);
+                const temps = wEvents.filter((e) => e.temperature != null).map((e) => e.temperature as number);
+                const hasNG = wEvents.some((e) => e.is_ok === false);
+                const lastTemp = [...wEvents].sort((a, b) => b.measured_at.localeCompare(a.measured_at)).find((e) => e.temperature != null);
+                const hasMaterial = slotHasMaterial(s.id);
+                const woNos = [...new Set(sEvents.map((e) => e.work_order_no).filter(Boolean))];
+
                 return (
                   <button key={s.id}
-                    className={`w-full rounded-xl border p-3 text-left transition-all ${selectedSession?.id === s.id ? "border-blue-400 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-                    onClick={() => { setSelectedSession(s); setEditingEventId(null); }}
+                    className={`w-full rounded-xl border p-3 text-left transition-all ${selectedSlotId === s.id ? "border-blue-400 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                    onClick={() => { setSelectedSlotId(s.id); setEditingEventId(null); }}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <div className="font-semibold text-sm truncate">{(s.slot as any)?.slot_name}</div>
-                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${s.status === "active" ? "bg-green-100 border-green-200 text-green-700" : "bg-slate-100 border-slate-200 text-slate-500"}`}>
-                        {s.status === "active" ? "진행중" : "종료"}
+                      <div className="font-semibold text-sm">{s.slot_name}</div>
+                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${hasMaterial ? "bg-green-100 border-green-200 text-green-700" : "bg-slate-100 border-slate-200 text-slate-500"}`}>
+                        {hasMaterial ? "원료있음" : "소진"}
                       </span>
                     </div>
-                    <div className="mt-0.5 text-[11px] text-slate-500">{(s.slot as any)?.purpose}</div>
+                    <div className="mt-0.5 text-[11px] text-slate-500">{s.purpose}</div>
                     <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                       {lastTemp && <span className={`text-xs font-bold ${hasNG ? "text-red-600" : "text-blue-600"}`}>최근 {lastTemp.temperature}°C</span>}
-                      <span className="text-[11px] text-slate-400">기록 {events.length}건</span>
+                      <span className="text-[11px] text-slate-400">슬롯기록 {sEvents.length}건 · 온도기록 {wEvents.length}건</span>
                       {hasNG && <span className="rounded-full border border-red-200 bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold text-red-700">⚠ 이탈</span>}
                     </div>
-                    {(s.orders ?? []).length > 0 && (
+                    {woNos.length > 0 && (
                       <div className="mt-1 text-[10px] text-slate-400 truncate">
-                        {(s.orders ?? []).map((o) => o.client_name).filter(Boolean).join(", ")}
+                        {woNos.join(", ")}
                       </div>
                     )}
                   </button>
@@ -311,230 +287,195 @@ useEffect(() => {
           )}
         </div>
 
-        {/* 우: 세션 상세 */}
-        {selectedSession ? (
-          <div className="space-y-3" style={{ maxHeight: "calc(100vh - 260px)", overflowY: "auto" }}>
-            {/* 헤더 */}
-            <div className={`${card} p-4`}>
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <div className="font-bold text-base">
-                    🌡️ {(selectedSession.slot as any)?.slot_name}
-                    <span className="ml-2 text-sm font-normal text-slate-500">({(selectedSession.slot as any)?.purpose})</span>
+        {/* 우: 슬롯 상세 */}
+        {selectedSlotId ? (() => {
+          const slot = allSlots.find((s) => s.id === selectedSlotId);
+          return (
+            <div className="space-y-3" style={{ maxHeight: "calc(100vh - 260px)", overflowY: "auto" }}>
+              {/* 헤더 */}
+              <div className={`${card} p-4`}>
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="font-bold text-base">
+                      🌡️ {slot?.slot_name}
+                      <span className="ml-2 text-sm font-normal text-slate-500">({slot?.purpose})</span>
+                    </div>
+                    <div className="mt-0.5 text-xs text-slate-400">{filterDate}</div>
                   </div>
-                  <div className="mt-0.5 text-xs text-slate-400">{filterDate}</div>
                 </div>
-                <div className="flex gap-2 items-center">
-                  <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${selectedSession.status === "active" ? "bg-green-100 border-green-200 text-green-700" : "bg-slate-100 border-slate-200 text-slate-500"}`}>
-                    {selectedSession.status === "active" ? "진행중" : "종료"}
-                  </span>
-                  {selectedSession.status === "active" && isAdminOrSubadmin && (
-                    <button className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-100"
-                      onClick={() => closeSession(selectedSession.id)}>세션 종료</button>
-                  )}
-                  {selectedSession.status === "done" && isAdmin && (
-                    <button className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100"
-                      onClick={() => reopenSession(selectedSession.id)}>재활성화</button>
-                  )}
 
-{isAdminOrSubadmin && (
-  <button
-    className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-600 hover:bg-amber-100"
-    onClick={() => { setShowMoveSession(true); setMoveTargetSlotId(""); }}
-  >
-    🔄 슬롯 변경
-  </button>
-)}
-
-                </div>
+                {/* 연결된 작업지시서 */}
+                {relatedWoNos.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-[11px] font-semibold text-slate-500 mb-1">📋 이 슬롯을 사용한 작업지시서</div>
+                    <div className="flex flex-wrap gap-2">
+                      {relatedWoNos.map((no) => (
+                        <span key={no} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-mono text-slate-600">{no}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {showMoveSession && (
-  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-3">
-    <div className="text-xs font-semibold text-amber-700">
-      🔄 슬롯 변경 — 모든 기록이 선택한 슬롯으로 이동됩니다
-    </div>
-    <div className="flex flex-wrap gap-2">
-      {allSlots
-        .filter((s) => s.id !== selectedSession.slot_id)
-        .map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
-              moveTargetSlotId === s.id
-                ? "border-amber-500 bg-amber-600 text-white shadow-sm scale-105"
-                : "border-slate-200 bg-white text-slate-600 hover:border-amber-300 hover:bg-amber-50"
-            }`}
-            onClick={() => setMoveTargetSlotId(moveTargetSlotId === s.id ? "" : s.id)}
-          >
-            {s.slot_name}
-            <span className="ml-1 text-[10px] opacity-70">({s.purpose})</span>
-          </button>
-        ))}
-    </div>
-    <div className="flex gap-2">
-      <button
-        className="flex-1 rounded-xl bg-amber-600 py-2 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-60"
-        disabled={moveSessionSaving || !moveTargetSlotId}
-        onClick={() => moveSession(selectedSession.id)}
-      >
-        {moveSessionSaving ? "이동 중..." : "✅ 이동 확정"}
-      </button>
-      <button
-        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500 hover:bg-slate-50"
-        onClick={() => { setShowMoveSession(false); setMoveTargetSlotId(""); }}
-      >
-        취소
-      </button>
-    </div>
-  </div>
-)}
-
-              {(selectedSession.orders ?? []).length > 0 && (
-                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="text-[11px] font-semibold text-slate-500 mb-1">📋 연결된 작업지시서</div>
-                  <div className="flex flex-wrap gap-2">
-                    {(selectedSession.orders ?? []).map((o) => (
-                      <span key={o.id} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs">
-                        <span className="font-medium">{o.client_name}</span>
-                        {o.product_name && <span className="ml-1 text-slate-400 text-[10px]">{o.product_name}</span>}
-                        {o.work_order_ref && <span className="ml-1 font-mono text-[10px] text-slate-400">{o.work_order_ref}</span>}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 기록 테이블 */}
-            <div className={`${card} p-4`}>
-              <div className="mb-3 font-semibold text-sm">📋 모니터링 기록</div>
-              {(selectedSession.events ?? []).length === 0 ? (
-                <div className="py-6 text-center text-sm text-slate-400">
-                  기록된 데이터가 없습니다.
-                  <div className="text-xs mt-1 text-slate-300">작업지시서에서 온도를 기록하면 여기에 표시됩니다.</div>
-                </div>
-              ) : (
-                <>
+              {/* 슬롯 기록 (원료투입/소진/이동) */}
+              <div className={`${card} p-4`}>
+                <div className="mb-3 font-semibold text-sm">🧪 슬롯 기록 (원료투입·소진·이동)</div>
+                {selectedSlotEvents.length === 0 ? (
+                  <div className="py-4 text-center text-sm text-slate-400">슬롯 기록이 없습니다.</div>
+                ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm border-collapse">
                       <thead>
                         <tr className="border-b-2 border-slate-200 bg-slate-50">
                           <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">시각</th>
                           <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">유형</th>
-                          <th className="py-2 px-3 text-right text-xs font-semibold text-slate-500 whitespace-nowrap">온도</th>
-                          <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">판정</th>
-                          <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">조치사항</th>
-                          {isAdminOrSubadmin && <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">관리</th>}
+                          <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">작업지시서</th>
+                          <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">비고</th>
+                          {isAdminOrSubadmin && <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500">관리</th>}
                         </tr>
                       </thead>
                       <tbody>
-                        {[...(selectedSession.events ?? [])]
-                          .sort((a, b) => a.measured_at.localeCompare(b.measured_at))
-                          .map((ev, idx) => {
+                        {selectedSlotEvents.map((ev, idx) => (
+                          <tr key={ev.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                            <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">{ev.measured_at.slice(11, 16)}</td>
+                            <td className="py-2 px-3 whitespace-nowrap">
+                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${slotBadgeCls(ev.event_type)}`}>
+                                {CCP_SLOT_EVENT_LABELS[ev.event_type] ?? ev.event_type}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-xs text-slate-600">{ev.work_order_no ?? "—"}</td>
+                            <td className="py-2 px-3 text-xs text-slate-500">{ev.action_note ?? ""}</td>
+                            {isAdminOrSubadmin && (
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500"
+                                  onClick={() => deleteSlotEvent(ev.id)}>삭제</button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* 온도 기록 (작업지시서별 시작/중간/종료) */}
+              <div className={`${card} p-4`}>
+                <div className="mb-3 font-semibold text-sm">🌡️ 온도 기록 (시작·중간점검·종료)</div>
+                {selectedWoEvents.length === 0 ? (
+                  <div className="py-4 text-center text-sm text-slate-400">
+                    온도 기록이 없습니다.
+                    <div className="text-xs mt-1 text-slate-300">작업지시서에서 온도를 기록하면 여기에 표시됩니다.</div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b-2 border-slate-200 bg-slate-50">
+                            <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">시각</th>
+                            <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">작업지시서</th>
+                            <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">유형</th>
+                            <th className="py-2 px-3 text-right text-xs font-semibold text-slate-500 whitespace-nowrap">온도</th>
+                            <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">판정</th>
+                            <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">조치사항</th>
+                            {isAdminOrSubadmin && <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">관리</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedWoEvents.map((ev, idx) => {
                             const isNG = ev.is_ok === false;
                             const isEditing = editingEventId === ev.id;
-                            const needsTemp = !["vat_refill", "move", "material_in"].includes(ev.event_type);
                             return (
-                              <tr key={ev.id} className={`border-b border-slate-100 transition-colors ${isEditing ? "bg-blue-50" : isNG ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                              <tr key={ev.id} className={`border-b border-slate-100 ${isEditing ? "bg-blue-50" : isNG ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
                                 <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">
-                                  {isEditing ? (
-                                    <input type="time" className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
-                                      value={editTime} onChange={(e) => setEditTime(e.target.value)} />
-                                  ) : ev.measured_at.slice(11, 16)}
+                                  {isEditing
+                                    ? <input type="time" className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
+                                        value={editTime} onChange={(e) => setEditTime(e.target.value)} />
+                                    : ev.measured_at.slice(11, 16)}
                                 </td>
+                                <td className="py-2 px-3 text-xs font-mono text-slate-500 whitespace-nowrap">{ev.work_order_no}</td>
                                 <td className="py-2 px-3 whitespace-nowrap">
-                                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${eventBadgeCls(ev.event_type)}`}>
-                                    {CCP_EVENT_LABELS[ev.event_type] ?? ev.event_type}
+                                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${woBadgeCls(ev.event_type)}`}>
+                                    {CCP_WO_EVENT_LABELS[ev.event_type] ?? ev.event_type}
                                   </span>
                                 </td>
                                 <td className="py-2 px-3 text-right whitespace-nowrap">
-                                  {isEditing && needsTemp ? (
-                                    <input className="w-20 rounded-lg border border-blue-300 px-2 py-1 text-xs text-right tabular-nums focus:outline-none"
-                                      inputMode="decimal" value={editTemp}
-                                      onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setEditTemp(v); if (v) setEditIsOk(Number(v) >= 40 && Number(v) <= 50); }} />
-                                  ) : ev.temperature != null ? (
-                                    <span className={`text-sm font-bold tabular-nums ${isNG ? "text-red-600" : "text-blue-700"}`}>{ev.temperature}°C</span>
-                                  ) : <span className="text-slate-300">—</span>}
+                                  {isEditing
+                                    ? <input className="w-20 rounded-lg border border-blue-300 px-2 py-1 text-xs text-right tabular-nums focus:outline-none"
+                                        inputMode="decimal" value={editTemp}
+                                        onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setEditTemp(v); if (v) setEditIsOk(Number(v) >= 40 && Number(v) <= 50); }} />
+                                    : ev.temperature != null
+                                      ? <span className={`text-sm font-bold tabular-nums ${isNG ? "text-red-600" : "text-blue-700"}`}>{ev.temperature}°C</span>
+                                      : <span className="text-slate-300">—</span>}
                                 </td>
                                 <td className="py-2 px-3 text-center whitespace-nowrap">
-                                  {isEditing && needsTemp ? (
-                                    <select className={`rounded-lg border px-1.5 py-1 text-xs focus:outline-none ${editIsOk ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}
-                                      value={editIsOk ? "ok" : "ng"} onChange={(e) => setEditIsOk(e.target.value === "ok")}>
-                                      <option value="ok">O 적합</option><option value="ng">X 부적합</option>
-                                    </select>
-                                  ) : ev.is_ok != null ? (
-                                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ev.is_ok ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>
-                                      {ev.is_ok ? "O 적합" : "X 부적합"}
-                                    </span>
-                                  ) : <span className="text-slate-300 text-xs">—</span>}
+                                  {isEditing
+                                    ? <select className={`rounded-lg border px-1.5 py-1 text-xs focus:outline-none ${editIsOk ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}
+                                        value={editIsOk ? "ok" : "ng"} onChange={(e) => setEditIsOk(e.target.value === "ok")}>
+                                        <option value="ok">O 적합</option><option value="ng">X 부적합</option>
+                                      </select>
+                                    : ev.is_ok != null
+                                      ? <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ev.is_ok ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>{ev.is_ok ? "O" : "X"}</span>
+                                      : <span className="text-slate-300 text-xs">—</span>}
                                 </td>
-                                <td className="py-2 px-3 text-xs text-red-600">
-                                  {isEditing ? (
-                                    <input className="w-full rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
-                                      value={editActionNote} onChange={(e) => setEditActionNote(e.target.value)} placeholder="조치사항" />
-                                  ) : ev.action_note ?? ""}
+                                <td className="py-2 px-3 text-xs">
+                                  {isEditing
+                                    ? <input className="w-full rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
+                                        value={editActionNote} onChange={(e) => setEditActionNote(e.target.value)} placeholder="조치사항" />
+                                    : <span className={isNG ? "text-red-600" : ""}>{ev.action_note ?? ""}</span>}
                                 </td>
                                 {isAdminOrSubadmin && (
                                   <td className="py-2 px-3 text-center whitespace-nowrap">
-                                    {isEditing ? (
-                                      <div className="flex gap-1 justify-center">
-                                        <button className="rounded-lg border border-blue-400 bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                                          disabled={editSaving} onClick={() => saveEditEvent(ev)}>
-                                          {editSaving ? "..." : "저장"}
-                                        </button>
-                                        <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50"
-                                          onClick={() => setEditingEventId(null)}>취소</button>
-                                      </div>
-                                    ) : (
-                                      <div className="flex gap-1 justify-center">
-                                        <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600"
-                                          onClick={() => startEdit(ev)}>수정</button>
-                                        <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500"
-                                          onClick={() => deleteEvent(ev.id)}>삭제</button>
-                                      </div>
-                                    )}
+                                    {isEditing
+                                      ? <div className="flex gap-1 justify-center">
+                                          <button className="rounded-lg border border-blue-400 bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                                            disabled={editSaving} onClick={() => saveEditEvent(ev)}>{editSaving ? "..." : "저장"}</button>
+                                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50"
+                                            onClick={() => setEditingEventId(null)}>취소</button>
+                                        </div>
+                                      : <div className="flex gap-1 justify-center">
+                                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600"
+                                            onClick={() => startEdit(ev)}>수정</button>
+                                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500"
+                                            onClick={() => deleteWoEvent(ev.id)}>삭제</button>
+                                        </div>}
                                   </td>
                                 )}
                               </tr>
                             );
                           })}
-                      </tbody>
-                    </table>
-                  </div>
-                  {/* 요약 */}
-                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
-                    {(() => {
-                      const events = selectedSession.events ?? [];
-                      const temps = events.filter((e) => e.temperature != null).map((e) => e.temperature as number);
-                      const ngCount = events.filter((e) => e.is_ok === false).length;
-                      const okCount = events.filter((e) => e.is_ok === true).length;
-                      const minT = temps.length ? Math.min(...temps) : null;
-                      const maxT = temps.length ? Math.max(...temps) : null;
-                      const materialIn = events.filter((e) => e.event_type === "material_in").length;
-                      return (
-                        <>
-                          <span>온도 측정 <b>{temps.length}</b>회</span>
-                          {okCount > 0 && <span className="text-green-600">적합 <b>{okCount}</b>회</span>}
-                          {ngCount > 0 && <span className="text-red-600 font-semibold">⚠ 이탈 <b>{ngCount}</b>회</span>}
-                          {minT != null && <span>최저 <b className={minT < 40 ? "text-red-600" : ""}>{minT}°C</b></span>}
-                          {maxT != null && <span>최고 <b className={maxT > 50 ? "text-red-600" : ""}>{maxT}°C</b></span>}
-                          {materialIn > 0 && <span>원료투입 <b>{materialIn}</b>회</span>}
-                        </>
-                      );
-                    })()}
-                  </div>
-                </>
-              )}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* 요약 */}
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+                      {(() => {
+                        const temps = selectedWoEvents.filter((e) => e.temperature != null).map((e) => e.temperature as number);
+                        const ngCount = selectedWoEvents.filter((e) => e.is_ok === false).length;
+                        const okCount = selectedWoEvents.filter((e) => e.is_ok === true).length;
+                        return (
+                          <>
+                            <span>온도 측정 <b>{temps.length}</b>회</span>
+                            {okCount > 0 && <span className="text-green-600">적합 <b>{okCount}</b>회</span>}
+                            {ngCount > 0 && <span className="text-red-600 font-semibold">⚠ 이탈 <b>{ngCount}</b>회</span>}
+                            {temps.length > 0 && <span>최저 <b className={Math.min(...temps) < 40 ? "text-red-600" : ""}>{Math.min(...temps)}°C</b></span>}
+                            {temps.length > 0 && <span>최고 <b className={Math.max(...temps) > 50 ? "text-red-600" : ""}>{Math.max(...temps)}°C</b></span>}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        ) : (
+          );
+        })() : (
           <div className={`${card} flex items-center justify-center p-12`}>
             <div className="text-center text-slate-400">
               <div className="text-3xl mb-2">🌡️</div>
-              <div className="text-sm">왼쪽 목록에서 세션을 선택하세요</div>
-              <div className="mt-1 text-xs text-slate-300">작업지시서에서 온도 기록 시 자동으로 세션이 생성됩니다</div>
+              <div className="text-sm">왼쪽 목록에서 슬롯을 선택하세요</div>
+              <div className="mt-1 text-xs text-slate-300">작업지시서에서 온도 기록 시 자동으로 생성됩니다</div>
             </div>
           </div>
         )}
@@ -542,6 +483,7 @@ useEffect(() => {
     </div>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════
 // CCP-1P 금속검출
