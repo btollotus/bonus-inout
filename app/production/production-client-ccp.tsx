@@ -305,7 +305,7 @@ export function useCcpState(
     if (error) return showToast("수정 실패: " + error.message, "error");
     showToast("✅ 수정 완료!");
     setCcpWoEditingId(null);
-    ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id);
+    await loadWoEvents(workOrderNo, ev.slot_id);
   }
 
   async function deleteWoEvent(eventId: string, workOrderNo: string) {
