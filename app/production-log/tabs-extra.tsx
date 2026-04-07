@@ -113,7 +113,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
     setLoading(true);
     const [slotRes, woRes] = await Promise.all([
       supabase.from("ccp_slot_events")
-        .select("id, slot_id, event_date, event_type, measured_at, work_order_no, action_note")
+        .select("id, slot_id, event_date, event_type, measured_at, work_order_no, action_note, temperature, is_ok")
         .eq("event_date", filterDate)
         .order("measured_at", { ascending: true }),
       supabase.from("ccp_wo_events")
@@ -121,13 +121,12 @@ export function Ccp1bTab({ role, userId, showToast }: {
         .order("measured_at", { ascending: true }),
     ]);
     setSlotEvents((slotRes.data ?? []) as any[]);
-    // wo_events는 날짜 필터가 없으므로 measured_at 기준으로 필터
     const filtered = (woRes.data ?? []).filter((e: any) =>
       e.measured_at.slice(0, 10) === filterDate
     );
     setWoEvents(filtered as any[]);
     setLoading(false);
-  }, [filterDate]);
+  }, [filterDate]); 
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -200,7 +199,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
   }
 
   const CCP_WO_EVENT_LABELS: Record<string, string> = { start: "시작", mid_check: "중간점검", end: "종료" };
-  const CCP_SLOT_EVENT_LABELS: Record<string, string> = { material_in: "원료투입", material_out: "원료소진", move: "슬롯이동" };
+  const CCP_SLOT_EVENT_LABELS: Record<string, string> = { material_in: "원료투입", material_out: "원료소진", move: "슬롯이동", start: "시작", mid_check: "중간점검", end: "종료" };
 
   function woBadgeCls(type: string) {
     if (type === "start") return "bg-blue-100 border-blue-200 text-blue-700";
@@ -211,6 +210,9 @@ export function Ccp1bTab({ role, userId, showToast }: {
     if (type === "material_in") return "bg-green-100 border-green-200 text-green-700";
     if (type === "material_out") return "bg-orange-100 border-orange-200 text-orange-700";
     if (type === "move") return "bg-teal-100 border-teal-200 text-teal-700";
+    if (type === "start") return "bg-blue-100 border-blue-200 text-blue-700";
+    if (type === "mid_check") return "bg-slate-100 border-slate-200 text-slate-600";
+    if (type === "end") return "bg-purple-100 border-purple-200 text-purple-700";
     return "bg-slate-100 border-slate-200 text-slate-600";
   }
 
@@ -330,8 +332,10 @@ export function Ccp1bTab({ role, userId, showToast }: {
                           <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">시각</th>
                           <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">유형</th>
                           <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">작업지시서</th>
-                          <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">비고</th>
-                          {isAdminOrSubadmin && <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500">관리</th>}
+<th className="py-2 px-3 text-right text-xs font-semibold text-slate-500 whitespace-nowrap">온도</th>
+<th className="py-2 px-3 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">판정</th>
+<th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">비고</th>
+{isAdminOrSubadmin && <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500">관리</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -344,8 +348,18 @@ export function Ccp1bTab({ role, userId, showToast }: {
                               </span>
                             </td>
                             <td className="py-2 px-3 text-xs text-slate-600">{ev.work_order_no ?? "—"}</td>
-                            <td className="py-2 px-3 text-xs text-slate-500">{ev.action_note ?? ""}</td>
-                            {isAdminOrSubadmin && (
+<td className="py-2 px-3 text-right whitespace-nowrap">
+  {(ev as any).temperature != null
+    ? <span className={`text-sm font-bold tabular-nums ${(ev as any).is_ok === false ? "text-red-600" : "text-blue-700"}`}>{(ev as any).temperature}°C</span>
+    : <span className="text-slate-300">—</span>}
+</td>
+<td className="py-2 px-3 text-center whitespace-nowrap">
+  {(ev as any).is_ok != null
+    ? <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${(ev as any).is_ok ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>{(ev as any).is_ok ? "O" : "X"}</span>
+    : <span className="text-slate-300 text-xs">—</span>}
+</td>
+<td className="py-2 px-3 text-xs text-slate-500">{ev.action_note ?? ""}</td>
+{isAdminOrSubadmin && (
                               <td className="py-2 px-3 text-center whitespace-nowrap">
                                 <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500"
                                   onClick={() => deleteSlotEvent(ev.id)}>삭제</button>
