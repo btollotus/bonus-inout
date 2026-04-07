@@ -117,22 +117,15 @@ export function useCcpState(
   }
 
   // ── 작업지시서 온도기록 로드 ──
-  const loadWoEvents = useCallback(async (workOrderNo: string, slotId?: string | null) => {
-    let query = supabase
+  const loadWoEvents = useCallback(async (workOrderNo: string) => {
+    const { data } = await supabase
       .from("ccp_wo_events")
       .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
+      .eq("work_order_no", workOrderNo)
       .order("measured_at", { ascending: true });
-  
-    if (slotId) {
-      query = query.eq("slot_id", slotId);
-    } else {
-      query = query.eq("work_order_no", workOrderNo);
-    }
-  
-    const { data } = await query;
     setWoEvents((data ?? []) as WoEvent[]);
-    const myEvents = (data ?? []).filter((e: any) => e.work_order_no === workOrderNo);
-    const hasStart = myEvents.some((e: any) => e.event_type === "start");
+    // 이벤트 타입 초기화
+    const hasStart = (data ?? []).some((e: any) => e.event_type === "start");
     setCcpWoEventType(hasStart ? "mid_check" : "start");
     setCcpWoTime("");
   }, []);
@@ -262,11 +255,14 @@ export function useCcpState(
 
     setCcpWoSaving(true);
     const today = todayKST();
+    const measuredAt = `${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00`;
+
+    // 1. 내 작업지시서 온도기록 저장
     const { error } = await supabase.from("ccp_wo_events").insert({
       work_order_no: selectedWo.work_order_no,
       slot_id:       slotId,
       event_type:    ccpWoEventType,
-      measured_at:   `${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00`,
+      measured_at:   measuredAt,
       temperature:   temp,
       is_ok:         ccpWoIsOk,
       action_note:   ccpWoActionNote.trim() || null,
@@ -274,6 +270,41 @@ export function useCcpState(
     });
     setCcpWoSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
+
+    // 2. 슬롯 기록에도 저장 (온도 포함)
+    await supabase.from("ccp_slot_events").insert({
+      slot_id:       slotId,
+      event_date:    today,
+      event_type:    ccpWoEventType,
+      measured_at:   measuredAt,
+      work_order_no: selectedWo.work_order_no,
+      temperature:   temp,
+      is_ok:         ccpWoIsOk,
+      action_note:   ccpWoActionNote.trim() || null,
+      created_by:    currentUserIdRef.current,
+    });
+
+    // 3. 같은 슬롯의 다른 작업지시서에도 동일 기록 복사
+    const { data: sameSlotWos } = await supabase
+      .from("work_orders")
+      .select("work_order_no")
+      .eq("ccp_slot_id", slotId)
+      .neq("work_order_no", selectedWo.work_order_no);
+
+    if (sameSlotWos && sameSlotWos.length > 0) {
+      await supabase.from("ccp_wo_events").insert(
+        sameSlotWos.map((wo: any) => ({
+          work_order_no: wo.work_order_no,
+          slot_id:       slotId,
+          event_type:    ccpWoEventType,
+          measured_at:   measuredAt,
+          temperature:   temp,
+          is_ok:         ccpWoIsOk,
+          action_note:   ccpWoActionNote.trim() || null,
+          created_by:    currentUserIdRef.current,
+        }))
+      );
+    }
 
     showToast("✅ CCP 온도 기록 완료!");
     setCcpWoTemp(""); setCcpWoActionNote(""); setCcpWoIsOk(true); setCcpWoTime("");
@@ -310,10 +341,12 @@ export function useCcpState(
 
   async function deleteWoEvent(eventId: string, workOrderNo: string) {
     if (!confirm("이 기록을 삭제하시겠습니까?")) return;
+    // ccp_wo_events에서 삭제할 이벤트의 slot_id 조회
+    const { data: evData } = await supabase.from("ccp_wo_events").select("slot_id").eq("id", eventId).maybeSingle();
     const { error } = await supabase.from("ccp_wo_events").delete().eq("id", eventId);
     if (error) return showToast("삭제 실패: " + error.message, "error");
     showToast("🗑️ 삭제 완료!");
-    await loadWoEvents(workOrderNo);
+    await loadWoEvents(workOrderNo, evData?.slot_id ?? null);
   }
 
   // ── 원료투입 저장 ──

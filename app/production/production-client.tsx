@@ -486,7 +486,7 @@ export default function ProductionClient() {
       });
     })();
     // ── CCP 온도기록 로드 ──
-    ccp.loadWoEvents(wo.work_order_no);
+    ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id);
   }
 
   async function deleteWo(woId: string) {
