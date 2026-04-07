@@ -256,30 +256,138 @@ export default function ProductionClient() {
   const [ccpSaving, setCcpSaving] = useState(false);
   const [ccpMoveTargetSlotId, setCcpMoveTargetSlotId] = useState(""); // 슬롯이동 대상
 
-  // ── 사전 원료투입 state ──
-  const [preSlotId, setPreSlotId] = useState("");
-  const [preDate, setPreDate] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
-  });
-  const [preTime, setPreTime] = useState(() => {
-    const now = new Date();
-    return `${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`;
-  });
-  const [preSaving, setPreSaving] = useState(false);
+ // ── 슬롯 원료투입 저장 ──
+async function saveSlotMaterialIn(slotId: string) {
+  if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
+  if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
+    return showToast("올바른 시각을 입력하세요.", "error");
 
-    // ── 슬롯이동 state (작업지시서 없이) ──
-    const [moveFromSlotId, setMoveFromSlotId] = useState("");
-    const [moveToSlotId, setMoveToSlotId] = useState("");
-    const [moveDate, setMoveDate] = useState(() => {
-      const now = new Date();
-      return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+  setSlotActionSaving(true);
+  try {
+    const { data: existSess } = await supabase
+      .from("ccp_heating_sessions")
+      .select("id")
+      .eq("session_date", slotActionDate)
+      .eq("slot_id", slotId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    let sessionId: string;
+    if (existSess?.id) {
+      sessionId = existSess.id;
+    } else {
+      const { data: newSess, error: sessErr } = await supabase
+        .from("ccp_heating_sessions")
+        .insert({ session_date: slotActionDate, slot_id: slotId, status: "active", created_by: currentUserIdRef.current })
+        .select("id").single();
+      if (sessErr || !newSess?.id) return showToast("세션 생성 실패: " + sessErr?.message, "error");
+      sessionId = newSess.id;
+    }
+
+    const { error: evErr } = await supabase.from("ccp_heating_events").insert({
+      session_id: sessionId,
+      event_type: "material_in",
+      measured_at: `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00`,
+      temperature: null, is_ok: null, action_note: null,
+      created_by: currentUserIdRef.current,
     });
-    const [moveTime, setMoveTime] = useState(() => {
-      const now = new Date();
-      return `${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`;
+    if (evErr) return showToast("원료투입 기록 실패: " + evErr.message, "error");
+
+    showToast("✅ 원료투입이 기록됐습니다!");
+    setActiveSlotId(null);
+    await loadSlotStatus();
+  } catch (e: any) {
+    showToast("오류: " + (e?.message ?? e), "error");
+  } finally {
+    setSlotActionSaving(false);
+  }
+}
+
+// ── 슬롯이동 저장 ──
+async function saveSlotMove(fromSlotId: string, toSlotId: string) {
+  if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
+  if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
+    return showToast("올바른 시각을 입력하세요.", "error");
+
+  const fromSlotName = warmerSlots.find((s) => s.id === fromSlotId)?.slot_name ?? fromSlotId;
+  const toSlotName = warmerSlots.find((s) => s.id === toSlotId)?.slot_name ?? toSlotId;
+
+  setSlotActionSaving(true);
+  try {
+    const { data: fromSess } = await supabase
+      .from("ccp_heating_sessions")
+      .select("id")
+      .eq("session_date", slotActionDate)
+      .eq("slot_id", fromSlotId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (!fromSess?.id) {
+      showToast(`⚠ ${fromSlotName} 슬롯에 활성 세션이 없습니다.`, "error");
+      return;
+    }
+    const fromSessionId = fromSess.id;
+
+    const { data: toSess } = await supabase
+      .from("ccp_heating_sessions")
+      .select("id")
+      .eq("session_date", slotActionDate)
+      .eq("slot_id", toSlotId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    let targetSessionId: string;
+    if (toSess?.id) {
+      targetSessionId = toSess.id;
+    } else {
+      const { data: newSess, error: sessErr } = await supabase
+        .from("ccp_heating_sessions")
+        .insert({ session_date: slotActionDate, slot_id: toSlotId, status: "active", created_by: currentUserIdRef.current })
+        .select("id").single();
+      if (sessErr || !newSess?.id) { showToast("세션 생성 실패", "error"); return; }
+      targetSessionId = newSess.id;
+    }
+
+    // 이벤트 + 연결 작업지시서를 도착 세션으로 이동
+    await supabase.from("ccp_heating_events").update({ session_id: targetSessionId }).eq("session_id", fromSessionId);
+    await supabase.from("ccp_heating_session_orders").update({ session_id: targetSessionId }).eq("session_id", fromSessionId);
+
+    // 출발 세션 삭제 (즉시 비어있음 전환)
+    await supabase.from("ccp_heating_sessions").delete().eq("id", fromSessionId);
+
+    // move 이벤트 기록
+    await supabase.from("ccp_heating_events").insert({
+      session_id: targetSessionId,
+      event_type: "move",
+      measured_at: `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00`,
+      temperature: null, is_ok: null,
+      action_note: `${fromSlotName} → ${toSlotName}`,
+      created_by: currentUserIdRef.current,
     });
-    const [moveSaving, setMoveSaving] = useState(false);
+
+    showToast(`✅ ${fromSlotName} → ${toSlotName} 이동 완료!`);
+    setActiveSlotId(null);
+    setSlotMoveTargetId(null);
+    await loadSlotStatus();
+  } catch (e: any) {
+    showToast("오류: " + (e?.message ?? e), "error");
+  } finally {
+    setSlotActionSaving(false);
+  }
+}
+
+// ── 슬롯 통합 액션 state ──
+const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
+const [slotMoveTargetId, setSlotMoveTargetId] = useState<string | null>(null);
+const [slotActionTime, setSlotActionTime] = useState(() => {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`;
+});
+const [slotActionDate, setSlotActionDate] = useState(() => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+});
+const [slotActionSaving, setSlotActionSaving] = useState(false);
 
 // ── 슬롯 현황 state ──
 const [slotStatus, setSlotStatus] = useState<Record<string, { date: string; daysAgo: number } | null>>({});
@@ -752,159 +860,9 @@ const loadSlotStatus = useCallback(async () => {
 
 useEffect(() => { loadSlotStatus(); }, [loadSlotStatus]);
 
-// ── 사전 원료투입 저장 ──
-async function savePreMaterialIn() {
-  if (!preSlotId) return showToast("슬롯을 선택하세요.", "error");
-  if (!preTime || preTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
-  const timeStr = `${preTime.slice(0,2)}:${preTime.slice(2,4)}`;
-  if (parseInt(preTime.slice(0,2)) > 23 || parseInt(preTime.slice(2,4)) > 59)
-    return showToast("올바른 시각을 입력하세요.", "error");
 
-  setPreSaving(true);
-  try {
-    const localDate = preDate;
 
-    // 해당 슬롯의 오늘 active 세션 조회
-    const { data: existSess } = await supabase
-      .from("ccp_heating_sessions")
-      .select("id")
-      .eq("session_date", localDate)
-      .eq("slot_id", preSlotId)
-      .eq("status", "active")
-      .maybeSingle();
 
-    let sessionId: string;
-    if (existSess?.id) {
-      sessionId = existSess.id;
-    } else {
-      // 세션 없으면 새로 생성
-      const { data: newSess, error: sessErr } = await supabase
-        .from("ccp_heating_sessions")
-        .insert({ session_date: localDate, slot_id: preSlotId, status: "active", created_by: currentUserIdRef.current })
-        .select("id").single();
-      if (sessErr || !newSess?.id) return showToast("세션 생성 실패: " + sessErr?.message, "error");
-      sessionId = newSess.id;
-    }
-
-    // 원료투입 이벤트 기록
-    const { error: evErr } = await supabase.from("ccp_heating_events").insert({
-      session_id: sessionId,
-      event_type: "material_in",
-      measured_at: `${localDate}T${preTime.slice(0,2)}:${preTime.slice(2,4)}:00`,
-      temperature: null,
-      is_ok: null,
-      action_note: null,
-      created_by: currentUserIdRef.current,
-    });
-    if (evErr) return showToast("원료투입 기록 실패: " + evErr.message, "error");
-
-    showToast("✅ 원료투입이 기록됐습니다!");
-    setPreSlotId("");
-    const now = new Date();
-    setPreDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`);
-    setPreTime(`${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`);
-  } catch (e: any) {
-    showToast("오류: " + (e?.message ?? e), "error");
-  } finally {
-    setPreSaving(false);
-  }
-}
-
-// ── 슬롯이동 저장 (작업지시서 없이) ──
-async function saveSlotMove() {
-  if (!moveFromSlotId) return showToast("출발 슬롯을 선택하세요.", "error");
-  if (!moveToSlotId) return showToast("도착 슬롯을 선택하세요.", "error");
-  if (moveFromSlotId === moveToSlotId) return showToast("출발과 도착 슬롯이 같습니다.", "error");
-  if (!moveTime || moveTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
-  if (parseInt(moveTime.slice(0,2)) > 23 || parseInt(moveTime.slice(2,4)) > 59)
-    return showToast("올바른 시각을 입력하세요.", "error");
-
-  setMoveSaving(true);
-  try {
-    const localDate = moveDate;
-    const fromSlotName = warmerSlots.find((s) => s.id === moveFromSlotId)?.slot_name ?? moveFromSlotId;
-    const toSlotName = warmerSlots.find((s) => s.id === moveToSlotId)?.slot_name ?? moveToSlotId;
-    const actionNote = `${fromSlotName} → ${toSlotName}`;
-
-    // 출발 슬롯의 해당 날짜 active 세션 조회
-    const { data: fromSess } = await supabase
-      .from("ccp_heating_sessions")
-      .select("id")
-      .eq("session_date", localDate)
-      .eq("slot_id", moveFromSlotId)
-      .eq("status", "active")
-      .maybeSingle();
-
-    if (!fromSess?.id) {
-      showToast(`⚠ ${fromSlotName} 슬롯에 해당 날짜 활성 세션이 없습니다.`, "error");
-      return;
-    }
-    const fromSessionId = fromSess.id;
-
-    // 도착 슬롯에 기존 active 세션 있는지 확인
-    const { data: toSess } = await supabase
-      .from("ccp_heating_sessions")
-      .select("id")
-      .eq("session_date", localDate)
-      .eq("slot_id", moveToSlotId)
-      .eq("status", "active")
-      .maybeSingle();
-
-    let targetSessionId: string;
-    if (toSess?.id) {
-      targetSessionId = toSess.id;
-    } else {
-      const { data: newSess, error: sessErr } = await supabase
-        .from("ccp_heating_sessions")
-        .insert({ session_date: localDate, slot_id: moveToSlotId, status: "active", created_by: currentUserIdRef.current })
-        .select("id").single();
-      if (sessErr || !newSess?.id) {
-        showToast("세션 생성 실패: " + sessErr?.message, "error");
-        return;
-      }
-      targetSessionId = newSess.id;
-    }
-
-    // 기존 출발 세션 이벤트를 도착 세션으로 이동
-    await supabase.from("ccp_heating_events")
-      .update({ session_id: targetSessionId })
-      .eq("session_id", fromSessionId);
-
-    // 연결 작업지시서도 도착 세션으로 이동
-    await supabase.from("ccp_heating_session_orders")
-      .update({ session_id: targetSessionId })
-      .eq("session_id", fromSessionId);
-
-    // 기존 출발 세션 삭제
-    await supabase.from("ccp_heating_sessions")
-      .delete()
-      .eq("id", fromSessionId);
-
-    // move 이벤트 기록 (도착 세션에)
-    const { error: evErr } = await supabase.from("ccp_heating_events").insert({
-      session_id: targetSessionId,
-      event_type: "move",
-      measured_at: `${localDate}T${moveTime.slice(0,2)}:${moveTime.slice(2,4)}:00`,
-      temperature: null,
-      is_ok: null,
-      action_note: actionNote,
-      created_by: currentUserIdRef.current,
-    });
-    if (evErr) { showToast("이동 기록 실패: " + evErr.message, "error"); return; }
-
-    showToast(`✅ ${fromSlotName} → ${toSlotName} 이동 기록 완료!`);
-    setMoveFromSlotId("");
-    setMoveToSlotId("");
-    const now = new Date();
-    setMoveDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`);
-    setMoveTime(`${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`);
-    await loadSlotStatus();
-  } catch (e: any) {
-    showToast("오류: " + (e?.message ?? e), "error");
-  } finally {
-    setMoveSaving(false);
-  }
-}
 
   // ── CCP 이벤트 수정/삭제 ──
   const [ccpEditingId, setCcpEditingId] = useState<string | null>(null);
@@ -1237,286 +1195,198 @@ async function saveSlotMove() {
           </div>
         )}
 
-{/* ── 온장고 슬롯 현황 + 사전 원료투입 ── */}
-<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-
-  {/* 온장고 슬롯 현황 */}
-  <div className={`${card} p-4`}>
-    <div className="flex items-center justify-between mb-3">
+{/* ── 온장고 슬롯 현황 (원료투입 + 슬롯이동 통합) ── */}
+<div className={`${card} p-4`}>
+  <div className="flex items-center justify-between mb-3">
+    <div>
       <div className="font-semibold text-sm">🌡️ 온장고 슬롯 현황</div>
+      <div className="text-xs text-slate-400 mt-0.5">슬롯 클릭 → 원료투입 또는 슬롯이동</div>
+    </div>
+    <div className="flex items-center gap-2">
+      <input
+        type="date"
+        className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-blue-400 focus:outline-none"
+        value={slotActionDate}
+        onChange={(e) => setSlotActionDate(e.target.value)}
+      />
       <button className={btnSm} onClick={loadSlotStatus}>🔄 갱신</button>
     </div>
-
- {(() => {
-  // 7, 8, 9-xx 슬롯을 한 그룹으로 묶기
-  const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
-  const mainGroups = Array.from(new Set(
-    warmerSlots
-      .filter((s) => !MERGE_PURPOSES.includes(s.purpose))
-      .map((s) => s.purpose)
-  ));
-  const mergedSlots = warmerSlots.filter((s) => MERGE_PURPOSES.includes(s.purpose));
-
-  const renderSlot = (s: { id: string; slot_name: string; purpose: string }) => {
-    const st = slotStatus[s.id];
-    const isEmpty = st === null || st === undefined;
-    const daysAgo = st?.daysAgo ?? 0;
-    const dateStr = st?.date ? st.date.slice(5) : null; // MM-DD
-    const isOverdue = !isEmpty && daysAgo >= 15;
-    const statusCls = isEmpty
-      ? "border-slate-200 bg-slate-50 text-slate-400"
-      : isOverdue
-      ? "border-red-300 bg-red-50 text-red-600"
-      : "border-blue-200 bg-blue-50 text-blue-700";
-    return (
-      <div key={s.id} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${statusCls}`}>
-        <div className={`font-semibold ${isOverdue ? "text-red-600 font-bold" : ""}`}>{s.slot_name}</div>
-        <div className={`mt-0.5 text-[10px] text-center ${isOverdue ? "text-red-600 font-bold" : "font-normal"}`}>
-          {isEmpty ? "비어있음" : dateStr}
-        </div>
-      </div>
-    ); 
-    
-  };
-
-  return (
-    <div className="space-y-3">
-      {mainGroups.map((purpose) => (
-        <div key={purpose}>
-          <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
-          <div className="flex flex-wrap gap-2">
-            {warmerSlots.filter((s) => s.purpose === purpose).map(renderSlot)}
-          </div>
-        </div>
-      ))}
-      {mergedSlots.length > 0 && (
-        <div>
-          <div className="mb-1.5 text-xs font-semibold text-slate-500">기타 (코팅·전사·유동)</div>
-          <div className="flex flex-wrap gap-2">
-            {mergedSlots.map(renderSlot)}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-})()}
-          
- </div>
-
-  {/* 사전 원료투입 */}
-  <div className={`${card} p-4`}>
-    <div className="flex items-center gap-2 mb-3">
-      <div className="font-semibold text-sm">🧪 사전 원료투입</div>
-      <span className="text-xs text-slate-400">작업지시서 없이 원료를 미리 투입할 때</span>
-    </div>
-    {(() => {
-      const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
-      const mainGroups = Array.from(new Set(
-        warmerSlots
-          .filter((s) => !MERGE_PURPOSES.includes(s.purpose))
-          .map((s) => s.purpose)
-      ));
-      const mergedSlots = warmerSlots.filter((s) => MERGE_PURPOSES.includes(s.purpose));
-      const renderPreSlot = (s: { id: string; slot_name: string; purpose: string }) => (
-        <button
-          key={s.id}
-          type="button"
-          className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
-            preSlotId === s.id
-              ? "border-green-500 bg-green-600 text-white shadow-sm scale-105"
-              : "border-slate-200 bg-white text-slate-600 hover:border-green-300 hover:bg-green-50"
-          }`}
-          onClick={() => setPreSlotId(preSlotId === s.id ? "" : s.id)}
-        >
-          {s.slot_name}
-        </button>
-      );
-      return (
-        <div className="space-y-3 mb-4">
-          {mainGroups.map((purpose) => (
-            <div key={purpose}>
-              <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
-              <div className="flex flex-wrap gap-2">
-                {warmerSlots.filter((s) => s.purpose === purpose).map(renderPreSlot)}
-              </div>
-            </div>
-          ))}
-          {mergedSlots.length > 0 && (
-            <div>
-              <div className="mb-1.5 text-xs font-semibold text-slate-500">기타 (코팅·전사·유동)</div>
-              <div className="flex flex-wrap gap-2">
-                {mergedSlots.map(renderPreSlot)}
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    })()}
-<div className="flex gap-3 items-end border-t border-slate-100 pt-3 flex-wrap">
-      <div>
-        <div className="mb-1 text-xs text-slate-500">투입날짜</div>
-        <input
-          type="date"
-          className={inp}
-          style={{ width: 150 }}
-          value={preDate}
-          onChange={(e) => setPreDate(e.target.value)}
-        />
-      </div>
-      <div>
-        <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
-        <input
-          className={inp}
-          style={{ width: 120 }}
-          inputMode="numeric"
-          placeholder="예: 1430"
-          maxLength={4}
-          value={preTime}
-          onChange={(e) => setPreTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
-        />
-      </div>
-      <div className="flex flex-col justify-end">
-        {preTime.length === 4 && (
-          <div className="mb-1 text-xs text-slate-400 text-center">
-            {preTime.slice(0, 2)}:{preTime.slice(2, 4)}
-          </div>
-        )}
-        <button
-          className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
-          disabled={preSaving || !preSlotId || preTime.length < 4 || !preDate}
-          onClick={savePreMaterialIn}
-        >
-          {preSaving ? "저장 중..." : "🧪 원료투입 기록"}
-        </button>
-      </div>
-    </div>
-
-    {/* 슬롯이동 */}
-    <div className="mt-4 pt-4 border-t border-slate-100">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="font-semibold text-sm">🔀 슬롯이동</div>
-        <span className="text-xs text-slate-400">작업지시서 없이 슬롯 간 원료를 이동할 때</span>
-      </div>
-      {(() => {
-        const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
-        const mainGroups = Array.from(new Set(
-          warmerSlots.filter((s) => !MERGE_PURPOSES.includes(s.purpose)).map((s) => s.purpose)
-        ));
-        const mergedSlots = warmerSlots.filter((s) => MERGE_PURPOSES.includes(s.purpose));
-        const renderMoveSlot = (s: { id: string; slot_name: string; purpose: string }, mode: "from" | "to") => {
-          const selected = mode === "from" ? moveFromSlotId === s.id : moveToSlotId === s.id;
-          const isOtherSelected = mode === "from" ? moveToSlotId === s.id : moveFromSlotId === s.id;
-          return (
-            <button
-              key={s.id}
-              type="button"
-              disabled={isOtherSelected}
-              className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
-                selected
-                  ? mode === "from"
-                    ? "border-orange-500 bg-orange-500 text-white shadow-sm scale-105"
-                    : "border-teal-500 bg-teal-600 text-white shadow-sm scale-105"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-              }`}
-              onClick={() => {
-                if (mode === "from") setMoveFromSlotId(moveFromSlotId === s.id ? "" : s.id);
-                else setMoveToSlotId(moveToSlotId === s.id ? "" : s.id);
-              }}
-            >
-              {s.slot_name}
-            </button>
-          );
-        };
-        return (
-          <div className="space-y-3">
-            <div>
-              <div className="mb-1.5 text-xs font-semibold text-orange-600">📤 출발 슬롯</div>
-              <div className="space-y-2">
-                {mainGroups.map((purpose) => (
-                  <div key={purpose}>
-                    <div className="mb-1 text-xs text-slate-400">{purpose}</div>
-                    <div className="flex flex-wrap gap-2">
-                      {warmerSlots.filter((s) => s.purpose === purpose).map((s) => renderMoveSlot(s, "from"))}
-                    </div>
-                  </div>
-                ))}
-                {mergedSlots.length > 0 && (
-                  <div>
-                    <div className="mb-1 text-xs text-slate-400">기타 (코팅·전사·유동)</div>
-                    <div className="flex flex-wrap gap-2">
-                      {mergedSlots.map((s) => renderMoveSlot(s, "from"))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div>
-              <div className="mb-1.5 text-xs font-semibold text-teal-600">📥 도착 슬롯</div>
-              <div className="space-y-2">
-                {mainGroups.map((purpose) => (
-                  <div key={purpose}>
-                    <div className="mb-1 text-xs text-slate-400">{purpose}</div>
-                    <div className="flex flex-wrap gap-2">
-                      {warmerSlots.filter((s) => s.purpose === purpose).map((s) => renderMoveSlot(s, "to"))}
-                    </div>
-                  </div>
-                ))}
-                {mergedSlots.length > 0 && (
-                  <div>
-                    <div className="mb-1 text-xs text-slate-400">기타 (코팅·전사·유동)</div>
-                    <div className="flex flex-wrap gap-2">
-                      {mergedSlots.map((s) => renderMoveSlot(s, "to"))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-      <div className="flex gap-3 items-end mt-3 flex-wrap">
-        <div>
-          <div className="mb-1 text-xs text-slate-500">이동날짜</div>
-          <input
-            type="date"
-            className={inp}
-            style={{ width: 150 }}
-            value={moveDate}
-            onChange={(e) => setMoveDate(e.target.value)}
-          />
-        </div>
-        <div>
-          <div className="mb-1 text-xs text-slate-500">이동시각 (HHmm)</div>
-          <input
-            className={inp}
-            style={{ width: 120 }}
-            inputMode="numeric"
-            placeholder="예: 1430"
-            maxLength={4}
-            value={moveTime}
-            onChange={(e) => setMoveTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
-          />
-        </div>
-        <div className="flex flex-col justify-end">
-          {moveFromSlotId && moveToSlotId && (
-            <div className="mb-1 text-xs text-slate-500 text-center">
-              {warmerSlots.find((s) => s.id === moveFromSlotId)?.slot_name}{" → "}
-              {warmerSlots.find((s) => s.id === moveToSlotId)?.slot_name}
-            </div>
-          )}
-          <button
-            className="rounded-xl border border-teal-500 bg-teal-600 px-4 py-2 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60"
-            disabled={moveSaving || !moveFromSlotId || !moveToSlotId || moveTime.length < 4 || !moveDate}
-            onClick={saveSlotMove}
-          >
-            {moveSaving ? "저장 중..." : "🔀 슬롯이동 기록"}
-          </button>
-        </div>
-      </div>
-    </div>
-
   </div>
 
+  {(() => {
+    const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
+    const mainGroups = Array.from(new Set(
+      warmerSlots.filter((s) => !MERGE_PURPOSES.includes(s.purpose)).map((s) => s.purpose)
+    ));
+    const mergedSlots = warmerSlots.filter((s) => MERGE_PURPOSES.includes(s.purpose));
+
+    const renderSlot = (s: { id: string; slot_name: string; purpose: string }) => {
+      const st = slotStatus[s.id];
+      const isEmpty = st === null || st === undefined;
+      const daysAgo = st?.daysAgo ?? 0;
+      const dateStr = st?.date ? st.date.slice(5) : null;
+      const isOverdue = !isEmpty && daysAgo >= 15;
+      const isActive = activeSlotId === s.id;
+      const isMoveTarget = slotMoveTargetId === s.id;
+
+      // 출발 슬롯으로 선택된 상태 (이동 모드에서 다른 슬롯이 출발)
+      const isMovingFrom = activeSlotId !== null && !isEmpty && slotStatus[activeSlotId ?? ""] !== null && activeSlotId !== s.id;
+
+      const baseCls = isEmpty
+        ? "border-slate-200 bg-slate-50 text-slate-400"
+        : isOverdue
+        ? "border-red-300 bg-red-50 text-red-600"
+        : "border-blue-200 bg-blue-50 text-blue-700";
+
+      const activeCls = isActive
+        ? "ring-2 ring-blue-500 ring-offset-1 scale-105 shadow-md"
+        : isMoveTarget
+        ? "ring-2 ring-teal-500 ring-offset-1 scale-105 shadow-md border-teal-300 bg-teal-50 text-teal-700"
+        : "";
+
+      return (
+        <div key={s.id} className="flex flex-col gap-1">
+          <button
+            type="button"
+            className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-all cursor-pointer hover:scale-105 ${baseCls} ${activeCls}`}
+            onClick={() => {
+              if (activeSlotId === s.id) {
+                // 같은 슬롯 클릭 → 닫기
+                setActiveSlotId(null);
+                setSlotMoveTargetId(null);
+              } else if (activeSlotId !== null && slotStatus[activeSlotId] !== null && slotStatus[activeSlotId] !== undefined) {
+                // 이동 모드: 출발 슬롯이 선택된 상태에서 다른 슬롯 클릭 → 도착 슬롯 선택
+                setSlotMoveTargetId(isMoveTarget ? null : s.id);
+              } else {
+                // 새 슬롯 선택
+                setActiveSlotId(s.id);
+                setSlotMoveTargetId(null);
+                const now = new Date();
+                setSlotActionTime(`${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`);
+              }
+            }}
+          >
+            <div className={isOverdue ? "text-red-600 font-bold" : ""}>{s.slot_name}</div>
+            <div className={`mt-0.5 text-[10px] text-center ${isOverdue ? "text-red-600 font-bold" : "font-normal"}`}>
+              {isEmpty ? "비어있음" : dateStr}
+            </div>
+          </button>
+        </div>
+      );
+    };
+
+    return (
+      <div className="space-y-3">
+        {mainGroups.map((purpose) => (
+          <div key={purpose}>
+            <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
+            <div className="flex flex-wrap gap-2">
+              {warmerSlots.filter((s) => s.purpose === purpose).map(renderSlot)}
+            </div>
+          </div>
+        ))}
+        {mergedSlots.length > 0 && (
+          <div>
+            <div className="mb-1.5 text-xs font-semibold text-slate-500">기타 (코팅·전사·유동)</div>
+            <div className="flex flex-wrap gap-2">
+              {mergedSlots.map(renderSlot)}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  })()}
+
+  {/* 슬롯 액션 패널 */}
+  {activeSlotId && (() => {
+    const slot = warmerSlots.find((s) => s.id === activeSlotId);
+    const st = slotStatus[activeSlotId];
+    const isEmpty = st === null || st === undefined;
+
+    return (
+      <div className="mt-4 pt-4 border-t border-slate-200 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="font-semibold text-sm">
+            {isEmpty ? `🧪 ${slot?.slot_name} — 원료투입` : `🔀 ${slot?.slot_name} — 슬롯이동`}
+          </div>
+          <button
+            className="text-xs text-slate-400 hover:text-slate-600"
+            onClick={() => { setActiveSlotId(null); setSlotMoveTargetId(null); }}
+          >✕ 닫기</button>
+        </div>
+
+        {isEmpty ? (
+          // ── 원료투입 모드 ──
+          <div className="flex gap-3 items-end flex-wrap">
+            <div>
+              <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
+              <input
+                className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                inputMode="numeric"
+                placeholder="예: 1430"
+                maxLength={4}
+                value={slotActionTime}
+                onChange={(e) => setSlotActionTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+              />
+              {slotActionTime.length === 4 && (
+                <div className="mt-0.5 text-xs text-slate-400 text-center">
+                  {slotActionTime.slice(0,2)}:{slotActionTime.slice(2,4)}
+                </div>
+              )}
+            </div>
+            <button
+              className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
+              disabled={slotActionSaving || slotActionTime.length < 4}
+              onClick={() => saveSlotMaterialIn(activeSlotId)}
+            >
+              {slotActionSaving ? "저장 중..." : "🧪 원료투입"}
+            </button>
+          </div>
+        ) : (
+          // ── 슬롯이동 모드 ──
+          <div className="space-y-3">
+            <div className="text-xs text-slate-500">
+              📤 <span className="font-semibold text-orange-600">{slot?.slot_name}</span>에서 이동할 슬롯을 클릭하세요
+            </div>
+            {slotMoveTargetId && (
+              <div className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-sm">
+                <span className="font-semibold text-orange-600">{slot?.slot_name}</span>
+                <span className="text-slate-400">→</span>
+                <span className="font-semibold text-teal-700">{warmerSlots.find((s) => s.id === slotMoveTargetId)?.slot_name}</span>
+              </div>
+            )}
+            <div className="flex gap-3 items-end flex-wrap">
+              <div>
+                <div className="mb-1 text-xs text-slate-500">이동시각 (HHmm)</div>
+                <input
+                  className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                  inputMode="numeric"
+                  placeholder="예: 1430"
+                  maxLength={4}
+                  value={slotActionTime}
+                  onChange={(e) => setSlotActionTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+                />
+                {slotActionTime.length === 4 && (
+                  <div className="mt-0.5 text-xs text-slate-400 text-center">
+                    {slotActionTime.slice(0,2)}:{slotActionTime.slice(2,4)}
+                  </div>
+                )}
+              </div>
+              {slotMoveTargetId && (
+                <button
+                  className="rounded-xl border border-teal-500 bg-teal-600 px-4 py-2 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60"
+                  disabled={slotActionSaving || slotActionTime.length < 4}
+                  onClick={() => saveSlotMove(activeSlotId, slotMoveTargetId)}
+                >
+                  {slotActionSaving ? "저장 중..." : "🔀 이동"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  })()}
 </div>
 
         {/* 헤더 */}
