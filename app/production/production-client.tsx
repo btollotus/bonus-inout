@@ -707,6 +707,12 @@ const loadSlotStatus = useCallback(async () => {
 
     for (const sess of slotSessions) {
       const events = (sess.events ?? []) as any[];
+      // 시간순 정렬
+      const sorted = [...events].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+      // 마지막 이벤트가 material_out이면 비어있음으로 처리
+      const lastEv = sorted[sorted.length - 1];
+      if (lastEv?.event_type === "material_out") continue;
+
       const materialIns = events
         .filter((e) => e.event_type === "material_in")
         .map((e) => e.measured_at)
