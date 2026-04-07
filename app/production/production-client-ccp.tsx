@@ -117,15 +117,22 @@ export function useCcpState(
   }
 
   // ── 작업지시서 온도기록 로드 ──
-  const loadWoEvents = useCallback(async (workOrderNo: string) => {
-    const { data } = await supabase
+  const loadWoEvents = useCallback(async (workOrderNo: string, slotId?: string | null) => {
+    let query = supabase
       .from("ccp_wo_events")
       .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
-      .eq("work_order_no", workOrderNo)
       .order("measured_at", { ascending: true });
+  
+    if (slotId) {
+      query = query.eq("slot_id", slotId);
+    } else {
+      query = query.eq("work_order_no", workOrderNo);
+    }
+  
+    const { data } = await query;
     setWoEvents((data ?? []) as WoEvent[]);
-    // 이벤트 타입 초기화
-    const hasStart = (data ?? []).some((e: any) => e.event_type === "start");
+    const myEvents = (data ?? []).filter((e: any) => e.work_order_no === workOrderNo);
+    const hasStart = myEvents.some((e: any) => e.event_type === "start");
     setCcpWoEventType(hasStart ? "mid_check" : "start");
     setCcpWoTime("");
   }, []);
@@ -270,7 +277,7 @@ export function useCcpState(
 
     showToast("✅ CCP 온도 기록 완료!");
     setCcpWoTemp(""); setCcpWoActionNote(""); setCcpWoIsOk(true); setCcpWoTime("");
-    await loadWoEvents(selectedWo.work_order_no);
+    await loadWoEvents(selectedWo.work_order_no, slotId);
   }
 
   // ── 작업지시서 온도기록 수정 ──
@@ -298,7 +305,7 @@ export function useCcpState(
     if (error) return showToast("수정 실패: " + error.message, "error");
     showToast("✅ 수정 완료!");
     setCcpWoEditingId(null);
-    await loadWoEvents(workOrderNo);
+    ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id);
   }
 
   async function deleteWoEvent(eventId: string, workOrderNo: string) {
