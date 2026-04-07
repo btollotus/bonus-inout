@@ -1627,12 +1627,10 @@ if (eCcpSlotId && eCcpSlotId !== s.id && ccpSessionId) {
                                 setCcpSessionSlotId(null);
                                 setCcpEvents([]);
                                 setCcpEventType("start");
-                              }  
+                              }
+                              // 목록 갱신 → applySelection 재실행 → eCcpSlotId UI 반영
+                              await loadWoList();
                           }}
-       
-
-
-
                         >
                           {s.slot_name}
                           <span className="ml-1 text-[10px] opacity-70">({s.purpose})</span>
