@@ -268,6 +268,19 @@ export default function ProductionClient() {
   });
   const [preSaving, setPreSaving] = useState(false);
 
+    // ── 슬롯이동 state (작업지시서 없이) ──
+    const [moveFromSlotId, setMoveFromSlotId] = useState("");
+    const [moveToSlotId, setMoveToSlotId] = useState("");
+    const [moveDate, setMoveDate] = useState(() => {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+    });
+    const [moveTime, setMoveTime] = useState(() => {
+      const now = new Date();
+      return `${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`;
+    });
+    const [moveSaving, setMoveSaving] = useState(false);
+
 // ── 슬롯 현황 state ──
 const [slotStatus, setSlotStatus] = useState<Record<string, { date: string; daysAgo: number } | null>>({});
 
@@ -797,6 +810,102 @@ async function savePreMaterialIn() {
   }
 }
 
+// ── 슬롯이동 저장 (작업지시서 없이) ──
+async function saveSlotMove() {
+  if (!moveFromSlotId) return showToast("출발 슬롯을 선택하세요.", "error");
+  if (!moveToSlotId) return showToast("도착 슬롯을 선택하세요.", "error");
+  if (moveFromSlotId === moveToSlotId) return showToast("출발과 도착 슬롯이 같습니다.", "error");
+  if (!moveTime || moveTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
+  if (parseInt(moveTime.slice(0,2)) > 23 || parseInt(moveTime.slice(2,4)) > 59)
+    return showToast("올바른 시각을 입력하세요.", "error");
+
+  setMoveSaving(true);
+  try {
+    const localDate = moveDate;
+    const fromSlotName = warmerSlots.find((s) => s.id === moveFromSlotId)?.slot_name ?? moveFromSlotId;
+    const toSlotName = warmerSlots.find((s) => s.id === moveToSlotId)?.slot_name ?? moveToSlotId;
+    const actionNote = `${fromSlotName} → ${toSlotName}`;
+
+    // 출발 슬롯의 해당 날짜 active 세션 조회
+    const { data: fromSess } = await supabase
+      .from("ccp_heating_sessions")
+      .select("id")
+      .eq("session_date", localDate)
+      .eq("slot_id", moveFromSlotId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (!fromSess?.id) {
+      showToast(`⚠ ${fromSlotName} 슬롯에 해당 날짜 활성 세션이 없습니다.`, "error");
+      return;
+    }
+    const fromSessionId = fromSess.id;
+
+    // 도착 슬롯에 기존 active 세션 있는지 확인
+    const { data: toSess } = await supabase
+      .from("ccp_heating_sessions")
+      .select("id")
+      .eq("session_date", localDate)
+      .eq("slot_id", moveToSlotId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    let targetSessionId: string;
+    if (toSess?.id) {
+      targetSessionId = toSess.id;
+    } else {
+      const { data: newSess, error: sessErr } = await supabase
+        .from("ccp_heating_sessions")
+        .insert({ session_date: localDate, slot_id: moveToSlotId, status: "active", created_by: currentUserIdRef.current })
+        .select("id").single();
+      if (sessErr || !newSess?.id) {
+        showToast("세션 생성 실패: " + sessErr?.message, "error");
+        return;
+      }
+      targetSessionId = newSess.id;
+    }
+
+    // 기존 출발 세션 이벤트를 도착 세션으로 이동
+    await supabase.from("ccp_heating_events")
+      .update({ session_id: targetSessionId })
+      .eq("session_id", fromSessionId);
+
+    // 연결 작업지시서도 도착 세션으로 이동
+    await supabase.from("ccp_heating_session_orders")
+      .update({ session_id: targetSessionId })
+      .eq("session_id", fromSessionId);
+
+    // 기존 출발 세션 삭제
+    await supabase.from("ccp_heating_sessions")
+      .delete()
+      .eq("id", fromSessionId);
+
+    // move 이벤트 기록 (도착 세션에)
+    const { error: evErr } = await supabase.from("ccp_heating_events").insert({
+      session_id: targetSessionId,
+      event_type: "move",
+      measured_at: `${localDate}T${moveTime.slice(0,2)}:${moveTime.slice(2,4)}:00`,
+      temperature: null,
+      is_ok: null,
+      action_note: actionNote,
+      created_by: currentUserIdRef.current,
+    });
+    if (evErr) { showToast("이동 기록 실패: " + evErr.message, "error"); return; }
+
+    showToast(`✅ ${fromSlotName} → ${toSlotName} 이동 기록 완료!`);
+    setMoveFromSlotId("");
+    setMoveToSlotId("");
+    const now = new Date();
+    setMoveDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`);
+    setMoveTime(`${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`);
+    await loadSlotStatus();
+  } catch (e: any) {
+    showToast("오류: " + (e?.message ?? e), "error");
+  } finally {
+    setMoveSaving(false);
+  }
+}
+
   // ── CCP 이벤트 수정/삭제 ──
   const [ccpEditingId, setCcpEditingId] = useState<string | null>(null);
   const [ccpEditTime, setCcpEditTime] = useState("");
@@ -1281,6 +1390,131 @@ async function savePreMaterialIn() {
         </button>
       </div>
     </div>
+
+    {/* 슬롯이동 */}
+    <div className="mt-4 pt-4 border-t border-slate-100">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="font-semibold text-sm">🔀 슬롯이동</div>
+        <span className="text-xs text-slate-400">작업지시서 없이 슬롯 간 원료를 이동할 때</span>
+      </div>
+      {(() => {
+        const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
+        const mainGroups = Array.from(new Set(
+          warmerSlots.filter((s) => !MERGE_PURPOSES.includes(s.purpose)).map((s) => s.purpose)
+        ));
+        const mergedSlots = warmerSlots.filter((s) => MERGE_PURPOSES.includes(s.purpose));
+        const renderMoveSlot = (s: { id: string; slot_name: string; purpose: string }, mode: "from" | "to") => {
+          const selected = mode === "from" ? moveFromSlotId === s.id : moveToSlotId === s.id;
+          const isOtherSelected = mode === "from" ? moveToSlotId === s.id : moveFromSlotId === s.id;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              disabled={isOtherSelected}
+              className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
+                selected
+                  ? mode === "from"
+                    ? "border-orange-500 bg-orange-500 text-white shadow-sm scale-105"
+                    : "border-teal-500 bg-teal-600 text-white shadow-sm scale-105"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+              }`}
+              onClick={() => {
+                if (mode === "from") setMoveFromSlotId(moveFromSlotId === s.id ? "" : s.id);
+                else setMoveToSlotId(moveToSlotId === s.id ? "" : s.id);
+              }}
+            >
+              {s.slot_name}
+            </button>
+          );
+        };
+        return (
+          <div className="space-y-3">
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-orange-600">📤 출발 슬롯</div>
+              <div className="space-y-2">
+                {mainGroups.map((purpose) => (
+                  <div key={purpose}>
+                    <div className="mb-1 text-xs text-slate-400">{purpose}</div>
+                    <div className="flex flex-wrap gap-2">
+                      {warmerSlots.filter((s) => s.purpose === purpose).map((s) => renderMoveSlot(s, "from"))}
+                    </div>
+                  </div>
+                ))}
+                {mergedSlots.length > 0 && (
+                  <div>
+                    <div className="mb-1 text-xs text-slate-400">기타 (코팅·전사·유동)</div>
+                    <div className="flex flex-wrap gap-2">
+                      {mergedSlots.map((s) => renderMoveSlot(s, "from"))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-teal-600">📥 도착 슬롯</div>
+              <div className="space-y-2">
+                {mainGroups.map((purpose) => (
+                  <div key={purpose}>
+                    <div className="mb-1 text-xs text-slate-400">{purpose}</div>
+                    <div className="flex flex-wrap gap-2">
+                      {warmerSlots.filter((s) => s.purpose === purpose).map((s) => renderMoveSlot(s, "to"))}
+                    </div>
+                  </div>
+                ))}
+                {mergedSlots.length > 0 && (
+                  <div>
+                    <div className="mb-1 text-xs text-slate-400">기타 (코팅·전사·유동)</div>
+                    <div className="flex flex-wrap gap-2">
+                      {mergedSlots.map((s) => renderMoveSlot(s, "to"))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      <div className="flex gap-3 items-end mt-3 flex-wrap">
+        <div>
+          <div className="mb-1 text-xs text-slate-500">이동날짜</div>
+          <input
+            type="date"
+            className={inp}
+            style={{ width: 150 }}
+            value={moveDate}
+            onChange={(e) => setMoveDate(e.target.value)}
+          />
+        </div>
+        <div>
+          <div className="mb-1 text-xs text-slate-500">이동시각 (HHmm)</div>
+          <input
+            className={inp}
+            style={{ width: 120 }}
+            inputMode="numeric"
+            placeholder="예: 1430"
+            maxLength={4}
+            value={moveTime}
+            onChange={(e) => setMoveTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+          />
+        </div>
+        <div className="flex flex-col justify-end">
+          {moveFromSlotId && moveToSlotId && (
+            <div className="mb-1 text-xs text-slate-500 text-center">
+              {warmerSlots.find((s) => s.id === moveFromSlotId)?.slot_name}{" → "}
+              {warmerSlots.find((s) => s.id === moveToSlotId)?.slot_name}
+            </div>
+          )}
+          <button
+            className="rounded-xl border border-teal-500 bg-teal-600 px-4 py-2 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60"
+            disabled={moveSaving || !moveFromSlotId || !moveToSlotId || moveTime.length < 4 || !moveDate}
+            onClick={saveSlotMove}
+          >
+            {moveSaving ? "저장 중..." : "🔀 슬롯이동 기록"}
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
 </div>
