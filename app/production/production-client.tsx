@@ -630,8 +630,8 @@ if (!sessionId && wo.ccp_slot_id) {
     // ── 시작 검증 ──
     // 가능 조건: 마지막 이벤트가 원료투입 | 마지막 이벤트가 슬롯이동(원료투입 간주)
     if (ccpEventType === "start") {
-      if (!lastEv || !["material_in", "move"].includes(lastEv.event_type)) {
-        return showToast("⚠ 시작은 원료투입 또는 슬롯이동 후에만 가능합니다.", "error");
+      if (!lastEv || !["material_in", "move", "end"].includes(lastEv.event_type)) {
+        return showToast("⚠ 시작은 원료투입, 슬롯이동, 또는 종료 후에만 가능합니다.", "error");
       }
     }
 
