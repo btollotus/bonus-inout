@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useCcpState, SlotStatusPanel, WoCcpCard } from "./production-client-ccp";
 
 // ─────────────────────── Types ───────────────────────
 type WoSubItem = { name: string; qty: number };
@@ -169,20 +170,6 @@ type WoChecks = {
   assignee_transfer: string; assignee_print_check: string; assignee_production: string; assignee_input: string;
 };
 
-const CCP_EVENT_LABELS: Record<string, string> = {
-  start: "시작", mid_check: "중간점검", end: "종료",
-  material_in: "원료투입", material_out: "원료소진", move: "슬롯이동",
-};
-
-function ccpEventBadgeCls(type: string) {
-  if (type === "start") return "bg-blue-100 border-blue-200 text-blue-700";
-  if (type === "end") return "bg-purple-100 border-purple-200 text-purple-700";
-  if (type === "material_in") return "bg-green-100 border-green-200 text-green-700";
-  if (type === "material_out") return "bg-orange-100 border-orange-200 text-orange-700";
-  if (type === "move") return "bg-teal-100 border-teal-200 text-teal-700";
-  return "bg-slate-100 border-slate-200 text-slate-600";
-}
-
 // ─────────────────────── Component ───────────────────────
 export default function ProductionClient() {
   const [role, setRole] = useState<UserRole>(null);
@@ -239,158 +226,10 @@ export default function ProductionClient() {
   const [warmerSlots, setWarmerSlots] = useState<{ id: string; slot_name: string; purpose: string }[]>([]);
   const [eCcpSlotId, setECcpSlotId] = useState<string>("");
 
-  // ── CCP-1B 온도 기록 ──
-  const [ccpSessionId, setCcpSessionId] = useState<string | null>(null);
-  const [ccpSessionSlotId, setCcpSessionSlotId] = useState<string | null>(null); // 현재 세션의 실제 slot_id
-  const [ccpIsOriginalWo, setCcpIsOriginalWo] = useState(true); // 세션의 첫 번째 연결 작업지시서 여부
-  const [ccpEvents, setCcpEvents] = useState<{
-    id: string; event_type: string; measured_at: string;
-    temperature: number | null; is_ok: boolean | null; action_note: string | null;
-  }[]>([]);
-  const [showCcpForm, setShowCcpForm] = useState(false);
-  const [ccpEventType, setCcpEventType] = useState("start");
-  const [ccpTime, setCcpTime] = useState("");
-  const [ccpTemp, setCcpTemp] = useState("");
-  const [ccpIsOk, setCcpIsOk] = useState(true);
-  const [ccpActionNote, setCcpActionNote] = useState("");
-  const [ccpSaving, setCcpSaving] = useState(false);
-  const [ccpMoveTargetSlotId, setCcpMoveTargetSlotId] = useState(""); // 슬롯이동 대상
+  const currentUserIdRef = useRef<string | null>(null);
 
- // ── 슬롯 원료투입 저장 ──
-async function saveSlotMaterialIn(slotId: string) {
-  if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
-  if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
-    return showToast("올바른 시각을 입력하세요.", "error");
-
-  setSlotActionSaving(true);
-  try {
-    const { data: existSess } = await supabase
-      .from("ccp_heating_sessions")
-      .select("id")
-      .eq("session_date", slotActionDate)
-      .eq("slot_id", slotId)
-      .eq("status", "active")
-      .maybeSingle();
-
-    let sessionId: string;
-    if (existSess?.id) {
-      sessionId = existSess.id;
-    } else {
-      const { data: newSess, error: sessErr } = await supabase
-        .from("ccp_heating_sessions")
-        .insert({ session_date: slotActionDate, slot_id: slotId, status: "active", created_by: currentUserIdRef.current })
-        .select("id").single();
-      if (sessErr || !newSess?.id) return showToast("세션 생성 실패: " + sessErr?.message, "error");
-      sessionId = newSess.id;
-    }
-
-    const { error: evErr } = await supabase.from("ccp_heating_events").insert({
-      session_id: sessionId,
-      event_type: "material_in",
-      measured_at: `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00`,
-      temperature: null, is_ok: null, action_note: null,
-      created_by: currentUserIdRef.current,
-    });
-    if (evErr) return showToast("원료투입 기록 실패: " + evErr.message, "error");
-
-    showToast("✅ 원료투입이 기록됐습니다!");
-    setActiveSlotId(null);
-    await loadSlotStatus();
-  } catch (e: any) {
-    showToast("오류: " + (e?.message ?? e), "error");
-  } finally {
-    setSlotActionSaving(false);
-  }
-}
-
-// ── 슬롯이동 저장 ──
-async function saveSlotMove(fromSlotId: string, toSlotId: string) {
-  if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
-  if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
-    return showToast("올바른 시각을 입력하세요.", "error");
-
-  const fromSlotName = warmerSlots.find((s) => s.id === fromSlotId)?.slot_name ?? fromSlotId;
-  const toSlotName = warmerSlots.find((s) => s.id === toSlotId)?.slot_name ?? toSlotId;
-
-  setSlotActionSaving(true);
-  try {
-    const { data: fromSess } = await supabase
-      .from("ccp_heating_sessions")
-      .select("id")
-      .eq("session_date", slotActionDate)
-      .eq("slot_id", fromSlotId)
-      .eq("status", "active")
-      .maybeSingle();
-
-    if (!fromSess?.id) {
-      showToast(`⚠ ${fromSlotName} 슬롯에 활성 세션이 없습니다.`, "error");
-      return;
-    }
-    const fromSessionId = fromSess.id;
-
-    const { data: toSess } = await supabase
-      .from("ccp_heating_sessions")
-      .select("id")
-      .eq("session_date", slotActionDate)
-      .eq("slot_id", toSlotId)
-      .eq("status", "active")
-      .maybeSingle();
-
-    let targetSessionId: string;
-    if (toSess?.id) {
-      targetSessionId = toSess.id;
-    } else {
-      const { data: newSess, error: sessErr } = await supabase
-        .from("ccp_heating_sessions")
-        .insert({ session_date: slotActionDate, slot_id: toSlotId, status: "active", created_by: currentUserIdRef.current })
-        .select("id").single();
-      if (sessErr || !newSess?.id) { showToast("세션 생성 실패", "error"); return; }
-      targetSessionId = newSess.id;
-    }
-
-    // 출발 세션의 기존 이벤트 삭제
-    await supabase.from("ccp_heating_events").delete().eq("session_id", fromSessionId);
-    // 연결 작업지시서를 도착 세션으로 이동
-    await supabase.from("ccp_heating_session_orders").update({ session_id: targetSessionId }).eq("session_id", fromSessionId);
-    // 출발 세션 삭제
-    await supabase.from("ccp_heating_sessions").delete().eq("id", fromSessionId);
-
-     // move 이벤트 기록
-    await supabase.from("ccp_heating_events").insert({
-      session_id: targetSessionId,
-      event_type: "move",
-      measured_at: `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00`,
-      temperature: null, is_ok: null,
-      action_note: `${fromSlotName} → ${toSlotName}`,
-      created_by: currentUserIdRef.current,
-    });
-
-    showToast(`✅ ${fromSlotName} → ${toSlotName} 이동 완료!`);
-    setActiveSlotId(null);
-    setSlotMoveTargetId(null);
-    await loadSlotStatus();
-  } catch (e: any) {
-    showToast("오류: " + (e?.message ?? e), "error");
-  } finally {
-    setSlotActionSaving(false);
-  }
-}
-
-// ── 슬롯 통합 액션 state ──
-const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
-const [slotMoveTargetId, setSlotMoveTargetId] = useState<string | null>(null);
-const [slotActionTime, setSlotActionTime] = useState(() => {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`;
-});
-const [slotActionDate, setSlotActionDate] = useState(() => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
-});
-const [slotActionSaving, setSlotActionSaving] = useState(false);
-
-// ── 슬롯 현황 state ──
-const [slotStatus, setSlotStatus] = useState<Record<string, { date: string; daysAgo: number } | null>>({});
+  // ── CCP 새 구조 ──
+  const ccp = useCcpState(warmerSlots, currentUserIdRef, showToast);
 
   const [stockAlerts, setStockAlerts] = useState<{ id: string; item_name: string; status: string; expiry_date: string | null; action: string | null; log_date: string }[]>([]);
   const [showAlertPanel, setShowAlertPanel] = useState(false);
@@ -399,7 +238,6 @@ const [slotStatus, setSlotStatus] = useState<Record<string, { date: string; days
   const [flashKey, setFlashKey] = useState<string | null>(null);
   const [stepSaving, setStepSaving] = useState<string | null>(null);
   const [readMap, setReadMap] = useState<Record<string, WoReadInfo>>({});
-  const currentUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => { currentUserIdRef.current = user?.id ?? null; });
@@ -504,409 +342,6 @@ const [slotStatus, setSlotStatus] = useState<Record<string, { date: string; days
     for (const row of data) { if (!map[row.work_order_id] || row.read_at < map[row.work_order_id].read_at) map[row.work_order_id] = { read_at: row.read_at }; }
     setReadMap(map);
   }, []);
-
-  // ── CCP 세션 로드 ──
-  const loadCcpSession = useCallback(async (wo: WorkOrderRow) => {
-    setCcpEvents([]);
-    setCcpSessionId(null);
-
-    const today = new Date().toISOString().slice(0, 10);
-
-    // 1) work_order_no로 연결된 세션 찾기
-    const { data: linkData } = await supabase
-    .from("ccp_heating_session_orders")
-    .select("session_id, ccp_heating_sessions!inner(session_date, status)")
-    .eq("work_order_ref", wo.work_order_no)
-    .eq("ccp_heating_sessions.session_date", today)
-    .eq("ccp_heating_sessions.status", "active")
-    .limit(1)
-    .maybeSingle();
-
-  let sessionId: string | null = linkData?.session_id ?? null;
-
-
-    let isOriginalWo = !!linkData?.session_id; // 1단계에서 찾으면 기존 연결 작업지시서
-
-   // 2) 연결 세션 없고 슬롯 있으면 오늘 active 세션 찾기 (연결 추가는 하지 않음)
-if (!sessionId && wo.ccp_slot_id) {
-  const { data: sessData } = await supabase
-    .from("ccp_heating_sessions")
-    .select("id")
-    .eq("session_date", today)
-    .eq("slot_id", wo.ccp_slot_id)
-    .eq("status", "active")
-    .maybeSingle();
-  sessionId = sessData?.id ?? null;
-  if (sessionId) isOriginalWo = false;
-  // ※ 자동 연결 추가 제거 — 슬롯 버튼 클릭 시에만 연결
-}
-
-// 3) 세션 없고 슬롯 있으면 새로 생성하지 않음 (슬롯 버튼 클릭 또는 첫 기록 시에만 생성)
-
-    setCcpSessionId(sessionId);
-    setCcpIsOriginalWo(isOriginalWo);
-
-    // 현재 세션의 실제 slot_id 조회
-    if (sessionId) {
-      const { data: sessDetail } = await supabase
-        .from("ccp_heating_sessions")
-        .select("slot_id")
-        .eq("id", sessionId)
-        .maybeSingle();
-      setCcpSessionSlotId(sessDetail?.slot_id ?? null);
-    } else {
-      setCcpSessionSlotId(null);
-    }
-
-    if (sessionId) {
-      const { data: evData } = await supabase
-        .from("ccp_heating_events")
-        .select("id, event_type, measured_at, temperature, is_ok, action_note")
-        .eq("session_id", sessionId)
-        .order("measured_at", { ascending: true });
-      const events = (evData ?? []) as any[];
-      setCcpEvents(events);
-      const hasStart = events.some((e) => e.event_type === "start");
-      setCcpEventType(hasStart ? "mid_check" : "start");
-    }
-    setCcpTime("");
-  }, []);
-
-  // ── CCP 이벤트 저장 ──
-  async function saveCcpEvent() {
-    if (!ccpSessionId) {
-      if (!eCcpSlotId && !selectedWo?.ccp_slot_id) 
-        return showToast("슬롯을 먼저 지정해주세요.", "error");
-      const slotId = eCcpSlotId || selectedWo?.ccp_slot_id;
-      const today = new Date().toISOString().slice(0, 10);
-      const { data: newSess } = await supabase
-        .from("ccp_heating_sessions")
-        .insert({ session_date: today, slot_id: slotId, status: "active", created_by: currentUserIdRef.current })
-        .select("id").single();
-      if (!newSess?.id) return showToast("세션 생성 실패", "error");
-      setCcpSessionId(newSess.id);
-      setCcpSessionSlotId(slotId ?? null);
-      if (selectedWo) {
-        await supabase.from("ccp_heating_session_orders").insert({
-          session_id: newSess.id, work_order_ref: selectedWo.work_order_no,
-          client_name: selectedWo.client_name, product_name: selectedWo.product_name,
-        });
-      }
-      // 이후 저장 로직이 ccpSessionId를 참조하므로 직접 변수 사용
-      // saveCcpEvent를 재귀 호출하면 state 반영 전이라 다시 실행
-      // 대신 아래처럼 sessionId를 변수로 넘기도록 리팩터링이 필요하므로
-      // 간단하게: 세션 생성 후 토스트로 안내하고 다시 기록하도록 유도
-      showToast("✅ 세션이 생성됐습니다. 다시 기록 버튼을 눌러주세요.");
-      return;
-    }
-    const needsTemp = !["move", "material_in", "material_out"].includes(ccpEventType);
-    if (!ccpTime || ccpTime.length < 4) return showToast("측정시각을 입력하세요. (예: 1430)", "error");
-    // ── 시각 순서 검증: 항상 마지막 기록보다 늦어야 함 ──
-    if (ccpEvents.length > 0) {
-      const lastEvent = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at)).slice(-1)[0];
-      const lastTimeStr = lastEvent.measured_at.slice(11, 16); // "HH:MM"
-      const newTimeStr = `${ccpTime.slice(0,2)}:${ccpTime.slice(2,4)}`;
-      if (newTimeStr <= lastTimeStr) {
-        return showToast(`⚠ 측정시각은 마지막 기록(${lastTimeStr})보다 늦어야 합니다.`, "error");
-      }
-    }
-    if (needsTemp && !ccpTemp) return showToast("온도를 입력하세요.", "error");
-    const temp = needsTemp ? Number(ccpTemp) : null;
-    if (needsTemp && temp !== null && (temp < 40 || temp > 50)) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
-   
-    if (ccpEventType === "move" && !ccpMoveTargetSlotId) return showToast("이동할 슬롯을 선택하세요.", "error");
-
-    const sortedForValidation = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
-    const lastEv = sortedForValidation[sortedForValidation.length - 1];
-
-    // ── 원료투입 검증 ──
-    // 가능 조건: 빈 슬롯(기록 없음) | 마지막 이벤트가 원료소진 | 마지막 이벤트가 슬롯이동
-    if (ccpEventType === "material_in") {
-      if (lastEv && !["material_out", "move"].includes(lastEv.event_type)) {
-        return showToast("⚠ 원료투입은 빈 슬롯이거나, 원료소진 또는 슬롯이동 후에만 가능합니다.", "error");
-      }
-    }
-
-    // ── 시작 검증 ──
-    // 가능 조건: 마지막 이벤트가 원료투입 | 마지막 이벤트가 슬롯이동(원료투입 간주)
-    if (ccpEventType === "start") {
-      if (!lastEv || !["material_in", "move", "end"].includes(lastEv.event_type)) {
-        return showToast("⚠ 시작은 원료투입, 슬롯이동, 또는 종료 후에만 가능합니다.", "error");
-      }
-    }
-
-// ── 슬롯이동 검증 ──
-// 가능 조건: 원료투입 후(보관 중 이동) | 종료 후 | 원료소진 후
-if (ccpEventType === "move") {
-  if (!lastEv || !["material_in", "end", "material_out"].includes(lastEv.event_type)) {
-    return showToast("⚠ 슬롯이동은 원료투입, 종료, 원료소진 후에만 가능합니다.", "error");
-  }
-}
-
-    // ── 원료소진 검증 ──
-    // 가능 조건: 마지막 이벤트가 종료
-    if (ccpEventType === "material_out") {
-      if (!lastEv || lastEv.event_type !== "end") {
-        return showToast("⚠ 원료소진은 종료 후에만 기록할 수 있습니다.", "error");
-      }
-    }
-
-    // ── 종료 기록 시: 시작~종료 2시간 이상 & 중간점검 없으면 차단 ──
-    if (ccpEventType === "end") {
-      if (!lastEv || lastEv.event_type !== "start" && lastEv.event_type !== "mid_check") {
-        return showToast("⚠ 종료는 시작 또는 중간점검 후에만 가능합니다.", "error");
-      }
-      const startEv = [...sortedForValidation].reverse().find((e) => e.event_type === "start");
-      const hasMidCheck = sortedForValidation.some((e) => e.event_type === "mid_check");
-      if (startEv && !hasMidCheck) {
-        const nowLocal2 = new Date();
-        const localDate2 = `${nowLocal2.getFullYear()}-${String(nowLocal2.getMonth()+1).padStart(2,"0")}-${String(nowLocal2.getDate()).padStart(2,"0")}`;
-        const startTime = new Date(`${localDate2}T${startEv.measured_at.slice(11, 16)}:00`);
-        const endTime = new Date(`${localDate2}T${ccpTime.slice(0,2)}:${ccpTime.slice(2,4)}:00`);
-        const diffMin = (endTime.getTime() - startTime.getTime()) / 1000 / 60;
-        if (diffMin >= 120) {
-          return showToast("⚠ 시작~종료 시간이 2시간 이상입니다. 중간점검 기록을 먼저 추가해주세요.", "error");
-        }
-      }
-    }
-
-    setCcpSaving(true);
-    // KST 로컬 날짜 사용 (UTC toISOString 날짜와 혼용 방지)
-    const nowLocal = new Date();
-    const localDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth()+1).padStart(2,"0")}-${String(nowLocal.getDate()).padStart(2,"0")}`;
-    // 슬롯이동 시 출발→도착 슬롯명을 action_note에 자동 기록
-    const moveToSlotName = ccpEventType === "move" && ccpMoveTargetSlotId
-      ? (warmerSlots.find((s) => s.id === ccpMoveTargetSlotId)?.slot_name ?? ccpMoveTargetSlotId)
-      : null;
-    const moveFromSlotName = ccpEventType === "move"
-      ? (warmerSlots.find((s) => s.id === (ccpSessionSlotId ?? eCcpSlotId ?? selectedWo?.ccp_slot_id))?.slot_name ?? "")
-      : null;
-    const finalActionNote = moveToSlotName
-      ? (moveFromSlotName ? `${moveFromSlotName} → ${moveToSlotName}` : `→ ${moveToSlotName}`)
-      : (ccpActionNote.trim() || null);
-    const { error } = await supabase.from("ccp_heating_events").insert({
-      session_id: ccpSessionId, event_type: ccpEventType,
-      measured_at: `${localDate}T${ccpTime.slice(0,2)}:${ccpTime.slice(2,4)}:00`,
-      temperature: temp, is_ok: needsTemp ? ccpIsOk : null,
-      action_note: finalActionNote, created_by: currentUserIdRef.current,
-    });
-    setCcpSaving(false);
-    if (error) return showToast("저장 실패: " + error.message, "error");
-
-    // ── 슬롯이동 시: 세션의 slot_id를 이동한 슬롯으로 업데이트 ──
-// ── 슬롯이동 시: 기존 세션 유지 + 새 세션 생성 ──
-if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
-  const today = new Date().toISOString().slice(0, 10);
-
-  // 1) 이동 대상 슬롯에 기존 active 세션 있는지 확인
-  const { data: existTargetSess } = await supabase
-    .from("ccp_heating_sessions")
-    .select("id")
-    .eq("session_date", today)
-    .eq("slot_id", ccpMoveTargetSlotId)
-    .eq("status", "active")
-    .maybeSingle();
-
-  let targetSessionId: string;
-
-  if (existTargetSess?.id) {
-    // 2a) 대상 슬롯에 기존 세션 있음 → 기존 세션 사용
-    targetSessionId = existTargetSess.id;
-
-    // 기존 1-1 세션의 이벤트를 모두 대상 세션으로 이동
-    await supabase.from("ccp_heating_events")
-      .update({ session_id: targetSessionId })
-      .eq("session_id", ccpSessionId);
-
-    // 기존 1-1 세션 연결 삭제
-    await supabase.from("ccp_heating_session_orders")
-      .delete()
-      .eq("session_id", ccpSessionId);
-
-    // 기존 1-1 세션 삭제
-    await supabase.from("ccp_heating_sessions")
-      .delete()
-      .eq("id", ccpSessionId);
-
-  } else {
-    // 2b) 대상 슬롯에 세션 없음 → 새 세션 생성
-    const { data: newSess } = await supabase
-      .from("ccp_heating_sessions")
-      .insert({
-        session_date: today,
-        slot_id: ccpMoveTargetSlotId,
-        status: "active",
-        created_by: currentUserIdRef.current,
-      })
-      .select("id").single();
-
-    if (!newSess?.id) {
-      showToast("세션 생성 실패", "error");
-      return;
-    }
-    targetSessionId = newSess.id;
-
-    // 기존 세션 이벤트 이동
-    await supabase.from("ccp_heating_events")
-      .update({ session_id: targetSessionId })
-      .eq("session_id", ccpSessionId);
-
-    // 기존 세션 연결 삭제
-    await supabase.from("ccp_heating_session_orders")
-      .delete()
-      .eq("session_id", ccpSessionId);
-
-    // 기존 세션 삭제
-    await supabase.from("ccp_heating_sessions")
-      .delete()
-      .eq("id", ccpSessionId);
-  }
-
-  if (selectedWo) {
-    // 3) 대상 세션에 작업지시서 연결 추가 (없는 경우에만)
-    const { data: existLink } = await supabase
-      .from("ccp_heating_session_orders")
-      .select("id")
-      .eq("session_id", targetSessionId)
-      .eq("work_order_ref", selectedWo.work_order_no)
-      .maybeSingle();
-    if (!existLink) {
-      await supabase.from("ccp_heating_session_orders").insert({
-        session_id: targetSessionId,
-        work_order_ref: selectedWo.work_order_no,
-        client_name: selectedWo.client_name,
-        product_name: selectedWo.product_name,
-      });
-    }
-
-    // 4) move 이벤트 저장 (대상 세션에)
-    await supabase.from("ccp_heating_events").insert({
-      session_id: targetSessionId,
-      event_type: "move",
-      measured_at: `${today}T${ccpTime.slice(0,2)}:${ccpTime.slice(2,4)}:00`,
-      temperature: null,
-      is_ok: null,
-      action_note: finalActionNote,
-      created_by: currentUserIdRef.current,
-    });
-
-    // 5) 작업지시서의 ccp_slot_id 업데이트
-    await supabase.from("work_orders")
-      .update({ ccp_slot_id: ccpMoveTargetSlotId, updated_at: new Date().toISOString() })
-      .eq("id", selectedWo.id);
-  }
-
-  // 6) state 전환
-  setCcpSessionId(targetSessionId);
-  setCcpSessionSlotId(ccpMoveTargetSlotId);
-  setECcpSlotId(ccpMoveTargetSlotId);
-}
-
-    showToast("✅ CCP 온도 기록 완료!");
-    setCcpTemp(""); setCcpActionNote(""); setCcpIsOk(true); setCcpMoveTargetSlotId(""); setCcpTime("");
-    if (selectedWo) loadCcpSession(selectedWo);
-  }
-
-  // ── 슬롯 현황 로드 ──
-const loadSlotStatus = useCallback(async () => {
-  if (warmerSlots.length === 0) return;
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
-
-  const { data: sessions } = await supabase
-    .from("ccp_heating_sessions")
-    .select(`id, slot_id, session_date, status,
-      events:ccp_heating_events(event_type, measured_at)`)
-    .eq("status", "active");
-
-  const map: Record<string, { date: string; daysAgo: number } | null> = {};
-
-  for (const slot of warmerSlots) {
-    // 해당 슬롯의 모든 active 세션 중 material_in 이벤트 찾기
-    const slotSessions = (sessions ?? []).filter((s) => s.slot_id === slot.id);
-    let latestMaterialIn: string | null = null;
-
-    for (const sess of slotSessions) {
-      const events = (sess.events ?? []) as any[];
-      // 시간순 정렬
-      const sorted = [...events].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
-      // 마지막 이벤트가 material_out이면 비어있음으로 처리
-      const lastEv = sorted[sorted.length - 1];
-      if (lastEv?.event_type === "material_out") continue;
-
-      const materialIns = events
-        .filter((e) => e.event_type === "material_in")
-        .map((e) => e.measured_at)
-        .sort()
-        .reverse();
-      if (materialIns.length > 0) {
-        if (!latestMaterialIn || materialIns[0] > latestMaterialIn) {
-          latestMaterialIn = materialIns[0];
-        }
-      }
-    }
-
-    if (!latestMaterialIn) {
-      map[slot.id] = null; // 비어있음
-    } else {
-      const materialDate = latestMaterialIn.slice(0, 10);
-      const diffMs = new Date(todayStr).getTime() - new Date(materialDate).getTime();
-      const daysAgo = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      map[slot.id] = { date: materialDate, daysAgo };
-    }
-  }
-  setSlotStatus(map);
-}, [warmerSlots]);
-
-useEffect(() => { loadSlotStatus(); }, [loadSlotStatus]);
-
-
-
-
-
-  // ── CCP 이벤트 수정/삭제 ──
-  const [ccpEditingId, setCcpEditingId] = useState<string | null>(null);
-  const [ccpEditTime, setCcpEditTime] = useState("");
-  const [ccpEditTemp, setCcpEditTemp] = useState("");
-  const [ccpEditIsOk, setCcpEditIsOk] = useState(true);
-  const [ccpEditActionNote, setCcpEditActionNote] = useState("");
-  const [ccpEditSaving, setCcpEditSaving] = useState(false);
-
-  function startCcpEdit(ev: { id: string; event_type: string; measured_at: string; temperature: number | null; is_ok: boolean | null; action_note: string | null }) {
-    setCcpEditingId(ev.id);
-    setCcpEditTime(ev.measured_at.slice(11, 13) + ev.measured_at.slice(14, 16));
-    setCcpEditTemp(ev.temperature != null ? String(ev.temperature) : "");
-    setCcpEditIsOk(ev.is_ok ?? true);
-    setCcpEditActionNote(ev.action_note ?? "");
-  }
-
-  async function saveCcpEdit(ev: { id: string; event_type: string; measured_at: string }) {
-    const needsTemp = !["move", "material_in", "material_out"].includes(ev.event_type); 
-    if (needsTemp && !ccpEditTemp) return showToast("온도를 입력하세요.", "error");
-    const temp = needsTemp ? Number(ccpEditTemp) : null;
-    if (needsTemp && temp !== null && (temp < 40 || temp > 50)) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
-    setCcpEditSaving(true);
-    const dateStr = ev.measured_at.slice(0, 10);
-    const { error } = await supabase.from("ccp_heating_events").update({
-      measured_at: `${dateStr}T${ccpEditTime.slice(0,2)}:${ccpEditTime.slice(2,4)}:00`,
-      temperature: temp,
-      is_ok: needsTemp ? ccpEditIsOk : null,
-      action_note: ccpEditActionNote.trim() || null,
-    }).eq("id", ev.id);
-    setCcpEditSaving(false);
-    if (error) return showToast("수정 실패: " + error.message, "error");
-    showToast("✅ 수정 완료!");
-    setCcpEditingId(null);
-    if (selectedWo) loadCcpSession(selectedWo);
-  }
-
-  async function deleteCcpEvent(eventId: string) {
-    if (!confirm("이 기록을 삭제하시겠습니까?")) return;
-    const { error } = await supabase.from("ccp_heating_events").delete().eq("id", eventId);
-    if (error) return showToast("삭제 실패: " + error.message, "error");
-    showToast("🗑️ 삭제 완료!");
-    if (selectedWo) loadCcpSession(selectedWo);
-  }
 
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const [newWoNotifications, setNewWoNotifications] = useState<NewWoNotification[]>([]);
@@ -1050,11 +485,8 @@ useEffect(() => { loadSlotStatus(); }, [loadSlotStatus]);
         return next;
       });
     })();
-    // ── CCP 세션 로드 ──
-    loadCcpSession(wo);
-    setCcpTemp("");
-    setCcpActionNote("");
-    setCcpIsOk(true);
+    // ── CCP 온도기록 로드 ──
+    ccp.loadWoEvents(wo.work_order_no);
   }
 
   async function deleteWo(woId: string) {
@@ -1141,18 +573,7 @@ useEffect(() => { loadSlotStatus(); }, [loadSlotStatus]);
         const { error: movErr } = await supabase.from("movements").insert({ lot_id: lotId, type: "IN", qty: actual_qty, happened_at: now, note: "작업지시서 생산완료 - " + selectedWo.work_order_no, created_by: userId });
         if (movErr) stockErrors.push("입고 기록 실패 (" + expiry_date + "): " + movErr.message);
       }
-      const ccpCategory = getFoodCategory(selectedWo.food_type);
-      const ccpSlotId = eCcpSlotId || selectedWo.ccp_slot_id;
-      if ((ccpCategory === "다크" || ccpCategory === "화이트") && ccpSlotId) {
-        const today = new Date().toISOString().slice(0, 10);
-        const { data: existSession } = await supabase.from("ccp_heating_sessions").select("id").eq("session_date", today).eq("slot_id", ccpSlotId).eq("status", "active").maybeSingle();
-        let sessionId = existSession?.id ?? null;
-        if (!sessionId) { const { data: newSession } = await supabase.from("ccp_heating_sessions").insert({ session_date: today, slot_id: ccpSlotId, status: "active", created_by: userId }).select("id").single(); sessionId = newSession?.id ?? null; }
-        if (sessionId) {
-          const { data: existLink } = await supabase.from("ccp_heating_session_orders").select("id").eq("session_id", sessionId).eq("work_order_ref", selectedWo.work_order_no).maybeSingle();
-          if (!existLink) await supabase.from("ccp_heating_session_orders").insert({ session_id: sessionId, work_order_ref: selectedWo.work_order_no, client_name: selectedWo.client_name, product_name: selectedWo.product_name });
-        }
-      }
+      // ── ccp_heating_sessions 관련 코드 제거됨 (새 구조: ccp_slot_events / ccp_wo_events 사용) ──
       const { error: statusErr } = await supabase.from("work_orders").update({ status: "완료", status_production: true, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
       if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
       if (stockErrors.length > 0) showToast("⚠️ 저장됐으나 재고 연동 오류: " + stockErrors.join(" / "), "error"); else showToast("✅ 생산입력 완료!");
@@ -1166,7 +587,6 @@ useEffect(() => { loadSlotStatus(); }, [loadSlotStatus]);
   const doneCount = woChecks ? PROGRESS_STEPS.filter((s) => (woChecks[s.assigneeKey] ?? "") !== "").length : 0;
 
   // ── 렌더 ──
-  // USER도 접근 가능 (SUBADMIN 공유 계정 사용)
   if (role === null) {
     return <div className="flex items-center justify-center min-h-screen bg-slate-50"><div className="text-sm text-slate-400">로딩 중...</div></div>;
   }
@@ -1195,199 +615,23 @@ useEffect(() => { loadSlotStatus(); }, [loadSlotStatus]);
           </div>
         )}
 
-{/* ── 온장고 슬롯 현황 (원료투입 + 슬롯이동 통합) ── */}
-<div className={`${card} p-4`}>
-  <div className="flex items-center justify-between mb-3">
-    <div>
-      <div className="font-semibold text-sm">🌡️ 온장고 슬롯 현황</div>
-      <div className="text-xs text-slate-400 mt-0.5">슬롯 클릭 → 원료투입 또는 슬롯이동</div>
-    </div>
-    <div className="flex items-center gap-2">
-      <input
-        type="date"
-        className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-blue-400 focus:outline-none"
-        value={slotActionDate}
-        onChange={(e) => setSlotActionDate(e.target.value)}
-      />
-      <button className={btnSm} onClick={loadSlotStatus}>🔄 갱신</button>
-    </div>
-  </div>
-
-  {(() => {
-    const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
-    const mainGroups = Array.from(new Set(
-      warmerSlots.filter((s) => !MERGE_PURPOSES.includes(s.purpose)).map((s) => s.purpose)
-    ));
-    const mergedSlots = warmerSlots.filter((s) => MERGE_PURPOSES.includes(s.purpose));
-
-    const renderSlot = (s: { id: string; slot_name: string; purpose: string }) => {
-      const st = slotStatus[s.id];
-      const isEmpty = st === null || st === undefined;
-      const daysAgo = st?.daysAgo ?? 0;
-      const dateStr = st?.date ? st.date.slice(5) : null;
-      const isOverdue = !isEmpty && daysAgo >= 15;
-      const isActive = activeSlotId === s.id;
-      const isMoveTarget = slotMoveTargetId === s.id;
-
-      // 출발 슬롯으로 선택된 상태 (이동 모드에서 다른 슬롯이 출발)
-      const isMovingFrom = activeSlotId !== null && !isEmpty && slotStatus[activeSlotId ?? ""] !== null && activeSlotId !== s.id;
-
-      const baseCls = isEmpty
-        ? "border-slate-200 bg-slate-50 text-slate-400"
-        : isOverdue
-        ? "border-red-300 bg-red-50 text-red-600"
-        : "border-blue-200 bg-blue-50 text-blue-700";
-
-      const activeCls = isActive
-        ? "ring-2 ring-blue-500 ring-offset-1 scale-105 shadow-md"
-        : isMoveTarget
-        ? "ring-2 ring-teal-500 ring-offset-1 scale-105 shadow-md border-teal-300 bg-teal-50 text-teal-700"
-        : "";
-
-      return (
-        <div key={s.id} className="flex flex-col gap-1">
-          <button
-            type="button"
-            className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-all cursor-pointer hover:scale-105 ${baseCls} ${activeCls}`}
-            onClick={() => {
-              if (activeSlotId === s.id) {
-                // 같은 슬롯 클릭 → 닫기
-                setActiveSlotId(null);
-                setSlotMoveTargetId(null);
-              } else if (activeSlotId !== null && slotStatus[activeSlotId] !== null && slotStatus[activeSlotId] !== undefined) {
-                // 이동 모드: 출발 슬롯이 선택된 상태에서 다른 슬롯 클릭 → 도착 슬롯 선택
-                setSlotMoveTargetId(isMoveTarget ? null : s.id);
-              } else {
-                // 새 슬롯 선택
-                setActiveSlotId(s.id);
-                setSlotMoveTargetId(null);
-                const now = new Date();
-                setSlotActionTime(`${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`);
-              }
-            }}
-          >
-            <div className={isOverdue ? "text-red-600 font-bold" : ""}>{s.slot_name}</div>
-            <div className={`mt-0.5 text-[10px] text-center ${isOverdue ? "text-red-600 font-bold" : "font-normal"}`}>
-              {isEmpty ? "비어있음" : dateStr}
-            </div>
-          </button>
-        </div>
-      );
-    };
-
-    return (
-      <div className="space-y-3">
-        {mainGroups.map((purpose) => (
-          <div key={purpose}>
-            <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
-            <div className="flex flex-wrap gap-2">
-              {warmerSlots.filter((s) => s.purpose === purpose).map(renderSlot)}
-            </div>
-          </div>
-        ))}
-        {mergedSlots.length > 0 && (
-          <div>
-            <div className="mb-1.5 text-xs font-semibold text-slate-500">기타 (코팅·전사·유동)</div>
-            <div className="flex flex-wrap gap-2">
-              {mergedSlots.map(renderSlot)}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  })()}
-
-  {/* 슬롯 액션 패널 */}
-  {activeSlotId && (() => {
-    const slot = warmerSlots.find((s) => s.id === activeSlotId);
-    const st = slotStatus[activeSlotId];
-    const isEmpty = st === null || st === undefined;
-
-    return (
-      <div className="mt-4 pt-4 border-t border-slate-200 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="font-semibold text-sm">
-            {isEmpty ? `🧪 ${slot?.slot_name} — 원료투입` : `🔀 ${slot?.slot_name} — 슬롯이동`}
-          </div>
-          <button
-            className="text-xs text-slate-400 hover:text-slate-600"
-            onClick={() => { setActiveSlotId(null); setSlotMoveTargetId(null); }}
-          >✕ 닫기</button>
-        </div>
-
-        {isEmpty ? (
-          // ── 원료투입 모드 ──
-          <div className="flex gap-3 items-end flex-wrap">
-            <div>
-              <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
-              <input
-                className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                inputMode="numeric"
-                placeholder="예: 1430"
-                maxLength={4}
-                value={slotActionTime}
-                onChange={(e) => setSlotActionTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
-              />
-              {slotActionTime.length === 4 && (
-                <div className="mt-0.5 text-xs text-slate-400 text-center">
-                  {slotActionTime.slice(0,2)}:{slotActionTime.slice(2,4)}
-                </div>
-              )}
-            </div>
-            <button
-              className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
-              disabled={slotActionSaving || slotActionTime.length < 4}
-              onClick={() => saveSlotMaterialIn(activeSlotId)}
-            >
-              {slotActionSaving ? "저장 중..." : "🧪 원료투입"}
-            </button>
-          </div>
-        ) : (
-          // ── 슬롯이동 모드 ──
-          <div className="space-y-3">
-            <div className="text-xs text-slate-500">
-              📤 <span className="font-semibold text-orange-600">{slot?.slot_name}</span>에서 이동할 슬롯을 클릭하세요
-            </div>
-            {slotMoveTargetId && (
-              <div className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-sm">
-                <span className="font-semibold text-orange-600">{slot?.slot_name}</span>
-                <span className="text-slate-400">→</span>
-                <span className="font-semibold text-teal-700">{warmerSlots.find((s) => s.id === slotMoveTargetId)?.slot_name}</span>
-              </div>
-            )}
-            <div className="flex gap-3 items-end flex-wrap">
-              <div>
-                <div className="mb-1 text-xs text-slate-500">이동시각 (HHmm)</div>
-                <input
-                  className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                  inputMode="numeric"
-                  placeholder="예: 1430"
-                  maxLength={4}
-                  value={slotActionTime}
-                  onChange={(e) => setSlotActionTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
-                />
-                {slotActionTime.length === 4 && (
-                  <div className="mt-0.5 text-xs text-slate-400 text-center">
-                    {slotActionTime.slice(0,2)}:{slotActionTime.slice(2,4)}
-                  </div>
-                )}
-              </div>
-              {slotMoveTargetId && (
-                <button
-                  className="rounded-xl border border-teal-500 bg-teal-600 px-4 py-2 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60"
-                  disabled={slotActionSaving || slotActionTime.length < 4}
-                  onClick={() => saveSlotMove(activeSlotId, slotMoveTargetId)}
-                >
-                  {slotActionSaving ? "저장 중..." : "🔀 이동"}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  })()}
-</div>
+        {/* ── 온장고 슬롯 현황 ── */}
+        <SlotStatusPanel
+          warmerSlots={warmerSlots}
+          slotStatus={ccp.slotStatus}
+          activeSlotId={ccp.activeSlotId}
+          setActiveSlotId={ccp.setActiveSlotId}
+          slotMoveTargetId={ccp.slotMoveTargetId}
+          setSlotMoveTargetId={ccp.setSlotMoveTargetId}
+          slotActionDate={ccp.slotActionDate}
+          setSlotActionDate={ccp.setSlotActionDate}
+          slotActionTime={ccp.slotActionTime}
+          setSlotActionTime={ccp.setSlotActionTime}
+          slotActionSaving={ccp.slotActionSaving}
+          loadSlotStatus={ccp.loadSlotStatus}
+          saveSlotMaterialIn={ccp.saveSlotMaterialIn}
+          saveSlotMove={ccp.saveSlotMove}
+        />
 
         {/* 헤더 */}
         <div className="flex items-center justify-between">
@@ -1595,7 +839,6 @@ useEffect(() => { loadSlotStatus(); }, [loadSlotStatus]);
                     <div><div className="mb-1 text-xs text-slate-500">성형틀 장당 생산수</div><input className={inpR} inputMode="numeric" value={eMoldPerSheet} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} /></div>
                     <div><div className="mb-1 text-xs text-slate-500">비고</div><input className={inp} value={eNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setENote(e.target.value)} /></div>
                     <div><div className="mb-1 text-xs text-slate-500">참고사항</div><input className={inp} value={eReferenceNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEReferenceNote(e.target.value)} /></div>
-
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-sm sm:grid-cols-3 md:grid-cols-4">
@@ -1645,455 +888,45 @@ useEffect(() => { loadSlotStatus(); }, [loadSlotStatus]);
                 )}
               </div>
 
-              {/* ── CCP-1B 온장고 슬롯 지정 카드 ── */}
+              {/* ── CCP-1B 슬롯 지정 + 온도 기록 ── */}
               {(getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트") && (
-                <div className={`${card} p-4`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="font-semibold text-sm">🌡️ CCP-1B 온장고 슬롯 지정</div>
-                    <span className="text-xs text-slate-400">(당류가공품·준초콜릿)</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {warmerSlots
-                      .filter((s) => getFoodCategory(selectedWo.food_type) === "다크" ? s.purpose === "다크컴파운드" : s.purpose === "화이트컴파운드" || s.purpose === "유동")
-                      .map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          disabled={selectedWo?.status === "완료" && !isEditMode}
-                          className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                            eCcpSlotId === s.id
-                              ? "border-blue-500 bg-blue-600 text-white shadow-sm scale-105"
-                              : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
-                          }`}
-                          onClick={async () => {
-                            const slotId = eCcpSlotId === s.id ? "" : s.id;
-   // ── 이전 슬롯 처리: 기록 있으면 이동, 없으면 연결 삭제 ──
-if (eCcpSlotId && eCcpSlotId !== s.id && ccpSessionId) {
-  if (ccpEvents.length > 0) {
-    const prevSlotName = warmerSlots.find((w) => w.id === eCcpSlotId)?.slot_name ?? eCcpSlotId;
-    const newSlotName = s.slot_name;
-    const ok = confirm(
-      `⚠ 현재 슬롯(${prevSlotName})에 이미 온도 기록이 있습니다.\n확인 시 모든 기록이 ${newSlotName} 슬롯으로 이동됩니다.\n정말 변경하시겠습니까?`
-    );
-    if (!ok) return;
-
-    // 이동 대상 슬롯에 active 세션 있는지 확인
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const { data: existSess } = await supabase
-      .from("ccp_heating_sessions")
-      .select("id")
-      .eq("session_date", todayStr)
-      .eq("slot_id", slotId)
-      .eq("status", "active")
-      .maybeSingle();
-
-    let targetSessionId: string;
-    if (existSess?.id) {
-      targetSessionId = existSess.id;
-    } else {
-      const { data: newSess } = await supabase
-        .from("ccp_heating_sessions")
-        .insert({ session_date: todayStr, slot_id: slotId, status: "active", created_by: currentUserIdRef.current })
-        .select("id").single();
-      if (!newSess?.id) { showToast("세션 생성 실패", "error"); return; }
-      targetSessionId = newSess.id;
-    }
-
-    // 이벤트 이동
-    await supabase.from("ccp_heating_events")
-      .update({ session_id: targetSessionId })
-      .eq("session_id", ccpSessionId);
-
-    // 연결 작업지시서 이동
-    await supabase.from("ccp_heating_session_orders")
-      .update({ session_id: targetSessionId })
-      .eq("session_id", ccpSessionId);
-
-    // 기존 세션 삭제
-    await supabase.from("ccp_heating_sessions")
-      .delete()
-      .eq("id", ccpSessionId);
-
-    // state를 새 세션으로 전환
-    setCcpSessionId(targetSessionId);
-    setCcpSessionSlotId(slotId);
-
-  } else {
-    // 기록 없으면 이전 세션 연결만 삭제
-    await supabase.from("ccp_heating_session_orders")
-      .delete()
-      .eq("session_id", ccpSessionId)
-      .eq("work_order_ref", selectedWo!.work_order_no);
-  
-    // 이전 세션에 다른 연결이 없으면 세션도 삭제
-    const { data: remainLinks } = await supabase
-      .from("ccp_heating_session_orders")
-      .select("id")
-      .eq("session_id", ccpSessionId);
-    if (!remainLinks || remainLinks.length === 0) {
-      await supabase.from("ccp_heating_sessions")
-        .delete()
-        .eq("id", ccpSessionId);
-    }
-  }
-}                       
-
-                          
-                            setECcpSlotId(slotId);
-                            await supabase.from("work_orders")
-                              .update({ ccp_slot_id: slotId || null, updated_at: new Date().toISOString() })
-                              .eq("id", selectedWo!.id);
-                          
-                            // 슬롯 해제 시 CCP 상태 초기화
-                            if (!slotId) {
-                              setCcpSessionId(null);
-                              setCcpSessionSlotId(null);
-                              setCcpEvents([]);
-                              return;
-                            }
-                          
-                            // 세션 자동생성 없이 조회만
-                            const today = new Date().toISOString().slice(0, 10);
-                            const { data: sessData } = await supabase
-                              .from("ccp_heating_sessions")
-                              .select("id, slot_id")
-                              .eq("session_date", today)
-                              .eq("slot_id", slotId)
-                              .eq("status", "active")
-                              .maybeSingle();
-                          
-                              if (sessData?.id) {
-                                setCcpSessionId(sessData.id);
-                                setCcpSessionSlotId(sessData.slot_id ?? null);
-                                const { data: evData } = await supabase
-                                  .from("ccp_heating_events")
-                                  .select("id, event_type, measured_at, temperature, is_ok, action_note")
-                                  .eq("session_id", sessData.id)
-                                  .order("measured_at", { ascending: true });
-                                setCcpEvents((evData ?? []) as any[]);
-                                const hasStart = (evData ?? []).some((e: any) => e.event_type === "start");
-                                setCcpEventType(hasStart ? "mid_check" : "start");
-                              
-                                // 새 슬롯 세션에 이 작업지시서 연결 추가 (없는 경우에만)
-                                if (selectedWo) {
-                                  const { data: existLink } = await supabase
-                                    .from("ccp_heating_session_orders")
-                                    .select("id")
-                                    .eq("session_id", sessData.id)
-                                    .eq("work_order_ref", selectedWo.work_order_no)
-                                    .maybeSingle();
-                                  if (!existLink) {
-                                    await supabase.from("ccp_heating_session_orders").insert({
-                                      session_id: sessData.id,
-                                      work_order_ref: selectedWo.work_order_no,
-                                      client_name: selectedWo.client_name,
-                                      product_name: selectedWo.product_name,
-                                    });
-                                  }
-                                }
-                              } else {
-                                setCcpSessionId(null);
-                                setCcpSessionSlotId(null);
-                                setCcpEvents([]);
-                                setCcpEventType("start");
-                              }
-                              // 목록 갱신 → applySelection 재실행 → eCcpSlotId UI 반영
-                              await loadWoList();
-                          }}
-                        >
-                          {s.slot_name}
-                          <span className="ml-1 text-[10px] opacity-70">({s.purpose})</span>
-                        </button>
-                      ))}
-                  </div>
-                </div>
+                <WoCcpCard
+                  selectedWo={selectedWo}
+                  eCcpSlotId={eCcpSlotId}
+                  setECcpSlotId={setECcpSlotId}
+                  warmerSlots={warmerSlots}
+                  woEvents={ccp.woEvents}
+                  ccpWoEventType={ccp.ccpWoEventType}
+                  setCcpWoEventType={ccp.setCcpWoEventType}
+                  ccpWoTime={ccp.ccpWoTime}
+                  setCcpWoTime={ccp.setCcpWoTime}
+                  ccpWoTemp={ccp.ccpWoTemp}
+                  setCcpWoTemp={ccp.setCcpWoTemp}
+                  ccpWoIsOk={ccp.ccpWoIsOk}
+                  setCcpWoIsOk={ccp.setCcpWoIsOk}
+                  ccpWoActionNote={ccp.ccpWoActionNote}
+                  setCcpWoActionNote={ccp.setCcpWoActionNote}
+                  ccpWoSaving={ccp.ccpWoSaving}
+                  ccpWoEditingId={ccp.ccpWoEditingId}
+                  setCcpWoEditingId={ccp.setCcpWoEditingId}
+                  ccpWoEditTime={ccp.ccpWoEditTime}
+                  setCcpWoEditTime={ccp.setCcpWoEditTime}
+                  ccpWoEditTemp={ccp.ccpWoEditTemp}
+                  setCcpWoEditTemp={ccp.setCcpWoEditTemp}
+                  ccpWoEditIsOk={ccp.ccpWoEditIsOk}
+                  setCcpWoEditIsOk={ccp.setCcpWoEditIsOk}
+                  ccpWoEditActionNote={ccp.ccpWoEditActionNote}
+                  setCcpWoEditActionNote={ccp.setCcpWoEditActionNote}
+                  ccpWoEditSaving={ccp.ccpWoEditSaving}
+                  isEditMode={isEditMode}
+                  saveWoEvent={ccp.saveWoEvent}
+                  startWoEventEdit={ccp.startWoEventEdit}
+                  saveWoEventEdit={ccp.saveWoEventEdit}
+                  deleteWoEvent={ccp.deleteWoEvent}
+                  supabaseClient={supabase}
+                  currentUserIdRef={currentUserIdRef}
+                />
               )}
-
-
-              {/* ── CCP-1B 온도 기록 카드 ── */}
-              <div className={`${card} p-4`}>
-                <div className="mb-3 flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <div className="font-semibold text-sm">🌡️ CCP-1B 온도 기록</div>
-                    {ccpSessionId ? (
-                      <div className="mt-0.5 text-xs text-slate-400">
-                        슬롯: {warmerSlots.find((s) => s.id === (selectedWo.ccp_slot_id ?? eCcpSlotId))?.slot_name ?? "—"}
-                      </div>
-                    ) : (
-                      <div className="mt-0.5 text-xs text-amber-500">
-                        ⚠ {selectedWo.ccp_slot_id ? "세션 로딩 중..." : "위의 슬롯 지정에서 온장고를 선택하면 기록할 수 있습니다"}
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-
-                {/* 입력 폼 - 항상 표시 */}
-                {(ccpSessionId || eCcpSlotId) && (
-                  <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 space-y-3">
-                    {/* 유형 탭 */}
-                    <div>
-                      <div className="mb-1 text-xs text-slate-500">유형</div>
-                      <div className="flex flex-wrap gap-1">
-                      {([
-  { value: "material_in",  label: "원료투입", cls: "bg-green-100 border-green-400 text-green-800" },
-  { value: "start",        label: "시작",     cls: "bg-blue-100 border-blue-400 text-blue-800" },
-  { value: "mid_check",    label: "중간점검", cls: "bg-slate-100 border-slate-400 text-slate-700" },
-  { value: "end",          label: "종료",     cls: "bg-purple-100 border-purple-400 text-purple-800" },
-  { value: "material_out", label: "원료소진", cls: "bg-orange-100 border-orange-400 text-orange-800" },
-  { value: "move",         label: "슬롯이동", cls: "bg-teal-100 border-teal-400 text-teal-800" },
-] as { value: string; label: string; cls: string }[]).map((t) => (
-                          <button
-                            key={t.value}
-                            type="button"
-                            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all ${
-                              ccpEventType === t.value
-                                ? t.cls + " shadow-sm scale-105"
-                                : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                            }`}
-                            onClick={() => setCcpEventType(t.value)}
-                          >
-                            {t.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                      <div>
-                        <div className="mb-1 text-xs text-slate-500">측정시각 (HHmm)</div>
-                        <input
-                          className={inp}
-                          inputMode="numeric"
-                          placeholder="예: 1430"
-                          maxLength={4}
-                          value={ccpTime}
-                          onChange={(e) => {
-                            const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
-                            setCcpTime(raw);
-                          }}
-                        />
-                        {ccpTime.length === 4 && (
-                          <div className="mt-0.5 text-xs text-slate-400 text-right">
-                            {ccpTime.slice(0, 2)}:{ccpTime.slice(2, 4)}
-                          </div>
-                        )}
-                      </div>
-                      {!["move", "material_in", "material_out"].includes(ccpEventType) && (
-  <>
-    <div>
-      <div className="mb-1 text-xs text-slate-500">온도 (40~50°C)</div>
-                            <input className={inpR} inputMode="numeric" placeholder="예: 45.0" value={ccpTemp}
-                              onChange={(e) => {
-                                const raw = e.target.value.replace(/[^\d]/g, "");
-                                if (!raw) { setCcpTemp(""); return; }
-                                // 3자리 이상 입력 시 자동 소수점: 451 → 45.1
-                                let v: string;
-                                if (raw.length >= 3) {
-                                  const intPart = raw.slice(0, -1);
-                                  const decPart = raw.slice(-1);
-                                  v = `${intPart}.${decPart}`;
-                                } else {
-                                  v = raw;
-                                }
-                                setCcpTemp(v);
-                                const n = Number(v);
-                                if (raw.length >= 3) setCcpIsOk(n >= 40 && n <= 50);
-                              }} />
-                          </div>
-                          <div>
-                            <div className="mb-1 text-xs text-slate-500">판정</div>
-                            <select className={`${inp} ${ccpIsOk ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}
-                              value={ccpIsOk ? "ok" : "ng"} onChange={(e) => setCcpIsOk(e.target.value === "ok")}>
-                              <option value="ok">✅ 적합</option>
-                              <option value="ng">❌ 부적합</option>
-                            </select>
-                          </div>
-                        </>
-                      )}
-                      {/* 슬롯이동 선택 시 이동 대상 슬롯 탭 */}
-                      {ccpEventType === "move" && (
-                        <div className="col-span-2 md:col-span-4">
-                          <div className="mb-1 text-xs text-slate-500">이동할 슬롯 *</div>
-                          <div className="flex flex-wrap gap-2">
-                            {warmerSlots.map((s) => (
-                              <button
-                                key={s.id}
-                                type="button"
-                                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
-                                  ccpMoveTargetSlotId === s.id
-                                    ? "border-teal-500 bg-teal-600 text-white shadow-sm scale-105"
-                                    : "border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:bg-teal-50"
-                                }`}
-                                onClick={() => setCcpMoveTargetSlotId(ccpMoveTargetSlotId === s.id ? "" : s.id)}
-                              >
-                                {s.slot_name}
-                                <span className="ml-1 text-[10px] opacity-70">({s.purpose})</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    {!["move", "material_in"].includes(ccpEventType) && !ccpIsOk && (
-                      <div>
-                        <div className="mb-1 text-xs text-red-600 font-semibold">⚠ 한계기준 이탈 — 조치사항 *</div>
-                        <input className="w-full rounded-xl border border-red-300 bg-white px-3 py-2 text-sm focus:outline-none" value={ccpActionNote} onChange={(e) => setCcpActionNote(e.target.value)} placeholder="온도 이탈 조치 내용" />
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      <button className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60" disabled={ccpSaving} onClick={saveCcpEvent}>{ccpSaving ? "저장 중..." : "💾 기록"}</button>
-                    </div>
-                  </div>
-                )}
-
-                {/* 기록 테이블
-                     - 세션 원래 슬롯 === 작업지시서 슬롯: 전체 기록 표시 (원래 작업지시서)
-                     - 세션 슬롯 !== 작업지시서 슬롯: 마지막 슬롯이동부터 표시 (이동 후 연결된 작업지시서) */}
-                {(() => {
-                  const sorted = [...ccpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
-                  const mySlotName = warmerSlots.find((s) => s.id === (eCcpSlotId || selectedWo.ccp_slot_id))?.slot_name ?? "";
-                  // 내 슬롯으로 도착한 이동 인덱스 (시작점)
-                  const arriveMoveIdx = mySlotName
-                    ? sorted.reduce((found, e, i) => e.event_type === "move" && (e.action_note ?? "").endsWith(`→ ${mySlotName}`) ? i : found, -1)
-                    : -1;
-                  // 내 슬롯에서 떠나는 첫 번째 이동 인덱스 (끝점) - 도착 이후에서만 찾기
-                  const startSearch = arriveMoveIdx >= 0 ? arriveMoveIdx + 1 : 0;
-                  const departMoveIdx = mySlotName
-                    ? sorted.slice(startSearch).reduce((found, e, i) => e.event_type === "move" && (e.action_note ?? "").startsWith(`${mySlotName} →`) ? startSearch + i : found, -1)
-                    : -1;
-                  // 시작: 도착 이동부터 / 끝: 떠나는 이동까지 (포함)
-                  const startIdx = arriveMoveIdx >= 0 ? arriveMoveIdx : 0;
-                  const endIdx = departMoveIdx >= 0 ? departMoveIdx + 1 : sorted.length;
-                  const visibleEvents = sorted.slice(startIdx, endIdx);
-                  return visibleEvents.length === 0 ? (
-                  <div className="py-4 text-center text-sm text-slate-400">
-                    {"기록된 온도가 없습니다."}
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm border-collapse">
-                      <thead>
-                        <tr className="border-b-2 border-slate-200 bg-slate-50">
-                          <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">시각</th>
-                          <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">유형</th>
-                          <th className="py-2 px-3 text-right text-xs font-semibold text-slate-500 whitespace-nowrap">온도</th>
-                          <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">판정</th>
-                          <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">조치</th>
-                          <th className="py-2 px-2 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">관리</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visibleEvents.map((ev, idx) => {
-                          const isNG = ev.is_ok === false;
-                          const isEditing = ccpEditingId === ev.id;
-                          const needsTemp = !["move", "material_in", "material_out"].includes(ev.event_type);
-                          return (
-                            <tr key={ev.id} className={`border-b border-slate-100 transition-colors ${isEditing ? "bg-blue-50" : isNG ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                              {/* 시각 */}
-                              <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">
-                                {isEditing ? (
-                                  <input
-                                    className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
-                                    inputMode="numeric" placeholder="HHmm" maxLength={4}
-                                    value={ccpEditTime}
-                                    onChange={(e) => setCcpEditTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
-                                  />
-                                ) : ev.measured_at.slice(11, 16)}
-                              </td>
-                              {/* 유형 */}
-                              <td className="py-2 px-3 whitespace-nowrap">
-                                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ccpEventBadgeCls(ev.event_type)}`}>{CCP_EVENT_LABELS[ev.event_type] ?? ev.event_type}</span>
-                              </td>
-                              {/* 온도 */}
-                              <td className="py-2 px-3 text-right whitespace-nowrap">
-                                {isEditing && needsTemp ? (
-                                  <input className="w-20 rounded-lg border border-blue-300 px-2 py-1 text-xs text-right tabular-nums focus:outline-none"
-                                    inputMode="decimal" value={ccpEditTemp}
-                                    onChange={(e) => {
-                                      const raw = e.target.value.replace(/[^\d]/g, "");
-                                      if (!raw) { setCcpEditTemp(""); return; }
-                                      let v: string;
-                                      if (raw.length >= 3) {
-                                        const intPart = raw.slice(0, -1);
-                                        const decPart = raw.slice(-1);
-                                        v = `${intPart}.${decPart}`;
-                                      } else {
-                                        v = raw;
-                                      }
-                                      setCcpEditTemp(v);
-                                      if (raw.length >= 3) setCcpEditIsOk(Number(v) >= 40 && Number(v) <= 50);
-                                    }} />
-                                ) : ev.temperature != null ? (
-                                  <span className={`text-sm font-bold tabular-nums ${isNG ? "text-red-600" : "text-blue-700"}`}>{ev.temperature}°C</span>
-                                ) : <span className="text-slate-300">—</span>}
-                              </td>
-                              {/* 판정 */}
-                              <td className="py-2 px-3 text-center whitespace-nowrap">
-                                {isEditing && needsTemp ? (
-                                  <select className={`rounded-lg border px-1.5 py-1 text-xs focus:outline-none ${ccpEditIsOk ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}
-                                    value={ccpEditIsOk ? "ok" : "ng"} onChange={(e) => setCcpEditIsOk(e.target.value === "ok")}>
-                                    <option value="ok">O 적합</option>
-                                    <option value="ng">X 부적합</option>
-                                  </select>
-                                ) : ev.is_ok != null ? (
-                                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ev.is_ok ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>{ev.is_ok ? "O" : "X"}</span>
-                                ) : <span className="text-slate-300 text-xs">—</span>}
-                              </td>
-                              {/* 조치/이동슬롯 */}
-                              <td className="py-2 px-3 text-xs">
-                                {isEditing ? (
-                                  <input className="w-full rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
-                                    value={ccpEditActionNote} onChange={(e) => setCcpEditActionNote(e.target.value)} placeholder="조치사항" />
-                                ) : ev.event_type === "move" && ev.action_note ? (
-                                  <span className="font-semibold text-teal-700">{ev.action_note}</span>
-                                ) : (
-                                  <span className="text-red-600">{ev.action_note ?? ""}</span>
-                                )}
-                              </td>
-                              {/* 수정/삭제 버튼 */}
-                              <td className="py-2 px-2 text-center whitespace-nowrap">
-                                {isEditing ? (
-                                  <div className="flex gap-1">
-                                    <button className="rounded-lg border border-blue-400 bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                                      disabled={ccpEditSaving} onClick={() => saveCcpEdit(ev)}>
-                                      {ccpEditSaving ? "..." : "저장"}
-                                    </button>
-                                    <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50"
-                                      onClick={() => setCcpEditingId(null)}>취소</button>
-                                  </div>
-                                ) : (
-                                  <div className="flex gap-1">
-                                    <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600"
-                                      onClick={() => startCcpEdit(ev)}>수정</button>
-                                    <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500"
-                                      onClick={() => deleteCcpEvent(ev.id)}>삭제</button>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    {/* 요약 */}
-                    <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-400">
-                      {(() => {
-                        const temps = visibleEvents.filter((e) => e.temperature != null).map((e) => e.temperature as number);
-                        const ngCount = visibleEvents.filter((e) => e.is_ok === false).length;
-                        return (
-                          <>
-                            <span>측정 {temps.length}회</span>
-                            {temps.length > 0 && <span>최저 <b className={Math.min(...temps) < 40 ? "text-red-500" : ""}>{Math.min(...temps)}°C</b></span>}
-                            {temps.length > 0 && <span>최고 <b className={Math.max(...temps) > 50 ? "text-red-500" : ""}>{Math.max(...temps)}°C</b></span>}
-                            {ngCount > 0 && <span className="text-red-500 font-semibold">⚠ 이탈 {ngCount}회</span>}
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                );
-                })()}
-              </div>
 
               {/* 납기일별 생산 입력 카드 */}
               <div className={`${card} p-4`}>
@@ -2180,12 +1013,12 @@ if (eCcpSlotId && eCcpSlotId !== s.id && ccpSessionId) {
       </div>
 
       {printOpen && selectedWo ? (
-  <WoPrintModal
-    wo={selectedWo}
-    onClose={() => setPrintOpen(false)}
-    employees={employees}
-  />
-) : null}
+        <WoPrintModal
+          wo={selectedWo}
+          onClose={() => setPrintOpen(false)}
+          employees={employees}
+        />
+      ) : null}
     </div>
   );
 }
@@ -2231,7 +1064,7 @@ function parseLogoSize(logoSpec: string | null): { width: string; height: string
   return { width: `${m[1]}${unit}`, height: `${m[2]}${unit}` };
 }
 
-// ─────────────────────── WoPrintModal (trade-client 버전) ───────────────────────
+// ─────────────────────── WoPrintModal ───────────────────────
 function WoPrintModal({ wo, onClose, employees }: {
   wo: WorkOrderRow; onClose: () => void; employees: { id: string; name: string | null }[];
 }) {
@@ -2504,7 +1337,6 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, signe
                 </tr>
               </tbody>
             </table>
-            {/* 품목별 이미지 */}
             {(() => {
               const itemSignedUrls = signedItemImagesMap?.[item.id] ?? [];
               if (itemSignedUrls.length === 0) return null;
@@ -2528,7 +1360,6 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, signe
           </div>
         );
       })}
-      {/* wo.images 공통 이미지 */}
       {(wo.images ?? []).length > 0 ? (
         <div style={{ marginBottom: "10px" }}>
           <div style={{ fontWeight: "bold", fontSize: "9pt", marginBottom: "2px", borderLeft: "3px solid #2563eb", paddingLeft: "5px" }}>인쇄 디자인 이미지</div>
