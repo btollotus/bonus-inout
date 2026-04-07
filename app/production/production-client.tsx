@@ -1124,30 +1124,45 @@ async function savePreMaterialIn() {
       <span className="text-xs text-slate-400">작업지시서 없이 원료를 미리 투입할 때</span>
     </div>
     {(() => {
-      const groups = Array.from(new Set(warmerSlots.map((s) => s.purpose)));
+      const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
+      const mainGroups = Array.from(new Set(
+        warmerSlots
+          .filter((s) => !MERGE_PURPOSES.includes(s.purpose))
+          .map((s) => s.purpose)
+      ));
+      const mergedSlots = warmerSlots.filter((s) => MERGE_PURPOSES.includes(s.purpose));
+      const renderPreSlot = (s: { id: string; slot_name: string; purpose: string }) => (
+        <button
+          key={s.id}
+          type="button"
+          className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
+            preSlotId === s.id
+              ? "border-green-500 bg-green-600 text-white shadow-sm scale-105"
+              : "border-slate-200 bg-white text-slate-600 hover:border-green-300 hover:bg-green-50"
+          }`}
+          onClick={() => setPreSlotId(preSlotId === s.id ? "" : s.id)}
+        >
+          {s.slot_name}
+        </button>
+      );
       return (
         <div className="space-y-3 mb-4">
-          {groups.map((purpose) => (
+          {mainGroups.map((purpose) => (
             <div key={purpose}>
               <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
               <div className="flex flex-wrap gap-2">
-                {warmerSlots.filter((s) => s.purpose === purpose).map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
-                      preSlotId === s.id
-                        ? "border-green-500 bg-green-600 text-white shadow-sm scale-105"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-green-300 hover:bg-green-50"
-                    }`}
-                    onClick={() => setPreSlotId(preSlotId === s.id ? "" : s.id)}
-                  >
-                    {s.slot_name}
-                  </button>
-                ))}
+                {warmerSlots.filter((s) => s.purpose === purpose).map(renderPreSlot)}
               </div>
             </div>
           ))}
+          {mergedSlots.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-slate-500">기타 (코팅·전사·유동)</div>
+              <div className="flex flex-wrap gap-2">
+                {mergedSlots.map(renderPreSlot)}
+              </div>
+            </div>
+          )}
         </div>
       );
     })()}
