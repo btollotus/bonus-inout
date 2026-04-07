@@ -347,13 +347,11 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string) {
       if (sessErr || !newSess?.id) { showToast("세션 생성 실패", "error"); return; }
       targetSessionId = newSess.id;
     }
+// 연결 작업지시서만 도착 세션으로 이동
+await supabase.from("ccp_heating_session_orders").update({ session_id: targetSessionId }).eq("session_id", fromSessionId);
 
-    // 이벤트 + 연결 작업지시서를 도착 세션으로 이동
-    await supabase.from("ccp_heating_events").update({ session_id: targetSessionId }).eq("session_id", fromSessionId);
-    await supabase.from("ccp_heating_session_orders").update({ session_id: targetSessionId }).eq("session_id", fromSessionId);
-
-    // 출발 세션 삭제 (즉시 비어있음 전환)
-    await supabase.from("ccp_heating_sessions").delete().eq("id", fromSessionId);
+// 출발 세션 삭제 (즉시 비어있음 전환) — 기존 이벤트(material_in 등)는 같이 삭제됨
+await supabase.from("ccp_heating_sessions").delete().eq("id", fromSessionId);
 
     // move 이벤트 기록
     await supabase.from("ccp_heating_events").insert({
