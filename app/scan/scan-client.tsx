@@ -709,13 +709,14 @@ export default function ScanClient() {
 
     if (lErr) throw new Error(lErr.message);
 
-    const { error: mErr } = await supabase.from("movements").insert({
-      lot_id: (lot as any).id,
-      type: row.type,
-      qty: eachQty,
-      note: row.note || null,
-      created_at: workDateTimestamp(),
-    });
+// saveInDiscard 함수 내 movements insert
+const { error: mErr } = await supabase.from("movements").insert({
+  lot_id: (lot as any).id,
+  type: row.type,
+  qty: eachQty,
+  note: row.note || null,
+  happened_at: workDateTimestamp(),  // ✅ created_at → happened_at 으로 변경
+});
 
     if (mErr) throw new Error(mErr.message);
 
