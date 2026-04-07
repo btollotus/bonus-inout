@@ -1080,17 +1080,21 @@ async function savePreMaterialIn() {
     const isEmpty = st === null || st === undefined;
     const daysAgo = st?.daysAgo ?? 0;
     const dateStr = st?.date ? st.date.slice(5) : null; // MM-DD
+    const isOverdue = !isEmpty && daysAgo >= 15;
     const statusCls = isEmpty
-    ? "border-slate-200 bg-slate-50 text-slate-400"
-    : "border-slate-200 bg-white text-slate-700";
+      ? "border-slate-200 bg-slate-50 text-slate-400"
+      : isOverdue
+      ? "border-red-300 bg-red-50 text-red-600"
+      : "border-slate-200 bg-white text-slate-700";
     return (
       <div key={s.id} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${statusCls}`}>
-        <div className="font-semibold">{s.slot_name}</div>
-        <div className="mt-0.5 text-[10px] font-normal text-center">
+        <div className={`font-semibold ${isOverdue ? "text-red-600 font-bold" : ""}`}>{s.slot_name}</div>
+        <div className={`mt-0.5 text-[10px] text-center ${isOverdue ? "text-red-600 font-bold" : "font-normal"}`}>
           {isEmpty ? "비어있음" : dateStr}
         </div>
       </div>
-    );
+    ); 
+    
   };
 
   return (
