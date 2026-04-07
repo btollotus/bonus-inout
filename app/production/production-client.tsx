@@ -257,9 +257,16 @@ export default function ProductionClient() {
   const [ccpMoveTargetSlotId, setCcpMoveTargetSlotId] = useState(""); // 슬롯이동 대상
 
   // ── 사전 원료투입 state ──
-const [preSlotId, setPreSlotId] = useState("");
-const [preTime, setPreTime] = useState("");
-const [preSaving, setPreSaving] = useState(false);
+  const [preSlotId, setPreSlotId] = useState("");
+  const [preDate, setPreDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+  });
+  const [preTime, setPreTime] = useState(() => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`;
+  });
+  const [preSaving, setPreSaving] = useState(false);
 
 // ── 슬롯 현황 state ──
 const [slotStatus, setSlotStatus] = useState<Record<string, { date: string; daysAgo: number } | null>>({});
@@ -677,8 +684,7 @@ async function savePreMaterialIn() {
 
   setPreSaving(true);
   try {
-    const nowLocal = new Date();
-    const localDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth()+1).padStart(2,"0")}-${String(nowLocal.getDate()).padStart(2,"0")}`;
+    const localDate = preDate;
 
     // 해당 슬롯의 오늘 active 세션 조회
     const { data: existSess } = await supabase
@@ -716,7 +722,9 @@ async function savePreMaterialIn() {
 
     showToast("✅ 원료투입이 기록됐습니다!");
     setPreSlotId("");
-    setPreTime("");
+    const now = new Date();
+    setPreDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`);
+    setPreTime(`${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`);
   } catch (e: any) {
     showToast("오류: " + (e?.message ?? e), "error");
   } finally {
@@ -1170,12 +1178,22 @@ async function savePreMaterialIn() {
         </div>
       );
     })()}
-    <div className="flex gap-3 items-end border-t border-slate-100 pt-3">
+  <div className="flex gap-3 items-end border-t border-slate-100 pt-3 flex-wrap">
+      <div>
+        <div className="mb-1 text-xs text-slate-500">투입날짜</div>
+        <input
+          type="date"
+          className={inp}
+          style={{ width: 150 }}
+          value={preDate}
+          onChange={(e) => setPreDate(e.target.value)}
+        />
+      </div>
       <div>
         <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
         <input
           className={inp}
-          style={{ width: 140 }}
+          style={{ width: 120 }}
           inputMode="numeric"
           placeholder="예: 1430"
           maxLength={4}
@@ -1190,7 +1208,7 @@ async function savePreMaterialIn() {
       </div>
       <button
         className="rounded-xl border border-green-500 bg-green-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
-        disabled={preSaving || !preSlotId || preTime.length < 4}
+        disabled={preSaving || !preSlotId || preTime.length < 4 || !preDate}
         onClick={savePreMaterialIn}
       >
         {preSaving ? "저장 중..." : "🧪 원료투입 기록"}
