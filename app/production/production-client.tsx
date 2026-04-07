@@ -1055,114 +1055,119 @@ async function savePreMaterialIn() {
           </div>
         )}
 
-{/* ── 온장고 슬롯 현황 카드 ── */}
-<div className={`${card} p-4`}>
-  <div className="flex items-center justify-between mb-3">
-    <div className="font-semibold text-sm">🌡️ 온장고 슬롯 현황</div>
-    <button className={btnSm} onClick={loadSlotStatus}>🔄 갱신</button>
-  </div>
-  {(() => {
-    const groups = Array.from(new Set(warmerSlots.map((s) => s.purpose)));
-    return (
-      <div className="space-y-3">
-        {groups.map((purpose) => (
-          <div key={purpose}>
-            <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
-            <div className="flex flex-wrap gap-2">
-              {warmerSlots.filter((s) => s.purpose === purpose).map((s) => {
-                const st = slotStatus[s.id];
-                const isEmpty = st === null || st === undefined;
-                const daysAgo = st?.daysAgo ?? 0;
-                const statusIcon = isEmpty ? "⚫" : daysAgo === 0 ? "🟢" : daysAgo <= 1 ? "🟡" : daysAgo <= 3 ? "🟠" : "🔴";
-                const statusCls = isEmpty
-                  ? "border-slate-200 bg-slate-50 text-slate-400"
-                  : daysAgo === 0
-                  ? "border-green-200 bg-green-50 text-green-700"
-                  : daysAgo <= 1
-                  ? "border-yellow-200 bg-yellow-50 text-yellow-700"
-                  : daysAgo <= 3
-                  ? "border-orange-200 bg-orange-50 text-orange-700"
-                  : "border-red-200 bg-red-50 text-red-700";
-                return (
-                  <div key={s.id} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${statusCls}`}>
-                    <div className="flex items-center gap-1">
-                      <span>{statusIcon}</span>
-                      <span>{s.slot_name}</span>
-                    </div>
-                    <div className="mt-0.5 text-[10px] font-normal opacity-80">
-                      {isEmpty ? "비어있음" : daysAgo === 0 ? `오늘 투입` : `${daysAgo}일 경과`}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  })()}
-</div>
+{/* ── 온장고 슬롯 현황 + 사전 원료투입 ── */}
+<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 
-{/* ── 사전 원료투입 카드 ── */}
-<div className={`${card} p-4`}>
-  <div className="flex items-center gap-2 mb-3">
-    <div className="font-semibold text-sm">🧪 사전 원료투입</div>
-    <span className="text-xs text-slate-400">작업지시서 없이 온장고에 원료를 미리 투입할 때 사용하세요</span>
-  </div>
-  {(() => {
-    const groups = Array.from(new Set(warmerSlots.map((s) => s.purpose)));
-    return (
-      <div className="space-y-3 mb-4">
-        {groups.map((purpose) => (
-          <div key={purpose}>
-            <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
-            <div className="flex flex-wrap gap-2">
-              {warmerSlots.filter((s) => s.purpose === purpose).map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
-                    preSlotId === s.id
-                      ? "border-green-500 bg-green-600 text-white shadow-sm scale-105"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-green-300 hover:bg-green-50"
-                  }`}
-                  onClick={() => setPreSlotId(preSlotId === s.id ? "" : s.id)}
-                >
-                  {s.slot_name}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  })()}
-  <div className="flex gap-3 items-end">
-    <div>
-      <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
-      <input
-        className={inp}
-        style={{ width: 140 }}
-        inputMode="numeric"
-        placeholder="예: 1430"
-        maxLength={4}
-        value={preTime}
-        onChange={(e) => setPreTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
-      />
-      {preTime.length === 4 && (
-        <div className="mt-0.5 text-xs text-slate-400 text-right">
-          {preTime.slice(0, 2)}:{preTime.slice(2, 4)}
-        </div>
-      )}
+  {/* 온장고 슬롯 현황 */}
+  <div className={`${card} p-4`}>
+    <div className="flex items-center justify-between mb-3">
+      <div className="font-semibold text-sm">🌡️ 온장고 슬롯 현황</div>
+      <button className={btnSm} onClick={loadSlotStatus}>🔄 갱신</button>
     </div>
-    <button
-      className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
-      disabled={preSaving || !preSlotId || preTime.length < 4}
-      onClick={savePreMaterialIn}
-    >
-      {preSaving ? "저장 중..." : "🧪 원료투입 기록"}
-    </button>
+    {(() => {
+      const groups = Array.from(new Set(warmerSlots.map((s) => s.purpose)));
+      return (
+        <div className="space-y-3">
+          {groups.map((purpose) => (
+            <div key={purpose}>
+              <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
+              <div className="flex flex-wrap gap-2">
+                {warmerSlots.filter((s) => s.purpose === purpose).map((s) => {
+                  const st = slotStatus[s.id];
+                  const isEmpty = st === null || st === undefined;
+                  const daysAgo = st?.daysAgo ?? 0;
+                  const statusIcon = isEmpty ? "⚫" : daysAgo === 0 ? "🟢" : daysAgo <= 1 ? "🟡" : daysAgo <= 3 ? "🟠" : "🔴";
+                  const statusCls = isEmpty
+                    ? "border-slate-200 bg-slate-50 text-slate-400"
+                    : daysAgo === 0
+                    ? "border-green-200 bg-green-50 text-green-700"
+                    : daysAgo <= 1
+                    ? "border-yellow-200 bg-yellow-50 text-yellow-700"
+                    : daysAgo <= 3
+                    ? "border-orange-200 bg-orange-50 text-orange-700"
+                    : "border-red-200 bg-red-50 text-red-700";
+                  return (
+                    <div key={s.id} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${statusCls}`}>
+                      <div className="flex items-center gap-1">
+                        <span>{statusIcon}</span>
+                        <span>{s.slot_name}</span>
+                      </div>
+                      <div className="mt-0.5 text-[10px] font-normal opacity-80 text-center">
+                        {isEmpty ? "비어있음" : daysAgo === 0 ? "오늘 투입" : `${daysAgo}일 경과`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    })()}
   </div>
+
+  {/* 사전 원료투입 */}
+  <div className={`${card} p-4`}>
+    <div className="flex items-center gap-2 mb-3">
+      <div className="font-semibold text-sm">🧪 사전 원료투입</div>
+      <span className="text-xs text-slate-400">작업지시서 없이 원료를 미리 투입할 때</span>
+    </div>
+    {(() => {
+      const groups = Array.from(new Set(warmerSlots.map((s) => s.purpose)));
+      return (
+        <div className="space-y-3 mb-4">
+          {groups.map((purpose) => (
+            <div key={purpose}>
+              <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
+              <div className="flex flex-wrap gap-2">
+                {warmerSlots.filter((s) => s.purpose === purpose).map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
+                      preSlotId === s.id
+                        ? "border-green-500 bg-green-600 text-white shadow-sm scale-105"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-green-300 hover:bg-green-50"
+                    }`}
+                    onClick={() => setPreSlotId(preSlotId === s.id ? "" : s.id)}
+                  >
+                    {s.slot_name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    })()}
+    <div className="flex gap-3 items-end border-t border-slate-100 pt-3">
+      <div>
+        <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
+        <input
+          className={inp}
+          style={{ width: 140 }}
+          inputMode="numeric"
+          placeholder="예: 1430"
+          maxLength={4}
+          value={preTime}
+          onChange={(e) => setPreTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+        />
+        {preTime.length === 4 && (
+          <div className="mt-0.5 text-xs text-slate-400 text-right">
+            {preTime.slice(0, 2)}:{preTime.slice(2, 4)}
+          </div>
+        )}
+      </div>
+      <button
+        className="rounded-xl border border-green-500 bg-green-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
+        disabled={preSaving || !preSlotId || preTime.length < 4}
+        onClick={savePreMaterialIn}
+      >
+        {preSaving ? "저장 중..." : "🧪 원료투입 기록"}
+      </button>
+    </div>
+  </div>
+
 </div>
 
         {/* 헤더 */}
