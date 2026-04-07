@@ -577,36 +577,90 @@ if (ccpEventType === "move") {
 if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
   const today = new Date().toISOString().slice(0, 10);
 
-  // 1) 기존 세션 slot_id는 그대로 유지 (수정하지 않음)
-  // 2) 이동 대상 슬롯에 새 세션 생성
-  const { data: newSess } = await supabase
+  // 1) 이동 대상 슬롯에 기존 active 세션 있는지 확인
+  const { data: existTargetSess } = await supabase
     .from("ccp_heating_sessions")
-    .insert({
-      session_date: today,
-      slot_id: ccpMoveTargetSlotId,
-      status: "active",
-      created_by: currentUserIdRef.current,
-    })
-    .select("id").single();
+    .select("id")
+    .eq("session_date", today)
+    .eq("slot_id", ccpMoveTargetSlotId)
+    .eq("status", "active")
+    .maybeSingle();
 
-    if (newSess?.id && selectedWo) {
-      // 3) 기존 세션에서 이 작업지시서 연결 삭제
-      await supabase.from("ccp_heating_session_orders")
-        .delete()
-        .eq("session_id", ccpSessionId)
-        .eq("work_order_ref", selectedWo.work_order_no);
-    
-      // 4) 새 세션에 작업지시서 연결
+  let targetSessionId: string;
+
+  if (existTargetSess?.id) {
+    // 2a) 대상 슬롯에 기존 세션 있음 → 기존 세션 사용
+    targetSessionId = existTargetSess.id;
+
+    // 기존 1-1 세션의 이벤트를 모두 대상 세션으로 이동
+    await supabase.from("ccp_heating_events")
+      .update({ session_id: targetSessionId })
+      .eq("session_id", ccpSessionId);
+
+    // 기존 1-1 세션 연결 삭제
+    await supabase.from("ccp_heating_session_orders")
+      .delete()
+      .eq("session_id", ccpSessionId);
+
+    // 기존 1-1 세션 삭제
+    await supabase.from("ccp_heating_sessions")
+      .delete()
+      .eq("id", ccpSessionId);
+
+  } else {
+    // 2b) 대상 슬롯에 세션 없음 → 새 세션 생성
+    const { data: newSess } = await supabase
+      .from("ccp_heating_sessions")
+      .insert({
+        session_date: today,
+        slot_id: ccpMoveTargetSlotId,
+        status: "active",
+        created_by: currentUserIdRef.current,
+      })
+      .select("id").single();
+
+    if (!newSess?.id) {
+      showToast("세션 생성 실패", "error");
+      return;
+    }
+    targetSessionId = newSess.id;
+
+    // 기존 세션 이벤트 이동
+    await supabase.from("ccp_heating_events")
+      .update({ session_id: targetSessionId })
+      .eq("session_id", ccpSessionId);
+
+    // 기존 세션 연결 삭제
+    await supabase.from("ccp_heating_session_orders")
+      .delete()
+      .eq("session_id", ccpSessionId);
+
+    // 기존 세션 삭제
+    await supabase.from("ccp_heating_sessions")
+      .delete()
+      .eq("id", ccpSessionId);
+  }
+
+  if (selectedWo) {
+    // 3) 대상 세션에 작업지시서 연결 추가 (없는 경우에만)
+    const { data: existLink } = await supabase
+      .from("ccp_heating_session_orders")
+      .select("id")
+      .eq("session_id", targetSessionId)
+      .eq("work_order_ref", selectedWo.work_order_no)
+      .maybeSingle();
+    if (!existLink) {
       await supabase.from("ccp_heating_session_orders").insert({
-        session_id: newSess.id,
+        session_id: targetSessionId,
         work_order_ref: selectedWo.work_order_no,
         client_name: selectedWo.client_name,
         product_name: selectedWo.product_name,
       });
+    }
 
- // 5) 새 세션에 슬롯이동 이벤트 복사
+    // 4) move 이벤트 저장 (대상 세션에)
     await supabase.from("ccp_heating_events").insert({
-      session_id: newSess.id,
+      session_id: targetSessionId,
       event_type: "move",
       measured_at: `${today}T${ccpTime.slice(0,2)}:${ccpTime.slice(2,4)}:00`,
       temperature: null,
@@ -615,16 +669,16 @@ if (ccpEventType === "move" && ccpMoveTargetSlotId && ccpSessionId) {
       created_by: currentUserIdRef.current,
     });
 
-  // 6) 작업지시서의 ccp_slot_id를 새 슬롯으로 업데이트
+    // 5) 작업지시서의 ccp_slot_id 업데이트
     await supabase.from("work_orders")
       .update({ ccp_slot_id: ccpMoveTargetSlotId, updated_at: new Date().toISOString() })
       .eq("id", selectedWo.id);
-
-   // 7) ccpSessionId를 새 세션으로 전환
-    setCcpSessionId(newSess.id);
-    setCcpSessionSlotId(ccpMoveTargetSlotId);
-    setECcpSlotId(ccpMoveTargetSlotId);
   }
+
+  // 6) state 전환
+  setCcpSessionId(targetSessionId);
+  setCcpSessionSlotId(ccpMoveTargetSlotId);
+  setECcpSlotId(ccpMoveTargetSlotId);
 }
 
     showToast("✅ CCP 온도 기록 완료!");
