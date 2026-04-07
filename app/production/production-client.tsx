@@ -1085,7 +1085,7 @@ async function savePreMaterialIn() {
       ? "border-slate-200 bg-slate-50 text-slate-400"
       : isOverdue
       ? "border-red-300 bg-red-50 text-red-600"
-      : "border-slate-200 bg-white text-slate-700";
+      : "border-blue-200 bg-blue-50 text-blue-700";
     return (
       <div key={s.id} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${statusCls}`}>
         <div className={`font-semibold ${isOverdue ? "text-red-600 font-bold" : ""}`}>{s.slot_name}</div>
