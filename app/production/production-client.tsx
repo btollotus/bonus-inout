@@ -1178,7 +1178,7 @@ async function savePreMaterialIn() {
         </div>
       );
     })()}
-  <div className="flex gap-3 items-end border-t border-slate-100 pt-3 flex-wrap">
+<div className="flex gap-3 items-end border-t border-slate-100 pt-3 flex-wrap">
       <div>
         <div className="mb-1 text-xs text-slate-500">투입날짜</div>
         <input
@@ -1200,19 +1200,21 @@ async function savePreMaterialIn() {
           value={preTime}
           onChange={(e) => setPreTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
         />
+      </div>
+      <div className="flex flex-col justify-end">
         {preTime.length === 4 && (
-          <div className="mt-0.5 text-xs text-slate-400 text-right">
+          <div className="mb-1 text-xs text-slate-400 text-center">
             {preTime.slice(0, 2)}:{preTime.slice(2, 4)}
           </div>
         )}
+        <button
+          className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
+          disabled={preSaving || !preSlotId || preTime.length < 4 || !preDate}
+          onClick={savePreMaterialIn}
+        >
+          {preSaving ? "저장 중..." : "🧪 원료투입 기록"}
+        </button>
       </div>
-      <button
-        className="rounded-xl border border-green-500 bg-green-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
-        disabled={preSaving || !preSlotId || preTime.length < 4 || !preDate}
-        onClick={savePreMaterialIn}
-      >
-        {preSaving ? "저장 중..." : "🧪 원료투입 기록"}
-      </button>
     </div>
   </div>
 
