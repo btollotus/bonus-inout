@@ -1064,47 +1064,58 @@ async function savePreMaterialIn() {
       <div className="font-semibold text-sm">🌡️ 온장고 슬롯 현황</div>
       <button className={btnSm} onClick={loadSlotStatus}>🔄 갱신</button>
     </div>
-    {(() => {
-      const groups = Array.from(new Set(warmerSlots.map((s) => s.purpose)));
-      return (
-        <div className="space-y-3">
-          {groups.map((purpose) => (
-            <div key={purpose}>
-              <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
-              <div className="flex flex-wrap gap-2">
-                {warmerSlots.filter((s) => s.purpose === purpose).map((s) => {
-                  const st = slotStatus[s.id];
-                  const isEmpty = st === null || st === undefined;
-                  const daysAgo = st?.daysAgo ?? 0;
-                  const statusIcon = isEmpty ? "⚫" : daysAgo === 0 ? "🟢" : daysAgo <= 1 ? "🟡" : daysAgo <= 3 ? "🟠" : "🔴";
-                  const statusCls = isEmpty
-                    ? "border-slate-200 bg-slate-50 text-slate-400"
-                    : daysAgo === 0
-                    ? "border-green-200 bg-green-50 text-green-700"
-                    : daysAgo <= 1
-                    ? "border-yellow-200 bg-yellow-50 text-yellow-700"
-                    : daysAgo <= 3
-                    ? "border-orange-200 bg-orange-50 text-orange-700"
-                    : "border-red-200 bg-red-50 text-red-700";
-                  return (
-                    <div key={s.id} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${statusCls}`}>
-                      <div className="flex items-center gap-1">
-                        <span>{statusIcon}</span>
-                        <span>{s.slot_name}</span>
-                      </div>
-                      <div className="mt-0.5 text-[10px] font-normal opacity-80 text-center">
-                        {isEmpty ? "비어있음" : daysAgo === 0 ? "오늘 투입" : `${daysAgo}일 경과`}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+
+ {(() => {
+  // 7, 8, 9-xx 슬롯을 한 그룹으로 묶기
+  const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
+  const mainGroups = Array.from(new Set(
+    warmerSlots
+      .filter((s) => !MERGE_PURPOSES.includes(s.purpose))
+      .map((s) => s.purpose)
+  ));
+  const mergedSlots = warmerSlots.filter((s) => MERGE_PURPOSES.includes(s.purpose));
+
+  const renderSlot = (s: { id: string; slot_name: string; purpose: string }) => {
+    const st = slotStatus[s.id];
+    const isEmpty = st === null || st === undefined;
+    const daysAgo = st?.daysAgo ?? 0;
+    const dateStr = st?.date ? st.date.slice(5) : null; // MM-DD
+    const statusCls = isEmpty
+    ? "border-slate-200 bg-slate-50 text-slate-400"
+    : "border-slate-200 bg-white text-slate-700";
+    return (
+      <div key={s.id} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${statusCls}`}>
+        <div className="font-semibold">{s.slot_name}</div>
+        <div className="mt-0.5 text-[10px] font-normal text-center">
+          {isEmpty ? "비어있음" : dateStr}
         </div>
-      );
-    })()}
-  </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-3">
+      {mainGroups.map((purpose) => (
+        <div key={purpose}>
+          <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
+          <div className="flex flex-wrap gap-2">
+            {warmerSlots.filter((s) => s.purpose === purpose).map(renderSlot)}
+          </div>
+        </div>
+      ))}
+      {mergedSlots.length > 0 && (
+        <div>
+          <div className="mb-1.5 text-xs font-semibold text-slate-500">기타 (코팅·전사·유동)</div>
+          <div className="flex flex-wrap gap-2">
+            {mergedSlots.map(renderSlot)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+})()}
+          
+ </div>
 
   {/* 사전 원료투입 */}
   <div className={`${card} p-4`}>
@@ -1769,7 +1780,7 @@ if (eCcpSlotId && eCcpSlotId !== s.id && ccpSessionId) {
                         {visibleEvents.map((ev, idx) => {
                           const isNG = ev.is_ok === false;
                           const isEditing = ccpEditingId === ev.id;
-                          const needsTemp = !["move", "material_in"].includes(ev.event_type);
+                          const needsTemp = !["move", "material_in", "material_out"].includes(ev.event_type);
                           return (
                             <tr key={ev.id} className={`border-b border-slate-100 transition-colors ${isEditing ? "bg-blue-50" : isNG ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
                               {/* 시각 */}
