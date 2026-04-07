@@ -393,12 +393,17 @@ const [slotStatus, setSlotStatus] = useState<Record<string, { date: string; days
 
     // 1) work_order_no로 연결된 세션 찾기
     const { data: linkData } = await supabase
-      .from("ccp_heating_session_orders")
-      .select("session_id")
-      .eq("work_order_ref", wo.work_order_no)
-      .maybeSingle();
+    .from("ccp_heating_session_orders")
+    .select("session_id, ccp_heating_sessions!inner(session_date, status)")
+    .eq("work_order_ref", wo.work_order_no)
+    .eq("ccp_heating_sessions.session_date", today)
+    .eq("ccp_heating_sessions.status", "active")
+    .limit(1)
+    .maybeSingle();
 
-    let sessionId: string | null = linkData?.session_id ?? null;
+  let sessionId: string | null = linkData?.session_id ?? null;
+
+
     let isOriginalWo = !!linkData?.session_id; // 1단계에서 찾으면 기존 연결 작업지시서
 
    // 2) 연결 세션 없고 슬롯 있으면 오늘 active 세션 찾기 (연결 추가는 하지 않음)
