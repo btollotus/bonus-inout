@@ -186,14 +186,19 @@ export function useCcpState(
       for (const slotId of needsHistorySlotIds) {
         const slotHistory = (historyEvents ?? []).filter((e) => e.slot_id === slotId);
         // 가장 최근 material_in 찾기
-        const lastIn = slotHistory.find((e) => e.event_type === "material_in");
-        if (!lastIn) { map[slotId] = null; continue; }
-  
-        // 그 이후 material_out이 있는지 확인
-        const hasOutAfter = slotHistory.some(
-          (e) => e.event_type === "material_out" && e.measured_at > lastIn.measured_at
-        );
-        if (hasOutAfter) { map[slotId] = null; continue; }
+// 전체 이력에서 가장 최근 이벤트가 material_out이면 바로 비어있음
+const lastEvent = slotHistory[0]; // descending 정렬이므로 [0]이 최신
+if (!lastEvent || lastEvent.event_type === "material_out") {
+  map[slotId] = null; continue;
+}
+
+const lastIn = slotHistory.find((e) => e.event_type === "material_in");
+if (!lastIn) { map[slotId] = null; continue; }
+
+const hasOutAfter = slotHistory.some(
+  (e) => e.event_type === "material_out" && e.measured_at > lastIn.measured_at
+);
+if (hasOutAfter) { map[slotId] = null; continue; }
   
         const materialDate = lastIn.measured_at.slice(0, 10);
         const diffMs = new Date(today).getTime() - new Date(materialDate).getTime();
