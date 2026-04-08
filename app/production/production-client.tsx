@@ -874,8 +874,9 @@ export default function ProductionClient() {
                         <div key={step.assigneeKey} className={`rounded-xl border px-3 py-2.5 transition-all duration-300 ${cardCls} ${isFlashing ? "ring-2 ring-blue-400 ring-offset-1 scale-[1.02]" : ""}`}>
                           <div className="flex items-center justify-between mb-2"><div className="text-xs font-semibold text-slate-700 flex items-center gap-1"><span>{step.icon}</span>{step.label}</div><div>{isSaving ? <span className="text-[10px] text-slate-400 animate-pulse">저장 중...</span> : isDone ? <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${step.badgeDone}`}>완료</span> : isSkipped ? <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${step.badgeSkip}`}>⚠ 미입력</span> : <span className="rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-400">대기</span>}</div></div>
                           <select className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 transition-colors ${isDone ? "border-current bg-white/70 text-slate-700 font-medium" : "border-slate-200 bg-white text-slate-500"} ${isSaving ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`} value={assigneeVal} disabled={isSaving || (selectedWo?.status === "완료" && !isEditMode)} onChange={(e) => handleAssigneeChange(step.assigneeKey, step.statusKey, e.target.value)}>
-                            <option value="">— 담당자 선택 —</option>
-                            {employees.map((e) => e.name ? <option key={e.id} value={e.name}>{e.name}</option> : null)}
+                          <option value="">— 담당자 선택 —</option>
+<option value="담당자없음">담당자 없음</option>
+{employees.map((e) => e.name ? <option key={e.id} value={e.name}>{e.name}</option> : null)}
                           </select>
                           {isDone && <div className="mt-1.5 text-[11px] font-semibold text-center text-slate-600 truncate">👤 {assigneeVal}</div>}
                         </div>
