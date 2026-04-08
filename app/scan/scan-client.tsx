@@ -732,7 +732,7 @@ const { error: mErr } = await supabase.from("movements").insert({
     }
 
     for (const r of cart) {
-      if (r.type === "IN" || r.type === "DISCARD") {
+      if (r.type === "IN" || (r.type === "DISCARD" && !r.selectedLotId)) {
         if (!r.expiry) {
           setMsg(`소비기한이 비어있는 항목이 있습니다: ${r.barcode}`);
           return;
