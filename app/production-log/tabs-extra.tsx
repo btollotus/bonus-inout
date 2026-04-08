@@ -46,6 +46,16 @@ type PetStockLog = {
 };
 type PetStock = { stock_raw: number; stock_coated: number; stock_sprayed_prod: number; stock_sprayed_sale: number };
 
+const SIGN_MAP: Record<string, string> = {
+  "조은미": "/sign-choem.png",
+  "강미라": "/sign-kangml.png",
+  "나현우": "/sign-nahw.png",
+  "나미영": "/sign-namiy.png",
+  "조대성": "/sign-chods.png",
+  "김영각": "/sign-kimyg.png",
+  "고한결": "/sign-gohg.png",
+};
+
 const PET_LOG_TYPE_LABELS: Record<string, string> = {
   incoming: "입고", coating_done: "코팅완료", spray_done_prod: "분사완료(생산용)",
   spray_done_sale: "분사완료(판매용)", print_used: "인쇄사용", sale_cut: "재단판매",
@@ -219,6 +229,45 @@ export function Ccp1bTab({ role, userId, showToast }: {
   // 슬롯 목록에서 오늘 활동있는 슬롯 구분
   const activeSlotsToday = new Set(slotEvents.map((e) => e.slot_id));
 
+  const [slotAssignees, setSlotAssignees] = useState<Record<string, string>>({});
+
+async function handlePrint() {
+  const activeSlotIds = [...activeSlotsToday];
+  if (activeSlotIds.length === 0) { window.print(); return; }
+
+  const woNosPerSlot: Record<string, string[]> = {};
+  for (const slotId of activeSlotIds) {
+    const wNos = [...new Set([
+      ...slotEvents.filter(e => e.slot_id === slotId).map(e => e.work_order_no).filter(Boolean) as string[],
+      ...woEvents.filter(e => e.slot_id === slotId).map(e => e.work_order_no),
+    ])];
+    woNosPerSlot[slotId] = wNos;
+  }
+
+  const allWoNos = [...new Set(Object.values(woNosPerSlot).flat())];
+  const assigneeMap: Record<string, string> = {};
+
+  if (allWoNos.length > 0) {
+    const { data } = await supabase
+      .from("work_orders")
+      .select("work_order_no, assignee_production")
+      .in("work_order_no", allWoNos);
+    for (const row of data ?? []) {
+      if (row.assignee_production) assigneeMap[row.work_order_no] = row.assignee_production;
+    }
+  }
+
+  const newSlotAssignees: Record<string, string> = {};
+  for (const slotId of activeSlotIds) {
+    for (const wNo of woNosPerSlot[slotId]) {
+      if (assigneeMap[wNo]) { newSlotAssignees[slotId] = assigneeMap[wNo]; break; }
+    }
+  }
+
+  setSlotAssignees(newSlotAssignees);
+  setTimeout(() => window.print(), 150);
+}
+
   return (
     <div className="space-y-4">
       {/* 날짜 필터 */}
@@ -230,7 +279,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
               onChange={(e) => { setFilterDate(e.target.value); setSelectedSlotId(null); setEditingEventId(null); }} />
           </div>
           <button className={btn} onClick={loadData}>🔄 조회</button>
-          <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+          <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
         </div>
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
           <span className="font-semibold">⚠ 한계기준:</span> 준초콜릿·당류가공품 45±5°C (40~50°C), 4시간 이상 유지 / 주기: 작업시작 전, 작업 중 2시간마다, 작업종료
@@ -500,6 +549,219 @@ export function Ccp1bTab({ role, userId, showToast }: {
           </div>
         )}
       </div>
+{/* ── 인쇄 전용 영역 ── */}
+<style>{`
+  @media screen { .ccp-print-only { display: none !important; } }
+  @media print {
+    body * { visibility: hidden; }
+    .ccp-print-only, .ccp-print-only * { visibility: visible; }
+    .ccp-print-only { position: absolute; top: 0; left: 0; width: 100%; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    @page { size: A4 landscape; margin: 8mm 10mm; }
+  }
+`}</style>
+
+<div className="ccp-print-only" style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
+
+  {/* ① 제목 + 결재란 */}
+  <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+    <tbody>
+      <tr>
+        <td rowSpan={2} style={{ border: "1px solid #000", padding: "6px 8px", fontWeight: "bold", fontSize: "12pt", textAlign: "center" }}>
+          중요관리점(CCP-1B) 모니터링일지<br/>
+          <span style={{ fontSize: "9pt" }}>[가열공정] 일반</span><br/>
+          <span style={{ fontSize: "8pt" }}>*온장고 내 보관기간 : 1개월 미만*</span>
+        </td>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", fontSize: "8pt", width: 40 }}>결재</td>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 60 }}>작성</td>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 60 }}>승인</td>
+      </tr>
+      <tr>
+        <td style={{ border: "1px solid #000", textAlign: "center", fontSize: "8pt" }}></td>
+        <td style={{ border: "1px solid #000", textAlign: "center", padding: 2 }}>
+          <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain" }} />
+        </td>
+        <td style={{ border: "1px solid #000", textAlign: "center", padding: 2 }}>
+          <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain" }} />
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  {/* ② 작성일자 */}
+  <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+    <tbody>
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", width: 60 }}>작성일자</td>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", width: "30%" }}>
+          {(() => { const d = new Date(filterDate + "T00:00:00+09:00"); return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일`; })()}
+        </td>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", width: 60 }}>점검자</td>
+        <td style={{ border: "1px solid #000", padding: "2px 6px" }}></td>
+      </tr>
+    </tbody>
+  </table>
+
+  {/* ③ 위해요소 / 한계기준 */}
+  <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+    <tbody>
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", whiteSpace: "nowrap", width: 56 }}>위해요소</td>
+        <td colSpan={3} style={{ border: "1px solid #000", padding: "2px 6px", fontSize: "8pt" }}>병원성 미생물(리스테리아모노사이토제네스, 장출혈성대장균)</td>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", width: 60 }}>온도</td>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", width: 80 }}>시간</td>
+      </tr>
+      <tr>
+        <td rowSpan={2} style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold" }}>한계기준</td>
+        <td colSpan={3} style={{ border: "1px solid #000", padding: "2px 6px", fontSize: "8pt" }}>준초콜릿(다크컴파운드)</td>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center" }}>45±5℃</td>
+        <td rowSpan={2} style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt" }}>4시간 이상 유지</td>
+      </tr>
+      <tr>
+        <td colSpan={3} style={{ border: "1px solid #000", padding: "2px 6px", fontSize: "8pt" }}>당류가공품(화이트컴파운드)</td>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center" }}>45±5℃</td>
+      </tr>
+    </tbody>
+  </table>
+
+  {/* ④ 슬롯별 데이터 */}
+  {(() => {
+    const printSlots = allSlots.filter(s => activeSlotsToday.has(s.id));
+    const darkSlots  = printSlots.filter(s => s.purpose.includes("다크"));
+    const whiteSlots = printSlots.filter(s => !s.purpose.includes("다크"));
+
+    const renderSection = (slots: typeof printSlots, label: string) => {
+      if (slots.length === 0) return null;
+
+      // 슬롯별 온도기록 (시간순 정렬)
+      const slotWoEvents = (slotId: string) =>
+        woEvents.filter(e => e.slot_id === slotId)
+          .sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+
+      // 최대 행 수
+      const maxRows = Math.max(...slots.map(s => slotWoEvents(s.id).length), 4);
+
+      return (
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
+          <tbody>
+            {/* 슬롯명 행 */}
+            <tr>
+              <td rowSpan={maxRows + 3} style={{ border: "1px solid #000", padding: "2px 4px", fontWeight: "bold", textAlign: "center", width: 48, fontSize: "8pt", writingMode: "vertical-rl" }}>
+                {label}
+              </td>
+              {slots.map(s => {
+                const wNos = [...new Set([
+                  ...slotEvents.filter(e => e.slot_id === s.id).map(e => e.work_order_no).filter(Boolean) as string[],
+                  ...woEvents.filter(e => e.slot_id === s.id).map(e => e.work_order_no),
+                ])];
+                return (
+                  <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontWeight: "bold", fontSize: "8pt" }}>
+                    {s.slot_name}<br/>
+                    <span style={{ fontSize: "7pt", fontWeight: "normal" }}>{wNos[0] ?? "—"}</span>
+                  </td>
+                );
+              })}
+            </tr>
+
+            {/* 온도기록 행 */}
+            {Array.from({ length: maxRows }).map((_, rowIdx) => (
+              <tr key={rowIdx}>
+                {slots.map(s => {
+                  const ev = slotWoEvents(s.id)[rowIdx];
+                  const isNG = ev?.is_ok === false;
+                  return (
+                    <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt", color: isNG ? "red" : "#000" }}>
+                      {ev
+                        ? `(${ev.measured_at.slice(11,16)}) ${ev.temperature ?? ""}℃`
+                        : "( : )     ℃"}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+
+            {/* 원료투입 월/일 */}
+            <tr>
+              {slots.map(s => {
+                const inEv = slotEvents
+                  .filter(e => e.slot_id === s.id && e.event_type === "material_in")
+                  .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+                return (
+                  <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
+                    원료투입: {inEv ? inEv.measured_at.slice(5,10).replace("-","/") : " / "}
+                  </td>
+                );
+              })}
+            </tr>
+
+            {/* 원료투입 시:분 */}
+            <tr>
+              {slots.map(s => {
+                const inEv = slotEvents
+                  .filter(e => e.slot_id === s.id && e.event_type === "material_in")
+                  .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+                return (
+                  <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
+                    {inEv ? inEv.measured_at.slice(11,16) : " : "}
+                  </td>
+                );
+              })}
+            </tr>
+
+            {/* 판정 + 담당자 사인 */}
+            <tr>
+              {slots.map(s => {
+                const events = woEvents.filter(e => e.slot_id === s.id);
+                const hasNG  = events.some(e => e.is_ok === false);
+                const hasAny = events.length > 0;
+                const assignee = slotAssignees[s.id];
+                const signSrc  = assignee ? SIGN_MAP[assignee] : null;
+                return (
+                  <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
+                    <span style={{ color: hasNG ? "red" : "#000" }}>
+                      {hasAny ? (hasNG ? "X" : "O") : "O"}
+                    </span>
+                    {" / X"}
+                    {signSrc && (
+                      <img src={signSrc} style={{ height: 22, display: "block", margin: "2px auto 0" }} />
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          </tbody>
+        </table>
+      );
+    };
+
+    return (
+      <>
+        {renderSection(darkSlots, "준초콜릿")}
+        {renderSection(whiteSlots, "당류가공품")}
+      </>
+    );
+  })()}
+
+  {/* ⑤ 한계기준 이탈 및 조치내용 */}
+  <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 4 }}>
+    <tbody>
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", fontSize: "8pt", width: 120 }}>
+          한계기준 이탈 및 조치내용
+        </td>
+        <td style={{ border: "1px solid #000", padding: "4px 6px", fontSize: "8pt", minHeight: 36 }}>
+          {woEvents.filter(e => e.is_ok === false)
+            .map(e => `${e.measured_at.slice(11,16)} [${e.work_order_no}] ${e.action_note ?? ""}`)
+            .join("  /  ") || " "}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+</div>
+
+
+
     </div>
   );
 }
