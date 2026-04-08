@@ -663,7 +663,12 @@ async function handlePrint() {
     const renderSection = (slots: typeof printSlots, label: string) => {
       if (slots.length === 0) return null;
 
-      // 슬롯별 온도기록 — 중복(시각+온도 동일) 제거 후 시간순
+      const CHUNK = 7;
+      const chunks: (typeof printSlots)[] = [];
+      for (let i = 0; i < slots.length; i += CHUNK) {
+        chunks.push(slots.slice(i, i + CHUNK));
+      }
+
       const slotWoEventsDedup = (slotId: string) => {
         const seen = new Set<string>();
         return woEvents
@@ -677,113 +682,104 @@ async function handlePrint() {
           });
       };
 
-      const maxRows = Math.max(...slots.map(s => slotWoEventsDedup(s.id).length), 3);
-
       return (
-        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
-          <tbody>
-            {/* 슬롯명 행 */}
-            <tr>
-              <td rowSpan={maxRows + 3} style={{
-                border: "1px solid #000", padding: "2px 4px", fontWeight: "bold",
-                textAlign: "center", width: 44, fontSize: "8pt",
-                writingMode: "vertical-rl" as any,
-              }}>
-                {label}
-              </td>
-              {slots.map(s => (
-                <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontWeight: "bold", fontSize: "8pt" }}>
-                  {s.slot_name}
-                </td>
-              ))}
-            </tr>
-
-            {/* 온도기록 행 — 배지(시작/중간점검/종료) + 시각 + 온도 */}
-            {Array.from({ length: maxRows }).map((_, rowIdx) => (
-              <tr key={rowIdx}>
-                {slots.map(s => {
-                  const ev = slotWoEventsDedup(s.id)[rowIdx];
-                  const isNG = ev?.is_ok === false;
-                  const typeLabel = ev ? (WO_EVENT_TYPE_LABEL[ev.event_type] ?? ev.event_type) : "";
-                  return (
-                    <td key={s.id} style={{
-                      border: "1px solid #000", padding: "2px 4px",
-                      textAlign: "center", fontSize: "8pt",
-                      color: isNG ? "red" : "#000",
+        <>
+          {chunks.map((chunkSlots, chunkIdx) => {
+            const maxRows = Math.max(...chunkSlots.map(s => slotWoEventsDedup(s.id).length), 3);
+            return (
+              <table key={chunkIdx} style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
+                <tbody>
+                  {/* 슬롯명 행 */}
+                  <tr>
+                    <td rowSpan={maxRows + 3} style={{
+                      border: "1px solid #000", padding: "2px 4px", fontWeight: "bold",
+                      textAlign: "center", width: 44, fontSize: "8pt",
+                      writingMode: "vertical-rl" as any,
                     }}>
-                      {ev ? (
-                        <>
-                          <span style={{
-                            fontSize: "7pt",
-                            background: ev.event_type === "start" ? "#dbeafe"
-                              : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9",
-                            padding: "0 3px", borderRadius: 2, marginRight: 2,
-                          }}>{typeLabel}</span>
-                          {`(${ev.measured_at.slice(11,16)}) ${ev.temperature ?? ""}℃`}
-                        </>
-                      ) : "( : )     ℃"}
+                      {label}
                     </td>
-                  );
-                })}
-              </tr>
-            ))}
+                    {chunkSlots.map(s => (
+                      <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontWeight: "bold", fontSize: "8pt" }}>
+                        {s.slot_name}
+                      </td>
+                    ))}
+                  </tr>
 
-            {/* 원료투입 날짜+시각 */}
-            <tr>
-              {slots.map(s => {
-                const inEv = slotEvents
-                  .filter(e => e.slot_id === s.id && e.event_type === "material_in")
-                  .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
-                return (
-                  <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
-                    {inEv
-                      ? `원료투입: ${inEv.measured_at.slice(5,10).replace("-","/")} ${inEv.measured_at.slice(11,16)}`
-                      : "원료투입: —"}
-                  </td>
-                );
-              })}
-            </tr>
+                  {/* 온도기록 행 */}
+                  {Array.from({ length: maxRows }).map((_, rowIdx) => (
+                    <tr key={rowIdx}>
+                      {chunkSlots.map(s => {
+                        const ev = slotWoEventsDedup(s.id)[rowIdx];
+                        const isNG = ev?.is_ok === false;
+                        const typeLabel = ev ? (WO_EVENT_TYPE_LABEL[ev.event_type] ?? ev.event_type) : "";
+                        return (
+                          <td key={s.id} style={{
+                            border: "1px solid #000", padding: "2px 4px",
+                            textAlign: "center", fontSize: "8pt",
+                            color: isNG ? "red" : "#000",
+                          }}>
+                            {ev ? (
+                              <>
+                                <span style={{
+                                  fontSize: "7pt",
+                                  background: ev.event_type === "start" ? "#dbeafe"
+                                    : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9",
+                                  padding: "0 3px", borderRadius: 2, marginRight: 2,
+                                }}>{typeLabel}</span>
+                                {`(${ev.measured_at.slice(11,16)}) ${ev.temperature ?? ""}℃`}
+                              </>
+                            ) : ""}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
 
-            {/* 판정 O (온도기록 있을 때만) + 점검자 사인 (온도기록 있을 때만) */}
-            <tr>
-            {slots.map(s => {
-  const events = woEvents.filter(e => e.slot_id === s.id);
-  const hasWoEvents = events.length > 0;
-  const hasNG = events.some(e => e.is_ok === false);
-  const assignee = slotAssignees[s.id];
-  const signSrc = assignee ? SIGN_MAP[assignee] : null;
+                  {/* 원료투입 */}
+                  <tr>
+                    {chunkSlots.map(s => {
+                      const inEv = slotEvents
+                        .filter(e => e.slot_id === s.id && e.event_type === "material_in")
+                        .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+                      return (
+                        <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
+                          {inEv ? `원료투입: ${inEv.measured_at.slice(5,10).replace("-","/")} ${inEv.measured_at.slice(11,16)}` : ""}
+                        </td>
+                      );
+                    })}
+                  </tr>
 
-  if (!hasWoEvents) {
-    return (
-      <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt", color: "#aaa" }}>
-        —
-      </td>
-    );
-  }
+                  {/* 판정 + 사인 */}
+                  <tr>
+                    {chunkSlots.map(s => {
+                      const events = woEvents.filter(e => e.slot_id === s.id);
+                      const hasWoEvents = events.length > 0;
+                      const hasNG = events.some(e => e.is_ok === false);
+                      const assignee = slotAssignees[s.id];
+                      const signSrc = assignee ? SIGN_MAP[assignee] : null;
 
-  return (
-    <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
-      <div style={{ marginBottom: 2 }}>
-        <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>
-          판정: {hasNG ? "X" : "O"}
-        </span>
-      </div>
-      <div style={{ fontSize: "7pt", color: "#555", marginBottom: 1 }}>점검자</div>
-      {signSrc && (
-        <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} />
-      )}
-      {assignee && !signSrc && (
-        <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>
-      )}
-      {!assignee && (
-        <div style={{ fontSize: "7pt", color: "#ccc" }}>—</div>
-      )}
-    </td>
-  );
-})}
-            </tr>
-          </tbody>
-        </table>
+                      if (!hasWoEvents) {
+                        return <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px" }}></td>;
+                      }
+
+                      return (
+                        <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
+                          <div style={{ marginBottom: 2 }}>
+                            <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>
+                              판정: {hasNG ? "X" : "O"}
+                            </span>
+                          </div>
+                          {signSrc && <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} />}
+                          {assignee && !signSrc && <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  </tbody>
+              </table>
+            );
+          })}
+        </>
       );
     };
 
