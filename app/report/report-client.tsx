@@ -38,6 +38,7 @@ type RpcRow = {
   prev_stock_ea: number | null;
   today_in_ea: number | null;
   today_out_ea: number | null;
+  today_discard_ea: number | null;
   today_stock_ea: number | null;
   expiry_date: string;
   barcode: string;
@@ -52,6 +53,7 @@ type AggRow = {
   start_stock_ea: number;
   period_in_ea: number;
   period_out_ea: number;
+  period_discard_ea: number;
   end_stock_ea: number;
   expiry_date: string;
   barcode: string;
@@ -122,7 +124,7 @@ function csvEscape(v: any) {
   return s;
 }
 
-type ColKey = "name" | "food_type" | "prev_stock" | "in" | "out" | "stock" | "expiry" | "barcode" | "note";
+type ColKey = "name" | "food_type" | "prev_stock" | "in" | "out" | "discard" | "stock" | "expiry" | "barcode" | "note";
 
 const COLS: Record<Exclude<Category, "ALL">, { key: ColKey; label: string }[]> = {
   기성: [
@@ -131,6 +133,7 @@ const COLS: Record<Exclude<Category, "ALL">, { key: ColKey; label: string }[]> =
     { key: "prev_stock", label: "전일재고" },
     { key: "in",         label: "입고" },
     { key: "out",        label: "출고" },
+    { key: "discard",    label: "폐기" },
     { key: "stock",      label: "재고" },
     { key: "expiry",     label: "소비기한" },
     { key: "barcode",    label: "바코드" },
@@ -142,6 +145,7 @@ const COLS: Record<Exclude<Category, "ALL">, { key: ColKey; label: string }[]> =
     { key: "prev_stock", label: "전일재고" },
     { key: "in",         label: "입고" },
     { key: "out",        label: "출고" },
+    { key: "discard",    label: "폐기" },
     { key: "stock",      label: "재고" },
     { key: "expiry",     label: "소비기한" },
     { key: "barcode",    label: "바코드" },
@@ -151,8 +155,9 @@ const COLS: Record<Exclude<Category, "ALL">, { key: ColKey; label: string }[]> =
     { key: "name",      label: "제품명" },
     { key: "food_type", label: "식품유형" },
     { key: "in",        label: "입고" },
-    { key: "out",       label: "출고" },
-    { key: "stock",     label: "재고" },
+    { key: "out",        label: "출고" },
+    { key: "discard",    label: "폐기" },
+    { key: "stock",      label: "재고" },
     { key: "expiry",    label: "소비기한" },
     { key: "barcode",   label: "바코드" },
     { key: "note",      label: "비고" },
@@ -165,6 +170,7 @@ const COLS_ALL: { key: ColKey; label: string }[] = [
   { key: "prev_stock", label: "시작재고" },
   { key: "in",         label: "기간입고합" },
   { key: "out",        label: "기간출고합" },
+  { key: "discard",    label: "기간폐기합" },
   { key: "stock",      label: "종료재고" },
   { key: "expiry",     label: "소비기한" },
   { key: "barcode",    label: "바코드" },
@@ -319,6 +325,7 @@ export default function ReportClient() {
               start_stock_ea: isFirst ? prevEA : 0,
               period_in_ea: inEA,
               period_out_ea: outEA,
+              period_discard_ea: intMin(r.today_discard_ea ?? 0, 0),
               end_stock_ea: isLast ? endEA : 0,
               expiry_date: r.expiry_date,
               barcode: r.barcode,
@@ -329,6 +336,7 @@ export default function ReportClient() {
             if (isFirst) exists.start_stock_ea = prevEA;
             exists.period_in_ea += inEA;
             exists.period_out_ea += outEA;
+            exists.period_discard_ea += intMin(r.today_discard_ea ?? 0, 0);
             if (isLast) exists.end_stock_ea = endEA;
             exists.product_category = r.product_category ?? exists.product_category;
             exists.food_type = r.food_type ?? exists.food_type;
@@ -572,6 +580,7 @@ export default function ReportClient() {
         prev_stock: String(sEA),
         in: String(inEA),
         out: String(outEA),
+        discard: String(intMin(r.period_discard_ea ?? 0, 0)),
         stock: String(eEA),
         expiry: safeStr(r.expiry_date),
         barcode: safeStr(r.barcode),
@@ -601,7 +610,7 @@ export default function ReportClient() {
   const scrollTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
   const cols = getCols(categoryFilter);
-  const isRightAlign = (key: ColKey) => ["prev_stock", "in", "out", "stock"].includes(key);
+  const isRightAlign = (key: ColKey) => ["prev_stock", "in", "out", "discard", "stock"].includes(key);
 
   const displayCols = isAdmin
     ? [...cols, { key: "actions" as any, label: "작업" }]
@@ -939,6 +948,15 @@ export default function ReportClient() {
                         <div className="text-sm font-bold text-black/80 print-sub">{toBoxAndEa(outEA, unit).eaText}</div>
                       </div>
                     ),
+                    discard: (() => {
+                      const discardEA = intMin(r.period_discard_ea ?? 0, 0);
+                      return discardEA > 0 ? (
+                        <div className="text-right leading-tight text-red-600">
+                          <div className="font-bold">{toBoxAndEa(discardEA, unit).boxText}</div>
+                          <div className="text-sm font-bold print-sub">{toBoxAndEa(discardEA, unit).eaText}</div>
+                        </div>
+                      ) : <div className="text-right text-black/30">—</div>;
+                    })(),
                     stock: (
                       <div className="text-right leading-tight">
                         <div className="font-bold">{toBoxAndEa(eEA, unit).boxText}</div>
