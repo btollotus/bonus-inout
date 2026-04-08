@@ -563,26 +563,14 @@ async function handlePrint() {
 
 <div className="ccp-print-only" style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
 
-  {/* ① 제목 + 결재란 */}
+  {/* ① 제목 */}
   <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
     <tbody>
       <tr>
-        <td rowSpan={2} style={{ border: "1px solid #000", padding: "6px 8px", fontWeight: "bold", fontSize: "12pt", textAlign: "center" }}>
+        <td style={{ border: "1px solid #000", padding: "6px 8px", fontWeight: "bold", fontSize: "12pt", textAlign: "center" }}>
           중요관리점(CCP-1B) 모니터링일지<br/>
           <span style={{ fontSize: "9pt" }}>[가열공정] 일반</span><br/>
           <span style={{ fontSize: "8pt" }}>*온장고 내 보관기간 : 1개월 미만*</span>
-        </td>
-        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", fontSize: "8pt", width: 40 }}>결재</td>
-        <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 60 }}>작성</td>
-        <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 60 }}>승인</td>
-      </tr>
-      <tr>
-        <td style={{ border: "1px solid #000", textAlign: "center", fontSize: "8pt" }}></td>
-        <td style={{ border: "1px solid #000", textAlign: "center", padding: 2 }}>
-          <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain" }} />
-        </td>
-        <td style={{ border: "1px solid #000", textAlign: "center", padding: 2 }}>
-          <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain" }} />
         </td>
       </tr>
     </tbody>
@@ -602,7 +590,7 @@ async function handlePrint() {
     </tbody>
   </table>
 
-  {/* ③ 위해요소 / 한계기준 */}
+  {/* ③ 위해요소 / 한계기준 / 주기 / 방법 */}
   <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
     <tbody>
       <tr>
@@ -621,66 +609,116 @@ async function handlePrint() {
         <td colSpan={3} style={{ border: "1px solid #000", padding: "2px 6px", fontSize: "8pt" }}>당류가공품(화이트컴파운드)</td>
         <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center" }}>45±5℃</td>
       </tr>
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold" }}>주 기</td>
+        <td colSpan={5} style={{ border: "1px solid #000", padding: "2px 6px", fontSize: "8pt" }}>
+          작업시작 전, 작업 중 2시간마다, 작업종료
+        </td>
+      </tr>
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold" }}>방 법</td>
+        <td colSpan={5} style={{ border: "1px solid #000", padding: "2px 6px", fontSize: "8pt" }}>
+          ◦ 중탕온도 : 바트 품온 온도 확인 &nbsp;&nbsp; ◦ 가열시간 : 4시간 이상 가열. ※ 온도계,시계는 연 1회 검·교정 실시 필요
+        </td>
+      </tr>
     </tbody>
   </table>
 
   {/* ④ 슬롯별 데이터 */}
   {(() => {
     const printSlots = allSlots.filter(s => activeSlotsToday.has(s.id));
-    const darkSlots  = printSlots.filter(s => s.purpose.includes("다크"));
-    const whiteSlots = printSlots.filter(s => !s.purpose.includes("다크"));
+
+    // 9-1A~9-3B 등 유동 슬롯은 purpose가 아닌
+    // 실제 원료투입 action_note 또는 purpose로 다크/화이트 판단
+    // → slotEvents의 material_in action_note에 "다크" 포함 여부로 구분
+    // → action_note 없으면 purpose로 fallback
+    function getSlotCategory(s: WarmSlot): "다크" | "화이트" {
+      const inEvs = slotEvents
+        .filter(e => e.slot_id === s.id && e.event_type === "material_in")
+        .sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+      const note = inEvs[0]?.action_note ?? "";
+      if (note.includes("다크") || note.includes("dark")) return "다크";
+      if (note.includes("화이트") || note.includes("white")) return "화이트";
+      // fallback: purpose
+      return s.purpose.includes("다크") ? "다크" : "화이트";
+    }
+
+    const darkSlots  = printSlots.filter(s => getSlotCategory(s) === "다크");
+    const whiteSlots = printSlots.filter(s => getSlotCategory(s) === "화이트");
+
+    const WO_EVENT_TYPE_LABEL: Record<string, string> = {
+      start: "시작", mid_check: "중간점검", end: "종료",
+    };
 
     const renderSection = (slots: typeof printSlots, label: string) => {
       if (slots.length === 0) return null;
 
-      // 슬롯별 온도기록 (시간순 정렬)
-      const slotWoEvents = (slotId: string) =>
-        woEvents.filter(e => e.slot_id === slotId)
-          .sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+      // 슬롯별 온도기록 — 중복(시각+온도 동일) 제거 후 시간순
+      const slotWoEventsDedup = (slotId: string) => {
+        const seen = new Set<string>();
+        return woEvents
+          .filter(e => e.slot_id === slotId)
+          .sort((a, b) => a.measured_at.localeCompare(b.measured_at))
+          .filter(e => {
+            const key = `${e.measured_at.slice(11,16)}_${e.temperature}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+      };
 
-      // 최대 행 수
-      const maxRows = Math.max(...slots.map(s => slotWoEvents(s.id).length), 4);
+      const maxRows = Math.max(...slots.map(s => slotWoEventsDedup(s.id).length), 3);
 
       return (
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
           <tbody>
             {/* 슬롯명 행 */}
             <tr>
-              <td rowSpan={maxRows + 3} style={{ border: "1px solid #000", padding: "2px 4px", fontWeight: "bold", textAlign: "center", width: 48, fontSize: "8pt", writingMode: "vertical-rl" }}>
+              <td rowSpan={maxRows + 3} style={{
+                border: "1px solid #000", padding: "2px 4px", fontWeight: "bold",
+                textAlign: "center", width: 44, fontSize: "8pt",
+                writingMode: "vertical-rl" as any,
+              }}>
                 {label}
               </td>
-              {slots.map(s => {
-                const wNos = [...new Set([
-                  ...slotEvents.filter(e => e.slot_id === s.id).map(e => e.work_order_no).filter(Boolean) as string[],
-                  ...woEvents.filter(e => e.slot_id === s.id).map(e => e.work_order_no),
-                ])];
-                return (
-                  <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontWeight: "bold", fontSize: "8pt" }}>
-                    {s.slot_name}<br/>
-                    <span style={{ fontSize: "7pt", fontWeight: "normal" }}>{wNos[0] ?? "—"}</span>
-                  </td>
-                );
-              })}
+              {slots.map(s => (
+                <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontWeight: "bold", fontSize: "8pt" }}>
+                  {s.slot_name}
+                </td>
+              ))}
             </tr>
 
-            {/* 온도기록 행 */}
+            {/* 온도기록 행 — 배지(시작/중간점검/종료) + 시각 + 온도 */}
             {Array.from({ length: maxRows }).map((_, rowIdx) => (
               <tr key={rowIdx}>
                 {slots.map(s => {
-                  const ev = slotWoEvents(s.id)[rowIdx];
+                  const ev = slotWoEventsDedup(s.id)[rowIdx];
                   const isNG = ev?.is_ok === false;
+                  const typeLabel = ev ? (WO_EVENT_TYPE_LABEL[ev.event_type] ?? ev.event_type) : "";
                   return (
-                    <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt", color: isNG ? "red" : "#000" }}>
-                      {ev
-                        ? `(${ev.measured_at.slice(11,16)}) ${ev.temperature ?? ""}℃`
-                        : "( : )     ℃"}
+                    <td key={s.id} style={{
+                      border: "1px solid #000", padding: "2px 4px",
+                      textAlign: "center", fontSize: "8pt",
+                      color: isNG ? "red" : "#000",
+                    }}>
+                      {ev ? (
+                        <>
+                          <span style={{
+                            fontSize: "7pt",
+                            background: ev.event_type === "start" ? "#dbeafe"
+                              : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9",
+                            padding: "0 3px", borderRadius: 2, marginRight: 2,
+                          }}>{typeLabel}</span>
+                          {`(${ev.measured_at.slice(11,16)}) ${ev.temperature ?? ""}℃`}
+                        </>
+                      ) : "( : )     ℃"}
                     </td>
                   );
                 })}
               </tr>
             ))}
 
-            {/* 원료투입 월/일 */}
+            {/* 원료투입 날짜+시각 */}
             <tr>
               {slots.map(s => {
                 const inEv = slotEvents
@@ -688,42 +726,44 @@ async function handlePrint() {
                   .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
                 return (
                   <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
-                    원료투입: {inEv ? inEv.measured_at.slice(5,10).replace("-","/") : " / "}
+                    {inEv
+                      ? `원료투입: ${inEv.measured_at.slice(5,10).replace("-","/")} ${inEv.measured_at.slice(11,16)}`
+                      : "원료투입: —"}
                   </td>
                 );
               })}
             </tr>
 
-            {/* 원료투입 시:분 */}
-            <tr>
-              {slots.map(s => {
-                const inEv = slotEvents
-                  .filter(e => e.slot_id === s.id && e.event_type === "material_in")
-                  .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
-                return (
-                  <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
-                    {inEv ? inEv.measured_at.slice(11,16) : " : "}
-                  </td>
-                );
-              })}
-            </tr>
-
-            {/* 판정 + 담당자 사인 */}
+            {/* 판정 O (온도기록 있을 때만) + 점검자 사인 (온도기록 있을 때만) */}
             <tr>
               {slots.map(s => {
                 const events = woEvents.filter(e => e.slot_id === s.id);
-                const hasNG  = events.some(e => e.is_ok === false);
-                const hasAny = events.length > 0;
+                const hasWoEvents = events.length > 0;
+                const hasNG = events.some(e => e.is_ok === false);
                 const assignee = slotAssignees[s.id];
-                const signSrc  = assignee ? SIGN_MAP[assignee] : null;
+                const signSrc = assignee ? SIGN_MAP[assignee] : null;
+
+                if (!hasWoEvents) {
+                  // 원료투입만 있는 경우 — 판정/점검자 없음
+                  return (
+                    <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt", color: "#aaa" }}>
+                      —
+                    </td>
+                  );
+                }
+
                 return (
                   <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
-                    <span style={{ color: hasNG ? "red" : "#000" }}>
-                      {hasAny ? (hasNG ? "X" : "O") : "O"}
-                    </span>
-                    {" / X"}
+                    <div>
+                      <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>
+                        {hasNG ? "X" : "O"}
+                      </span>
+                    </div>
                     {signSrc && (
                       <img src={signSrc} style={{ height: 22, display: "block", margin: "2px auto 0" }} />
+                    )}
+                    {assignee && !signSrc && (
+                      <div style={{ fontSize: "7pt", color: "#555", marginTop: 2 }}>{assignee}</div>
                     )}
                   </td>
                 );
@@ -746,12 +786,12 @@ async function handlePrint() {
   <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 4 }}>
     <tbody>
       <tr>
-        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", fontSize: "8pt", width: 120 }}>
+        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", fontSize: "8pt", width: 140, whiteSpace: "nowrap" }}>
           한계기준 이탈 및 조치내용
         </td>
-        <td style={{ border: "1px solid #000", padding: "4px 6px", fontSize: "8pt", minHeight: 36 }}>
+        <td style={{ border: "1px solid #000", padding: "4px 6px", fontSize: "8pt" }}>
           {woEvents.filter(e => e.is_ok === false)
-            .map(e => `${e.measured_at.slice(11,16)} [${e.work_order_no}] ${e.action_note ?? ""}`)
+            .map(e => `${e.measured_at.slice(11,16)} ${e.action_note ?? ""}`)
             .join("  /  ") || " "}
         </td>
       </tr>
@@ -759,14 +799,9 @@ async function handlePrint() {
   </table>
 
 </div>
-
-
-
-    </div>
+</div>
   );
 }
-
-
 // ═══════════════════════════════════════════════════════════
 // CCP-1P 금속검출
 // ═══════════════════════════════════════════════════════════
