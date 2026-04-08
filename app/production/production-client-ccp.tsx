@@ -123,16 +123,14 @@ export function useCcpState(
       .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
       .order("measured_at", { ascending: true });
   
-    if (slotId) {
-      query = query.eq("slot_id", slotId);
-    } else {
       query = query.eq("work_order_no", workOrderNo);
-    }
-  
-    const { data } = await query;
-    setWoEvents((data ?? []) as WoEvent[]);
-    const myEvents = (data ?? []).filter((e: any) => e.work_order_no === workOrderNo);
-    const hasStart = myEvents.some((e: any) => e.event_type === "start");
+      if (slotId) {
+        query = query.eq("slot_id", slotId);
+      }
+      
+      const { data } = await query;
+      setWoEvents((data ?? []) as WoEvent[]);
+      const hasStart = (data ?? []).some((e: any) => e.event_type === "start");
     setCcpWoEventType(hasStart ? "mid_check" : "start");
     setCcpWoTime("");
   }, []);
@@ -678,6 +676,7 @@ export function WoCcpCard({
   deleteWoEvent,
   supabaseClient,
   currentUserIdRef,
+  onSlotSaved,
 }: any) {
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const inp  = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none";
@@ -702,13 +701,13 @@ export function WoCcpCard({
                   : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
               }`}
               onClick={async () => {
-                // 이미 선택된 슬롯은 재클릭해도 해제되지 않음
                 if (eCcpSlotId === s.id) return;
                 const slotId = s.id;
                 setECcpSlotId(slotId);
                 await supabaseClient.from("work_orders")
                   .update({ ccp_slot_id: slotId, updated_at: new Date().toISOString() })
                   .eq("id", selectedWo.id);
+                onSlotSaved?.(slotId);
               }}
             >
               {s.slot_name}

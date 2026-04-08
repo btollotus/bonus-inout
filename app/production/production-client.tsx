@@ -926,6 +926,10 @@ export default function ProductionClient() {
                   deleteWoEvent={ccp.deleteWoEvent}
                   supabaseClient={supabase}
                   currentUserIdRef={currentUserIdRef}
+                  onSlotSaved={(slotId: string) => {
+                    setSelectedWo((prev) => prev ? { ...prev, ccp_slot_id: slotId } : prev);
+                    setWoList((prev) => prev.map((w) => w.id === selectedWo!.id ? { ...w, ccp_slot_id: slotId } : w));
+                  }}     
                 />
               )}
 
