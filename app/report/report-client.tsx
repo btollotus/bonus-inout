@@ -350,7 +350,8 @@ export default function ReportClient() {
       let listAgg = Array.from(agg.values()).filter((r) =>
         intMin(r.period_in_ea) > 0 ||
         intMin(r.period_out_ea) > 0 ||
-        intMin(r.end_stock_ea) > 0
+        intMin(r.end_stock_ea) > 0 ||
+        intMin(r.period_discard_ea) > 0
       );
 
       // ADMIN: lot_id·variant_id 매핑 (쿼리 2번으로 처리)
