@@ -590,17 +590,15 @@ async function handlePrint() {
 
   {/* ② 작성일자 */}
   <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
-    <tbody>
-      <tr>
-        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", width: 60 }}>작성일자</td>
-        <td style={{ border: "1px solid #000", padding: "2px 6px", width: "30%" }}>
-          {(() => { const d = new Date(filterDate + "T00:00:00+09:00"); return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일`; })()}
-        </td>
-        <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", width: 60 }}>점검자</td>
-        <td style={{ border: "1px solid #000", padding: "2px 6px" }}></td>
-      </tr>
-    </tbody>
-  </table>
+  <tbody>
+    <tr>
+      <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", width: 60 }}>작성일자</td>
+      <td style={{ border: "1px solid #000", padding: "2px 6px" }}>
+        {(() => { const d = new Date(filterDate + "T00:00:00+09:00"); return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일`; })()}
+      </td>
+    </tr>
+  </tbody>
+</table>
 
   {/* ③ 위해요소 / 한계기준 / 주기 / 방법 */}
   <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
@@ -748,38 +746,41 @@ async function handlePrint() {
 
             {/* 판정 O (온도기록 있을 때만) + 점검자 사인 (온도기록 있을 때만) */}
             <tr>
-              {slots.map(s => {
-                const events = woEvents.filter(e => e.slot_id === s.id);
-                const hasWoEvents = events.length > 0;
-                const hasNG = events.some(e => e.is_ok === false);
-                const assignee = slotAssignees[s.id];
-                const signSrc = assignee ? SIGN_MAP[assignee] : null;
+            {slots.map(s => {
+  const events = woEvents.filter(e => e.slot_id === s.id);
+  const hasWoEvents = events.length > 0;
+  const hasNG = events.some(e => e.is_ok === false);
+  const assignee = slotAssignees[s.id];
+  const signSrc = assignee ? SIGN_MAP[assignee] : null;
 
-                if (!hasWoEvents) {
-                  // 원료투입만 있는 경우 — 판정/점검자 없음
-                  return (
-                    <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt", color: "#aaa" }}>
-                      —
-                    </td>
-                  );
-                }
+  if (!hasWoEvents) {
+    return (
+      <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt", color: "#aaa" }}>
+        —
+      </td>
+    );
+  }
 
-                return (
-                  <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
-                    <div>
-                      <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>
-                        {hasNG ? "X" : "O"}
-                      </span>
-                    </div>
-                    {signSrc && (
-                      <img src={signSrc} style={{ height: 22, display: "block", margin: "2px auto 0" }} />
-                    )}
-                    {assignee && !signSrc && (
-                      <div style={{ fontSize: "7pt", color: "#555", marginTop: 2 }}>{assignee}</div>
-                    )}
-                  </td>
-                );
-              })}
+  return (
+    <td key={s.id} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
+      <div style={{ marginBottom: 2 }}>
+        <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>
+          판정: {hasNG ? "X" : "O"}
+        </span>
+      </div>
+      <div style={{ fontSize: "7pt", color: "#555", marginBottom: 1 }}>점검자</div>
+      {signSrc && (
+        <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} />
+      )}
+      {assignee && !signSrc && (
+        <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>
+      )}
+      {!assignee && (
+        <div style={{ fontSize: "7pt", color: "#ccc" }}>—</div>
+      )}
+    </td>
+  );
+})}
             </tr>
           </tbody>
         </table>
