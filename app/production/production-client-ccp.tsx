@@ -196,8 +196,8 @@ const lastIn = slotHistory.find((e) => e.event_type === "material_in");
 if (!lastIn) { map[slotId] = null; continue; }
 
 const hasOutAfter = slotHistory.some(
-  (e) => e.event_type === "material_out" && e.measured_at > lastIn.measured_at
-);
+    (e) => e.event_type === "material_out" && e.measured_at >= lastIn.measured_at
+  );
 if (hasOutAfter) { map[slotId] = null; continue; }
   
         const materialDate = lastIn.measured_at.slice(0, 10);
