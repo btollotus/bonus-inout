@@ -702,10 +702,12 @@ export function WoCcpCard({
                   : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
               }`}
               onClick={async () => {
-                const slotId = eCcpSlotId === s.id ? "" : s.id;
+                // 이미 선택된 슬롯은 재클릭해도 해제되지 않음
+                if (eCcpSlotId === s.id) return;
+                const slotId = s.id;
                 setECcpSlotId(slotId);
                 await supabaseClient.from("work_orders")
-                  .update({ ccp_slot_id: slotId || null, updated_at: new Date().toISOString() })
+                  .update({ ccp_slot_id: slotId, updated_at: new Date().toISOString() })
                   .eq("id", selectedWo.id);
               }}
             >
