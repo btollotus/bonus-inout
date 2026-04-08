@@ -150,59 +150,58 @@ export function useCcpState(
   const loadSlotStatus = useCallback(async () => {
     if (warmerSlots.length === 0) return;
     const today = todayKST();
-
-    // 각 슬롯의 오늘 슬롯이벤트 조회
-    const { data } = await supabase
+    const slotIds = warmerSlots.map((s) => s.id);
+  
+    // 오늘 이벤트 한 번에 조회
+    const { data: todayEvents } = await supabase
       .from("ccp_slot_events")
       .select("slot_id, event_type, measured_at")
       .eq("event_date", today)
+      .in("slot_id", slotIds)
       .order("measured_at", { ascending: true });
-
+  
+    // 오늘 기록 없는 슬롯 목록 파악
+    const needsHistorySlotIds: string[] = [];
     const map: Record<string, { date: string; daysAgo: number } | null> = {};
-
+  
     for (const slot of warmerSlots) {
-      const events = (data ?? []).filter((e) => e.slot_id === slot.id);
-      // 마지막 이벤트가 material_out이면 비어있음
+      const events = (todayEvents ?? []).filter((e) => e.slot_id === slot.id);
       const last = events[events.length - 1];
       if (!last || last.event_type === "material_out") {
-        // 오늘 기록 없으면 최근 material_in 날짜 조회
-        const { data: recent } = await supabase
-          .from("ccp_slot_events")
-          .select("measured_at, event_type")
-          .eq("slot_id", slot.id)
-          .eq("event_type", "material_in")
-          .order("measured_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (!recent) { map[slot.id] = null; continue; }
-
-        // 소진 여부 확인
-        const materialDate = recent.measured_at.slice(0, 10);
-        const { data: afterOut } = await supabase
-          .from("ccp_slot_events")
-          .select("id")
-          .eq("slot_id", slot.id)
-          .eq("event_type", "material_out")
-          .gt("measured_at", recent.measured_at)
-          .limit(1)
-          .maybeSingle();
-
-        if (afterOut) { map[slot.id] = null; continue; }
-
-        const diffMs = new Date(today).getTime() - new Date(materialDate).getTime();
-        const daysAgo = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        map[slot.id] = { date: materialDate, daysAgo };
+        needsHistorySlotIds.push(slot.id);
       } else {
-        // 오늘 material_in 있고 마지막이 소진 아님
         const materialIn = events.filter((e) => e.event_type === "material_in").slice(-1)[0];
-        if (materialIn) {
-          map[slot.id] = { date: today, daysAgo: 0 };
-        } else {
-          map[slot.id] = null;
-        }
+        map[slot.id] = materialIn ? { date: today, daysAgo: 0 } : null;
       }
     }
+  
+    // 과거 기록이 필요한 슬롯들 한 번에 조회
+    if (needsHistorySlotIds.length > 0) {
+      const { data: historyEvents } = await supabase
+        .from("ccp_slot_events")
+        .select("slot_id, event_type, measured_at")
+        .in("slot_id", needsHistorySlotIds)
+        .order("measured_at", { ascending: false });
+  
+      for (const slotId of needsHistorySlotIds) {
+        const slotHistory = (historyEvents ?? []).filter((e) => e.slot_id === slotId);
+        // 가장 최근 material_in 찾기
+        const lastIn = slotHistory.find((e) => e.event_type === "material_in");
+        if (!lastIn) { map[slotId] = null; continue; }
+  
+        // 그 이후 material_out이 있는지 확인
+        const hasOutAfter = slotHistory.some(
+          (e) => e.event_type === "material_out" && e.measured_at > lastIn.measured_at
+        );
+        if (hasOutAfter) { map[slotId] = null; continue; }
+  
+        const materialDate = lastIn.measured_at.slice(0, 10);
+        const diffMs = new Date(today).getTime() - new Date(materialDate).getTime();
+        const daysAgo = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        map[slotId] = { date: materialDate, daysAgo };
+      }
+    }
+  
     setSlotStatus(map);
   }, [warmerSlots]);
 
