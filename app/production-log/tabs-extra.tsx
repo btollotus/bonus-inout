@@ -343,9 +343,15 @@ export function Ccp1bTab({ role, userId, showToast }: {
                           <tr key={ev.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
                             <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">{ev.measured_at.slice(11, 16)}</td>
                             <td className="py-2 px-3 whitespace-nowrap">
-                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${slotBadgeCls(ev.event_type)}`}>
-                                {CCP_SLOT_EVENT_LABELS[ev.event_type] ?? ev.event_type}
-                              </span>
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+  ev.event_type === "material_out" && ev.action_note?.startsWith("→")
+    ? "bg-teal-100 border-teal-200 text-teal-700"
+    : slotBadgeCls(ev.event_type)
+}`}>
+  {ev.event_type === "material_out" && ev.action_note?.startsWith("→")
+    ? "슬롯이동"
+    : CCP_SLOT_EVENT_LABELS[ev.event_type] ?? ev.event_type}
+</span>
                             </td>
                             <td className="py-2 px-3 text-xs text-slate-600">{ev.work_order_no ?? "—"}</td>
 <td className="py-2 px-3 text-right whitespace-nowrap">
