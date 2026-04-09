@@ -239,6 +239,14 @@ if (hasOutAfter) { map[slotId] = null; continue; }
     const sorted = [...woEvents].sort((a,b) => a.measured_at.localeCompare(b.measured_at));
     const lastEv = sorted[sorted.length - 1];
 
+    // 시작 기록 전: 슬롯에 원료가 있는지 확인
+if (ccpWoEventType === "start") {
+  const currentSlotStatus = slotStatus[slotId];
+  if (currentSlotStatus === null || currentSlotStatus === undefined) {
+    return showToast("⚠ 해당 슬롯에 원료가 없습니다. 원료투입 또는 슬롯이동 후 시작 기록을 해주세요.", "error");
+  }
+}
+
     if (ccpWoEventType === "start" && lastEv && lastEv.event_type !== "end") {
       return showToast("⚠ 시작은 종료 후에만 다시 기록할 수 있습니다.", "error");
     }
