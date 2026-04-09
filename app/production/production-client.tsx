@@ -385,10 +385,11 @@ export default function ProductionClient() {
 
       // work_order_items 실시간 연동
       const itemsChannel = supabase.channel(`wo_items:${selectedWo.id}`)
-        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "work_order_items", filter: `work_order_id=eq.${selectedWo.id}` }, (payload) => {
-          const d = payload.new as Record<string, unknown>;
-          const itemId = String(d.id ?? "");
-          setProdInputs((prev) => ({
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "work_order_items", filter: `work_order_id=eq.${selectedWo.id}` }, (payload) => {
+        console.log("📦 [wo_items 이벤트 수신]", payload);
+        const d = payload.new as Record<string, unknown>;
+        const itemId = String(d.id ?? "");
+        setProdInputs((prev) => ({
             ...prev,
             [itemId]: {
               actual_qty: d.actual_qty != null ? String(d.actual_qty) : (prev[itemId]?.actual_qty ?? ""),
