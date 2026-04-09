@@ -556,22 +556,47 @@ export function SlotStatusPanel({
         </div>
       </div>
 
-      <div className="space-y-3">
-        {mainGroups.map((purpose) => (
-          <div key={purpose}>
-            <div className="mb-1.5 text-xs font-semibold text-slate-500">{purpose}</div>
-            <div className="flex flex-wrap gap-2">
-              {warmerSlots.filter((s) => s.purpose === purpose).map(renderSlot)}
-            </div>
-          </div>
-        ))}
-        {mergedSlots.length > 0 && (
-          <div>
-            <div className="mb-1.5 text-xs font-semibold text-slate-500">기타 (코팅·전사·유동)</div>
-            <div className="flex flex-wrap gap-2">{mergedSlots.map(renderSlot)}</div>
-          </div>
-        )}
-      </div>
+      <div className="flex flex-wrap gap-4">
+  {/* 다크컴파운드 3×3 */}
+  <div>
+    <div className="mb-1.5 text-xs font-semibold text-slate-500">다크컴파운드</div>
+    <div className="grid grid-cols-3 gap-1.5">
+      {warmerSlots.filter(s => s.purpose === "다크컴파운드").map(renderSlot)}
+    </div>
+  </div>
+
+  {/* 화이트컴파운드 3×3 */}
+  <div>
+    <div className="mb-1.5 text-xs font-semibold text-slate-500">화이트컴파운드</div>
+    <div className="grid grid-cols-3 gap-1.5">
+      {warmerSlots.filter(s => s.purpose === "화이트컴파운드").map(renderSlot)}
+    </div>
+  </div>
+
+  {/* 코팅용도 7-1,7-2,7-3 세로 1열 */}
+  <div>
+    <div className="mb-1.5 text-xs font-semibold text-slate-500">코팅</div>
+    <div className="grid grid-cols-1 gap-1.5">
+      {warmerSlots.filter(s => s.purpose === "코팅용도").map(renderSlot)}
+    </div>
+  </div>
+
+  {/* 전사용도 8 */}
+  <div>
+    <div className="mb-1.5 text-xs font-semibold text-slate-500">전사</div>
+    <div className="grid grid-cols-1 gap-1.5">
+      {warmerSlots.filter(s => s.purpose === "전사용도").map(renderSlot)}
+    </div>
+  </div>
+
+  {/* 유동 9-1A~9-3B 3×2 */}
+  <div>
+    <div className="mb-1.5 text-xs font-semibold text-slate-500">유동</div>
+    <div className="grid grid-cols-3 gap-1.5">
+      {warmerSlots.filter(s => s.purpose === "유동").map(renderSlot)}
+    </div>
+  </div>
+</div>
 
       {/* 슬롯 액션 패널 */}
       {activeSlotId && (() => {
