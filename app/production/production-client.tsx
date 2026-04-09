@@ -443,7 +443,7 @@ setRealtimeConnected(false);
   // ── ccp_slot_events 실시간 → 슬롯 현황 자동 갱신 ──
 useEffect(() => {
   const channel = supabase
-    .channel("ccp_slot_events_realtime")
+    .channel(`ccp_slot_events_realtime_${Math.random().toString(36).slice(2)}`)
     .on("postgres_changes", {
       event: "*",
       schema: "public",
@@ -453,7 +453,7 @@ useEffect(() => {
     })
     .subscribe();
   return () => { supabase.removeChannel(channel); };
-}, [ccp.loadSlotStatus]);
+}, []);
 
   useEffect(() => { supabase.from("employees").select("id,name,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => { if (data) setEmployees(data); }); }, []);
   useEffect(() => { supabase.from("warmer_slots").select("id,slot_name,purpose").eq("is_active", true).order("slot_no").then(({ data }) => { if (data) setWarmerSlots(data); }); }, []);
