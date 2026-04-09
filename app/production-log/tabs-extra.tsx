@@ -636,7 +636,7 @@ async function handlePrint() {
 
   {/* ④ 슬롯별 데이터 */}
   {(() => {
-    const printSlots = allSlots.filter(s => activeSlotsToday.has(s.id));
+   const printSlots = allSlots;
 
     // 9-1A~9-3B 등 유동 슬롯은 purpose가 아닌
     // 실제 원료투입 action_note 또는 purpose로 다크/화이트 판단
@@ -659,9 +659,8 @@ async function handlePrint() {
     const WO_EVENT_TYPE_LABEL: Record<string, string> = {
       start: "시작", mid_check: "중간점검", end: "종료",
     };
-
     const renderSection = (slots: typeof printSlots, label: string) => {
-      if (slots.length === 0) return null;
+      if (slots.length === 0) return null; // 슬롯 자체가 없을 때만 null
 
       const CHUNK = 7;
       const chunks: (typeof printSlots)[] = [];
