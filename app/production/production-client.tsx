@@ -385,9 +385,10 @@ export default function ProductionClient() {
 
       // work_order_items 실시간 연동
       const itemsChannel = supabase.channel(`wo_items:${selectedWo.id}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "work_order_items", filter: `work_order_id=eq.${selectedWo.id}` }, (payload) => {
-        console.log("📦 [wo_items 이벤트 수신]", payload);
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "work_order_items" }, (payload) => {
         const d = payload.new as Record<string, unknown>;
+        if (String(d.work_order_id ?? "") !== selectedWo.id) return;
+        console.log("📦 [wo_items 이벤트 수신]", payload);
         const itemId = String(d.id ?? "");
         setProdInputs((prev) => ({
             ...prev,
@@ -403,7 +404,9 @@ export default function ProductionClient() {
   
 // ccp_wo_events 실시간 연동
 const ccpEventsChannel = supabase.channel(`ccp_wo_events:${selectedWo.id}`)
-.on("postgres_changes", { event: "*", schema: "public", table: "ccp_wo_events", filter: `work_order_no=eq.${selectedWo.work_order_no}` }, () => {
+        .on("postgres_changes", { event: "*", schema: "public", table: "ccp_wo_events" }, (payload) => {
+          const d = (payload.new ?? payload.old) as Record<string, unknown>;
+          if (String(d.work_order_no ?? "") !== selectedWo.work_order_no) return;
   ccp.loadWoEvents(selectedWo.work_order_no, selectedWo.ccp_slot_id);
 }).subscribe((status, err) => {
   console.log("🌡️ [ccp_wo_events 채널]", status, err ?? "");
