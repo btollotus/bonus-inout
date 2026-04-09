@@ -396,15 +396,26 @@ export default function ProductionClient() {
               expiry_date: d.expiry_date != null ? String(d.expiry_date) : (prev[itemId]?.expiry_date ?? ""),
             },
           }));
-        }).subscribe();
+        }).subscribe((status, err) => {
+          console.log("📦 [wo_items 채널]", status, err ?? "");
+        });
   
-      return () => {
-        supabase.removeChannel(channel);
-        supabase.removeChannel(itemsChannel);
-        realtimeChannelRef.current = null;
-        setRealtimeConnected(false);
-      };
-    }, [selectedWo?.id]);
+// ccp_wo_events 실시간 연동
+const ccpEventsChannel = supabase.channel(`ccp_wo_events:${selectedWo.id}`)
+.on("postgres_changes", { event: "*", schema: "public", table: "ccp_wo_events", filter: `work_order_no=eq.${selectedWo.work_order_no}` }, () => {
+  ccp.loadWoEvents(selectedWo.work_order_no, selectedWo.ccp_slot_id);
+}).subscribe((status, err) => {
+  console.log("🌡️ [ccp_wo_events 채널]", status, err ?? "");
+});
+
+return () => {
+supabase.removeChannel(channel);
+supabase.removeChannel(itemsChannel);
+supabase.removeChannel(ccpEventsChannel);
+realtimeChannelRef.current = null;
+setRealtimeConnected(false);
+};
+}, [selectedWo?.id]);
 
   async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyof WoChecks, value: string) {
     if (!woChecks || !selectedWo) return;
