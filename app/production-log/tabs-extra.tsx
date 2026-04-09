@@ -700,11 +700,12 @@ async function handlePrint() {
                 const isNG = ev?.is_ok === false;
                 const typeLabel = ev ? (WO_EVENT_TYPE_LABEL[ev.event_type] ?? ev.event_type) : "";
                 return (
-                  <td key={i} style={{
-                    border: "1px solid #000", padding: "2px 4px",
-                    textAlign: "center", fontSize: "8pt",
-                    color: isNG ? "red" : "#000",
-                  }}>
+<td key={i} style={{
+  border: "1px solid #000", padding: "4px",
+  textAlign: "center", fontSize: "8pt",
+  color: isNG ? "red" : "#000",
+  height: 22,
+}}>
                     {ev ? (
                       <>
                         <span style={{
