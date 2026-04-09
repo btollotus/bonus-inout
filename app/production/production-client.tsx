@@ -152,8 +152,7 @@ const PROGRESS_STEPS = [
   { label: "전사인쇄", statusKey: "status_transfer" as const, assigneeKey: "assignee_transfer" as const, icon: "🖨️", cardDone: "border-blue-300 bg-blue-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-blue-100 text-blue-700 border-blue-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
   { label: "인쇄검수", statusKey: "status_print_check" as const, assigneeKey: "assignee_print_check" as const, icon: "🔍", cardDone: "border-violet-300 bg-violet-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-violet-100 text-violet-700 border-violet-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
   { label: "생산완료", statusKey: "status_production" as const, assigneeKey: "assignee_production" as const, icon: "✅", cardDone: "border-green-300 bg-green-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-green-100 text-green-700 border-green-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
-  { label: "입력완료", statusKey: "status_input" as const, assigneeKey: "assignee_input" as const, icon: "📥", cardDone: "border-teal-300 bg-teal-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-teal-100 text-teal-700 border-teal-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
-] as const;
+ ] as const;
 
 const DARK_FOOD_TYPES = ["다크화이트","다크옐로우","데코초콜릿","롤리팝다크화이트","다크핑크","다크연두","롤리팝다크핑크"];
 
@@ -523,7 +522,7 @@ export default function ProductionClient() {
     if (!selectedWo) return;
     setIsCompleting(true);
     if (!isAdmin && woChecks) {
-      const missing = [!woChecks.assignee_transfer && "전사인쇄", !woChecks.assignee_print_check && "인쇄검수", !woChecks.assignee_production && "생산완료", !woChecks.assignee_input && "입력완료"].filter(Boolean) as string[];
+      const missing = [!woChecks.assignee_transfer && "전사인쇄", !woChecks.assignee_print_check && "인쇄검수", !woChecks.assignee_production && "생산완료", ].filter(Boolean) as string[];
       if (missing.length > 0) { setMsg(`담당자를 모두 선택해주세요: ${missing.join(", ")}`); setIsCompleting(false); return; }
     }
     const items = (selectedWo.work_order_items ?? []).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); });
@@ -928,7 +927,8 @@ export default function ProductionClient() {
                   currentUserIdRef={currentUserIdRef}
                   onSlotSaved={(slotId: string) => {
                     setSelectedWo((prev) => prev ? { ...prev, ccp_slot_id: slotId } : prev);
-                    setWoList((prev) => prev.map((w) => w.id === selectedWo!.id ? { ...w, ccp_slot_id: slotId } : w));
+                    setWoList((prev) => prev.map((w) => w.id === selectedWo!// 삭제할 줄:
+                   .id ? { ...w, ccp_slot_id: slotId } : w));
                   }}     
                 />
               )}
@@ -1250,7 +1250,6 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, signe
     { label: "전사인쇄", checked: wo.status_transfer },
     { label: "인쇄검수", checked: wo.status_print_check },
     { label: "생산완료", checked: wo.status_production },
-    { label: "입력완료", checked: wo.status_input },
   ];
   const visibleItems = items.filter((i) => !isSpecialItem((i.sub_items ?? [])[0]?.name || ""));
   const deliveryDate = items[0]?.delivery_date ?? wo.order_date;
