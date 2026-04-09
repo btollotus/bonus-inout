@@ -685,7 +685,7 @@ async function handlePrint() {
     slotEvents.some(e => e.slot_id === s.id)
   ) : false;
   return (
-    <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontWeight: "bold", fontSize: "8pt" }}>
+    <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontWeight: "bold", fontSize: "8pt", height: 22 }}>
       {hasActivity ? s!.slot_name : ""}
     </td>
   );
@@ -730,7 +730,7 @@ async function handlePrint() {
                 .filter(e => e.slot_id === s.id && e.event_type === "material_in")
                 .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0] : undefined;
               return (
-                <td key={i} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
+                <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
                   {inEv ? `원료투입: ${inEv.measured_at.slice(5,10).replace("-","/")} ${inEv.measured_at.slice(11,16)}` : ""}
                 </td>
               );
@@ -739,30 +739,30 @@ async function handlePrint() {
 
           {/* 판정 + 사인 행 */}
           <tr>
-            {slots.map((s, i) => {
-              if (!s) return <td key={i} style={{ border: "1px solid #000", padding: "2px 4px" }}></td>;
-              const events = woEvents.filter(e => e.slot_id === s.id);
-              const hasWoEvents = events.length > 0;
-              const hasNG = events.some(e => e.is_ok === false);
-              const assignee = slotAssignees[s.id];
-              const signSrc = assignee ? SIGN_MAP[assignee] : null;
+          {slots.map((s, i) => {
+  if (!s) return <td key={i} style={{ border: "1px solid #000", padding: "4px", height: 28 }}></td>;
+  const events = woEvents.filter(e => e.slot_id === s.id);
+  const hasWoEvents = events.length > 0;
+  const hasNG = events.some(e => e.is_ok === false);
+  const assignee = slotAssignees[s.id];
+  const signSrc = assignee ? SIGN_MAP[assignee] : null;
 
-              if (!hasWoEvents) {
-                return <td key={i} style={{ border: "1px solid #000", padding: "2px 4px" }}></td>;
-              }
+  if (!hasWoEvents) {
+    return <td key={i} style={{ border: "1px solid #000", padding: "4px", height: 28 }}></td>;
+  }
 
-              return (
-                <td key={i} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}>
-                  <div style={{ marginBottom: 2 }}>
-                    <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>
-                      판정: {hasNG ? "X" : "O"}
-                    </span>
-                  </div>
-                  {signSrc && <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} />}
-                  {assignee && !signSrc && <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
-                </td>
-              );
-            })}
+  return (
+    <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 28 }}>
+      <div style={{ marginBottom: 2 }}>
+        <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>
+          판정: {hasNG ? "X" : "O"}
+        </span>
+      </div>
+      {signSrc && <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} />}
+      {assignee && !signSrc && <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
+    </td>
+  );
+})}
           </tr>
         </tbody>
       </table>
