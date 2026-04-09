@@ -586,15 +586,16 @@ async function handlePrint() {
       </td>
     </tr>
 
+    <tr>
+      <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
+        <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
+      </td>
+      <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
+        <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
+      </td>
+    </tr>
 
-<tr>
-  <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
-    <img src="/sign-kimyg.png" .../>
-  </td>
-  <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
-    <img src="/sign-chods.png" .../>
-  </td>
-</tr>
+
   </tbody>
 </table>
 
