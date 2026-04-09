@@ -457,6 +457,33 @@ setRealtimeConnected(false);
   }, [filterStatus, filterDateFrom, filterDateTo, loadReadMap]); // eslint-disable-line
 
   useEffect(() => { loadWoList(); }, [loadWoList]);
+  // 선택된 작업지시서의 생산입력 + CCP 온도기록 10초 폴링
+useEffect(() => {
+  if (!selectedWo) return;
+  const interval = setInterval(async () => {
+    // 생산입력 폴링
+    const { data: itemsData } = await supabase
+      .from("work_order_items")
+      .select("id, actual_qty, unit_weight, expiry_date")
+      .eq("work_order_id", selectedWo.id);
+    if (itemsData) {
+      setProdInputs((prev) => {
+        const next = { ...prev };
+        for (const item of itemsData) {
+          next[item.id] = {
+            actual_qty: item.actual_qty != null ? String(item.actual_qty) : (prev[item.id]?.actual_qty ?? ""),
+            unit_weight: item.unit_weight != null ? String(item.unit_weight) : (prev[item.id]?.unit_weight ?? ""),
+            expiry_date: item.expiry_date ?? (prev[item.id]?.expiry_date ?? ""),
+          };
+        }
+        return next;
+      });
+    }
+    // CCP 온도기록 폴링
+    ccp.loadWoEvents(selectedWo.work_order_no, selectedWo.ccp_slot_id);
+  }, 10000);
+  return () => clearInterval(interval);
+}, [selectedWo?.id]);
   useEffect(() => { supabase.from("employees").select("id,name,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => { if (data) setEmployees(data); }); }, []);
   useEffect(() => { supabase.from("warmer_slots").select("id,slot_name,purpose").eq("is_active", true).order("slot_no").then(({ data }) => { if (data) setWarmerSlots(data); }); }, []);
   useEffect(() => {
