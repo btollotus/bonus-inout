@@ -264,7 +264,7 @@ if (hasOutAfter) { map[slotId] = null; continue; }
 
     setCcpWoSaving(true);
     const today = todayKST();
-    const measuredAt = `${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00`;
+    const measuredAt = `${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00+09:00`;
 
     // 1. 내 작업지시서 온도기록 저장
     const { error } = await supabase.from("ccp_wo_events").insert({
@@ -336,7 +336,7 @@ if (hasOutAfter) { map[slotId] = null; continue; }
     setCcpWoEditSaving(true);
     const dateStr = ev.measured_at.slice(0, 10);
     const { error } = await supabase.from("ccp_wo_events").update({
-      measured_at: `${dateStr}T${ccpWoEditTime.slice(0,2)}:${ccpWoEditTime.slice(2,4)}:00`,
+      measured_at: `${dateStr}T${ccpWoEditTime.slice(0,2)}:${ccpWoEditTime.slice(2,4)}:00+09:00`,   
       temperature: temp,
       is_ok:       ccpWoEditIsOk,
       action_note: ccpWoEditActionNote.trim() || null,
