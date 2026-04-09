@@ -371,14 +371,40 @@ export default function ProductionClient() {
           if (!prev) return prev;
           return { ...prev, status_transfer: typeof d.status_transfer === "boolean" ? d.status_transfer : prev.status_transfer, status_print_check: typeof d.status_print_check === "boolean" ? d.status_print_check : prev.status_print_check, status_production: typeof d.status_production === "boolean" ? d.status_production : prev.status_production, status_input: typeof d.status_input === "boolean" ? d.status_input : prev.status_input, assignee_transfer: d.assignee_transfer !== undefined ? (d.assignee_transfer as string ?? "") : prev.assignee_transfer, assignee_print_check: d.assignee_print_check !== undefined ? (d.assignee_print_check as string ?? "") : prev.assignee_print_check, assignee_production: d.assignee_production !== undefined ? (d.assignee_production as string ?? "") : prev.assignee_production, assignee_input: d.assignee_input !== undefined ? (d.assignee_input as string ?? "") : prev.assignee_input };
         });
+        if (d.ccp_slot_id !== undefined) {
+          setECcpSlotId((d.ccp_slot_id as string) ?? "");
+          setSelectedWo((prev) => prev ? { ...prev, ccp_slot_id: (d.ccp_slot_id as string) ?? null } : prev);
+        }
         const now = new Date();
         setLastUpdatedAt(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`);
         const changed = PROGRESS_STEPS.find((s) => d[s.assigneeKey] !== undefined || d[s.statusKey] !== undefined);
+
         if (changed) { setFlashKey(changed.assigneeKey); setTimeout(() => setFlashKey(null), 1500); }
       }).subscribe((status) => { setRealtimeConnected(status === "SUBSCRIBED"); });
-    realtimeChannelRef.current = channel;
-    return () => { supabase.removeChannel(channel); realtimeChannelRef.current = null; setRealtimeConnected(false); };
-  }, [selectedWo?.id]);
+      realtimeChannelRef.current = channel;
+
+      // work_order_items 실시간 연동
+      const itemsChannel = supabase.channel(`wo_items:${selectedWo.id}`)
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "work_order_items", filter: `work_order_id=eq.${selectedWo.id}` }, (payload) => {
+          const d = payload.new as Record<string, unknown>;
+          const itemId = String(d.id ?? "");
+          setProdInputs((prev) => ({
+            ...prev,
+            [itemId]: {
+              actual_qty: d.actual_qty != null ? String(d.actual_qty) : (prev[itemId]?.actual_qty ?? ""),
+              unit_weight: d.unit_weight != null ? String(d.unit_weight) : (prev[itemId]?.unit_weight ?? ""),
+              expiry_date: d.expiry_date != null ? String(d.expiry_date) : (prev[itemId]?.expiry_date ?? ""),
+            },
+          }));
+        }).subscribe();
+  
+      return () => {
+        supabase.removeChannel(channel);
+        supabase.removeChannel(itemsChannel);
+        realtimeChannelRef.current = null;
+        setRealtimeConnected(false);
+      };
+    }, [selectedWo?.id]);
 
   async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyof WoChecks, value: string) {
     if (!woChecks || !selectedWo) return;
