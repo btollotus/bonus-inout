@@ -576,18 +576,17 @@ async function handlePrint() {
       <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 64 }}>작성</td>
       <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 64 }}>승인</td>
     </tr>
-    // 수정 전
-<tr>
-  <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}></td>
-  <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
-    <img src="/sign-kimyg.png" .../>
-  </td>
-  <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
-    <img src="/sign-chods.png" .../>
-  </td>
-</tr>
+ 
+    <tr>
+      <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
+        <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
+      </td>
+      <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
+        <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
+      </td>
+    </tr>
 
-// 수정 후 (빈 td 삭제)
+
 <tr>
   <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
     <img src="/sign-kimyg.png" .../>
