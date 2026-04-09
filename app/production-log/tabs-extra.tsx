@@ -12,6 +12,8 @@ const btn = "rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm fon
 const btnOn = "rounded-xl border border-blue-500 bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700";
 const btnSm = "rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50";
 
+
+
 type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
 type WarmSlot = { id: string; slot_name: string; purpose: string };
 
@@ -112,6 +114,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
   const [editIsOk, setEditIsOk] = useState(true);
   const [editActionNote, setEditActionNote] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [woLabelMap, setWoLabelMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     supabase.from("warmer_slots").select("id,slot_name,purpose")
@@ -135,6 +138,27 @@ export function Ccp1bTab({ role, userId, showToast }: {
       e.measured_at.slice(0, 10) === filterDate
     );
     setWoEvents(filtered as any[]);
+// work_order_no → 표시 레이블 맵 생성
+const allWoNos = [...new Set([
+  ...(slotRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
+  ...(woRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
+])] as string[];
+if (allWoNos.length > 0) {
+  const { data: woData } = await supabase
+    .from("work_orders")
+    .select("work_order_no, client_name, sub_name, product_name")
+    .in("work_order_no", allWoNos);
+  const map: Record<string, string> = {};
+  for (const wo of woData ?? []) {
+    const label = wo.sub_name
+      ? `${wo.client_name} · ${wo.sub_name}`
+      : `${wo.client_name} · ${wo.product_name}`;
+    map[wo.work_order_no] = label;
+  }
+  setWoLabelMap(map);
+}
+
+
     setLoading(false);
   }, [filterDate]); 
 
@@ -327,10 +351,10 @@ async function handlePrint() {
                       {hasNG && <span className="rounded-full border border-red-200 bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold text-red-700">⚠ 이탈</span>}
                     </div>
                     {woNos.length > 0 && (
-                      <div className="mt-1 text-[10px] text-slate-400 truncate">
-                        {woNos.join(", ")}
-                      </div>
-                    )}
+  <div className="mt-1 text-[10px] text-slate-400 truncate">
+    {woNos.map((no) => woLabelMap[no] ?? no).join(", ")}
+  </div>
+)}
                   </button>
                 );
               })}
@@ -360,9 +384,11 @@ async function handlePrint() {
                   <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                     <div className="text-[11px] font-semibold text-slate-500 mb-1">📋 이 슬롯을 사용한 작업지시서</div>
                     <div className="flex flex-wrap gap-2">
-                      {relatedWoNos.map((no) => (
-                        <span key={no} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-mono text-slate-600">{no}</span>
-                      ))}
+                    {relatedWoNos.map((no) => (
+  <span key={no} title={no} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
+    {woLabelMap[no] ?? no}
+  </span>
+))}
                     </div>
                   </div>
                 )}
@@ -402,7 +428,9 @@ async function handlePrint() {
     : CCP_SLOT_EVENT_LABELS[ev.event_type] ?? ev.event_type}
 </span>
                             </td>
-                            <td className="py-2 px-3 text-xs text-slate-600">{ev.work_order_no ?? "—"}</td>
+                            <td className="py-2 px-3 text-xs text-slate-600" title={ev.work_order_no ?? ""}>
+  {ev.work_order_no ? (woLabelMap[ev.work_order_no] ?? ev.work_order_no) : "—"}
+</td>
 <td className="py-2 px-3 text-right whitespace-nowrap">
   {(ev as any).temperature != null
     ? <span className={`text-sm font-bold tabular-nums ${(ev as any).is_ok === false ? "text-red-600" : "text-blue-700"}`}>{(ev as any).temperature}°C</span>
@@ -463,7 +491,10 @@ async function handlePrint() {
                                         value={editTime} onChange={(e) => setEditTime(e.target.value)} />
                                     : ev.measured_at.slice(11, 16)}
                                 </td>
-                                <td className="py-2 px-3 text-xs font-mono text-slate-500 whitespace-nowrap">{ev.work_order_no}</td>
+                                <td className="py-2 px-3 text-xs text-slate-500 whitespace-nowrap" title={ev.work_order_no}>
+  {woLabelMap[ev.work_order_no] ?? ev.work_order_no}
+</td>
+
                                 <td className="py-2 px-3 whitespace-nowrap">
                                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${woBadgeCls(ev.event_type)}`}>
                                     {CCP_WO_EVENT_LABELS[ev.event_type] ?? ev.event_type}
