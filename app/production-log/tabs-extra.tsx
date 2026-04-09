@@ -679,11 +679,17 @@ async function handlePrint() {
             }}>
               {label}
             </td>
-            {slots.map((s, i) => (
-              <td key={i} style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontWeight: "bold", fontSize: "8pt" }}>
-                {s ? s.slot_name : ""}
-              </td>
-            ))}
+            {slots.map((s, i) => {
+  const hasActivity = s ? (
+    slotWoEventsDedup(s.id).length > 0 ||
+    slotEvents.some(e => e.slot_id === s.id)
+  ) : false;
+  return (
+    <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontWeight: "bold", fontSize: "8pt" }}>
+      {hasActivity ? s!.slot_name : ""}
+    </td>
+  );
+})}
           </tr>
 
           {/* 온도기록 행 */}
