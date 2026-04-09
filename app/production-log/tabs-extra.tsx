@@ -352,7 +352,7 @@ async function handlePrint() {
                     </div>
                     {woNos.length > 0 && (
   <div className="mt-1 text-[10px] text-slate-400 truncate">
-    {woNos.map((no) => woLabelMap[no] ?? no).join(", ")}
+   {woNos.map((no) => (no ? woLabelMap[no] ?? no : "")).filter(Boolean).join(", ")}
   </div>
 )}
                   </button>
