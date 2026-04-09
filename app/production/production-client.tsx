@@ -383,24 +383,6 @@ export default function ProductionClient() {
       }).subscribe((status) => { setRealtimeConnected(status === "SUBSCRIBED"); });
       realtimeChannelRef.current = channel;
 
-      // work_order_items 실시간 연동
-      const itemsChannel = supabase.channel(`wo_items:${selectedWo.id}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "work_order_items" }, (payload) => {
-        const d = payload.new as Record<string, unknown>;
-        if (String(d.work_order_id ?? "") !== selectedWo.id) return;
-        console.log("📦 [wo_items 이벤트 수신]", payload);
-        const itemId = String(d.id ?? "");
-        setProdInputs((prev) => ({
-            ...prev,
-            [itemId]: {
-              actual_qty: d.actual_qty != null ? String(d.actual_qty) : (prev[itemId]?.actual_qty ?? ""),
-              unit_weight: d.unit_weight != null ? String(d.unit_weight) : (prev[itemId]?.unit_weight ?? ""),
-              expiry_date: d.expiry_date != null ? String(d.expiry_date) : (prev[itemId]?.expiry_date ?? ""),
-            },
-          }));
-        }).subscribe((status, err) => {
-          console.log("📦 [wo_items 채널]", status, err ?? "");
-        });
   
 // ccp_wo_events 실시간 연동
 const ccpEventsChannel = supabase.channel(`ccp_wo_events:${selectedWo.id}`)
@@ -414,7 +396,6 @@ const ccpEventsChannel = supabase.channel(`ccp_wo_events:${selectedWo.id}`)
 
 return () => {
 supabase.removeChannel(channel);
-supabase.removeChannel(itemsChannel);
 supabase.removeChannel(ccpEventsChannel);
 realtimeChannelRef.current = null;
 setRealtimeConnected(false);
@@ -457,33 +438,7 @@ setRealtimeConnected(false);
   }, [filterStatus, filterDateFrom, filterDateTo, loadReadMap]); // eslint-disable-line
 
   useEffect(() => { loadWoList(); }, [loadWoList]);
-  // 선택된 작업지시서의 생산입력 + CCP 온도기록 10초 폴링
-useEffect(() => {
-  if (!selectedWo) return;
-  const interval = setInterval(async () => {
-    // 생산입력 폴링
-    const { data: itemsData } = await supabase
-      .from("work_order_items")
-      .select("id, actual_qty, unit_weight, expiry_date")
-      .eq("work_order_id", selectedWo.id);
-    if (itemsData) {
-      setProdInputs((prev) => {
-        const next = { ...prev };
-        for (const item of itemsData) {
-          next[item.id] = {
-            actual_qty: item.actual_qty != null ? String(item.actual_qty) : (prev[item.id]?.actual_qty ?? ""),
-            unit_weight: item.unit_weight != null ? String(item.unit_weight) : (prev[item.id]?.unit_weight ?? ""),
-            expiry_date: item.expiry_date ?? (prev[item.id]?.expiry_date ?? ""),
-          };
-        }
-        return next;
-      });
-    }
-    // CCP 온도기록 폴링
-    ccp.loadWoEvents(selectedWo.work_order_no, selectedWo.ccp_slot_id);
-  }, 10000);
-  return () => clearInterval(interval);
-}, [selectedWo?.id]);
+
   useEffect(() => { supabase.from("employees").select("id,name,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => { if (data) setEmployees(data); }); }, []);
   useEffect(() => { supabase.from("warmer_slots").select("id,slot_name,purpose").eq("is_active", true).order("slot_no").then(({ data }) => { if (data) setWarmerSlots(data); }); }, []);
   useEffect(() => {
