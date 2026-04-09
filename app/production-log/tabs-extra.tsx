@@ -576,15 +576,26 @@ async function handlePrint() {
       <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 64 }}>작성</td>
       <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 64 }}>승인</td>
     </tr>
-    <tr>
-      <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}></td>
-      <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
-        <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
-      </td>
-      <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
-        <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
-      </td>
-    </tr>
+    // 수정 전
+<tr>
+  <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center", fontSize: "8pt" }}></td>
+  <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
+    <img src="/sign-kimyg.png" .../>
+  </td>
+  <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
+    <img src="/sign-chods.png" .../>
+  </td>
+</tr>
+
+// 수정 후 (빈 td 삭제)
+<tr>
+  <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
+    <img src="/sign-kimyg.png" .../>
+  </td>
+  <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
+    <img src="/sign-chods.png" .../>
+  </td>
+</tr>
   </tbody>
 </table>
 
@@ -592,7 +603,7 @@ async function handlePrint() {
   <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
   <tbody>
     <tr>
-      <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", width: 60 }}>작성일자</td>
+    <td style={{ border: "1px solid #000", padding: "1px 6px", fontWeight: "bold", width: 80, whiteSpace: "nowrap" }}>작성일자</td>
       <td style={{ border: "1px solid #000", padding: "2px 6px" }}>
         {(() => { const d = new Date(filterDate + "T00:00:00+09:00"); return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일`; })()}
       </td>
@@ -613,7 +624,7 @@ async function handlePrint() {
         <td rowSpan={2} style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold" }}>한계기준</td>
         <td colSpan={3} style={{ border: "1px solid #000", padding: "2px 6px", fontSize: "8pt" }}>준초콜릿(다크컴파운드)</td>
         <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center" }}>45±5℃</td>
-        <td rowSpan={2} style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt" }}>4시간 이상 유지</td>
+        <td rowSpan={2} style={{ border: "1px solid #000", padding: "1px 6px", textAlign: "center", fontSize: "8pt", width: 100, whiteSpace: "nowrap" }}>4시간 이상 유지</td>
       </tr>
       <tr>
         <td colSpan={3} style={{ border: "1px solid #000", padding: "2px 6px", fontSize: "8pt" }}>당류가공품(화이트컴파운드)</td>
