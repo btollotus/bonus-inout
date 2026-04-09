@@ -521,13 +521,14 @@ export default function ProductionClient() {
     if (isCompleting) return;
     if (!selectedWo) return;
     setIsCompleting(true);
-    if (!isAdmin && woChecks) {
+    if (woChecks) {
       const missing = [!woChecks.assignee_transfer && "전사인쇄", !woChecks.assignee_print_check && "인쇄검수", !woChecks.assignee_production && "생산완료", ].filter(Boolean) as string[];
-      if (missing.length > 0) { setMsg(`담당자를 모두 선택해주세요: ${missing.join(", ")}`); setIsCompleting(false); return; }
+      if (missing.length > 0) { alert(`다음 단계의 담당자를 선택해주세요:\n\n• ${missing.join("\n• ")}`); setIsCompleting(false); return; }
     }
     const items = (selectedWo.work_order_items ?? []).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); });
-    const missingItems = items.filter((item) => { const pi = prodInputs[item.id]; return !pi || !pi.actual_qty || !pi.unit_weight || !pi.expiry_date; });
-    if (missingItems.length > 0) { const ok = confirm("⚠️ 일부 항목에 생산정보(출고수량/개당중량/소비기한)가 입력되지 않았습니다.\n재고대장 연동이 불완전할 수 있습니다.\n\n그래도 완료 처리하시겠습니까?"); if (!ok) { setIsCompleting(false); return; } } else { if (!confirm("생산완료 처리하시겠습니까?\n기본정보·담당자·생산입력이 모두 저장되고 재고대장에 입고가 반영됩니다.")) { setIsCompleting(false); return; } }
+    const missingQtyOrExpiry = items.filter((item) => { const pi = prodInputs[item.id]; return !pi || !pi.actual_qty || !pi.expiry_date; });
+    if (missingQtyOrExpiry.length > 0) { alert("출고수량과 소비기한은 필수 입력 항목입니다.\n\n입력 후 다시 시도해주세요."); setIsCompleting(false); return; }
+    if (!confirm("생산완료 처리하시겠습니까?\n기본정보·담당자·생산입력이 모두 저장되고 재고대장에 입고가 반영됩니다.")) { setIsCompleting(false); return; } 
     setMsg(`⏳ 시작 - role:${role}, isAdminOrSubadmin:${isAdminOrSubadmin}`);
     try {
       if (isAdminOrSubadmin) {
