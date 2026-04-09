@@ -727,7 +727,11 @@ useEffect(() => {
               <input className={inp} placeholder="거래처명 / 제품명 / 바코드 검색" value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} />
               <div className="flex flex-wrap gap-1">
   {(["전체", "생산중", "완료"] as const).map((s) => (
-    <button key={s} className={filterStatus === s ? btnOn : btn} onClick={() => setFilterStatus(s)}>{s}</button>
+    <button key={s} className={filterStatus === s ? btnOn : btn} onClick={() => setFilterStatus(s)}>
+      {s}
+      {s === "생산중" && <span className={`ml-1 tabular-nums text-xs ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>{productionCount}</span>}
+      {s === "완료" && <span className={`ml-1 tabular-nums text-xs ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>{woList.filter(w => w.status === "완료").length}</span>}
+    </button>
   ))}
   <div className="w-px bg-slate-200 mx-0.5" />
   <button className={sortBy === "created_at" ? btnOn : btn} onClick={() => setSortBy("created_at")}>주문일순</button>
@@ -738,7 +742,7 @@ useEffect(() => {
       {c === "다크" ? "다크" : c === "화이트" ? "화이트" : c === "전사지" ? "전사지" : "전체"}
     </button>
   ))}
-</div>   
+</div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div><div className="mb-1 text-xs text-slate-500">주문일 From</div><input type="date" className={inp} value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} /></div>
