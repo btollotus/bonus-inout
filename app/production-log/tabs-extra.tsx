@@ -668,7 +668,7 @@ async function handlePrint() {
     );
 
     return (
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6, tableLayout: "fixed" }}>
         <tbody>
           {/* 슬롯명 행 */}
           <tr>
@@ -685,9 +685,9 @@ async function handlePrint() {
     slotEvents.some(e => e.slot_id === s.id)
   ) : false;
   return (
-    <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontWeight: "bold", fontSize: "8pt", height: 22 }}>
-      {hasActivity ? s!.slot_name : ""}
-    </td>
+<td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontWeight: "bold", fontSize: "8pt", height: 22, width: "calc((100% - 44px) / 7)" }}>
+  {hasActivity ? s!.slot_name : ""}
+</td>
   );
 })}
           </tr>
