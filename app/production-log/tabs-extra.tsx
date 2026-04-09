@@ -565,38 +565,27 @@ async function handlePrint() {
 
 {/* ① 제목 + 결재란 */}
 <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
-  <tbody>
-    <tr>
-      <td rowSpan={2} style={{ border: "1px solid #000", padding: "6px 8px", fontWeight: "bold", fontSize: "12pt", textAlign: "center" }}>
-        중요관리점(CCP-1B) 모니터링일지<br/>
-        <span style={{ fontSize: "9pt" }}>[가열공정] 일반</span><br/>
-        <span style={{ fontSize: "8pt" }}>*온장고 내 보관기간 : 1개월 미만*</span>
-      </td>
-      <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", fontSize: "8pt", width: 36 }}>결재</td>
-      <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 64 }}>작성</td>
-      <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 64 }}>승인</td>
-    </tr>
- 
-    <tr>
-      <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
-        <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
-      </td>
-      <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
-        <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
-      </td>
-    </tr>
-
-    <tr>
-      <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
-        <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
-      </td>
-      <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
-        <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
-      </td>
-    </tr>
-
-
-  </tbody>
+<tbody>
+  <tr>
+    <td rowSpan={2} style={{ border: "1px solid #000", padding: "6px 8px", fontWeight: "bold", fontSize: "12pt", textAlign: "center" }}>
+      중요관리점(CCP-1B) 모니터링일지<br/>
+      <span style={{ fontSize: "9pt" }}>[가열공정] 일반</span><br/>
+      <span style={{ fontSize: "8pt" }}>*온장고 내 보관기간 : 1개월 미만*</span>
+    </td>
+    <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", fontSize: "8pt", width: 36 }}>결재</td>
+    <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 64 }}>작성</td>
+    <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 64 }}>승인</td>
+  </tr>
+  <tr>
+    <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}></td>
+    <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
+      <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
+    </td>
+    <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
+      <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
+    </td>
+  </tr>
+</tbody>
 </table>
 
   {/* ② 작성일자 */}
