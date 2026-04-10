@@ -62,6 +62,11 @@ function ccpSlotEventBadgeCls(type: string) {
   return "bg-slate-100 border-slate-200 text-slate-600";
 }
 
+function toKSTTime(isoStr: string): string {
+  const d = new Date(isoStr);
+  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+
 const inp  = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none";
 const inpR = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-right tabular-nums focus:border-blue-400 focus:outline-none";
 const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
@@ -336,7 +341,9 @@ if (ccpWoEventType === "start") {
   // ── 작업지시서 온도기록 수정 ──
   function startWoEventEdit(ev: WoEvent) {
     setCcpWoEditingId(ev.id);
-    setCcpWoEditTime(ev.measured_at.slice(11,13) + ev.measured_at.slice(14,16));
+    const kstTime = toKSTTime(ev.measured_at);
+setCcpWoEditTime(kstTime.replace(":", ""));
+
     setCcpWoEditTemp(ev.temperature != null ? String(ev.temperature) : "");
     setCcpWoEditIsOk(ev.is_ok ?? true);
     setCcpWoEditActionNote(ev.action_note ?? "");
@@ -867,7 +874,7 @@ export function WoCcpCard({
                           ? <input className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
                               inputMode="numeric" placeholder="HHmm" maxLength={4}
                               value={ccpWoEditTime} onChange={(e) => setCcpWoEditTime(e.target.value.replace(/[^\d]/g,"").slice(0,4))} />
-                          : ev.measured_at.slice(11,16)}
+                              : toKSTTime(ev.measured_at)}
                       </td>
                       <td className="py-2 px-3 text-xs text-slate-500 whitespace-nowrap">{slotName}</td>
                       <td className="py-2 px-3 whitespace-nowrap">
@@ -985,7 +992,7 @@ export function SlotDetailPanel({
           {events.map((ev, idx) => (
             <tr key={ev.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
               <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">
-                {ev.measured_at.slice(11,16)}
+              {toKSTTime(ev.measured_at)}
               </td>
               <td className="py-2 px-3 whitespace-nowrap">
                 <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ccpSlotEventBadgeCls(ev.event_type)}`}>
