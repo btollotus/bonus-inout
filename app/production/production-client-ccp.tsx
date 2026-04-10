@@ -261,12 +261,29 @@ if (slotAllEvents.length > 0) {
     const lastEv = sorted[sorted.length - 1];
 
     // 시작 기록 전: 슬롯에 원료가 있는지 확인
-if (ccpWoEventType === "start") {
-  const currentSlotStatus = slotStatus[slotId];
-  if (currentSlotStatus === null || currentSlotStatus === undefined) {
-    return showToast("⚠ 해당 슬롯에 원료가 없습니다. 원료투입 또는 슬롯이동 후 시작 기록을 해주세요.", "error");
-  }
-}
+    if (ccpWoEventType === "start") {
+      const currentSlotStatus = slotStatus[slotId];
+      if (currentSlotStatus === null || currentSlotStatus === undefined) {
+        return showToast("⚠ 해당 슬롯에 원료가 없습니다. 원료투입 또는 슬롯이동 후 시작 기록을 해주세요.", "error");
+      }
+      // 원료투입/이동 시각 이후인지 확인
+      const { data: lastMaterialIn } = await supabase
+        .from("ccp_slot_events")
+        .select("measured_at")
+        .eq("slot_id", slotId)
+        .eq("event_type", "material_in")
+        .order("measured_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastMaterialIn) {
+        const materialInTime = new Date(lastMaterialIn.measured_at);
+        const startTimeKst = new Date(`${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00+09:00`);
+        if (startTimeKst < materialInTime) {
+          const materialInKst = toKSTTime(lastMaterialIn.measured_at);
+          return showToast(`⚠ 시작 시각은 원료투입(${materialInKst}) 이후여야 합니다.`, "error");
+        }
+      }
+    }
 
     if (ccpWoEventType === "start" && lastEv && lastEv.event_type !== "end") {
       return showToast("⚠ 시작은 종료 후에만 다시 기록할 수 있습니다.", "error");
