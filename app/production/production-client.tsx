@@ -389,7 +389,8 @@ const ccpEventsChannel = supabase.channel(`ccp_wo_events:${selectedWo.id}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "ccp_wo_events" }, (payload) => {
           const d = (payload.new ?? payload.old ?? {}) as Record<string, unknown>;
           const woNo = String(d.work_order_no ?? "");
-          if (woNo && woNo !== selectedWo.work_order_no) return;
+          const evSlotId = String(d.slot_id ?? "");
+          if (evSlotId && selectedWo.ccp_slot_id && evSlotId !== selectedWo.ccp_slot_id) return;
   ccp.loadWoEvents(selectedWo.work_order_no, selectedWo.ccp_slot_id);
 }).subscribe((status, err) => {
   console.log("🌡️ [ccp_wo_events 채널]", status, err ?? "");
