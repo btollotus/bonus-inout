@@ -517,8 +517,8 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [eVatFree, setEVatFree] = useState(false);
   const [eSalaryEmployeeId, setESalaryEmployeeId] = useState<string>("");
 
-  const [fromYMD, setFromYMD] = useState("2025-12-01");
-  const [toYMD, setToYMD] = useState(todayYMD());
+  const [fromYMD, setFromYMD] = useState(addDays(todayYMD(), -15));
+const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [ledgers, setLedgers] = useState<LedgerRow[]>([]);
 
