@@ -175,7 +175,6 @@ for (const wo of woSlotRes.data ?? []) {
 setSlotWoMap(slotMap);
     setLoading(false);
   }, [filterDate]); 
-
   useEffect(() => { loadData(); }, [loadData]);
 
   // 슬롯별 마지막 상태 (원료 있는지)
