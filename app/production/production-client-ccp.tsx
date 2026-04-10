@@ -128,15 +128,7 @@ export function useCcpState(
       .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
       .order("measured_at", { ascending: true });
   
-      if (slotId) {
-        const today = todayKST();
-        query = query
-          .eq("slot_id", slotId)
-          .gte("measured_at", `${today}T00:00:00`)
-          .lte("measured_at", `${today}T23:59:59`);
-      } else {
-        query = query.eq("work_order_no", workOrderNo);
-      }
+      query = query.eq("work_order_no", workOrderNo);
       
       const { data } = await query;
       setWoEvents((data ?? []) as WoEvent[]);
@@ -232,9 +224,20 @@ if (hasOutAfter) { map[slotId] = null; continue; }
     if (!ccpWoTime || ccpWoTime.length < 4) return showToast("측정시각을 입력하세요. (예: 1430)", "error");
 
     // 시각 순서 검증
-    if (woEvents.length > 0) {
-      const lastEv = [...woEvents].sort((a,b) => a.measured_at.localeCompare(b.measured_at)).slice(-1)[0];
-      const lastTimeStr = lastEv.measured_at.slice(11,16);
+    // slotId 기준 오늘 전체 기록 조회 (순서 검증용)
+const today = todayKST();
+const { data: slotEventsData } = await supabase
+  .from("ccp_wo_events")
+  .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
+  .eq("slot_id", slotId)
+  .gte("measured_at", `${today}T00:00:00+09:00`)
+  .lte("measured_at", `${today}T23:59:59+09:00`)
+  .order("measured_at", { ascending: true });
+const slotAllEvents = (slotEventsData ?? []) as WoEvent[];
+
+if (slotAllEvents.length > 0) {
+  const lastEv = [...slotAllEvents].sort((a,b) => a.measured_at.localeCompare(b.measured_at)).slice(-1)[0];
+  const lastTimeStr = toKSTTime(lastEv.measured_at);
       const newTimeStr = `${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}`;
       if (newTimeStr <= lastTimeStr) {
         return showToast(`⚠ 측정시각은 마지막 기록(${lastTimeStr})보다 늦어야 합니다.`, "error");
@@ -246,7 +249,7 @@ if (hasOutAfter) { map[slotId] = null; continue; }
     if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
 
     // 이벤트 순서 검증
-    const sorted = [...woEvents].sort((a,b) => a.measured_at.localeCompare(b.measured_at));
+    const sorted = [...slotAllEvents].sort((a,b) => a.measured_at.localeCompare(b.measured_at));
     const lastEv = sorted[sorted.length - 1];
 
     // 시작 기록 전: 슬롯에 원료가 있는지 확인
@@ -271,7 +274,7 @@ if (ccpWoEventType === "start") {
       const startEv = [...sorted].reverse().find((e) => e.event_type === "start");
       const hasMidCheck = sorted.some((e) => e.event_type === "mid_check");
       if (startEv && !hasMidCheck) {
-        const today = todayKST();
+        
         const startTime = new Date(startEv.measured_at);
         const endTimeKst = new Date(`${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00+09:00`);
         if ((endTimeKst.getTime() - startTime.getTime()) / 60000 >= 120) {
@@ -281,8 +284,7 @@ if (ccpWoEventType === "start") {
     }
 
     setCcpWoSaving(true);
-    const today = todayKST();
-    const measuredAt = `${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00+09:00`;
+        const measuredAt = `${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00+09:00`;
 
     // 1. 내 작업지시서 온도기록 저장
     const { error } = await supabase.from("ccp_wo_events").insert({
