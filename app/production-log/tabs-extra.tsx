@@ -173,10 +173,6 @@ for (const wo of woSlotRes.data ?? []) {
   slotMap[wo.ccp_slot_id].push(wo.work_order_no);
 }
 setSlotWoMap(slotMap);
-
-}
-
-
     setLoading(false);
   }, [filterDate]); 
 
