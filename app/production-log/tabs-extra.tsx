@@ -787,18 +787,20 @@ async function handlePrint() {
           {/* 원료투입 행 */}
           <tr>
             {slots.map((s, i) => {
- const slotMoveEv = s ? slotEvents
- .filter(e => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→"))
- .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0] : undefined;
-const materialInEv = s ? slotEvents
- .filter(e => e.slot_id === s.id && e.event_type === "material_in")
- .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0] : undefined;
-const inEv = slotMoveEv ?? materialInEv;
+const inEvList = s ? slotEvents
+.filter(e => e.slot_id === s.id && (
+  e.event_type === "material_in" ||
+  (e.event_type === "material_out" && e.action_note?.startsWith("→"))
+))
+.sort((a, b) => a.measured_at.localeCompare(b.measured_at)) : []; 
 
 
               return (
                 <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
-           {inEv ? `${inEv.action_note?.includes("→") ? "슬롯이동" : "원료투입"}: ${inEv.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(inEv.measured_at)}${inEv.action_note?.includes("→") ? ` (${inEv.action_note})` : ""}` : ""}  
+          {inEvList.map(ev =>
+  `${ev.action_note?.includes("→") ? "슬롯이동" : "원료투입"}: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}${ev.action_note?.includes("→") ? ` (${ev.action_note})` : ""}`
+).join("\n")}
+
                 </td>
               );
             })}
