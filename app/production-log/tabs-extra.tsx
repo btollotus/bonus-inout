@@ -733,7 +733,7 @@ async function handlePrint() {
         <tbody>
           {/* 슬롯명 행 */}
           <tr>
-            <td rowSpan={maxRows + 3} style={{
+            <td rowSpan={maxRows + 4} style={{
               border: "1px solid #000", padding: "2px 4px", fontWeight: "bold",
               textAlign: "center", width: 44, fontSize: "8pt",
               writingMode: "vertical-rl" as any,
@@ -784,27 +784,25 @@ async function handlePrint() {
             </tr>
           ))}
 
-          {/* 원료투입 행 */}
-          <tr>
-            {slots.map((s, i) => {
-const inEvList = s ? slotEvents
-.filter(e => e.slot_id === s.id && (
-  e.event_type === "material_in" ||
-  (e.event_type === "material_out" && e.action_note?.startsWith("→"))
-))
-.sort((a, b) => a.measured_at.localeCompare(b.measured_at)) : []; 
-
-
-              return (
-                <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
-          {inEvList.map(ev =>
-  `${ev.action_note?.includes("→") ? "슬롯이동" : "원료투입"}: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}${ev.action_note?.includes("→") ? ` (${ev.action_note})` : ""}`
-).join("\n")}
-
-                </td>
-              );
-            })}
-          </tr>
+       {/* 원료투입 행 */}
+{["material_in", "material_out"].map((evType) => (
+  <tr key={evType}>
+    {slots.map((s, i) => {
+      const ev = s ? slotEvents
+        .filter(e => e.slot_id === s.id && (
+          evType === "material_in"
+            ? e.event_type === "material_in"
+            : e.event_type === "material_out" && e.action_note?.startsWith("→")
+        ))
+        .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0] : undefined;
+      return (
+        <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
+          {ev ? `${evType === "material_out" ? "슬롯이동" : "원료투입"}: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}${ev.action_note?.includes("→") ? ` (${ev.action_note})` : ""}` : ""}
+        </td>
+      );
+    })}
+  </tr>
+))}
 
           {/* 판정 + 사인 행 */}
           <tr>
