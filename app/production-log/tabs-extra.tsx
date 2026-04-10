@@ -185,10 +185,9 @@ if (allWoNos.length > 0) {
     : [];
 
   // 선택된 슬롯에서 작업한 작업지시서 번호 목록
-  const relatedWoNos = [...new Set([
-    ...selectedSlotEvents.map((e) => e.work_order_no).filter(Boolean),
-    ...selectedWoEvents.map((e) => e.work_order_no),
-  ])] as string[];
+  const relatedWoNos = [...new Set(
+    selectedWoEvents.map((e) => e.work_order_no)
+  )] as string[];
 
   function startEdit(ev: typeof woEvents[0]) {
     setEditingEventId(ev.id);
