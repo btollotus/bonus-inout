@@ -273,9 +273,8 @@ if (ccpWoEventType === "start") {
       if (startEv && !hasMidCheck) {
         const today = todayKST();
         const startTime = new Date(startEv.measured_at);
-const endTime   = new Date(`${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00+09:00`);
-        const endTime   = new Date(`${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00`);
-        if ((endTime.getTime() - startTime.getTime()) / 60000 >= 120) {
+        const endTimeKst = new Date(`${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00+09:00`);
+        if ((endTimeKst.getTime() - startTime.getTime()) / 60000 >= 120) {
           return showToast("⚠ 시작~종료 2시간 이상 — 중간점검을 먼저 추가해주세요.", "error");
         }
       }
