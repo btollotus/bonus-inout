@@ -445,14 +445,18 @@ async function handlePrint() {
                            <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">{toKSTTime(ev.measured_at)}</td>
                             <td className="py-2 px-3 whitespace-nowrap">
                             <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-  ev.event_type === "material_out" && ev.action_note?.startsWith("→")
+  (ev.event_type === "material_out" && ev.action_note?.startsWith("→")) ||
+  (ev.event_type === "material_in" && ev.action_note?.includes("→"))
     ? "bg-teal-100 border-teal-200 text-teal-700"
     : slotBadgeCls(ev.event_type)
 }`}>
-  {ev.event_type === "material_out" && ev.action_note?.startsWith("→")
+  {(ev.event_type === "material_out" && ev.action_note?.startsWith("→")) ||
+   (ev.event_type === "material_in" && ev.action_note?.includes("→"))
     ? "슬롯이동"
     : CCP_SLOT_EVENT_LABELS[ev.event_type] ?? ev.event_type}
-</span>
+</span>                         
+
+
                             </td>
                             <td className="py-2 px-3 text-xs text-slate-600" title={ev.work_order_no ?? ""}>
   {ev.work_order_no ? (woLabelMap[ev.work_order_no] ?? ev.work_order_no) : "—"}
