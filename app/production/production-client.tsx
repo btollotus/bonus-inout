@@ -230,6 +230,9 @@ export default function ProductionClient() {
   // ── CCP 새 구조 ──
   const ccp = useCcpState(warmerSlots, currentUserIdRef, showToast);
 
+  const loadSlotStatusRef = useRef(ccp.loadSlotStatus);
+useEffect(() => { loadSlotStatusRef.current = ccp.loadSlotStatus; }, [ccp.loadSlotStatus]);
+
   const [stockAlerts, setStockAlerts] = useState<{ id: string; item_name: string; status: string; expiry_date: string | null; action: string | null; log_date: string }[]>([]);
   const [showAlertPanel, setShowAlertPanel] = useState(false);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
@@ -442,19 +445,19 @@ setRealtimeConnected(false);
   useEffect(() => { loadWoList(); }, [loadWoList]);
 
   // ── ccp_slot_events 실시간 → 슬롯 현황 자동 갱신 ──
-useEffect(() => {
-  const channel = supabase
-    .channel("ccp_slot_events_realtime")
-    .on("postgres_changes", {
-      event: "*",
-      schema: "public",
-      table: "ccp_slot_events",
-    }, () => {
-      ccp.loadSlotStatus();
-    })
-    .subscribe();
-  return () => { supabase.removeChannel(channel); };
-}, [ccp.loadSlotStatus]);
+  useEffect(() => {
+    const channel = supabase
+      .channel("ccp_slot_events_realtime")
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "ccp_slot_events",
+      }, () => {
+        loadSlotStatusRef.current();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []); // eslint-disable-line
 
   useEffect(() => { supabase.from("employees").select("id,name,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => { if (data) setEmployees(data); }); }, []);
   useEffect(() => { supabase.from("warmer_slots").select("id,slot_name,purpose").eq("is_active", true).order("slot_no").then(({ data }) => { if (data) setWarmerSlots(data); }); }, []);
