@@ -5,6 +5,11 @@ import { createClient } from "@/lib/supabase/browser";
 
 const supabase = createClient();
 
+function toKSTTime(isoStr: string): string {
+  const d = new Date(isoStr);
+  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+
 const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
 const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none";
 const inpR = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-right tabular-nums focus:border-blue-400 focus:outline-none";
@@ -434,7 +439,7 @@ async function handlePrint() {
                       <tbody>
                         {selectedSlotEvents.map((ev, idx) => (
                           <tr key={ev.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                            <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">{ev.measured_at.slice(11, 16)}</td>
+                           <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">{toKSTTime(ev.measured_at)}</td>
                             <td className="py-2 px-3 whitespace-nowrap">
                             <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
   ev.event_type === "material_out" && ev.action_note?.startsWith("→")
@@ -507,7 +512,7 @@ async function handlePrint() {
                                   {isEditing
                                     ? <input type="time" className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
                                         value={editTime} onChange={(e) => setEditTime(e.target.value)} />
-                                    : ev.measured_at.slice(11, 16)}
+                                        : toKSTTime(ev.measured_at)}
                                 </td>
                                 <td className="py-2 px-3 text-xs text-slate-500 whitespace-nowrap" title={ev.work_order_no}>
   {woLabelMap[ev.work_order_no] ?? ev.work_order_no}
