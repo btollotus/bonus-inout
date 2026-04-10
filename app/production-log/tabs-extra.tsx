@@ -163,8 +163,10 @@ if (allWoNos.length > 0) {
     map[wo.work_order_no] = label;
   }
   setWoLabelMap(map);
+}  // ← if (allWoNos.length > 0) 닫는 괄호
 
-  const slotMap: Record<string, string[]> = {};
+// slotWoMap은 if 블록 밖에서 항상 실행
+const slotMap: Record<string, string[]> = {};
 for (const wo of woSlotRes.data ?? []) {
   if (!wo.ccp_slot_id) continue;
   if (!slotMap[wo.ccp_slot_id]) slotMap[wo.ccp_slot_id] = [];
