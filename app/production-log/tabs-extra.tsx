@@ -115,6 +115,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
   const [editActionNote, setEditActionNote] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [woLabelMap, setWoLabelMap] = useState<Record<string, string>>({});
+  const [slotWoMap, setSlotWoMap] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     supabase.from("warmer_slots").select("id,slot_name,purpose")
@@ -124,7 +125,8 @@ export function Ccp1bTab({ role, userId, showToast }: {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [slotRes, woRes] = await Promise.all([
+
+    const [slotRes, woRes, woSlotRes] = await Promise.all([
       supabase.from("ccp_slot_events")
         .select("id, slot_id, event_date, event_type, measured_at, work_order_no, action_note, temperature, is_ok")
         .eq("event_date", filterDate)
@@ -132,7 +134,12 @@ export function Ccp1bTab({ role, userId, showToast }: {
       supabase.from("ccp_wo_events")
         .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
         .order("measured_at", { ascending: true }),
+      supabase.from("work_orders")
+        .select("work_order_no, client_name, sub_name, product_name, ccp_slot_id")
+        .not("ccp_slot_id", "is", null)
+        .eq("status", "생산중"),
     ]);
+
     setSlotEvents((slotRes.data ?? []) as any[]);
     const filtered = (woRes.data ?? []).filter((e: any) =>
       e.measured_at.slice(0, 10) === filterDate
@@ -156,6 +163,15 @@ if (allWoNos.length > 0) {
     map[wo.work_order_no] = label;
   }
   setWoLabelMap(map);
+
+  const slotMap: Record<string, string[]> = {};
+for (const wo of woSlotRes.data ?? []) {
+  if (!wo.ccp_slot_id) continue;
+  if (!slotMap[wo.ccp_slot_id]) slotMap[wo.ccp_slot_id] = [];
+  slotMap[wo.ccp_slot_id].push(wo.work_order_no);
+}
+setSlotWoMap(slotMap);
+
 }
 
 
@@ -185,9 +201,9 @@ if (allWoNos.length > 0) {
     : [];
 
   // 선택된 슬롯에서 작업한 작업지시서 번호 목록
-  const relatedWoNos = [...new Set(
-    selectedWoEvents.map((e) => e.work_order_no)
-  )] as string[];
+  const relatedWoNos = selectedSlotId
+  ? (slotWoMap[selectedSlotId] ?? [])
+  : [];
 
   function startEdit(ev: typeof woEvents[0]) {
     setEditingEventId(ev.id);
