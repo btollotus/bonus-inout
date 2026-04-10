@@ -149,7 +149,10 @@ export function Ccp1bTab({ role, userId, showToast }: {
 const allWoNos = [...new Set([
   ...(slotRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
   ...(woRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
+  ...(woSlotRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
 ])] as string[];
+
+
 if (allWoNos.length > 0) {
   const { data: woData } = await supabase
     .from("work_orders")
@@ -157,9 +160,12 @@ if (allWoNos.length > 0) {
     .in("work_order_no", allWoNos);
   const map: Record<string, string> = {};
   for (const wo of woData ?? []) {
-    const label = wo.sub_name
-      ? `${wo.client_name} · ${wo.sub_name}`
-      : `${wo.client_name} · ${wo.product_name}`;
+    const secondPart = wo.sub_name ?? wo.product_name;
+    const label = wo.client_name === secondPart
+      ? wo.client_name
+      : `${wo.client_name} · ${secondPart}`;
+
+
     map[wo.work_order_no] = label;
   }
   setWoLabelMap(map);
