@@ -322,26 +322,7 @@ if (ccpWoEventType === "start") {
     });
 
     // 3. 같은 슬롯의 다른 작업지시서에도 동일 기록 복사
-    const { data: sameSlotWos } = await supabase
-      .from("work_orders")
-      .select("work_order_no")
-      .eq("ccp_slot_id", slotId)
-      .neq("work_order_no", selectedWo.work_order_no);
-
-    if (sameSlotWos && sameSlotWos.length > 0) {
-      await supabase.from("ccp_wo_events").insert(
-        sameSlotWos.map((wo: any) => ({
-          work_order_no: wo.work_order_no,
-          slot_id:       slotId,
-          event_type:    ccpWoEventType,
-          measured_at:   measuredAt,
-          temperature:   temp,
-          is_ok:         ccpWoIsOk,
-          action_note:   ccpWoActionNote.trim() || null,
-          created_by:    currentUserIdRef.current,
-        }))
-      );
-    }
+ 
 
     showToast("✅ CCP 온도 기록 완료!");
     setCcpWoTemp(""); setCcpWoActionNote(""); setCcpWoIsOk(true); setCcpWoTime("");
