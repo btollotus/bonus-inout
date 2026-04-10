@@ -775,7 +775,7 @@ async function handlePrint() {
                             : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9",
                           padding: "0 3px", borderRadius: 2, marginRight: 2,
                         }}>{typeLabel}</span>
-                        {`(${ev.measured_at.slice(11,16)}) ${ev.temperature ?? ""}℃`}
+                        {`(${toKSTTime(ev.measured_at)}) ${ev.temperature ?? ""}℃`}
                       </>
                     ) : ""}
                   </td>
