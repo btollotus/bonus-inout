@@ -165,10 +165,13 @@ if (allWoNos.length > 0) {
     .in("work_order_no", allWoNos);
   const map: Record<string, string> = {};
   for (const wo of woData ?? []) {
-    const secondPart = wo.sub_name ?? wo.product_name;
-    const label = wo.client_name === secondPart
-      ? wo.client_name
-      : `${wo.client_name} · ${secondPart}`;
+    const rawSecond = wo.sub_name ?? wo.product_name ?? "";
+    const secondPart = rawSecond.startsWith(wo.client_name)
+      ? rawSecond.slice(wo.client_name.length).replace(/^[-_\s·]+/, "")
+      : rawSecond;
+    const label = secondPart
+      ? `${wo.client_name} · ${secondPart}`
+      : wo.client_name;
 
 
     map[wo.work_order_no] = label;
