@@ -361,10 +361,23 @@ setCcpWoEditTime(kstTime.replace(":", ""));
 
   async function deleteWoEvent(eventId: string, workOrderNo: string) {
     if (!confirm("이 기록을 삭제하시겠습니까?")) return;
-    // ccp_wo_events에서 삭제할 이벤트의 slot_id 조회
-    const { data: evData } = await supabase.from("ccp_wo_events").select("slot_id").eq("id", eventId).maybeSingle();
+    const { data: evData } = await supabase
+      .from("ccp_wo_events")
+      .select("slot_id, event_type, measured_at")
+      .eq("id", eventId)
+      .maybeSingle();
     const { error } = await supabase.from("ccp_wo_events").delete().eq("id", eventId);
     if (error) return showToast("삭제 실패: " + error.message, "error");
+  
+    // ccp_slot_events에서도 동일 기록 삭제
+    if (evData?.slot_id && evData?.measured_at) {
+      await supabase.from("ccp_slot_events")
+        .delete()
+        .eq("slot_id", evData.slot_id)
+        .eq("measured_at", evData.measured_at)
+        .eq("event_type", evData.event_type);
+    }
+  
     showToast("🗑️ 삭제 완료!");
     await loadWoEvents(workOrderNo, evData?.slot_id ?? null);
   }
