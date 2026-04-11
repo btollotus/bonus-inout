@@ -564,8 +564,7 @@ async function handlePrint() {
                   </>
                 )}
               </div>
-
-          <div className={`${card} flex items-center justify-center p-12`}>
+              <div className={`${card} flex items-center justify-center p-12`}>
             <div className="text-center text-slate-400">
               <div className="text-3xl mb-2">🌡️</div>
               <div className="text-sm">왼쪽 목록에서 슬롯을 선택하세요</div>
@@ -574,7 +573,8 @@ async function handlePrint() {
           </div>
         )}
       </div>
-       </div>
+    </div>
+         
 {/* ── 인쇄 전용 영역 ── */}
 <style>{`
   @media screen { .ccp-print-only { display: none !important; } }
