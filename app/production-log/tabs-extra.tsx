@@ -574,6 +574,7 @@ async function handlePrint() {
           </div>
         )}
       </div>
+       </div>
 {/* ── 인쇄 전용 영역 ── */}
 <style>{`
   @media screen { .ccp-print-only { display: none !important; } }
