@@ -710,28 +710,29 @@ export function SlotStatusPanel({
 
             {isEmpty ? (
               <div className="flex gap-3 items-end flex-wrap">
-<div>
-                  <div className="mb-1 text-xs text-slate-500">원료 종류 *</div>
-                  <div className="flex gap-2">
-                    {["다크", "화이트"].map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        className={`rounded-xl border px-4 py-2 text-sm font-bold transition-all ${
-                          selectedMaterialType === t
-                            ? t === "다크"
-                              ? "border-amber-600 bg-amber-700 text-white"
-                              : "border-yellow-400 bg-yellow-400 text-amber-900"
-                            : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                        }`}
-                        onClick={() => setSelectedMaterialType(t)}
-                      >
-                        {t}
-                      </button>
-                    ))}
+                {warmerSlots.find((s) => s.id === activeSlotId)?.purpose === "유동" && (
+                  <div>
+                    <div className="mb-1 text-xs text-slate-500">원료 종류 *</div>
+                    <div className="flex gap-2">
+                      {["다크", "화이트"].map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          className={`rounded-xl border px-4 py-2 text-sm font-bold transition-all ${
+                            selectedMaterialType === t
+                              ? t === "다크"
+                                ? "border-amber-600 bg-amber-700 text-white"
+                                : "border-yellow-400 bg-yellow-400 text-amber-900"
+                              : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                          }`}
+                          onClick={() => setSelectedMaterialType(t)}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-
+                )}
                 <div>
                   <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
                   <input className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
@@ -746,12 +747,14 @@ export function SlotStatusPanel({
                 </div>
                 <button
                   className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
-                  disabled={slotActionSaving || slotActionTime.length < 4 || !selectedMaterialType}
+                  disabled={slotActionSaving || slotActionTime.length < 4 || (warmerSlots.find((s) => s.id === activeSlotId)?.purpose === "유동" && !selectedMaterialType)}
                   onClick={() => { saveSlotMaterialIn(activeSlotId, undefined, selectedMaterialType); setSelectedMaterialType(""); }}
                 >
                   {slotActionSaving ? "저장 중..." : "🧪 원료투입"}
                 </button>
               </div>
+
+
             ) : (
               <div className="space-y-3">
                 <div className="text-xs text-slate-500">
