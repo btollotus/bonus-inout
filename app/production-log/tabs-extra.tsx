@@ -564,6 +564,9 @@ async function handlePrint() {
                   </>
                 )}
               </div>
+            </div>
+          );
+        })() : (
               <div className={`${card} flex items-center justify-center p-12`}>
             <div className="text-center text-slate-400">
               <div className="text-3xl mb-2">🌡️</div>
