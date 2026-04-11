@@ -21,6 +21,7 @@ type SlotEvent = {
   measured_at: string;
   work_order_no: string | null;
   action_note: string | null;
+  material_type: string | null;
 };
 
 type WoEvent = {
@@ -171,14 +172,14 @@ export function useCcpState(
     // 오늘 이벤트 한 번에 조회
     const { data: todayEvents } = await supabase
       .from("ccp_slot_events")
-      .select("slot_id, event_type, measured_at")
+      .select("slot_id, event_type, measured_at, material_type")
       .eq("event_date", today)
       .in("slot_id", slotIds)
       .order("measured_at", { ascending: true });
   
     // 오늘 기록 없는 슬롯 목록 파악
     const needsHistorySlotIds: string[] = [];
-    const map: Record<string, { date: string; daysAgo: number } | null> = {};
+    const map: Record<string, { date: string; daysAgo: number; materialType: string | null } | null> = {};
   
     for (const slot of warmerSlots) {
       const events = (todayEvents ?? []).filter((e) => e.slot_id === slot.id);
@@ -187,7 +188,7 @@ export function useCcpState(
         needsHistorySlotIds.push(slot.id);
       } else {
         const materialIn = events.filter((e) => e.event_type === "material_in").slice(-1)[0];
-        map[slot.id] = materialIn ? { date: today, daysAgo: 0 } : null;
+        map[slot.id] = materialIn ? { date: today, daysAgo: 0, materialType: (materialIn as any).material_type ?? null } : null;
       }
     }
   
@@ -195,8 +196,8 @@ export function useCcpState(
     if (needsHistorySlotIds.length > 0) {
       const { data: historyEvents } = await supabase
         .from("ccp_slot_events")
-        .select("slot_id, event_type, measured_at")
-        .in("slot_id", needsHistorySlotIds)
+        .select("slot_id, event_type, measured_at, material_type")
+      .in("slot_id", needsHistorySlotIds)
         .order("measured_at", { ascending: false });
   
       for (const slotId of needsHistorySlotIds) {
@@ -219,7 +220,7 @@ if (hasOutAfter) { map[slotId] = null; continue; }
         const materialDate = lastIn.measured_at.slice(0, 10);
         const diffMs = new Date(today).getTime() - new Date(materialDate).getTime();
         const daysAgo = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        map[slotId] = { date: materialDate, daysAgo };
+        map[slotId] = { date: materialDate, daysAgo, materialType: (lastIn as any).material_type ?? null };
       }
     }
   
@@ -426,7 +427,7 @@ setCcpWoEditTime(kstTime.replace(":", ""));
   }
 
   // ── 원료투입 저장 ──
-  async function saveSlotMaterialIn(slotId: string, workOrderNo?: string) {
+  async function saveSlotMaterialIn(slotId: string, workOrderNo?: string, materialType?: string) {
     if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
     if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
       return showToast("올바른 시각을 입력하세요.", "error");
@@ -440,6 +441,7 @@ setCcpWoEditTime(kstTime.replace(":", ""));
         measured_at: `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`,
         work_order_no: workOrderNo ?? null,
         action_note:   null,
+        material_type: materialType ?? null,
         created_by:    currentUserIdRef.current,
       });
       if (error) return showToast("원료투입 기록 실패: " + error.message, "error");
@@ -466,6 +468,17 @@ setCcpWoEditTime(kstTime.replace(":", ""));
     const fromSlotName = warmerSlots.find((s) => s.id === fromSlotId)?.slot_name ?? fromSlotId;
     const toSlotName   = warmerSlots.find((s) => s.id === toSlotId)?.slot_name ?? toSlotId;
 
+    // 출발 슬롯의 material_type 조회
+    const { data: lastInEvent } = await supabase
+    .from("ccp_slot_events")
+    .select("material_type")
+    .eq("slot_id", fromSlotId)
+    .eq("event_type", "material_in")
+    .order("measured_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const movedMaterialType = lastInEvent?.material_type ?? null;
+
     setSlotActionSaving(true);
     try {
       // 출발 슬롯에 material_out 기록
@@ -487,6 +500,7 @@ setCcpWoEditTime(kstTime.replace(":", ""));
         measured_at: `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`,
         work_order_no: workOrderNo ?? null,
         action_note:   `${fromSlotName} → ${toSlotName}`,
+        material_type: movedMaterialType,
         created_by:    currentUserIdRef.current,
       });
 
@@ -533,6 +547,8 @@ setCcpWoEditTime(kstTime.replace(":", ""));
 
 // ── 온장고 슬롯 현황 패널 ──
 export function SlotStatusPanel({
+ 
+
   warmerSlots,
   slotStatus,
   activeSlotId, setActiveSlotId,
@@ -544,6 +560,7 @@ export function SlotStatusPanel({
   saveSlotMaterialIn,
   saveSlotMove,
 }: {
+}) {
   warmerSlots: { id: string; slot_name: string; purpose: string }[];
   slotStatus: Record<string, { date: string; daysAgo: number } | null>;
   activeSlotId: string | null; setActiveSlotId: (v: string | null) => void;
@@ -555,6 +572,7 @@ export function SlotStatusPanel({
   saveSlotMaterialIn: (slotId: string) => void;
   saveSlotMove: (fromSlotId: string, toSlotId: string) => void;
 }) {
+  const [selectedMaterialType, setSelectedMaterialType] = React.useState<string>("");
   const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
   const mainGroups = Array.from(new Set(
     warmerSlots.filter((s) => !MERGE_PURPOSES.includes(s.purpose)).map((s) => s.purpose)
@@ -566,15 +584,20 @@ export function SlotStatusPanel({
     const isEmpty = st === null || st === undefined;
     const daysAgo = st?.daysAgo ?? 0;
     const dateStr = st?.date ? st.date.slice(5) : null;
+    const materialType = st?.materialType ?? null;
     const isOverdue = !isEmpty && daysAgo >= 15;
     const isActive = activeSlotId === s.id;
     const isMoveTarget = slotMoveTargetId === s.id;
 
     const baseCls = isEmpty
-      ? "border-slate-200 bg-slate-50 text-slate-400"
-      : isOverdue
-      ? "border-red-300 bg-red-50 text-red-600"
-      : "border-blue-200 bg-blue-50 text-blue-700";
+    ? "border-slate-200 bg-slate-50 text-slate-400"
+    : isOverdue
+    ? "border-red-300 bg-red-50 text-red-600"
+    : materialType === "다크"
+    ? "border-amber-300 bg-amber-50 text-amber-800"
+    : materialType === "화이트"
+    ? "border-yellow-200 bg-yellow-50 text-yellow-700"
+    : "border-blue-200 bg-blue-50 text-blue-700";
 
     const activeCls = isActive
       ? "ring-2 ring-blue-500 ring-offset-1 scale-105 shadow-md"
@@ -604,6 +627,11 @@ export function SlotStatusPanel({
           <div className={`mt-0.5 text-[10px] text-center ${isOverdue ? "text-red-600 font-bold" : "font-normal"}`}>
             {isEmpty ? "비어있음" : dateStr}
           </div>
+          {!isEmpty && materialType && (
+            <div className={`text-[9px] text-center font-bold mt-0.5 ${materialType === "다크" ? "text-amber-800" : "text-yellow-600"}`}>
+              {materialType}
+            </div>
+          )} 
         </button>
       </div>
     );
@@ -683,6 +711,28 @@ export function SlotStatusPanel({
 
             {isEmpty ? (
               <div className="flex gap-3 items-end flex-wrap">
+<div>
+                  <div className="mb-1 text-xs text-slate-500">원료 종류 *</div>
+                  <div className="flex gap-2">
+                    {["다크", "화이트"].map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        className={`rounded-xl border px-4 py-2 text-sm font-bold transition-all ${
+                          selectedMaterialType === t
+                            ? t === "다크"
+                              ? "border-amber-600 bg-amber-700 text-white"
+                              : "border-yellow-400 bg-yellow-400 text-amber-900"
+                            : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                        }`}
+                        onClick={() => setSelectedMaterialType(t)}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div>
                   <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
                   <input className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
@@ -697,8 +747,8 @@ export function SlotStatusPanel({
                 </div>
                 <button
                   className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
-                  disabled={slotActionSaving || slotActionTime.length < 4}
-                  onClick={() => saveSlotMaterialIn(activeSlotId)}
+                  disabled={slotActionSaving || slotActionTime.length < 4 || !selectedMaterialType}
+                  onClick={() => { saveSlotMaterialIn(activeSlotId, undefined, selectedMaterialType); setSelectedMaterialType(""); }}
                 >
                   {slotActionSaving ? "저장 중..." : "🧪 원료투입"}
                 </button>
