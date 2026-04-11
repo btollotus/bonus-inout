@@ -754,8 +754,9 @@ async function handlePrint() {
           </tr>
           <tr>
             {slots.map((s, i) => {
-              const ev = s ? slotEvents.filter(e => e.slot_id === s.id && e.event_type === "material_in").sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0] : undefined;
-              return <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>{ev ? `원료투입: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}` : ""}</td>;
+        const ev = s ? slotEvents.filter(e => e.slot_id === s.id && e.event_type === "material_in").sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0] : undefined;
+        const isMove = ev?.action_note?.includes("→");
+        return <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>{ev ? `${isMove ? "슬롯이동" : "원료투입"}: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}${isMove ? ` (${ev.action_note})` : ""}` : ""}</td>;
             })}
           </tr>
           <tr>
