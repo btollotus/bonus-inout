@@ -784,41 +784,32 @@ async function handlePrint() {
             </tr>
           ))}
 
-       {/* 원료투입 행 */}
-       {(() => {
-  // 슬롯별 원료투입/슬롯이동 이벤트 수집 후 시간순 정렬
-  const allEvTypes = slots.flatMap(s => s ? slotEvents.filter(e =>
-    e.slot_id === s.id && (
-      e.event_type === "material_in" ||
-      (e.event_type === "material_out" && e.action_note?.startsWith("→"))
-    )
-  ) : []);
-  // 전체 슬롯 기준 시간순 고유 이벤트 타입 순서 결정
-  const orderedTypes = ["material_in", "material_out_move"].filter(t =>
-    t === "material_in"
-      ? allEvTypes.some(e => e.event_type === "material_in")
-      : allEvTypes.some(e => e.event_type === "material_out" && e.action_note?.startsWith("→"))
-  );
-  // 원료투입 항상 첫번째
-  return orderedTypes.map((evType) => (
-    <tr key={evType}>
-      {slots.map((s, i) => {
-        const ev = s ? slotEvents
-          .filter(e => e.slot_id === s.id && (
-            evType === "material_in"
-              ? e.event_type === "material_in"
-              : e.event_type === "material_out" && e.action_note?.startsWith("→")
-          ))
-          .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0] : undefined;
-        return (
-          <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
-            {ev ? `${evType === "material_out_move" ? "슬롯이동" : "원료투입"}: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}${ev.action_note?.includes("→") ? ` (${ev.action_note})` : ""}` : ""}
-          </td>
-        );
-      })}
-    </tr>
-  ));
-})()}
+ {/* 원료투입 행 — 항상 첫번째 */}
+ <tr>
+            {slots.map((s, i) => {
+              const ev = s ? slotEvents
+                .filter(e => e.slot_id === s.id && e.event_type === "material_in")
+                .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0] : undefined;
+              return (
+                <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
+                  {ev ? `원료투입: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}` : ""}
+                </td>
+              );
+            })}
+          </tr>
+          {/* 슬롯이동 행 — 있을 때만 */}
+          <tr>
+            {slots.map((s, i) => {
+              const ev = s ? slotEvents
+                .filter(e => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→"))
+                .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0] : undefined;
+              return (
+                <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
+                  {ev ? `슬롯이동: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})` : ""}
+                </td>
+              );
+            })}
+          </tr>
 
 
            {/* 판정 + 사인 행 */}
