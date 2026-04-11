@@ -574,6 +574,7 @@ export function SlotStatusPanel({
 }) {
   const [selectedMaterialType, setSelectedMaterialType] = React.useState<string>("");
 
+
   const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
   const mainGroups = Array.from(new Set(
     warmerSlots.filter((s) => !MERGE_PURPOSES.includes(s.purpose)).map((s) => s.purpose)
