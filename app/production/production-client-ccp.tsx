@@ -135,6 +135,14 @@ export function useCcpState(
       }
 
     const { data } = await query;
+        // 같은 시각+유형 중복 제거 (슬롯 공유 시 중복 방지)
+        const seen = new Set<string>();
+        const deduped = (data ?? []).filter((e: any) => {
+          const key = `${e.measured_at}_${e.event_type}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
     setWoEvents((data ?? []) as WoEvent[]);
     const hasStart = (data ?? []).some((e: any) => e.event_type === "start");
     setCcpWoEventType(hasStart ? "mid_check" : "start");
