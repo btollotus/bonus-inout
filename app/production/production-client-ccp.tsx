@@ -547,8 +547,6 @@ setCcpWoEditTime(kstTime.replace(":", ""));
 
 // ── 온장고 슬롯 현황 패널 ──
 export function SlotStatusPanel({
- 
-
   warmerSlots,
   slotStatus,
   activeSlotId, setActiveSlotId,
@@ -560,9 +558,8 @@ export function SlotStatusPanel({
   saveSlotMaterialIn,
   saveSlotMove,
 }: {
-}) {
   warmerSlots: { id: string; slot_name: string; purpose: string }[];
-  slotStatus: Record<string, { date: string; daysAgo: number } | null>;
+  slotStatus: Record<string, { date: string; daysAgo: number; materialType: string | null } | null>;
   activeSlotId: string | null; setActiveSlotId: (v: string | null) => void;
   slotMoveTargetId: string | null; setSlotMoveTargetId: (v: string | null) => void;
   slotActionDate: string; setSlotActionDate: (v: string) => void;
