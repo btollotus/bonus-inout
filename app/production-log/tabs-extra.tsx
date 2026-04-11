@@ -420,80 +420,11 @@ async function handlePrint() {
                 )}
               </div>
 
-              {/* 슬롯 기록 (원료투입/소진/이동) */}
-              <div className={`${card} p-4`}>
-                <div className="mb-3 font-semibold text-sm">🧪 슬롯 기록 (원료투입·소진·이동)</div>
-                {selectedSlotEvents.length === 0 ? (
-                  <div className="py-4 text-center text-sm text-slate-400">슬롯 기록이 없습니다.</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm border-collapse">
-                      <thead>
-                        <tr className="border-b-2 border-slate-200 bg-slate-50">
-                          <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">시각</th>
-                          <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">유형</th>
-                          <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">작업지시서</th>
-<th className="py-2 px-3 text-right text-xs font-semibold text-slate-500 whitespace-nowrap">온도</th>
-<th className="py-2 px-3 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">판정</th>
-<th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">비고</th>
-{isAdminOrSubadmin && <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500">관리</th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedSlotEvents.map((ev, idx) => (
-                          <tr key={ev.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                           <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">{toKSTTime(ev.measured_at)}</td>
-                            <td className="py-2 px-3 whitespace-nowrap">
-                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-  (ev.event_type === "material_out" && ev.action_note?.startsWith("→")) ||
-  (ev.event_type === "material_in" && ev.action_note?.includes("→"))
-    ? "bg-teal-100 border-teal-200 text-teal-700"
-    : slotBadgeCls(ev.event_type)
-}`}>
-  {(ev.event_type === "material_out" && ev.action_note?.startsWith("→")) ||
-   (ev.event_type === "material_in" && ev.action_note?.includes("→"))
-    ? "슬롯이동"
-    : CCP_SLOT_EVENT_LABELS[ev.event_type] ?? ev.event_type}
-</span>                         
-
-
-                            </td>
-                            <td className="py-2 px-3 text-xs text-slate-600" title={ev.work_order_no ?? ""}>
-  {ev.work_order_no ? (woLabelMap[ev.work_order_no] ?? ev.work_order_no) : "—"}
-</td>
-<td className="py-2 px-3 text-right whitespace-nowrap">
-  {(ev as any).temperature != null
-    ? <span className={`text-sm font-bold tabular-nums ${(ev as any).is_ok === false ? "text-red-600" : "text-blue-700"}`}>{(ev as any).temperature}°C</span>
-    : <span className="text-slate-300">—</span>}
-</td>
-<td className="py-2 px-3 text-center whitespace-nowrap">
-  {(ev as any).is_ok != null
-    ? <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${(ev as any).is_ok ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>{(ev as any).is_ok ? "O" : "X"}</span>
-    : <span className="text-slate-300 text-xs">—</span>}
-</td>
-<td className="py-2 px-3 text-xs text-slate-500">{ev.action_note ?? ""}</td>
-{isAdminOrSubadmin && (
-                              <td className="py-2 px-3 text-center whitespace-nowrap">
-                                <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500"
-                                  onClick={() => deleteSlotEvent(ev.id)}>삭제</button>
-                              </td>
-                            )}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* 온도 기록 (작업지시서별 시작/중간/종료) */}
-              <div className={`${card} p-4`}>
-                <div className="mb-3 font-semibold text-sm">🌡️ 온도 기록 (시작·중간점검·종료)</div>
-                {selectedWoEvents.length === 0 ? (
-                  <div className="py-4 text-center text-sm text-slate-400">
-                    온도 기록이 없습니다.
-                    <div className="text-xs mt-1 text-slate-300">작업지시서에서 온도를 기록하면 여기에 표시됩니다.</div>
-                  </div>
+  {/* 통합 기록 */}
+  <div className={`${card} p-4`}>
+                <div className="mb-3 font-semibold text-sm">🌡️ 기록</div>
+                {selectedSlotEvents.length === 0 && selectedWoEvents.length === 0 ? (
+                  <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
                 ) : (
                   <>
                     <div className="overflow-x-auto">
@@ -501,89 +432,124 @@ async function handlePrint() {
                         <thead>
                           <tr className="border-b-2 border-slate-200 bg-slate-50">
                             <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">시각</th>
-                            <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">작업지시서</th>
                             <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">유형</th>
                             <th className="py-2 px-3 text-right text-xs font-semibold text-slate-500 whitespace-nowrap">온도</th>
                             <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">판정</th>
-                            <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">조치사항</th>
-                            {isAdminOrSubadmin && <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">관리</th>}
+                            <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">비고</th>
+                            {isAdminOrSubadmin && <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500">관리</th>}
                           </tr>
                         </thead>
                         <tbody>
-                          {selectedWoEvents.map((ev, idx) => {
-                            const isNG = ev.is_ok === false;
-                            const isEditing = editingEventId === ev.id;
-                            return (
-                              <tr key={ev.id} className={`border-b border-slate-100 ${isEditing ? "bg-blue-50" : isNG ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                                <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">
-                                  {isEditing
-                                    ? <input type="time" className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
-                                        value={editTime} onChange={(e) => setEditTime(e.target.value)} />
+                          {/* 슬롯 이벤트 (원료투입/슬롯이동 등) — 중복 제거 */}
+                          {(() => {
+                            const seen = new Set<string>();
+                            return selectedSlotEvents
+                              .filter(e => e.event_type === "material_in" || e.event_type === "material_out")
+                              .filter(e => {
+                                const key = `${e.measured_at}_${e.event_type}`;
+                                if (seen.has(key)) return false;
+                                seen.add(key); return true;
+                              })
+                              .map((ev, idx) => {
+                                const isMove = (ev.event_type === "material_out" && ev.action_note?.startsWith("→")) || (ev.event_type === "material_in" && ev.action_note?.includes("→"));
+                                const label = isMove ? "슬롯이동" : ev.event_type === "material_in" ? "원료투입" : "원료소진";
+                                const badgeCls = isMove ? "bg-teal-100 border-teal-200 text-teal-700" : slotBadgeCls(ev.event_type);
+                                return (
+                                  <tr key={ev.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                                    <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">{toKSTTime(ev.measured_at)}</td>
+                                    <td className="py-2 px-3 whitespace-nowrap">
+                                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeCls}`}>{label}</span>
+                                    </td>
+                                    <td className="py-2 px-3 text-right whitespace-nowrap"><span className="text-slate-300">—</span></td>
+                                    <td className="py-2 px-3 text-center whitespace-nowrap"><span className="text-slate-300 text-xs">—</span></td>
+                                    <td className="py-2 px-3 text-xs text-slate-500">{ev.action_note ?? ""}</td>
+                                    {isAdminOrSubadmin && (
+                                      <td className="py-2 px-3 text-center whitespace-nowrap">
+                                        <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500"
+                                          onClick={() => deleteSlotEvent(ev.id)}>삭제</button>
+                                      </td>
+                                    )}
+                                  </tr>
+                                );
+                              });
+                          })()}
+                          {/* 온도 기록 (시작/중간점검/종료) — 중복 제거 */}
+                          {(() => {
+                            const seen = new Set<string>();
+                            return selectedWoEvents
+                              .filter(e => {
+                                const key = `${e.measured_at}_${e.event_type}`;
+                                if (seen.has(key)) return false;
+                                seen.add(key); return true;
+                              })
+                              .map((ev, idx) => {
+                                const isNG = ev.is_ok === false;
+                                const isEditing = editingEventId === ev.id;
+                                return (
+                                  <tr key={ev.id} className={`border-b border-slate-100 ${isEditing ? "bg-blue-50" : isNG ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                                    <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">
+                                      {isEditing
+                                        ? <input type="time" className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none" value={editTime} onChange={(e) => setEditTime(e.target.value)} />
                                         : toKSTTime(ev.measured_at)}
-                                </td>
-                                <td className="py-2 px-3 text-xs text-slate-500 whitespace-nowrap" title={ev.work_order_no}>
-  {woLabelMap[ev.work_order_no] ?? ev.work_order_no}
-</td>
-
-                                <td className="py-2 px-3 whitespace-nowrap">
-                                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${woBadgeCls(ev.event_type)}`}>
-                                    {CCP_WO_EVENT_LABELS[ev.event_type] ?? ev.event_type}
-                                  </span>
-                                </td>
-                                <td className="py-2 px-3 text-right whitespace-nowrap">
-                                  {isEditing
-                                    ? <input className="w-20 rounded-lg border border-blue-300 px-2 py-1 text-xs text-right tabular-nums focus:outline-none"
-                                        inputMode="decimal" value={editTemp}
-                                        onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setEditTemp(v); if (v) setEditIsOk(Number(v) >= 40 && Number(v) <= 50); }} />
-                                    : ev.temperature != null
-                                      ? <span className={`text-sm font-bold tabular-nums ${isNG ? "text-red-600" : "text-blue-700"}`}>{ev.temperature}°C</span>
-                                      : <span className="text-slate-300">—</span>}
-                                </td>
-                                <td className="py-2 px-3 text-center whitespace-nowrap">
-                                  {isEditing
-                                    ? <select className={`rounded-lg border px-1.5 py-1 text-xs focus:outline-none ${editIsOk ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}
-                                        value={editIsOk ? "ok" : "ng"} onChange={(e) => setEditIsOk(e.target.value === "ok")}>
-                                        <option value="ok">O 적합</option><option value="ng">X 부적합</option>
-                                      </select>
-                                    : ev.is_ok != null
-                                      ? <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ev.is_ok ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>{ev.is_ok ? "O" : "X"}</span>
-                                      : <span className="text-slate-300 text-xs">—</span>}
-                                </td>
-                                <td className="py-2 px-3 text-xs">
-                                  {isEditing
-                                    ? <input className="w-full rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
-                                        value={editActionNote} onChange={(e) => setEditActionNote(e.target.value)} placeholder="조치사항" />
-                                    : <span className={isNG ? "text-red-600" : ""}>{ev.action_note ?? ""}</span>}
-                                </td>
-                                {isAdminOrSubadmin && (
-                                  <td className="py-2 px-3 text-center whitespace-nowrap">
-                                    {isEditing
-                                      ? <div className="flex gap-1 justify-center">
-                                          <button className="rounded-lg border border-blue-400 bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                                            disabled={editSaving} onClick={() => saveEditEvent(ev)}>{editSaving ? "..." : "저장"}</button>
-                                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50"
-                                            onClick={() => setEditingEventId(null)}>취소</button>
-                                        </div>
-                                      : <div className="flex gap-1 justify-center">
-                                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600"
-                                            onClick={() => startEdit(ev)}>수정</button>
-                                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500"
-                                            onClick={() => deleteWoEvent(ev.id)}>삭제</button>
-                                        </div>}
-                                  </td>
-                                )}
-                              </tr>
-                            );
-                          })}
+                                    </td>
+                                    <td className="py-2 px-3 whitespace-nowrap">
+                                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${woBadgeCls(ev.event_type)}`}>
+                                        {CCP_WO_EVENT_LABELS[ev.event_type] ?? ev.event_type}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-3 text-right whitespace-nowrap">
+                                      {isEditing
+                                        ? <input className="w-20 rounded-lg border border-blue-300 px-2 py-1 text-xs text-right tabular-nums focus:outline-none" inputMode="decimal" value={editTemp} onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setEditTemp(v); if (v) setEditIsOk(Number(v) >= 40 && Number(v) <= 50); }} />
+                                        : ev.temperature != null
+                                          ? <span className={`text-sm font-bold tabular-nums ${isNG ? "text-red-600" : "text-blue-700"}`}>{ev.temperature}°C</span>
+                                          : <span className="text-slate-300">—</span>}
+                                    </td>
+                                    <td className="py-2 px-3 text-center whitespace-nowrap">
+                                      {isEditing
+                                        ? <select className={`rounded-lg border px-1.5 py-1 text-xs focus:outline-none ${editIsOk ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`} value={editIsOk ? "ok" : "ng"} onChange={(e) => setEditIsOk(e.target.value === "ok")}>
+                                            <option value="ok">O 적합</option><option value="ng">X 부적합</option>
+                                          </select>
+                                        : ev.is_ok != null
+                                          ? <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ev.is_ok ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>{ev.is_ok ? "O" : "X"}</span>
+                                          : <span className="text-slate-300 text-xs">—</span>}
+                                    </td>
+                                    <td className="py-2 px-3 text-xs">
+                                      {isEditing
+                                        ? <input className="w-full rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none" value={editActionNote} onChange={(e) => setEditActionNote(e.target.value)} placeholder="조치사항" />
+                                        : <span className={isNG ? "text-red-600" : ""}>{ev.action_note ?? ""}</span>}
+                                    </td>
+                                    {isAdminOrSubadmin && (
+                                      <td className="py-2 px-3 text-center whitespace-nowrap">
+                                        {isEditing
+                                          ? <div className="flex gap-1 justify-center">
+                                              <button className="rounded-lg border border-blue-400 bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-60" disabled={editSaving} onClick={() => saveEditEvent(ev)}>{editSaving ? "..." : "저장"}</button>
+                                              <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50" onClick={() => setEditingEventId(null)}>취소</button>
+                                            </div>
+                                          : <div className="flex gap-1 justify-center">
+                                              <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600" onClick={() => startEdit(ev)}>수정</button>
+                                              <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500" onClick={() => deleteWoEvent(ev.id)}>삭제</button>
+                                            </div>}
+                                      </td>
+                                    )}
+                                  </tr>
+                                );
+                              });
+                          })()}
                         </tbody>
                       </table>
                     </div>
                     {/* 요약 */}
                     <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
                       {(() => {
-                        const temps = selectedWoEvents.filter((e) => e.temperature != null).map((e) => e.temperature as number);
-                        const ngCount = selectedWoEvents.filter((e) => e.is_ok === false).length;
-                        const okCount = selectedWoEvents.filter((e) => e.is_ok === true).length;
+                        const seen = new Set<string>();
+                        const deduped = selectedWoEvents.filter(e => {
+                          const key = `${e.measured_at}_${e.event_type}`;
+                          if (seen.has(key)) return false;
+                          seen.add(key); return true;
+                        });
+                        const temps = deduped.filter((e) => e.temperature != null).map((e) => e.temperature as number);
+                        const ngCount = deduped.filter((e) => e.is_ok === false).length;
+                        const okCount = deduped.filter((e) => e.is_ok === true).length;
                         return (
                           <>
                             <span>온도 측정 <b>{temps.length}</b>회</span>
@@ -598,9 +564,7 @@ async function handlePrint() {
                   </>
                 )}
               </div>
-            </div>
-          );
-        })() : (
+
           <div className={`${card} flex items-center justify-center p-12`}>
             <div className="text-center text-slate-400">
               <div className="text-3xl mb-2">🌡️</div>
