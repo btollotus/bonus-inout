@@ -106,7 +106,7 @@ export function useCcpState(
   const [slotActionSaving, setSlotActionSaving] = useState(false);
 
   // ── 슬롯 현황 ──
-  const [slotStatus, setSlotStatus] = useState<Record<string, { date: string; daysAgo: number } | null>>({});
+  const [slotStatus, setSlotStatus] = useState<Record<string, { date: string; daysAgo: number; materialType: string | null } | null>>({});
 
   // ── 수정 state ──
   const [ccpWoEditingId, setCcpWoEditingId] = useState<string | null>(null);
