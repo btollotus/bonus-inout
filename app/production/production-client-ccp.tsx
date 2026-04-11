@@ -441,7 +441,7 @@ setCcpWoEditTime(kstTime.replace(":", ""));
         measured_at: `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`,
         work_order_no: workOrderNo ?? null,
         action_note:   null,
-        material_type: materialType ?? null,
+        material_type: materialType || null,
         created_by:    currentUserIdRef.current,
       });
       if (error) return showToast("원료투입 기록 실패: " + error.message, "error");
