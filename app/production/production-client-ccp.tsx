@@ -129,11 +129,11 @@ export function useCcpState(
       .order("measured_at", { ascending: true });
   
       if (slotId) {
-        query = query.eq("slot_id", slotId).eq("work_order_no", workOrderNo);
+        query = query.eq("slot_id", slotId);
       } else {
         query = query.eq("work_order_no", workOrderNo);
       }
-      
+
     const { data } = await query;
     setWoEvents((data ?? []) as WoEvent[]);
     const hasStart = (data ?? []).some((e: any) => e.event_type === "start");
@@ -336,6 +336,26 @@ if (slotAllEvents.length > 0) {
 
     // 3. 같은 슬롯의 다른 작업지시서에도 동일 기록 복사
  
+// 같은 슬롯의 다른 작업지시서에도 복사
+const { data: sameSlotWos } = await supabase
+.from("work_orders")
+.select("work_order_no")
+.eq("ccp_slot_id", slotId)
+.eq("status", "생산중")
+.neq("work_order_no", selectedWo.work_order_no);
+
+for (const wo of sameSlotWos ?? []) {
+await supabase.from("ccp_wo_events").insert({
+  work_order_no: wo.work_order_no,
+  slot_id: slotId,
+  event_type: ccpWoEventType,
+  measured_at: measuredAt,
+  temperature: temp,
+  is_ok: ccpWoIsOk,
+  action_note: ccpWoActionNote.trim() || null,
+  created_by: currentUserIdRef.current,
+});
+}
 
     showToast("✅ CCP 온도 기록 완료!");
     setCcpWoTemp(""); setCcpWoActionNote(""); setCcpWoIsOk(true); setCcpWoTime("");
