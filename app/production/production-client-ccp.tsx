@@ -128,15 +128,11 @@ export function useCcpState(
       .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
       .order("measured_at", { ascending: true });
   
-    if (slotId) {
-      const today = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}-${String(new Date().getDate()).padStart(2,"0")}`;
-      query = query
-        .eq("slot_id", slotId)
-        .gte("measured_at", `${today}T00:00:00+09:00`)
-        .lte("measured_at", `${today}T23:59:59+09:00`);
-    } else {
-      query = query.eq("work_order_no", workOrderNo);
-    }
+      if (slotId) {
+        query = query.eq("slot_id", slotId).eq("work_order_no", workOrderNo);
+      } else {
+        query = query.eq("work_order_no", workOrderNo);
+      }
       
     const { data } = await query;
     setWoEvents((data ?? []) as WoEvent[]);
