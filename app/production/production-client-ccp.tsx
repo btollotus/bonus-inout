@@ -569,10 +569,11 @@ export function SlotStatusPanel({
   slotActionTime: string; setSlotActionTime: (v: string) => void;
   slotActionSaving: boolean;
   loadSlotStatus: () => void;
-  saveSlotMaterialIn: (slotId: string) => void;
+  saveSlotMaterialIn: (slotId: string, workOrderNo?: string, materialType?: string) => void;
   saveSlotMove: (fromSlotId: string, toSlotId: string) => void;
 }) {
   const [selectedMaterialType, setSelectedMaterialType] = React.useState<string>("");
+
   const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
   const mainGroups = Array.from(new Set(
     warmerSlots.filter((s) => !MERGE_PURPOSES.includes(s.purpose)).map((s) => s.purpose)
