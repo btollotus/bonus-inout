@@ -573,7 +573,7 @@ async function handlePrint() {
           </div>
         )}
       </div>
-    </div>
+    
          
 {/* ── 인쇄 전용 영역 ── */}
 <style>{`
