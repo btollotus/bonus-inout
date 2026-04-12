@@ -140,16 +140,18 @@ type ZoneFields = {
 };
 
 function ZoneTable({
-  zone, fields, onChange, showExtra = false,
+  zone, fields, onChange, showExtra = false, disabled = false,
 }: {
   zone: "A" | "B";
   fields: ZoneFields;
   onChange: (key: keyof ZoneFields, val: string | number | null) => void;
   showExtra?: boolean;
+  disabled?: boolean;
 }) {
   const thTop = "border border-slate-200 bg-slate-50 px-2 py-1 text-center text-[11px] font-semibold text-slate-500 whitespace-nowrap";
   const thSub = "border border-slate-200 bg-slate-50 px-1 py-1 text-center text-[10px] text-slate-400 whitespace-nowrap";
   const td = "border border-slate-200 px-1 py-2 text-center";
+  const tdDim = "border border-slate-200 px-1 py-2 text-center bg-slate-50 opacity-30 pointer-events-none";
   const label = "border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-medium text-slate-600 whitespace-nowrap";
 
   return (
@@ -180,20 +182,21 @@ function ZoneTable({
           <tr>
             <td className={label}>감도모니터링<br />&amp;공정품확인</td>
             {(["fe_l","fe_m","fe_r","sus_l","sus_m","sus_r"] as (keyof ZoneFields)[]).map((k) => (
-              <td key={k} className={td}>
+              <td key={k} className={disabled ? tdDim : td}>
                 <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
               </td>
             ))}
-            <td className={td}>
+            <td className={disabled ? tdDim : td}>
               <OxToggle value={fields.product_pass} onChange={(v) => onChange("product_pass", v)} />
             </td>
             {(["fe_up_l","fe_up_m","fe_up_r","fe_dn_l","fe_dn_m","fe_dn_r","sus_up_l","sus_up_m","sus_up_r","sus_dn_l","sus_dn_m","sus_dn_r"] as (keyof ZoneFields)[]).map((k) => (
-              <td key={k} className={td}>
+              <td key={k} className={disabled ? tdDim : td}>
                 <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
               </td>
             ))}
             {showExtra && (
               <td className={td}>
+                {/* 이탈유무는 disabled여도 항상 활성 */}
                 <OxToggle value={fields.deviation ?? "X"} onChange={(v) => onChange("deviation", v)} />
               </td>
             )}
@@ -546,11 +549,17 @@ export function Ccp1pTab({ role, userId, showToast }: {
             <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200">
               <ZoneHeader label="B" color="amber" title="제품 2개 이상일 경우" sub="— 해당 시에만 입력" />
               <div className="p-3">
+                {(formData.b_pass_qty ?? 0) <= 1 && (
+                  <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
+                    통과수량이 1개 이하 → 이탈유무만 입력 가능합니다.
+                  </div>
+                )}
                 <ZoneTable
                   zone="B"
                   fields={bFields(formData)}
                   onChange={setB}
                   showExtra
+                  disabled={(formData.b_pass_qty ?? 0) <= 1}
                 />
               </div>
             </div>
