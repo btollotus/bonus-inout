@@ -423,8 +423,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
       "a_fe_up_l","a_fe_up_m","a_fe_up_r","a_fe_dn_l","a_fe_dn_m","a_fe_dn_r",
       "a_sus_up_l","a_sus_up_m","a_sus_up_r","a_sus_dn_l","a_sus_dn_m","a_sus_dn_r"] as (keyof typeof formData)[];
     const aDefaultX = ["a_product_pass"] as (keyof typeof formData)[];
-    const bDefaultO = ["b_fe_l","b_fe_m","b_fe_r","b_sus_l","b_sus_m","b_sus_r"]
-    as (keyof typeof formData)[];
+    const bDefaultO = ["b_fe_l","b_fe_m","b_fe_r","b_sus_l","b_sus_m","b_sus_r"] as (keyof typeof formData)[];
   const bDefaultX = ["b_product_pass","b_deviation"] as (keyof typeof formData)[];
 
     const aChanged = aDefaultO.some((k) => formData[k] === "X") || aDefaultX.some((k) => formData[k] === "O");
