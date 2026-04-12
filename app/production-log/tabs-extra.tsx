@@ -777,38 +777,53 @@ async function handlePrint() {
                   ))}
                 </tr>
 
-                {/* 원료투입 행 */}
-                <tr>
-                  {chunk.map((s, i) => {
-                    const ev = slotEvents.filter(e => e.slot_id === s.id && e.event_type === "material_in")
-                      .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
-                    const isMove = ev?.action_note?.includes("→");
-                    return (
-                      <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
-                        {ev ? `${isMove ? "슬롯이동" : "원료투입"}: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}` : ""}
-                      </td>
-                    );
-                  })}
-                  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
-                    <td key={`empty-in-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
-                  ))}
-                </tr>
+          {/* 원료투입 행 */}
+<tr>
+  {chunk.map((s, i) => {
+    const ev = slotEvents.filter(e =>
+      e.slot_id === s.id &&
+      e.event_type === "material_in" &&
+      !e.action_note?.includes("→")
+    ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+    return (
+      <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
+        {ev ? `원료투입: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}` : ""}
+      </td>
+    );
+  })}
+  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+    <td key={`empty-in-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
+  ))}
+</tr>
 
-                {/* 슬롯이동 행 */}
-                <tr>
-                  {chunk.map((s, i) => {
-                    const ev = slotEvents.filter(e => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→"))
-                      .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
-                    return (
-                      <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
-                        {ev ? `슬롯이동: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})` : ""}
-                      </td>
-                    );
-                  })}
-                  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
-                    <td key={`empty-out-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
-                  ))}
-                </tr>
+    
+{/* 슬롯이동 행 */}
+<tr>
+  {chunk.map((s, i) => {
+    // 출발 슬롯: material_out + action_note "→"로 시작
+    const outEv = slotEvents.filter(e =>
+      e.slot_id === s.id &&
+      e.event_type === "material_out" &&
+      e.action_note?.startsWith("→")
+    ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+    // 도착 슬롯: material_in + action_note "→" 포함 (슬롯이동으로 온 것)
+    const inEv = slotEvents.filter(e =>
+      e.slot_id === s.id &&
+      e.event_type === "material_in" &&
+      e.action_note?.includes("→")
+    ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+    const ev = outEv ?? inEv;
+    return (
+      <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
+        {ev ? `슬롯이동: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})` : ""}
+      </td>
+    );
+  })}
+  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+    <td key={`empty-out-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
+  ))}
+</tr>
+
 
                 {/* 온도기록 행 */}
                 {Array.from({ length: maxRows }).map((_, rowIdx) => (
