@@ -326,11 +326,32 @@ export function Ccp1pTab({ role, userId, showToast }: {
   async function save() {
     if (!formData || !selectedWoId) return;
     if (!formData.start_time) return showToast("시작시간을 입력하세요.", "error");
-    if (formData.b_end_time && formData.start_time) {
+    if (formData.b_end_time && formData.b_end_time.length === 5 && formData.start_time) {
       if (formData.b_end_time <= formData.start_time) {
         return showToast("종료시간은 시작시간보다 늦어야 합니다.", "error");
       }
     }
+
+    // 기본값과 다른 값 감지 (A: O기본→X변경, X기본→O변경 / B: 통과수량 2이상일때)
+    const aDefaultO = ["a_fe_l","a_fe_m","a_fe_r","a_sus_l","a_sus_m","a_sus_r",
+      "a_fe_up_l","a_fe_up_m","a_fe_up_r","a_fe_dn_l","a_fe_dn_m","a_fe_dn_r",
+      "a_sus_up_l","a_sus_up_m","a_sus_up_r","a_sus_dn_l","a_sus_dn_m","a_sus_dn_r"] as (keyof typeof formData)[];
+    const aDefaultX = ["a_product_pass"] as (keyof typeof formData)[];
+    const bDefaultO = ["b_fe_l","b_fe_m","b_fe_r","b_sus_l","b_sus_m","b_sus_r",
+      "b_fe_up_l","b_fe_up_m","b_fe_up_r","b_fe_dn_l","b_fe_dn_m","b_fe_dn_r",
+      "b_sus_up_l","b_sus_up_m","b_sus_up_r","b_sus_dn_l","b_sus_dn_m","b_sus_dn_r"] as (keyof typeof formData)[];
+    const bDefaultX = ["b_product_pass","b_deviation"] as (keyof typeof formData)[];
+
+    const aChanged = aDefaultO.some((k) => formData[k] === "X") || aDefaultX.some((k) => formData[k] === "O");
+    const bActive = (formData.b_pass_qty ?? 0) > 1;
+    const bChanged = bActive && (bDefaultO.some((k) => formData[k] === "X") || bDefaultX.some((k) => formData[k] === "O"));
+
+    if (aChanged || bChanged) {
+      const zones = [aChanged && "A구역", bChanged && "B구역"].filter(Boolean).join(", ");
+      const ok = confirm(`[${zones}] 기본값과 다른 입력값이 있습니다.\n내용을 다시 확인하셨나요?\n\n확인 → 저장 / 취소 → 다시 검토`);
+      if (!ok) return;
+    }
+
     setSaving(true);
 
     const existing = logMap[selectedWoId];
@@ -504,7 +525,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
                   maxLength={5}
                   placeholder="1500"
                   className={`w-28 rounded-xl border px-3 py-2 text-sm focus:outline-none ${
-                    formData.b_end_time && formData.start_time && formData.b_end_time <= formData.start_time
+                    formData.b_end_time?.length === 5 && formData.start_time && formData.b_end_time <= formData.start_time
                       ? "border-red-400 bg-red-50 focus:border-red-500"
                       : "border-slate-200 focus:border-blue-400"
                   }`}
@@ -515,7 +536,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
                     setFormData((prev: any) => prev ? { ...prev, b_end_time: v || null } : prev);
                   }}
                 />
-                {formData.b_end_time && formData.start_time && formData.b_end_time <= formData.start_time && (
+                {formData.b_end_time?.length === 5 && formData.start_time && formData.b_end_time <= formData.start_time && (
                   <div className="mt-1 text-[11px] text-red-500">시작시간보다 늦게 입력하세요</div>
                 )}
               </div>
