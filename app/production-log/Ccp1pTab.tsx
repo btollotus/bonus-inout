@@ -891,22 +891,20 @@ export function Ccp1pTab({ role, userId, showToast }: {
           </tbody>
         </table>
 
-       {/* ④ 본문 테이블 */}
-<table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4, tableLayout: "fixed" }}>
+{/* ④ 본문 테이블 — 헤더 테이블 */}
+<table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 0, tableLayout: "fixed" }}>
   <colgroup>
-    <col style={{ width: "86px" }} />  {/* 품명 */}
-    <col style={{ width: "22px" }} />  {/* 시작시간 */}
-    <col style={{ width: "22px" }} />  {/* 종료시간 */}
-    <col style={{ width: "16px" }} />  {/* 구역 */}
-    <col style={{ width: "18px" }} />  {/* 제품통과(B행 전용) */}
-    {/* OX 18열 × 16px */}
+    <col style={{ width: "86px" }} />
+    <col style={{ width: "22px" }} />
+    <col style={{ width: "22px" }} />
+    <col style={{ width: "16px" }} />
+    <col style={{ width: "18px" }} />
     <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
     <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
     <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
     <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
     <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
     <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
-    {/* 이탈/통과/확인 */}
     <col style={{ width: "18px" }} />
     <col style={{ width: "18px" }} />
     <col style={{ width: "30px" }} />
@@ -937,15 +935,35 @@ export function Ccp1pTab({ role, userId, showToast }: {
       ))}
     </tr>
   </thead>
+</table>
 
-  {/* 데이터 행 — 품명 1개당 별도 tbody */}
-  {sortedLogs.map((log) => {
-    const signSrc = log.worker_name ? SIGN_MAP[log.worker_name] : null;
-    const hasDeviation = getDeviationDesc(log) !== "";
-    const bActive = (log.b_pass_qty ?? 0) > 1;
-    return (
-      <tbody key={log.id} style={{ pageBreakInside: "avoid" }}>
-        {/* A행 */}
+{/* 데이터 행 — 품명 1개당 별도 table */}
+{sortedLogs.map((log) => {
+  const signSrc = log.worker_name ? SIGN_MAP[log.worker_name] : null;
+  const hasDeviation = getDeviationDesc(log) !== "";
+  const bActive = (log.b_pass_qty ?? 0) > 1;
+  const colgroup = (
+    <colgroup>
+      <col style={{ width: "86px" }} />
+      <col style={{ width: "22px" }} />
+      <col style={{ width: "22px" }} />
+      <col style={{ width: "16px" }} />
+      <col style={{ width: "18px" }} />
+      <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+      <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+      <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+      <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+      <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+      <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+      <col style={{ width: "18px" }} />
+      <col style={{ width: "18px" }} />
+      <col style={{ width: "30px" }} />
+    </colgroup>
+  );
+  return (
+    <table key={log.id} style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", pageBreakInside: "avoid" }}>
+      {colgroup}
+      <tbody>
         <tr style={{ background: hasDeviation ? "#fff9f9" : "#fff" }}>
           <td rowSpan={2} style={{ ...tdBase, textAlign: "left", fontSize: "6.5pt", paddingLeft: 3, whiteSpace: "normal", wordBreak: "keep-all" }}>
             {hasDeviation && <span style={{ color: "#DC2626" }}>⚠ </span>}
@@ -954,8 +972,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
           <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{(log.start_time ?? "").slice(0, 5)}</td>
           <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{(log.b_end_time ?? "").slice(0, 5)}</td>
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>A</td>
-          <td style={tdBase} />{/* A행: 제품통과 빈칸 */}
-          {/* A OX 18열 */}
+          <td style={tdBase} />
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_fe_l ?? "O"}</td>
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_fe_m ?? "O"}</td>
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_fe_r ?? "O"}</td>
@@ -974,7 +991,6 @@ export function Ccp1pTab({ role, userId, showToast }: {
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_sus_dn_l ?? "O"}</td>
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_sus_dn_m ?? "O"}</td>
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_sus_dn_r ?? "O"}</td>
-          {/* 이탈/통과/확인 rowspan=2 */}
           <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.b_deviation ?? "X"}</td>
           <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{log.b_pass_qty ?? ""}</td>
           <td rowSpan={2} style={{ ...tdBase, textAlign: "center", padding: "2px" }}>
@@ -988,50 +1004,63 @@ export function Ccp1pTab({ role, userId, showToast }: {
             ) : null}
           </td>
         </tr>
-        {/* B행 */}
         <tr style={{ background: "#fff" }}>
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>B</td>
-          {/* 제품통과 */}
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>
             {bActive ? (log.b_product_pass ?? "X") : ""}
           </td>
-          {/* Fe(3) + SUS(3) = 6칸 */}
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_fe_l ?? "O") : ""}</td>
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_fe_m ?? "O") : ""}</td>
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_fe_r ?? "O") : ""}</td>
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_sus_l ?? "O") : ""}</td>
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_sus_m ?? "O") : ""}</td>
           <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_sus_r ?? "O") : ""}</td>
-          {/* 나머지 12칸 빈칸 */}
           <td style={tdBase} /><td style={tdBase} /><td style={tdBase} />
           <td style={tdBase} /><td style={tdBase} /><td style={tdBase} />
           <td style={tdBase} /><td style={tdBase} /><td style={tdBase} />
           <td style={tdBase} /><td style={tdBase} /><td style={tdBase} />
         </tr>
       </tbody>
-    );
-  })}
+    </table>
+  );
+})}
 
-  {/* 빈 행 — 별도 tbody */}
-  {Array.from({ length: emptyRowCount }).map((_, i) => (
-    <tbody key={`empty-${i}`} style={{ pageBreakInside: "avoid" }}>
-   <tr style={{ height: 18 }}>
-  <td rowSpan={2} style={tdBase} />  {/* 품명 */}
-  <td rowSpan={2} style={tdBase} />  {/* 시작 */}
-  <td rowSpan={2} style={tdBase} />  {/* 종료 */}
-  <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>A</td>
-  <td style={tdBase} />
-  {Array.from({ length: 18 }).map((__, j) => <td key={j} style={tdBase} />)}
-  <td rowSpan={2} style={tdBase} />  {/* 이탈 */}
-  <td rowSpan={2} style={tdBase} />  {/* 통과 */}
-  <td rowSpan={2} style={tdBase} />  {/* 확인 */}
-</tr>
-<tr style={{ height: 18 }}>
-  <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>B</td>
-  <td style={tdBase} />
-  {Array.from({ length: 18 }).map((__, j) => <td key={j} style={tdBase} />)}
-</tr>
+{/* 빈 행 — 별도 table */}
+{Array.from({ length: emptyRowCount }).map((_, i) => (
+  <table key={`empty-${i}`} style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", pageBreakInside: "avoid" }}>
+    <colgroup>
+      <col style={{ width: "86px" }} />
+      <col style={{ width: "22px" }} />
+      <col style={{ width: "22px" }} />
+      <col style={{ width: "16px" }} />
+      <col style={{ width: "18px" }} />
+      <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+      <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+      <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+      <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+      <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+      <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+      <col style={{ width: "18px" }} />
+      <col style={{ width: "18px" }} />
+      <col style={{ width: "30px" }} />
+    </colgroup>
+    <tbody>
+      <tr style={{ height: 18 }}>
+        <td rowSpan={2} style={tdBase} />
+        <td rowSpan={2} style={tdBase} />
+        <td rowSpan={2} style={tdBase} />
+        <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>A</td>
+        <td style={tdBase} />
+        {Array.from({ length: 18 }).map((__, j) => <td key={j} style={tdBase} />)}
+        <td rowSpan={2} style={tdBase} />
+        <td rowSpan={2} style={tdBase} />
+        <td rowSpan={2} style={tdBase} />
+      </tr>
+      <tr style={{ height: 18 }}>
+        <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>B</td>
+        <td style={tdBase} />
+        {Array.from({ length: 18 }).map((__, j) => <td key={j} style={tdBase} />)}
+      </tr>
     </tbody>
-  ))}
-
-</table>
+  </table>
+))}
