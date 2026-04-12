@@ -214,13 +214,15 @@ function ZoneTable({
               <OxToggle value={fields.product_pass} onChange={(v) => onChange("product_pass", v)} />
             </td>
             {showFull && (
-  (["fe_up_l","fe_up_m","fe_up_r","fe_dn_l","fe_dn_m","fe_dn_r",
-    "sus_up_l","sus_up_m","sus_up_r","sus_dn_l","sus_dn_m","sus_dn_r"]
-   as (keyof ZoneFields)[]).map((k) => (
-    <td key={k} className={disabled ? tdDim : td}>
-      <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
-    </td>
-  ))
+  <>
+    {(["fe_up_l","fe_up_m","fe_up_r","fe_dn_l","fe_dn_m","fe_dn_r",
+      "sus_up_l","sus_up_m","sus_up_r","sus_dn_l","sus_dn_m","sus_dn_r"]
+     as (keyof ZoneFields)[]).map((k) => (
+      <td key={k} className={disabled ? tdDim : td}>
+        <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
+      </td>
+    ))}
+  </>
 )}
 
 
