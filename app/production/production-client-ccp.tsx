@@ -741,7 +741,7 @@ export function SlotStatusPanel({
                   </div>
                 )}
                
-               // 변경 후
+             
 <div>
   <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
   <input className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
