@@ -326,6 +326,11 @@ export function Ccp1pTab({ role, userId, showToast }: {
   async function save() {
     if (!formData || !selectedWoId) return;
     if (!formData.start_time) return showToast("시작시간을 입력하세요.", "error");
+    if (formData.b_end_time && formData.start_time) {
+      if (formData.b_end_time <= formData.start_time) {
+        return showToast("종료시간은 시작시간보다 늦어야 합니다.", "error");
+      }
+    }
     setSaving(true);
 
     const existing = logMap[selectedWoId];
@@ -498,7 +503,11 @@ export function Ccp1pTab({ role, userId, showToast }: {
                   inputMode="numeric"
                   maxLength={5}
                   placeholder="1500"
-                  className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                  className={`w-28 rounded-xl border px-3 py-2 text-sm focus:outline-none ${
+                    formData.b_end_time && formData.start_time && formData.b_end_time <= formData.start_time
+                      ? "border-red-400 bg-red-50 focus:border-red-500"
+                      : "border-slate-200 focus:border-blue-400"
+                  }`}
                   value={formData.b_end_time ?? ""}
                   onChange={(e: any) => {
                     let v = e.target.value.replace(/[^\d:]/g, "");
@@ -506,6 +515,9 @@ export function Ccp1pTab({ role, userId, showToast }: {
                     setFormData((prev: any) => prev ? { ...prev, b_end_time: v || null } : prev);
                   }}
                 />
+                {formData.b_end_time && formData.start_time && formData.b_end_time <= formData.start_time && (
+                  <div className="mt-1 text-[11px] text-red-500">시작시간보다 늦게 입력하세요</div>
+                )}
               </div>
               <div>
                 <div className="mb-1 text-xs text-slate-500">통과수량</div>
