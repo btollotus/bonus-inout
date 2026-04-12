@@ -55,9 +55,19 @@ type MetalLog = {
   approved_at: string | null;
 };
 
+// 담당자 → 서명 이미지 경로
+const SIGN_MAP: Record<string, string> = {
+  "조은미": "/sign-choem.png",
+  "강미라": "/sign-kangml.png",
+  "나현우": "/sign-nahw.png",
+  "나미영": "/sign-namiy.png",
+  "조대성": "/sign-chods.png",
+  "김영각": "/sign-kimyg.png",
+  "고한결": "/sign-gohg.png",
+};
+
 // 빈 기록 초기값
 function emptyLog(workOrderId: string, productName: string, clientName: string, logDate: string): Omit<MetalLog, "id"> {
-  const ox = (def: string) => def;
   return {
     work_order_id: workOrderId,
     log_date: logDate,
@@ -196,7 +206,6 @@ function ZoneTable({
             ))}
             {showExtra && (
               <td className={td}>
-                {/* 이탈유무는 disabled여도 항상 활성 */}
                 <OxToggle value={fields.deviation ?? "X"} onChange={(v) => onChange("deviation", v)} />
               </td>
             )}
@@ -207,16 +216,45 @@ function ZoneTable({
   );
 }
 
+// ─────────────────────── 인쇄 전용 OX 셀 ───────────────────────
+function PrintOx({ val }: { val: string | null }) {
+  const v = val ?? "O";
+  return (
+    <td
+      style={{
+        border: "1px solid #000",
+        textAlign: "center",
+        fontSize: "8pt",
+        fontWeight: "bold",
+        color: v === "O" ? "#059669" : "#DC2626",
+        padding: "1px",
+        width: 22,
+      }}
+    >
+      {v}
+    </td>
+  );
+}
+
+// ─────────────────────── 인쇄 전용 빈 OX 셀 ───────────────────────
+function PrintOxEmpty() {
+  return (
+    <td style={{ border: "1px solid #000", textAlign: "center", fontSize: "8pt", width: 22, padding: "1px" }}>
+      &nbsp;
+    </td>
+  );
+}
+
 // ─────────────────────── Main Tab ───────────────────────
 export function Ccp1pTab({ role, userId, showToast }: {
   role: UserRole;
   userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
-  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }); // YYYY-MM-DD KST
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 
   const [woList, setWoList] = useState<WorkOrderItem[]>([]);
-  const [logMap, setLogMap] = useState<Record<string, MetalLog>>({}); // work_order_id → log
+  const [logMap, setLogMap] = useState<Record<string, MetalLog>>({});
   const [selectedWoId, setSelectedWoId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Omit<MetalLog, "id"> | null>(null);
   const [saving, setSaving] = useState(false);
@@ -228,7 +266,6 @@ export function Ccp1pTab({ role, userId, showToast }: {
       .then(({ data }: { data: any[] | null }) => setEmployees(data ?? []));
   }, []);
 
-  // 김영각/조대성 uuid 조회
   const [confirmerUserId, setConfirmerUserId] = useState<string | null>(null);
   const [approverUserId, setApproverUserId] = useState<string | null>(null);
 
@@ -241,7 +278,6 @@ export function Ccp1pTab({ role, userId, showToast }: {
     });
   }, []);
 
-  // 오늘 생산완료 작업지시서 조회 (KST 기준) - 생산완료 시간 오름차순
   const loadWoList = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -257,7 +293,6 @@ export function Ccp1pTab({ role, userId, showToast }: {
     setLoading(false);
   }, [today]);
 
-  // 오늘 CCP-1P 기록 조회
   const loadLogs = useCallback(async () => {
     const { data } = await supabase
       .from("ccp_metal_logs")
@@ -278,7 +313,6 @@ export function Ccp1pTab({ role, userId, showToast }: {
     loadLogs();
   }, [loadWoList, loadLogs]);
 
-  // 작업지시서 선택
   function selectWo(wo: WorkOrderItem) {
     setSelectedWoId(wo.id);
     const existing = logMap[wo.id];
@@ -289,7 +323,6 @@ export function Ccp1pTab({ role, userId, showToast }: {
     }
   }
 
-  // A구역 필드 변경
   function setA(key: keyof ZoneFields, val: string | number | null) {
     if (!formData) return;
     const map: Record<keyof ZoneFields, keyof Omit<MetalLog,"id">> = {
@@ -304,7 +337,6 @@ export function Ccp1pTab({ role, userId, showToast }: {
     setFormData((prev: any) => prev ? { ...prev, [map[key]]: val } : prev);
   }
 
-  // B구역 필드 변경
   function setB(key: keyof ZoneFields, val: string | number | null) {
     if (!formData) return;
     const map: Record<string, keyof Omit<MetalLog,"id">> = {
@@ -322,20 +354,17 @@ export function Ccp1pTab({ role, userId, showToast }: {
     setFormData((prev: any) => prev ? { ...prev, [map[key]]: val } : prev);
   }
 
-  // 저장
   async function save() {
     if (!formData || !selectedWoId) return;
     if (!formData.start_time) return showToast("시작시간을 입력하세요.", "error");
     if (!formData.b_end_time || formData.b_end_time.length < 5) return showToast("종료시간을 입력하세요.", "error");
 
-    // 시작시간 > 생산완료 시간 검증
     const wo = woList.find((w: any) => w.id === selectedWoId);
     if (wo && formData.start_time) {
-      // updated_at(UTC) → KST HH:MM 24시간 형식
       const completedDate = new Date(wo.updated_at);
       const completedKst24 = completedDate.toLocaleTimeString("ko-KR", {
         timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false,
-      }); // "HH:MM"
+      });
       if (formData.start_time < completedKst24) {
         return showToast(`시작시간(${formData.start_time})은 생산완료 시간(${completedKst24})보다 늦어야 합니다.`, "error");
       }
@@ -347,17 +376,14 @@ export function Ccp1pTab({ role, userId, showToast }: {
       }
     }
 
-    // 다른 기록과 시간 겹침 검증 (금속검출기 1대)
     const myStart = formData.start_time;
     const myEnd = formData.b_end_time && formData.b_end_time.length === 5 ? formData.b_end_time : myStart;
-    const existingId = logMap[selectedWoId]?.id ?? null;
 
     for (const [woId, log] of Object.entries(logMap) as [string, MetalLog][]) {
-      if (woId === selectedWoId) continue; // 자기 자신 제외
+      if (woId === selectedWoId) continue;
       if (!log.start_time) continue;
       const otherStart = log.start_time;
       const otherEnd = log.b_end_time && log.b_end_time.length === 5 ? log.b_end_time : otherStart;
-      // 겹침 조건: myStart < otherEnd AND myEnd > otherStart
       const overlaps = myStart < otherEnd && myEnd > otherStart;
       if (overlaps) {
         const otherWo = woList.find((w: any) => w.id === woId);
@@ -369,7 +395,6 @@ export function Ccp1pTab({ role, userId, showToast }: {
       }
     }
 
-    // 기본값과 다른 값 감지 (A: O기본→X변경, X기본→O변경 / B: 통과수량 2이상일때)
     const aDefaultO = ["a_fe_l","a_fe_m","a_fe_r","a_sus_l","a_sus_m","a_sus_r",
       "a_fe_up_l","a_fe_up_m","a_fe_up_r","a_fe_dn_l","a_fe_dn_m","a_fe_dn_r",
       "a_sus_up_l","a_sus_up_m","a_sus_up_r","a_sus_dn_l","a_sus_dn_m","a_sus_dn_r"] as (keyof typeof formData)[];
@@ -411,12 +436,10 @@ export function Ccp1pTab({ role, userId, showToast }: {
     if (error) return showToast("저장 실패: " + error.message, "error");
     showToast("✅ CCP-1P 기록 저장 완료!");
     await loadLogs();
-    // 저장 후 logMap 갱신된 값으로 formData 동기화
     setSelectedWoId(null);
     setFormData(null);
   }
 
-  // A구역 ZoneFields 추출
   const aFields = (f: Omit<MetalLog,"id">): ZoneFields => ({
     fe_l: f.a_fe_l, fe_m: f.a_fe_m, fe_r: f.a_fe_r,
     sus_l: f.a_sus_l, sus_m: f.a_sus_m, sus_r: f.a_sus_r,
@@ -427,7 +450,6 @@ export function Ccp1pTab({ role, userId, showToast }: {
     sus_dn_l: f.a_sus_dn_l, sus_dn_m: f.a_sus_dn_m, sus_dn_r: f.a_sus_dn_r,
   });
 
-  // B구역 ZoneFields 추출
   const bFields = (f: Omit<MetalLog,"id">): ZoneFields => ({
     fe_l: f.b_fe_l, fe_m: f.b_fe_m, fe_r: f.b_fe_r,
     sus_l: f.b_sus_l, sus_m: f.b_sus_m, sus_r: f.b_sus_r,
@@ -441,18 +463,79 @@ export function Ccp1pTab({ role, userId, showToast }: {
     pass_qty: f.b_pass_qty,
   });
 
-  // KST 시간 표시 (24시간 HH:MM)
   function toKstTime(utcStr: string) {
     return new Date(utcStr).toLocaleTimeString("ko-KR", {
       timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false,
     });
   }
 
+  // ── 인쇄용: logMap을 시작시간 순으로 정렬한 기록 목록 ──
+  const sortedLogs: MetalLog[] = Object.values(logMap).sort((a, b) => {
+    const ta = a.start_time ?? "";
+    const tb = b.start_time ?? "";
+    return ta.localeCompare(tb);
+  });
+
+  // ── 인쇄용: 이탈 기록 수집 ──
+  function getDeviationDesc(log: MetalLog): string {
+    const parts: string[] = [];
+    const aFields: [string, string][] = [
+      ["a_fe_l","Fe시편(좌)"],["a_fe_m","Fe시편(중)"],["a_fe_r","Fe시편(우)"],
+      ["a_sus_l","SUS시편(좌)"],["a_sus_m","SUS시편(중)"],["a_sus_r","SUS시편(우)"],
+      ["a_product_pass","제품통과"],
+      ["a_fe_up_l","Fe+제품상(좌)"],["a_fe_up_m","Fe+제품상(중)"],["a_fe_up_r","Fe+제품상(우)"],
+      ["a_fe_dn_l","Fe+제품하(좌)"],["a_fe_dn_m","Fe+제품하(중)"],["a_fe_dn_r","Fe+제품하(우)"],
+      ["a_sus_up_l","SUS+제품상(좌)"],["a_sus_up_m","SUS+제품상(중)"],["a_sus_up_r","SUS+제품상(우)"],
+      ["a_sus_dn_l","SUS+제품하(좌)"],["a_sus_dn_m","SUS+제품하(중)"],["a_sus_dn_r","SUS+제품하(우)"],
+    ];
+    for (const [key, label] of aFields) {
+      const val = (log as any)[key];
+      const defaultVal = key === "a_product_pass" ? "X" : "O";
+      if (val && val !== defaultVal) parts.push(`A-${label}`);
+    }
+    if (log.b_deviation === "O") parts.push("B-이탈");
+    const name = `${log.start_time ?? ""} ${log.client_name ?? ""} ${log.product_name ?? ""}`.trim();
+    return parts.length > 0 ? `${name} / ${parts.join(", ")}` : "";
+  }
+
+  const deviationRows = sortedLogs
+    .map((log) => ({ log, desc: getDeviationDesc(log) }))
+    .filter((r) => r.desc !== "");
+
+  // ── 인쇄용 날짜 포맷 ──
+  const printDate = (() => {
+    const d = new Date(today + "T00:00:00+09:00");
+    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+  })();
+
+  // ── 빈 행 (테이블 여백용, 최소 3행 보장) ──
+  const EMPTY_ROW_MIN = 3;
+  const emptyRowCount = Math.max(EMPTY_ROW_MIN, EMPTY_ROW_MIN - sortedLogs.length);
+
+  const tdBase: React.CSSProperties = { border: "1px solid #000", padding: "2px 3px", fontSize: "8pt", verticalAlign: "middle" };
+  const thBase: React.CSSProperties = { border: "1px solid #000", padding: "2px 3px", fontSize: "7.5pt", fontWeight: "bold", textAlign: "center", background: "#f0f0f0", verticalAlign: "middle" };
+  const thSub: React.CSSProperties = { border: "1px solid #000", padding: "1px 2px", fontSize: "7pt", textAlign: "center", background: "#fafafa", verticalAlign: "middle" };
+  const thA: React.CSSProperties = { ...thSub, background: "#dbeafe" };
+  const thB: React.CSSProperties = { ...thSub, background: "#fef9c3" };
+  const thATop: React.CSSProperties = { ...thBase, background: "#dbeafe" };
+  const thBTop: React.CSSProperties = { ...thBase, background: "#fef9c3" };
+
   return (
     <div className="space-y-4">
 
+      {/* ── 인쇄 버튼 (화면 전용) ── */}
+      <div className="flex justify-end print:hidden">
+        <button className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50" onClick={() => window.print()}>
+          🖨️ 인쇄
+        </button>
+      </div>
+
+      {/* ══════════════════════════════════════════
+          화면용 UI (기존 그대로)
+      ══════════════════════════════════════════ */}
+
       {/* ── 공통사항 ── */}
-      <div className={`${card} p-4`}>
+      <div className={`${card} p-4 print:hidden`}>
         <div className="mb-2 text-xs font-semibold text-slate-500">공통사항</div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm md:grid-cols-4 mb-3">
           <div><span className="text-xs text-slate-400">한계기준</span><div>Fe 2.5mmφ &nbsp;/&nbsp; SUS 3.0mmφ</div></div>
@@ -472,7 +555,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
       </div>
 
       {/* ── 오늘 생산완료 목록 ── */}
-      <div className={`${card} p-4`}>
+      <div className={`${card} p-4 print:hidden`}>
         <div className="mb-3 flex items-center justify-between">
           <div className="text-sm font-semibold">오늘 생산완료 목록 ({today} KST)</div>
           <div className="flex items-center gap-2">
@@ -537,8 +620,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
         const wo = woList.find((w: any) => w.id === selectedWoId);
         const isEdit = !!logMap[selectedWoId];
         return (
-          <div className={`${card} p-4`}>
-            {/* 폼 헤더 */}
+          <div className={`${card} p-4 print:hidden`}>
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <div className="font-bold text-base">{wo?.client_name} — {wo?.product_name}</div>
@@ -549,7 +631,6 @@ export function Ccp1pTab({ role, userId, showToast }: {
               }`}>{isEdit ? "기록완료" : "미기록"}</span>
             </div>
 
-            {/* 시작시간 + 종료시간 + 통과수량 + 담당자 + 일괄O */}
             <div className="mb-4 flex flex-wrap items-end gap-4">
               <div>
                 <div className="mb-1 text-xs text-slate-500">시작시간 * <span className="text-slate-300">(예: 1430)</span></div>
@@ -620,11 +701,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
             <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200">
               <ZoneHeader label="A" color="blue" title="제품 1개일 경우" />
               <div className="p-3">
-                <ZoneTable
-                  zone="A"
-                  fields={aFields(formData)}
-                  onChange={setA}
-                />
+                <ZoneTable zone="A" fields={aFields(formData)} onChange={setA} />
               </div>
             </div>
 
@@ -668,14 +745,12 @@ export function Ccp1pTab({ role, userId, showToast }: {
               </div>
             </div>
 
-            {/* 결재 표시 */}
             <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
               <span className="font-semibold text-slate-600">확인:</span> 김영각 &nbsp;&nbsp;
               <span className="font-semibold text-slate-600">승인:</span> 조대성 &nbsp;&nbsp;
               <span className="text-slate-400">(저장 시 자동 등록)</span>
             </div>
 
-            {/* 저장/취소 */}
             <div className="flex gap-3">
               <button
                 className={`flex-1 rounded-xl py-3 text-sm font-bold text-white disabled:opacity-60 ${saving ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"}`}
@@ -694,6 +769,253 @@ export function Ccp1pTab({ role, userId, showToast }: {
           </div>
         );
       })()}
+
+      {/* ══════════════════════════════════════════
+          인쇄 전용 영역
+      ══════════════════════════════════════════ */}
+      <style>{`
+        @media screen { .ccp1p-print-only { display: none !important; } }
+        @media print {
+          body * { visibility: hidden; }
+          .ccp1p-print-only, .ccp1p-print-only * { visibility: visible; }
+          .ccp1p-print-only { position: absolute; top: 0; left: 0; width: 100%; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          @page { size: A4 landscape; margin: 8mm 10mm; }
+        }
+      `}</style>
+
+      <div
+        className="ccp1p-print-only"
+        style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "8.5pt", color: "#000" }}
+      >
+        {/* ① 제목 + 결재란 */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+          <tbody>
+            <tr>
+              <td rowSpan={2} style={{ ...tdBase, fontSize: "13pt", fontWeight: "bold", textAlign: "center", padding: "6px 8px" }}>
+                중요관리점(CCP-1P) 점검표 [금속검출공정]
+              </td>
+              <td style={{ ...tdBase, width: 28, fontWeight: "bold", background: "#f5f5f5", textAlign: "center", fontSize: "8pt" }} rowSpan={2}>
+                결<br/>재<br/>란
+              </td>
+              <td style={{ ...tdBase, width: 80, textAlign: "center", fontWeight: "bold" }}>작성</td>
+              <td style={{ ...tdBase, width: 80, textAlign: "center", fontWeight: "bold" }}>승인</td>
+            </tr>
+            <tr>
+              <td style={{ ...tdBase, textAlign: "center", padding: "3px" }}>
+                <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} alt="김영각" />
+                <div style={{ fontSize: "7pt", marginTop: 2 }}>김영각</div>
+              </td>
+              <td style={{ ...tdBase, textAlign: "center", padding: "3px" }}>
+                <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} alt="조대성" />
+                <div style={{ fontSize: "7pt", marginTop: 2 }}>조대성</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* ② 작성일자 + 한계기준 + 검교정주기 */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+          <tbody>
+            <tr>
+              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#f5f5f5" }}>작성일자</td>
+              <td style={tdBase}>{printDate}</td>
+              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#f5f5f5" }}>한계기준</td>
+              <td style={tdBase}>악성 85</td>
+              <td style={{ ...tdBase, width: 20, fontWeight: "bold", background: "#f5f5f5" }}>Fe</td>
+              <td style={tdBase}>2.5mmφ</td>
+              <td style={{ ...tdBase, width: 30, fontWeight: "bold", background: "#f5f5f5" }}>SUS</td>
+              <td style={tdBase}>3.0mmφ</td>
+              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#f5f5f5" }}>검교정주기</td>
+              <td style={tdBase}>연 1회</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* ③ 점검주기 + 방법 */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+          <tbody>
+            <tr>
+              <td rowSpan={2} style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>점검주기</td>
+              <td style={{ ...tdBase, width: 80, fontWeight: "bold", background: "#fafafa" }}>감도 모니터링</td>
+              <td style={tdBase}>금속검출 작업시작 전, 작업중 2시간마다, 작업 종료 후</td>
+            </tr>
+            <tr>
+              <td style={{ ...tdBase, fontWeight: "bold", background: "#fafafa" }}>공정품 확인</td>
+              <td style={tdBase}>제품변경 시 &amp; 작업 중 상시</td>
+            </tr>
+            <tr>
+              <td rowSpan={3} style={{ ...tdBase, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>방&nbsp;&nbsp;&nbsp;법</td>
+              <td style={{ ...tdBase, fontWeight: "bold", background: "#fafafa", whiteSpace: "nowrap" }}>감도 모니터링</td>
+              <td style={{ ...tdBase, fontSize: "7.5pt" }}>① 표준시편만 통과&nbsp;&nbsp;② 금속이물이 없는 것으로 확인된 공정품 통과&nbsp;&nbsp;③ 표준시편과 공정품을 함께 통과</td>
+            </tr>
+            <tr>
+              <td style={{ ...tdBase, fontWeight: "bold", background: "#fafafa" }}>공정품 확인</td>
+              <td style={{ ...tdBase, fontSize: "7.5pt" }}>제품 금속검출기 통과</td>
+            </tr>
+            <tr>
+              <td colSpan={2} style={{ ...tdBase, fontSize: "7.5pt", color: "#555" }}>
+                제품 1개 → <span style={{ color: "#1D6FB5", fontWeight: "bold" }}>A단계</span> 실행 후 종료시간 기록&nbsp;&nbsp;|&nbsp;&nbsp;제품 2개 이상 → <span style={{ color: "#B45309", fontWeight: "bold" }}>A단계 + B단계</span> 실행
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* ④ 본문 테이블 */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4, tableLayout: "fixed" }}>
+          <colgroup>
+            <col style={{ width: "82px" }} />
+            <col style={{ width: "34px" }} />
+            {/* A: Fe시편 */}
+            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+            {/* A: SUS시편 */}
+            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+            {/* A: 제품통과 */}
+            <col style={{ width: "28px" }} />
+            {/* A: Fe+제품(상)(하) SUS+제품(상)(하) */}
+            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+            {/* B: 종료시간 / 이탈유무 / 통과수량 / 확인 */}
+            <col style={{ width: "34px" }} />
+            <col style={{ width: "28px" }} />
+            <col style={{ width: "28px" }} />
+            <col style={{ width: "42px" }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th rowSpan={3} style={{ ...thBase, width: 82 }}>품명<br />(업체명)</th>
+              <th rowSpan={3} style={thBase}>시작<br />시간</th>
+              <th colSpan={19} style={thATop}>A (제품1개일 경우)</th>
+              <th colSpan={4} style={thBTop}>B (제품2개 이상)</th>
+            </tr>
+            <tr>
+              <th colSpan={3} style={thA}>Fe 시편</th>
+              <th colSpan={3} style={thA}>SUS 시편</th>
+              <th rowSpan={2} style={{ ...thA, fontSize: "6.5pt" }}>제품<br />통과</th>
+              <th colSpan={3} style={thA}>Fe+제품(상)</th>
+              <th colSpan={3} style={thA}>Fe+제품(하)</th>
+              <th colSpan={3} style={thA}>SUS+제품(상)</th>
+              <th colSpan={3} style={thA}>SUS+제품(하)</th>
+              <th rowSpan={2} style={{ ...thB, fontSize: "6.5pt" }}>종료<br />시간</th>
+              <th rowSpan={2} style={{ ...thB, fontSize: "6.5pt" }}>이탈<br />유무</th>
+              <th rowSpan={2} style={{ ...thB, fontSize: "6.5pt" }}>통과<br />수량</th>
+              <th rowSpan={2} style={{ ...thB, fontSize: "6.5pt" }}>확 인<br />(서명)</th>
+            </tr>
+            <tr>
+              {["좌","중","우","좌","중","우","좌","중","우","좌","중","우","좌","중","우","좌","중","우"].map((l, i) => (
+                <th key={i} style={thA}>{l}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sortedLogs.map((log) => {
+              const signSrc = log.worker_name ? SIGN_MAP[log.worker_name] : null;
+              const hasDeviation = getDeviationDesc(log) !== "";
+              return (
+                <tr key={log.id} style={{ background: hasDeviation ? "#fff9f9" : "#fff" }}>
+                  <td style={{ ...tdBase, textAlign: "left", fontSize: "7pt", paddingLeft: 3 }}>
+                    {hasDeviation && <span style={{ color: "#DC2626" }}>⚠ </span>}
+                    {log.client_name} — {log.product_name}
+                  </td>
+                  <td style={{ ...tdBase, textAlign: "center", fontSize: "7.5pt" }}>{(log.start_time ?? "").slice(0, 5)}</td>
+                  {/* A구역 OX */}
+                  <PrintOx val={log.a_fe_l} />
+                  <PrintOx val={log.a_fe_m} />
+                  <PrintOx val={log.a_fe_r} />
+                  <PrintOx val={log.a_sus_l} />
+                  <PrintOx val={log.a_sus_m} />
+                  <PrintOx val={log.a_sus_r} />
+                  <PrintOx val={log.a_product_pass} />
+                  <PrintOx val={log.a_fe_up_l} />
+                  <PrintOx val={log.a_fe_up_m} />
+                  <PrintOx val={log.a_fe_up_r} />
+                  <PrintOx val={log.a_fe_dn_l} />
+                  <PrintOx val={log.a_fe_dn_m} />
+                  <PrintOx val={log.a_fe_dn_r} />
+                  <PrintOx val={log.a_sus_up_l} />
+                  <PrintOx val={log.a_sus_up_m} />
+                  <PrintOx val={log.a_sus_up_r} />
+                  <PrintOx val={log.a_sus_dn_l} />
+                  <PrintOx val={log.a_sus_dn_m} />
+                  <PrintOx val={log.a_sus_dn_r} />
+                  {/* B구역 */}
+                  <td style={{ ...tdBase, textAlign: "center", fontSize: "7.5pt" }}>{(log.b_end_time ?? "").slice(0, 5)}</td>
+                  <td style={{
+                    ...tdBase, textAlign: "center", fontSize: "8pt", fontWeight: "bold",
+                    color: log.b_deviation === "O" ? "#DC2626" : "#059669",
+                  }}>{log.b_deviation ?? "X"}</td>
+                  <td style={{ ...tdBase, textAlign: "center", fontSize: "7.5pt" }}>{log.b_pass_qty ?? ""}</td>
+                  <td style={{ ...tdBase, textAlign: "center", padding: "2px" }}>
+                    {signSrc ? (
+                      <>
+                        <img src={signSrc} style={{ height: 22, objectFit: "contain", display: "block", margin: "0 auto" }} alt={log.worker_name ?? ""} />
+                        <div style={{ fontSize: "6pt", color: "#555" }}>{log.worker_name}</div>
+                      </>
+                    ) : log.worker_name ? (
+                      <div style={{ fontSize: "7pt" }}>{log.worker_name}</div>
+                    ) : null}
+                  </td>
+                </tr>
+              );
+            })}
+            {/* 빈 행 */}
+            {Array.from({ length: emptyRowCount }).map((_, i) => (
+              <tr key={`empty-${i}`}>
+                <td style={{ ...tdBase, height: 20 }} /><td style={tdBase} />
+                {Array.from({ length: 19 }).map((__, j) => (
+                  <td key={j} style={{ ...tdBase, width: 22 }} />
+                ))}
+                <td style={tdBase} /><td style={tdBase} /><td style={tdBase} /><td style={tdBase} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* ⑤ 개선조치 방법 */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+          <tbody>
+            {[
+              "① 고장 확인 시 담당자는 즉시 수리하고, 이전 모니터링 시점부터 고장 확인 시점까지 금속검출기를 통과한 공정품을 재통과 시킨 후 그 결과를 기록한다.",
+              "② 즉각적인 수리가 불가능할 경우, 공정품을 분리하여 창고에 보관한 후, 수리가 끝나면 금속검출기의 정상 작동을 확인 후 제품생산을 계속한다.",
+              "③ 공정품에 혼입된 금속이물을 찾아내고, 그 출처를 조사하여 원인을 제거한다.",
+              "④ 금속이물 검출 내역 및 개선조치 사항을 부적합품발생보고서일지에 기록한다.",
+            ].map((text, i) => (
+              <tr key={i}>
+                {i === 0 && (
+                  <td rowSpan={4} style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>
+                    개선조치<br />방&nbsp;&nbsp;&nbsp;법
+                  </td>
+                )}
+                <td style={{ ...tdBase, background: "#f9f9f9", fontSize: "7.5pt" }}>{text}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* ⑥ 이탈내용 */}
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <tbody>
+            <tr>
+              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>이탈내용</td>
+              <td style={{ ...tdBase, fontSize: "8pt" }}>
+                {deviationRows.map((r) => r.desc).join("  /  ") || " "}
+              </td>
+              <td style={{ ...tdBase, width: 80, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>개선조치 및 결과</td>
+              <td style={tdBase} />
+              <td style={{ ...tdBase, width: 50, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>조치자</td>
+              <td style={{ ...tdBase, width: 50, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>확&nbsp;&nbsp;인</td>
+            </tr>
+            <tr>
+              <td style={{ ...tdBase, height: 20 }} /><td style={tdBase} />
+              <td style={tdBase} /><td style={tdBase} />
+              <td style={tdBase} /><td style={tdBase} />
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
     </div>
   );
 }
