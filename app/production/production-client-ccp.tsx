@@ -188,7 +188,13 @@ export function useCcpState(
         needsHistorySlotIds.push(slot.id);
       } else {
         const materialIn = events.filter((e) => e.event_type === "material_in").slice(-1)[0];
-        map[slot.id] = materialIn ? { date: today, daysAgo: 0, materialType: (materialIn as any).material_type ?? null } : null;
+        if (materialIn) {
+          map[slot.id] = { date: today, daysAgo: 0, materialType: (materialIn as any).material_type ?? null };
+        } else {
+          // 오늘 material_in 없지만 start/mid_check/end 기록이 있음
+          // → 과거에 투입된 슬롯이므로 이력 조회 필요
+          needsHistorySlotIds.push(slot.id);
+        }
       }
     }
   
