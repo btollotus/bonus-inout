@@ -2,7 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
-import { Ccp1bTab, Ccp1pTab, OtherHeatingTab, CompressorTab, PetLedgerTab } from "./tabs-extra";
+import { Ccp1bTab, OtherHeatingTab, CompressorTab, PetLedgerTab } from "./tabs-extra";
+import { Ccp1pTab } from "./Ccp1pTab";
 import { ExpiryMgmtTab, WarmerCleaningTab, PestTab, ForeignMatterTab, HygieneCheckTab, TempHumidityTab, StorageTempTab } from "./tabs-hygiene";
 
 const supabase = createClient();
