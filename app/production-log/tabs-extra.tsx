@@ -367,9 +367,13 @@ async function handlePrint() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="font-semibold text-sm">{s.slot_name}</div>
-                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${hasMaterial ? "bg-green-100 border-green-200 text-green-700" : "bg-slate-100 border-slate-200 text-slate-500"}`}>
-                        {hasMaterial ? "원료있음" : "소진"}
-                      </span>
+                      <span className={`... ${
+  status === "있음" ? "bg-green-100 border-green-200 text-green-700"
+  : status === "슬롯이동" ? "bg-teal-100 border-teal-200 text-teal-700"
+  : "bg-slate-100 border-slate-200 text-slate-500"
+}`}>
+  {status === "있음" ? "원료있음" : status}
+</span>
                     </div>
                     <div className="mt-0.5 text-[11px] text-slate-500">{s.purpose}</div>
                     <div className="mt-1.5 flex items-center gap-2 flex-wrap">
