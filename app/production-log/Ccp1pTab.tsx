@@ -175,7 +175,6 @@ function ZoneTable({
           <tr>
 
           <th className={thTop} rowSpan={2} style={{ width: 110 }}>항목</th>
-<th className={thTop} rowSpan={2}>제품<br />통과</th>   
 <th className={thTop} colSpan={3}>Fe 시편</th>
 <th className={thTop} colSpan={3}>SUS 시편</th>
 
@@ -208,14 +207,17 @@ function ZoneTable({
         <tbody>
   <tr>
     <td className={label}>감도모니터링<br />&amp;공정품확인</td>
-    <td className={disabled ? tdDim : td}>
-      <OxToggle value={fields.product_pass} onChange={(v) => onChange("product_pass", v)} />
-    </td>
+   
     {(["fe_l","fe_m","fe_r","sus_l","sus_m","sus_r"] as (keyof ZoneFields)[]).map((k) => (
-      <td key={k} className={disabled ? tdDim : td}>
-        <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
-      </td>
-    ))}
+  <td key={k} className={disabled ? tdDim : td}>
+    <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
+  </td>
+))}
+{!showFull && (
+  <td className={disabled ? tdDim : td}>
+    <OxToggle value={fields.product_pass} onChange={(v) => onChange("product_pass", v)} />
+  </td>
+)}
     {showFull && (() => {
       const extraKeys: (keyof ZoneFields)[] = [
         "fe_up_l","fe_up_m","fe_up_r",
@@ -920,7 +922,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
             <tr>
               <th colSpan={3} style={thA}>Fe 시편</th>
               <th colSpan={3} style={thA}>SUS 시편</th>
-              <th rowSpan={2} style={{ ...thA, fontSize: "6.5pt" }}>제품<br />통과</th>
+             
               <th colSpan={3} style={thA}>Fe+제품(상)</th>
               <th colSpan={3} style={thA}>Fe+제품(하)</th>
               <th colSpan={3} style={thA}>SUS+제품(상)</th>
