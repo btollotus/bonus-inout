@@ -540,8 +540,8 @@ export function Ccp1pTab({ role, userId, showToast }: {
   const emptyRowCount = Math.max(EMPTY_ROW_MIN, EMPTY_ROW_MIN - sortedLogs.length);
 
   const tdBase: React.CSSProperties = { border: "1px solid #000", padding: "2px 3px", fontSize: "8pt", verticalAlign: "middle" };
-  const thBase: React.CSSProperties = { border: "1px solid #000", padding: "2px 3px", fontSize: "7.5pt", fontWeight: "bold", textAlign: "center", background: "#f0f0f0", verticalAlign: "middle" };
-  const thSub: React.CSSProperties = { border: "1px solid #000", padding: "1px 2px", fontSize: "7pt", textAlign: "center", background: "#fafafa", verticalAlign: "middle" };
+  const thBase: React.CSSProperties = { border: "1px solid #000", padding: "2px 3px", fontSize: "7.5pt", fontWeight: "bold", textAlign: "center", background: "#fff", verticalAlign: "middle" };
+  const thSub: React.CSSProperties = { border: "1px solid #000", padding: "1px 2px", fontSize: "7pt", textAlign: "center", background: "#fff", verticalAlign: "middle" };
   const thA: React.CSSProperties = { ...thSub, background: "#dbeafe" };
   const thB: React.CSSProperties = { ...thSub, background: "#fef9c3" };
   const thATop: React.CSSProperties = { ...thBase, background: "#dbeafe" };
@@ -825,7 +825,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
               <td rowSpan={2} style={{ ...tdBase, fontSize: "13pt", fontWeight: "bold", textAlign: "center", padding: "6px 8px" }}>
                 중요관리점(CCP-1P) 점검표 [금속검출공정]
               </td>
-              <td style={{ ...tdBase, width: 28, fontWeight: "bold", background: "#f5f5f5", textAlign: "center", fontSize: "8pt" }} rowSpan={2}>
+              <td style={{ ...tdBase, width: 28, fontWeight: "bold", background: "#fff", textAlign: "center", fontSize: "8pt" }} rowSpan={2}>
                 결<br/>재<br/>란
               </td>
               <td style={{ ...tdBase, width: 80, textAlign: "center", fontWeight: "bold" }}>작성</td>
@@ -848,15 +848,15 @@ export function Ccp1pTab({ role, userId, showToast }: {
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
           <tbody>
             <tr>
-              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#f5f5f5" }}>작성일자</td>
+              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff" }}>작성일자</td>
               <td style={tdBase}>{printDate}</td>
-              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#f5f5f5" }}>한계기준</td>
+              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff" }}>한계기준</td>
               <td style={tdBase}>악성 85</td>
-              <td style={{ ...tdBase, width: 20, fontWeight: "bold", background: "#f5f5f5" }}>Fe</td>
+              <td style={{ ...tdBase, width: 20, fontWeight: "bold", background: "#fff" }}>Fe</td>
               <td style={tdBase}>2.5mmφ</td>
-              <td style={{ ...tdBase, width: 30, fontWeight: "bold", background: "#f5f5f5" }}>SUS</td>
+              <td style={{ ...tdBase, width: 30, fontWeight: "bold", background: "#fff" }}>SUS</td>
               <td style={tdBase}>3.0mmφ</td>
-              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#f5f5f5" }}>검교정주기</td>
+              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff" }}>검교정주기</td>
               <td style={tdBase}>연 1회</td>
             </tr>
           </tbody>
@@ -866,21 +866,21 @@ export function Ccp1pTab({ role, userId, showToast }: {
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
           <tbody>
             <tr>
-              <td rowSpan={2} style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>점검주기</td>
-              <td style={{ ...tdBase, width: 80, fontWeight: "bold", background: "#fafafa" }}>감도 모니터링</td>
+              <td rowSpan={2} style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff", textAlign: "center" }}>점검주기</td>
+              <td style={{ ...tdBase, width: 80, fontWeight: "bold", background: "#fff" }}>감도 모니터링</td>
               <td style={tdBase}>금속검출 작업시작 전, 작업중 2시간마다, 작업 종료 후</td>
             </tr>
             <tr>
-              <td style={{ ...tdBase, fontWeight: "bold", background: "#fafafa" }}>공정품 확인</td>
+              <td style={{ ...tdBase, fontWeight: "bold", background: "#fff" }}>공정품 확인</td>
               <td style={tdBase}>제품변경 시 &amp; 작업 중 상시</td>
             </tr>
             <tr>
-              <td rowSpan={3} style={{ ...tdBase, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>방&nbsp;&nbsp;&nbsp;법</td>
-              <td style={{ ...tdBase, fontWeight: "bold", background: "#fafafa", whiteSpace: "nowrap" }}>감도 모니터링</td>
+              <td rowSpan={3} style={{ ...tdBase, fontWeight: "bold", background: "#fff", textAlign: "center" }}>방&nbsp;&nbsp;&nbsp;법</td>
+              <td style={{ ...tdBase, fontWeight: "bold", background: "#fff", whiteSpace: "nowrap" }}>감도 모니터링</td>
               <td style={{ ...tdBase, fontSize: "7.5pt" }}>① 표준시편만 통과&nbsp;&nbsp;② 금속이물이 없는 것으로 확인된 공정품 통과&nbsp;&nbsp;③ 표준시편과 공정품을 함께 통과</td>
             </tr>
             <tr>
-              <td style={{ ...tdBase, fontWeight: "bold", background: "#fafafa" }}>공정품 확인</td>
+              <td style={{ ...tdBase, fontWeight: "bold", background: "#fff" }}>공정품 확인</td>
               <td style={{ ...tdBase, fontSize: "7.5pt" }}>제품 금속검출기 통과</td>
             </tr>
             <tr>
@@ -891,161 +891,147 @@ export function Ccp1pTab({ role, userId, showToast }: {
           </tbody>
         </table>
 
-        {/* ④ 본문 테이블 */}
-        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4, tableLayout: "fixed" }}>
-          <colgroup>
-            <col style={{ width: "82px" }} />
-            <col style={{ width: "34px" }} />
-            {/* A: Fe시편 */}
-            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
-            {/* A: SUS시편 */}
-            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
-            {/* A: 제품통과 */}
-            <col style={{ width: "28px" }} />
-            {/* A: Fe+제품(상)(하) SUS+제품(상)(하) */}
-            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
-            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
-            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
-            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
-            {/* B: 종료시간 / 이탈유무 / 통과수량 / 확인 */}
-            <col style={{ width: "34px" }} />
-            <col style={{ width: "28px" }} />
-            <col style={{ width: "28px" }} />
-            <col style={{ width: "42px" }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th rowSpan={3} style={{ ...thBase, width: 82 }}>품명<br />(업체명)</th>
-              <th rowSpan={3} style={thBase}>시작<br />시간</th>
-              <th colSpan={19} style={thATop}>A (제품1개일 경우)</th>
-              <th colSpan={4} style={thBTop}>B (제품2개 이상)</th>
-            </tr>
-            <tr>
-              <th colSpan={3} style={thA}>Fe 시편</th>
-              <th colSpan={3} style={thA}>SUS 시편</th>
-             
-              <th colSpan={3} style={thA}>Fe+제품(상)</th>
-              <th colSpan={3} style={thA}>Fe+제품(하)</th>
-              <th colSpan={3} style={thA}>SUS+제품(상)</th>
-              <th colSpan={3} style={thA}>SUS+제품(하)</th>
-              <th rowSpan={2} style={{ ...thB, fontSize: "6.5pt" }}>종료<br />시간</th>
-              <th rowSpan={2} style={{ ...thB, fontSize: "6.5pt" }}>이탈<br />유무</th>
-              <th rowSpan={2} style={{ ...thB, fontSize: "6.5pt" }}>통과<br />수량</th>
-              <th rowSpan={2} style={{ ...thB, fontSize: "6.5pt" }}>확 인<br />(서명)</th>
-            </tr>
-            <tr>
-              {["좌","중","우","좌","중","우","좌","중","우","좌","중","우","좌","중","우","좌","중","우"].map((l, i) => (
-                <th key={i} style={thA}>{l}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sortedLogs.map((log) => {
-              const signSrc = log.worker_name ? SIGN_MAP[log.worker_name] : null;
-              const hasDeviation = getDeviationDesc(log) !== "";
-              return (
-                <tr key={log.id} style={{ background: hasDeviation ? "#fff9f9" : "#fff" }}>
-                  <td style={{ ...tdBase, textAlign: "left", fontSize: "7pt", paddingLeft: 3 }}>
-                    {hasDeviation && <span style={{ color: "#DC2626" }}>⚠ </span>}
-                    {log.client_name} — {log.product_name}
-                  </td>
-                  <td style={{ ...tdBase, textAlign: "center", fontSize: "7.5pt" }}>{(log.start_time ?? "").slice(0, 5)}</td>
-                  {/* A구역 OX */}
-                  <PrintOx val={log.a_fe_l} />
-                  <PrintOx val={log.a_fe_m} />
-                  <PrintOx val={log.a_fe_r} />
-                  <PrintOx val={log.a_sus_l} />
-                  <PrintOx val={log.a_sus_m} />
-                  <PrintOx val={log.a_sus_r} />
-                  <PrintOx val={log.a_product_pass} />
-                  <PrintOx val={log.a_fe_up_l} />
-                  <PrintOx val={log.a_fe_up_m} />
-                  <PrintOx val={log.a_fe_up_r} />
-                  <PrintOx val={log.a_fe_dn_l} />
-                  <PrintOx val={log.a_fe_dn_m} />
-                  <PrintOx val={log.a_fe_dn_r} />
-                  <PrintOx val={log.a_sus_up_l} />
-                  <PrintOx val={log.a_sus_up_m} />
-                  <PrintOx val={log.a_sus_up_r} />
-                  <PrintOx val={log.a_sus_dn_l} />
-                  <PrintOx val={log.a_sus_dn_m} />
-                  <PrintOx val={log.a_sus_dn_r} />
-                  {/* B구역 */}
-                  <td style={{ ...tdBase, textAlign: "center", fontSize: "7.5pt" }}>{(log.b_end_time ?? "").slice(0, 5)}</td>
-                  <td style={{
-                    ...tdBase, textAlign: "center", fontSize: "8pt", fontWeight: "bold",
-                    color: log.b_deviation === "O" ? "#DC2626" : "#059669",
-                  }}>{log.b_deviation ?? "X"}</td>
-                  <td style={{ ...tdBase, textAlign: "center", fontSize: "7.5pt" }}>{log.b_pass_qty ?? ""}</td>
-                  <td style={{ ...tdBase, textAlign: "center", padding: "2px" }}>
-                    {signSrc ? (
-                      <>
-                        <img src={signSrc} style={{ height: 22, objectFit: "contain", display: "block", margin: "0 auto" }} alt={log.worker_name ?? ""} />
-                        <div style={{ fontSize: "6pt", color: "#555" }}>{log.worker_name}</div>
-                      </>
-                    ) : log.worker_name ? (
-                      <div style={{ fontSize: "7pt" }}>{log.worker_name}</div>
-                    ) : null}
-                  </td>
-                </tr>
-              );
-            })}
-            {/* 빈 행 */}
-            {Array.from({ length: emptyRowCount }).map((_, i) => (
-              <tr key={`empty-${i}`}>
-                <td style={{ ...tdBase, height: 20 }} /><td style={tdBase} />
-                {Array.from({ length: 19 }).map((__, j) => (
-                  <td key={j} style={{ ...tdBase, width: 22 }} />
-                ))}
-                <td style={tdBase} /><td style={tdBase} /><td style={tdBase} /><td style={tdBase} />
-              </tr>
-            ))}
-          </tbody>
-        </table>
+       {/* ④ 본문 테이블 */}
+<table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4, tableLayout: "fixed" }}>
+  <colgroup>
+    <col style={{ width: "86px" }} />  {/* 품명 */}
+    <col style={{ width: "22px" }} />  {/* 시작시간 */}
+    <col style={{ width: "22px" }} />  {/* 종료시간 */}
+    <col style={{ width: "16px" }} />  {/* 구역 */}
+    <col style={{ width: "18px" }} />  {/* 제품통과(B행 전용) */}
+    {/* OX 18열 × 16px */}
+    <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+    <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+    <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+    <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+    <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+    <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+    {/* 이탈/통과/확인 */}
+    <col style={{ width: "18px" }} />
+    <col style={{ width: "18px" }} />
+    <col style={{ width: "30px" }} />
+  </colgroup>
+  <thead>
+    <tr>
+      <th rowSpan={3} style={{ ...thBase }}>품명<br />(업체명)</th>
+      <th rowSpan={3} style={{ ...thBase }}>시작<br />시간</th>
+      <th rowSpan={3} style={{ ...thBase }}>종료<br />시간</th>
+      <th rowSpan={3} style={{ ...thBase }}>구역</th>
+      <th rowSpan={3} style={{ ...thBase, fontSize: "5.5pt" }}>제품<br />통과<br />(B행)</th>
+      <th colSpan={18} style={{ ...thBase }}>A (제품 1개일 경우) / B행: Fe시편·SUS시편</th>
+      <th rowSpan={3} style={{ ...thBase }}>이탈<br />유무</th>
+      <th rowSpan={3} style={{ ...thBase }}>통과<br />수량</th>
+      <th rowSpan={3} style={{ ...thBase }}>확 인<br />(서명)</th>
+    </tr>
+    <tr>
+      <th colSpan={3} style={thSub}>Fe 시편</th>
+      <th colSpan={3} style={thSub}>SUS 시편</th>
+      <th colSpan={3} style={thSub}>Fe+제품(상)</th>
+      <th colSpan={3} style={thSub}>Fe+제품(하)</th>
+      <th colSpan={3} style={thSub}>SUS+제품(상)</th>
+      <th colSpan={3} style={thSub}>SUS+제품(하)</th>
+    </tr>
+    <tr>
+      {["좌","중","우","좌","중","우","좌","중","우","좌","중","우","좌","중","우","좌","중","우"].map((l, i) => (
+        <th key={i} style={thSub}>{l}</th>
+      ))}
+    </tr>
+  </thead>
 
-        {/* ⑤ 개선조치 방법 */}
-        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
-          <tbody>
-            {[
-              "① 고장 확인 시 담당자는 즉시 수리하고, 이전 모니터링 시점부터 고장 확인 시점까지 금속검출기를 통과한 공정품을 재통과 시킨 후 그 결과를 기록한다.",
-              "② 즉각적인 수리가 불가능할 경우, 공정품을 분리하여 창고에 보관한 후, 수리가 끝나면 금속검출기의 정상 작동을 확인 후 제품생산을 계속한다.",
-              "③ 공정품에 혼입된 금속이물을 찾아내고, 그 출처를 조사하여 원인을 제거한다.",
-              "④ 금속이물 검출 내역 및 개선조치 사항을 부적합품발생보고서일지에 기록한다.",
-            ].map((text, i) => (
-              <tr key={i}>
-                {i === 0 && (
-                  <td rowSpan={4} style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>
-                    개선조치<br />방&nbsp;&nbsp;&nbsp;법
-                  </td>
-                )}
-                <td style={{ ...tdBase, background: "#f9f9f9", fontSize: "7.5pt" }}>{text}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+  {/* 데이터 행 — 품명 1개당 별도 tbody */}
+  {sortedLogs.map((log) => {
+    const signSrc = log.worker_name ? SIGN_MAP[log.worker_name] : null;
+    const hasDeviation = getDeviationDesc(log) !== "";
+    const bActive = (log.b_pass_qty ?? 0) > 1;
+    return (
+      <tbody key={log.id} style={{ pageBreakInside: "avoid" }}>
+        {/* A행 */}
+        <tr style={{ background: hasDeviation ? "#fff9f9" : "#fff" }}>
+          <td rowSpan={2} style={{ ...tdBase, textAlign: "left", fontSize: "6.5pt", paddingLeft: 3, whiteSpace: "normal", wordBreak: "keep-all" }}>
+            {hasDeviation && <span style={{ color: "#DC2626" }}>⚠ </span>}
+            {log.client_name} — {log.product_name}
+          </td>
+          <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{(log.start_time ?? "").slice(0, 5)}</td>
+          <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{(log.b_end_time ?? "").slice(0, 5)}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>A</td>
+          <td style={tdBase} />{/* A행: 제품통과 빈칸 */}
+          {/* A OX 18열 */}
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_fe_l ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_fe_m ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_fe_r ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_sus_l ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_sus_m ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_sus_r ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_fe_up_l ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_fe_up_m ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_fe_up_r ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_fe_dn_l ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_fe_dn_m ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_fe_dn_r ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_sus_up_l ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_sus_up_m ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_sus_up_r ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_sus_dn_l ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_sus_dn_m ?? "O"}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.a_sus_dn_r ?? "O"}</td>
+          {/* 이탈/통과/확인 rowspan=2 */}
+          <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.b_deviation ?? "X"}</td>
+          <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{log.b_pass_qty ?? ""}</td>
+          <td rowSpan={2} style={{ ...tdBase, textAlign: "center", padding: "2px" }}>
+            {signSrc ? (
+              <>
+                <img src={signSrc} style={{ height: 22, objectFit: "contain", display: "block", margin: "0 auto" }} alt={log.worker_name ?? ""} />
+                <div style={{ fontSize: "6pt", color: "#000" }}>{log.worker_name}</div>
+              </>
+            ) : log.worker_name ? (
+              <div style={{ fontSize: "7pt" }}>{log.worker_name}</div>
+            ) : null}
+          </td>
+        </tr>
+        {/* B행 */}
+        <tr style={{ background: "#fff" }}>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>B</td>
+          {/* 제품통과 */}
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>
+            {bActive ? (log.b_product_pass ?? "X") : ""}
+          </td>
+          {/* Fe(3) + SUS(3) = 6칸 */}
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_fe_l ?? "O") : ""}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_fe_m ?? "O") : ""}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_fe_r ?? "O") : ""}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_sus_l ?? "O") : ""}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_sus_m ?? "O") : ""}</td>
+          <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_sus_r ?? "O") : ""}</td>
+          {/* 나머지 12칸 빈칸 */}
+          <td style={tdBase} /><td style={tdBase} /><td style={tdBase} />
+          <td style={tdBase} /><td style={tdBase} /><td style={tdBase} />
+          <td style={tdBase} /><td style={tdBase} /><td style={tdBase} />
+          <td style={tdBase} /><td style={tdBase} /><td style={tdBase} />
+        </tr>
+      </tbody>
+    );
+  })}
 
-        {/* ⑥ 이탈내용 */}
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <tbody>
-            <tr>
-              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>이탈내용</td>
-              <td style={{ ...tdBase, fontSize: "8pt" }}>
-                {deviationRows.map((r) => r.desc).join("  /  ") || " "}
-              </td>
-              <td style={{ ...tdBase, width: 80, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>개선조치 및 결과</td>
-              <td style={tdBase} />
-              <td style={{ ...tdBase, width: 50, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>조치자</td>
-              <td style={{ ...tdBase, width: 50, fontWeight: "bold", background: "#f5f5f5", textAlign: "center" }}>확&nbsp;&nbsp;인</td>
-            </tr>
-            <tr>
-              <td style={{ ...tdBase, height: 20 }} /><td style={tdBase} />
-              <td style={tdBase} /><td style={tdBase} />
-              <td style={tdBase} /><td style={tdBase} />
-            </tr>
-          </tbody>
-        </table>
-      </div>
+  {/* 빈 행 — 별도 tbody */}
+  {Array.from({ length: emptyRowCount }).map((_, i) => (
+    <tbody key={`empty-${i}`} style={{ pageBreakInside: "avoid" }}>
+   <tr style={{ height: 18 }}>
+  <td rowSpan={2} style={tdBase} />  {/* 품명 */}
+  <td rowSpan={2} style={tdBase} />  {/* 시작 */}
+  <td rowSpan={2} style={tdBase} />  {/* 종료 */}
+  <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>A</td>
+  <td style={tdBase} />
+  {Array.from({ length: 18 }).map((__, j) => <td key={j} style={tdBase} />)}
+  <td rowSpan={2} style={tdBase} />  {/* 이탈 */}
+  <td rowSpan={2} style={tdBase} />  {/* 통과 */}
+  <td rowSpan={2} style={tdBase} />  {/* 확인 */}
+</tr>
+<tr style={{ height: 18 }}>
+  <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>B</td>
+  <td style={tdBase} />
+  {Array.from({ length: 18 }).map((__, j) => <td key={j} style={tdBase} />)}
+</tr>
+    </tbody>
+  ))}
 
-    </div>
-  );
-}
+</table>
