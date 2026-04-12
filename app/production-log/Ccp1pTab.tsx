@@ -175,6 +175,7 @@ function ZoneTable({
           <tr>
 
           <th className={thTop} rowSpan={2} style={{ width: 110 }}>항목</th>
+{!showFull && <th className={thTop} rowSpan={2}>제품<br />통과</th>}
 <th className={thTop} colSpan={3}>Fe 시편</th>
 <th className={thTop} colSpan={3}>SUS 시편</th>
 
@@ -208,16 +209,16 @@ function ZoneTable({
   <tr>
     <td className={label}>감도모니터링<br />&amp;공정품확인</td>
    
-    {(["fe_l","fe_m","fe_r","sus_l","sus_m","sus_r"] as (keyof ZoneFields)[]).map((k) => (
-  <td key={k} className={disabled ? tdDim : td}>
-    <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
-  </td>
-))}
-{!showFull && (
+    {!showFull && (
   <td className={disabled ? tdDim : td}>
     <OxToggle value={fields.product_pass} onChange={(v) => onChange("product_pass", v)} />
   </td>
 )}
+{(["fe_l","fe_m","fe_r","sus_l","sus_m","sus_r"] as (keyof ZoneFields)[]).map((k) => (
+  <td key={k} className={disabled ? tdDim : td}>
+    <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
+  </td>
+))}
     {showFull && (() => {
       const extraKeys: (keyof ZoneFields)[] = [
         "fe_up_l","fe_up_m","fe_up_r",
