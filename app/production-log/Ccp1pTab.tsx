@@ -154,38 +154,39 @@ function ZoneTable({
       <table className="w-full border-collapse text-xs" style={{ minWidth: 900 }}>
         <thead>
           <tr>
-            <th className={th} style={{ width: 80 }}>항목</th>
-            <th className={th}>Fe시편<br />좌</th>
-            <th className={th}>중</th>
-            <th className={th}>우</th>
-            <th className={th}>SUS시편<br />좌</th>
-            <th className={th}>중</th>
-            <th className={th}>우</th>
+            <th className={th} style={{ width: 90 }}>항목</th>
+            <th className={th} colSpan={3}>Fe시편 (좌·중·우)</th>
+            <th className={th} colSpan={3}>SUS시편 (좌·중·우)</th>
             <th className={th}>제품<br />통과</th>
-            <th className={th}>Fe+제품(상)<br />좌</th>
-            <th className={th}>중</th>
-            <th className={th}>우</th>
-            <th className={th}>Fe+제품(하)<br />좌</th>
-            <th className={th}>중</th>
-            <th className={th}>우</th>
-            <th className={th}>SUS+제품(상)<br />좌</th>
-            <th className={th}>중</th>
-            <th className={th}>우</th>
-            <th className={th}>SUS+제품(하)<br />좌</th>
-            <th className={th}>중</th>
-            <th className={th}>우</th>
-            {showExtra && <th className={th}>종료시간</th>}
+            <th className={th} colSpan={3}>Fe+제품(상)</th>
+            <th className={th} colSpan={3}>Fe+제품(하)</th>
+            <th className={th} colSpan={3}>SUS+제품(상)</th>
+            <th className={th} colSpan={3}>SUS+제품(하)</th>
             {showExtra && <th className={th}>이탈유무</th>}
-            {showExtra && <th className={th}>통과수량</th>}
           </tr>
         </thead>
         <tbody>
+          {/* 1행: 감도 모니터링 */}
           <tr>
-            <td className={label}>{zone === "A" ? "강도 모니터링" : "B구역"}</td>
+            <td className={label}>감도 모니터링</td>
             {(["fe_l","fe_m","fe_r","sus_l","sus_m","sus_r"] as (keyof ZoneFields)[]).map((k) => (
               <td key={k} className={td}>
                 <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
               </td>
+            ))}
+            <td className={td + " bg-slate-50 text-slate-300 text-xs"}>—</td>
+            {/* 공정품 확인 칸은 1행에서 비움 */}
+            {Array.from({ length: 12 }).map((_, i) => (
+              <td key={i} className={td + " bg-slate-50"} />
+            ))}
+            {showExtra && <td className={td + " bg-slate-50"} />}
+          </tr>
+          {/* 2행: 공정품 확인 */}
+          <tr>
+            <td className={label}>공정품 확인</td>
+            {/* Fe/SUS 시편 칸 비움 */}
+            {Array.from({ length: 6 }).map((_, i) => (
+              <td key={i} className={td + " bg-slate-50"} />
             ))}
             <td className={td}>
               <OxToggle value={fields.product_pass} onChange={(v) => onChange("product_pass", v)} />
@@ -197,28 +198,7 @@ function ZoneTable({
             ))}
             {showExtra && (
               <td className={td}>
-                <input
-                  type="time"
-                  className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-xs focus:border-blue-400 focus:outline-none"
-                  value={fields.end_time ?? ""}
-                  onChange={(e: any) => onChange("end_time", e.target.value || null)}
-                />
-              </td>
-            )}
-            {showExtra && (
-              <td className={td}>
                 <OxToggle value={fields.deviation ?? null} onChange={(v) => onChange("deviation", v)} />
-              </td>
-            )}
-            {showExtra && (
-              <td className={td}>
-                <input
-                  type="number"
-                  min={0}
-                  className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-xs text-right focus:border-blue-400 focus:outline-none"
-                  value={fields.pass_qty ?? ""}
-                  onChange={(e: any) => onChange("pass_qty", e.target.value ? Number(e.target.value) : null)}
-                />
               </td>
             )}
           </tr>
@@ -427,13 +407,17 @@ export function Ccp1pTab({ role, userId, showToast }: {
         <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm md:grid-cols-4">
           <div><span className="text-xs text-slate-400">한계기준</span><div>Fe 2.5mmφ &nbsp;/&nbsp; SUS 3.0mmφ</div></div>
           <div><span className="text-xs text-slate-400">검교정주기</span><div>연 1회</div></div>
-          <div className="col-span-2"><span className="text-xs text-slate-400">강도 모니터링 점검주기</span><div>작업시작 전 · 작업중 2시간마다 · 작업 종료 후</div></div>
+          <div className="col-span-2"><span className="text-xs text-slate-400">감도 모니터링 점검주기</span><div>작업시작 전 · 작업중 2시간마다 · 작업 종료 후</div></div>
           <div className="col-span-2"><span className="text-xs text-slate-400">공정품 확인</span><div>제품 금속검출기 통과 · 제품변경 시 &amp; 작업 중 상시</div></div>
           <div className="col-span-2">
-            <div className="mt-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-              제품 1개 → <span className="font-semibold text-blue-700">A단계</span> 실행 후 종료시간 기록
-              &nbsp;&nbsp;|&nbsp;&nbsp;
-              제품 2개 이상 → <span className="font-semibold text-amber-700">A단계 + B단계</span> 실행
+            <div className="mt-1 space-y-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              <div><span className="font-semibold text-slate-600">방법 —</span> 감도 모니터링: ① 표준시편만 통과 &nbsp;② 금속이물이 없는 것으로 확인된 공정품 통과 &nbsp;③ 표준시편과 공정품을 함께 통과</div>
+              <div><span className="font-semibold text-slate-600">공정품 확인:</span> 제품 금속검출기 통과</div>
+              <div>
+                제품 1개 → <span className="font-semibold text-blue-700">A단계</span> 실행 후 종료시간 기록
+                &nbsp;&nbsp;|&nbsp;&nbsp;
+                제품 2개 이상 → <span className="font-semibold text-amber-700">A단계 + B단계</span> 실행
+              </div>
             </div>
           </div>
         </div>
@@ -506,15 +490,49 @@ export function Ccp1pTab({ role, userId, showToast }: {
               }`}>{isEdit ? "기록완료" : "미기록"}</span>
             </div>
 
-            {/* 시작시간 + 일괄O */}
+            {/* 시작시간 + 종료시간 + 통과수량 + 일괄O */}
             <div className="mb-4 flex flex-wrap items-end gap-4">
               <div>
-                <div className="mb-1 text-xs text-slate-500">시작시간 *</div>
+                <div className="mb-1 text-xs text-slate-500">시작시간 * <span className="text-slate-300">(예: 1430)</span></div>
                 <input
-                  type="time"
-                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={5}
+                  placeholder="1430"
+                  className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
                   value={formData.start_time ?? ""}
-                  onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, start_time: e.target.value || null } : prev)}
+                  onChange={(e: any) => {
+                    let v = e.target.value.replace(/[^\d:]/g, "");
+                    if (/^\d{4}$/.test(v)) v = v.slice(0,2) + ":" + v.slice(2);
+                    setFormData((prev: any) => prev ? { ...prev, start_time: v || null } : prev);
+                  }}
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-slate-500">종료시간 <span className="text-slate-300">(예: 1500)</span></div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={5}
+                  placeholder="1500"
+                  className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                  value={formData.b_end_time ?? ""}
+                  onChange={(e: any) => {
+                    let v = e.target.value.replace(/[^\d:]/g, "");
+                    if (/^\d{4}$/.test(v)) v = v.slice(0,2) + ":" + v.slice(2);
+                    setFormData((prev: any) => prev ? { ...prev, b_end_time: v || null } : prev);
+                  }}
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-slate-500">통과수량</div>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="0"
+                  className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm text-right focus:border-blue-400 focus:outline-none"
+                  value={formData.b_pass_qty ?? ""}
+                  onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, b_pass_qty: e.target.value ? Number(e.target.value) : null } : prev)}
                 />
               </div>
               <button
