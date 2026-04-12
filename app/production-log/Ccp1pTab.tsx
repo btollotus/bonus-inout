@@ -511,8 +511,8 @@ export function Ccp1pTab({ role, userId, showToast }: {
                         {hasLog && log?.start_time && (
                           <span className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-0.5">
                             <span className="text-green-600">기록</span>
-                            <span className="font-semibold text-green-700 tabular-nums">{log.start_time}</span>
-                            {log.b_end_time && <span className="text-green-500">→ {log.b_end_time}</span>}
+                            <span className="font-semibold text-green-700 tabular-nums">{log.start_time.slice(0,5)}</span>
+                            {log.b_end_time && <span className="text-green-500">→ {log.b_end_time.slice(0,5)}</span>}
                           </span>
                         )}
                       </div>
@@ -559,7 +559,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
                   maxLength={5}
                   placeholder="1430"
                   className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                  value={formData.start_time ?? ""}
+                  value={(formData.start_time ?? "").slice(0, 5)}
                   onChange={(e: any) => {
                     let v = e.target.value.replace(/[^\d:]/g, "");
                     if (/^\d{4}$/.test(v)) v = v.slice(0,2) + ":" + v.slice(2);
@@ -575,18 +575,18 @@ export function Ccp1pTab({ role, userId, showToast }: {
                   maxLength={5}
                   placeholder="1500"
                   className={`w-28 rounded-xl border px-3 py-2 text-sm focus:outline-none ${
-                    formData.b_end_time?.length === 5 && formData.start_time && formData.b_end_time <= formData.start_time
+                    (formData.b_end_time ?? "").slice(0,5).length === 5 && formData.start_time && (formData.b_end_time ?? "").slice(0,5) <= formData.start_time.slice(0,5)
                       ? "border-red-400 bg-red-50 focus:border-red-500"
                       : "border-slate-200 focus:border-blue-400"
                   }`}
-                  value={formData.b_end_time ?? ""}
+                  value={(formData.b_end_time ?? "").slice(0, 5)}
                   onChange={(e: any) => {
                     let v = e.target.value.replace(/[^\d:]/g, "");
                     if (/^\d{4}$/.test(v)) v = v.slice(0,2) + ":" + v.slice(2);
                     setFormData((prev: any) => prev ? { ...prev, b_end_time: v || null } : prev);
                   }}
                 />
-                {formData.b_end_time?.length === 5 && formData.start_time && formData.b_end_time <= formData.start_time && (
+                {(formData.b_end_time ?? "").slice(0,5).length === 5 && formData.start_time && (formData.b_end_time ?? "").slice(0,5) <= formData.start_time.slice(0,5) && (
                   <div className="mt-1 text-[11px] text-red-500">시작시간보다 늦게 입력하세요</div>
                 )}
               </div>
