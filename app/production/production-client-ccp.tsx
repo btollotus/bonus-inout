@@ -754,7 +754,7 @@ export function SlotStatusPanel({
     {slotActionTime.slice(0,2)}:{slotActionTime.slice(2,4)}
   </div>
 )}
-<button
+
 
                 <button
                   className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
