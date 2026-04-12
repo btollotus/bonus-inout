@@ -326,6 +326,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
   async function save() {
     if (!formData || !selectedWoId) return;
     if (!formData.start_time) return showToast("시작시간을 입력하세요.", "error");
+    if (!formData.b_end_time || formData.b_end_time.length < 5) return showToast("종료시간을 입력하세요.", "error");
 
     // 시작시간 > 생산완료 시간 검증
     const wo = woList.find((w: any) => w.id === selectedWoId);
@@ -339,6 +340,28 @@ export function Ccp1pTab({ role, userId, showToast }: {
     if (formData.b_end_time && formData.b_end_time.length === 5 && formData.start_time) {
       if (formData.b_end_time <= formData.start_time) {
         return showToast("종료시간은 시작시간보다 늦어야 합니다.", "error");
+      }
+    }
+
+    // 다른 기록과 시간 겹침 검증 (금속검출기 1대)
+    const myStart = formData.start_time;
+    const myEnd = formData.b_end_time && formData.b_end_time.length === 5 ? formData.b_end_time : myStart;
+    const existingId = logMap[selectedWoId]?.id ?? null;
+
+    for (const [woId, log] of Object.entries(logMap) as [string, MetalLog][]) {
+      if (woId === selectedWoId) continue; // 자기 자신 제외
+      if (!log.start_time) continue;
+      const otherStart = log.start_time;
+      const otherEnd = log.b_end_time && log.b_end_time.length === 5 ? log.b_end_time : otherStart;
+      // 겹침 조건: myStart < otherEnd AND myEnd > otherStart
+      const overlaps = myStart < otherEnd && myEnd > otherStart;
+      if (overlaps) {
+        const otherWo = woList.find((w: any) => w.id === woId);
+        const otherName = otherWo ? `${otherWo.client_name} — ${otherWo.product_name}` : woId;
+        return showToast(
+          `시간이 겹칩니다: "${otherName}" (${otherStart}~${otherEnd})\n금속검출기는 1대이므로 시간이 겹칠 수 없습니다.`,
+          "error"
+        );
       }
     }
 
