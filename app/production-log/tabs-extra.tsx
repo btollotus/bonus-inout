@@ -103,6 +103,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
   const [slotEvents, setSlotEvents] = useState<{
     id: string; slot_id: string; event_date: string; event_type: string;
     measured_at: string; work_order_no: string | null; action_note: string | null;
+    material_type: string | null;
   }[]>([]);
 
   // 작업지시서 온도기록 — 작업지시서 기준
@@ -133,7 +134,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
 
     const [slotRes, woRes, woSlotRes] = await Promise.all([
       supabase.from("ccp_slot_events")
-        .select("id, slot_id, event_date, event_type, measured_at, work_order_no, action_note, temperature, is_ok")
+      .select("id, slot_id, event_date, event_type, measured_at, work_order_no, action_note, temperature, is_ok, material_type")
         .eq("event_date", filterDate)
         .order("measured_at", { ascending: true }),
       supabase.from("ccp_wo_events")
@@ -587,6 +588,7 @@ async function handlePrint() {
     .ccp-print-only { position: absolute; top: 0; left: 0; width: 100%; }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     @page { size: A4 landscape; margin: 8mm 10mm; }
+    table { page-break-inside: avoid; }
   }
 `}</style>
 
@@ -663,15 +665,9 @@ async function handlePrint() {
     </tbody>
   </table>
 
-  {/* ④ 슬롯별 데이터 */}
+ {/* ④ 슬롯별 데이터 */}
 {(() => {
-  // 준초콜릿/당류가공품 슬롯을 purpose로 분류, 각 7칸 고정
-  const darkAll  = allSlots.filter(s => s.purpose.includes("다크"));
-  const whiteAll = allSlots.filter(s => s.purpose.includes("화이트"));
-
-  // 7칸 고정 (부족하면 null로 채움)
-  const darkSlots:  (WarmSlot | null)[] = Array.from({ length: 7 }, (_, i) => darkAll[i] ?? null);
-  const whiteSlots: (WarmSlot | null)[] = Array.from({ length: 7 }, (_, i) => whiteAll[i] ?? null);
+  const CHUNK_SIZE = 7;
 
   const WO_EVENT_TYPE_LABEL: Record<string, string> = {
     start: "시작", mid_check: "중간점검", end: "종료",
@@ -690,108 +686,196 @@ async function handlePrint() {
       });
   };
 
-  const renderSection = (slots: (WarmSlot | null)[], label: string) => {
-    const maxRows = Math.max(
-      ...slots.map(s => s ? slotWoEventsDedup(s.id).length : 0),
-      3
-    );
-
+  // 슬롯 활동 여부
+  function hasActivity(slotId: string) {
     return (
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6, tableLayout: "fixed" }}>
-        <tbody>
-          {/* 슬롯명 행 */}
-          <tr>
-            <td rowSpan={maxRows + 4} style={{
-              border: "1px solid #000", padding: "2px 4px", fontWeight: "bold",
-              textAlign: "center", width: 44, fontSize: "8pt",
-              writingMode: "vertical-rl" as any,
-            }}>
-              {label}
-            </td>
-            {slots.map((s, i) => {
-  const hasActivity = s ? (
-    slotWoEventsDedup(s.id).length > 0 ||
-    slotEvents.some(e => e.slot_id === s.id)
-  ) : false;
-  return (
-<td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontWeight: "bold", fontSize: "8pt", height: 22, width: "calc((100% - 44px) / 7)" }}>
-  {hasActivity ? s!.slot_name : ""}
-</td>
-  );
-})}
-          </tr>
-          <tr>
-            {slots.map((s, i) => {
-        const ev = s ? slotEvents.filter(e => e.slot_id === s.id && e.event_type === "material_in").sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0] : undefined;
-        const isMove = ev?.action_note?.includes("→");
-        return <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>{ev ? `${isMove ? "슬롯이동" : "원료투입"}: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}${isMove ? ` (${ev.action_note})` : ""}` : ""}</td>;
-            })}
-          </tr>
-          <tr>
-            {slots.map((s, i) => {
-              const ev = s ? slotEvents.filter(e => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→")).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0] : undefined;
-              return <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>{ev ? `슬롯이동: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})` : ""}</td>;
-            })}
-          </tr>
-
-          {/* 온도기록 행 */}
-          {Array.from({ length: maxRows }).map((_, rowIdx) => (
-            <tr key={rowIdx}>
-              {slots.map((s, i) => {
-                const ev = s ? slotWoEventsDedup(s.id)[rowIdx] : undefined;
-                const isNG = ev?.is_ok === false;
-                const typeLabel = ev ? (WO_EVENT_TYPE_LABEL[ev.event_type] ?? ev.event_type) : "";
-                return (
-<td key={i} style={{
-  border: "1px solid #000", padding: "4px",
-  textAlign: "center", fontSize: "8pt",
-  color: isNG ? "red" : "#000",
-  height: 22,
-}}>
-                    {ev ? (
-                      <>
-                        <span style={{
-                          fontSize: "7pt",
-                          background: ev.event_type === "start" ? "#dbeafe"
-                            : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9",
-                          padding: "0 3px", borderRadius: 2, marginRight: 2,
-                        }}>{typeLabel}</span>
-                        {`(${toKSTTime(ev.measured_at)}) ${ev.temperature ?? ""}℃`}
-                      </>
-                    ) : ""}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-
-           {/* 판정 + 사인 행 */}
-          <tr>
-          {slots.map((s, i) => {
-  if (!s) return <td key={i} style={{ border: "1px solid #000", padding: "4px", height: 28 }}></td>;
-  const events = woEvents.filter(e => e.slot_id === s.id);
-  const hasWoEvents = events.length > 0;
-  const hasNG = events.some(e => e.is_ok === false);
-  const assignee = slotAssignees[s.id];
-  const signSrc = assignee ? SIGN_MAP[assignee] : null;
-
-  if (!hasWoEvents) {
-    return <td key={i} style={{ border: "1px solid #000", padding: "4px", height: 28 }}></td>;
+      slotWoEventsDedup(slotId).length > 0 ||
+      slotEvents.some(e => e.slot_id === slotId)
+    );
   }
 
-  return (
-    <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 28 }}>
-      <div style={{ marginBottom: 2 }}>
-        <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>
-          판정: {hasNG ? "X" : "O"}
-        </span>
-      </div>
-      {signSrc && <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} />}
-      {assignee && !signSrc && <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
-    </td>
-  );
-})}
-          </tr>
+  // 유동 슬롯의 material_type 조회
+  function getSlotMaterialType(slotId: string): string | null {
+    const lastIn = [...slotEvents]
+      .filter(e => e.slot_id === slotId && e.event_type === "material_in")
+      .sort((a, b) => b.measured_at.localeCompare(a.measured_at))[0];
+    return (lastIn as any)?.material_type ?? null;
+  }
+
+  // 다크 활동 슬롯: 고정(다크컴파운드) + 유동 중 다크
+  const darkActive = [
+    ...allSlots.filter(s => s.purpose === "다크컴파운드"),
+    ...allSlots.filter(s => s.purpose === "유동" && getSlotMaterialType(s.id) === "다크"),
+  ].filter(s => hasActivity(s.id));
+
+  // 화이트 활동 슬롯: 고정(화이트컴파운드) + 유동 중 화이트
+  const whiteActive = [
+    ...allSlots.filter(s => s.purpose === "화이트컴파운드"),
+    ...allSlots.filter(s => s.purpose === "유동" && getSlotMaterialType(s.id) === "화이트"),
+  ].filter(s => hasActivity(s.id));
+
+  // CHUNK_SIZE씩 청크로 분할
+  function chunkSlots(slots: WarmSlot[]) {
+    const chunks: WarmSlot[][] = [];
+    for (let i = 0; i < slots.length; i += CHUNK_SIZE) {
+      chunks.push(slots.slice(i, i + CHUNK_SIZE));
+    }
+    return chunks.length > 0 ? chunks : [[]];
+  }
+
+  const renderSection = (slots: WarmSlot[], label: string) => {
+    if (slots.length === 0) return null;
+    const chunks = chunkSlots(slots);
+    const totalRows = chunks.length; // 청크 수 (줄 수)
+
+    // 청크별 maxRows 계산
+    const chunkMaxRows = chunks.map(chunk =>
+      Math.max(...chunk.map(s => slotWoEventsDedup(s.id).length), 3)
+    );
+
+    // 전체 rowspan = 각 청크의 (1슬롯명+1원료+maxRows+1빈+1판정) 합산
+    const totalRowspan = chunks.reduce((sum, _, ci) => sum + 5 + chunkMaxRows[ci], 0);
+    // 실제로는 section label을 각 청크 첫 행에만 표시하고 rowspan으로 병합
+
+    return (
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6, tableLayout: "fixed", pageBreakInside: "avoid" as any }}>
+        <tbody>
+          {chunks.map((chunk, chunkIdx) => {
+            const maxRows = chunkMaxRows[chunkIdx];
+            const isFirstChunk = chunkIdx === 0;
+
+            return (
+              <React.Fragment key={chunkIdx}>
+                {/* 슬롯명 행 */}
+                <tr>
+                  {isFirstChunk && (
+                    <td rowSpan={totalRowspan} style={{
+                      border: "1px solid #000", padding: "2px 4px", fontWeight: "bold",
+                      textAlign: "center", width: 44, fontSize: "8pt",
+                      writingMode: "vertical-rl" as any,
+                    }}>
+                      {label}
+                    </td>
+                  )}
+                  {chunk.map((s, i) => (
+                    <td key={i} style={{
+                      border: "1px solid #000", padding: "4px", textAlign: "center",
+                      fontWeight: "bold", fontSize: "8pt", height: 22,
+                      width: `calc((100% - 44px) / ${CHUNK_SIZE})`,
+                    }}>
+                      {s.slot_name}
+                      {s.purpose === "유동" && (
+                        <span style={{ fontSize: "7pt", marginLeft: 2, color: getSlotMaterialType(s.id) === "다크" ? "#854F0B" : "#A16207" }}>
+                          ({getSlotMaterialType(s.id)})
+                        </span>
+                      )}
+                    </td>
+                  ))}
+                  {/* 빈 칸 채우기 */}
+                  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+                    <td key={`empty-name-${i}`} style={{ border: "1px solid #000", padding: "4px", width: `calc((100% - 44px) / ${CHUNK_SIZE})` }} />
+                  ))}
+                </tr>
+
+                {/* 원료투입 행 */}
+                <tr>
+                  {chunk.map((s, i) => {
+                    const ev = slotEvents.filter(e => e.slot_id === s.id && e.event_type === "material_in")
+                      .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+                    const isMove = ev?.action_note?.includes("→");
+                    return (
+                      <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
+                        {ev ? `${isMove ? "슬롯이동" : "원료투입"}: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}` : ""}
+                      </td>
+                    );
+                  })}
+                  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+                    <td key={`empty-in-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
+                  ))}
+                </tr>
+
+                {/* 슬롯이동 행 */}
+                <tr>
+                  {chunk.map((s, i) => {
+                    const ev = slotEvents.filter(e => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→"))
+                      .sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+                    return (
+                      <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
+                        {ev ? `슬롯이동: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})` : ""}
+                      </td>
+                    );
+                  })}
+                  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+                    <td key={`empty-out-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
+                  ))}
+                </tr>
+
+                {/* 온도기록 행 */}
+                {Array.from({ length: maxRows }).map((_, rowIdx) => (
+                  <tr key={`temp-${rowIdx}`}>
+                    {chunk.map((s, i) => {
+                      const ev = slotWoEventsDedup(s.id)[rowIdx];
+                      const isNG = ev?.is_ok === false;
+                      const typeLabel = ev ? (WO_EVENT_TYPE_LABEL[ev.event_type] ?? ev.event_type) : "";
+                      return (
+                        <td key={i} style={{
+                          border: "1px solid #000", padding: "4px",
+                          textAlign: "center", fontSize: "8pt",
+                          color: isNG ? "red" : "#000", height: 22,
+                        }}>
+                          {ev ? (
+                            <>
+                              <span style={{
+                                fontSize: "7pt",
+                                background: ev.event_type === "start" ? "#dbeafe"
+                                  : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9",
+                                padding: "0 3px", borderRadius: 2, marginRight: 2,
+                              }}>{typeLabel}</span>
+                              {`(${toKSTTime(ev.measured_at)}) ${ev.temperature ?? ""}℃`}
+                            </>
+                          ) : ""}
+                        </td>
+                      );
+                    })}
+                    {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+                      <td key={`empty-temp-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
+                    ))}
+                  </tr>
+                ))}
+
+                {/* 빈 행 */}
+                <tr>
+                  {Array.from({ length: CHUNK_SIZE }).map((_, i) => (
+                    <td key={i} style={{ border: "1px solid #000", padding: "4px", height: 22 }} />
+                  ))}
+                </tr>
+
+                {/* 판정 + 서명 행 */}
+                <tr>
+                  {chunk.map((s, i) => {
+                    const events = woEvents.filter(e => e.slot_id === s.id);
+                    const hasWoEvents = events.length > 0;
+                    const hasNG = events.some(e => e.is_ok === false);
+                    const assignee = slotAssignees[s.id];
+                    const signSrc = assignee ? SIGN_MAP[assignee] : null;
+                    if (!hasWoEvents) return <td key={i} style={{ border: "1px solid #000", padding: "4px", height: 28 }} />;
+                    return (
+                      <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 28 }}>
+                        <div style={{ marginBottom: 2 }}>
+                          <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>판정: {hasNG ? "X" : "O"}</span>
+                        </div>
+                        {signSrc && <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} />}
+                        {assignee && !signSrc && <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
+                      </td>
+                    );
+                  })}
+                  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+                    <td key={`empty-judge-${i}`} style={{ border: "1px solid #000", padding: "4px", height: 28 }} />
+                  ))}
+                </tr>
+              </React.Fragment>
+            );
+          })}
         </tbody>
       </table>
     );
@@ -799,8 +883,8 @@ async function handlePrint() {
 
   return (
     <>
-      {renderSection(darkSlots, "준초콜릿")}
-      {renderSection(whiteSlots, "당류가공품")}
+      {renderSection(darkActive, "준초콜릿")}
+      {renderSection(whiteActive, "당류가공품")}
     </>
   );
 })()}
