@@ -92,22 +92,22 @@ function emptyLog(workOrderId: string, productName: string, clientName: string, 
 
 // ─────────────────────── O/X 토글 ───────────────────────
 function OxToggle({
-  value, onChange, nullable = false,
-}: { value: string | null; onChange: (v: string) => void; nullable?: boolean }) {
-  const cur = value ?? "";
+  value, onChange,
+}: { value: string | null; onChange: (v: string) => void; }) {
+  const cur = value ?? "O";
+  const isO = cur === "O";
   return (
-    <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 text-xs">
-      <button
-        type="button"
-        className={`px-2.5 py-1.5 font-semibold transition-colors ${cur === "O" ? "bg-emerald-100 text-emerald-700" : "bg-white text-slate-400 hover:bg-slate-50"}`}
-        onClick={() => onChange("O")}
-      >O</button>
-      <button
-        type="button"
-        className={`px-2.5 py-1.5 font-semibold transition-colors border-l border-slate-200 ${cur === "X" ? "bg-red-100 text-red-600" : "bg-white text-slate-400 hover:bg-slate-50"}`}
-        onClick={() => onChange("X")}
-      >X</button>
-    </div>
+    <button
+      type="button"
+      className={`w-8 h-7 rounded-lg text-xs font-bold transition-colors border ${
+        isO
+          ? "bg-emerald-100 text-emerald-700 border-emerald-300 hover:bg-emerald-200"
+          : "bg-red-100 text-red-600 border-red-300 hover:bg-red-200"
+      }`}
+      onClick={() => onChange(isO ? "X" : "O")}
+    >
+      {cur}
+    </button>
   );
 }
 
@@ -149,17 +149,15 @@ function ZoneTable({
 }) {
   const thTop = "border border-slate-200 bg-slate-50 px-2 py-1 text-center text-[11px] font-semibold text-slate-500 whitespace-nowrap";
   const thSub = "border border-slate-200 bg-slate-50 px-1 py-1 text-center text-[10px] text-slate-400 whitespace-nowrap";
-  const td = "border border-slate-200 px-1 py-1.5 text-center";
-  const tdBlank = "border border-slate-200 bg-slate-50";
-  const label = "border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs font-medium text-slate-600 whitespace-nowrap";
+  const td = "border border-slate-200 px-1 py-2 text-center";
+  const label = "border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-medium text-slate-600 whitespace-nowrap";
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-xs" style={{ minWidth: 900 }}>
         <thead>
-          {/* 윗줄: 그룹 헤더 */}
           <tr>
-            <th className={thTop} rowSpan={2} style={{ width: 90 }}>항목</th>
+            <th className={thTop} rowSpan={2} style={{ width: 110 }}>항목</th>
             <th className={thTop} colSpan={3}>Fe 시편</th>
             <th className={thTop} colSpan={3}>SUS 시편</th>
             <th className={thTop} rowSpan={2}>제품<br />통과</th>
@@ -169,7 +167,6 @@ function ZoneTable({
             <th className={thTop} colSpan={3}>SUS+제품(하)</th>
             {showExtra && <th className={thTop} rowSpan={2}>이탈유무</th>}
           </tr>
-          {/* 아랫줄: 좌·중·우 */}
           <tr>
             <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
             <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
@@ -180,24 +177,13 @@ function ZoneTable({
           </tr>
         </thead>
         <tbody>
-          {/* 1행: 감도 모니터링 */}
           <tr>
-            <td className={label}>감도 모니터링</td>
+            <td className={label}>감도모니터링<br />&amp;공정품확인</td>
             {(["fe_l","fe_m","fe_r","sus_l","sus_m","sus_r"] as (keyof ZoneFields)[]).map((k) => (
               <td key={k} className={td}>
                 <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
               </td>
             ))}
-            <td className={tdBlank + " text-slate-300 text-[10px] text-center"}>—</td>
-            {Array.from({ length: 12 }).map((_, i) => <td key={i} className={tdBlank} />)}
-            {showExtra && <td className={tdBlank} rowSpan={2}>
-              <OxToggle value={fields.deviation ?? null} onChange={(v) => onChange("deviation", v)} />
-            </td>}
-          </tr>
-          {/* 2행: 공정품 확인 */}
-          <tr>
-            <td className={label}>공정품 확인</td>
-            {Array.from({ length: 6 }).map((_, i) => <td key={i} className={tdBlank} />)}
             <td className={td}>
               <OxToggle value={fields.product_pass} onChange={(v) => onChange("product_pass", v)} />
             </td>
@@ -206,6 +192,11 @@ function ZoneTable({
                 <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
               </td>
             ))}
+            {showExtra && (
+              <td className={td}>
+                <OxToggle value={fields.deviation ?? "X"} onChange={(v) => onChange("deviation", v)} />
+              </td>
+            )}
           </tr>
         </tbody>
       </table>
@@ -293,26 +284,6 @@ export function Ccp1pTab({ role, userId, showToast }: {
     } else {
       setFormData(emptyLog(wo.id, wo.product_name, wo.client_name, today));
     }
-  }
-
-  // 일괄 O 입력 (Fe/SUS 시편 6개 → O, 제품통과/이탈유무 → X 유지)
-  function applyBulkO() {
-    if (!formData) return;
-    setFormData((prev: any) => prev ? {
-      ...prev,
-      a_fe_l: "O", a_fe_m: "O", a_fe_r: "O",
-      a_sus_l: "O", a_sus_m: "O", a_sus_r: "O",
-      a_fe_up_l: "O", a_fe_up_m: "O", a_fe_up_r: "O",
-      a_fe_dn_l: "O", a_fe_dn_m: "O", a_fe_dn_r: "O",
-      a_sus_up_l: "O", a_sus_up_m: "O", a_sus_up_r: "O",
-      a_sus_dn_l: "O", a_sus_dn_m: "O", a_sus_dn_r: "O",
-      b_fe_l: "O", b_fe_m: "O", b_fe_r: "O",
-      b_sus_l: "O", b_sus_m: "O", b_sus_r: "O",
-      b_fe_up_l: "O", b_fe_up_m: "O", b_fe_up_r: "O",
-      b_fe_dn_l: "O", b_fe_dn_m: "O", b_fe_dn_r: "O",
-      b_sus_up_l: "O", b_sus_up_m: "O", b_sus_up_r: "O",
-      b_sus_dn_l: "O", b_sus_dn_m: "O", b_sus_dn_r: "O",
-    } : prev);
   }
 
   // A구역 필드 변경
@@ -557,14 +528,6 @@ export function Ccp1pTab({ role, userId, showToast }: {
                   ) : null)}
                 </select>
               </div>
-              <button
-                type="button"
-                className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
-                onClick={applyBulkO}
-              >
-                일괄 O 입력
-              </button>
-              <div className="text-xs text-slate-400">Fe/SUS 시편 · 공정품 확인 전체 O로 입력<br />제품통과 · 이탈유무는 X 유지</div>
             </div>
 
             {/* A구역 */}
