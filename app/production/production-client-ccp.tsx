@@ -740,18 +740,22 @@ export function SlotStatusPanel({
                     </div>
                   </div>
                 )}
-                <div>
-                  <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
-                  <input className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                    inputMode="numeric" placeholder="예: 1430" maxLength={4}
-                    value={slotActionTime}
-                    onChange={(e) => setSlotActionTime(e.target.value.replace(/[^\d]/g,"").slice(0,4))} />
-                  {slotActionTime.length === 4 && (
-                    <div className="mt-0.5 text-xs text-slate-400 text-center">
-                      {slotActionTime.slice(0,2)}:{slotActionTime.slice(2,4)}
-                    </div>
-                  )}
-                </div>
+               
+               // 변경 후
+<div>
+  <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
+  <input className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+    inputMode="numeric" placeholder="예: 1430" maxLength={4}
+    value={slotActionTime}
+    onChange={(e) => setSlotActionTime(e.target.value.replace(/[^\d]/g,"").slice(0,4))} />
+</div>
+{slotActionTime.length === 4 && (
+  <div className="text-xs text-slate-400 text-center self-center">
+    {slotActionTime.slice(0,2)}:{slotActionTime.slice(2,4)}
+  </div>
+)}
+<button
+
                 <button
                   className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
                   disabled={slotActionSaving || slotActionTime.length < 4 || (warmerSlots.find((s) => s.id === activeSlotId)?.purpose === "유동" && !selectedMaterialType)}
