@@ -331,9 +331,13 @@ export function Ccp1pTab({ role, userId, showToast }: {
     // 시작시간 > 생산완료 시간 검증
     const wo = woList.find((w: any) => w.id === selectedWoId);
     if (wo && formData.start_time) {
-      const completedKst = toKstTime(wo.updated_at); // HH:MM
-      if (formData.start_time < completedKst) {
-        return showToast(`시작시간(${formData.start_time})은 생산완료 시간(${completedKst})보다 늦어야 합니다.`, "error");
+      // updated_at(UTC) → KST HH:MM 24시간 형식
+      const completedDate = new Date(wo.updated_at);
+      const completedKst24 = completedDate.toLocaleTimeString("ko-KR", {
+        timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false,
+      }); // "HH:MM"
+      if (formData.start_time < completedKst24) {
+        return showToast(`시작시간(${formData.start_time})은 생산완료 시간(${completedKst24})보다 늦어야 합니다.`, "error");
       }
     }
 
