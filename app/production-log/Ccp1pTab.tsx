@@ -241,7 +241,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
     });
   }, []);
 
-  // 오늘 생산완료 작업지시서 조회 (KST 기준)
+  // 오늘 생산완료 작업지시서 조회 (KST 기준) - 생산완료 시간 오름차순
   const loadWoList = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -250,7 +250,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
       .eq("status_production", true)
       .gte("updated_at", `${today}T00:00:00+09:00`)
       .lt("updated_at", `${today}T23:59:59+09:00`)
-      .order("updated_at", { ascending: false });
+      .order("updated_at", { ascending: true });
 
     if (error) { showToast("조회 실패: " + error.message, "error"); setLoading(false); return; }
     setWoList((data ?? []) as WorkOrderItem[]);
@@ -326,6 +326,16 @@ export function Ccp1pTab({ role, userId, showToast }: {
   async function save() {
     if (!formData || !selectedWoId) return;
     if (!formData.start_time) return showToast("시작시간을 입력하세요.", "error");
+
+    // 시작시간 > 생산완료 시간 검증
+    const wo = woList.find((w: any) => w.id === selectedWoId);
+    if (wo && formData.start_time) {
+      const completedKst = toKstTime(wo.updated_at); // HH:MM
+      if (formData.start_time < completedKst) {
+        return showToast(`시작시간(${formData.start_time})은 생산완료 시간(${completedKst})보다 늦어야 합니다.`, "error");
+      }
+    }
+
     if (formData.b_end_time && formData.b_end_time.length === 5 && formData.start_time) {
       if (formData.b_end_time <= formData.start_time) {
         return showToast("종료시간은 시작시간보다 늦어야 합니다.", "error");
@@ -450,6 +460,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
             {woList.map((wo: any) => {
               const hasLog = !!logMap[wo.id];
               const isSelected = selectedWoId === wo.id;
+              const log = logMap[wo.id];
               return (
                 <button
                   key={wo.id}
@@ -463,11 +474,21 @@ export function Ccp1pTab({ role, userId, showToast }: {
                   <div className="flex items-center justify-between gap-2">
                     <div>
                       <div className="font-semibold text-sm">{wo.client_name} — {wo.product_name}</div>
-                      <div className="mt-0.5 text-xs text-slate-400">
-                        생산완료 {toKstTime(wo.updated_at)}
+                      <div className="mt-1 flex items-center gap-3 text-xs">
+                        <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5">
+                          <span className="text-slate-400">생산완료</span>
+                          <span className="font-semibold text-slate-700 tabular-nums">{toKstTime(wo.updated_at)}</span>
+                        </span>
+                        {hasLog && log?.start_time && (
+                          <span className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-0.5">
+                            <span className="text-green-600">기록</span>
+                            <span className="font-semibold text-green-700 tabular-nums">{log.start_time}</span>
+                            {log.b_end_time && <span className="text-green-500">→ {log.b_end_time}</span>}
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
                       hasLog
                         ? "border-green-200 bg-green-100 text-green-700"
                         : "border-amber-200 bg-amber-100 text-amber-700"
