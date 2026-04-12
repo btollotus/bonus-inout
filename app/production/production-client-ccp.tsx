@@ -805,7 +805,6 @@ export function SlotStatusPanel({
       </>
     )}
     </div>
-       </div>
   );
 }
 
