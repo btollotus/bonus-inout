@@ -49,6 +49,7 @@ type MetalLog = {
   b_pass_qty: number | null;
   action_note: string | null;
   note: string | null;
+  worker_name: string | null;
   confirmed_by: string | null;
   approved_by: string | null;
   approved_at: string | null;
@@ -82,6 +83,7 @@ function emptyLog(workOrderId: string, productName: string, clientName: string, 
     b_pass_qty: null,
     action_note: null,
     note: null,
+    worker_name: null,
     confirmed_by: null,
     approved_by: null,
     approved_at: null,
@@ -145,24 +147,36 @@ function ZoneTable({
   onChange: (key: keyof ZoneFields, val: string | number | null) => void;
   showExtra?: boolean;
 }) {
-  const th = "border border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-[11px] font-semibold text-slate-500 whitespace-nowrap";
+  const thTop = "border border-slate-200 bg-slate-50 px-2 py-1 text-center text-[11px] font-semibold text-slate-500 whitespace-nowrap";
+  const thSub = "border border-slate-200 bg-slate-50 px-1 py-1 text-center text-[10px] text-slate-400 whitespace-nowrap";
   const td = "border border-slate-200 px-1 py-1.5 text-center";
+  const tdBlank = "border border-slate-200 bg-slate-50";
   const label = "border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs font-medium text-slate-600 whitespace-nowrap";
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-xs" style={{ minWidth: 900 }}>
         <thead>
+          {/* 윗줄: 그룹 헤더 */}
           <tr>
-            <th className={th} style={{ width: 90 }}>항목</th>
-            <th className={th} colSpan={3}>Fe시편 (좌·중·우)</th>
-            <th className={th} colSpan={3}>SUS시편 (좌·중·우)</th>
-            <th className={th}>제품<br />통과</th>
-            <th className={th} colSpan={3}>Fe+제품(상)</th>
-            <th className={th} colSpan={3}>Fe+제품(하)</th>
-            <th className={th} colSpan={3}>SUS+제품(상)</th>
-            <th className={th} colSpan={3}>SUS+제품(하)</th>
-            {showExtra && <th className={th}>이탈유무</th>}
+            <th className={thTop} rowSpan={2} style={{ width: 90 }}>항목</th>
+            <th className={thTop} colSpan={3}>Fe 시편</th>
+            <th className={thTop} colSpan={3}>SUS 시편</th>
+            <th className={thTop} rowSpan={2}>제품<br />통과</th>
+            <th className={thTop} colSpan={3}>Fe+제품(상)</th>
+            <th className={thTop} colSpan={3}>Fe+제품(하)</th>
+            <th className={thTop} colSpan={3}>SUS+제품(상)</th>
+            <th className={thTop} colSpan={3}>SUS+제품(하)</th>
+            {showExtra && <th className={thTop} rowSpan={2}>이탈유무</th>}
+          </tr>
+          {/* 아랫줄: 좌·중·우 */}
+          <tr>
+            <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
+            <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
+            <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
+            <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
+            <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
+            <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
           </tr>
         </thead>
         <tbody>
@@ -174,20 +188,16 @@ function ZoneTable({
                 <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
               </td>
             ))}
-            <td className={td + " bg-slate-50 text-slate-300 text-xs"}>—</td>
-            {/* 공정품 확인 칸은 1행에서 비움 */}
-            {Array.from({ length: 12 }).map((_, i) => (
-              <td key={i} className={td + " bg-slate-50"} />
-            ))}
-            {showExtra && <td className={td + " bg-slate-50"} />}
+            <td className={tdBlank + " text-slate-300 text-[10px] text-center"}>—</td>
+            {Array.from({ length: 12 }).map((_, i) => <td key={i} className={tdBlank} />)}
+            {showExtra && <td className={tdBlank} rowSpan={2}>
+              <OxToggle value={fields.deviation ?? null} onChange={(v) => onChange("deviation", v)} />
+            </td>}
           </tr>
           {/* 2행: 공정품 확인 */}
           <tr>
             <td className={label}>공정품 확인</td>
-            {/* Fe/SUS 시편 칸 비움 */}
-            {Array.from({ length: 6 }).map((_, i) => (
-              <td key={i} className={td + " bg-slate-50"} />
-            ))}
+            {Array.from({ length: 6 }).map((_, i) => <td key={i} className={tdBlank} />)}
             <td className={td}>
               <OxToggle value={fields.product_pass} onChange={(v) => onChange("product_pass", v)} />
             </td>
@@ -196,11 +206,6 @@ function ZoneTable({
                 <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
               </td>
             ))}
-            {showExtra && (
-              <td className={td}>
-                <OxToggle value={fields.deviation ?? null} onChange={(v) => onChange("deviation", v)} />
-              </td>
-            )}
           </tr>
         </tbody>
       </table>
@@ -222,6 +227,12 @@ export function Ccp1pTab({ role, userId, showToast }: {
   const [formData, setFormData] = useState<Omit<MetalLog, "id"> | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
+
+  useEffect(() => {
+    supabase.from("employees").select("id,name").is("resign_date", null).order("name")
+      .then(({ data }: { data: any[] | null }) => setEmployees(data ?? []));
+  }, []);
 
   // 김영각/조대성 uuid 조회
   const [confirmerUserId, setConfirmerUserId] = useState<string | null>(null);
@@ -404,21 +415,19 @@ export function Ccp1pTab({ role, userId, showToast }: {
       {/* ── 공통사항 ── */}
       <div className={`${card} p-4`}>
         <div className="mb-2 text-xs font-semibold text-slate-500">공통사항</div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm md:grid-cols-4 mb-3">
           <div><span className="text-xs text-slate-400">한계기준</span><div>Fe 2.5mmφ &nbsp;/&nbsp; SUS 3.0mmφ</div></div>
           <div><span className="text-xs text-slate-400">검교정주기</span><div>연 1회</div></div>
-          <div className="col-span-2"><span className="text-xs text-slate-400">감도 모니터링 점검주기</span><div>작업시작 전 · 작업중 2시간마다 · 작업 종료 후</div></div>
-          <div className="col-span-2"><span className="text-xs text-slate-400">공정품 확인</span><div>제품 금속검출기 통과 · 제품변경 시 &amp; 작업 중 상시</div></div>
-          <div className="col-span-2">
-            <div className="mt-1 space-y-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-              <div><span className="font-semibold text-slate-600">방법 —</span> 감도 모니터링: ① 표준시편만 통과 &nbsp;② 금속이물이 없는 것으로 확인된 공정품 통과 &nbsp;③ 표준시편과 공정품을 함께 통과</div>
-              <div><span className="font-semibold text-slate-600">공정품 확인:</span> 제품 금속검출기 통과</div>
-              <div>
-                제품 1개 → <span className="font-semibold text-blue-700">A단계</span> 실행 후 종료시간 기록
-                &nbsp;&nbsp;|&nbsp;&nbsp;
-                제품 2개 이상 → <span className="font-semibold text-amber-700">A단계 + B단계</span> 실행
-              </div>
-            </div>
+          <div><span className="text-xs text-slate-400">감도 모니터링 점검주기</span><div>작업시작 전 · 작업중 2시간마다 · 종료 후</div></div>
+          <div><span className="text-xs text-slate-400">공정품 확인</span><div>제품변경 시 &amp; 작업 중 상시</div></div>
+        </div>
+        <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+          <div><span className="font-semibold text-slate-700">방법 —</span> 감도 모니터링: &nbsp;① 표준시편만 통과 &nbsp;② 금속이물이 없는 것으로 확인된 공정품 통과 &nbsp;③ 표준시편과 공정품을 함께 통과</div>
+          <div><span className="font-semibold text-slate-700">공정품 확인:</span> &nbsp;제품 금속검출기 통과</div>
+          <div className="text-slate-500">
+            제품 1개 → <span className="font-semibold text-blue-700">A단계</span> 실행 후 종료시간 기록
+            &nbsp;&nbsp;|&nbsp;&nbsp;
+            제품 2개 이상 → <span className="font-semibold text-amber-700">A단계 + B단계</span> 실행
           </div>
         </div>
       </div>
@@ -490,7 +499,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
               }`}>{isEdit ? "기록완료" : "미기록"}</span>
             </div>
 
-            {/* 시작시간 + 종료시간 + 통과수량 + 일괄O */}
+            {/* 시작시간 + 종료시간 + 통과수량 + 담당자 + 일괄O */}
             <div className="mb-4 flex flex-wrap items-end gap-4">
               <div>
                 <div className="mb-1 text-xs text-slate-500">시작시간 * <span className="text-slate-300">(예: 1430)</span></div>
@@ -534,6 +543,19 @@ export function Ccp1pTab({ role, userId, showToast }: {
                   value={formData.b_pass_qty ?? ""}
                   onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, b_pass_qty: e.target.value ? Number(e.target.value) : null } : prev)}
                 />
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-slate-500">담당자</div>
+                <select
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                  value={formData.worker_name ?? ""}
+                  onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, worker_name: e.target.value || null } : prev)}
+                >
+                  <option value="">— 선택 —</option>
+                  {employees.map((e: any) => e.name ? (
+                    <option key={e.id} value={e.name}>{e.name}</option>
+                  ) : null)}
+                </select>
               </div>
               <button
                 type="button"
