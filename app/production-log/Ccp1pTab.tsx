@@ -441,9 +441,11 @@ export function Ccp1pTab({ role, userId, showToast }: {
     pass_qty: f.b_pass_qty,
   });
 
-  // KST 시간 표시
+  // KST 시간 표시 (24시간 HH:MM)
   function toKstTime(utcStr: string) {
-    return new Date(utcStr).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" });
+    return new Date(utcStr).toLocaleTimeString("ko-KR", {
+      timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false,
+    });
   }
 
   return (
