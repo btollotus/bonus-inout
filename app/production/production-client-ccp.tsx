@@ -570,6 +570,7 @@ export function SlotStatusPanel({
   saveSlotMove: (fromSlotId: string, toSlotId: string) => void;
 }) {
   const [selectedMaterialType, setSelectedMaterialType] = React.useState<string>("");
+  const [isExpanded, setIsExpanded] = React.useState(true);
 
 
   const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
@@ -637,19 +638,24 @@ export function SlotStatusPanel({
   };
 
   return (
-    <div className={`${card} p-4`}>
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <div className="font-semibold text-sm">🌡️ 온장고 슬롯 현황</div>
-          <div className="text-xs text-slate-400 mt-0.5">슬롯 클릭 → 원료투입 또는 슬롯이동</div>
-        </div>
-        <div className="flex items-center gap-2">
-          <input type="date" className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-blue-400 focus:outline-none"
-            value={slotActionDate} onChange={(e) => setSlotActionDate(e.target.value)} />
-          <button className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50" onClick={loadSlotStatus}>🔄 갱신</button>
-        </div>
-      </div>
+<div className="flex items-center justify-between mb-3">
+  <button
+    type="button"
+    className="flex items-center gap-2 text-left"
+    onClick={() => setIsExpanded((v) => !v)}
+  >
+    <div className="font-semibold text-sm">🌡️ 온장고 슬롯 현황</div>
+    <span className="text-xs text-slate-400">{isExpanded ? "▲" : "▼"}</span>
+  </button>
+  <div className="flex items-center gap-2">
+    <input type="date" className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-blue-400 focus:outline-none"
+      value={slotActionDate} onChange={(e) => setSlotActionDate(e.target.value)} />
+    <button className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50" onClick={loadSlotStatus}>🔄 갱신</button>
+  </div>
+</div>
 
+{isExpanded && (
+  <>
       <div className="flex flex-wrap gap-4">
   {/* 다크컴파운드 3×3 */}
   <div>
@@ -795,6 +801,8 @@ export function SlotStatusPanel({
           </div>
         );
       })()}
+      </>
+    )}
     </div>
   );
 }
