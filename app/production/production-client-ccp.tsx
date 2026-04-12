@@ -477,7 +477,11 @@ setCcpWoEditTime(kstTime.replace(":", ""));
     .order("measured_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const movedMaterialType = lastInEvent?.material_type ?? null;
+    const fromSlot = warmerSlots.find((s) => s.id === fromSlotId);
+    const movedMaterialType = lastInEvent?.material_type
+      ?? (fromSlot?.purpose === "화이트컴파운드" ? "화이트"
+        : fromSlot?.purpose === "다크컴파운드" ? "다크"
+        : null);
 
     setSlotActionSaving(true);
     try {
