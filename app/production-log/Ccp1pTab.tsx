@@ -150,14 +150,18 @@ type ZoneFields = {
 };
 
 function ZoneTable({
-  zone, fields, onChange, showExtra = false, disabled = false,
-}: {
-  zone: "A" | "B";
-  fields: ZoneFields;
-  onChange: (key: keyof ZoneFields, val: string | number | null) => void;
-  showExtra?: boolean;
-  disabled?: boolean;
-}) {
+    zone, fields, onChange, showExtra = false, disabled = false, showFull = true,
+  }: {
+    zone: "A" | "B";
+    fields: ZoneFields;
+    onChange: (key: keyof ZoneFields, val: string | number | null) => void;
+    showExtra?: boolean;
+    disabled?: boolean;
+    showFull?: boolean;
+  })
+
+
+{
   const thTop = "border border-slate-200 bg-slate-50 px-2 py-1 text-center text-[11px] font-semibold text-slate-500 whitespace-nowrap";
   const thSub = "border border-slate-200 bg-slate-50 px-1 py-1 text-center text-[10px] text-slate-400 whitespace-nowrap";
   const td = "border border-slate-200 px-1 py-2 text-center";
@@ -166,26 +170,36 @@ function ZoneTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-xs" style={{ minWidth: 900 }}>
-        <thead>
+    <table className="w-full border-collapse text-xs" style={{ minWidth: showFull ? 900 : 460 }}>
+    <thead>
           <tr>
             <th className={thTop} rowSpan={2} style={{ width: 110 }}>항목</th>
             <th className={thTop} colSpan={3}>Fe 시편</th>
             <th className={thTop} colSpan={3}>SUS 시편</th>
             <th className={thTop} rowSpan={2}>제품<br />통과</th>
-            <th className={thTop} colSpan={3}>Fe+제품(상)</th>
-            <th className={thTop} colSpan={3}>Fe+제품(하)</th>
-            <th className={thTop} colSpan={3}>SUS+제품(상)</th>
-            <th className={thTop} colSpan={3}>SUS+제품(하)</th>
-            {showExtra && <th className={thTop} rowSpan={2}>이탈유무</th>}
+{showFull && (
+  <>
+    <th className={thTop} colSpan={3}>Fe+제품(상)</th>
+    <th className={thTop} colSpan={3}>Fe+제품(하)</th>
+    <th className={thTop} colSpan={3}>SUS+제품(상)</th>
+    <th className={thTop} colSpan={3}>SUS+제품(하)</th>
+  </>
+)}
+{showExtra && <th className={thTop} rowSpan={2}>이탈유무</th>}  
+
+
           </tr>
           <tr>
-            <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
-            <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
-            <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
-            <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
-            <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
-            <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
+          <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>  {/* Fe */}
+<th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>  {/* SUS */}
+{showFull && (
+  <>
+    <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
+    <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
+    <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
+    <th className={thSub}>좌</th><th className={thSub}>중</th><th className={thSub}>우</th>
+  </>
+)}
           </tr>
         </thead>
         <tbody>
@@ -199,11 +213,17 @@ function ZoneTable({
             <td className={disabled ? tdDim : td}>
               <OxToggle value={fields.product_pass} onChange={(v) => onChange("product_pass", v)} />
             </td>
-            {(["fe_up_l","fe_up_m","fe_up_r","fe_dn_l","fe_dn_m","fe_dn_r","sus_up_l","sus_up_m","sus_up_r","sus_dn_l","sus_dn_m","sus_dn_r"] as (keyof ZoneFields)[]).map((k) => (
-              <td key={k} className={disabled ? tdDim : td}>
-                <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
-              </td>
-            ))}
+            {showFull && (
+  (["fe_up_l","fe_up_m","fe_up_r","fe_dn_l","fe_dn_m","fe_dn_r",
+    "sus_up_l","sus_up_m","sus_up_r","sus_dn_l","sus_dn_m","sus_dn_r"]
+   as (keyof ZoneFields)[]).map((k) => (
+    <td key={k} className={disabled ? tdDim : td}>
+      <OxToggle value={fields[k] as string | null} onChange={(v) => onChange(k, v)} />
+    </td>
+  ))
+)}
+
+
             {showExtra && (
               <td className={td}>
                 <OxToggle value={fields.deviation ?? "X"} onChange={(v) => onChange("deviation", v)} />
@@ -399,10 +419,9 @@ export function Ccp1pTab({ role, userId, showToast }: {
       "a_fe_up_l","a_fe_up_m","a_fe_up_r","a_fe_dn_l","a_fe_dn_m","a_fe_dn_r",
       "a_sus_up_l","a_sus_up_m","a_sus_up_r","a_sus_dn_l","a_sus_dn_m","a_sus_dn_r"] as (keyof typeof formData)[];
     const aDefaultX = ["a_product_pass"] as (keyof typeof formData)[];
-    const bDefaultO = ["b_fe_l","b_fe_m","b_fe_r","b_sus_l","b_sus_m","b_sus_r",
-      "b_fe_up_l","b_fe_up_m","b_fe_up_r","b_fe_dn_l","b_fe_dn_m","b_fe_dn_r",
-      "b_sus_up_l","b_sus_up_m","b_sus_up_r","b_sus_dn_l","b_sus_dn_m","b_sus_dn_r"] as (keyof typeof formData)[];
-    const bDefaultX = ["b_product_pass","b_deviation"] as (keyof typeof formData)[];
+    const bDefaultO = ["b_fe_l","b_fe_m","b_fe_r","b_sus_l","b_sus_m","b_sus_r"]
+    as (keyof typeof formData)[];
+  const bDefaultX = ["b_product_pass","b_deviation"] as (keyof typeof formData)[];
 
     const aChanged = aDefaultO.some((k) => formData[k] === "X") || aDefaultX.some((k) => formData[k] === "O");
     const bActive = (formData.b_pass_qty ?? 0) > 1;
@@ -513,12 +532,12 @@ export function Ccp1pTab({ role, userId, showToast }: {
   const emptyRowCount = Math.max(EMPTY_ROW_MIN, EMPTY_ROW_MIN - sortedLogs.length);
 
   const tdBase: React.CSSProperties = { border: "1px solid #000", padding: "2px 3px", fontSize: "8pt", verticalAlign: "middle" };
-  const thBase: React.CSSProperties = { border: "1px solid #000", padding: "2px 3px", fontSize: "7.5pt", fontWeight: "bold", textAlign: "center", background: "#e8e8e8", verticalAlign: "middle" };
-  const thSub: React.CSSProperties = { border: "1px solid #000", padding: "1px 2px", fontSize: "7pt", textAlign: "center", background: "#f4f4f4", verticalAlign: "middle" };
-  const thA: React.CSSProperties = { ...thSub, background: "#f4f4f4" };
-  const thB: React.CSSProperties = { ...thSub, background: "#e8e8e8" };
-  const thATop: React.CSSProperties = { ...thBase, background: "#e8e8e8" };
-  const thBTop: React.CSSProperties = { ...thBase, background: "#d0d0d0" };
+  const thBase: React.CSSProperties = { border: "1px solid #000", padding: "2px 3px", fontSize: "7.5pt", fontWeight: "bold", textAlign: "center", background: "#f0f0f0", verticalAlign: "middle" };
+  const thSub: React.CSSProperties = { border: "1px solid #000", padding: "1px 2px", fontSize: "7pt", textAlign: "center", background: "#fafafa", verticalAlign: "middle" };
+  const thA: React.CSSProperties = { ...thSub, background: "#dbeafe" };
+  const thB: React.CSSProperties = { ...thSub, background: "#fef9c3" };
+  const thATop: React.CSSProperties = { ...thBase, background: "#dbeafe" };
+  const thBTop: React.CSSProperties = { ...thBase, background: "#fef9c3" };
 
   return (
     <div className="space-y-4">
@@ -714,13 +733,16 @@ export function Ccp1pTab({ role, userId, showToast }: {
                     통과수량이 1개 이하 → 이탈유무만 입력 가능합니다.
                   </div>
                 )}
-                <ZoneTable
-                  zone="B"
-                  fields={bFields(formData)}
-                  onChange={setB}
-                  showExtra
-                  disabled={(formData.b_pass_qty ?? 0) <= 1}
-                />
+<ZoneTable
+  zone="B"
+  fields={bFields(formData)}
+  onChange={setB}
+  showExtra
+  showFull={false}
+  disabled={(formData.b_pass_qty ?? 0) <= 1}
+/>
+
+
               </div>
             </div>
 
@@ -855,65 +877,58 @@ export function Ccp1pTab({ role, userId, showToast }: {
             </tr>
             <tr>
               <td colSpan={2} style={{ ...tdBase, fontSize: "7.5pt", color: "#555" }}>
-                제품 1개 → <span style={{ fontWeight: "bold" }}>A단계</span> 실행 후 종료시간 기록&nbsp;&nbsp;|&nbsp;&nbsp;제품 2개 이상 → <span style={{ fontWeight: "bold" }}>A단계 + B단계</span> 실행
+                제품 1개 → <span style={{ color: "#1D6FB5", fontWeight: "bold" }}>A단계</span> 실행 후 종료시간 기록&nbsp;&nbsp;|&nbsp;&nbsp;제품 2개 이상 → <span style={{ color: "#B45309", fontWeight: "bold" }}>A단계 + B단계</span> 실행
               </td>
             </tr>
           </tbody>
         </table>
 
-        {/* ④ 본문 테이블
-            A구역 19칸(좌중우 표기 포함) + B구역 4칸 = 총 25칸
-            헤더는 2행으로: 1행=그룹명(좌중우 포함), 2행=상세 그룹
-        */}
+        {/* ④ 본문 테이블 */}
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4, tableLayout: "fixed" }}>
           <colgroup>
-            {/* 품명, 시작시간 */}
-            <col style={{ width: "76px" }} />
-            <col style={{ width: "30px" }} />
-            {/* A: Fe시편 좌중우 */}
-            <col style={{ width: "18px" }} /><col style={{ width: "18px" }} /><col style={{ width: "18px" }} />
-            {/* A: SUS시편 좌중우 */}
-            <col style={{ width: "18px" }} /><col style={{ width: "18px" }} /><col style={{ width: "18px" }} />
+            <col style={{ width: "82px" }} />
+            <col style={{ width: "34px" }} />
+            {/* A: Fe시편 */}
+            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+            {/* A: SUS시편 */}
+            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
             {/* A: 제품통과 */}
-            <col style={{ width: "22px" }} />
-            {/* A: Fe+제품(상) 좌중우 */}
-            <col style={{ width: "18px" }} /><col style={{ width: "18px" }} /><col style={{ width: "18px" }} />
-            {/* A: Fe+제품(하) 좌중우 */}
-            <col style={{ width: "18px" }} /><col style={{ width: "18px" }} /><col style={{ width: "18px" }} />
-            {/* A: SUS+제품(상) 좌중우 */}
-            <col style={{ width: "18px" }} /><col style={{ width: "18px" }} /><col style={{ width: "18px" }} />
-            {/* A: SUS+제품(하) 좌중우 */}
-            <col style={{ width: "18px" }} /><col style={{ width: "18px" }} /><col style={{ width: "18px" }} />
-            {/* B: 종료시간 / 이탈유무 / 통과수량 / 확인(서명) */}
-            <col style={{ width: "30px" }} />
-            <col style={{ width: "22px" }} />
-            <col style={{ width: "22px" }} />
-            <col style={{ width: "40px" }} />
+            <col style={{ width: "28px" }} />
+            {/* A: Fe+제품(상)(하) SUS+제품(상)(하) */}
+            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+            <col style={{ width: "22px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+            {/* B: 종료시간 / 이탈유무 / 통과수량 / 확인 */}
+            <col style={{ width: "34px" }} />
+            <col style={{ width: "28px" }} />
+            <col style={{ width: "28px" }} />
+            <col style={{ width: "42px" }} />
           </colgroup>
           <thead>
-            {/* 1행: 그룹명 */}
             <tr>
-              <th rowSpan={2} style={{ ...thBase }}>품명<br />(업체명)</th>
-              <th rowSpan={2} style={{ ...thBase, fontSize: "6.5pt" }}>시작<br />시간</th>
-              {/* A구역 헤더: Fe시편(좌/중/우) → "Fe시편 좌·중·우" 형태로 1셀씩 */}
-              <th colSpan={3} style={{ ...thATop, fontSize: "6.5pt" }}>Fe시편<br/>좌·중·우</th>
-              <th colSpan={3} style={{ ...thATop, fontSize: "6.5pt" }}>SUS시편<br/>좌·중·우</th>
-              <th rowSpan={2} style={{ ...thATop, fontSize: "6pt" }}>제품<br/>통과</th>
-              <th colSpan={3} style={{ ...thATop, fontSize: "6.5pt" }}>Fe+제품(상)<br/>좌·중·우</th>
-              <th colSpan={3} style={{ ...thATop, fontSize: "6.5pt" }}>Fe+제품(하)<br/>좌·중·우</th>
-              <th colSpan={3} style={{ ...thATop, fontSize: "6.5pt" }}>SUS+제품(상)<br/>좌·중·우</th>
-              <th colSpan={3} style={{ ...thATop, fontSize: "6.5pt" }}>SUS+제품(하)<br/>좌·중·우</th>
-              <th rowSpan={2} style={{ ...thBTop, fontSize: "6pt" }}>종료<br/>시간</th>
-              <th rowSpan={2} style={{ ...thBTop, fontSize: "6pt" }}>이탈<br/>유무</th>
-              <th rowSpan={2} style={{ ...thBTop, fontSize: "6pt" }}>통과<br/>수량</th>
-              <th rowSpan={2} style={{ ...thBTop, fontSize: "6pt" }}>확 인<br/>(서명)</th>
+              <th rowSpan={3} style={{ ...thBase, width: 82 }}>품명<br />(업체명)</th>
+              <th rowSpan={3} style={thBase}>시작<br />시간</th>
+              <th colSpan={19} style={thATop}>A (제품1개일 경우)</th>
+              <th colSpan={4} style={thBTop}>B (제품2개 이상)</th>
             </tr>
-            {/* 2행: A/B 구분 레이블 */}
             <tr>
-              <th colSpan={6} style={{ ...thATop, fontSize: "7pt", letterSpacing: 0 }}>A (제품 1개일 경우)</th>
-              {/* 제품통과는 rowSpan=2라 여기 없음 */}
-              <th colSpan={12} style={{ ...thATop, fontSize: "7pt" }}>A (감도모니터링 &amp; 공정품확인)</th>
-              {/* B 4칸도 rowSpan=2 */}
+              <th colSpan={3} style={thA}>Fe 시편</th>
+              <th colSpan={3} style={thA}>SUS 시편</th>
+              <th rowSpan={2} style={{ ...thA, fontSize: "6.5pt" }}>제품<br />통과</th>
+              <th colSpan={3} style={thA}>Fe+제품(상)</th>
+              <th colSpan={3} style={thA}>Fe+제품(하)</th>
+              <th colSpan={3} style={thA}>SUS+제품(상)</th>
+              <th colSpan={3} style={thA}>SUS+제품(하)</th>
+              <th rowSpan={2} style={{ ...thB, fontSize: "6.5pt" }}>종료<br />시간</th>
+              <th rowSpan={2} style={{ ...thB, fontSize: "6.5pt" }}>이탈<br />유무</th>
+              <th rowSpan={2} style={{ ...thB, fontSize: "6.5pt" }}>통과<br />수량</th>
+              <th rowSpan={2} style={{ ...thB, fontSize: "6.5pt" }}>확 인<br />(서명)</th>
+            </tr>
+            <tr>
+              {["좌","중","우","좌","중","우","좌","중","우","좌","중","우","좌","중","우","좌","중","우"].map((l, i) => (
+                <th key={i} style={thA}>{l}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -921,8 +936,9 @@ export function Ccp1pTab({ role, userId, showToast }: {
               const signSrc = log.worker_name ? SIGN_MAP[log.worker_name] : null;
               const hasDeviation = getDeviationDesc(log) !== "";
               return (
-                <tr key={log.id} style={{ background: "#fff" }}>
+                <tr key={log.id} style={{ background: hasDeviation ? "#fff9f9" : "#fff" }}>
                   <td style={{ ...tdBase, textAlign: "left", fontSize: "7pt", paddingLeft: 3 }}>
+                    {hasDeviation && <span style={{ color: "#DC2626" }}>⚠ </span>}
                     {log.client_name} — {log.product_name}
                   </td>
                   <td style={{ ...tdBase, textAlign: "center", fontSize: "7.5pt" }}>{(log.start_time ?? "").slice(0, 5)}</td>
@@ -946,19 +962,13 @@ export function Ccp1pTab({ role, userId, showToast }: {
                   <PrintOx val={log.a_sus_dn_l} />
                   <PrintOx val={log.a_sus_dn_m} />
                   <PrintOx val={log.a_sus_dn_r} />
-                  {/* B구역: 데이터 없어도 칸은 항상 표시 */}
-                  <td style={{ ...tdBase, textAlign: "center", fontSize: "7.5pt" }}>
-                    {(log.b_end_time ?? "").slice(0, 5) || ""}
-                  </td>
+                  {/* B구역 */}
+                  <td style={{ ...tdBase, textAlign: "center", fontSize: "7.5pt" }}>{(log.b_end_time ?? "").slice(0, 5)}</td>
                   <td style={{
                     ...tdBase, textAlign: "center", fontSize: "8pt", fontWeight: "bold",
-                    color: log.b_deviation === "O" ? "#000" : "#000",
-                  }}>
-                    {log.b_deviation ?? ""}
-                  </td>
-                  <td style={{ ...tdBase, textAlign: "center", fontSize: "7.5pt" }}>
-                    {log.b_pass_qty != null ? log.b_pass_qty : ""}
-                  </td>
+                    color: log.b_deviation === "O" ? "#DC2626" : "#059669",
+                  }}>{log.b_deviation ?? "X"}</td>
+                  <td style={{ ...tdBase, textAlign: "center", fontSize: "7.5pt" }}>{log.b_pass_qty ?? ""}</td>
                   <td style={{ ...tdBase, textAlign: "center", padding: "2px" }}>
                     {signSrc ? (
                       <>
@@ -974,13 +984,11 @@ export function Ccp1pTab({ role, userId, showToast }: {
             })}
             {/* 빈 행 */}
             {Array.from({ length: emptyRowCount }).map((_, i) => (
-              <tr key={`empty-${i}`} style={{ height: 20 }}>
-                <td style={tdBase} /><td style={tdBase} />
-                {/* A: 19칸 */}
+              <tr key={`empty-${i}`}>
+                <td style={{ ...tdBase, height: 20 }} /><td style={tdBase} />
                 {Array.from({ length: 19 }).map((__, j) => (
-                  <td key={j} style={{ ...tdBase, width: 18 }} />
+                  <td key={j} style={{ ...tdBase, width: 22 }} />
                 ))}
-                {/* B: 4칸 */}
                 <td style={tdBase} /><td style={tdBase} /><td style={tdBase} /><td style={tdBase} />
               </tr>
             ))}
