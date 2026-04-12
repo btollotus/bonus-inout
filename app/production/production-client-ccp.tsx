@@ -716,7 +716,7 @@ export function SlotStatusPanel({
             </div>
 
             {isEmpty ? (
-              <div className="flex gap-3 items-end flex-wrap">
+             <div className="flex gap-3 items-center flex-nowrap">
                 {warmerSlots.find((s) => s.id === activeSlotId)?.purpose === "유동" && (
                   <div>
                     <div className="mb-1 text-xs text-slate-500">원료 종류 *</div>
