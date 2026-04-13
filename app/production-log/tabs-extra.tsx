@@ -963,128 +963,833 @@ setSlotWoMap(slotMap);
 
 
 // ═══════════════════════════════════════════════════════════
-// 기타가공품 가열공정
+// 가열공정 탭 — 코팅(7-1,7-2,7-3) + 전사(8) 슬롯 전용
+// CCP-1B와 동일한 구조 / 슬롯 4개 고정 표시
+// tabs-extra.tsx 의 OtherHeatingTab 전체를 이 코드로 교체하세요
 // ═══════════════════════════════════════════════════════════
+
 export function OtherHeatingTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
-  const isAdmin = role === "ADMIN";
-  const [logs, setLogs] = useState<OtherHeatingLog[]>([]);
-  const [slots, setSlots] = useState<WarmSlot[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
+
+  const [filterDate, setFilterDate] = useState(
+    new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })
+  );
   const [loading, setLoading] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [fWorkType, setFWorkType] = useState("jeonsa");
-  const [fSlotId, setFSlotId] = useState("");
-  const [fTime, setFTime] = useState(new Date().toTimeString().slice(0, 5));
-  const [fTemp, setFTemp] = useState("");
-  const [fIsOk, setFIsOk] = useState(true);
-  const [fActionNote, setFActionNote] = useState("");
-  const [fNote, setFNote] = useState("");
+
+  // 고정 슬롯 4개 (코팅 3 + 전사 1)
+  const [targetSlots, setTargetSlots] = useState<WarmSlot[]>([]);
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+
+  // 슬롯 이벤트 (원료투입/소진)
+  const [slotEvents, setSlotEvents] = useState<{
+    id: string; slot_id: string; event_date: string; event_type: string;
+    measured_at: string; work_order_no: string | null; action_note: string | null;
+    material_type: string | null;
+  }[]>([]);
+
+  // 작업지시서 온도기록
+  const [woEvents, setWoEvents] = useState<{
+    id: string; work_order_no: string; slot_id: string; event_type: string;
+    measured_at: string; temperature: number | null; is_ok: boolean | null;
+    action_note: string | null;
+  }[]>([]);
+
+  // 슬롯별 연결 작업지시서 레이블
+  const [woLabelMap, setWoLabelMap] = useState<Record<string, string>>({});
+  const [slotWoMap, setSlotWoMap] = useState<Record<string, string[]>>({});
+
+  // 입력 폼 state
+  const [ccpEventType, setCcpEventType] = useState<"start" | "mid_check" | "end">("start");
+  const [ccpTime, setCcpTime] = useState("");
+  const [ccpTemp, setCcpTemp] = useState("");
+  const [ccpIsOk, setCcpIsOk] = useState(true);
+  const [ccpActionNote, setCcpActionNote] = useState("");
+  const [ccpWorkerName, setCcpWorkerName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
 
-  const loadLogs = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.from("ccp_other_heating_logs").select("*").eq("log_date", filterDate).order("measured_at", { ascending: false });
-    setLogs((data ?? []) as OtherHeatingLog[]);
-    setLoading(false);
-  }, [filterDate]);
+  // 수정 state
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editTemp, setEditTemp] = useState("");
+  const [editTime, setEditTime] = useState("");
+  const [editIsOk, setEditIsOk] = useState(true);
+  const [editActionNote, setEditActionNote] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
-  useEffect(() => { loadLogs(); }, [loadLogs]);
-  useEffect(() => {
-    supabase.from("warmer_slots").select("id,slot_name,purpose").eq("is_active", true).order("slot_no").then(({ data }) => setSlots(data ?? []));
-  }, []);
+  // 인쇄용 담당자 맵
+  const [slotAssignees, setSlotAssignees] = useState<Record<string, string>>({});
 
-  async function saveLog() {
-    if (!fTemp) return showToast("온도를 입력하세요.", "error");
-    const temp = Number(fTemp);
-    if (temp < 40 || temp > 50) return showToast("온도는 40~50도 범위여야 합니다.", "error");
-    setSaving(true);
-    const { error } = await supabase.from("ccp_other_heating_logs").insert({
-      log_date: filterDate, work_type: fWorkType, slot_id: fSlotId || null,
-      measured_at: `${filterDate}T${fTime}:00`, temperature: temp, is_ok: fIsOk,
-      action_note: fActionNote.trim() || null, note: fNote.trim() || null, created_by: userId,
-    });
-    setSaving(false);
-    if (error) return showToast("저장 실패: " + error.message, "error");
-    showToast("✅ 가열공정 기록 완료!");
-    setShowForm(false); setFTemp(""); setFActionNote(""); setFNote(""); setFIsOk(true);
-    loadLogs();
+  function todayKST() {
+    return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
   }
 
-  async function approveLog(logId: string) {
-    const { error } = await supabase.from("ccp_other_heating_logs").update({ approved_by: userId, approved_at: new Date().toISOString() }).eq("id", logId);
-    if (error) return showToast("실패: " + error.message, "error");
-    showToast("✅ 승인 완료!"); loadLogs();
+  // 코팅/전사 슬롯만 로드
+  useEffect(() => {
+    supabase.from("warmer_slots")
+      .select("id,slot_name,purpose")
+      .eq("is_active", true)
+      .in("purpose", ["코팅용도", "전사용도"])
+      .order("slot_no")
+      .then(({ data }) => setTargetSlots(data ?? []));
+    supabase.from("employees").select("id,name").is("resign_date", null).order("name")
+      .then(({ data }) => setEmployees(data ?? []));
+  }, []);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+
+    const slotIds = targetSlots.map((s) => s.id);
+    if (slotIds.length === 0) { setLoading(false); return; }
+
+    const [slotRes, woRes, woSlotRes] = await Promise.all([
+      supabase.from("ccp_slot_events")
+        .select("id,slot_id,event_date,event_type,measured_at,work_order_no,action_note,material_type")
+        .eq("event_date", filterDate)
+        .in("slot_id", slotIds)
+        .order("measured_at", { ascending: true }),
+      supabase.from("ccp_wo_events")
+        .select("id,work_order_no,slot_id,event_type,measured_at,temperature,is_ok,action_note")
+        .in("slot_id", slotIds)
+        .gte("measured_at", `${filterDate}T00:00:00+09:00`)
+        .lte("measured_at", `${filterDate}T23:59:59+09:00`)
+        .order("measured_at", { ascending: true }),
+      supabase.from("work_orders")
+        .select("work_order_no,client_name,sub_name,product_name,ccp_slot_id")
+        .not("ccp_slot_id", "is", null)
+        .in("ccp_slot_id", slotIds)
+        .eq("status", "생산중"),
+    ]);
+
+    setSlotEvents((slotRes.data ?? []) as any[]);
+    setWoEvents((woRes.data ?? []) as any[]);
+
+    // work_order_no → 레이블 맵
+    const allWoNos = [...new Set([
+      ...(slotRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
+      ...(woRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
+      ...(woSlotRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
+    ])] as string[];
+
+    if (allWoNos.length > 0) {
+      const { data: woData } = await supabase
+        .from("work_orders")
+        .select("work_order_no,client_name,sub_name,product_name")
+        .in("work_order_no", allWoNos);
+      const map: Record<string, string> = {};
+      for (const wo of woData ?? []) {
+        const rawSecond = wo.sub_name ?? wo.product_name ?? "";
+        const secondPart = rawSecond.startsWith(wo.client_name)
+          ? rawSecond.slice(wo.client_name.length).replace(/^[-_\s·]+/, "")
+          : rawSecond;
+        map[wo.work_order_no] = secondPart
+          ? `${wo.client_name} · ${secondPart}`
+          : wo.client_name;
+      }
+      setWoLabelMap(map);
+    }
+
+    const slotMap: Record<string, string[]> = {};
+    for (const wo of woSlotRes.data ?? []) {
+      if (!wo.ccp_slot_id) continue;
+      if (!slotMap[wo.ccp_slot_id]) slotMap[wo.ccp_slot_id] = [];
+      slotMap[wo.ccp_slot_id].push(wo.work_order_no);
+    }
+    setSlotWoMap(slotMap);
+    setLoading(false);
+  }, [filterDate, targetSlots]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // 슬롯 클릭 시 입력 폼 초기화
+  function selectSlot(slotId: string) {
+    setSelectedSlotId(slotId);
+    setEditingEventId(null);
+    // 해당 슬롯 기록 보고 유형 자동 설정
+    const slotWoEvs = woEvents
+      .filter((e) => e.slot_id === slotId)
+      .sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+    const hasStart = slotWoEvs.some((e) => e.event_type === "start");
+    setCcpEventType(hasStart ? "mid_check" : "start");
+    setCcpTime("");
+    setCcpTemp("");
+    setCcpIsOk(true);
+    setCcpActionNote("");
+  }
+
+  // 온도 기록 저장
+  async function saveEvent() {
+    if (!selectedSlotId) return;
+    if (!ccpTime || ccpTime.length < 4) return showToast("측정시각을 입력하세요. (예: 1430)", "error");
+    if (!ccpTemp) return showToast("온도를 입력하세요.", "error");
+    const temp = Number(ccpTemp);
+    if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
+
+    const today = filterDate;
+    const measuredAt = `${today}T${ccpTime.slice(0, 2)}:${ccpTime.slice(2, 4)}:00+09:00`;
+
+    // 시각 순서 검증
+    const slotWoEvs = woEvents
+      .filter((e) => e.slot_id === selectedSlotId)
+      .sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+    if (slotWoEvs.length > 0) {
+      const lastTime = toKSTTime(slotWoEvs[slotWoEvs.length - 1].measured_at);
+      const newTime = `${ccpTime.slice(0, 2)}:${ccpTime.slice(2, 4)}`;
+      if (newTime <= lastTime) {
+        return showToast(`⚠ 측정시각은 마지막 기록(${lastTime})보다 늦어야 합니다.`, "error");
+      }
+    }
+
+    // 이벤트 순서 검증
+    const sorted = [...slotWoEvs];
+    const lastEv = sorted[sorted.length - 1];
+    if (ccpEventType === "start" && lastEv && lastEv.event_type !== "end") {
+      return showToast("⚠ 시작은 종료 후에만 다시 기록할 수 있습니다.", "error");
+    }
+    if (ccpEventType === "mid_check" && (!lastEv || lastEv.event_type === "end")) {
+      return showToast("⚠ 중간점검은 시작 후에만 기록할 수 있습니다.", "error");
+    }
+    if (ccpEventType === "end") {
+      if (!lastEv || (lastEv.event_type !== "start" && lastEv.event_type !== "mid_check")) {
+        return showToast("⚠ 종료는 시작 또는 중간점검 후에만 가능합니다.", "error");
+      }
+      // 2시간 이상 경과 + 중간점검 없으면 차단
+      const startEv = [...sorted].reverse().find((e) => e.event_type === "start");
+      const hasMidCheck = sorted.some((e) => e.event_type === "mid_check");
+      if (startEv && !hasMidCheck) {
+        const startTime = new Date(startEv.measured_at);
+        const endTime = new Date(measuredAt);
+        if ((endTime.getTime() - startTime.getTime()) / 60000 >= 120) {
+          return showToast("⚠ 시작~종료 2시간 이상 — 중간점검을 먼저 추가해주세요.", "error");
+        }
+      }
+    }
+
+    // 연결된 work_order_no 조회
+    const relatedWoNos = slotWoMap[selectedSlotId] ?? [];
+    const workOrderNo = relatedWoNos[0] ?? null;
+
+    setSaving(true);
+
+    // ccp_wo_events 저장
+    if (workOrderNo) {
+      const { error } = await supabase.from("ccp_wo_events").insert({
+        work_order_no: workOrderNo,
+        slot_id: selectedSlotId,
+        event_type: ccpEventType,
+        measured_at: measuredAt,
+        temperature: temp,
+        is_ok: ccpIsOk,
+        action_note: ccpActionNote.trim() || null,
+        created_by: userId,
+      });
+      if (error) { setSaving(false); return showToast("저장 실패: " + error.message, "error"); }
+
+      // 같은 슬롯의 다른 작업지시서에도 복사
+      for (const wNo of relatedWoNos.slice(1)) {
+        await supabase.from("ccp_wo_events").insert({
+          work_order_no: wNo,
+          slot_id: selectedSlotId,
+          event_type: ccpEventType,
+          measured_at: measuredAt,
+          temperature: temp,
+          is_ok: ccpIsOk,
+          action_note: ccpActionNote.trim() || null,
+          created_by: userId,
+        });
+      }
+    }
+
+    // ccp_slot_events에도 저장
+    await supabase.from("ccp_slot_events").insert({
+      slot_id: selectedSlotId,
+      event_date: today,
+      event_type: ccpEventType,
+      measured_at: measuredAt,
+      work_order_no: workOrderNo,
+      temperature: temp,
+      is_ok: ccpIsOk,
+      action_note: ccpActionNote.trim() || null,
+      created_by: userId,
+    });
+
+    setSaving(false);
+    showToast("✅ 가열공정 온도 기록 완료!");
+    setCcpTemp(""); setCcpActionNote(""); setCcpIsOk(true); setCcpTime("");
+    await loadData();
+    // 유형 자동 갱신
+    setCcpEventType("mid_check");
+  }
+
+  // 수정 시작
+  function startEdit(ev: typeof woEvents[0]) {
+    setEditingEventId(ev.id);
+    setEditTime(toKSTTime(ev.measured_at).replace(":", ""));
+    setEditTemp(ev.temperature != null ? String(ev.temperature) : "");
+    setEditIsOk(ev.is_ok ?? true);
+    setEditActionNote(ev.action_note ?? "");
+  }
+
+  // 수정 저장
+  async function saveEdit(ev: typeof woEvents[0]) {
+    if (!editTemp) return showToast("온도를 입력하세요.", "error");
+    const temp = Number(editTemp);
+    if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
+    setEditSaving(true);
+    const { error } = await supabase.from("ccp_wo_events").update({
+      measured_at: `${filterDate}T${editTime.slice(0, 2)}:${editTime.slice(2, 4)}:00+09:00`,
+      temperature: temp,
+      is_ok: editIsOk,
+      action_note: editActionNote.trim() || null,
+    }).eq("id", ev.id);
+    setEditSaving(false);
+    if (error) return showToast("수정 실패: " + error.message, "error");
+    showToast("✅ 수정 완료!");
+    setEditingEventId(null);
+    await loadData();
+  }
+
+  // 삭제
+  async function deleteEvent(eventId: string) {
+    if (!confirm("이 기록을 삭제하시겠습니까?")) return;
+    const { data: evData } = await supabase
+      .from("ccp_wo_events").select("slot_id,event_type,measured_at").eq("id", eventId).maybeSingle();
+    const { error } = await supabase.from("ccp_wo_events").delete().eq("id", eventId);
+    if (error) return showToast("삭제 실패: " + error.message, "error");
+    if (evData?.slot_id && evData?.measured_at) {
+      await supabase.from("ccp_slot_events")
+        .delete()
+        .eq("slot_id", evData.slot_id)
+        .eq("measured_at", evData.measured_at)
+        .eq("event_type", evData.event_type);
+    }
+    showToast("🗑️ 삭제 완료!");
+    await loadData();
+  }
+
+  // 선택된 슬롯의 기록 (중복 제거)
+  const selectedWoEvents = (() => {
+    if (!selectedSlotId) return [];
+    const seen = new Set<string>();
+    return woEvents
+      .filter((e) => e.slot_id === selectedSlotId)
+      .filter((e) => {
+        const key = `${e.measured_at}_${e.event_type}`;
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+      })
+      .sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+  })();
+
+  const relatedWoNos = selectedSlotId ? (slotWoMap[selectedSlotId] ?? []) : [];
+
+  // 인쇄 처리
+  async function handlePrint() {
+    const allWoNos = [...new Set(Object.values(slotWoMap).flat())];
+    const assigneeMap: Record<string, string> = {};
+    if (allWoNos.length > 0) {
+      const { data } = await supabase.from("work_orders")
+        .select("work_order_no,assignee_production").in("work_order_no", allWoNos);
+      for (const row of data ?? []) {
+        if (row.assignee_production) assigneeMap[row.work_order_no] = row.assignee_production;
+      }
+    }
+    const newAssignees: Record<string, string> = {};
+    for (const slotId of targetSlots.map((s) => s.id)) {
+      for (const wNo of slotWoMap[slotId] ?? []) {
+        if (assigneeMap[wNo]) { newAssignees[slotId] = assigneeMap[wNo]; break; }
+      }
+    }
+    setSlotAssignees(newAssignees);
+
+    setTimeout(() => {
+      const content = document.getElementById("other-heating-print-inner");
+      if (!content) return;
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
+      document.body.appendChild(iframe);
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) return;
+      const printTitle = `가열공정_코팅전사_${filterDate}`;
+      doc.open();
+      doc.write(`<!DOCTYPE html><html><head>
+        <meta charset="utf-8"><title>${printTitle}</title>
+        <style>
+          @page { size: A4 landscape; margin: 8mm 10mm; }
+          body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 9pt; color: #000; }
+          * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          table { border-collapse: collapse; page-break-inside: avoid; }
+        </style>
+      </head><body>${content.innerHTML}</body></html>`);
+      doc.close();
+      const origTitle = document.title;
+      document.title = printTitle;
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => { document.title = origTitle; document.body.removeChild(iframe); }, 1500);
+    }, 150);
+  }
+
+  const CCP_WO_EVENT_LABELS: Record<string, string> = { start: "시작", mid_check: "중간점검", end: "종료" };
+
+  function woBadgeCls(type: string) {
+    if (type === "start") return "bg-blue-100 border-blue-200 text-blue-700";
+    if (type === "end") return "bg-purple-100 border-purple-200 text-purple-700";
+    return "bg-slate-100 border-slate-200 text-slate-600";
   }
 
   return (
     <div className="space-y-4">
+
+      {/* 필터 바 */}
       <div className={`${card} p-4`}>
         <div className="flex flex-wrap gap-3 items-end">
-          <div><div className="mb-1 text-xs text-slate-500">날짜</div><input type="date" className={inp} style={{ width: 160 }} value={filterDate} onChange={(e) => setFilterDate(e.target.value)} /></div>
-          <button className={btn} onClick={loadLogs}>🔄 조회</button>
-          {isAdminOrSubadmin && <button className={showForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"} onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ 닫기" : "✚ 가열공정 기록"}</button>}
-          <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+          <div>
+            <div className="mb-1 text-xs text-slate-500">날짜</div>
+            <input type="date" className={inp} style={{ width: 160 }} value={filterDate}
+              onChange={(e) => { setFilterDate(e.target.value); setSelectedSlotId(null); setEditingEventId(null); }} />
+          </div>
+          <button className={btn} onClick={loadData}>🔄 조회</button>
+          <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
+        </div>
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          <span className="font-semibold">⚠ 한계기준:</span> 45±5°C (40~50°C), 4시간 이상 유지 / 주기: 작업시작 전, 작업 중 2시간마다, 작업종료 / 해당 슬롯: 7-1, 7-2, 7-3, 8
         </div>
       </div>
-      {showForm && isAdminOrSubadmin && (
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
+
+        {/* 좌: 슬롯 목록 고정 4개 */}
         <div className={`${card} p-4`}>
-          <div className="mb-3 font-semibold text-sm text-blue-700">✚ 기타가공품 가열공정 기록</div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div><div className="mb-1 text-xs text-slate-500">작업유형 *</div>
-              <select className={inp} value={fWorkType} onChange={(e) => setFWorkType(e.target.value)}>
-                <option value="jeonsa">② 전사지 생산</option><option value="pet_coating">④ PET 코팅</option>
-              </select></div>
-            <div><div className="mb-1 text-xs text-slate-500">온장고 슬롯</div>
-              <select className={inp} value={fSlotId} onChange={(e) => setFSlotId(e.target.value)}>
-                <option value="">— 선택 —</option>{slots.map((s) => <option key={s.id} value={s.id}>{s.slot_name} ({s.purpose})</option>)}
-              </select></div>
-            <div><div className="mb-1 text-xs text-slate-500">측정시각</div><input type="time" className={inp} value={fTime} onChange={(e) => setFTime(e.target.value)} /></div>
-            <div><div className="mb-1 text-xs text-slate-500">온도 (40~50°C) *</div><input className={inpR} inputMode="decimal" value={fTemp} onChange={(e) => setFTemp(e.target.value.replace(/[^\d.]/g, ""))} placeholder="예: 45" /></div>
-            <div><div className="mb-1 text-xs text-slate-500">적합 여부</div>
-              <select className={inp} value={fIsOk ? "ok" : "ng"} onChange={(e) => setFIsOk(e.target.value === "ok")}>
-                <option value="ok">✅ 적합</option><option value="ng">❌ 부적합</option>
-              </select></div>
-            {!fIsOk && <div><div className="mb-1 text-xs text-slate-500">조치사항</div><input className={inp} value={fActionNote} onChange={(e) => setFActionNote(e.target.value)} /></div>}
-            <div><div className="mb-1 text-xs text-slate-500">비고</div><input className={inp} value={fNote} onChange={(e) => setFNote(e.target.value)} /></div>
-          </div>
-          <div className="mt-4 flex gap-2">
-            <button className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60" disabled={saving} onClick={saveLog}>{saving ? "저장 중..." : "💾 기록"}</button>
-            <button className={btn} onClick={() => setShowForm(false)}>취소</button>
-          </div>
-        </div>
-      )}
-      <div className={`${card} p-4`}>
-        <div className="mb-3 font-semibold text-sm">🔥 가열공정 기록 — {filterDate}</div>
-        {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
-          : logs.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
-          : (
+          <div className="mb-3 font-semibold text-sm">🔥 슬롯 목록</div>
+          {loading ? (
+            <div className="py-6 text-center text-sm text-slate-400">불러오는 중...</div>
+          ) : (
             <div className="space-y-2">
-              {logs.map((log) => (
-                <div key={log.id} className={`rounded-2xl border p-3 ${log.is_ok === false ? "border-red-200 bg-red-50" : "border-slate-200 bg-slate-50"}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-sm">{log.work_type === "jeonsa" ? "② 전사지 생산" : "④ PET 코팅"}</span>
-                        <span className="text-xs font-mono text-slate-500">{log.measured_at.slice(11, 16)}</span>
-                        <span className={`text-sm font-bold ${log.is_ok === false ? "text-red-600" : "text-blue-600"}`}>{log.temperature}°C</span>
-                        <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${log.is_ok ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>{log.is_ok ? "적합" : "부적합"}</span>
+              {targetSlots.map((s) => {
+                const wEvs = woEvents.filter((e) => e.slot_id === s.id);
+                const temps = wEvs.filter((e) => e.temperature != null).map((e) => e.temperature as number);
+                const hasNG = wEvs.some((e) => e.is_ok === false);
+                const lastTemp = [...wEvs].sort((a, b) => b.measured_at.localeCompare(a.measured_at))
+                  .find((e) => e.temperature != null);
+                const woNos = slotWoMap[s.id] ?? [];
+                const isSelected = selectedSlotId === s.id;
+
+                return (
+                  <button key={s.id}
+                    className={`w-full rounded-xl border p-3 text-left transition-all ${
+                      isSelected
+                        ? "border-blue-400 bg-blue-50 shadow-sm"
+                        : "border-slate-200 bg-white hover:bg-slate-50"
+                    }`}
+                    onClick={() => selectSlot(s.id)}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-semibold text-sm">{s.slot_name}</div>
+                      {wEvs.length > 0 && (
+                        <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
+                          hasNG
+                            ? "bg-red-100 border-red-200 text-red-700"
+                            : "bg-green-100 border-green-200 text-green-700"
+                        }`}>{hasNG ? "⚠ 이탈" : "적합"}</span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-slate-500">{s.purpose}</div>
+                    <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                      {lastTemp
+                        ? <span className={`text-xs font-bold ${hasNG ? "text-red-600" : "text-blue-600"}`}>최근 {lastTemp.temperature}°C</span>
+                        : <span className="text-xs text-slate-400">기록 없음</span>
+                      }
+                      {wEvs.length > 0 && <span className="text-[11px] text-slate-400">온도기록 {wEvs.length}건</span>}
+                    </div>
+                    {woNos.length > 0 && (
+                      <div className="mt-1 text-[10px] text-slate-400 truncate">
+                        {woNos.map((no) => woLabelMap[no] ?? no).filter(Boolean).join(", ")}
                       </div>
-                      {log.action_note && <div className="mt-1 text-xs text-red-600">조치: {log.action_note}</div>}
-                      {log.note && <div className="mt-0.5 text-xs text-slate-400">비고: {log.note}</div>}
-                    </div>
-                    <div className="shrink-0">
-                      {!log.approved_by && isAdmin && <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700 hover:bg-green-100" onClick={() => approveLog(log.id)}>✅ 승인</button>}
-                      {log.approved_by && <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">승인완료</span>}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
+        </div>
+
+        {/* 우: 슬롯 상세 */}
+        {selectedSlotId ? (() => {
+          const slot = targetSlots.find((s) => s.id === selectedSlotId);
+          return (
+            <div className="space-y-3" style={{ maxHeight: "calc(100vh - 260px)", overflowY: "auto" }}>
+
+              {/* 헤더 */}
+              <div className={`${card} p-4`}>
+                <div className="font-bold text-base">
+                  🔥 {slot?.slot_name}
+                  <span className="ml-2 text-sm font-normal text-slate-500">({slot?.purpose})</span>
+                </div>
+                <div className="mt-0.5 text-xs text-slate-400">{filterDate}</div>
+                {relatedWoNos.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-[11px] font-semibold text-slate-500 mb-1">📋 연결된 작업지시서</div>
+                    <div className="flex flex-wrap gap-2">
+                      {relatedWoNos.map((no) => (
+                        <span key={no} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
+                          {woLabelMap[no] ?? no}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 온도 기록 입력 */}
+              <div className={`${card} p-4`}>
+                <div className="mb-3 font-semibold text-sm">🌡️ 온도 기록 입력</div>
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 space-y-3">
+                  <div>
+                    <div className="mb-1 text-xs text-slate-500">유형</div>
+                    <div className="flex flex-wrap gap-1">
+                      {([
+                        { value: "start",     label: "시작",     cls: "bg-blue-100 border-blue-400 text-blue-800" },
+                        { value: "mid_check", label: "중간점검", cls: "bg-slate-100 border-slate-400 text-slate-700" },
+                        { value: "end",       label: "종료",     cls: "bg-purple-100 border-purple-400 text-purple-800" },
+                      ] as { value: string; label: string; cls: string }[]).map((t) => (
+                        <button key={t.value} type="button"
+                          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all ${
+                            ccpEventType === t.value
+                              ? t.cls + " shadow-sm scale-105"
+                              : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                          }`}
+                          onClick={() => setCcpEventType(t.value as any)}
+                        >{t.label}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                    <div>
+                      <div className="mb-1 text-xs text-slate-500">측정시각 (HHmm)</div>
+                      <input className={inp} inputMode="numeric" placeholder="예: 1430" maxLength={4}
+                        value={ccpTime}
+                        onChange={(e) => setCcpTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))} />
+                      {ccpTime.length === 4 && (
+                        <div className="mt-0.5 text-xs text-slate-400 text-right">
+                          {ccpTime.slice(0, 2)}:{ccpTime.slice(2, 4)}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="mb-1 text-xs text-slate-500">온도 (40~50°C)</div>
+                      <input className={inpR} inputMode="numeric" placeholder="예: 45.0" value={ccpTemp}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^\d]/g, "");
+                          if (!raw) { setCcpTemp(""); return; }
+                          const v = raw.length >= 3 ? `${raw.slice(0, -1)}.${raw.slice(-1)}` : raw;
+                          setCcpTemp(v);
+                          if (raw.length >= 3) setCcpIsOk(Number(v) >= 40 && Number(v) <= 50);
+                        }} />
+                    </div>
+                    <div>
+                      <div className="mb-1 text-xs text-slate-500">판정</div>
+                      <select className={`${inp} ${ccpIsOk ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}
+                        value={ccpIsOk ? "ok" : "ng"}
+                        onChange={(e) => setCcpIsOk(e.target.value === "ok")}>
+                        <option value="ok">✅ 적합</option>
+                        <option value="ng">❌ 부적합</option>
+                      </select>
+                    </div>
+                  </div>
+                  {!ccpIsOk && (
+                    <div>
+                      <div className="mb-1 text-xs text-red-600 font-semibold">⚠ 한계기준 이탈 — 조치사항 *</div>
+                      <input className="w-full rounded-xl border border-red-300 bg-white px-3 py-2 text-sm focus:outline-none"
+                        value={ccpActionNote} onChange={(e) => setCcpActionNote(e.target.value)}
+                        placeholder="온도 이탈 조치 내용" />
+                    </div>
+                  )}
+                  <button
+                    className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+                    disabled={saving}
+                    onClick={saveEvent}
+                  >
+                    {saving ? "저장 중..." : "💾 기록"}
+                  </button>
+                </div>
+              </div>
+
+              {/* 기록 테이블 */}
+              <div className={`${card} p-4`}>
+                <div className="mb-3 font-semibold text-sm">🌡️ 기록된 온도</div>
+                {selectedWoEvents.length === 0 ? (
+                  <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b-2 border-slate-200 bg-slate-50">
+                            <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">시각</th>
+                            <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">유형</th>
+                            <th className="py-2 px-3 text-right text-xs font-semibold text-slate-500 whitespace-nowrap">온도</th>
+                            <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500 whitespace-nowrap">판정</th>
+                            <th className="py-2 px-3 text-left text-xs font-semibold text-slate-500">조치</th>
+                            {isAdminOrSubadmin && <th className="py-2 px-3 text-center text-xs font-semibold text-slate-500">관리</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedWoEvents.map((ev, idx) => {
+                            const isNG = ev.is_ok === false;
+                            const isEditing = editingEventId === ev.id;
+                            return (
+                              <tr key={ev.id} className={`border-b border-slate-100 ${
+                                isEditing ? "bg-blue-50" : isNG ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
+                              }`}>
+                                <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">
+                                  {isEditing
+                                    ? <input className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
+                                        inputMode="numeric" placeholder="HHmm" maxLength={4}
+                                        value={editTime} onChange={(e) => setEditTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))} />
+                                    : toKSTTime(ev.measured_at)}
+                                </td>
+                                <td className="py-2 px-3 whitespace-nowrap">
+                                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${woBadgeCls(ev.event_type)}`}>
+                                    {CCP_WO_EVENT_LABELS[ev.event_type] ?? ev.event_type}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-right whitespace-nowrap">
+                                  {isEditing
+                                    ? <input className="w-20 rounded-lg border border-blue-300 px-2 py-1 text-xs text-right tabular-nums focus:outline-none"
+                                        inputMode="decimal" value={editTemp}
+                                        onChange={(e) => {
+                                          const raw = e.target.value.replace(/[^\d]/g, "");
+                                          if (!raw) { setEditTemp(""); return; }
+                                          const v = raw.length >= 3 ? `${raw.slice(0, -1)}.${raw.slice(-1)}` : raw;
+                                          setEditTemp(v);
+                                          if (raw.length >= 3) setEditIsOk(Number(v) >= 40 && Number(v) <= 50);
+                                        }} />
+                                    : ev.temperature != null
+                                      ? <span className={`text-sm font-bold tabular-nums ${isNG ? "text-red-600" : "text-blue-700"}`}>{ev.temperature}°C</span>
+                                      : <span className="text-slate-300">—</span>}
+                                </td>
+                                <td className="py-2 px-3 text-center whitespace-nowrap">
+                                  {isEditing
+                                    ? <select className={`rounded-lg border px-1.5 py-1 text-xs focus:outline-none ${editIsOk ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}
+                                        value={editIsOk ? "ok" : "ng"} onChange={(e) => setEditIsOk(e.target.value === "ok")}>
+                                        <option value="ok">O 적합</option>
+                                        <option value="ng">X 부적합</option>
+                                      </select>
+                                    : ev.is_ok != null
+                                      ? <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ev.is_ok ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>{ev.is_ok ? "O" : "X"}</span>
+                                      : <span className="text-slate-300 text-xs">—</span>}
+                                </td>
+                                <td className="py-2 px-3 text-xs">
+                                  {isEditing
+                                    ? <input className="w-full rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
+                                        value={editActionNote} onChange={(e) => setEditActionNote(e.target.value)} placeholder="조치사항" />
+                                    : <span className={isNG ? "text-red-600" : ""}>{ev.action_note ?? ""}</span>}
+                                </td>
+                                {isAdminOrSubadmin && (
+                                  <td className="py-2 px-3 text-center whitespace-nowrap">
+                                    {isEditing
+                                      ? <div className="flex gap-1 justify-center">
+                                          <button className="rounded-lg border border-blue-400 bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                                            disabled={editSaving} onClick={() => saveEdit(ev)}>{editSaving ? "..." : "저장"}</button>
+                                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50"
+                                            onClick={() => setEditingEventId(null)}>취소</button>
+                                        </div>
+                                      : <div className="flex gap-1 justify-center">
+                                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600"
+                                            onClick={() => startEdit(ev)}>수정</button>
+                                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500"
+                                            onClick={() => deleteEvent(ev.id)}>삭제</button>
+                                        </div>}
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* 요약 */}
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+                      {(() => {
+                        const temps = selectedWoEvents.filter((e) => e.temperature != null).map((e) => e.temperature as number);
+                        const ngCount = selectedWoEvents.filter((e) => e.is_ok === false).length;
+                        const okCount = selectedWoEvents.filter((e) => e.is_ok === true).length;
+                        return (
+                          <>
+                            <span>온도 측정 <b>{temps.length}</b>회</span>
+                            {okCount > 0 && <span className="text-green-600">적합 <b>{okCount}</b>회</span>}
+                            {ngCount > 0 && <span className="text-red-600 font-semibold">⚠ 이탈 <b>{ngCount}</b>회</span>}
+                            {temps.length > 0 && <span>최저 <b className={Math.min(...temps) < 40 ? "text-red-600" : ""}>{Math.min(...temps)}°C</b></span>}
+                            {temps.length > 0 && <span>최고 <b className={Math.max(...temps) > 50 ? "text-red-600" : ""}>{Math.max(...temps)}°C</b></span>}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </>
+                )}
+              </div>
+
+            </div>
+          );
+        })() : (
+          <div className={`${card} flex items-center justify-center p-12`}>
+            <div className="text-center text-slate-400">
+              <div className="text-3xl mb-2">🔥</div>
+              <div className="text-sm">왼쪽 슬롯을 선택하세요</div>
+              <div className="mt-1 text-xs text-slate-300">7-1, 7-2, 7-3, 8 슬롯의 온도를 기록합니다</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 인쇄 전용 영역 ── */}
+      <style>{`.other-heating-print-only { display: none; }`}</style>
+      <div id="other-heating-print-inner" className="other-heating-print-only"
+        style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
+
+        {/* 제목 + 결재란 */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+          <tbody>
+            <tr>
+              <td rowSpan={2} style={{ border: "1px solid #000", padding: "6px 8px", fontWeight: "bold", fontSize: "12pt", textAlign: "center" }}>
+                가열공정 온도 모니터링일지<br/>
+                <span style={{ fontSize: "9pt" }}>[코팅/전사 슬롯 — 7-1, 7-2, 7-3, 8]</span>
+              </td>
+              <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", fontSize: "8pt", width: 36 }}>결재</td>
+              <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 64 }}>작성</td>
+              <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 64 }}>승인</td>
+            </tr>
+            <tr>
+              <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}></td>
+              <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
+                <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
+              </td>
+              <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
+                <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* 작성일자 + 한계기준 */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+          <tbody>
+            <tr>
+              <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", width: 70 }}>작성일자</td>
+              <td style={{ border: "1px solid #000", padding: "2px 6px" }}>
+                {(() => { const d = new Date(filterDate + "T00:00:00+09:00"); return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`; })()}
+              </td>
+              <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", width: 60 }}>한계기준</td>
+              <td style={{ border: "1px solid #000", padding: "2px 6px" }}>45±5°C (40~50°C), 4시간 이상 유지</td>
+              <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", width: 60 }}>점검주기</td>
+              <td style={{ border: "1px solid #000", padding: "2px 6px" }}>작업시작 전, 작업 중 2시간마다, 작업종료</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* 슬롯별 데이터 */}
+        {(() => {
+          const WO_EVENT_LABEL: Record<string, string> = { start: "시작", mid_check: "중간점검", end: "종료" };
+          return (
+            <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+              <thead>
+                <tr>
+                  <th style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt", textAlign: "center", background: "#f8fafc", width: 60 }}>슬롯</th>
+                  <th style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt", textAlign: "center", background: "#f8fafc", width: 80 }}>용도</th>
+                  <th style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt", textAlign: "center", background: "#f8fafc" }}>작업지시서</th>
+                  <th style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt", textAlign: "center", background: "#f8fafc", width: 50 }}>유형</th>
+                  <th style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt", textAlign: "center", background: "#f8fafc", width: 50 }}>시각</th>
+                  <th style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt", textAlign: "center", background: "#f8fafc", width: 60 }}>온도</th>
+                  <th style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt", textAlign: "center", background: "#f8fafc", width: 40 }}>판정</th>
+                  <th style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt", textAlign: "center", background: "#f8fafc" }}>조치사항</th>
+                  <th style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt", textAlign: "center", background: "#f8fafc", width: 60 }}>확인(서명)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {targetSlots.map((s) => {
+                  const seen = new Set<string>();
+                  const evs = woEvents
+                    .filter((e) => e.slot_id === s.id)
+                    .filter((e) => {
+                      const key = `${e.measured_at}_${e.event_type}`;
+                      if (seen.has(key)) return false;
+                      seen.add(key); return true;
+                    })
+                    .sort((a, b) => a.measured_at.localeCompare(b.measured_at));
+                  const woNos = slotWoMap[s.id] ?? [];
+                  const woLabel = woNos.map((no) => woLabelMap[no] ?? no).join(", ");
+                  const assignee = slotAssignees[s.id];
+                  const signSrc = assignee ? SIGN_MAP[assignee] : null;
+                  const rowCount = Math.max(evs.length, 1);
+
+                  return evs.length === 0 ? (
+                    <tr key={s.id}>
+                      <td style={{ border: "1px solid #000", padding: "3px 6px", textAlign: "center", fontSize: "8pt", fontWeight: "bold" }}>{s.slot_name}</td>
+                      <td style={{ border: "1px solid #000", padding: "3px 6px", textAlign: "center", fontSize: "8pt" }}>{s.purpose}</td>
+                      <td style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt" }}>{woLabel}</td>
+                      <td colSpan={5} style={{ border: "1px solid #000", padding: "3px 6px", textAlign: "center", fontSize: "8pt", color: "#aaa" }}>기록 없음</td>
+                      <td style={{ border: "1px solid #000", padding: "3px 6px", textAlign: "center" }}></td>
+                    </tr>
+                  ) : evs.map((ev, idx) => {
+                    const isNG = ev.is_ok === false;
+                    return (
+                      <tr key={ev.id} style={{ background: isNG ? "#fff9f9" : "#fff" }}>
+                        {idx === 0 && (
+                          <>
+                            <td rowSpan={rowCount} style={{ border: "1px solid #000", padding: "3px 6px", textAlign: "center", fontSize: "8pt", fontWeight: "bold", verticalAlign: "middle" }}>{s.slot_name}</td>
+                            <td rowSpan={rowCount} style={{ border: "1px solid #000", padding: "3px 6px", textAlign: "center", fontSize: "8pt", verticalAlign: "middle" }}>{s.purpose}</td>
+                            <td rowSpan={rowCount} style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt", verticalAlign: "middle" }}>{woLabel}</td>
+                          </>
+                        )}
+                        <td style={{ border: "1px solid #000", padding: "3px 6px", textAlign: "center", fontSize: "8pt" }}>
+                          {WO_EVENT_LABEL[ev.event_type] ?? ev.event_type}
+                        </td>
+                        <td style={{ border: "1px solid #000", padding: "3px 6px", textAlign: "center", fontSize: "8pt", fontFamily: "monospace" }}>
+                          {toKSTTime(ev.measured_at)}
+                        </td>
+                        <td style={{ border: "1px solid #000", padding: "3px 6px", textAlign: "center", fontSize: "8pt", fontWeight: "bold", color: isNG ? "red" : "#000" }}>
+                          {ev.temperature != null ? `${ev.temperature}°C` : ""}
+                        </td>
+                        <td style={{ border: "1px solid #000", padding: "3px 6px", textAlign: "center", fontSize: "8pt", fontWeight: "bold", color: isNG ? "red" : "#000" }}>
+                          {ev.is_ok != null ? (ev.is_ok ? "O" : "X") : ""}
+                        </td>
+                        <td style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt", color: isNG ? "red" : "#000" }}>
+                          {ev.action_note ?? ""}
+                        </td>
+                        {idx === 0 && (
+                          <td rowSpan={rowCount} style={{ border: "1px solid #000", padding: "3px 4px", textAlign: "center", verticalAlign: "middle" }}>
+                            {signSrc && <img src={signSrc} style={{ height: 24, objectFit: "contain", display: "block", margin: "0 auto" }} />}
+                            {assignee && !signSrc && <div style={{ fontSize: "7pt" }}>{assignee}</div>}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  });
+                })}
+              </tbody>
+            </table>
+          );
+        })()}
+
+        {/* 한계기준 이탈 */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 4 }}>
+          <tbody>
+            <tr>
+              <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", fontSize: "8pt", width: 130, whiteSpace: "nowrap" }}>
+                한계기준 이탈 및 조치내용
+              </td>
+              <td style={{ border: "1px solid #000", padding: "4px 6px", fontSize: "8pt" }}>
+                {woEvents.filter((e) => e.is_ok === false)
+                  .map((e) => `${toKSTTime(e.measured_at)} ${e.action_note ?? ""}`)
+                  .join("  /  ") || " "}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
       </div>
     </div>
   );
