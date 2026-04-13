@@ -852,6 +852,7 @@ export function WoCcpCard({
   supabaseClient,
   currentUserIdRef,
   onSlotSaved,
+  foodCategory,
 }: any) {
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const inp  = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none";
@@ -865,7 +866,11 @@ export function WoCcpCard({
           <div className="font-semibold text-sm">🌡️ CCP-1B 온장고 슬롯 지정</div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {warmerSlots.map((s: any) => (
+        {(foodCategory === "중간재"
+  ? warmerSlots.filter((s: any) => s.purpose === "코팅용도" || s.purpose === "전사용도")
+  : warmerSlots
+).map((s: any) => (       
+
             <button
               key={s.id}
               type="button"

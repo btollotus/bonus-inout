@@ -156,10 +156,10 @@ const PROGRESS_STEPS = [
 
 const DARK_FOOD_TYPES = ["다크화이트","다크옐로우","데코초콜릿","롤리팝다크화이트","다크핑크","다크연두","롤리팝다크핑크"];
 
-function getFoodCategory(foodType: string | null | undefined): "다크" | "화이트" | "전사지" | null {
+function getFoodCategory(foodType: string | null | undefined): "다크" | "화이트" | "중간재" | null {
   const ft = (foodType ?? "").trim();
   if (!ft) return null;
-  if (ft.includes("초콜릿중간재")) return "전사지";
+  if (ft.includes("초콜릿중간재") || ft.includes("중간재")) return "중간재";
   if (DARK_FOOD_TYPES.some((d) => ft.includes(d))) return "다크";
   return "화이트";
 }
@@ -936,7 +936,7 @@ setRealtimeConnected(false);
               </div>
 
               {/* ── CCP-1B 슬롯 지정 + 온도 기록 ── */}
-              {(getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트") && (
+              {(getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트" || getFoodCategory(selectedWo.food_type) === "중간재") && (
                 <WoCcpCard
                   selectedWo={selectedWo}
                   eCcpSlotId={eCcpSlotId}
@@ -972,6 +972,8 @@ setRealtimeConnected(false);
                   deleteWoEvent={ccp.deleteWoEvent}
                   supabaseClient={supabase}
                   currentUserIdRef={currentUserIdRef}
+                  foodCategory={getFoodCategory(selectedWo.food_type)} 
+
                   onSlotSaved={(slotId: string) => {
                     setSelectedWo((prev) => prev ? { ...prev, ccp_slot_id: slotId } : prev);
                     setWoList((prev) => prev.map((w) => w.id === selectedWo!// 삭제할 줄:
