@@ -282,42 +282,82 @@ setSlotWoMap(slotMap);
 
   const [slotAssignees, setSlotAssignees] = useState<Record<string, string>>({});
 
-async function handlePrint() {
-  const activeSlotIds = [...activeSlotsToday];
-  if (activeSlotIds.length === 0) { window.print(); return; }
 
-  const woNosPerSlot: Record<string, string[]> = {};
-  for (const slotId of activeSlotIds) {
-    const wNos = [...new Set([
-      ...slotEvents.filter(e => e.slot_id === slotId).map(e => e.work_order_no).filter(Boolean) as string[],
-      ...woEvents.filter(e => e.slot_id === slotId).map(e => e.work_order_no),
-    ])];
-    woNosPerSlot[slotId] = wNos;
-  }
-
-  const allWoNos = [...new Set(Object.values(woNosPerSlot).flat())];
-  const assigneeMap: Record<string, string> = {};
-
-  if (allWoNos.length > 0) {
-    const { data } = await supabase
-      .from("work_orders")
-      .select("work_order_no, assignee_production")
-      .in("work_order_no", allWoNos);
-    for (const row of data ?? []) {
-      if (row.assignee_production) assigneeMap[row.work_order_no] = row.assignee_production;
+  async function handlePrint() {
+    const activeSlotIds = [...activeSlotsToday];
+    if (activeSlotIds.length === 0) {
+      // 데이터 없어도 인쇄는 진행
     }
-  }
-
-  const newSlotAssignees: Record<string, string> = {};
-  for (const slotId of activeSlotIds) {
-    for (const wNo of woNosPerSlot[slotId]) {
-      if (assigneeMap[wNo]) { newSlotAssignees[slotId] = assigneeMap[wNo]; break; }
+  
+    const woNosPerSlot: Record<string, string[]> = {};
+    for (const slotId of activeSlotIds) {
+      const wNos = [...new Set([
+        ...slotEvents.filter(e => e.slot_id === slotId).map(e => e.work_order_no).filter(Boolean) as string[],
+        ...woEvents.filter(e => e.slot_id === slotId).map(e => e.work_order_no),
+      ])];
+      woNosPerSlot[slotId] = wNos;
     }
+  
+    const allWoNos = [...new Set(Object.values(woNosPerSlot).flat())];
+    const assigneeMap: Record<string, string> = {};
+  
+    if (allWoNos.length > 0) {
+      const { data } = await supabase
+        .from("work_orders")
+        .select("work_order_no, assignee_production")
+        .in("work_order_no", allWoNos);
+      for (const row of data ?? []) {
+        if (row.assignee_production) assigneeMap[row.work_order_no] = row.assignee_production;
+      }
+    }
+  
+    const newSlotAssignees: Record<string, string> = {};
+    for (const slotId of activeSlotIds) {
+      for (const wNo of woNosPerSlot[slotId] ?? []) {
+        if (assigneeMap[wNo]) { newSlotAssignees[slotId] = assigneeMap[wNo]; break; }
+      }
+    }
+  
+    setSlotAssignees(newSlotAssignees);
+  
+    // React state 반영 후 iframe 인쇄
+    setTimeout(() => {
+      const content = document.getElementById("ccp1b-print-inner");
+      if (!content) return;
+  
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
+      document.body.appendChild(iframe);
+  
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) return;
+  
+      const printTitle = `CCP-1B_가열공정_${filterDate}`;
+  
+      doc.open();
+      doc.write(`<!DOCTYPE html><html><head>
+        <meta charset="utf-8">
+        <title>${printTitle}</title>
+        <style>
+          @page { size: A4 landscape; margin: 8mm 10mm; }
+          body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 9pt; color: #000; }
+          * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          table { border-collapse: collapse; page-break-inside: avoid; }
+          img { max-width: none; }
+        </style>
+      </head><body>${content.innerHTML}</body></html>`);
+      doc.close();
+  
+      const origTitle = document.title;
+      document.title = printTitle;
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        document.title = origTitle;
+        document.body.removeChild(iframe);
+      }, 1500);
+    }, 150);
   }
-
-  setSlotAssignees(newSlotAssignees);
-  setTimeout(() => window.print(), 150);
-}
 
   return (
     <div className="space-y-4">
@@ -585,18 +625,10 @@ async function handlePrint() {
          
 {/* ── 인쇄 전용 영역 ── */}
 <style>{`
-  @media screen { .ccp-print-only { display: none !important; } }
-  @media print {
-    body * { visibility: hidden; }
-    .ccp-print-only, .ccp-print-only * { visibility: visible; }
-    .ccp-print-only { position: absolute; top: 0; left: 0; width: 100%; }
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    @page { size: A4 landscape; margin: 8mm 10mm; }
-    table { page-break-inside: avoid; }
-  }
+  .ccp-print-only { display: none; }
 `}</style>
 
-<div className="ccp-print-only" style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
+<div id="ccp1b-print-inner" className="ccp-print-only" style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
 
 {/* ① 제목 + 결재란 */}
 <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
