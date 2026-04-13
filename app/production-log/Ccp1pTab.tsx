@@ -803,16 +803,21 @@ export function Ccp1pTab({ role, userId, showToast }: {
       {/* ══════════════════════════════════════════
           인쇄 전용 영역
       ══════════════════════════════════════════ */}
-      <style>{`
-        @media screen { .ccp1p-print-only { display: none !important; } }
-        @media print {
-          body * { visibility: hidden; }
-          .ccp1p-print-only, .ccp1p-print-only * { visibility: visible; }
-          .ccp1p-print-only { position: absolute; top: 0; left: 0; width: 100%; }
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          @page { size: A4 landscape; margin: 8mm 10mm; }
-        }
-      `}</style>
+<style>{`
+  @media screen { .ccp1p-print-only { display: none !important; } }
+  @media print {
+    body * { visibility: hidden; }
+    .ccp1p-print-only, .ccp1p-print-only * { visibility: visible; }
+    .ccp1p-print-only {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+    }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    @page { size: A4 landscape; margin: 8mm 10mm; }
+  }
+`}</style>
 
       <div
         className="ccp1p-print-only"
