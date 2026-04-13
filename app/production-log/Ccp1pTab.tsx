@@ -551,11 +551,45 @@ export function Ccp1pTab({ role, userId, showToast }: {
     <div className="space-y-4">
 
       {/* ── 인쇄 버튼 (화면 전용) ── */}
-      <div className="flex justify-end print:hidden">
-        <button className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50" onClick={() => window.print()}>
-          🖨️ 인쇄
-        </button>
-      </div>
+      <button className="..." onClick={() => {
+  const content = document.getElementById("ccp1p-print-inner");
+  if (!content) return;
+
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument || iframe.contentWindow?.document;
+  if (!doc) return;
+
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+  const printTitle = `CCP-1P_금속검출_${today}`;
+
+  doc.open();
+  doc.write(`<!DOCTYPE html><html><head>
+    <meta charset="utf-8">
+    <title>${printTitle}</title>
+    <style>
+      @page { size: A4 landscape; margin: 8mm 10mm; }
+      body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 8.5pt; color: #000; }
+      * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      table { border-collapse: collapse; }
+      img { max-width: none; }
+    </style>
+  </head><body>${content.innerHTML}</body></html>`);
+  doc.close();
+
+  const origTitle = document.title;
+  document.title = printTitle;
+  iframe.contentWindow?.focus();
+  iframe.contentWindow?.print();
+  setTimeout(() => {
+    document.title = origTitle;
+    document.body.removeChild(iframe);
+  }, 1500);
+}}>
+  🖨️ 인쇄
+</button>
 
       {/* ══════════════════════════════════════════
           화면용 UI (기존 그대로)
@@ -804,22 +838,11 @@ export function Ccp1pTab({ role, userId, showToast }: {
           인쇄 전용 영역
       ══════════════════════════════════════════ */}
 <style>{`
-  @media screen { .ccp1p-print-only { display: none !important; } }
-  @media print {
-    body * { visibility: hidden; }
-    .ccp1p-print-only, .ccp1p-print-only * { visibility: visible; }
-    .ccp1p-print-only {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-    }
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    @page { size: A4 landscape; margin: 8mm 10mm; }
-  }
+  .ccp1p-print-only { display: none; }
 `}</style>
 
       <div
+      id="ccp1p-print-inner"
         className="ccp1p-print-only"
         style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "8.5pt", color: "#000" }}
       >
