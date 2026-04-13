@@ -1064,3 +1064,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
     </tbody>
   </table>
 ))}
+      </div> {/* ccp1p-print-only div */}
+    </div>   {/* 최상위 space-y-4 div */}
+  );
+}
