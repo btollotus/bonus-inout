@@ -865,36 +865,63 @@ export function WoCcpCard({
         <div className="flex items-center gap-2 mb-2">
           <div className="font-semibold text-sm">🌡️ CCP-1B 온장고 슬롯 지정</div>
         </div>
-        <div className="flex flex-wrap gap-2">
-        {(foodCategory === "중간재"
-  ? warmerSlots.filter((s: any) => s.purpose === "코팅용도" || s.purpose === "전사용도")
-  : warmerSlots
-).map((s: any) => (       
+  
+        {(() => {
+  const PURPOSE_LABEL: Record<string, string> = {
+    "다크컴파운드": "다크",
+    "화이트컴파운드": "화이트",
+    "코팅용도": "코팅",
+    "전사용도": "전사",
+    "유동": "유동",
+  };
+  const GROUPS = [
+    { label: "다크", purpose: "다크컴파운드", cols: "grid-cols-3" },
+    { label: "화이트", purpose: "화이트컴파운드", cols: "grid-cols-3" },
+    { label: "코팅", purpose: "코팅용도", cols: "grid-cols-1" },
+    { label: "전사", purpose: "전사용도", cols: "grid-cols-1" },
+    { label: "유동", purpose: "유동", cols: "grid-cols-3" },
+  ];
+  return (
+    <div className="flex flex-wrap gap-4">
+      {GROUPS.map(({ label, purpose, cols }) => {
+        const slots = warmerSlots.filter((s: any) => s.purpose === purpose);
+        if (slots.length === 0) return null;
+        return (
+          <div key={purpose}>
+            <div className="mb-1 text-xs font-semibold text-slate-500">{label}</div>
+            <div className={`grid ${cols} gap-1.5`}>
+              {slots.map((s: any) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  disabled={selectedWo?.status === "완료" && !isEditMode}
+                  className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                    eCcpSlotId === s.id
+                      ? "border-blue-500 bg-blue-600 text-white shadow-sm scale-105"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
+                  }`}
+                  onClick={async () => {
+                    if (eCcpSlotId === s.id) return;
+                    const slotId = s.id;
+                    setECcpSlotId(slotId);
+                    await supabaseClient.from("work_orders")
+                      .update({ ccp_slot_id: slotId, updated_at: new Date().toISOString() })
+                      .eq("id", selectedWo.id);
+                    onSlotSaved?.(slotId);
+                  }}
+                >
+                  {s.slot_name}
+                  <span className="ml-1 text-[10px] opacity-70">({PURPOSE_LABEL[s.purpose] ?? s.purpose})</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+})()}
 
-            <button
-              key={s.id}
-              type="button"
-              disabled={selectedWo?.status === "완료" && !isEditMode}
-              className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                eCcpSlotId === s.id
-                  ? "border-blue-500 bg-blue-600 text-white shadow-sm scale-105"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
-              }`}
-              onClick={async () => {
-                if (eCcpSlotId === s.id) return;
-                const slotId = s.id;
-                setECcpSlotId(slotId);
-                await supabaseClient.from("work_orders")
-                  .update({ ccp_slot_id: slotId, updated_at: new Date().toISOString() })
-                  .eq("id", selectedWo.id);
-                onSlotSaved?.(slotId);
-              }}
-            >
-              {s.slot_name}
-              <span className="ml-1 text-[10px] opacity-70">({s.purpose})</span>
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* 온도 기록 */}
