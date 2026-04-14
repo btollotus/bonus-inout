@@ -56,6 +56,7 @@ export default function NaverOrderAlert() {
     });
   };
 
+
   const pollNaver = async () => {
     try {
       const res = await fetch("/api/naver/poll");
@@ -65,19 +66,17 @@ export default function NaverOrderAlert() {
       if (count > prevNaverRef.current && prevNaverRef.current !== 0) playBeep();
       prevNaverRef.current = count;
       setNaverCount(count);
-
-
       if (data.orders?.length) addOrders(data.orders.map((o: Order) => ({ ...o, channel: "naver" as const })));
     } catch {}
   };
-
+  
   const pollCoupang = async () => {
     try {
       const res = await fetch("/api/coupang/poll");
       if (!res.ok) return;
       const data = await res.json();
       const count = data.newCount ?? 0;
-      if (initializedRef.current && count > prevCoupangRef.current) playBeep();
+      if (count > prevCoupangRef.current && prevCoupangRef.current !== 0) playBeep();
       prevCoupangRef.current = count;
       setCoupangCount(count);
       if (data.orders?.length) addOrders(data.orders.map((o: Order) => ({ ...o, channel: "coupang" as const })));
