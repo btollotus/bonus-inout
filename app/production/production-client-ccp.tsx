@@ -72,19 +72,16 @@ const inp  = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-
 const inpR = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-right tabular-nums focus:border-blue-400 focus:outline-none";
 const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
 
-// ─── CCP 훅 (기존 컴포넌트에서 분리해서 사용) ──────────────
+// ─── CCP 훅 ──────────────────────────────────────────────────
 
 export function useCcpState(
   warmerSlots: { id: string; slot_name: string; purpose: string }[],
   currentUserIdRef: React.RefObject<string | null>,
   showToast: (msg: string, type?: "success" | "error") => void,
 ) {
-  // ── 작업지시서 온도 기록 ──
   const [woEvents, setWoEvents] = useState<WoEvent[]>([]);
-  // ── 슬롯 이벤트 (오늘 날짜) ──
   const [slotEvents, setSlotEvents] = useState<SlotEvent[]>([]);
 
-  // ── 폼 state ──
   const [ccpWoEventType, setCcpWoEventType] = useState<"start"|"mid_check"|"end">("start");
   const [ccpWoTime, setCcpWoTime] = useState("");
   const [ccpWoTemp, setCcpWoTemp] = useState("");
@@ -92,7 +89,6 @@ export function useCcpState(
   const [ccpWoActionNote, setCcpWoActionNote] = useState("");
   const [ccpWoSaving, setCcpWoSaving] = useState(false);
 
-  // ── 슬롯 액션 state ──
   const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
   const [slotMoveTargetId, setSlotMoveTargetId] = useState<string | null>(null);
   const [slotActionTime, setSlotActionTime] = useState(() => {
@@ -105,10 +101,8 @@ export function useCcpState(
   });
   const [slotActionSaving, setSlotActionSaving] = useState(false);
 
-  // ── 슬롯 현황 ──
   const [slotStatus, setSlotStatus] = useState<Record<string, { date: string; daysAgo: number; materialType: string | null } | null>>({});
 
-  // ── 수정 state ──
   const [ccpWoEditingId, setCcpWoEditingId] = useState<string | null>(null);
   const [ccpWoEditTime, setCcpWoEditTime] = useState("");
   const [ccpWoEditTemp, setCcpWoEditTemp] = useState("");
@@ -116,47 +110,41 @@ export function useCcpState(
   const [ccpWoEditActionNote, setCcpWoEditActionNote] = useState("");
   const [ccpWoEditSaving, setCcpWoEditSaving] = useState(false);
 
-  // ── 오늘 날짜 (KST) ──
   function todayKST() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
   }
 
-  // ── 작업지시서 온도기록 로드 ──
   const loadWoEvents = useCallback(async (workOrderNo: string, slotId?: string | null) => {
     let query = supabase
       .from("ccp_wo_events")
       .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
       .order("measured_at", { ascending: true });
   
-      if (slotId) {
-        const today = todayKST();
-        query = query
-          .eq("slot_id", slotId)
-          .gte("measured_at", `${today}T00:00:00+09:00`)
-          .lte("measured_at", `${today}T23:59:59+09:00`);
-      } else {
-        query = query.eq("work_order_no", workOrderNo);
-      }
+    if (slotId) {
+      const today = todayKST();
+      query = query
+        .eq("slot_id", slotId)
+        .gte("measured_at", `${today}T00:00:00+09:00`)
+        .lte("measured_at", `${today}T23:59:59+09:00`);
+    } else {
+      query = query.eq("work_order_no", workOrderNo);
+    }
 
-      const { data } = await query;
-      // 같은 시각+유형 중복 제거 (슬롯 공유 시 중복 방지)
-      const seen = new Set<string>();
-      const deduped = (data ?? []).filter((e: any) => {
-        const key = `${e.measured_at}_${e.event_type}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      setWoEvents(deduped as WoEvent[]);
-      const hasStart = deduped.some((e: any) => e.event_type === "start");
-
-
+    const { data } = await query;
+    const seen = new Set<string>();
+    const deduped = (data ?? []).filter((e: any) => {
+      const key = `${e.measured_at}_${e.event_type}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    setWoEvents(deduped as WoEvent[]);
+    const hasStart = deduped.some((e: any) => e.event_type === "start");
     setCcpWoEventType(hasStart ? "mid_check" : "start");
     setCcpWoTime("");
   }, []);
 
-  // ── 슬롯 이벤트 로드 (오늘) ──
   const loadSlotEvents = useCallback(async () => {
     const today = todayKST();
     const { data } = await supabase
@@ -167,13 +155,11 @@ export function useCcpState(
     setSlotEvents((data ?? []) as SlotEvent[]);
   }, []);
 
-  // ── 슬롯 현황 로드 ──
   const loadSlotStatus = useCallback(async () => {
     if (warmerSlots.length === 0) return;
     const today = todayKST();
     const slotIds = warmerSlots.map((s) => s.id);
   
-    // 오늘 이벤트 한 번에 조회
     const { data: todayEvents } = await supabase
       .from("ccp_slot_events")
       .select("slot_id, event_type, measured_at, material_type")
@@ -181,7 +167,6 @@ export function useCcpState(
       .in("slot_id", slotIds)
       .order("measured_at", { ascending: true });
   
-    // 오늘 기록 없는 슬롯 목록 파악
     const needsHistorySlotIds: string[] = [];
     const map: Record<string, { date: string; daysAgo: number; materialType: string | null } | null> = {};
   
@@ -195,38 +180,30 @@ export function useCcpState(
         if (materialIn) {
           map[slot.id] = { date: today, daysAgo: 0, materialType: (materialIn as any).material_type ?? null };
         } else {
-          // 오늘 material_in 없지만 start/mid_check/end 기록이 있음
-          // → 과거에 투입된 슬롯이므로 이력 조회 필요
           needsHistorySlotIds.push(slot.id);
         }
       }
     }
   
-    // 과거 기록이 필요한 슬롯들 한 번에 조회
     if (needsHistorySlotIds.length > 0) {
       const { data: historyEvents } = await supabase
         .from("ccp_slot_events")
         .select("slot_id, event_type, measured_at, material_type")
-      .in("slot_id", needsHistorySlotIds)
+        .in("slot_id", needsHistorySlotIds)
         .order("measured_at", { ascending: false });
   
       for (const slotId of needsHistorySlotIds) {
         const slotHistory = (historyEvents ?? []).filter((e) => e.slot_id === slotId);
-        // 가장 최근 material_in 찾기
-// 전체 이력에서 가장 최근 이벤트가 material_out이면 바로 비어있음
-const lastEvent = slotHistory[0]; // descending 정렬이므로 [0]이 최신
-if (!lastEvent || lastEvent.event_type === "material_out") {
-  map[slotId] = null; continue;
-}
-
-const lastIn = slotHistory.find((e) => e.event_type === "material_in");
-if (!lastIn) { map[slotId] = null; continue; }
-
-const hasOutAfter = slotHistory.some(
-    (e) => e.event_type === "material_out" && e.measured_at >= lastIn.measured_at
-  );
-if (hasOutAfter) { map[slotId] = null; continue; }
-  
+        const lastEvent = slotHistory[0];
+        if (!lastEvent || lastEvent.event_type === "material_out") {
+          map[slotId] = null; continue;
+        }
+        const lastIn = slotHistory.find((e) => e.event_type === "material_in");
+        if (!lastIn) { map[slotId] = null; continue; }
+        const hasOutAfter = slotHistory.some(
+          (e) => e.event_type === "material_out" && e.measured_at >= lastIn.measured_at
+        );
+        if (hasOutAfter) { map[slotId] = null; continue; }
         const materialDate = lastIn.measured_at.slice(0, 10);
         const diffMs = new Date(today).getTime() - new Date(materialDate).getTime();
         const daysAgo = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -239,7 +216,6 @@ if (hasOutAfter) { map[slotId] = null; continue; }
 
   useEffect(() => { loadSlotStatus(); }, [loadSlotStatus]);
 
-  // ── 작업지시서 온도기록 저장 ──
   async function saveWoEvent(
     selectedWo: { work_order_no: string; ccp_slot_id: string | null },
     eCcpSlotId: string,
@@ -248,21 +224,19 @@ if (hasOutAfter) { map[slotId] = null; continue; }
     if (!slotId) return showToast("슬롯을 먼저 지정해주세요.", "error");
     if (!ccpWoTime || ccpWoTime.length < 4) return showToast("측정시각을 입력하세요. (예: 1430)", "error");
 
-    // 시각 순서 검증
-    // slotId 기준 오늘 전체 기록 조회 (순서 검증용)
-const today = todayKST();
-const { data: slotEventsData } = await supabase
-  .from("ccp_wo_events")
-  .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
-  .eq("slot_id", slotId)
-  .gte("measured_at", `${today}T00:00:00+09:00`)
-  .lte("measured_at", `${today}T23:59:59+09:00`)
-  .order("measured_at", { ascending: true });
-const slotAllEvents = (slotEventsData ?? []) as WoEvent[];
+    const today = todayKST();
+    const { data: slotEventsData } = await supabase
+      .from("ccp_wo_events")
+      .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
+      .eq("slot_id", slotId)
+      .gte("measured_at", `${today}T00:00:00+09:00`)
+      .lte("measured_at", `${today}T23:59:59+09:00`)
+      .order("measured_at", { ascending: true });
+    const slotAllEvents = (slotEventsData ?? []) as WoEvent[];
 
-if (slotAllEvents.length > 0) {
-  const lastEv = [...slotAllEvents].sort((a,b) => a.measured_at.localeCompare(b.measured_at)).slice(-1)[0];
-  const lastTimeStr = toKSTTime(lastEv.measured_at);
+    if (slotAllEvents.length > 0) {
+      const lastEv = [...slotAllEvents].sort((a,b) => a.measured_at.localeCompare(b.measured_at)).slice(-1)[0];
+      const lastTimeStr = toKSTTime(lastEv.measured_at);
       const newTimeStr = `${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}`;
       if (newTimeStr <= lastTimeStr) {
         return showToast(`⚠ 측정시각은 마지막 기록(${lastTimeStr})보다 늦어야 합니다.`, "error");
@@ -273,17 +247,14 @@ if (slotAllEvents.length > 0) {
     const temp = Number(ccpWoTemp);
     if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
 
-    // 이벤트 순서 검증
     const sorted = [...slotAllEvents].sort((a,b) => a.measured_at.localeCompare(b.measured_at));
     const lastEv = sorted[sorted.length - 1];
 
-    // 시작 기록 전: 슬롯에 원료가 있는지 확인
     if (ccpWoEventType === "start") {
       const currentSlotStatus = slotStatus[slotId];
       if (currentSlotStatus === null || currentSlotStatus === undefined) {
         return showToast("⚠ 해당 슬롯에 원료가 없습니다. 원료투입 또는 슬롯이동 후 시작 기록을 해주세요.", "error");
       }
-      // 원료투입/이동 시각 이후인지 확인
       const { data: lastMaterialIn } = await supabase
         .from("ccp_slot_events")
         .select("measured_at")
@@ -312,11 +283,9 @@ if (slotAllEvents.length > 0) {
       if (!lastEv || (lastEv.event_type !== "start" && lastEv.event_type !== "mid_check")) {
         return showToast("⚠ 종료는 시작 또는 중간점검 후에만 가능합니다.", "error");
       }
-      // 2시간 이상 경과 + 중간점검 없으면 차단
       const startEv = [...sorted].reverse().find((e) => e.event_type === "start");
       const hasMidCheck = sorted.some((e) => e.event_type === "mid_check");
       if (startEv && !hasMidCheck) {
-        
         const startTime = new Date(startEv.measured_at);
         const endTimeKst = new Date(`${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00+09:00`);
         if ((endTimeKst.getTime() - startTime.getTime()) / 60000 >= 120) {
@@ -326,9 +295,8 @@ if (slotAllEvents.length > 0) {
     }
 
     setCcpWoSaving(true);
-        const measuredAt = `${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00+09:00`;
+    const measuredAt = `${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00+09:00`;
 
-    // 1. 내 작업지시서 온도기록 저장
     const { error } = await supabase.from("ccp_wo_events").insert({
       work_order_no: selectedWo.work_order_no,
       slot_id:       slotId,
@@ -342,7 +310,6 @@ if (slotAllEvents.length > 0) {
     setCcpWoSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
 
-    // 2. 슬롯 기록에도 저장 (온도 포함)
     await supabase.from("ccp_slot_events").insert({
       slot_id:       slotId,
       event_date:    today,
@@ -355,40 +322,35 @@ if (slotAllEvents.length > 0) {
       created_by:    currentUserIdRef.current,
     });
 
-    // 3. 같은 슬롯의 다른 작업지시서에도 동일 기록 복사
- 
-// 같은 슬롯의 다른 작업지시서에도 복사
-const { data: sameSlotWos } = await supabase
-.from("work_orders")
-.select("work_order_no")
-.eq("ccp_slot_id", slotId)
-.eq("status", "생산중")
-.neq("work_order_no", selectedWo.work_order_no);
+    const { data: sameSlotWos } = await supabase
+      .from("work_orders")
+      .select("work_order_no")
+      .eq("ccp_slot_id", slotId)
+      .eq("status", "생산중")
+      .neq("work_order_no", selectedWo.work_order_no);
 
-for (const wo of sameSlotWos ?? []) {
-await supabase.from("ccp_wo_events").insert({
-  work_order_no: wo.work_order_no,
-  slot_id: slotId,
-  event_type: ccpWoEventType,
-  measured_at: measuredAt,
-  temperature: temp,
-  is_ok: ccpWoIsOk,
-  action_note: ccpWoActionNote.trim() || null,
-  created_by: currentUserIdRef.current,
-});
-}
+    for (const wo of sameSlotWos ?? []) {
+      await supabase.from("ccp_wo_events").insert({
+        work_order_no: wo.work_order_no,
+        slot_id: slotId,
+        event_type: ccpWoEventType,
+        measured_at: measuredAt,
+        temperature: temp,
+        is_ok: ccpWoIsOk,
+        action_note: ccpWoActionNote.trim() || null,
+        created_by: currentUserIdRef.current,
+      });
+    }
 
     showToast("✅ CCP 온도 기록 완료!");
     setCcpWoTemp(""); setCcpWoActionNote(""); setCcpWoIsOk(true); setCcpWoTime("");
     await loadWoEvents(selectedWo.work_order_no, slotId);
   }
 
-  // ── 작업지시서 온도기록 수정 ──
   function startWoEventEdit(ev: WoEvent) {
     setCcpWoEditingId(ev.id);
     const kstTime = toKSTTime(ev.measured_at);
-setCcpWoEditTime(kstTime.replace(":", ""));
-
+    setCcpWoEditTime(kstTime.replace(":", ""));
     setCcpWoEditTemp(ev.temperature != null ? String(ev.temperature) : "");
     setCcpWoEditIsOk(ev.is_ok ?? true);
     setCcpWoEditActionNote(ev.action_note ?? "");
@@ -401,7 +363,7 @@ setCcpWoEditTime(kstTime.replace(":", ""));
     setCcpWoEditSaving(true);
     const dateStr = ev.measured_at.slice(0, 10);
     const { error } = await supabase.from("ccp_wo_events").update({
-      measured_at: `${dateStr}T${ccpWoEditTime.slice(0,2)}:${ccpWoEditTime.slice(2,4)}:00+09:00`,   
+      measured_at: `${dateStr}T${ccpWoEditTime.slice(0,2)}:${ccpWoEditTime.slice(2,4)}:00+09:00`,
       temperature: temp,
       is_ok:       ccpWoEditIsOk,
       action_note: ccpWoEditActionNote.trim() || null,
@@ -422,8 +384,6 @@ setCcpWoEditTime(kstTime.replace(":", ""));
       .maybeSingle();
     const { error } = await supabase.from("ccp_wo_events").delete().eq("id", eventId);
     if (error) return showToast("삭제 실패: " + error.message, "error");
-  
-    // ccp_slot_events에서도 동일 기록 삭제
     if (evData?.slot_id && evData?.measured_at) {
       await supabase.from("ccp_slot_events")
         .delete()
@@ -431,12 +391,10 @@ setCcpWoEditTime(kstTime.replace(":", ""));
         .eq("measured_at", evData.measured_at)
         .eq("event_type", evData.event_type);
     }
-  
     showToast("🗑️ 삭제 완료!");
     await loadWoEvents(workOrderNo, evData?.slot_id ?? null);
   }
 
-  // ── 원료투입 저장 ──
   async function saveSlotMaterialIn(slotId: string, workOrderNo?: string, materialType?: string) {
     if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
     if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
@@ -455,7 +413,6 @@ setCcpWoEditTime(kstTime.replace(":", ""));
         created_by:    currentUserIdRef.current,
       });
       if (error) return showToast("원료투입 기록 실패: " + error.message, "error");
-
       showToast("✅ 원료투입이 기록됐습니다!");
       setActiveSlotId(null);
       await loadSlotStatus();
@@ -467,26 +424,20 @@ setCcpWoEditTime(kstTime.replace(":", ""));
     }
   }
 
-  // ── 슬롯이동 저장 ──
-  async function saveSlotMove(
-    fromSlotId: string,
-    toSlotId: string,
-    workOrderNo?: string,
-  ) {
+  async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: string) {
     if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
 
     const fromSlotName = warmerSlots.find((s) => s.id === fromSlotId)?.slot_name ?? fromSlotId;
     const toSlotName   = warmerSlots.find((s) => s.id === toSlotId)?.slot_name ?? toSlotId;
 
-    // 출발 슬롯의 material_type 조회
     const { data: lastInEvent } = await supabase
-    .from("ccp_slot_events")
-    .select("material_type")
-    .eq("slot_id", fromSlotId)
-    .eq("event_type", "material_in")
-    .order("measured_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+      .from("ccp_slot_events")
+      .select("material_type")
+      .eq("slot_id", fromSlotId)
+      .eq("event_type", "material_in")
+      .order("measured_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
     const fromSlot = warmerSlots.find((s) => s.id === fromSlotId);
     const movedMaterialType = lastInEvent?.material_type
       ?? (fromSlot?.purpose === "화이트컴파운드" ? "화이트"
@@ -495,7 +446,6 @@ setCcpWoEditTime(kstTime.replace(":", ""));
 
     setSlotActionSaving(true);
     try {
-      // 출발 슬롯에 material_out 기록
       await supabase.from("ccp_slot_events").insert({
         slot_id:       fromSlotId,
         event_date:    slotActionDate,
@@ -505,8 +455,6 @@ setCcpWoEditTime(kstTime.replace(":", ""));
         action_note:   `→ ${toSlotName}`,
         created_by:    currentUserIdRef.current,
       });
-
-      // 도착 슬롯에 material_in + move 기록
       await supabase.from("ccp_slot_events").insert({
         slot_id:       toSlotId,
         event_date:    slotActionDate,
@@ -517,7 +465,6 @@ setCcpWoEditTime(kstTime.replace(":", ""));
         material_type: movedMaterialType,
         created_by:    currentUserIdRef.current,
       });
-
       showToast(`✅ ${fromSlotName} → ${toSlotName} 이동 완료!`);
       setActiveSlotId(null);
       setSlotMoveTargetId(null);
@@ -531,7 +478,6 @@ setCcpWoEditTime(kstTime.replace(":", ""));
   }
 
   return {
-    // state
     woEvents, slotEvents, slotStatus,
     ccpWoEventType, setCcpWoEventType,
     ccpWoTime, setCcpWoTime,
@@ -550,7 +496,6 @@ setCcpWoEditTime(kstTime.replace(":", ""));
     ccpWoEditIsOk, setCcpWoEditIsOk,
     ccpWoEditActionNote, setCcpWoEditActionNote,
     ccpWoEditSaving,
-    // 함수
     loadWoEvents, loadSlotEvents, loadSlotStatus,
     saveWoEvent, startWoEventEdit, saveWoEventEdit, deleteWoEvent,
     saveSlotMaterialIn, saveSlotMove,
@@ -559,7 +504,6 @@ setCcpWoEditTime(kstTime.replace(":", ""));
 
 // ─── UI 컴포넌트 ─────────────────────────────────────────────
 
-// ── 온장고 슬롯 현황 패널 ──
 export function SlotStatusPanel({
   warmerSlots,
   slotStatus,
@@ -586,13 +530,6 @@ export function SlotStatusPanel({
   const [selectedMaterialType, setSelectedMaterialType] = React.useState<string>("");
   const [isExpanded, setIsExpanded] = React.useState(true);
 
-
-  const MERGE_PURPOSES = ["코팅용도", "전사용도", "유동"];
-  const mainGroups = Array.from(new Set(
-    warmerSlots.filter((s) => !MERGE_PURPOSES.includes(s.purpose)).map((s) => s.purpose)
-  ));
-  const mergedSlots = warmerSlots.filter((s) => MERGE_PURPOSES.includes(s.purpose));
-
   const renderSlot = (s: { id: string; slot_name: string; purpose: string }) => {
     const st = slotStatus[s.id];
     const isEmpty = st === null || st === undefined;
@@ -604,14 +541,14 @@ export function SlotStatusPanel({
     const isMoveTarget = slotMoveTargetId === s.id;
 
     const baseCls = isEmpty
-    ? "border-slate-200 bg-slate-50 text-slate-400"
-    : isOverdue
-    ? "border-red-300 bg-red-50 text-red-600"
-    : materialType === "다크"
-    ? "border-amber-300 bg-amber-50 text-amber-800"
-    : materialType === "화이트"
-    ? "border-yellow-200 bg-yellow-50 text-yellow-700"
-    : "border-blue-200 bg-blue-50 text-blue-700";
+      ? "border-slate-200 bg-slate-50 text-slate-400"
+      : isOverdue
+      ? "border-red-300 bg-red-50 text-red-600"
+      : materialType === "다크"
+      ? "border-amber-300 bg-amber-50 text-amber-800"
+      : materialType === "화이트"
+      ? "border-yellow-200 bg-yellow-50 text-yellow-700"
+      : "border-blue-200 bg-blue-50 text-blue-700";
 
     const activeCls = isActive
       ? "ring-2 ring-blue-500 ring-offset-1 scale-105 shadow-md"
@@ -620,33 +557,67 @@ export function SlotStatusPanel({
       : "";
 
     return (
-      <div key={s.id} className="flex flex-col gap-1">
-        <button
-          type="button"
-          className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-all cursor-pointer hover:scale-105 ${baseCls} ${activeCls}`}
-          onClick={() => {
-            if (activeSlotId === s.id) {
-              setActiveSlotId(null); setSlotMoveTargetId(null);
-            } else if (activeSlotId !== null && slotStatus[activeSlotId] !== null && slotStatus[activeSlotId] !== undefined) {
-              // 이동 모드: 도착 슬롯 선택
-              setSlotMoveTargetId(isMoveTarget ? null : s.id);
-            } else {
-              setActiveSlotId(s.id); setSlotMoveTargetId(null);
-              const now = new Date();
-              setSlotActionTime(`${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`);
-            }
-          }}
-        >
-          <div className={isOverdue ? "text-red-600 font-bold" : ""}>{s.slot_name}</div>
-          <div className={`mt-0.5 text-[10px] text-center ${isOverdue ? "text-red-600 font-bold" : "font-normal"}`}>
-            {isEmpty ? "비어있음" : dateStr}
-          </div>
-          {!isEmpty && materialType && (
-            <div className={`text-[9px] text-center font-bold mt-0.5 ${materialType === "다크" ? "text-amber-800" : "text-yellow-600"}`}>
-              {materialType}
+      <button
+        key={s.id}
+        type="button"
+        className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-all cursor-pointer hover:scale-105 ${baseCls} ${activeCls}`}
+        onClick={() => {
+          if (activeSlotId === s.id) {
+            setActiveSlotId(null); setSlotMoveTargetId(null);
+          } else if (activeSlotId !== null && slotStatus[activeSlotId] !== null && slotStatus[activeSlotId] !== undefined) {
+            setSlotMoveTargetId(isMoveTarget ? null : s.id);
+          } else {
+            setActiveSlotId(s.id); setSlotMoveTargetId(null);
+            const now = new Date();
+            setSlotActionTime(`${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`);
+          }
+        }}
+      >
+        <div className={isOverdue ? "text-red-600 font-bold" : ""}>{s.slot_name}</div>
+        <div className={`mt-0.5 text-[10px] text-center ${isOverdue ? "text-red-600 font-bold" : "font-normal"}`}>
+          {isEmpty ? "비어있음" : dateStr}
+        </div>
+      </button>
+    );
+  };
+
+  // 유동 슬롯: 2열 3행 (A열/B열), 각 슬롯 오른쪽에 materialType 라벨
+  const renderFluidGrid = () => {
+    const fluidSlots = warmerSlots.filter((s) => s.purpose === "유동");
+    const aSlots = fluidSlots.filter((s) => s.slot_name.endsWith("A")).sort((a,b) => a.slot_name.localeCompare(b.slot_name));
+    const bSlots = fluidSlots.filter((s) => s.slot_name.endsWith("B")).sort((a,b) => a.slot_name.localeCompare(b.slot_name));
+    const rowCount = Math.max(aSlots.length, bSlots.length);
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+        {Array.from({ length: rowCount }).map((_, i) => {
+          const aSlot = aSlots[i];
+          const bSlot = bSlots[i];
+          return (
+            <div key={i} style={{ display: "flex", flexDirection: "row", gap: "4px", alignItems: "center" }}>
+              {aSlot && (
+                <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "3px" }}>
+                  {renderSlot(aSlot)}
+                  {(() => {
+                    const mt = slotStatus[aSlot.id]?.materialType ?? null;
+                    if (!mt) return null;
+                    return <span className={`text-[9px] font-semibold whitespace-nowrap ${mt === "다크" ? "text-amber-800" : "text-yellow-700"}`}>{mt}</span>;
+                  })()}
+                </div>
+              )}
+              {bSlot && (
+                <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "3px" }}>
+                  {renderSlot(bSlot)}
+                  {(() => {
+                    const mt = slotStatus[bSlot.id]?.materialType ?? null;
+                    if (!mt) return null;
+                    return <span className={`text-[9px] font-semibold whitespace-nowrap ${mt === "다크" ? "text-amber-800" : "text-yellow-700"}`}>{mt}</span>;
+                  })()}
+                </div>
+              )}
             </div>
-          )} 
-        </button>
+          );
+        })}
       </div>
     );
   };
@@ -654,174 +625,164 @@ export function SlotStatusPanel({
   return (
     <div className={`${card} p-4`}>
       <div className="flex items-center justify-between mb-3">
-  <button
-    type="button"
-    className="flex items-center gap-2 text-left"
-    onClick={() => setIsExpanded((v) => !v)}
-  >
-    <div className="font-semibold text-sm">🌡️ 온장고 슬롯 현황</div>
-    <span className="text-xs text-slate-400">{isExpanded ? "▲" : "▼"}</span>
-  </button>
-  <div className="flex items-center gap-2">
-    <input type="date" className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-blue-400 focus:outline-none"
-      value={slotActionDate} onChange={(e) => setSlotActionDate(e.target.value)} />
-    <button className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50" onClick={loadSlotStatus}>🔄 갱신</button>
-  </div>
-</div>
+        <button
+          type="button"
+          className="flex items-center gap-2 text-left"
+          onClick={() => setIsExpanded((v) => !v)}
+        >
+          <div className="font-semibold text-sm">🌡️ 온장고 슬롯 현황</div>
+          <span className="text-xs text-slate-400">{isExpanded ? "▲" : "▼"}</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <input type="date" className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-blue-400 focus:outline-none"
+            value={slotActionDate} onChange={(e) => setSlotActionDate(e.target.value)} />
+          <button className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50" onClick={loadSlotStatus}>🔄 갱신</button>
+        </div>
+      </div>
 
-{isExpanded && (
-  <>
-      <div className="flex flex-wrap gap-4">
-  {/* 다크컴파운드 3×3 */}
-  <div>
-    <div className="mb-1.5 text-xs font-semibold text-slate-500">다크컴파운드</div>
-    <div className="grid grid-cols-3 gap-1.5">
-      {warmerSlots.filter(s => s.purpose === "다크컴파운드").map(renderSlot)}
-    </div>
-  </div>
-
-  {/* 화이트컴파운드 3×3 */}
-  <div>
-    <div className="mb-1.5 text-xs font-semibold text-slate-500">화이트컴파운드</div>
-    <div className="grid grid-cols-3 gap-1.5">
-      {warmerSlots.filter(s => s.purpose === "화이트컴파운드").map(renderSlot)}
-    </div>
-  </div>
-
-  {/* 코팅용도 7-1,7-2,7-3 세로 1열 */}
-  <div>
-    <div className="mb-1.5 text-xs font-semibold text-slate-500">코팅</div>
-    <div className="grid grid-cols-1 gap-1.5">
-      {warmerSlots.filter(s => s.purpose === "코팅용도").map(renderSlot)}
-    </div>
-  </div>
-
-  {/* 전사용도 8 */}
-  <div>
-    <div className="mb-1.5 text-xs font-semibold text-slate-500">전사</div>
-    <div className="grid grid-cols-1 gap-1.5">
-      {warmerSlots.filter(s => s.purpose === "전사용도").map(renderSlot)}
-    </div>
-  </div>
-
-  {/* 유동 9-1A~9-3B 3×2 */}
-  <div>
-    <div className="mb-1.5 text-xs font-semibold text-slate-500">유동</div>
-    <div className="grid grid-cols-3 gap-1.5">
-      {warmerSlots.filter(s => s.purpose === "유동").map(renderSlot)}
-    </div>
-  </div>
-</div>
-
-      {/* 슬롯 액션 패널 */}
-      {activeSlotId && (() => {
-        const slot = warmerSlots.find((s) => s.id === activeSlotId);
-        const st = slotStatus[activeSlotId];
-        const isEmpty = st === null || st === undefined;
-
-        return (
-          <div className="mt-4 pt-4 border-t border-slate-200 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="font-semibold text-sm">
-                {isEmpty ? `🧪 ${slot?.slot_name} — 원료투입` : `🔀 ${slot?.slot_name} — 슬롯이동`}
+      {isExpanded && (
+        <>
+          <div className="flex flex-wrap gap-4">
+            {/* 다크컴파운드 3×3 */}
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-slate-500">다크컴파운드</div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {warmerSlots.filter(s => s.purpose === "다크컴파운드").map(renderSlot)}
               </div>
-              <button className="text-xs text-slate-400 hover:text-slate-600"
-                onClick={() => { setActiveSlotId(null); setSlotMoveTargetId(null); }}>✕ 닫기</button>
             </div>
 
-            {isEmpty ? (
-             <div className="flex gap-3 items-center flex-nowrap">
-                {warmerSlots.find((s) => s.id === activeSlotId)?.purpose === "유동" && (
-                  <div>
-                    <div className="mb-1 text-xs text-slate-500">원료 종류 *</div>
-                    <div className="flex gap-2">
-                      {["다크", "화이트"].map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          className={`rounded-xl border px-4 py-2 text-sm font-bold transition-all ${
-                            selectedMaterialType === t
-                              ? t === "다크"
-                                ? "border-amber-600 bg-amber-700 text-white"
-                                : "border-yellow-400 bg-yellow-400 text-amber-900"
-                              : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                          }`}
-                          onClick={() => setSelectedMaterialType(t)}
-                        >
-                          {t}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-               
-             
-<div>
-  <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
-  <input className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-    inputMode="numeric" placeholder="예: 1430" maxLength={4}
-    value={slotActionTime}
-    onChange={(e) => setSlotActionTime(e.target.value.replace(/[^\d]/g,"").slice(0,4))} />
-</div>
-{slotActionTime.length === 4 && (
-  <div className="text-xs text-slate-400 text-center self-center">
-    {slotActionTime.slice(0,2)}:{slotActionTime.slice(2,4)}
-  </div>
-)}
-
-
-                <button
-                  className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
-                  disabled={slotActionSaving || slotActionTime.length < 4 || (warmerSlots.find((s) => s.id === activeSlotId)?.purpose === "유동" && !selectedMaterialType)}
-                  onClick={() => { saveSlotMaterialIn(activeSlotId, undefined, selectedMaterialType); setSelectedMaterialType(""); }}
-                >
-                  {slotActionSaving ? "저장 중..." : "🧪 원료투입"}
-                </button>
+            {/* 화이트컴파운드 3×3 */}
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-slate-500">화이트컴파운드</div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {warmerSlots.filter(s => s.purpose === "화이트컴파운드").map(renderSlot)}
               </div>
+            </div>
 
+            {/* 코팅 가로 1줄 */}
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-slate-500">코팅</div>
+              <div className="flex flex-row gap-1.5">
+                {warmerSlots.filter(s => s.purpose === "코팅용도").map(renderSlot)}
+              </div>
+            </div>
 
-            ) : (
-              <div className="space-y-3">
-                <div className="text-xs text-slate-500">
-                  📤 <span className="font-semibold text-orange-600">{slot?.slot_name}</span>에서 이동할 슬롯을 클릭하세요
-                </div>
-                {slotMoveTargetId && (
-                  <div className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-sm">
-                    <span className="font-semibold text-orange-600">{slot?.slot_name}</span>
-                    <span className="text-slate-400">→</span>
-                    <span className="font-semibold text-teal-700">{warmerSlots.find((s) => s.id === slotMoveTargetId)?.slot_name}</span>
+            {/* 전사 */}
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-slate-500">전사</div>
+              <div className="flex flex-row gap-1.5">
+                {warmerSlots.filter(s => s.purpose === "전사용도").map(renderSlot)}
+              </div>
+            </div>
+
+            {/* 유동 2열 3행 */}
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-slate-500">유동</div>
+              {renderFluidGrid()}
+            </div>
+          </div>
+
+          {/* 슬롯 액션 패널 */}
+          {activeSlotId && (() => {
+            const slot = warmerSlots.find((s) => s.id === activeSlotId);
+            const st = slotStatus[activeSlotId];
+            const isEmpty = st === null || st === undefined;
+
+            return (
+              <div className="mt-4 pt-4 border-t border-slate-200 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold text-sm">
+                    {isEmpty ? `🧪 ${slot?.slot_name} — 원료투입` : `🔀 ${slot?.slot_name} — 슬롯이동`}
                   </div>
-                )}
-                <div className="flex gap-3 items-end flex-wrap">
-                  <div>
-                    <div className="mb-1 text-xs text-slate-500">이동시각 (HHmm)</div>
-                    <input className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                      inputMode="numeric" placeholder="예: 1430" maxLength={4}
-                      value={slotActionTime}
-                      onChange={(e) => setSlotActionTime(e.target.value.replace(/[^\d]/g,"").slice(0,4))} />
+                  <button className="text-xs text-slate-400 hover:text-slate-600"
+                    onClick={() => { setActiveSlotId(null); setSlotMoveTargetId(null); }}>✕ 닫기</button>
+                </div>
+
+                {isEmpty ? (
+                  <div className="flex gap-3 items-center flex-nowrap">
+                    {warmerSlots.find((s) => s.id === activeSlotId)?.purpose === "유동" && (
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">원료 종류 *</div>
+                        <div className="flex gap-2">
+                          {["다크", "화이트"].map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              className={`rounded-xl border px-4 py-2 text-sm font-bold transition-all ${
+                                selectedMaterialType === t
+                                  ? t === "다크"
+                                    ? "border-amber-600 bg-amber-700 text-white"
+                                    : "border-yellow-400 bg-yellow-400 text-amber-900"
+                                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                              }`}
+                              onClick={() => setSelectedMaterialType(t)}
+                            >{t}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
+                      <input className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                        inputMode="numeric" placeholder="예: 1430" maxLength={4}
+                        value={slotActionTime}
+                        onChange={(e) => setSlotActionTime(e.target.value.replace(/[^\d]/g,"").slice(0,4))} />
+                    </div>
                     {slotActionTime.length === 4 && (
-                      <div className="mt-0.5 text-xs text-slate-400 text-center">
+                      <div className="text-xs text-slate-400 text-center self-center">
                         {slotActionTime.slice(0,2)}:{slotActionTime.slice(2,4)}
                       </div>
                     )}
-                  </div>
-                  {slotMoveTargetId && (
                     <button
-                      className="rounded-xl border border-teal-500 bg-teal-600 px-4 py-2 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60"
-                      disabled={slotActionSaving || slotActionTime.length < 4}
-                      onClick={() => saveSlotMove(activeSlotId, slotMoveTargetId)}
+                      className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
+                      disabled={slotActionSaving || slotActionTime.length < 4 || (warmerSlots.find((s) => s.id === activeSlotId)?.purpose === "유동" && !selectedMaterialType)}
+                      onClick={() => { saveSlotMaterialIn(activeSlotId, undefined, selectedMaterialType); setSelectedMaterialType(""); }}
                     >
-                      {slotActionSaving ? "저장 중..." : "🔀 이동"}
+                      {slotActionSaving ? "저장 중..." : "🧪 원료투입"}
                     </button>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-xs text-slate-500">
+                      📤 <span className="font-semibold text-orange-600">{slot?.slot_name}</span>에서 이동할 슬롯을 클릭하세요
+                    </div>
+                    {slotMoveTargetId && (
+                      <div className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-sm">
+                        <span className="font-semibold text-orange-600">{slot?.slot_name}</span>
+                        <span className="text-slate-400">→</span>
+                        <span className="font-semibold text-teal-700">{warmerSlots.find((s) => s.id === slotMoveTargetId)?.slot_name}</span>
+                      </div>
+                    )}
+                    <div className="flex gap-3 items-end flex-wrap">
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">이동시각 (HHmm)</div>
+                        <input className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                          inputMode="numeric" placeholder="예: 1430" maxLength={4}
+                          value={slotActionTime}
+                          onChange={(e) => setSlotActionTime(e.target.value.replace(/[^\d]/g,"").slice(0,4))} />
+                        {slotActionTime.length === 4 && (
+                          <div className="mt-0.5 text-xs text-slate-400 text-center">
+                            {slotActionTime.slice(0,2)}:{slotActionTime.slice(2,4)}
+                          </div>
+                        )}
+                      </div>
+                      {slotMoveTargetId && (
+                        <button
+                          className="rounded-xl border border-teal-500 bg-teal-600 px-4 py-2 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60"
+                          disabled={slotActionSaving || slotActionTime.length < 4}
+                          onClick={() => saveSlotMove(activeSlotId, slotMoveTargetId)}
+                        >
+                          {slotActionSaving ? "저장 중..." : "🔀 이동"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        );
-      })()}
-      </>
-    )}
+            );
+          })()}
+        </>
+      )}
     </div>
   );
 }
@@ -858,70 +819,125 @@ export function WoCcpCard({
   const inp  = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none";
   const inpR = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-right tabular-nums focus:border-blue-400 focus:outline-none";
 
+  // 유동 슬롯 2열 3행 렌더 (CCP 슬롯 지정용, 라벨 없음)
+  const renderWoFluidGrid = () => {
+    const fluidSlots = warmerSlots.filter((s: any) => s.purpose === "유동");
+    const aSlots = fluidSlots.filter((s: any) => s.slot_name.endsWith("A")).sort((a: any, b: any) => a.slot_name.localeCompare(b.slot_name));
+    const bSlots = fluidSlots.filter((s: any) => s.slot_name.endsWith("B")).sort((a: any, b: any) => a.slot_name.localeCompare(b.slot_name));
+    const rowCount = Math.max(aSlots.length, bSlots.length);
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+        {Array.from({ length: rowCount }).map((_, i) => (
+          <div key={i} style={{ display: "flex", flexDirection: "row", gap: "6px" }}>
+            {[aSlots[i], bSlots[i]].filter(Boolean).map((s: any) => (
+              <button
+                key={s.id}
+                type="button"
+                disabled={selectedWo?.status === "완료" && !isEditMode}
+                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                  eCcpSlotId === s.id
+                    ? "border-blue-500 bg-blue-600 text-white shadow-sm scale-105"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
+                }`}
+                onClick={async () => {
+                  if (eCcpSlotId === s.id) return;
+                  setECcpSlotId(s.id);
+                  await supabaseClient.from("work_orders")
+                    .update({ ccp_slot_id: s.id, updated_at: new Date().toISOString() })
+                    .eq("id", selectedWo.id);
+                  onSlotSaved?.(s.id);
+                }}
+              >
+                {s.slot_name}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderSlotBtn = (s: any) => (
+    <button
+      key={s.id}
+      type="button"
+      disabled={selectedWo?.status === "완료" && !isEditMode}
+      className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+        eCcpSlotId === s.id
+          ? "border-blue-500 bg-blue-600 text-white shadow-sm scale-105"
+          : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
+      }`}
+      onClick={async () => {
+        if (eCcpSlotId === s.id) return;
+        setECcpSlotId(s.id);
+        await supabaseClient.from("work_orders")
+          .update({ ccp_slot_id: s.id, updated_at: new Date().toISOString() })
+          .eq("id", selectedWo.id);
+        onSlotSaved?.(s.id);
+      }}
+    >
+      {s.slot_name}
+    </button>
+  );
+
   return (
     <>
       {/* 슬롯 지정 */}
       <div className={`${card} p-4`}>
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-3">
           <div className="font-semibold text-sm">🌡️ CCP-1B 온장고 슬롯 지정</div>
         </div>
-  
-        {(() => {
-  const PURPOSE_LABEL: Record<string, string> = {
-    "다크컴파운드": "다크",
-    "화이트컴파운드": "화이트",
-    "코팅용도": "코팅",
-    "전사용도": "전사",
-    "유동": "유동",
-  };
-  const GROUPS = [
-    { label: "다크", purpose: "다크컴파운드", cols: "grid-cols-3" },
-    { label: "화이트", purpose: "화이트컴파운드", cols: "grid-cols-3" },
-    { label: "코팅", purpose: "코팅용도", cols: "grid-cols-1" },
-    { label: "전사", purpose: "전사용도", cols: "grid-cols-1" },
-    { label: "유동", purpose: "유동", cols: "grid-cols-3" },
-  ];
-  return (
-    <div className="flex flex-wrap gap-4">
-      {GROUPS.map(({ label, purpose, cols }) => {
-        const slots = warmerSlots.filter((s: any) => s.purpose === purpose);
-        if (slots.length === 0) return null;
-        return (
-          <div key={purpose}>
-            <div className="mb-1 text-xs font-semibold text-slate-500">{label}</div>
-            <div className={`grid ${cols} gap-1.5`}>
-              {slots.map((s: any) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  disabled={selectedWo?.status === "완료" && !isEditMode}
-                  className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                    eCcpSlotId === s.id
-                      ? "border-blue-500 bg-blue-600 text-white shadow-sm scale-105"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
-                  }`}
-                  onClick={async () => {
-                    if (eCcpSlotId === s.id) return;
-                    const slotId = s.id;
-                    setECcpSlotId(slotId);
-                    await supabaseClient.from("work_orders")
-                      .update({ ccp_slot_id: slotId, updated_at: new Date().toISOString() })
-                      .eq("id", selectedWo.id);
-                    onSlotSaved?.(slotId);
-                  }}
-                >
-                  {s.slot_name}
-                  <span className="ml-1 text-[10px] opacity-70">({PURPOSE_LABEL[s.purpose] ?? s.purpose})</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-})()}
 
+        <div className="flex flex-wrap gap-4">
+          {/* 다크 3×3 */}
+          {warmerSlots.filter((s: any) => s.purpose === "다크컴파운드").length > 0 && (
+            <div>
+              <div className="mb-1 text-xs font-semibold text-slate-500">다크</div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {warmerSlots.filter((s: any) => s.purpose === "다크컴파운드").map(renderSlotBtn)}
+              </div>
+            </div>
+          )}
+
+          {/* 화이트 3×3 */}
+          {warmerSlots.filter((s: any) => s.purpose === "화이트컴파운드").length > 0 && (
+            <div>
+              <div className="mb-1 text-xs font-semibold text-slate-500">화이트</div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {warmerSlots.filter((s: any) => s.purpose === "화이트컴파운드").map(renderSlotBtn)}
+              </div>
+            </div>
+          )}
+
+          {/* 코팅 가로 1줄 */}
+          {warmerSlots.filter((s: any) => s.purpose === "코팅용도").length > 0 && (
+            <div>
+              <div className="mb-1 text-xs font-semibold text-slate-500">코팅</div>
+              <div className="flex flex-row gap-1.5">
+                {warmerSlots.filter((s: any) => s.purpose === "코팅용도").map(renderSlotBtn)}
+              </div>
+            </div>
+          )}
+
+          {/* 전사 */}
+          {warmerSlots.filter((s: any) => s.purpose === "전사용도").length > 0 && (
+            <div>
+              <div className="mb-1 text-xs font-semibold text-slate-500">전사</div>
+              <div className="flex flex-row gap-1.5">
+                {warmerSlots.filter((s: any) => s.purpose === "전사용도").map(renderSlotBtn)}
+              </div>
+            </div>
+          )}
+
+          {/* 유동 2열 3행, 라벨 없음 */}
+          {warmerSlots.filter((s: any) => s.purpose === "유동").length > 0 && (
+            <div>
+              <div className="mb-1 text-xs font-semibold text-slate-500">유동</div>
+              {renderWoFluidGrid()}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 온도 기록 */}
@@ -936,7 +952,6 @@ export function WoCcpCard({
           </div>
         </div>
 
-        {/* 입력 폼 */}
         {(eCcpSlotId || selectedWo?.ccp_slot_id) && (
           <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 space-y-3">
             <div>
@@ -1003,7 +1018,6 @@ export function WoCcpCard({
           </div>
         )}
 
-        {/* 기록 테이블 */}
         {woEvents.length === 0 ? (
           <div className="py-4 text-center text-sm text-slate-400">기록된 온도가 없습니다.</div>
         ) : (
@@ -1032,7 +1046,7 @@ export function WoCcpCard({
                           ? <input className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
                               inputMode="numeric" placeholder="HHmm" maxLength={4}
                               value={ccpWoEditTime} onChange={(e) => setCcpWoEditTime(e.target.value.replace(/[^\d]/g,"").slice(0,4))} />
-                              : toKSTTime(ev.measured_at)}
+                          : toKSTTime(ev.measured_at)}
                       </td>
                       <td className="py-2 px-3 text-xs text-slate-500 whitespace-nowrap">{slotName}</td>
                       <td className="py-2 px-3 whitespace-nowrap">
@@ -1094,7 +1108,6 @@ export function WoCcpCard({
                 })}
               </tbody>
             </table>
-            {/* 요약 */}
             <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-400">
               {(() => {
                 const temps = woEvents.filter((e: WoEvent) => e.temperature != null).map((e: WoEvent) => e.temperature as number);
@@ -1150,7 +1163,7 @@ export function SlotDetailPanel({
           {events.map((ev, idx) => (
             <tr key={ev.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
               <td className="py-2 px-3 font-mono text-sm text-slate-700 whitespace-nowrap">
-              {toKSTTime(ev.measured_at)}
+                {toKSTTime(ev.measured_at)}
               </td>
               <td className="py-2 px-3 whitespace-nowrap">
                 <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ccpSlotEventBadgeCls(ev.event_type)}`}>
