@@ -395,10 +395,37 @@ export function useCcpState(
     await loadWoEvents(workOrderNo, evData?.slot_id ?? null);
   }
 
+  // after
   async function saveSlotMaterialIn(slotId: string, workOrderNo?: string, materialType?: string) {
     if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
     if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
       return showToast("올바른 시각을 입력하세요.", "error");
+
+    const inMeasuredAt = `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`;
+    const slotName = warmerSlots.find((s) => s.id === slotId)?.slot_name ?? slotId;
+
+    // 5-2: 마지막 material_out 시각보다 투입 시각이 이전인지 확인
+    const { data: lastSlotEvents } = await supabase
+      .from("ccp_slot_events")
+      .select("event_type, measured_at")
+      .eq("slot_id", slotId)
+      .eq("event_date", slotActionDate)
+      .order("measured_at", { ascending: false })
+      .limit(5);
+
+    const lastOut = (lastSlotEvents ?? []).find((e) => e.event_type === "material_out");
+    if (lastOut && inMeasuredAt <= lastOut.measured_at) {
+      const outTime = toKSTTime(lastOut.measured_at);
+      return showToast(`⚠ 투입 시각은 마지막 소진/이동(${outTime}) 이후여야 합니다.`, "error");
+    }
+
+    // 동일 시각 중복 체크
+    const duplicate = (lastSlotEvents ?? []).find(
+      (e) => e.measured_at === inMeasuredAt && e.event_type === "material_in"
+    );
+    if (duplicate) return showToast("⚠ 동일 시각에 이미 원료투입 기록이 있습니다.", "error");
+
+    if (!confirm(`[${slotName}] 원료투입을 기록합니다. 맞습니까?`)) return;
 
     setSlotActionSaving(true);
     try {
@@ -406,7 +433,7 @@ export function useCcpState(
         slot_id:       slotId,
         event_date:    slotActionDate,
         event_type:    "material_in",
-        measured_at: `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`,
+        measured_at:   inMeasuredAt,
         work_order_no: workOrderNo ?? null,
         action_note:   null,
         material_type: materialType || null,
@@ -425,17 +452,75 @@ export function useCcpState(
   }
 
 // after
+// after
 async function saveSlotMaterialOut(slotId: string) {
   if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
   if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
     return showToast("올바른 시각을 입력하세요.", "error");
+
+  const outMeasuredAt = `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`;
+  const slotName = warmerSlots.find((s) => s.id === slotId)?.slot_name ?? slotId;
+
+  // 4-A: 이미 마지막 이벤트가 material_out인지 확인 (중복 소진 방지)
+  const { data: lastSlotEvents } = await supabase
+    .from("ccp_slot_events")
+    .select("event_type, measured_at")
+    .eq("slot_id", slotId)
+    .eq("event_date", slotActionDate)
+    .order("measured_at", { ascending: false })
+    .limit(5);
+
+  const lastSlotEv = (lastSlotEvents ?? [])[0];
+  if (lastSlotEv?.event_type === "material_out") {
+    return showToast("⚠ 이미 소진 처리된 슬롯입니다.", "error");
+  }
+
+  // 5-1: 소진 시각이 마지막 material_in 시각보다 이전인지 확인
+  const lastIn = (lastSlotEvents ?? []).find((e) => e.event_type === "material_in");
+  if (lastIn && outMeasuredAt <= lastIn.measured_at) {
+    const inTime = toKSTTime(lastIn.measured_at);
+    return showToast(`⚠ 소진 시각은 원료투입(${inTime}) 이후여야 합니다.`, "error");
+  }
+
+  // 4-B: 동일 시각 중복 체크
+  const duplicate = (lastSlotEvents ?? []).find(
+    (e) => e.measured_at === outMeasuredAt && e.event_type === "material_out"
+  );
+  if (duplicate) return showToast("⚠ 동일 시각에 이미 소진 기록이 있습니다.", "error");
+
+  // 1,3: slotActionDate 기준으로 온도기록 조회 (today 아님)
+  const { data: woEventsData } = await supabase
+    .from("ccp_wo_events")
+    .select("event_type, measured_at")
+    .eq("slot_id", slotId)
+    .gte("measured_at", `${slotActionDate}T00:00:00+09:00`)
+    .lte("measured_at", `${slotActionDate}T23:59:59+09:00`)
+    .order("measured_at", { ascending: true });
+
+  const woEvList = woEventsData ?? [];
+  const lastWoEv = woEvList[woEvList.length - 1];
+
+  // 진행 중 차단 (start/mid_check 상태)
+  if (lastWoEv?.event_type === "start" || lastWoEv?.event_type === "mid_check") {
+    return showToast("⚠ 진행 중인 작업이 있습니다. 종료 후에만 원료소진이 가능합니다.", "error");
+  }
+
+  // 마지막 종료 시각보다 소진 시각이 이전인지 확인
+  if (lastWoEv?.event_type === "end" && outMeasuredAt <= lastWoEv.measured_at) {
+    const endTime = toKSTTime(lastWoEv.measured_at);
+    return showToast(`⚠ 소진 시각은 마지막 종료(${endTime}) 이후여야 합니다.`, "error");
+  }
+
+  // 2: confirm으로 실수 방지
+  if (!confirm(`[${slotName}] 원료소진을 기록합니다.\n소진 후에는 원료가 없는 상태로 변경됩니다. 맞습니까?`)) return;
+
   setSlotActionSaving(true);
   try {
     const { error } = await supabase.from("ccp_slot_events").insert({
       slot_id:       slotId,
       event_date:    slotActionDate,
       event_type:    "material_out",
-      measured_at:   `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`,
+      measured_at:   outMeasuredAt,
       work_order_no: null,
       action_note:   "원료소진",
       created_by:    currentUserIdRef.current,
@@ -443,6 +528,7 @@ async function saveSlotMaterialOut(slotId: string) {
     if (error) return showToast("원료소진 기록 실패: " + error.message, "error");
     showToast("✅ 원료소진이 기록됐습니다!");
     setActiveSlotId(null);
+    setSlotMoveTargetId(null);
     await loadSlotStatus();
     await loadSlotEvents();
   } catch (e: any) {
