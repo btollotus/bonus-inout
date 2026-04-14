@@ -20,22 +20,28 @@ export default function NaverOrderAlert() {
   const prevNaverRef = useRef(0);
   const prevCoupangRef = useRef(0);
 
-  const playBeep = () => {
-    try {
-      const ctx = new AudioContext();
-      [0, 0.15, 0.3].forEach(delay => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = 1200;
-        gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.1);
-        osc.start(ctx.currentTime + delay);
-        osc.stop(ctx.currentTime + delay + 0.1);
-      });
-    } catch {}
-  };
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+const playBeep = () => {
+  try {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new AudioContext();
+    }
+    const ctx = audioCtxRef.current;
+    if (ctx.state === 'suspended') ctx.resume();
+    [0, 0.15, 0.3].forEach(delay => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 1200;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.1);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + 0.1);
+    });
+  } catch {}
+};
 
   const addOrders = (newOnes: Order[]) => {
     setOrders(prev => {
@@ -70,13 +76,13 @@ export default function NaverOrderAlert() {
   };
 
   useEffect(() => {
-    // 첫 클릭 시 AudioContext 활성화
     const unlock = () => {
-      const ctx = new AudioContext();
-      ctx.resume();
-      document.removeEventListener('click', unlock);
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext();
+      }
+      audioCtxRef.current.resume();
     };
-    document.addEventListener('click', unlock);
+    document.addEventListener('click', unlock, { once: true });
   
     pollNaver();
     pollCoupang();
