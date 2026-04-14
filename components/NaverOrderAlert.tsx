@@ -54,9 +54,29 @@ export default function NaverOrderAlert() {
     } catch {}
   };
 
+  const pollCoupang = async () => {
+    try {
+      const res = await fetch("/api/coupang/poll");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.newCount > 0) {
+        playBeep();
+        setCount((prev) => prev + (data.newCount ?? 0));
+        if (data.orders?.length) {
+          setOrders((prev) => {
+            const ids = new Set(prev.map((o) => o.id));
+            const incoming = (data.orders as Order[]).filter((o) => !ids.has(o.id));
+            return [...incoming, ...prev].slice(0, 20);
+          });
+        }
+      }
+    } catch {}
+  };
+  
   useEffect(() => {
     poll();
-    const timer = setInterval(poll, 30_000);
+    pollCoupang();
+    const timer = setInterval(() => { poll(); pollCoupang(); }, 30_000);
     return () => clearInterval(timer);
   }, []);
 
