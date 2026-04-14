@@ -2607,7 +2607,7 @@ if (needsLabel) {
       <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
 <style>@page{size:A4 portrait;margin:12mm 14mm;}body{margin:0;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:10pt;color:#111;}*{box-sizing:border-box;}img{max-width:none;}div[style*="overflow:hidden"] img,div[style*="overflow: hidden"] img{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:cover!important;object-position:top left!important;}textarea{border:1px solid #cbd5e1!important;background:#fff!important;}</style>
     </head><body>${content.innerHTML}
-    <script>window.onload=function(){if(typeof JsBarcode!=="undefined"){document.querySelectorAll("svg[data-barcode]").forEach(function(el){JsBarcode(el,el.getAttribute("data-barcode"),{format:"CODE128",displayValue:false,width:2,height:40,margin:0});});}window.print();};<\/script>
+    <script>window.onload=function(){if(typeof JsBarcode!=="undefined"){document.querySelectorAll("svg[data-barcode]").forEach(function(el){JsBarcode(el,el.getAttribute("data-barcode"),{format:"CODE128",displayValue:false,width:2,height:26,margin:0});});}window.print();};<\/script>
     </body></html>`);
     doc.close();
     // 부모 페이지 title을 임시로 변경 → 인쇄 파일명 적용
@@ -2714,8 +2714,8 @@ const tdS: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 8p
                   <td style={{ border: "1px solid #94a3b8", borderBottom: "none", borderLeft: "none", padding: "5px 10px", background: "#f8fafc", verticalAlign: "middle" }}>
                     {itemBarcode ? (
                       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <span style={{ fontFamily: "monospace", fontSize: "8pt", color: "#444", whiteSpace: "nowrap" }}>{itemBarcode}</span>
-                        <svg data-barcode={itemBarcode} style={{ height: "40px", flex: 1, display: "block", minWidth: 0 }} /> 
+                        <span style={{ fontFamily: "monospace", fontSize: "11pt", color: "#444", whiteSpace: "nowrap" }}>{itemBarcode}</span>
+                        <svg data-barcode={itemBarcode} style={{ height: "26px", flex: 1, display: "block", minWidth: 0 }} /> 
                       </div>
                     ) : <span style={{ color: "#aaa", fontSize: "8pt" }}>바코드 없음</span>}
                   </td>
