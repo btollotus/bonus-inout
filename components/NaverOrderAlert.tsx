@@ -62,10 +62,11 @@ export default function NaverOrderAlert() {
       if (!res.ok) return;
       const data = await res.json();
       const count = data.newCount ?? 0;
-      // 첫 폴링은 소리 없이 카운트만 설정
-      if (initializedRef.current && count > prevNaverRef.current) playBeep();
+      if (count > prevNaverRef.current && prevNaverRef.current !== 0) playBeep();
       prevNaverRef.current = count;
       setNaverCount(count);
+
+
       if (data.orders?.length) addOrders(data.orders.map((o: Order) => ({ ...o, channel: "naver" as const })));
     } catch {}
   };
