@@ -23,7 +23,7 @@ const SUBADMIN_PATHS = [
   "/products", // ✅ /leave 제거 — USER도 접근 가능
 ];
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
   const isPublic =
