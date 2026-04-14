@@ -110,7 +110,7 @@ export default function NaverOrderAlert() {
 
     return (
       <div style={{
-        position: "absolute", top: "calc(100% + 8px)", left: 0,
+        position: "absolute", top: "calc(100% + 8px)", right: 0,
         width: 300, backgroundColor: "#1a1a1a",
         border: "1px solid rgba(255,255,255,0.15)",
         borderRadius: 10, zIndex: 9999,
