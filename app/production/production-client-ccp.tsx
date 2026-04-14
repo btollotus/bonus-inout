@@ -424,6 +424,34 @@ export function useCcpState(
     }
   }
 
+// after
+async function saveSlotMaterialOut(slotId: string) {
+  if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
+  if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
+    return showToast("올바른 시각을 입력하세요.", "error");
+  setSlotActionSaving(true);
+  try {
+    const { error } = await supabase.from("ccp_slot_events").insert({
+      slot_id:       slotId,
+      event_date:    slotActionDate,
+      event_type:    "material_out",
+      measured_at:   `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`,
+      work_order_no: null,
+      action_note:   "원료소진",
+      created_by:    currentUserIdRef.current,
+    });
+    if (error) return showToast("원료소진 기록 실패: " + error.message, "error");
+    showToast("✅ 원료소진이 기록됐습니다!");
+    setActiveSlotId(null);
+    await loadSlotStatus();
+    await loadSlotEvents();
+  } catch (e: any) {
+    showToast("오류: " + (e?.message ?? e), "error");
+  } finally {
+    setSlotActionSaving(false);
+  }
+}
+
   async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: string) {
     if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
 
@@ -498,7 +526,8 @@ export function useCcpState(
     ccpWoEditSaving,
     loadWoEvents, loadSlotEvents, loadSlotStatus,
     saveWoEvent, startWoEventEdit, saveWoEventEdit, deleteWoEvent,
-    saveSlotMaterialIn, saveSlotMove,
+    // after
+    saveSlotMaterialIn, saveSlotMaterialOut, saveSlotMove,
   };
 }
 
@@ -514,6 +543,7 @@ export function SlotStatusPanel({
   slotActionSaving,
   loadSlotStatus,
   saveSlotMaterialIn,
+  saveSlotMaterialOut,
   saveSlotMove,
 }: {
   warmerSlots: { id: string; slot_name: string; purpose: string }[];
@@ -525,6 +555,7 @@ export function SlotStatusPanel({
   slotActionSaving: boolean;
   loadSlotStatus: () => void;
   saveSlotMaterialIn: (slotId: string, workOrderNo?: string, materialType?: string) => void;
+  saveSlotMaterialOut: (slotId: string) => void;
   saveSlotMove: (fromSlotId: string, toSlotId: string) => void;
 }) {
   const [selectedMaterialType, setSelectedMaterialType] = React.useState<string>("");
@@ -692,7 +723,7 @@ export function SlotStatusPanel({
               <div className="mt-4 pt-4 border-t border-slate-200 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="font-semibold text-sm">
-                    {isEmpty ? `🧪 ${slot?.slot_name} — 원료투입` : `🔀 ${slot?.slot_name} — 슬롯이동`}
+                  {isEmpty ? `🧪 ${slot?.slot_name} — 원료투입` : `⚙️ ${slot?.slot_name} — 작업선택`}
                   </div>
                   <button className="text-xs text-slate-400 hover:text-slate-600"
                     onClick={() => { setActiveSlotId(null); setSlotMoveTargetId(null); }}>✕ 닫기</button>
@@ -741,8 +772,49 @@ export function SlotStatusPanel({
                       {slotActionSaving ? "저장 중..." : "🧪 원료투입"}
                     </button>
                   </div>
+             // after
+            ) : (
+              <div className="space-y-3">
+                {/* 원료소진 / 슬롯이동 선택 버튼 */}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className={`rounded-xl border px-4 py-2 text-sm font-bold transition-all ${slotMoveTargetId === "__out__" ? "border-orange-500 bg-orange-600 text-white" : "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"}`}
+                    onClick={() => setSlotMoveTargetId("__out__")}
+                  >🗑️ 원료소진</button>
+                  <button
+                    type="button"
+                    className={`rounded-xl border px-4 py-2 text-sm font-bold transition-all ${slotMoveTargetId !== "__out__" && slotMoveTargetId !== null ? "border-teal-500 bg-teal-600 text-white" : "border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100"}`}
+                    onClick={() => setSlotMoveTargetId(null)}
+                  >🔀 슬롯이동</button>
+                </div>
+
+                {slotMoveTargetId === "__out__" ? (
+                  /* 원료소진 UI */
+                  <div className="flex gap-3 items-end flex-wrap">
+                    <div>
+                      <div className="mb-1 text-xs text-slate-500">소진시각 (HHmm)</div>
+                      <input className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                        inputMode="numeric" placeholder="예: 1430" maxLength={4}
+                        value={slotActionTime}
+                        onChange={(e) => setSlotActionTime(e.target.value.replace(/[^\d]/g,"").slice(0,4))} />
+                      {slotActionTime.length === 4 && (
+                        <div className="mt-0.5 text-xs text-slate-400 text-center">
+                          {slotActionTime.slice(0,2)}:{slotActionTime.slice(2,4)}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      className="rounded-xl border border-orange-500 bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-60"
+                      disabled={slotActionSaving || slotActionTime.length < 4}
+                      onClick={() => saveSlotMaterialOut(activeSlotId!)}
+                    >
+                      {slotActionSaving ? "저장 중..." : "🗑️ 원료소진 확정"}
+                    </button>
+                  </div>
                 ) : (
-                  <div className="space-y-3">
+                  /* 슬롯이동 UI */
+                  <>
                     <div className="text-xs text-slate-500">
                       📤 <span className="font-semibold text-orange-600">{slot?.slot_name}</span>에서 이동할 슬롯을 클릭하세요
                     </div>
@@ -770,14 +842,18 @@ export function SlotStatusPanel({
                         <button
                           className="rounded-xl border border-teal-500 bg-teal-600 px-4 py-2 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60"
                           disabled={slotActionSaving || slotActionTime.length < 4}
-                          onClick={() => saveSlotMove(activeSlotId, slotMoveTargetId)}
+                          onClick={() => saveSlotMove(activeSlotId!, slotMoveTargetId)}
                         >
                           {slotActionSaving ? "저장 중..." : "🔀 이동"}
                         </button>
                       )}
                     </div>
-                  </div>
+                  </>
                 )}
+              </div>
+            )}
+
+
               </div>
             );
           })()}
