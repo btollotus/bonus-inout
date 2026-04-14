@@ -20,7 +20,7 @@ export async function GET() {
 
       function toNaverDate(date: Date): string {
         const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-        return kst.toISOString().replace('Z', '+09:00');
+        return kst.toISOString().slice(0, 23) + '+09:00';
       }
       
       const lastChangedFrom = toNaverDate(
