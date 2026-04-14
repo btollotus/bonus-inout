@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React from "react";
 import { createClient } from "@/lib/supabase/browser";
+import NaverOrderAlert from "@/components/NaverOrderAlert";
 
 const nav = [
   { href: "/inventory",       label: "재고관리",      allowedRoles: ["ADMIN", "SUBADMIN"] },
@@ -96,6 +97,7 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
         <div style={{ maxWidth: 1400, margin: "0 auto", padding: "8px 16px" }}>
           <div style={{ display: "flex", gap: 5, flexWrap: "nowrap", alignItems: "center", overflowX: "auto" }}>
             <span style={{ color: "white", fontWeight: 900, fontSize: 13, marginRight: 6, whiteSpace: "nowrap" }}>BONUSMATE ERP</span>
+            <NaverOrderAlert />
 
             {nav
               .filter((x) => canSee(userRole, x.allowedRoles))
