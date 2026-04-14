@@ -673,6 +673,7 @@ setRealtimeConnected(false);
           slotActionSaving={ccp.slotActionSaving}
           loadSlotStatus={ccp.loadSlotStatus}
           saveSlotMaterialIn={ccp.saveSlotMaterialIn}
+          saveSlotMaterialOut={ccp.saveSlotMaterialOut}
           saveSlotMove={ccp.saveSlotMove}
         />
 
