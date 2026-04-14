@@ -462,6 +462,11 @@ async function saveSlotMaterialOut(slotId: string) {
   const slotName = warmerSlots.find((s) => s.id === slotId)?.slot_name ?? slotId;
 
   // 4-A: 이미 마지막 이벤트가 material_out인지 확인 (중복 소진 방지)
+  if (slotStatus[slotId] === null || slotStatus[slotId] === undefined) {
+    return showToast("⚠ 이미 원료가 없는 슬롯입니다. 소진 처리를 할 수 없습니다.", "error");
+  }
+  
+  // 이후 검증에서 사용할 슬롯 이벤트 조회
   const { data: lastSlotEvents } = await supabase
     .from("ccp_slot_events")
     .select("event_type, measured_at")
@@ -469,11 +474,6 @@ async function saveSlotMaterialOut(slotId: string) {
     .eq("event_date", slotActionDate)
     .order("measured_at", { ascending: false })
     .limit(5);
-
-  const lastSlotEv = (lastSlotEvents ?? [])[0];
-  if (lastSlotEv?.event_type === "material_out") {
-    return showToast("⚠ 이미 소진 처리된 슬롯입니다.", "error");
-  }
 
   // 5-1: 소진 시각이 마지막 material_in 시각보다 이전인지 확인
   const lastIn = (lastSlotEvents ?? []).find((e) => e.event_type === "material_in");
