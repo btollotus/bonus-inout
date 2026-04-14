@@ -18,9 +18,17 @@ export async function GET() {
       .eq("id", 1)
       .single();
 
-    const lastChangedFrom = stateRow?.last_changed_at
-      ?? new Date(Date.now() - 5 * 60_000).toISOString();
-    const now = new Date().toISOString();
+      function toNaverDate(date: Date): string {
+        const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+        return kst.toISOString().replace('Z', '+09:00');
+      }
+      
+      const lastChangedFrom = toNaverDate(
+        stateRow?.last_changed_at
+          ? new Date(stateRow.last_changed_at)
+          : new Date(Date.now() - 5 * 60_000)
+      );
+      const now = toNaverDate(new Date());
 
     // 2. 프록시 서버에서 주문 조회
     const params = new URLSearchParams({ lastChangedFrom, lastChangedTo: now });
