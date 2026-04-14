@@ -70,6 +70,14 @@ export default function NaverOrderAlert() {
   };
 
   useEffect(() => {
+    // 첫 클릭 시 AudioContext 활성화
+    const unlock = () => {
+      const ctx = new AudioContext();
+      ctx.resume();
+      document.removeEventListener('click', unlock);
+    };
+    document.addEventListener('click', unlock);
+  
     pollNaver();
     pollCoupang();
     const timer = setInterval(() => { pollNaver(); pollCoupang(); }, 30_000);
