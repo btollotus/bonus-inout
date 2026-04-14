@@ -19,29 +19,34 @@ export default function NaverOrderAlert() {
   const [open, setOpen] = useState<"naver" | "coupang" | null>(null);
   const prevNaverRef = useRef(0);
   const prevCoupangRef = useRef(0);
-
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const initializedRef = useRef(false);
 
-const playBeep = () => {
-  try {
+  const playBeep = () => {
+    try {
+      if (!audioCtxRef.current) return;
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") ctx.resume();
+      [0, 0.15, 0.3].forEach(delay => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 1200;
+        gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.1);
+        osc.start(ctx.currentTime + delay);
+        osc.stop(ctx.currentTime + delay + 0.1);
+      });
+    } catch {}
+  };
+
+  const unlock = () => {
     if (!audioCtxRef.current) {
       audioCtxRef.current = new AudioContext();
     }
-    const ctx = audioCtxRef.current;
-    if (ctx.state === 'suspended') ctx.resume();
-    [0, 0.15, 0.3].forEach(delay => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = 1200;
-      gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.1);
-      osc.start(ctx.currentTime + delay);
-      osc.stop(ctx.currentTime + delay + 0.1);
-    });
-  } catch {}
-};
+    audioCtxRef.current.resume();
+  };
 
   const addOrders = (newOnes: Order[]) => {
     setOrders(prev => {
@@ -56,10 +61,12 @@ const playBeep = () => {
       const res = await fetch("/api/naver/poll");
       if (!res.ok) return;
       const data = await res.json();
-      if ((data.newCount ?? 0) > prevNaverRef.current) playBeep();
-      prevNaverRef.current = data.newCount ?? 0;
-      setNaverCount(data.newCount ?? 0);
-      if (data.orders?.length) addOrders(data.orders.map((o: Order) => ({ ...o, channel: "naver" })));
+      const count = data.newCount ?? 0;
+      // 첫 폴링은 소리 없이 카운트만 설정
+      if (initializedRef.current && count > prevNaverRef.current) playBeep();
+      prevNaverRef.current = count;
+      setNaverCount(count);
+      if (data.orders?.length) addOrders(data.orders.map((o: Order) => ({ ...o, channel: "naver" as const })));
     } catch {}
   };
 
@@ -68,24 +75,24 @@ const playBeep = () => {
       const res = await fetch("/api/coupang/poll");
       if (!res.ok) return;
       const data = await res.json();
-      if ((data.newCount ?? 0) > prevCoupangRef.current) playBeep();
-      prevCoupangRef.current = data.newCount ?? 0;
-      setCoupangCount(data.newCount ?? 0);
-      if (data.orders?.length) addOrders(data.orders.map((o: Order) => ({ ...o, channel: "coupang" })));
+      const count = data.newCount ?? 0;
+      if (initializedRef.current && count > prevCoupangRef.current) playBeep();
+      prevCoupangRef.current = count;
+      setCoupangCount(count);
+      if (data.orders?.length) addOrders(data.orders.map((o: Order) => ({ ...o, channel: "coupang" as const })));
     } catch {}
   };
 
   useEffect(() => {
-    const unlock = () => {
-      if (!audioCtxRef.current) {
-        audioCtxRef.current = new AudioContext();
-      }
-      audioCtxRef.current.resume();
+    document.addEventListener("click", unlock, { once: true });
+
+    const init = async () => {
+      await pollNaver();
+      await pollCoupang();
+      initializedRef.current = true;
     };
-    document.addEventListener('click', unlock, { once: true });
-  
-    pollNaver();
-    pollCoupang();
+    init();
+
     const timer = setInterval(() => { pollNaver(); pollCoupang(); }, 30_000);
     return () => clearInterval(timer);
   }, []);
@@ -175,7 +182,7 @@ const playBeep = () => {
   return (
     <div style={{ display: "flex", gap: 6 }}>
       <div style={{ position: "relative" }}>
-      <button style={btnStyle(naverCount, "rgba(3,199,90,0.7)")} onClick={() => { setOpen(open === "naver" ? null : "naver"); if (open !== "naver") { setNaverCount(0); prevNaverRef.current = 0; } }}>
+        <button style={btnStyle(naverCount, "rgba(3,199,90,0.7)")} onClick={() => { unlock(); setOpen(open === "naver" ? null : "naver"); if (open !== "naver") { setNaverCount(0); prevNaverRef.current = 0; } }}>
           N 주문
           <Badge count={naverCount} />
         </button>
@@ -183,7 +190,7 @@ const playBeep = () => {
       </div>
 
       <div style={{ position: "relative" }}>
-      <button style={btnStyle(naverCount, "rgba(3,199,90,0.7)")} onClick={() => { setOpen(open === "naver" ? null : "naver"); if (open !== "naver") { setNaverCount(0); prevNaverRef.current = 0; } }}>
+        <button style={btnStyle(coupangCount, "rgba(255,102,0,0.7)")} onClick={() => { unlock(); setOpen(open === "coupang" ? null : "coupang"); if (open !== "coupang") { setCoupangCount(0); prevCoupangRef.current = 0; } }}>
           C 주문
           <Badge count={coupangCount} />
         </button>
