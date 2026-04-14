@@ -118,7 +118,7 @@ export default function NaverOrderAlert() {
 
     return (
       <div style={{
-        position: "absolute", top: "calc(100% + 8px)", right: 0,
+        position: "fixed", top: 48, right: 16,
         width: 300, backgroundColor: "#1a1a1a",
         border: "1px solid rgba(255,255,255,0.15)",
         borderRadius: 10, zIndex: 9999,
@@ -169,7 +169,7 @@ export default function NaverOrderAlert() {
   return (
     <div style={{ display: "flex", gap: 6 }}>
       <div style={{ position: "relative" }}>
-        <button style={btnStyle(naverCount, "rgba(3,199,90,0.7)")} onClick={() => setOpen(open === "naver" ? null : "naver")}>
+      <button style={btnStyle(naverCount, "rgba(3,199,90,0.7)")} onClick={() => { setOpen(open === "naver" ? null : "naver"); if (open !== "naver") { setNaverCount(0); prevNaverRef.current = 0; } }}>
           N 주문
           <Badge count={naverCount} />
         </button>
@@ -177,7 +177,7 @@ export default function NaverOrderAlert() {
       </div>
 
       <div style={{ position: "relative" }}>
-        <button style={btnStyle(coupangCount, "rgba(255,102,0,0.7)")} onClick={() => setOpen(open === "coupang" ? null : "coupang")}>
+      <button style={btnStyle(naverCount, "rgba(3,199,90,0.7)")} onClick={() => { setOpen(open === "naver" ? null : "naver"); if (open !== "naver") { setNaverCount(0); prevNaverRef.current = 0; } }}>
           C 주문
           <Badge count={coupangCount} />
         </button>
