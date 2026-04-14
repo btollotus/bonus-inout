@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 
 let cachedToken: string | null = null;
 let tokenExpiry: number = 0;
 
 export async function GET() {
   try {
-    // 캐시된 토큰이 유효하면 재사용 (만료 1분 전까지)
     if (cachedToken && Date.now() < tokenExpiry - 60_000) {
       return NextResponse.json({ access_token: cachedToken });
     }
@@ -13,7 +13,11 @@ export async function GET() {
     const clientId = process.env.NAVER_CLIENT_ID!;
     const clientSecret = process.env.NAVER_CLIENT_SECRET!;
     const timestamp = Date.now().toString();
-    const password = Buffer.from(`${clientId}_${timestamp}:${clientSecret}`).toString("base64");
+
+    // ✅ bcrypt 해싱 후 base64 인코딩
+    const password = `${clientId}_${timestamp}`;
+    const hashed = await bcrypt.hash(password, clientSecret);
+    const clientSecretSign = Buffer.from(hashed).toString("base64");
 
     const res = await fetch("https://api.commerce.naver.com/external/v1/oauth2/token", {
       method: "POST",
@@ -21,7 +25,7 @@ export async function GET() {
       body: new URLSearchParams({
         client_id: clientId,
         timestamp,
-        client_secret_sign: password,
+        client_secret_sign: clientSecretSign,
         grant_type: "client_credentials",
         type: "SELF",
       }),
