@@ -883,9 +883,11 @@ const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
     </td>
   ));
 })}
+
 {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
   <td key={`empty-out-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
 ))}
+</tr>
 
 
                 {/* 온도기록 행 */}
