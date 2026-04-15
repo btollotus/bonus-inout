@@ -97,6 +97,10 @@ export default function NaverOrderAlert() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    (window as any).__testBeep = playBeep;
+  }, []);
+
   const btnStyle = (count: number, color: string) => ({
     position: "relative" as const,
     padding: "5px 8px",
