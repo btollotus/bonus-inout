@@ -311,11 +311,15 @@ setSlotWoMap(slotMap);
       }
     }
   
-    const newSlotAssignees: Record<string, string> = {};
+    const newSlotAssignees: Record<string, string[]> = {};
     for (const slotId of activeSlotIds) {
+      const assignees: string[] = [];
       for (const wNo of woNosPerSlot[slotId] ?? []) {
-        if (assigneeMap[wNo]) { newSlotAssignees[slotId] = assigneeMap[wNo]; break; }
+        if (assigneeMap[wNo] && !assignees.includes(assigneeMap[wNo])) {
+          assignees.push(assigneeMap[wNo]);
+        }
       }
+      if (assignees.length > 0) newSlotAssignees[slotId] = assignees;
     }
   
     setSlotAssignees(newSlotAssignees);
@@ -904,21 +908,48 @@ setSlotWoMap(slotMap);
                 {/* 판정 + 서명 행 */}
                 <tr>
                   {chunk.map((s, i) => {
-                    const events = woEvents.filter(e => e.slot_id === s.id);
-                    const hasWoEvents = events.length > 0;
-                    const hasNG = events.some(e => e.is_ok === false);
-                    const assignee = slotAssignees[s.id];
-                    const signSrc = assignee ? SIGN_MAP[assignee] : null;
-                    if (!hasWoEvents) return <td key={i} style={{ border: "1px solid #000", padding: "4px", height: 28 }} />;
-                    return (
-                      <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 28 }}>
-                        <div style={{ marginBottom: 2 }}>
-                          <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>판정: {hasNG ? "X" : "O"}</span>
+              
+              const events = woEvents.filter(e => e.slot_id === s.id);
+              const hasWoEvents = events.length > 0;
+              const hasNG = events.some(e => e.is_ok === false);
+              const assignees = slotAssignees[s.id] ?? [];
+              if (!hasWoEvents) return <td key={i} style={{ border: "1px solid #000", padding: "4px", height: 28 }} />;
+              if (assignees.length <= 1) {
+                const assignee = assignees[0];
+                const signSrc = assignee ? SIGN_MAP[assignee] : null;
+                return (
+                  <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 28 }}>
+                    <div style={{ marginBottom: 2 }}>
+                      <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>판정: {hasNG ? "X" : "O"}</span>
+                    </div>
+                    {signSrc && <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} />}
+                    {assignee && !signSrc && <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
+                  </td>
+                );
+              }
+              return (
+                <td key={i} style={{ border: "1px solid #000", fontSize: "8pt", height: 28, padding: 0 }}>
+                  <div style={{ display: "flex", height: "100%" }}>
+                    {assignees.map((assignee, ai) => {
+                      const signSrc = SIGN_MAP[assignee] ?? null;
+                      return (
+                        <div key={ai} style={{
+                          flex: 1,
+                          borderLeft: ai > 0 ? "0.5px solid #000" : "none",
+                          textAlign: "center", padding: "2px 3px",
+                          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                        }}>
+                          <span style={{ fontWeight: "bold" }}>판정: {hasNG ? "X" : "O"}</span>
+                          {signSrc
+                            ? <img src={signSrc} style={{ height: 18, display: "block", margin: "0 auto" }} alt={assignee} />
+                            : <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
                         </div>
-                        {signSrc && <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} />}
-                        {assignee && !signSrc && <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
-                      </td>
-                    );
+                      );
+                    })}
+                  </div>
+                </td>
+              );
+
                   })}
                   {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
                     <td key={`empty-judge-${i}`} style={{ border: "1px solid #000", padding: "4px", height: 28 }} />
