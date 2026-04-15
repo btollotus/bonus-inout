@@ -766,9 +766,12 @@ setSlotWoMap(slotMap);
 
   // renderSection 함수 바로 위에 추가
 const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
+  console.log("woAssigneeMap:", woAssigneeMap); // ← 추가
+  console.log("assignee:", assignee);
   const assigneeWoNos = Object.keys(woAssigneeMap).filter(
     (no) => woAssigneeMap[no] === assignee
   );
+  console.log("assigneeWoNos:", assigneeWoNos);
   const seen = new Set<string>();
   return woEvents
     .filter((e) => e.slot_id === slotId && assigneeWoNos.includes(e.work_order_no))
