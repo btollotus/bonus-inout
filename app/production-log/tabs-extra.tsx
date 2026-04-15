@@ -1017,7 +1017,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
   const [editSaving, setEditSaving] = useState(false);
 
   // 인쇄용 담당자 맵
-  const [slotAssignees, setSlotAssignees] = useState<Record<string, string>>({});
+  const [slotAssignees, setSlotAssignees] = useState<Record<string, string[]>>({});
 
   // 코팅/전사 슬롯만 로드
   useEffect(() => {
