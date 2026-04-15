@@ -146,11 +146,17 @@ export default function NaverOrderAlert() {
         }}>
           <span style={{ color }}>{label} 신규 주문 {count > 0 ? `(${count})` : ""}</span>
           <button
-            onClick={() => {
-              if (channel === "naver") { setNaverCount(0); prevNaverRef.current = 0; }
-              else { setCoupangCount(0); prevCoupangRef.current = 0; }
-              setOpen(null);
-            }}
+onClick={async () => {
+  if (channel === "naver") {
+    await fetch("/api/naver/confirm", { method: "POST" });
+    setNaverCount(0); prevNaverRef.current = 0;
+  } else {
+    await fetch("/api/coupang/confirm", { method: "POST" });
+    setCoupangCount(0); prevCoupangRef.current = 0;
+  }
+  setOpen(null);
+}}
+
             style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 11 }}
           >
             모두 확인
