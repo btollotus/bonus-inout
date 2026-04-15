@@ -37,7 +37,9 @@ export async function GET() {
       return NextResponse.json({ error: "poll_failed", detail: text }, { status: 500 });
     }
 
-    const { newOrders } = await pollRes.json();
+    const rawBody = await pollRes.json();
+    console.log("[poll] proxy raw:", JSON.stringify(rawBody));
+    const { newOrders } = rawBody;
 
     await supabase
       .from("coupang_poll_state")
