@@ -46,19 +46,19 @@ export async function GET() {
       .update({ last_changed_at: new Date().toISOString() })
       .eq("id", 1);
 
-      if (!newOrders?.length) {
-        return NextResponse.json({ newCount: count ?? 0 });
-      }
-
-    await supabase
-      .from("coupang_orders")
-      .upsert(newOrders, { onConflict: "id", ignoreDuplicates: true });
-
-    const { count } = await supabase
+      const { count } = await supabase
       .from("coupang_orders")
       .select("*", { count: "exact", head: true })
       .eq("status", "ACCEPT");
-
+    
+    if (!newOrders?.length) {
+      return NextResponse.json({ newCount: count ?? 0 });
+    }
+    
+    await supabase
+      .from("coupang_orders")
+      .upsert(newOrders, { onConflict: "id", ignoreDuplicates: true });
+      
     return NextResponse.json({ newCount: count ?? newOrders.length, orders: newOrders });
   } catch (e: any) {
     console.error("[coupang/poll] 예외:", e);
