@@ -24,21 +24,25 @@ export default function NaverOrderAlert() {
 
   const playBeep = async () => {
     try {
-      if (!audioCtxRef.current) {
-        return;
-      }
+      if (!audioCtxRef.current) return;
       const ctx = audioCtxRef.current;
       if (ctx.state === "suspended") await ctx.resume();
-        [0, 0.15, 0.3].forEach(delay => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = 2000;
-        gain.gain.setValueAtTime(1.3, ctx.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.1);
-        osc.start(ctx.currentTime + delay);
-        osc.stop(ctx.currentTime + delay + 0.1);
+      
+      // 저주파 + 고주파 동시에 울려서 더 크게 들림
+      const frequencies = [880, 1760];
+      [0, 0.2, 0.4].forEach(delay => {
+        frequencies.forEach(freq => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = "square"; // sine보다 훨씬 크고 날카로움
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(1.0, ctx.currentTime + delay);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.15);
+          osc.start(ctx.currentTime + delay);
+          osc.stop(ctx.currentTime + delay + 0.2);
+        });
       });
     } catch {}
   };
