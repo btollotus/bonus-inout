@@ -22,11 +22,11 @@ export default function NaverOrderAlert() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const initializedRef = useRef(false);
 
-  const playBeep = () => {
+  const playBeep = async () => {
     try {
       if (!audioCtxRef.current) return;
       const ctx = audioCtxRef.current;
-      if (ctx.state === "suspended") ctx.resume();
+      if (ctx.state === "suspended") await ctx.resume();
       [0, 0.15, 0.3].forEach(delay => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
