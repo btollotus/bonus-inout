@@ -23,10 +23,15 @@ export default function NaverOrderAlert() {
   const initializedRef = useRef(false);
 
   const playBeep = async () => {
+    console.log("playBeep 호출, ctx 상태:", audioCtxRef.current?.state ?? "null");
     try {
-      if (!audioCtxRef.current) return;
+      if (!audioCtxRef.current) {
+        console.log("audioCtx 없음 - return");
+        return;
+      }
       const ctx = audioCtxRef.current;
       if (ctx.state === "suspended") await ctx.resume();
+      console.log("resume 후 상태:", ctx.state);
       [0, 0.15, 0.3].forEach(delay => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
