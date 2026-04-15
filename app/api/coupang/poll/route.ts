@@ -11,7 +11,7 @@ const PROXY = "http://175.106.96.167:3000";
 
 function toProxyDate(date: Date): string {
   const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-  return kst.toISOString().substring(0, 13);
+  return kst.toISOString().substring(0, 10);
 }
 
 export async function GET() {
