@@ -281,7 +281,7 @@ setSlotWoMap(slotMap);
   const activeSlotsToday = new Set(slotEvents.map((e) => e.slot_id));
 
   const [slotAssignees, setSlotAssignees] = useState<Record<string, string[]>>({});
-
+  const [woAssigneeMap, setWoAssigneeMap] = useState<Record<string, string>>({});
 
   async function handlePrint() {
     const activeSlotIds = [...activeSlotsToday];
@@ -323,6 +323,7 @@ setSlotWoMap(slotMap);
     }
   
     setSlotAssignees(newSlotAssignees);
+    setWoAssigneeMap(assigneeMap);
   
     // React state 반영 후 iframe 인쇄
     setTimeout(() => {
@@ -763,6 +764,23 @@ setSlotWoMap(slotMap);
     return chunks.length > 0 ? chunks : [[]];
   }
 
+  // renderSection 함수 바로 위에 추가
+const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
+  const assigneeWoNos = Object.keys(woAssigneeMap).filter(
+    (no) => woAssigneeMap[no] === assignee
+  );
+  const seen = new Set<string>();
+  return woEvents
+    .filter((e) => e.slot_id === slotId && assigneeWoNos.includes(e.work_order_no))
+    .sort((a, b) => a.measured_at.localeCompare(b.measured_at))
+    .filter((e) => {
+      const key = `${e.measured_at.slice(11, 16)}_${e.temperature}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
+
   const renderSection = (slots: WarmSlot[], label: string) => {
     if (slots.length === 0) return null;
     const chunks = chunkSlots(slots);
@@ -770,7 +788,10 @@ setSlotWoMap(slotMap);
 
     // 청크별 maxRows 계산
     const chunkMaxRows = chunks.map(chunk =>
-      Math.max(...chunk.map(s => slotWoEventsDedup(s.id).length), 3)
+      Math.max(...chunk.flatMap(s => {
+        const assignees = slotAssignees[s.id] ?? [""];
+        return assignees.map(a => a ? slotWoEventsByAssignee(s.id, a).length : slotWoEventsDedup(s.id).length);
+      }), 3)
     );
 
     // 전체 rowspan = 각 청크의 (1슬롯명+1원료+maxRows+1빈+1판정) 합산
@@ -797,164 +818,154 @@ setSlotWoMap(slotMap);
                       {label}
                     </td>
                   )}
-                  {chunk.map((s, i) => (
-                    <td key={i} style={{
-                      border: "1px solid #000", padding: "4px", textAlign: "center",
-                      fontWeight: "bold", fontSize: "8pt", height: 22,
-                      width: `calc((100% - 44px) / ${CHUNK_SIZE})`,
-                    }}>
-                      {s.slot_name}
-                      {s.purpose === "유동" && (
-                        <span style={{ fontSize: "7pt", marginLeft: 2, color: getSlotMaterialType(s.id) === "다크" ? "#854F0B" : "#A16207" }}>
-                          ({getSlotMaterialType(s.id)})
-                        </span>
-                      )}
-                    </td>
-                  ))}
-                  {/* 빈 칸 채우기 */}
-                  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
-                    <td key={`empty-name-${i}`} style={{ border: "1px solid #000", padding: "4px", width: `calc((100% - 44px) / ${CHUNK_SIZE})` }} />
-                  ))}
+               
+               // after — 슬롯명 행 (담당자별 열 분리)
+{chunk.flatMap((s, i) => {
+  const assignees = slotAssignees[s.id] ?? [""];
+  return assignees.map((assignee, ai) => (
+    <td key={`${i}-${ai}`} style={{
+      border: "1px solid #000", padding: "4px", textAlign: "center",
+      fontWeight: "bold", fontSize: "8pt", height: 22,
+      width: `calc((100% - 44px) / ${CHUNK_SIZE})`,
+    }}>
+      {s.slot_name}
+      {assignees.length > 1 && (
+        <span style={{ fontSize: "6.5pt", marginLeft: 2, color: "#555" }}>({assignee})</span>
+      )}
+      {s.purpose === "유동" && (
+        <span style={{ fontSize: "7pt", marginLeft: 2, color: getSlotMaterialType(s.id) === "다크" ? "#854F0B" : "#A16207" }}>
+          ({getSlotMaterialType(s.id)})
+        </span>
+      )}
+    </td>
+  ));
+})}
+{Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+  <td key={`empty-name-${i}`} style={{ border: "1px solid #000", padding: "4px", width: `calc((100% - 44px) / ${CHUNK_SIZE})` }} />
+))}
+
                 </tr>
 
           {/* 원료투입 행 */}
 <tr>
-  {chunk.map((s, i) => {
-    const ev = slotEvents.filter(e =>
-      e.slot_id === s.id &&
-      e.event_type === "material_in" &&
-      !e.action_note?.includes("→")
-    ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
-    return (
-      <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
-        {ev ? `원료투입: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}` : ""}
-      </td>
-    );
-  })}
-  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
-    <td key={`empty-in-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
-  ))}
+{chunk.flatMap((s, i) => {
+  const assignees = slotAssignees[s.id] ?? [""];
+  const ev = slotEvents.filter(e =>
+    e.slot_id === s.id &&
+    e.event_type === "material_in" &&
+    !e.action_note?.includes("→")
+  ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+  return assignees.map((_, ai) => (
+    <td key={`${i}-${ai}`} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
+      {ai === 0 ? (ev ? `원료투입: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}` : "") : ""}
+    </td>
+  ));
+})}
+{Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+  <td key={`empty-in-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
+))}
 </tr>
-
     
 {/* 슬롯이동 행 */}
 <tr>
-  {chunk.map((s, i) => {
-    // 출발 슬롯: material_out + action_note "→"로 시작
-    const outEv = slotEvents.filter(e =>
-      e.slot_id === s.id &&
-      e.event_type === "material_out" &&
-      e.action_note?.startsWith("→")
-    ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
-    // 도착 슬롯: material_in + action_note "→" 포함 (슬롯이동으로 온 것)
-    const inEv = slotEvents.filter(e =>
-      e.slot_id === s.id &&
-      e.event_type === "material_in" &&
-      e.action_note?.includes("→")
-    ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
-    const ev = outEv ?? inEv;
-    return (
-      <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
-        {ev ? `슬롯이동: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})` : ""}
-      </td>
-    );
-  })}
-  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
-    <td key={`empty-out-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
-  ))}
-</tr>
+{chunk.flatMap((s, i) => {
+  const assignees = slotAssignees[s.id] ?? [""];
+  const outEv = slotEvents.filter(e =>
+    e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→")
+  ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+  const inEv = slotEvents.filter(e =>
+    e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→")
+  ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+  const ev = outEv ?? inEv;
+  return assignees.map((_, ai) => (
+    <td key={`${i}-${ai}`} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
+      {ai === 0 ? (ev ? `슬롯이동: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})` : "") : ""}
+    </td>
+  ));
+})}
+{Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+  <td key={`empty-out-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
+))}
 
 
                 {/* 온도기록 행 */}
                 {Array.from({ length: maxRows }).map((_, rowIdx) => (
-                  <tr key={`temp-${rowIdx}`}>
-                    {chunk.map((s, i) => {
-                      const ev = slotWoEventsDedup(s.id)[rowIdx];
-                      const isNG = ev?.is_ok === false;
-                      const typeLabel = ev ? (WO_EVENT_TYPE_LABEL[ev.event_type] ?? ev.event_type) : "";
-                      return (
-                        <td key={i} style={{
-                          border: "1px solid #000", padding: "4px",
-                          textAlign: "center", fontSize: "8pt",
-                          color: isNG ? "red" : "#000", height: 22,
-                        }}>
-                          {ev ? (
-                            <>
-                              <span style={{
-                                fontSize: "7pt",
-                                background: ev.event_type === "start" ? "#dbeafe"
-                                  : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9",
-                                padding: "0 3px", borderRadius: 2, marginRight: 2,
-                              }}>{typeLabel}</span>
-                              {`(${toKSTTime(ev.measured_at)}) ${ev.temperature ?? ""}℃`}
-                            </>
-                          ) : ""}
-                        </td>
-                      );
-                    })}
-                    {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
-                      <td key={`empty-temp-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
-                    ))}
-                  </tr>
-                ))}
+  <tr key={`temp-${rowIdx}`}>
+    {chunk.flatMap((s, i) => {
+      const assignees = slotAssignees[s.id] ?? [""];
+      return assignees.map((assignee, ai) => {
+        const ev = assignee
+          ? slotWoEventsByAssignee(s.id, assignee)[rowIdx]
+          : slotWoEventsDedup(s.id)[rowIdx];
+        const isNG = ev?.is_ok === false;
+        const typeLabel = ev ? (WO_EVENT_TYPE_LABEL[ev.event_type] ?? ev.event_type) : "";
+        return (
+          <td key={`${i}-${ai}`} style={{
+            border: "1px solid #000", padding: "4px",
+            textAlign: "center", fontSize: "8pt",
+            color: isNG ? "red" : "#000", height: 22,
+          }}>
+            {ev ? (
+              <>
+                <span style={{
+                  fontSize: "7pt",
+                  background: ev.event_type === "start" ? "#dbeafe"
+                    : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9",
+                  padding: "0 3px", borderRadius: 2, marginRight: 2,
+                }}>{typeLabel}</span>
+                {`(${toKSTTime(ev.measured_at)}) ${ev.temperature ?? ""}℃`}
+              </>
+            ) : ""}
+          </td>
+        );
+      });
+    })}
+    {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+      <td key={`empty-temp-${i}`} style={{ border: "1px solid #000", padding: "4px" }} />
+    ))}
+  </tr>
+))}    
 
                 {/* 빈 행 */}
                 <tr>
-                  {Array.from({ length: CHUNK_SIZE }).map((_, i) => (
-                    <td key={i} style={{ border: "1px solid #000", padding: "4px", height: 22 }} />
-                  ))}
-                </tr>
+  {chunk.flatMap((s, i) => {
+    const assignees = slotAssignees[s.id] ?? [""];
+    return assignees.map((_, ai) => (
+      <td key={`${i}-${ai}`} style={{ border: "1px solid #000", padding: "4px", height: 22 }} />
+    ));
+  })}
+  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+    <td key={`empty-blank-${i}`} style={{ border: "1px solid #000", padding: "4px", height: 22 }} />
+  ))}
+</tr>
 
                 {/* 판정 + 서명 행 */}
-                <tr>
-                  {chunk.map((s, i) => {
-              
-              const events = woEvents.filter(e => e.slot_id === s.id);
-              const hasWoEvents = events.length > 0;
-              const hasNG = events.some(e => e.is_ok === false);
-              const assignees = slotAssignees[s.id] ?? [];
-              if (!hasWoEvents) return <td key={i} style={{ border: "1px solid #000", padding: "4px", height: 28 }} />;
-              if (assignees.length <= 1) {
-                const assignee = assignees[0];
-                const signSrc = assignee ? SIGN_MAP[assignee] : null;
-                return (
-                  <td key={i} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 28 }}>
-                    <div style={{ marginBottom: 2 }}>
-                      <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>판정: {hasNG ? "X" : "O"}</span>
-                    </div>
-                    {signSrc && <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} />}
-                    {assignee && !signSrc && <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
-                  </td>
-                );
-              }
-              return (
-                <td key={i} style={{ border: "1px solid #000", fontSize: "8pt", height: 28, padding: 0 }}>
-                  <div style={{ display: "flex", height: "100%" }}>
-                    {assignees.map((assignee, ai) => {
-                      const signSrc = SIGN_MAP[assignee] ?? null;
-                      return (
-                        <div key={ai} style={{
-                          flex: 1,
-                          borderLeft: ai > 0 ? "0.5px solid #000" : "none",
-                          textAlign: "center", padding: "2px 3px",
-                          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                        }}>
-                          <span style={{ fontWeight: "bold" }}>판정: {hasNG ? "X" : "O"}</span>
-                          {signSrc
-                            ? <img src={signSrc} style={{ height: 18, display: "block", margin: "0 auto" }} alt={assignee} />
-                            : <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </td>
-              );
-
-                  })}
-                  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
-                    <td key={`empty-judge-${i}`} style={{ border: "1px solid #000", padding: "4px", height: 28 }} />
-                  ))}
-                </tr>
+               <tr>
+  {chunk.flatMap((s, i) => {
+    const assignees = slotAssignees[s.id] ?? [""];
+    return assignees.map((assignee, ai) => {
+      const evs = assignee
+        ? woEvents.filter(e => e.slot_id === s.id && Object.keys(woAssigneeMap).filter(no => woAssigneeMap[no] === assignee).includes(e.work_order_no))
+        : woEvents.filter(e => e.slot_id === s.id);
+      const hasWoEvents = evs.length > 0;
+      const hasNG = evs.some(e => e.is_ok === false);
+      const signSrc = assignee ? SIGN_MAP[assignee] ?? null : null;
+      if (!hasWoEvents) return <td key={`${i}-${ai}`} style={{ border: "1px solid #000", padding: "4px", height: 28 }} />;
+      return (
+        <td key={`${i}-${ai}`} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 28 }}>
+          <div style={{ marginBottom: 2 }}>
+            <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>판정: {hasNG ? "X" : "O"}</span>
+          </div>
+          {signSrc && <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} alt={assignee} />}
+          {assignee && !signSrc && <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
+        </td>
+      );
+    });
+  })}
+  {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
+    <td key={`empty-judge-${i}`} style={{ border: "1px solid #000", padding: "4px", height: 28 }} />
+  ))}
+</tr>    
               </React.Fragment>
             );
           })}
@@ -1049,6 +1060,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
 
   // 인쇄용 담당자 맵
   const [slotAssignees, setSlotAssignees] = useState<Record<string, string[]>>({});
+  const [woAssigneeMap, setWoAssigneeMap] = useState<Record<string, string>>({});
 
   // 코팅/전사 슬롯만 로드
   useEffect(() => {
