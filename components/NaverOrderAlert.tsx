@@ -65,7 +65,7 @@ export default function NaverOrderAlert() {
       if (!res.ok) return;
       const data = await res.json();
       const count = data.newCount ?? 0;
-      if (count > prevNaverRef.current && prevNaverRef.current !== 0) playBeep();
+      if (count > prevNaverRef.current && initializedRef.current) playBeep();
       prevNaverRef.current = count;
       setNaverCount(count);
       if (data.orders?.length) addOrders(data.orders.map((o: Order) => ({ ...o, channel: "naver" as const })));
