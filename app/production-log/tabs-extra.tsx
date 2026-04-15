@@ -280,7 +280,7 @@ setSlotWoMap(slotMap);
   // 슬롯 목록에서 오늘 활동있는 슬롯 구분
   const activeSlotsToday = new Set(slotEvents.map((e) => e.slot_id));
 
-  const [slotAssignees, setSlotAssignees] = useState<Record<string, string>>({});
+  const [slotAssignees, setSlotAssignees] = useState<Record<string, string[]>>({});
 
 
   async function handlePrint() {
@@ -1243,12 +1243,19 @@ export function OtherHeatingTab({ role, userId, showToast }: {
         if (row.assignee_production) assigneeMap[row.work_order_no] = row.assignee_production;
       }
     }
-    const newAssignees: Record<string, string> = {};
-    for (const s of targetSlots) {
-      for (const wNo of slotWoMap[s.id] ?? []) {
-        if (assigneeMap[wNo]) { newAssignees[s.id] = assigneeMap[wNo]; break; }
-      }
+   
+    const newAssignees: Record<string, string[]> = {};
+for (const s of targetSlots) {
+  const assignees: string[] = [];
+  for (const wNo of slotWoMap[s.id] ?? []) {
+    if (assigneeMap[wNo] && !assignees.includes(assigneeMap[wNo])) {
+      assignees.push(assigneeMap[wNo]);
     }
+  }
+  if (assignees.length > 0) newAssignees[s.id] = assignees;
+}
+
+
     setSlotAssignees(newAssignees);
 
     setTimeout(() => {
@@ -1778,22 +1785,50 @@ export function OtherHeatingTab({ role, userId, showToast }: {
 
             {/* 판정 + 서명 행 */}
             <tr>
-              {targetSlots.map((s) => {
-                const evs = woEvents.filter((e) => e.slot_id === s.id);
-                if (evs.length === 0) return <td key={s.id} style={{ ...tdBase, height: 28 }} />;
-                const hasNG = evs.some((e) => e.is_ok === false);
-                const assignee = slotAssignees[s.id];
-                const signSrc = assignee ? SIGN_MAP[assignee] : null;
-                return (
-                  <td key={s.id} style={{ ...tdBase, textAlign: "center", fontSize: "8pt", height: 28 }}>
-                    <div style={{ marginBottom: 2 }}>
-                      <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>판정: {hasNG ? "X" : "O"}</span>
-                    </div>
-                    {signSrc && <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} alt={assignee} />}
-                    {assignee && !signSrc && <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
-                  </td>
-                );
-              })}
+
+            {targetSlots.map((s) => {
+  const evs = woEvents.filter((e) => e.slot_id === s.id);
+  if (evs.length === 0) return <td key={s.id} style={{ ...tdBase, height: 28 }} />;
+  const hasNG = evs.some((e) => e.is_ok === false);
+  const assignees = slotAssignees[s.id] ?? [];
+  if (assignees.length <= 1) {
+    const assignee = assignees[0];
+    const signSrc = assignee ? SIGN_MAP[assignee] : null;
+    return (
+      <td key={s.id} style={{ ...tdBase, textAlign: "center", fontSize: "8pt", height: 28 }}>
+        <div style={{ marginBottom: 2 }}>
+          <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>판정: {hasNG ? "X" : "O"}</span>
+        </div>
+        {signSrc && <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} alt={assignee} />}
+        {assignee && !signSrc && <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
+      </td>
+    );
+  }
+  // 담당자 2명 이상 — 셀 내부를 세로 분할
+  return (
+    <td key={s.id} style={{ ...tdBase, fontSize: "8pt", height: 28, padding: 0 }}>
+      <div style={{ display: "flex", height: "100%" }}>
+        {assignees.map((assignee, i) => {
+          const signSrc = SIGN_MAP[assignee] ?? null;
+          return (
+            <div key={i} style={{
+              flex: 1,
+              borderLeft: i > 0 ? "0.5px solid #000" : "none",
+              textAlign: "center", padding: "2px 3px",
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            }}>
+              <span style={{ fontWeight: "bold" }}>판정: {hasNG ? "X" : "O"}</span>
+              {signSrc
+                ? <img src={signSrc} style={{ height: 18, display: "block", margin: "0 auto" }} alt={assignee} />
+                : <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </td>
+  );
+})}
+
               {Array.from({ length: CHUNK_SIZE - targetSlots.length }).map((_, i) => (
                 <td key={`ej-${i}`} style={{ ...tdBase, height: 28 }} />
               ))}
