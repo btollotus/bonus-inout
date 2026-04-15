@@ -8,10 +8,12 @@ const supabase = createClient(
 );
 
 export async function POST() {
+  const now = new Date().toISOString();
   await supabase
     .from("naver_orders")
     .update({ confirmed: true })
-    .eq("confirmed", false);
+    .eq("confirmed", false)
+    .lte("created_at", now);
 
   return NextResponse.json({ ok: true });
 }
