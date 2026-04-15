@@ -35,7 +35,7 @@ export default function NaverOrderAlert() {
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.frequency.value = 1200;
-        gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
+        gain.gain.setValueAtTime(1.3, ctx.currentTime + delay);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.1);
         osc.start(ctx.currentTime + delay);
         osc.stop(ctx.currentTime + delay + 0.1);
