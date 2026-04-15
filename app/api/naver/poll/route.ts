@@ -54,7 +54,7 @@ export async function GET() {
     const { count } = await supabase
       .from("naver_orders")
       .select("*", { count: "exact", head: true })
-      .in("status", ["PAYED", "PAYMENT_WAITING"]);
+      .in("status", ["PAYED", "PAYMENT_WAITING"])
       .eq("confirmed", false); 
 
     // 6. 최근 미확인 주문 목록도 반환
