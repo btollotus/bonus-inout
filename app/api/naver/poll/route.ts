@@ -10,8 +10,7 @@ const supabase = createClient(
 const PROXY = "http://175.106.96.167:3000";
 
 function toNaverDate(date: Date): string {
-  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-  return kst.toISOString().slice(0, 23) + '+09:00';
+  return date.toISOString().slice(0, 23) + 'Z';
 }
 
 export async function GET() {
