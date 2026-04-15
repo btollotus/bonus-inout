@@ -46,9 +46,9 @@ export async function GET() {
       .update({ last_changed_at: new Date().toISOString() })
       .eq("id", 1);
 
-    if (!newOrders?.length) {
-      return NextResponse.json({ newCount: 0 });
-    }
+      if (!newOrders?.length) {
+        return NextResponse.json({ newCount: count ?? 0 });
+      }
 
     await supabase
       .from("coupang_orders")

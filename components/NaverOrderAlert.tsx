@@ -78,7 +78,7 @@ export default function NaverOrderAlert() {
       if (!res.ok) return;
       const data = await res.json();
       const count = data.newCount ?? 0;
-      if (count > prevCoupangRef.current && prevCoupangRef.current !== 0) playBeep();
+      if (count > prevCoupangRef.current && initializedRef.current) playBeep();
       prevCoupangRef.current = count;
       setCoupangCount(count);
       if (data.orders?.length) addOrders(data.orders.map((o: Order) => ({ ...o, channel: "coupang" as const })));
