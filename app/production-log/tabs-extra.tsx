@@ -280,8 +280,8 @@ setSlotWoMap(slotMap);
   // 슬롯 목록에서 오늘 활동있는 슬롯 구분
   const activeSlotsToday = new Set(slotEvents.map((e) => e.slot_id));
 
-  const [slotAssignees, setSlotAssignees] = useState<Record<string, string[]>>({});
-  const [woAssigneeMap, setWoAssigneeMap] = useState<Record<string, string>>({});
+  const slotAssigneesRef = React.useRef<Record<string, string[]>>({});
+const woAssigneeMapRef = React.useRef<Record<string, string>>({});
 
   async function handlePrint() {
     const activeSlotIds = [...activeSlotsToday];
@@ -322,8 +322,8 @@ setSlotWoMap(slotMap);
       if (assignees.length > 0) newSlotAssignees[slotId] = assignees;
     }
   
-    setSlotAssignees(newSlotAssignees);
-    setWoAssigneeMap(assigneeMap);
+    slotAssigneesRef.current = newSlotAssignees;
+    woAssigneeMapRef.current = assigneeMap;
   
     // React state 반영 후 iframe 인쇄
     setTimeout(() => {
@@ -765,24 +765,22 @@ setSlotWoMap(slotMap);
   }
 
   // renderSection 함수 바로 위에 추가
-const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
-  console.log("woAssigneeMap:", woAssigneeMap); // ← 추가
-  console.log("assignee:", assignee);
-  const assigneeWoNos = Object.keys(woAssigneeMap).filter(
-    (no) => woAssigneeMap[no] === assignee
-  );
-  console.log("assigneeWoNos:", assigneeWoNos);
-  const seen = new Set<string>();
-  return woEvents
-    .filter((e) => e.slot_id === slotId && assigneeWoNos.includes(e.work_order_no))
-    .sort((a, b) => a.measured_at.localeCompare(b.measured_at))
-    .filter((e) => {
-      const key = `${e.measured_at.slice(11, 16)}_${e.temperature}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-};
+
+  const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
+    const assigneeWoNos = Object.keys(woAssigneeMapRef.current).filter(
+      (no) => woAssigneeMapRef.current[no] === assignee
+    );
+    const seen = new Set<string>();
+    return woEvents
+      .filter((e) => e.slot_id === slotId && assigneeWoNos.includes(e.work_order_no))
+      .sort((a, b) => a.measured_at.localeCompare(b.measured_at))
+      .filter((e) => {
+        const key = `${e.measured_at.slice(11, 16)}_${e.temperature}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  };
 
   const renderSection = (slots: WarmSlot[], label: string) => {
     if (slots.length === 0) return null;
@@ -792,7 +790,7 @@ const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
     // 청크별 maxRows 계산
     const chunkMaxRows = chunks.map(chunk =>
       Math.max(...chunk.flatMap(s => {
-        const assignees = slotAssignees[s.id] ?? [""];
+        const assignees = slotAssigneesRef.current[s.id] ?? [""];
         return assignees.map(a => a ? slotWoEventsByAssignee(s.id, a).length : slotWoEventsDedup(s.id).length);
       }), 3)
     );
@@ -823,8 +821,9 @@ const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
                   )}
                
                // after — 슬롯명 행 (담당자별 열 분리)
-{chunk.flatMap((s, i) => {
-  const assignees = slotAssignees[s.id] ?? [""];
+               {chunk.flatMap((s, i) => {
+  const assignees = slotAssigneesRef.current[s.id] ?? [""];
+
   return assignees.map((assignee, ai) => (
     <td key={`${i}-${ai}`} style={{
       border: "1px solid #000", padding: "4px", textAlign: "center",
@@ -852,10 +851,11 @@ const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
           {/* 원료투입 행 */}
 <tr>
 {chunk.flatMap((s, i) => {
-  const assignees = slotAssignees[s.id] ?? [""];
+  const assignees = slotAssigneesRef.current[s.id] ?? [""];
   const ev = slotEvents.filter(e =>
     e.slot_id === s.id &&
     e.event_type === "material_in" &&
+
     !e.action_note?.includes("→")
   ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
   return assignees.map((_, ai) => (
@@ -872,7 +872,7 @@ const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
 {/* 슬롯이동 행 */}
 <tr>
 {chunk.flatMap((s, i) => {
-  const assignees = slotAssignees[s.id] ?? [""];
+  const assignees = slotAssigneesRef.current[s.id] ?? [""];
   const outEv = slotEvents.filter(e =>
     e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→")
   ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
@@ -896,11 +896,12 @@ const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
                 {/* 온도기록 행 */}
                 {Array.from({ length: maxRows }).map((_, rowIdx) => (
   <tr key={`temp-${rowIdx}`}>
-    {chunk.flatMap((s, i) => {
-      const assignees = slotAssignees[s.id] ?? [""];
-      return assignees.map((assignee, ai) => {
-        const ev = assignee
-          ? slotWoEventsByAssignee(s.id, assignee)[rowIdx]
+{chunk.flatMap((s, i) => {
+  const assignees = slotAssigneesRef.current[s.id] ?? [""];
+  return assignees.map((assignee, ai) => {
+    const ev = assignee
+      ? slotWoEventsByAssignee(s.id, assignee)[rowIdx]
+
           : slotWoEventsDedup(s.id)[rowIdx];
         const isNG = ev?.is_ok === false;
         const typeLabel = ev ? (WO_EVENT_TYPE_LABEL[ev.event_type] ?? ev.event_type) : "";
@@ -933,10 +934,11 @@ const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
 
                 {/* 빈 행 */}
                 <tr>
-  {chunk.flatMap((s, i) => {
-    const assignees = slotAssignees[s.id] ?? [""];
-    return assignees.map((_, ai) => (
-      <td key={`${i}-${ai}`} style={{ border: "1px solid #000", padding: "4px", height: 22 }} />
+                {chunk.flatMap((s, i) => {
+  const assignees = slotAssigneesRef.current[s.id] ?? [""];
+  return assignees.map((_, ai) => (
+    <td key={`${i}-${ai}`} style={{ border: "1px solid #000", padding: "4px", height: 22 }} />
+
     ));
   })}
   {Array.from({ length: CHUNK_SIZE - chunk.length }).map((_, i) => (
@@ -946,12 +948,12 @@ const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
 
                 {/* 판정 + 서명 행 */}
                <tr>
-  {chunk.flatMap((s, i) => {
-    const assignees = slotAssignees[s.id] ?? [""];
-    return assignees.map((assignee, ai) => {
-      const evs = assignee
-        ? woEvents.filter(e => e.slot_id === s.id && Object.keys(woAssigneeMap).filter(no => woAssigneeMap[no] === assignee).includes(e.work_order_no))
-        : woEvents.filter(e => e.slot_id === s.id);
+               {chunk.flatMap((s, i) => {
+  const assignees = slotAssigneesRef.current[s.id] ?? [""];
+  return assignees.map((assignee, ai) => {
+    const evs = assignee
+      ? woEvents.filter(e => e.slot_id === s.id && Object.keys(woAssigneeMapRef.current).filter(no => woAssigneeMapRef.current[no] === assignee).includes(e.work_order_no))
+      : woEvents.filter(e => e.slot_id === s.id);
       const hasWoEvents = evs.length > 0;
       const hasNG = evs.some(e => e.is_ok === false);
       const signSrc = assignee ? SIGN_MAP[assignee] ?? null : null;
@@ -1064,8 +1066,8 @@ export function OtherHeatingTab({ role, userId, showToast }: {
   const [editSaving, setEditSaving] = useState(false);
 
   // 인쇄용 담당자 맵
-  const [slotAssignees, setSlotAssignees] = useState<Record<string, string[]>>({});
-  const [woAssigneeMap, setWoAssigneeMap] = useState<Record<string, string>>({});
+  const slotAssigneesRef = React.useRef<Record<string, string[]>>({});
+  const woAssigneeMapRef = React.useRef<Record<string, string>>({});
 
   // 코팅/전사 슬롯만 로드
   useEffect(() => {
