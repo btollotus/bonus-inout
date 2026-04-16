@@ -1840,7 +1840,7 @@ slotAssigneesRef.current = newAssignees;
   const evs = woEvents.filter((e) => e.slot_id === s.id);
   if (evs.length === 0) return <td key={s.id} style={{ ...tdBase, height: 28 }} />;
   const hasNG = evs.some((e) => e.is_ok === false);
-  const assignees = slotAssignees[s.id] ?? [];
+  const assignees = slotAssigneesRef.current[s.id] ?? [];
   if (assignees.length <= 1) {
     const assignee = assignees[0];
     const signSrc = assignee ? SIGN_MAP[assignee] : null;
