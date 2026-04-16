@@ -324,6 +324,9 @@ const woAssigneeMapRef = React.useRef<Record<string, string>>({});
   
     slotAssigneesRef.current = newSlotAssignees;
     woAssigneeMapRef.current = assigneeMap;
+    console.log("slotAssigneesRef:", JSON.stringify(slotAssigneesRef.current));
+    console.log("woAssigneeMapRef:", JSON.stringify(woAssigneeMapRef.current));
+    console.log("slotWoMap:", JSON.stringify(slotWoMap));
   
     // React state 반영 후 iframe 인쇄
     setTimeout(() => {
