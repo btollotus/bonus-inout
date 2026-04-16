@@ -212,6 +212,9 @@ const [signageList, setSignageList] = useState<any[]>([]);
 const [signageLoading, setSignageLoading] = useState(false);
 const [signageSearch, setSignageSearch] = useState("");
 
+const [sigPage, setSigPage] = useState(1);
+const SIG_PAGE_SIZE = 10;
+
   // 스타일
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
@@ -1322,7 +1325,7 @@ async function loadSignageList() {
         className={`${inp} max-w-[240px]`}
         placeholder="업체명, 담당자 검색..."
         value={signageSearch}
-        onChange={e => setSignageSearch(e.target.value)}
+        onChange={e => { setSignageSearch(e.target.value); setSigPage(1); }}
       />
       <button className={btn} onClick={loadSignageList}>🔄 새로고침</button>
       <span className="text-xs text-slate-400 ml-auto">총 {signageList.length}건</span>
@@ -1330,66 +1333,92 @@ async function loadSignageList() {
 
     {signageLoading ? (
       <div className="py-8 text-center text-sm text-slate-400">불러오는 중...</div>
-    ) : (
-      <div className="overflow-x-auto rounded-2xl border border-slate-200">
-        <table className="w-full table-fixed text-sm">
-          <colgroup>
-            <col style={{ width: 90 }} />
-            <col style={{ width: 120 }} />
-            <col style={{ width: 80 }} />
-            <col style={{ width: 110 }} />
-            <col style={{ width: 70 }} />
-            <col style={{ width: 90 }} />
-            <col style={{ width: 90 }} />
-            <col style={{ width: 60 }} />
-            <col style={{ width: "auto" }} />
-          </colgroup>
-          <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-            <tr>
-              <th className="px-3 py-2 text-left">접수일시</th>
-              <th className="px-3 py-2 text-left">업체명</th>
-              <th className="px-3 py-2 text-left">담당자</th>
-              <th className="px-3 py-2 text-left">연락처</th>
-              <th className="px-3 py-2 text-left">모양</th>
-              <th className="px-3 py-2 text-left">크기</th>
-              <th className="px-3 py-2 text-left">종류</th>
-              <th className="px-3 py-2 text-left">수량</th>
-              <th className="px-3 py-2 text-left">기타문의</th>
-            </tr>
-          </thead>
-          <tbody>
-            {signageList
-              .filter(r => {
-                const q = signageSearch.toLowerCase();
-                return !q || (r[1]??'').toLowerCase().includes(q) || (r[2]??'').toLowerCase().includes(q);
-              })
-              .map((r, i) => (
-                <tr key={i} className="border-t border-slate-200 bg-white hover:bg-slate-50">
-                  <td className="px-3 py-2 text-xs text-slate-500 tabular-nums">
-                  {r[0] ? (() => {
-  // "26. 3. 30. AM 11:57 제출됨" 형식 파싱
-  const m = r[0].match(/(\d{2,4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
-  if (m) {
-    const year = m[1].length === 2 ? `20${m[1]}` : m[1];
-    return `${year}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
-  }
-  return r[0].slice(0, 10);
-})() : "—"}
-                  </td>
-                  <td className="px-3 py-2 font-semibold truncate">{r[1] ?? "—"}</td>
-                  <td className="px-3 py-2 truncate">{r[2] ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs text-slate-500 tabular-nums">{r[3] ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs">{r[4] ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs">{r[5] ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs">{r[6] ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs text-right tabular-nums">{r[7] ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs text-slate-500 truncate">{r[8] ?? "—"}</td>
+    ) : (() => {
+      const filtered = signageList.filter(r => {
+        const q = signageSearch.toLowerCase();
+        return !q || (r[1]??'').toLowerCase().includes(q) || (r[2]??'').toLowerCase().includes(q);
+      });
+      const totalPages = Math.max(1, Math.ceil(filtered.length / SIG_PAGE_SIZE));
+      const paginated = filtered.slice((sigPage - 1) * SIG_PAGE_SIZE, sigPage * SIG_PAGE_SIZE);
+
+      return (
+        <>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                <tr>
+                  <th className="px-3 py-2 text-left whitespace-nowrap">접수일시</th>
+                  <th className="px-3 py-2 text-left whitespace-nowrap">업체명</th>
+                  <th className="px-3 py-2 text-left whitespace-nowrap">담당자</th>
+                  <th className="px-3 py-2 text-left whitespace-nowrap">연락처</th>
+                  <th className="px-3 py-2 text-left whitespace-nowrap">모양</th>
+                  <th className="px-3 py-2 text-left whitespace-nowrap">크기</th>
+                  <th className="px-3 py-2 text-left whitespace-nowrap">종류</th>
+                  <th className="px-3 py-2 text-left whitespace-nowrap">수량</th>
+                  <th className="px-3 py-2 text-left" style={{ minWidth: 260 }}>기타문의</th>
                 </tr>
+              </thead>
+              <tbody>
+                {paginated.map((r, i) => (
+                  <tr key={i} className="border-t border-slate-200 bg-white hover:bg-slate-50">
+                    <td className="px-3 py-2 text-xs text-slate-500 tabular-nums whitespace-nowrap">
+                      {r[0] ? (() => {
+                        const m = r[0].match(/(\d{2,4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
+                        if (m) {
+                          const year = m[1].length === 2 ? `20${m[1]}` : m[1];
+                          return `${year}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
+                        }
+                        return r[0].slice(0, 10);
+                      })() : "—"}
+                    </td>
+                    <td className="px-3 py-2 font-semibold break-words whitespace-normal">{r[1] ?? "—"}</td>
+                    <td className="px-3 py-2 break-words whitespace-normal">{r[2] ?? "—"}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 tabular-nums whitespace-nowrap">{r[3] ?? "—"}</td>
+                    <td className="px-3 py-2 text-xs whitespace-nowrap">{r[4] ?? "—"}</td>
+                    <td className="px-3 py-2 text-xs whitespace-nowrap">{r[5] ?? "—"}</td>
+                    <td className="px-3 py-2 text-xs break-words whitespace-normal">{r[6] ?? "—"}</td>
+                    <td className="px-3 py-2 text-xs text-right tabular-nums whitespace-nowrap">{r[7] ?? "—"}</td>
+                    <td className="px-3 py-2 text-xs text-slate-700 break-words whitespace-normal">{r[8] ?? "—"}</td>
+                  </tr>
+                ))}
+                {paginated.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-8 text-center text-sm text-slate-400">검색 결과가 없습니다.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-center gap-1">
+              <button
+                className={`${btn} px-3 py-1.5 text-xs`}
+                disabled={sigPage === 1}
+                onClick={() => setSigPage(p => Math.max(1, p - 1))}>
+                ← 이전
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                <button key={p}
+                  className={`rounded-xl border px-3 py-1.5 text-xs font-semibold ${sigPage === p ? "border-blue-300 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  onClick={() => setSigPage(p)}>
+                  {p}
+                </button>
               ))}
-          </tbody>
-        </table>
-      </div>
-    )}
+              <button
+                className={`${btn} px-3 py-1.5 text-xs`}
+                disabled={sigPage === totalPages}
+                onClick={() => setSigPage(p => Math.min(totalPages, p + 1))}>
+                다음 →
+              </button>
+              <span className="ml-2 text-xs text-slate-400">
+                {(sigPage - 1) * SIG_PAGE_SIZE + 1}–{Math.min(sigPage * SIG_PAGE_SIZE, filtered.length)} / {filtered.length}건
+              </span>
+            </div>
+          )}
+        </>
+      );
+    })()}
   </div>
 )}
 
