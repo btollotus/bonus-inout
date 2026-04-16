@@ -1311,8 +1311,11 @@ for (const s of targetSlots) {
 
 slotAssigneesRef.current = newAssignees;
 woAssigneeMapRef.current = assigneeMap;
+console.log("slotAssigneesRef:", JSON.stringify(slotAssigneesRef.current));
+console.log("woAssigneeMapRef:", JSON.stringify(woAssigneeMapRef.current));
+console.log("slotWoMap:", JSON.stringify(slotWoMap));
 
-    setTimeout(() => {
+setTimeout(() => {
       const content = document.getElementById("other-heating-print-inner");
       if (!content) return;
       const iframe = document.createElement("iframe");
