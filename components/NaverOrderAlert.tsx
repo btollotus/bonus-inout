@@ -36,7 +36,7 @@ export default function NaverOrderAlert() {
           const gain = ctx.createGain();
           osc.connect(gain);
           gain.connect(ctx.destination);
-          osc.type = "square"; // sine보다 훨씬 크고 날카로움
+          osc.type = "sine"; // sine보다 훨씬 크고 날카로움
           osc.frequency.value = freq;
           gain.gain.setValueAtTime(1.0, ctx.currentTime + delay);
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.15);
