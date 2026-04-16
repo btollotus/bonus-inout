@@ -696,7 +696,7 @@ setRealtimeConnected(false);
           <div className="flex items-center gap-2">
             <button className={isKiseongForm ? "rounded-xl border border-emerald-500 bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700" : "rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"}
               onClick={() => { if (isKiseongForm) resetKiseongForm(); else { setIsKiseongForm(true); setSelectedWo(null); } }}>📦 재고생산</button>
-            <button className={btn} onClick={loadWoList}>🔄 새로고침</button>
+          <button className={btn} onClick={() => { setWoOffset(0); loadWoList(0); }}>🔄 새로고침</button>
           </div>
         </div>
 
