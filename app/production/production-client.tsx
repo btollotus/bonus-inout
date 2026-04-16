@@ -198,6 +198,8 @@ export default function ProductionClient() {
   const [productionCount, setProductionCount] = useState(0);
   const [sortBy, setSortBy] = useState<"created_at" | "delivery_date">("created_at");
   const [filterStatus, setFilterStatus] = useState<"전체" | "생산중" | "완료">("생산중");
+  const [woOffset, setWoOffset] = useState(0);
+const [hasMore, setHasMore] = useState(false);
   const [filterFoodCategory, setFilterFoodCategory] = useState<"전체" | "다크" | "화이트" | "전사지">("전체");
   const [filterSearch, setFilterSearch] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
@@ -422,17 +424,23 @@ setRealtimeConnected(false);
     if (error) { setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: woChecks[assigneeKey], [statusKey]: woChecks[statusKey] } : prev); setMsg("진행상태 저장 실패: " + error.message); }
   }
 
-  const loadWoList = useCallback(async () => {
+  const loadWoList = useCallback(async (offset = 0) => {
     setLoading(true); setMsg(null);
     try {
-      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).limit(200);
+      const LIMIT = filterStatus === "완료" ? 20 : 200;
+      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
       if (filterStatus !== "전체") q = q.eq("status", filterStatus);
       if (filterDateFrom) q = q.gte("order_date", filterDateFrom);
       if (filterDateTo) q = q.lte("order_date", filterDateTo);
       const { data, error } = await q;
       if (error) return setMsg(error.message);
       const list = (data ?? []) as WorkOrderRow[];
-      setWoList(list);
+      if (offset === 0) {
+        setWoList(list);
+      } else {
+        setWoList((prev) => [...prev, ...list]);
+      }
+      setHasMore(list.length === LIMIT);
       if (filterStatus !== "생산중") {
         supabase.from("work_orders").select("id", { count: "exact", head: true }).eq("status", "생산중").then(({ count }) => setProductionCount(count ?? 0));
       } else { setProductionCount(list.filter((w) => w.status === "생산중").length); }
@@ -731,8 +739,22 @@ setRealtimeConnected(false);
             <div className="mb-3 space-y-2">
               <input className={inp} placeholder="거래처명 / 제품명 / 바코드 검색" value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} />
               <div className="flex flex-wrap gap-1">
-  {(["전체", "생산중", "완료"] as const).map((s) => (
-    <button key={s} className={filterStatus === s ? btnOn : btn} onClick={() => setFilterStatus(s)}>
+              {(["전체", "생산중", "완료"] as const).map((s) => (
+    <button key={s} className={filterStatus === s ? btnOn : btn} onClick={() => {
+      setWoOffset(0);
+      setHasMore(false);
+      if (s === "완료" && filterStatus !== "완료") {
+        const today = new Date();
+        const from = new Date(today); from.setDate(today.getDate() - 7);
+        setFilterDateFrom(from.toISOString().slice(0, 10));
+        setFilterDateTo(today.toISOString().slice(0, 10));
+      } else if (s !== "완료") {
+        setFilterDateFrom("");
+        setFilterDateTo("");
+      }
+      setFilterStatus(s);
+    }}>
+
       {s}
       {s === "생산중" && <span className={`ml-1 tabular-nums text-xs ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>{productionCount}</span>}
       {s === "완료" && <span className={`ml-1 tabular-nums text-xs ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>{woList.filter(w => w.status === "완료").length}</span>}
@@ -787,7 +809,20 @@ setRealtimeConnected(false);
                       </div>
                     );
                   })}
-                </div>
+</div>
+                {hasMore && filterStatus === "완료" && (
+                  <button
+                    className={`w-full ${btn} py-2.5`}
+                    disabled={loading}
+                    onClick={() => {
+                      const next = woOffset + 20;
+                      setWoOffset(next);
+                      loadWoList(next);
+                    }}
+                  >
+                    {loading ? "불러오는 중..." : "🔽 20건 더 보기"}
+                  </button>
+                )}
               )}
           </div>
 
