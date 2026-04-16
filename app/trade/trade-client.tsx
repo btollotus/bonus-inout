@@ -2480,7 +2480,7 @@ function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: (
       if (!isChocBase && mold > 0 && qty > 0) {
         if (isNeoColor) {
           const perRow = mold === 108 ? 9 : mold === 88 ? 8 : mold === 66 ? 6 : mold === 63 ? 7 : Math.round(Math.sqrt(mold));
-          const buffer = mold === 63 || mold === 66 ? 20 : 30;
+          const buffer = mold === 63 ? 10 : 20;
 
           const totalNeeded = qty + buffer;
           const sheets = totalNeeded / mold;
@@ -2498,7 +2498,7 @@ function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: (
 // ── 라벨 수량 추가 (포장방법이 벌크인 경우) ──
 const needsLabel = (wo.packaging_type ?? "").includes("벌크");
 if (needsLabel) {
-  const labelBuffer = mold === 63 || mold === 66 ? 20 : 30;
+  const labelBuffer = mold === 63 ? 10 : 20;
   const labelQty = Math.ceil((qty + labelBuffer) / (6 * mold));
   init[item.id] = init[item.id] + `  라벨: ${labelQty}장`;
 }
