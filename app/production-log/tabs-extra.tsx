@@ -1369,7 +1369,30 @@ slotAssigneesRef.current = newAssignees;
   })();
 
   const CHUNK_SIZE = 4;
-  const maxRows = Math.max(...targetSlots.map((s) => slotWoEventsDedup(s.id).length), 3);
+  const slotWoEventsByAssignee = (slotId: string, assignee: string) => {
+    const assigneeWoNos = Object.keys(woAssigneeMapRef.current).filter(
+      (no) => woAssigneeMapRef.current[no] === assignee
+    );
+    const seen = new Set<string>();
+    return woEvents
+      .filter((e) => e.slot_id === slotId && assigneeWoNos.includes(e.work_order_no))
+      .sort((a, b) => a.measured_at.localeCompare(b.measured_at))
+      .filter((e) => {
+        const key = `${e.measured_at.slice(11, 16)}_${e.temperature}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  };
+  
+  const maxRows = Math.max(
+    ...targetSlots.flatMap((s) => {
+      const assignees = slotAssigneesRef.current[s.id] ?? [""];
+      return assignees.map((a) => a ? slotWoEventsByAssignee(s.id, a).length : slotWoEventsDedup(s.id).length);
+    }),
+    3
+  );
+
   const colWidth = `calc((100% - 44px) / ${CHUNK_SIZE})`;
 
   return (
@@ -1750,88 +1773,108 @@ slotAssigneesRef.current = newAssignees;
               <td rowSpan={3 + maxRows + 2} style={{ ...tdBase, fontWeight: "bold", textAlign: "center", width: 44, fontSize: "8pt", writingMode: "vertical-rl" as any, verticalAlign: "middle" }}>
                 코팅·전사
               </td>
-              {targetSlots.map((s) => (
-                <td key={s.id} style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "8pt", height: 22 }}>
-                  {s.slot_name}
-                </td>
-              ))}
-              {Array.from({ length: CHUNK_SIZE - targetSlots.length }).map((_, i) => (
-                <td key={`en-${i}`} style={tdBase} />
-              ))}
+              {targetSlots.flatMap((s, i) => {
+  const assignees = slotAssigneesRef.current[s.id] ?? [""];
+  return assignees.map((assignee, ai) => (
+    <td key={`${i}-${ai}`} style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "8pt", height: 22 }}>
+      {s.slot_name}
+      {assignees.length > 1 && (
+        <span style={{ fontSize: "6.5pt", marginLeft: 2, color: "#555" }}>({assignee})</span>
+      )}
+    </td>
+  ));
+})}
+{Array.from({ length: CHUNK_SIZE - targetSlots.length }).map((_, i) => (
+  <td key={`en-${i}`} style={tdBase} />
+))}
+
             </tr>
 
             {/* 원료투입 행 */}
             <tr>
-              {targetSlots.map((s) => {
-                const ev = slotEvents.filter((e) =>
-                  e.slot_id === s.id && e.event_type === "material_in" && !e.action_note?.includes("→")
-                ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
-                return (
-                  <td key={s.id} style={{ ...tdBase, textAlign: "center", fontSize: "8pt", height: 22 }}>
-                    {ev ? `원료투입: ${ev.measured_at.slice(5, 10).replace("-", "/")} ${toKSTTime(ev.measured_at)}` : ""}
-                  </td>
-                );
-              })}
-              {Array.from({ length: CHUNK_SIZE - targetSlots.length }).map((_, i) => (
-                <td key={`ei-${i}`} style={tdBase} />
-              ))}
+            {targetSlots.flatMap((s, i) => {
+  const assignees = slotAssigneesRef.current[s.id] ?? [""];
+  const ev = slotEvents.filter((e) =>
+    e.slot_id === s.id && e.event_type === "material_in" && !e.action_note?.includes("→")
+  ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+  return assignees.map((_, ai) => (
+    <td key={`${i}-${ai}`} style={{ ...tdBase, textAlign: "center", fontSize: "8pt", height: 22 }}>
+      {ai === 0 ? (ev ? `원료투입: ${ev.measured_at.slice(5, 10).replace("-", "/")} ${toKSTTime(ev.measured_at)}` : "") : ""}
+    </td>
+  ));
+})}
+{Array.from({ length: CHUNK_SIZE - targetSlots.length }).map((_, i) => (
+  <td key={`ei-${i}`} style={tdBase} />
+))}
             </tr>
 
             {/* 슬롯이동 행 */}
             <tr>
-              {targetSlots.map((s) => {
-                const outEv = slotEvents.filter((e) =>
-                  e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→")
-                ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
-                const inEv = slotEvents.filter((e) =>
-                  e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→")
-                ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
-                const ev = outEv ?? inEv;
-                return (
-                  <td key={s.id} style={{ ...tdBase, textAlign: "center", fontSize: "8pt", height: 22 }}>
-                    {ev ? `슬롯이동: ${ev.measured_at.slice(5, 10).replace("-", "/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})` : ""}
-                  </td>
-                );
-              })}
-              {Array.from({ length: CHUNK_SIZE - targetSlots.length }).map((_, i) => (
-                <td key={`eo-${i}`} style={tdBase} />
-              ))}
+            {targetSlots.flatMap((s, i) => {
+  const assignees = slotAssigneesRef.current[s.id] ?? [""];
+  const outEv = slotEvents.filter((e) =>
+    e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→")
+  ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+  const inEv = slotEvents.filter((e) =>
+    e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→")
+  ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
+  const ev = outEv ?? inEv;
+  return assignees.map((_, ai) => (
+    <td key={`${i}-${ai}`} style={{ ...tdBase, textAlign: "center", fontSize: "8pt", height: 22 }}>
+      {ai === 0 ? (ev ? `슬롯이동: ${ev.measured_at.slice(5, 10).replace("-", "/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})` : "") : ""}
+    </td>
+  ));
+})}
+{Array.from({ length: CHUNK_SIZE - targetSlots.length }).map((_, i) => (
+  <td key={`eo-${i}`} style={tdBase} />
+))}
             </tr>
 
             {/* 온도기록 행 */}
             {Array.from({ length: maxRows }).map((_, rowIdx) => (
-              <tr key={`temp-${rowIdx}`}>
-                {targetSlots.map((s) => {
-                  const ev = slotWoEventsDedup(s.id)[rowIdx];
-                  const isNG = ev?.is_ok === false;
-                  const typeLabel = ev ? (WO_EVENT_TYPE_LABEL[ev.event_type] ?? ev.event_type) : "";
-                  return (
-                    <td key={s.id} style={{ ...tdBase, textAlign: "center", fontSize: "8pt", color: isNG ? "red" : "#000", height: 22 }}>
-                      {ev ? (
-                        <>
-                          <span style={{
-                            fontSize: "7pt",
-                            background: ev.event_type === "start" ? "#dbeafe" : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9",
-                            padding: "0 3px", borderRadius: 2, marginRight: 2,
-                          }}>{typeLabel}</span>
-                          {`(${toKSTTime(ev.measured_at)}) ${ev.temperature ?? ""}℃`}
-                        </>
-                      ) : ""}
-                    </td>
-                  );
-                })}
-                {Array.from({ length: CHUNK_SIZE - targetSlots.length }).map((_, i) => (
-                  <td key={`et-${i}`} style={tdBase} />
-                ))}
-              </tr>
-            ))}
+  <tr key={`temp-${rowIdx}`}>
+    {targetSlots.flatMap((s, i) => {
+      const assignees = slotAssigneesRef.current[s.id] ?? [""];
+      return assignees.map((assignee, ai) => {
+        const ev = assignee
+          ? slotWoEventsByAssignee(s.id, assignee)[rowIdx]
+          : slotWoEventsDedup(s.id)[rowIdx];
+        const isNG = ev?.is_ok === false;
+        const typeLabel = ev ? (WO_EVENT_TYPE_LABEL[ev.event_type] ?? ev.event_type) : "";
+        return (
+          <td key={`${i}-${ai}`} style={{ ...tdBase, textAlign: "center", fontSize: "8pt", color: isNG ? "red" : "#000", height: 22 }}>
+            {ev ? (
+              <>
+                <span style={{
+                  fontSize: "7pt",
+                  background: ev.event_type === "start" ? "#dbeafe" : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9",
+                  padding: "0 3px", borderRadius: 2, marginRight: 2,
+                }}>{typeLabel}</span>
+                {`(${toKSTTime(ev.measured_at)}) ${ev.temperature ?? ""}℃`}
+              </>
+            ) : ""}
+          </td>
+        );
+      });
+    })}
+    {Array.from({ length: CHUNK_SIZE - targetSlots.length }).map((_, i) => (
+      <td key={`et-${i}`} style={tdBase} />
+    ))}
+  </tr>
+))}     
 
             {/* 빈 행 */}
             <tr>
-              {Array.from({ length: CHUNK_SIZE }).map((_, i) => (
-                <td key={i} style={{ ...tdBase, height: 22 }} />
-              ))}
-            </tr>
+  {targetSlots.flatMap((s, i) => {
+    const assignees = slotAssigneesRef.current[s.id] ?? [""];
+    return assignees.map((_, ai) => (
+      <td key={`${i}-${ai}`} style={{ ...tdBase, height: 22 }} />
+    ));
+  })}
+  {Array.from({ length: CHUNK_SIZE - targetSlots.length }).map((_, i) => (
+    <td key={`eb-${i}`} style={{ ...tdBase, height: 22 }} />
+  ))}
+</tr>
 
             {/* 판정 + 서명 행 */}
             <tr>
