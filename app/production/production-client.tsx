@@ -806,23 +806,23 @@ setRealtimeConnected(false);
                           </div>
                         </button>
                         {isAdmin ? <button className="absolute top-2 right-2 hidden group-hover:flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-500 hover:bg-red-500 hover:text-white text-xs font-bold transition-colors z-10" onClick={(e) => { e.stopPropagation(); deleteWo(wo.id); }} title="작업지시서 삭제">✕</button> : null}
-                      </div>
+                        </div>
                     );
                   })}
-</div>
-                {hasMore && filterStatus === "완료" && (
-                  <button
-                    className={`w-full ${btn} py-2.5`}
-                    disabled={loading}
-                    onClick={() => {
-                      const next = woOffset + 20;
-                      setWoOffset(next);
-                      loadWoList(next);
-                    }}
-                  >
-                    {loading ? "불러오는 중..." : "🔽 20건 더 보기"}
-                  </button>
-                )}
+                  {hasMore && filterStatus === "완료" && (
+                    <button
+                      className={`w-full ${btn} py-2.5`}
+                      disabled={loading}
+                      onClick={() => {
+                        const next = woOffset + 20;
+                        setWoOffset(next);
+                        loadWoList(next);
+                      }}
+                    >
+                      {loading ? "불러오는 중..." : "🔽 20건 더 보기"}
+                    </button>
+                  )}
+                </div>
               )}
           </div>
 
