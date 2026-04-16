@@ -27,6 +27,9 @@ type Employee = {
   birthday_type: 'solar' | 'lunar' | null
   signature_url: string | null
   created_at: string
+  shoe_size: string | null
+  top_size: string | null
+  bottom_size: string | null
 }
 
 type HealthCertRecord = {
@@ -54,6 +57,7 @@ const EMPTY_FORM = {
   fuel_efficiency: '',
   emergency_contact: '', bank_name: '', bank_account: '', rrn: '',
   birthday: '', birthday_type: 'solar' as 'solar' | 'lunar',
+  shoe_size: '', top_size: '', bottom_size: '',
 }
 
 // ── 에러 한글화 ──────────────────────────────────────────
@@ -115,6 +119,7 @@ function detectChanges(original: Employee, newForm: typeof EMPTY_FORM) {
     commute_distance: '출퇴근거리', fuel_efficiency: '연비',
     emergency_contact: '비상연락처', bank_name: '은행명', bank_account: '계좌번호',
     birthday: '생일', birthday_type: '생일구분',
+    shoe_size: '신발사이즈', top_size: '상의사이즈', bottom_size: '하의사이즈',
   }
   const changes: Record<string, { before: unknown; after: unknown }> = {}
   for (const [key, label] of Object.entries(fieldMap)) {
@@ -420,7 +425,7 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
     return data?.signedUrl ?? null
   }
 
-  function handleEdit(emp: Employee) {
+  async function handleEdit(emp: Employee) {
     setEditingId(emp.id)
     setEditingEmployee(emp)
     setEditingAuthId(emp.auth_user_id)
@@ -443,12 +448,23 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
       rrn: '',
       birthday: emp.birthday || '',
       birthday_type: emp.birthday_type || 'solar',
+      shoe_size: emp.shoe_size || '',
+      top_size: emp.top_size || '',
+      bottom_size: emp.bottom_size || '',
     })
     setShowForm(true)
     setError('')
     setSuccess('')
     setSignatureFile(null)
-  setSignaturePreview(emp.signature_url ?? null)
+  
+    // ✅ path → signed URL 변환 후 preview 세팅
+    if (emp.signature_url) {
+      const url = await getSignatureUrl(emp.signature_url)
+      setSignaturePreview(url)
+    } else {
+      setSignaturePreview(null)
+    }
+  
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -567,6 +583,9 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
         ...basePayload,
         birthday: form.birthday || null,
         birthday_type: form.birthday ? form.birthday_type : null,
+        shoe_size: form.shoe_size || null,
+top_size: form.top_size || null,
+bottom_size: form.bottom_size || null,
       }
 
       if (editingId) {
@@ -926,6 +945,31 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
                   )}
                 </div>
               </div>
+{/* 신체 사이즈 */}
+<div>
+  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">신체 사이즈</p>
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">신발 사이즈</label>
+      <input name="shoe_size" value={form.shoe_size} onChange={handleChange}
+        placeholder="예: 270"
+        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    </div>
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">근무복 상의 사이즈</label>
+      <input name="top_size" value={form.top_size} onChange={handleChange}
+        placeholder="예: L, XL, 105"
+        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    </div>
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">근무복 하의 사이즈</label>
+      <input name="bottom_size" value={form.bottom_size} onChange={handleChange}
+        placeholder="예: 32, 95"
+        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    </div>
+  </div>
+</div>
+
 
               {/* 차량/통근 정보 */}
               <div>
@@ -980,9 +1024,7 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
               </div>
             </form>
           </div>
-        )}
-
-        {/* 직원 목록 */}
+      )}
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-base font-semibold text-gray-800">
@@ -1117,6 +1159,18 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
                             {emp.car_type ? `${emp.car_type}${emp.fuel_type ? ` (${emp.fuel_type})` : ''}` : '-'}
                           </span>
                         </div>
+                        {(emp.shoe_size || emp.top_size || emp.bottom_size) && (
+                          <div className="flex gap-1.5">
+                            <span className="text-gray-400 shrink-0">사이즈</span>
+                            <span className="text-gray-700">
+                              {[
+                                emp.shoe_size ? `신발 ${emp.shoe_size}` : null,
+                                emp.top_size  ? `상의 ${emp.top_size}`  : null,
+                                emp.bottom_size ? `하의 ${emp.bottom_size}` : null,
+                              ].filter(Boolean).join(' / ')}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex gap-1.5">
                           <span className="text-gray-400 shrink-0">통근</span>
                           <span className="text-gray-700">
