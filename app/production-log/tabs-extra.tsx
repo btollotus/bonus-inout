@@ -1306,7 +1306,7 @@ for (const s of targetSlots) {
 }
 
 
-    setSlotAssignees(newAssignees);
+slotAssigneesRef.current = newAssignees;
 
     setTimeout(() => {
       const content = document.getElementById("other-heating-print-inner");
