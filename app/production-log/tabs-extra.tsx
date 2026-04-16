@@ -1310,6 +1310,7 @@ for (const s of targetSlots) {
 
 
 slotAssigneesRef.current = newAssignees;
+woAssigneeMapRef.current = assigneeMap;
 
     setTimeout(() => {
       const content = document.getElementById("other-heating-print-inner");
