@@ -583,7 +583,8 @@ setRealtimeConnected(false);
     setMsg(`⏳ 시작 - role:${role}, isAdminOrSubadmin:${isAdminOrSubadmin}`);
     try {
       if (isAdminOrSubadmin) {
-        const { error: basicErr } = await supabase.from("work_orders").update({ sub_name: eSubName.trim() || null, product_name: eProductName.trim(), food_type: eFoodType.trim() || null, logo_spec: eLogoSpec.trim() || null, thickness: eThickness || null, delivery_method: eDeliveryMethod || null, packaging_type: ePackagingType || null, tray_slot: ePackagingType === "트레이" ? eTraySlot : null, package_unit: ePackageUnit || null, mold_per_sheet: eMoldPerSheet ? Number(eMoldPerSheet) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+        const { error: basicErr } = await supabase.from("work_orders").update({ sub_name: eSubName.trim() || null, product_name: eProductName.trim(), food_type: eFoodType.trim() || null, logo_spec: eLogoSpec.trim() || null, thickness: eThickness || null, delivery_method: eDeliveryMethod || null, packaging_type: ePackagingType === "트레이" ? `트레이-${eTraySlot}` : ePackagingType || null,
+        tray_slot: null, package_unit: ePackageUnit || null, mold_per_sheet: eMoldPerSheet ? Number(eMoldPerSheet) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
         if (basicErr) { setMsg("기본정보 저장 실패: " + basicErr.message); setIsCompleting(false); return; }
       }
       if (woChecks) {
@@ -1066,7 +1067,8 @@ setRealtimeConnected(false);
                         if (!selectedWo) return;
                         try {
                           if (isAdminOrSubadmin) {
-                            const { error } = await supabase.from("work_orders").update({ sub_name: eSubName.trim() || null, product_name: eProductName.trim(), food_type: eFoodType.trim() || null, logo_spec: eLogoSpec.trim() || null, thickness: eThickness || null, delivery_method: eDeliveryMethod || null, packaging_type: ePackagingType || null, tray_slot: ePackagingType === "트레이" ? eTraySlot : null, package_unit: ePackageUnit || null, mold_per_sheet: eMoldPerSheet ? Number(eMoldPerSheet) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+                            const { error } = await supabase.from("work_orders").update({ sub_name: eSubName.trim() || null, product_name: eProductName.trim(), food_type: eFoodType.trim() || null, logo_spec: eLogoSpec.trim() || null, thickness: eThickness || null, delivery_method: eDeliveryMethod || null, packaging_type: ePackagingType === "트레이" ? `트레이-${eTraySlot}` : ePackagingType || null,
+                            tray_slot: null, package_unit: ePackageUnit || null, mold_per_sheet: eMoldPerSheet ? Number(eMoldPerSheet) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
                             if (error) { showToast("❌ 수정 실패: " + error.message, "error"); return; }
                           }
                           if (woChecks) {
