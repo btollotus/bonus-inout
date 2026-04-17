@@ -1338,7 +1338,7 @@ if (copyPartnerId) {
       try {
         const { data: wo } = await supabase
           .from("work_orders")
-          .select("id,sub_name,logo_spec,thickness,packaging_type,mold_per_sheet,note,work_order_items(id,sub_items,images,barcode_no)")
+          .select("id,sub_name,logo_spec,thickness,packaging_type,mold_per_sheet,note,work_order_items(id,sub_items,images,barcode_no,unit_weight)")
           .eq("linked_order_id", r.rawId)
           .limit(1)
           .maybeSingle();
@@ -1354,11 +1354,20 @@ if (copyPartnerId) {
           // 품목별 기존 바코드 저장 (재주문 시 재사용) - 품목명을 key로 사용
           const woItemsAll: any[] = (wo as any).work_order_items ?? [];
           const barcodeMap: Record<string, string> = {};
+          const weightMap: Record<string, number> = {};
           for (const wi of woItemsAll) {
             const itemName = wi.sub_items?.[0]?.name ?? "";
             if (itemName && wi.barcode_no) barcodeMap[itemName] = wi.barcode_no;
+            if (itemName && wi.unit_weight) weightMap[itemName] = Number(wi.unit_weight);
           }
           if (Object.keys(barcodeMap).length > 0) setWo_itemExistingBarcodes(barcodeMap);
+
+          if (Object.keys(weightMap).length > 0) {
+            setLines((prev) => prev.map((l) => ({
+              ...l,
+              weight_g: weightMap[l.name] ?? l.weight_g,
+            })));
+          }
 
           // 품목별 이미지 복사 (lines 이름 기준 매핑)
           const woItems: any[] = (wo as any).work_order_items ?? [];
