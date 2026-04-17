@@ -347,7 +347,7 @@ export default function EmployeesAdminClient() {
                         </div>
                       </td>
                       <td className="px-3 py-2">{r.resign_date ?? ""}</td>
-                      // 변경 후
+                     
 <td className="px-3 py-2">
   <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
     r.pin
