@@ -180,15 +180,15 @@ export default function ProductionLogPage() {
 {/* 오른쪽 컨텐츠 */}
 <div className="flex-1 min-w-0">
 {/* 탭 컨텐츠 */}
-        {activeTab === "production" && (
-          <ProductionLogTab role={role} userId={userId} showToast={showToast} />
-        )}
+{activeTab === "production" && (
+  <WorkLogTab role={role} userId={userId} showToast={showToast} />
+)}
         {activeTab === "material" && (
           <MaterialLedgerTab role={role} userId={userId} showToast={showToast} />
         )}
-       {activeTab === "work" && (
-          <WorkLogTab role={role} userId={userId} showToast={showToast} />
-        )}
+{activeTab === "work" && (
+  <ProductionLogTab role={role} userId={userId} showToast={showToast} />
+)}
         {activeTab === "ccp1b" && (
           <Ccp1bTab role={role} userId={userId} showToast={showToast} />
         )}
