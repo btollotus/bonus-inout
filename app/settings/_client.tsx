@@ -192,7 +192,125 @@ export default function SettingsPage() {
             {emailSending ? "발송 중..." : "재설정 링크 이메일 발송"}
           </button>
         </div>
+        <PinSettingSection userEmail={userEmail} supabase={supabase} />
+
       </div>
+    </div>
+  );
+}
+
+// ── PIN 설정 섹션 ──
+function PinSettingSection({
+  userEmail,
+  supabase,
+}: {
+  userEmail: string;
+  supabase: ReturnType<typeof createClient>;
+}) {
+  const [currentPin, setCurrentPin] = useState<string | null>(null);
+  const [pin1, setPin1] = useState("");
+  const [pin2, setPin2] = useState("");
+  const [pinMsg, setPinMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [pinSaving, setPinSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("employees")
+        .select("pin")
+        .eq("email", userEmail)
+        .maybeSingle();
+      setCurrentPin(data?.pin ?? null);
+      setLoading(false);
+    })();
+  }, [userEmail]);
+
+  async function savePin() {
+    setPinMsg(null);
+    if (!pin1 || pin1.length !== 4 || !/^\d{4}$/.test(pin1))
+      return setPinMsg({ type: "error", text: "PIN은 숫자 4자리여야 합니다." });
+    if (pin1 !== pin2)
+      return setPinMsg({ type: "error", text: "PIN이 일치하지 않습니다." });
+    setPinSaving(true);
+    const { error } = await supabase
+      .from("employees")
+      .update({ pin: pin1 })
+      .eq("email", userEmail);
+    setPinSaving(false);
+    if (error) return setPinMsg({ type: "error", text: "저장 실패: " + error.message });
+    setCurrentPin(pin1);
+    setPin1(""); setPin2("");
+    setPinMsg({ type: "success", text: "✅ PIN이 설정되었습니다." });
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+      <h2 className="text-base font-semibold text-gray-800 mb-1">생산일지 PIN 설정</h2>
+      <p className="text-xs text-gray-500 mb-4">
+        생산일지 작성 시 본인 확인에 사용되는 4자리 숫자 PIN입니다.
+      </p>
+
+      {/* 현재 상태 */}
+      <div className="mb-4 flex items-center gap-2">
+        <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+          currentPin
+            ? "border-green-200 bg-green-50 text-green-700"
+            : "border-amber-200 bg-amber-50 text-amber-700"
+        }`}>
+          {currentPin ? "✅ PIN 설정됨" : "⚠ PIN 미설정"}
+        </span>
+        {currentPin && (
+          <span className="text-xs text-gray-400">변경하려면 새 PIN을 입력하세요</span>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {currentPin ? "새 PIN (4자리 숫자)" : "PIN 설정 (4자리 숫자)"}
+          </label>
+          <input
+            type="password"
+            inputMode="numeric"
+            maxLength={4}
+            value={pin1}
+            onChange={(e) => setPin1(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+            placeholder="● ● ● ●"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 tracking-widest text-center text-lg"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">PIN 확인</label>
+          <input
+            type="password"
+            inputMode="numeric"
+            maxLength={4}
+            value={pin2}
+            onChange={(e) => setPin2(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+            placeholder="● ● ● ●"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 tracking-widest text-center text-lg"
+            onKeyDown={(e) => e.key === "Enter" && savePin()}
+          />
+        </div>
+      </div>
+
+      {pinMsg && (
+        <div className={`mt-3 p-2.5 rounded-md text-sm ${
+          pinMsg.type === "success"
+            ? "bg-green-50 text-green-700 border border-green-200"
+            : "bg-red-50 text-red-700 border border-red-200"
+        }`}>{pinMsg.text}</div>
+      )}
+
+      <button
+        onClick={savePin}
+        disabled={pinSaving || pin1.length !== 4 || pin2.length !== 4}
+        className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md text-sm font-medium disabled:opacity-50 transition-colors">
+        {pinSaving ? "저장 중..." : currentPin ? "PIN 변경" : "PIN 설정"}
+      </button>
     </div>
   );
 }
