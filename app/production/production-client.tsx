@@ -270,7 +270,7 @@ useEffect(() => { loadSlotStatusRef.current = ccp.loadSlotStatus; }, [ccp.loadSl
     const isNeoColor = foodType.includes("네오컬러");
     if (isNeoColor) {
       const perRow = mold === 108 ? 9 : mold === 88 ? 8 : mold === 66 ? 6 : mold === 63 ? 7 : Math.round(Math.sqrt(mold));
-      const buffer = mold === 63 || mold === 66 ? 20 : 30;
+      const buffer = mold === 63 ? 10 : 20;
       const totalNeeded = qty + buffer;
       const sheets = totalNeeded / mold;
       const fullSheets = Math.floor(sheets);
@@ -1178,7 +1178,7 @@ function WoPrintModal({ wo, onClose, employees }: {
       if (!isChocBase && mold > 0 && qty > 0) {
         if (isNeoColor) {
           const perRow = mold === 108 ? 9 : mold === 88 ? 8 : mold === 66 ? 6 : mold === 63 ? 7 : Math.round(Math.sqrt(mold));
-          const buffer = mold === 63 || mold === 66 ? 20 : 30;
+          const buffer = mold === 63 ? 10 : 20;
           const totalNeeded = qty + buffer;
           const sheets = totalNeeded / mold;
           const fullSheets = Math.floor(sheets);
@@ -1194,7 +1194,7 @@ function WoPrintModal({ wo, onClose, employees }: {
         }
         const needsLabel = (wo.packaging_type ?? "").includes("벌크");
         if (needsLabel) {
-          const labelBuffer = mold === 63 || mold === 66 ? 20 : 30;
+          const labelBuffer = mold === 63 ? 10 : 20;
           const labelQty = Math.ceil((qty + labelBuffer) / (6 * mold));
           init[item.id] = init[item.id] + `  라벨: ${labelQty}장`;
         }
