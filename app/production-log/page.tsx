@@ -228,259 +228,437 @@ export default function ProductionLogPage() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// 탭 1: 생산일지
+// 탭 1: 생산일지 (일별 작업일지)
 // ═══════════════════════════════════════════════════════════
+type TaskType = { id: string; name: string; order_no: number };
+type DailyWorkLog = {
+  id: string;
+  log_date: string;
+  employee_id: string;
+  employee_name: string;
+  work_order_nos: string[];
+  task_checks: Record<string, boolean>;
+  extra_note: string | null;
+  confirmed_at: string | null;
+  created_at: string;
+};
+type WorkOrderRef = {
+  id: string;
+  work_order_no: string;
+  client_name: string;
+  product_name: string;
+  assignee_production: string | null;
+};
+
 function ProductionLogTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
-  const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
   const isAdmin = role === "ADMIN";
 
-  const [logs, setLogs] = useState<ProductionLog[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
-  const [filterWorkType, setFilterWorkType] = useState("전체");
-  const [formulas, setFormulas] = useState<Formula[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
-  const [showForm, setShowForm] = useState(false);
+  // ── 작업자 선택 + PIN 인증 ──
+  const [employees, setEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<{ id: string; name: string } | null>(null);
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [pinStep, setPinStep] = useState(false); // false=작업자선택, true=PIN입력
 
-  // 폼 state
-  const [fDate, setFDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fWorkType, setFWorkType] = useState("product");
-  const [fFormulaId, setFFormulaId] = useState("");
-  const [fWorkName, setFWorkName] = useState("");
-  const [fQty, setFQty] = useState("");
-  const [fDefectQty, setFDefectQty] = useState("");
-  const [fStart, setFStart] = useState("");
-  const [fEnd, setFEnd] = useState("");
-  const [fNote, setFNote] = useState("");
+  // ── 일지 데이터 ──
+  const [taskTypes, setTaskTypes] = useState<TaskType[]>([]);
+  const [todayLog, setTodayLog] = useState<DailyWorkLog | null>(null);
+  const [workOrders, setWorkOrders] = useState<WorkOrderRef[]>([]);
+  const [taskChecks, setTaskChecks] = useState<Record<string, boolean>>({});
+  const [extraNote, setExtraNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
-  const filteredFormulas = useMemo(() =>
-    formulas.filter((f) => fWorkType === "전체" || f.work_type === fWorkType),
-    [formulas, fWorkType]
-  );
+  // ── 조회 ──
+  const [viewDate, setViewDate] = useState(new Date().toISOString().slice(0, 10));
+  const [viewMode, setViewMode] = useState(false); // 조회모드(ADMIN)
+  const [viewLogs, setViewLogs] = useState<DailyWorkLog[]>([]);
+  const [viewLoading, setViewLoading] = useState(false);
 
-  const loadLogs = useCallback(async () => {
-    setLoading(true);
-    let q = supabase.from("production_logs")
-      .select(`id, log_date, work_type, work_name, quantity, defect_qty,
-        work_start, work_end, note, created_by, confirmed_by, approved_by, approved_at, created_at,
-        formula:product_formulas(name),
-        creator:users!created_by(name),
-        confirmer:users!confirmed_by(name),
-        approver:users!approved_by(name)`)
-      .eq("log_date", filterDate)
-      .order("created_at", { ascending: false });
-    if (filterWorkType !== "전체") q = q.eq("work_type", filterWorkType);
-    const { data } = await q;
-    setLogs((data ?? []) as unknown as ProductionLog[]);
-    setLoading(false);
-  }, [filterDate, filterWorkType]);
-
-  useEffect(() => { loadLogs(); }, [loadLogs]);
+  const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
-    supabase.from("product_formulas").select("id,name,work_type").order("name")
-      .then(({ data }) => setFormulas(data ?? []));
-    supabase.from("employees").select("id,name").is("resign_date", null).order("name")
-      .then(({ data }) => setEmployees(data ?? []));
-    supabase.from("users").select("id,name").order("name")
-      .then(({ data }) => setUsers(data ?? []));
+    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+      .then(({ data }) => setEmployees((data ?? []) as any));
+    supabase.from("production_task_types").select("id,name,order_no").eq("is_active", true).order("order_no")
+      .then(({ data }) => setTaskTypes(data ?? []));
   }, []);
 
+  // 작업자 선택 후 오늘 일지 + 작업지시서 로드
+  const loadTodayData = useCallback(async (empId: string, empName: string) => {
+    const [logRes, woRes] = await Promise.all([
+      supabase.from("daily_work_logs")
+        .select("*").eq("log_date", today).eq("employee_id", empId).maybeSingle(),
+      supabase.from("work_orders")
+        .select("id,work_order_no,client_name,product_name,assignee_production")
+        .eq("assignee_production", empName)
+        .eq("status", "완료")
+        .gte("order_date", today)
+        .order("created_at", { ascending: false }),
+    ]);
+    const log = logRes.data as DailyWorkLog | null;
+    setTodayLog(log);
+    setWorkOrders((woRes.data ?? []) as WorkOrderRef[]);
+    if (log) {
+      setTaskChecks(log.task_checks ?? {});
+      setExtraNote(log.extra_note ?? "");
+    } else {
+      const init: Record<string, boolean> = {};
+      taskTypes.forEach((t) => { init[t.id] = false; });
+      setTaskChecks(init);
+      setExtraNote("");
+    }
+  }, [today, taskTypes]);
+
+  // PIN 인증
+  function handleEmployeeSelect(emp: { id: string; name: string; pin: string | null }) {
+    setSelectedEmployee({ id: emp.id, name: emp.name });
+    setPinInput("");
+    setPinError("");
+    setPinStep(true);
+  }
+
+  function handlePinDigit(d: string) {
+    if (pinInput.length >= 4) return;
+    const next = pinInput + d;
+    setPinInput(next);
+    if (next.length === 4) {
+      setTimeout(() => verifyPin(next), 100);
+    }
+  }
+
+  function verifyPin(pin: string) {
+    const emp = employees.find((e) => e.id === selectedEmployee?.id);
+    if (!emp) return;
+    if (!emp.pin) {
+      setPinError("PIN이 설정되지 않았습니다. 설정 페이지에서 먼저 PIN을 등록해주세요.");
+      setPinInput("");
+      return;
+    }
+    if (emp.pin !== pin) {
+      setPinError("PIN이 올바르지 않습니다.");
+      setPinInput("");
+      return;
+    }
+    setPinError("");
+    setPinStep(false);
+    loadTodayData(emp.id, emp.name);
+  }
+
+  // 저장
   async function saveLog() {
-    if (!fDate) return showToast("날짜를 선택하세요.", "error");
+    if (!selectedEmployee) return;
     setSaving(true);
-    const { error } = await supabase.from("production_logs").insert({
-      log_date: fDate,
-      work_type: fWorkType,
-      formula_id: fFormulaId || null,
-      work_name: fWorkName.trim() || null,
-      quantity: fQty ? Number(fQty) : null,
-      defect_qty: fDefectQty ? Number(fDefectQty) : null,
-      work_start: fStart || null,
-      work_end: fEnd || null,
-      note: fNote.trim() || null,
-      created_by: userId,
-    });
+    const payload = {
+      log_date: today,
+      employee_id: selectedEmployee.id,
+      employee_name: selectedEmployee.name,
+      work_order_nos: workOrders.map((w) => w.work_order_no),
+      task_checks: taskChecks,
+      extra_note: extraNote.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    let error;
+    if (todayLog) {
+      ({ error } = await supabase.from("daily_work_logs").update(payload).eq("id", todayLog.id));
+    } else {
+      ({ error } = await supabase.from("daily_work_logs").insert({ ...payload, created_by: userId }));
+    }
     setSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
-    showToast("✅ 생산일지 등록 완료!");
-    setShowForm(false);
-    setFQty(""); setFDefectQty(""); setFStart(""); setFEnd(""); setFNote(""); setFFormulaId(""); setFWorkName("");
-    loadLogs();
+    showToast("✅ 저장 완료!");
+    await loadTodayData(selectedEmployee.id, selectedEmployee.name);
   }
 
-  async function approveLog(logId: string, step: "confirm" | "approve") {
-    const field = step === "confirm" ? { confirmed_by: userId } : { approved_by: userId, approved_at: new Date().toISOString() };
-    const { error } = await supabase.from("production_logs").update(field).eq("id", logId);
-    if (error) return showToast("처리 실패: " + error.message, "error");
-    showToast(step === "confirm" ? "✅ 확인 완료!" : "✅ 승인 완료!");
-    loadLogs();
+  // 확인 완료
+  async function confirmLog() {
+    if (!selectedEmployee) return;
+    if (!todayLog) { await saveLog(); }
+    setConfirming(true);
+    const confirmedAt = new Date().toISOString();
+    let error;
+    if (todayLog) {
+      ({ error } = await supabase.from("daily_work_logs")
+        .update({ confirmed_at: confirmedAt, task_checks: taskChecks, extra_note: extraNote.trim() || null, work_order_nos: workOrders.map((w) => w.work_order_no), updated_at: confirmedAt })
+        .eq("id", todayLog.id));
+    } else {
+      ({ error } = await supabase.from("daily_work_logs").insert({
+        log_date: today, employee_id: selectedEmployee.id, employee_name: selectedEmployee.name,
+        work_order_nos: workOrders.map((w) => w.work_order_no),
+        task_checks: taskChecks, extra_note: extraNote.trim() || null,
+        confirmed_at: confirmedAt, created_by: userId,
+      }));
+    }
+    setConfirming(false);
+    if (error) return showToast("확인 실패: " + error.message, "error");
+    showToast("✅ 확인 완료! 오늘 생산일지가 확정되었습니다.");
+    await loadTodayData(selectedEmployee.id, selectedEmployee.name);
   }
 
+  // ADMIN 조회
+  async function loadViewLogs() {
+    setViewLoading(true);
+    const { data } = await supabase.from("daily_work_logs")
+      .select("*").eq("log_date", viewDate).order("employee_name");
+    setViewLogs((data ?? []) as DailyWorkLog[]);
+    setViewLoading(false);
+  }
+
+  const isConfirmed = !!todayLog?.confirmed_at;
+  const checkedCount = Object.values(taskChecks).filter(Boolean).length;
+
+  // ── 렌더: ADMIN 조회 모드 ──
+  if (isAdmin && viewMode) {
+    return (
+      <div className="space-y-4">
+        <div className={`${card} p-4`}>
+          <div className="flex flex-wrap gap-3 items-end">
+            <div>
+              <div className="mb-1 text-xs text-slate-500">조회 날짜</div>
+              <input type="date" className={inp} style={{ width: 160 }} value={viewDate}
+                onChange={(e) => setViewDate(e.target.value)} />
+            </div>
+            <button className={btn} onClick={loadViewLogs}>🔄 조회</button>
+            <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+            <button className="ml-auto rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              onClick={() => setViewMode(false)}>← 작성 모드</button>
+          </div>
+        </div>
+        {viewLoading ? (
+          <div className={`${card} p-8 text-center text-sm text-slate-400`}>불러오는 중...</div>
+        ) : viewLogs.length === 0 ? (
+          <div className={`${card} p-8 text-center text-sm text-slate-400`}>해당 날짜 생산일지가 없습니다.</div>
+        ) : (
+          viewLogs.map((log) => (
+            <div key={log.id} className={`${card} p-4`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="font-bold text-base">👤 {log.employee_name}</div>
+                <div className="flex items-center gap-2">
+                  {log.confirmed_at
+                    ? <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">✅ 확인완료</span>
+                    : <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">미확인</span>}
+                </div>
+              </div>
+              {/* 작업지시서 */}
+              {(log.work_order_nos ?? []).length > 0 && (
+                <div className="mb-3">
+                  <div className="mb-1.5 text-xs font-semibold text-slate-500">처리한 작업지시서</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(log.work_order_nos ?? []).map((no) => (
+                      <span key={no} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-mono text-blue-700">{no}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* 업무 체크 */}
+              <div className="mb-3">
+                <div className="mb-1.5 text-xs font-semibold text-slate-500">업무 체크</div>
+                <div className="flex flex-wrap gap-2">
+                  {taskTypes.map((t) => {
+                    const checked = (log.task_checks ?? {})[t.id] === true;
+                    return (
+                      <span key={t.id} className={`rounded-lg border px-2 py-1 text-xs font-medium ${checked ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-400 line-through"}`}>
+                        {checked ? "✅" : "☐"} {t.name}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+              {log.extra_note && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <span className="font-semibold">기타: </span>{log.extra_note}
+                </div>
+              )}
+              {log.confirmed_at && (
+                <div className="mt-2 text-[11px] text-slate-400">
+                  확인시각: {new Date(log.confirmed_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    );
+  }
+
+  // ── 렌더: 작업자 선택 ──
+  if (!selectedEmployee || pinStep) {
+    return (
+      <div className="space-y-4">
+        {isAdmin && (
+          <div className="flex justify-end">
+            <button className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              onClick={() => { setViewMode(true); loadViewLogs(); }}>📋 조회 모드</button>
+          </div>
+        )}
+
+        {/* 작업자 선택 */}
+        {!pinStep && (
+          <div className={`${card} p-6`}>
+            <div className="mb-4 font-semibold text-base text-slate-700">👤 오늘 작업자를 선택하세요</div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {employees.map((emp) => (
+                <button key={emp.id}
+                  className="rounded-2xl border-2 border-slate-200 bg-white px-4 py-5 text-center font-bold text-slate-700 text-base hover:border-blue-400 hover:bg-blue-50 active:scale-95 transition-all"
+                  onClick={() => handleEmployeeSelect(emp)}>
+                  {emp.name}
+                  <div className="mt-1 text-[10px] font-normal text-slate-400">
+                    {emp.pin ? "PIN 설정됨" : "PIN 미설정"}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* PIN 입력 */}
+        {pinStep && selectedEmployee && (
+          <div className={`${card} p-6 max-w-xs mx-auto`}>
+            <button className="mb-4 text-xs text-slate-400 hover:text-slate-600"
+              onClick={() => { setPinStep(false); setSelectedEmployee(null); setPinInput(""); setPinError(""); }}>
+              ← 작업자 선택으로
+            </button>
+            <div className="mb-1 font-semibold text-base text-slate-700 text-center">{selectedEmployee.name}</div>
+            <div className="mb-4 text-sm text-slate-500 text-center">PIN 4자리를 입력하세요</div>
+            {/* PIN 표시 */}
+            <div className="flex justify-center gap-3 mb-4">
+              {[0,1,2,3].map((i) => (
+                <div key={i} className={`w-10 h-10 rounded-xl border-2 flex items-center justify-center text-lg font-bold transition-all
+                  ${pinInput.length > i ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-300"}`}>
+                  {pinInput.length > i ? "●" : "○"}
+                </div>
+              ))}
+            </div>
+            {pinError && <div className="mb-3 text-center text-xs text-red-500">{pinError}</div>}
+            {/* 키패드 */}
+            <div className="grid grid-cols-3 gap-2">
+              {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
+                <button key={i}
+                  className={`rounded-xl border py-3 text-lg font-semibold transition-all
+                    ${d === "" ? "invisible" : "border-slate-200 bg-white hover:bg-slate-50 active:bg-slate-100 active:scale-95"}`}
+                  onClick={() => {
+                    if (d === "⌫") { setPinInput((p) => p.slice(0, -1)); setPinError(""); }
+                    else if (d !== "") handlePinDigit(d);
+                  }}>
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── 렌더: 일지 작성 ──
   return (
     <div className="space-y-4">
-      {/* 필터 + 등록 버튼 */}
+      {/* 헤더 */}
       <div className={`${card} p-4`}>
-        <div className="flex flex-wrap gap-3 items-end">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
-            <div className="mb-1 text-xs text-slate-500">날짜</div>
-            <input type="date" className={inp} style={{ width: 160 }} value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)} />
+            <div className="font-bold text-base">📝 {selectedEmployee.name}의 생산일지</div>
+            <div className="text-xs text-slate-500 mt-0.5">{today}</div>
           </div>
-          <div>
-            <div className="mb-1 text-xs text-slate-500">작업유형</div>
-            <select className={inp} style={{ width: 200 }} value={filterWorkType}
-              onChange={(e) => setFilterWorkType(e.target.value)}>
-              <option value="전체">전체</option>
-              {Object.entries(WORK_TYPE_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
-          </div>
-          <button className={btn} onClick={loadLogs}>🔄 조회</button>
-          {isAdminOrSubadmin && (
-            <button
-              className={showForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
-              onClick={() => setShowForm((v) => !v)}
-            >
-              {showForm ? "✕ 닫기" : "✚ 생산일지 등록"}
+          <div className="flex items-center gap-2">
+            {isConfirmed && (
+              <span className="rounded-full border border-green-200 bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                ✅ {new Date(todayLog!.confirmed_at!).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })} 확인완료
+              </span>
+            )}
+            <button className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
+              onClick={() => { setSelectedEmployee(null); setPinStep(false); setPinInput(""); }}>
+              작업자 변경
             </button>
-          )}
-          <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+            {isAdmin && (
+              <button className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+                onClick={() => { setViewMode(true); loadViewLogs(); }}>📋 조회</button>
+            )}
+            <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+          </div>
         </div>
       </div>
 
-      {/* 등록 폼 */}
-      {showForm && isAdminOrSubadmin && (
-        <div className={`${card} p-4`}>
-          <div className="mb-3 font-semibold text-sm text-blue-700">✚ 생산일지 신규 등록</div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div>
-              <div className="mb-1 text-xs text-slate-500">날짜 *</div>
-              <input type="date" className={inp} value={fDate} onChange={(e) => setFDate(e.target.value)} />
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">작업유형 *</div>
-              <select className={inp} value={fWorkType} onChange={(e) => { setFWorkType(e.target.value); setFFormulaId(""); }}>
-                {Object.entries(WORK_TYPE_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">배합설명서</div>
-              <select className={inp} value={fFormulaId} onChange={(e) => setFFormulaId(e.target.value)}>
-                <option value="">— 선택 —</option>
-                {filteredFormulas.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">작업명 (배합설명서 미선택 시)</div>
-              <input className={inp} value={fWorkName} onChange={(e) => setFWorkName(e.target.value)}
-                placeholder="예: 다크컴파운드 생산" />
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">생산수량</div>
-              <input className={inpR} inputMode="numeric" value={fQty}
-                onChange={(e) => setFQty(e.target.value.replace(/[^\d]/g, ""))} placeholder="g 또는 개" />
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">불량수량</div>
-              <input className={inpR} inputMode="numeric" value={fDefectQty}
-                onChange={(e) => setFDefectQty(e.target.value.replace(/[^\d]/g, ""))} placeholder="전사지·PET만" />
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">작업시작</div>
-              <input type="time" className={inp} value={fStart} onChange={(e) => setFStart(e.target.value)} />
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">작업종료</div>
-              <input type="time" className={inp} value={fEnd} onChange={(e) => setFEnd(e.target.value)} />
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">비고</div>
-              <input className={inp} value={fNote} onChange={(e) => setFNote(e.target.value)} />
-            </div>
-          </div>
-          <div className="mt-4 flex gap-2">
-            <button
-              className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
-              disabled={saving} onClick={saveLog}
-            >
-              {saving ? "저장 중..." : "💾 등록"}
-            </button>
-            <button className={btn} onClick={() => setShowForm(false)}>취소</button>
-          </div>
-        </div>
-      )}
-
-      {/* 목록 */}
+      {/* 작업지시서 목록 */}
       <div className={`${card} p-4`}>
-        <div className="mb-3 flex items-center justify-between">
-          <div className="font-semibold text-sm">생산일지 목록 — {filterDate}</div>
-          <div className="text-xs text-slate-400">{logs.length}건</div>
-        </div>
-        {loading ? (
-          <div className="py-8 text-center text-sm text-slate-400">불러오는 중...</div>
-        ) : logs.length === 0 ? (
-          <div className="py-8 text-center text-sm text-slate-400">해당 날짜 생산일지가 없습니다.</div>
+        <div className="mb-3 font-semibold text-sm">✅ 오늘 처리한 작업지시서</div>
+        {workOrders.length === 0 ? (
+          <div className="py-3 text-center text-sm text-slate-400">
+            오늘 날짜 기준 생산완료된 작업지시서가 없습니다.
+          </div>
         ) : (
           <div className="space-y-2">
-            {logs.map((log) => (
-              <div key={log.id} className="rounded-2xl border border-slate-200 p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-sm">
-                        {WORK_TYPE_LABELS[log.work_type] ?? log.work_type}
-                      </span>
-                      {(log.formula as any)?.name && (
-                        <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[11px] text-blue-700">
-                          {(log.formula as any).name}
-                        </span>
-                      )}
-                      {log.work_name && (
-                        <span className="text-xs text-slate-500">{log.work_name}</span>
-                      )}
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
-                      {log.quantity != null && <span>생산: <b>{log.quantity.toLocaleString()}</b></span>}
-                      {log.defect_qty != null && log.defect_qty > 0 && <span>불량: <b className="text-red-600">{log.defect_qty}</b></span>}
-                      {log.work_start && <span>시작: {log.work_start}</span>}
-                      {log.work_end && <span>종료: {log.work_end}</span>}
-                      {log.note && <span>비고: {log.note}</span>}
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap gap-2 text-[11px]">
-                      <span className="text-slate-400">작성: {(log.creator as any)?.name ?? "—"}</span>
-                      <span className="text-slate-400">확인: {(log.confirmer as any)?.name ?? <span className="text-amber-500">미확인</span>}</span>
-                      <span className="text-slate-400">승인: {(log.approver as any)?.name ?? <span className="text-amber-500">미승인</span>}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1 items-end shrink-0">
-                    {/* 확인 버튼 (김영각 — USER 역할) */}
-                    {!log.confirmed_by && !isAdminOrSubadmin && (
-                      <button className="rounded-lg border border-violet-300 bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700 hover:bg-violet-100"
-                        onClick={() => approveLog(log.id, "confirm")}>✅ 확인</button>
-                    )}
-                    {/* 승인 버튼 (ADMIN) */}
-                    {log.confirmed_by && !log.approved_by && isAdmin && (
-                      <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700 hover:bg-green-100"
-                        onClick={() => approveLog(log.id, "approve")}>✅ 최종승인</button>
-                    )}
-                    {log.approved_by && (
-                      <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">승인완료</span>
-                    )}
-                  </div>
-                </div>
+            {workOrders.map((wo) => (
+              <div key={wo.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <span className="font-mono text-xs text-blue-600 font-semibold">{wo.work_order_no}</span>
+                <span className="text-sm font-medium text-slate-700">{wo.client_name}</span>
+                <span className="text-xs text-slate-500">{wo.product_name}</span>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* 업무 체크리스트 */}
+      <div className={`${card} p-4`}>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="font-semibold text-sm">📋 업무 체크리스트</div>
+          <div className="text-xs text-slate-400">{checkedCount}/{taskTypes.length} 완료</div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {taskTypes.map((t) => {
+            const checked = taskChecks[t.id] === true;
+            return (
+              <button key={t.id}
+                disabled={isConfirmed}
+                className={`rounded-xl border-2 px-3 py-3 text-sm font-medium text-left transition-all
+                  ${checked
+                    ? "border-green-400 bg-green-50 text-green-700"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}
+                  ${isConfirmed ? "opacity-60 cursor-not-allowed" : "active:scale-95"}`}
+                onClick={() => setTaskChecks((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}>
+                <span className="mr-1.5">{checked ? "✅" : "☐"}</span>
+                {t.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 기타 입력 */}
+      <div className={`${card} p-4`}>
+        <div className="mb-2 font-semibold text-sm">📝 기타 특이사항</div>
+        <textarea
+          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none resize-none"
+          rows={3}
+          placeholder="오늘 특이사항, 메모 등을 자유롭게 입력하세요"
+          value={extraNote}
+          disabled={isConfirmed}
+          onChange={(e) => setExtraNote(e.target.value)}
+        />
+      </div>
+
+      {/* 저장 / 확인 완료 버튼 */}
+      <div className={`${card} p-4 flex gap-3`}>
+        {!isConfirmed ? (
+          <>
+            <button
+              className="flex-1 rounded-xl border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+              disabled={saving} onClick={saveLog}>
+              {saving ? "저장 중..." : "💾 임시저장"}
+            </button>
+            <button
+              className="flex-1 rounded-xl border border-green-500 bg-green-600 py-2.5 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
+              disabled={confirming} onClick={confirmLog}>
+              {confirming ? "처리 중..." : "✅ 확인 완료 (오늘 일지 확정)"}
+            </button>
+          </>
+        ) : (
+          <div className="flex-1 rounded-xl border border-green-200 bg-green-50 py-2.5 text-sm font-semibold text-green-700 text-center">
+            ✅ 오늘 생산일지가 확정되었습니다
           </div>
         )}
       </div>
