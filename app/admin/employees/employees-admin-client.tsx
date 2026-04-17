@@ -13,6 +13,7 @@ type EmployeeRow = {
   address: string | null;
   hire_date: string | null;
   resign_date: string | null;
+  pin: string | null;       // ← 추가
   created_at?: string;
   updated_at?: string;
 };
@@ -80,7 +81,8 @@ export default function EmployeesAdminClient() {
     try {
       const { data, error } = await supabase
         .from("employees")
-        .select("id,name,employee_code,auth_user_id,rrn,mobile,address,hire_date,resign_date,created_at,updated_at")
+        .select("id,name,employee_code,auth_user_id,rrn,mobile,address,hire_date,resign_date,pin,created_at,updated_at")
+
         .order("created_at", { ascending: false })
         .limit(500);
 
@@ -306,6 +308,8 @@ export default function EmployeesAdminClient() {
                   <th className="px-3 py-2">입사일</th>
                   <th className="px-3 py-2">주민번호</th>{/* ── 추가 */}
                   <th className="px-3 py-2">퇴사일</th>
+                  <th className="px-3 py-2">PIN</th>
+
                   <th className="px-3 py-2">작업</th>
                 </tr>
               </thead>
@@ -343,16 +347,45 @@ export default function EmployeesAdminClient() {
                         </div>
                       </td>
                       <td className="px-3 py-2">{r.resign_date ?? ""}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex gap-2">
-                          <button className={btn} onClick={() => fillForm(r)} disabled={loading}>
-                            수정
-                          </button>
-                          <button className={btn} onClick={() => remove(r.id)} disabled={loading}>
-                            삭제
-                          </button>
-                        </div>
-                      </td>
+                      // 변경 후
+<td className="px-3 py-2">
+  <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+    r.pin
+      ? "border-green-200 bg-green-50 text-green-700"
+      : "border-slate-200 bg-slate-50 text-slate-400"
+  }`}>
+    {r.pin ? "설정됨" : "미설정"}
+  </span>
+</td>
+<td className="px-3 py-2">
+  <div className="flex gap-2">
+    <button className={btn} onClick={() => fillForm(r)} disabled={loading}>
+      수정
+    </button>
+    {r.pin && (
+      <button
+        className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 hover:bg-amber-100"
+        disabled={loading}
+        onClick={async () => {
+          if (!confirm(`${r.name}의 PIN을 초기화하시겠습니까?`)) return;
+          const { error } = await supabase
+            .from("employees")
+            .update({ pin: null })
+            .eq("id", r.id);
+          if (error) return setMsg("PIN 초기화 실패: " + error.message);
+          setMsg(null);
+          await load();
+        }}
+      >
+        PIN초기화
+      </button>
+    )}
+    <button className={btn} onClick={() => remove(r.id)} disabled={loading}>
+      삭제
+    </button>
+  </div>
+</td>
+
                     </tr>
                   ))
                 )}
