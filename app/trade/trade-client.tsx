@@ -1354,18 +1354,14 @@ if (copyPartnerId) {
           // 품목별 기존 바코드 저장 (재주문 시 재사용) - 품목명을 key로 사용
           const woItemsAll: any[] = (wo as any).work_order_items ?? [];
           const barcodeMap: Record<string, string> = {};
-          const weightMap: Record<string, number> = {};
-          for (const wi of woItemsAll) {
-            const itemName = wi.sub_items?.[0]?.name ?? "";
-            if (itemName && wi.barcode_no) barcodeMap[itemName] = wi.barcode_no;
-            if (itemName && wi.unit_weight) weightMap[itemName] = Number(wi.unit_weight);
-          }
-          if (Object.keys(barcodeMap).length > 0) setWo_itemExistingBarcodes(barcodeMap);
-
-          if (Object.keys(weightMap).length > 0) {
-            setLines((prev) => prev.map((l) => ({
+          const weightByIndex: Record<number, number> = {};
+          woItemsAll.forEach((wi, idx) => {
+            if (wi.unit_weight) weightByIndex[idx] = Number(wi.unit_weight);
+          });
+          if (Object.keys(weightByIndex).length > 0) {
+            setLines((prev) => prev.map((l, i) => ({
               ...l,
-              weight_g: weightMap[l.name] ?? l.weight_g,
+              weight_g: weightByIndex[i] ?? l.weight_g,
             })));
           }
 
