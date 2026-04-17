@@ -1112,6 +1112,26 @@ bottom_size: form.bottom_size || null,
     ✍️ 서명
   </button>
 )}
+
+{(emp as any).pin ? (
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`${emp.name}의 PIN을 초기화하시겠습니까?\n초기화 후 본인이 다시 설정해야 합니다.`)) return
+                                const { error } = await supabase
+                                  .from('employees')
+                                  .update({ pin: null })
+                                  .eq('id', emp.id)
+                                if (error) setError('PIN 초기화 실패: ' + error.message)
+                                else { setSuccess(`${emp.name}의 PIN이 초기화되었습니다.`); fetchEmployees() }
+                              }}
+                              className="text-xs font-medium px-2.5 py-1 rounded-full border text-amber-600 border-amber-300 hover:bg-amber-50 transition-colors"
+                            >
+                              🔑 PIN초기화
+                            </button>
+                          ) : (
+                            <span className="text-xs text-gray-300">PIN미설정</span>
+                          )}
+                          
                           <button onClick={() => handleDelete(emp.id, emp.name)}
                             className="text-xs text-red-400 hover:text-red-600 font-medium">삭제</button>
                         </div>
