@@ -122,15 +122,16 @@ export function useCcpState(
       .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
       .order("measured_at", { ascending: true });
   
-    if (slotId) {
-      const today = todayKST();
-      query = query
-        .eq("slot_id", slotId)
-        .gte("measured_at", `${today}T00:00:00+09:00`)
-        .lte("measured_at", `${today}T23:59:59+09:00`);
-    } else {
-      query = query.eq("work_order_no", workOrderNo);
-    }
+      if (slotId) {
+        const today = todayKST();
+        query = query
+          .eq("slot_id", slotId)
+          .eq("work_order_no", workOrderNo)
+          .gte("measured_at", `${today}T00:00:00+09:00`)
+          .lte("measured_at", `${today}T23:59:59+09:00`);
+      } else {
+        query = query.eq("work_order_no", workOrderNo);
+      }
 
     const { data } = await query;
     const seen = new Set<string>();
