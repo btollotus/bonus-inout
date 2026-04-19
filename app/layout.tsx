@@ -4,6 +4,8 @@ import TopNavWrapper from "@/components/TopNavWrapper";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
+// 상단 import에 추가
+import PinSessionProviderWrapper from "@/app/contexts/PinSessionProviderWrapper";
 
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
@@ -39,7 +41,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="ko">
       <body style={{ margin: 0, backgroundColor: "#f9fafb", color: "#111", minHeight: "100vh" }}>
         <TopNavWrapper role={role} email={email} />
-        <main style={{ width: "100%" }}>{children}</main>
+        <main style={{ width: "100%" }}>
+  <PinSessionProviderWrapper>
+    {children}
+  </PinSessionProviderWrapper>
+</main>
       </body>
     </html>
   );

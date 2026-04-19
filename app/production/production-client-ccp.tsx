@@ -8,6 +8,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import { usePinSession, PinModal } from "@/app/contexts/PinSessionContext";
 
 const supabase = createClient();
 
@@ -396,7 +397,7 @@ export function useCcpState(
   }
 
   // after
-  async function saveSlotMaterialIn(slotId: string, workOrderNo?: string, materialType?: string) {
+  async function saveSlotMaterialIn(slotId: string, workOrderNo?: string, materialType?: string, actionBy?: string) {
     if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
     if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
       return showToast("올바른 시각을 입력하세요.", "error");
@@ -437,6 +438,7 @@ export function useCcpState(
         work_order_no: workOrderNo ?? null,
         action_note:   null,
         material_type: materialType || null,
+        action_by:     actionBy ?? null,
         created_by:    currentUserIdRef.current,
       });
       if (error) return showToast("원료투입 기록 실패: " + error.message, "error");
@@ -453,7 +455,7 @@ export function useCcpState(
 
 // after
 // after
-async function saveSlotMaterialOut(slotId: string) {
+async function saveSlotMaterialOut(slotId: string, actionBy?: string) {
   if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
   if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
     return showToast("올바른 시각을 입력하세요.", "error");
@@ -523,7 +525,8 @@ async function saveSlotMaterialOut(slotId: string) {
       measured_at:   outMeasuredAt,
       work_order_no: null,
       action_note:   "원료소진",
-      created_by:    currentUserIdRef.current,
+action_by:     actionBy ?? null,
+created_by:    currentUserIdRef.current,
     });
     if (error) return showToast("원료소진 기록 실패: " + error.message, "error");
     showToast("✅ 원료소진이 기록됐습니다!");
@@ -538,7 +541,7 @@ async function saveSlotMaterialOut(slotId: string) {
   }
 }
 
-  async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: string) {
+async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: string, actionBy?: string) {
     if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
 
     const fromSlotName = warmerSlots.find((s) => s.id === fromSlotId)?.slot_name ?? fromSlotId;
@@ -567,6 +570,7 @@ async function saveSlotMaterialOut(slotId: string) {
         measured_at: `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`,
         work_order_no: workOrderNo ?? null,
         action_note:   `→ ${toSlotName}`,
+        action_by:     actionBy ?? null,
         created_by:    currentUserIdRef.current,
       });
       await supabase.from("ccp_slot_events").insert({
@@ -577,6 +581,7 @@ async function saveSlotMaterialOut(slotId: string) {
         work_order_no: workOrderNo ?? null,
         action_note:   `${fromSlotName} → ${toSlotName}`,
         material_type: movedMaterialType,
+        action_by:     actionBy ?? null,
         created_by:    currentUserIdRef.current,
       });
       showToast(`✅ ${fromSlotName} → ${toSlotName} 이동 완료!`);
@@ -617,6 +622,7 @@ async function saveSlotMaterialOut(slotId: string) {
   };
 }
 
+
 // ─── UI 컴포넌트 ─────────────────────────────────────────────
 
 export function SlotStatusPanel({
@@ -640,12 +646,33 @@ export function SlotStatusPanel({
   slotActionTime: string; setSlotActionTime: (v: string) => void;
   slotActionSaving: boolean;
   loadSlotStatus: () => void;
-  saveSlotMaterialIn: (slotId: string, workOrderNo?: string, materialType?: string) => void;
-  saveSlotMaterialOut: (slotId: string) => void;
-  saveSlotMove: (fromSlotId: string, toSlotId: string) => void;
+  saveSlotMaterialIn: (slotId: string, workOrderNo?: string, materialType?: string, actionBy?: string) => void;
+  saveSlotMaterialOut: (slotId: string, actionBy?: string) => void;
+  saveSlotMove: (fromSlotId: string, toSlotId: string, workOrderNo?: string, actionBy?: string) => void;
 }) {
   const [selectedMaterialType, setSelectedMaterialType] = React.useState<string>("");
   const [isExpanded, setIsExpanded] = React.useState(true);
+
+  // ── PIN 세션 state (SlotStatusPanel 내부) ──
+const { session: pinSession, isValid: isPinValid, login: pinLogin } = usePinSession();
+const [showPinModal, setShowPinModal] = useState(false);
+const [pinPendingAction, setPinPendingAction] = useState<((name: string) => void) | null>(null);
+const [employees, setEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
+
+useEffect(() => {
+  supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    .then(({ data }) => setEmployees((data ?? []) as any));
+}, []);
+
+function requirePin(action: (actionBy: string) => void) {
+  if (isPinValid() && pinSession) {
+    action(pinSession.employeeName);
+  } else {
+    setPinPendingAction(() => (name: string) => action(name));
+    setShowPinModal(true);
+  }
+}
+
 
   const renderSlot = (s: { id: string; slot_name: string; purpose: string }) => {
     const st = slotStatus[s.id];
@@ -741,6 +768,24 @@ export function SlotStatusPanel({
 
   return (
     <div className={`${card} p-4`}>
+
+       {/* PIN 모달 */}
+    {showPinModal && (
+      <PinModal
+        employees={employees}
+        title="슬롯 작업 — 본인 확인"
+        onSuccess={(empId, empName) => {
+          pinLogin(empId, empName);
+          setShowPinModal(false);
+          if (pinPendingAction) {
+            pinPendingAction(empName);
+            setPinPendingAction(null);
+          }
+        }}
+        onCancel={() => { setShowPinModal(false); setPinPendingAction(null); }}
+      />
+    )}
+
       <div className="flex items-center justify-between mb-3">
         <button
           type="button"
@@ -853,7 +898,7 @@ export function SlotStatusPanel({
                     <button
                       className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
                       disabled={slotActionSaving || slotActionTime.length < 4 || (warmerSlots.find((s) => s.id === activeSlotId)?.purpose === "유동" && !selectedMaterialType)}
-                      onClick={() => { saveSlotMaterialIn(activeSlotId, undefined, selectedMaterialType); setSelectedMaterialType(""); }}
+                      onClick={() => requirePin((actionBy) => { saveSlotMaterialIn(activeSlotId, undefined, selectedMaterialType, actionBy); setSelectedMaterialType(""); })}
                     >
                       {slotActionSaving ? "저장 중..." : "🧪 원료투입"}
                     </button>
@@ -893,7 +938,7 @@ export function SlotStatusPanel({
                     <button
                       className="rounded-xl border border-orange-500 bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-60"
                       disabled={slotActionSaving || slotActionTime.length < 4}
-                      onClick={() => saveSlotMaterialOut(activeSlotId!)}
+                      onClick={() => requirePin((actionBy) => saveSlotMaterialOut(activeSlotId!, actionBy))}
                     >
                       {slotActionSaving ? "저장 중..." : "🗑️ 원료소진 확정"}
                     </button>
@@ -928,7 +973,7 @@ export function SlotStatusPanel({
                         <button
                           className="rounded-xl border border-teal-500 bg-teal-600 px-4 py-2 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60"
                           disabled={slotActionSaving || slotActionTime.length < 4}
-                          onClick={() => saveSlotMove(activeSlotId!, slotMoveTargetId)}
+                          onClick={() => requirePin((actionBy) => saveSlotMove(activeSlotId!, slotMoveTargetId, undefined, actionBy))}
                         >
                           {slotActionSaving ? "저장 중..." : "🔀 이동"}
                         </button>
