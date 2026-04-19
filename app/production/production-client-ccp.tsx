@@ -141,8 +141,13 @@ export function useCcpState(
       return true;
     });
     setWoEvents(deduped as WoEvent[]);
-    const hasStart = deduped.some((e: any) => e.event_type === "start");
-    setCcpWoEventType(hasStart ? "mid_check" : "start");
+
+    const lastEvent = deduped[deduped.length - 1];
+if (!lastEvent || lastEvent.event_type === "end") {
+  setCcpWoEventType("start");
+} else if (lastEvent.event_type === "start" || lastEvent.event_type === "mid_check") {
+  setCcpWoEventType("mid_check");
+}
     setCcpWoTime("");
   }, []);
 
