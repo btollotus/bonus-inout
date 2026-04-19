@@ -576,7 +576,37 @@ setRealtimeConnected(false);
       const missing = [!woChecks.assignee_transfer && "전사인쇄", !woChecks.assignee_print_check && "인쇄검수", !woChecks.assignee_production && "생산완료", ].filter(Boolean) as string[];
       if (missing.length > 0) { alert(`다음 단계의 담당자를 선택해주세요:\n\n• ${missing.join("\n• ")}`); setIsCompleting(false); return; }
     }
-    const items = (selectedWo.work_order_items ?? []).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); });
+
+    // ── CCP-1B 종료 여부 체크 ──
+    const foodCat = getFoodCategory(selectedWo.food_type);
+    if (foodCat === "다크" || foodCat === "화이트" || foodCat === "중간재") {
+      if (selectedWo.ccp_slot_id) {
+        const todayKst = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+        const { data: ccpEvs } = await supabase
+          .from("ccp_wo_events")
+          .select("event_type")
+          .eq("work_order_no", selectedWo.work_order_no)
+          .gte("measured_at", `${todayKst}T00:00:00+09:00`)
+          .lte("measured_at", `${todayKst}T23:59:59+09:00`)
+          .order("measured_at", { ascending: false });
+
+        const lastEv = (ccpEvs ?? [])[0];
+        if (!lastEv) {
+          alert("CCP-1B 온도 기록이 없습니다.\n시작 → 중간점검 → 종료 순으로 기록 후 생산완료 처리해주세요.");
+          setIsCompleting(false); return;
+        }
+        if (lastEv.event_type !== "end") {
+          const stateLabel = lastEv.event_type === "start" ? "시작" : "중간점검";
+          alert(`CCP-1B 온도 기록이 종료되지 않았습니다.\n현재 상태: [${stateLabel}]\n\n종료 기록 후 생산완료 처리해주세요.`);
+          setIsCompleting(false); return;
+        }
+      } else {
+        alert("CCP-1B 슬롯이 지정되지 않았습니다.\n슬롯 지정 및 온도 기록(시작→중간점검→종료) 후 생산완료 처리해주세요.");
+        setIsCompleting(false); return;
+      }
+    }
+
+    const items = (selectedWo.work_order_items ?? []).filter((item) => {const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); });
     const missingQtyOrExpiry = items.filter((item) => { const pi = prodInputs[item.id]; return !pi || !pi.actual_qty || !pi.expiry_date; });
     if (missingQtyOrExpiry.length > 0) { alert("출고수량과 소비기한은 필수 입력 항목입니다.\n\n입력 후 다시 시도해주세요."); setIsCompleting(false); return; }
     if (!confirm("생산완료 처리하시겠습니까?\n기본정보·담당자·생산입력이 모두 저장되고 재고대장에 입고가 반영됩니다.")) { setIsCompleting(false); return; } 
