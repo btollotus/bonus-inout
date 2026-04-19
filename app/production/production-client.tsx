@@ -238,7 +238,8 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
   const ccp = useCcpState(warmerSlots, currentUserIdRef, showToast);
 
   const loadSlotStatusRef = useRef(ccp.loadSlotStatus);
-useEffect(() => { loadSlotStatusRef.current = ccp.loadSlotStatus; }, [ccp.loadSlotStatus]);
+  useEffect(() => { loadSlotStatusRef.current = ccp.loadSlotStatus; }, [ccp.loadSlotStatus]);
+  const slotStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [stockAlerts, setStockAlerts] = useState<{ id: string; item_name: string; status: string; expiry_date: string | null; action: string | null; log_date: string }[]>([]);
   const [showAlertPanel, setShowAlertPanel] = useState(false);
@@ -488,10 +489,14 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
         schema: "public",
         table: "ccp_slot_events",
       }, () => {
-        loadSlotStatusRef.current();
+        if (slotStatusTimerRef.current) clearTimeout(slotStatusTimerRef.current);
+        slotStatusTimerRef.current = setTimeout(() => loadSlotStatusRef.current(), 400);
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+      if (slotStatusTimerRef.current) clearTimeout(slotStatusTimerRef.current);
+    };
   }, []); // eslint-disable-line
 
   useEffect(() => { supabase.from("employees").select("id,name,pin,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => { if (data) setEmployees(data); }); }, []);
