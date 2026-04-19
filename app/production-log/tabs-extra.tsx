@@ -303,9 +303,10 @@ const woAssigneeMapRef = React.useRef<Record<string, string>>({});
   
     if (allWoNos.length > 0) {
       const { data } = await supabase
-        .from("work_orders")
-        .select("work_order_no, assignee_production")
-        .in("work_order_no", allWoNos);
+      .from("work_orders")
+      .select("work_order_no, assignee_production")
+      .in("work_order_no", allWoNos)
+      .not("assignee_production", "is", null);
       for (const row of data ?? []) {
         if (row.assignee_production) assigneeMap[row.work_order_no] = row.assignee_production;
       }
