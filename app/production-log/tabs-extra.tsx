@@ -143,7 +143,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
       supabase.from("work_orders")
         .select("work_order_no, client_name, sub_name, product_name, ccp_slot_id")
         .not("ccp_slot_id", "is", null)
-        .eq("status", "생산중"),
+        .eq("status", "완료"),
     ]);
 
     setSlotEvents((slotRes.data ?? []) as any[]);
