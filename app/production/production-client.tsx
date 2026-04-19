@@ -326,8 +326,16 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
     try {
       const today = new Date();
       const dateStr = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,"0")}${String(today.getDate()).padStart(2,"0")}`;
-      const { count } = await supabase.from("work_orders").select("id", { count: "exact", head: true }).like("work_order_no", `WO-${dateStr}-%`);
-      const workOrderNo = `WO-${dateStr}-${String((count ?? 0) + 1).padStart(4, "0")}`;
+      const { data: lastWo } = await supabase
+  .from("work_orders")
+  .select("work_order_no")
+  .like("work_order_no", `WO-${dateStr}-%`)
+  .order("work_order_no", { ascending: false })
+  .limit(1)
+  .maybeSingle();
+const lastSeq = lastWo ? parseInt(lastWo.work_order_no.split("-")[2], 10) : 0;
+const workOrderNo = `WO-${dateStr}-${String(lastSeq + 1).padStart(4, "0")}`;
+
       const { data: wo, error: woErr } = await supabase.from("work_orders").insert({ work_order_no: workOrderNo, barcode_no: kiseongSelected.barcode, client_id: null, client_name: "재고생산", sub_name: kSubName.trim() || null, order_date: today.toISOString().slice(0, 10), food_type: kFoodType.trim() || null, product_name: kiseongSelected.product_name, logo_spec: kLogoSpec.trim() || null, thickness: kThickness || null, delivery_method: null, packaging_type: kPackagingType || null, tray_slot: null, package_unit: kPackageUnit || null, mold_per_sheet: kMoldPerSheet ? Number(kMoldPerSheet) : null, note: kNote.trim() || null, reference_note: kReferenceNote.trim() || null, status: "생산중", variant_id: kiseongSelected.variant_id, order_type: "재고" }).select("id").single();
       if (woErr) throw woErr;
       const { error: itemErr } = await supabase.from("work_order_items").insert({ work_order_id: wo.id, delivery_date: today.toISOString().slice(0, 10), sub_items: [{ name: kiseongSelected.product_name, qty: toInt(kActualQty) }], order_qty: toInt(kActualQty), barcode_no: kiseongSelected.barcode, actual_qty: toInt(kActualQty), unit_weight: kiseongSelected.weight_g ?? null, expiry_date: null });
