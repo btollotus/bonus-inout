@@ -34,7 +34,7 @@ export function PinSessionProvider({ children }: { children: React.ReactNode }) 
     setSession({
       employeeId,
       employeeName,
-      expiresAt: Date.now() + 2 * 60 * 60 * 1000, // 2시간
+      expiresAt: Date.now() + 30 * 60 * 1000, // 30분
     });
   }, []);
 
