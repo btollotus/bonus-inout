@@ -360,7 +360,7 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
   const pageLoadTimeRef = useRef<string>(new Date().toISOString());
 
   useEffect(() => {
-    const channel = supabase.channel("wo_production_insert_notify")
+    const channel = supabase.channel(`wo_production_insert_notify_${Math.random().toString(36).slice(2, 9)}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "work_orders" }, (payload) => {
         const d = payload.new as Record<string, unknown>;
         const createdAt = String(d.created_at ?? "");
@@ -482,8 +482,9 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
 
   // ── ccp_slot_events 실시간 → 슬롯 현황 자동 갱신 ──
   useEffect(() => {
-    const channel = supabase
-      .channel("ccp_slot_events_realtime")
+    const channelId = `ccp_slot_events_realtime_${Math.random().toString(36).slice(2, 9)}`;
+const channel = supabase
+  .channel(channelId)
       .on("postgres_changes", {
         event: "*",
         schema: "public",
@@ -496,7 +497,7 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
         console.log("🌡️ [ccp_slot_events_realtime 채널]", status, err ?? "");
       });
 
-      
+
     return () => {
       supabase.removeChannel(channel);
       if (slotStatusTimerRef.current) clearTimeout(slotStatusTimerRef.current);
