@@ -729,8 +729,8 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
 
 {showPinModalForProgress && (
   <PinModal
-    employees={employees}
-    title="진행상태 입력 — 본인 확인"
+  employees={employees.filter((e): e is { id: string; name: string; pin: string | null } => e.name !== null)}
+  title="진행상태 입력 — 본인 확인"
     onSuccess={(empId, empName) => {
       pinLogin(empId, empName);
       setShowPinModalForProgress(false);
