@@ -384,7 +384,7 @@ useEffect(() => { ccpLoadSlotStatusRef.current = ccp.loadSlotStatus; }, [ccp.loa
 
   
 // ccp_wo_events 실시간 연동
-const ccpEventsChannel = supabase.channel(`ccp_wo_events:${selectedWo.id}`)
+const ccpEventsChannel = supabase.channel(`ccp_wo_events:${selectedWo.id}_${Math.random().toString(36).slice(2, 9)}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "ccp_wo_events" }, (payload) => {
           const d = (payload.new ?? payload.old ?? {}) as Record<string, unknown>;
           const woNo = String(d.work_order_no ?? "");
