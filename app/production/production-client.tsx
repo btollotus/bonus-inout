@@ -237,8 +237,6 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
   // ── CCP 새 구조 ──
   const ccp = useCcpState(warmerSlots, currentUserIdRef, showToast);
 
-  const loadSlotStatusRef = useRef(ccp.loadSlotStatus);
-  useEffect(() => { loadSlotStatusRef.current = ccp.loadSlotStatus; }, [ccp.loadSlotStatus]);
   const slotStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [stockAlerts, setStockAlerts] = useState<{ id: string; item_name: string; status: string; expiry_date: string | null; action: string | null; log_date: string }[]>([]);
@@ -359,18 +357,8 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
   const insertChannelRef = useRef<RealtimeChannel | null>(null);
   const pageLoadTimeRef = useRef<string>(new Date().toISOString());
 
-  useEffect(() => {
-    const channel = supabase.channel(`wo_production_insert_notify_${Math.random().toString(36).slice(2, 9)}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "work_orders" }, (payload) => {
-        const d = payload.new as Record<string, unknown>;
-        const createdAt = String(d.created_at ?? "");
-        if (createdAt && createdAt < pageLoadTimeRef.current) return;
-        setNewWoNotifications((prev) => [{ id: String(d.id ?? ""), client_name: String(d.client_name ?? ""), product_name: String(d.product_name ?? ""), work_order_no: String(d.work_order_no ?? ""), order_date: String(d.order_date ?? ""), created_at: createdAt }, ...prev]);
-        setShowNewWoModal(true); playNotificationSound();
-      }).subscribe((status, err) => { console.log("🔔 [production INSERT채널]", status, err ?? ""); });
-    insertChannelRef.current = channel;
-    return () => { supabase.removeChannel(channel); insertChannelRef.current = null; };
-  }, []); // eslint-disable-line
+  const ccpLoadSlotStatusRef = useRef(ccp.loadSlotStatus);
+useEffect(() => { ccpLoadSlotStatusRef.current = ccp.loadSlotStatus; }, [ccp.loadSlotStatus]);
 
   useEffect(() => {
     if (realtimeChannelRef.current) { supabase.removeChannel(realtimeChannelRef.current); realtimeChannelRef.current = null; setRealtimeConnected(false); }
@@ -491,7 +479,7 @@ const channel = supabase
         table: "ccp_slot_events",
       }, () => {
         if (slotStatusTimerRef.current) clearTimeout(slotStatusTimerRef.current);
-        slotStatusTimerRef.current = setTimeout(() => loadSlotStatusRef.current(), 400);
+        slotStatusTimerRef.current = setTimeout(() => ccpLoadSlotStatusRef.current(), 400); 
       })
       .subscribe((status, err) => {
         console.log("🌡️ [ccp_slot_events_realtime 채널]", status, err ?? "");
