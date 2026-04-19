@@ -420,16 +420,12 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
   if (!woChecks || !selectedWo) return;
 
   const doSave = async (actionBy: string) => {
-    if (value !== "") {
-      const stepLabel = PROGRESS_STEPS.find((s) => s.assigneeKey === assigneeKey)?.label ?? assigneeKey;
-      const confirmed = confirm(`[${stepLabel}] 담당자를 "${value}"로 저장합니다.\n본인(${actionBy})이 맞습니까?`);
-      if (!confirmed) return;
-    }
-    const isDone = value !== "";
-    setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: value, [statusKey]: isDone } : prev);
+    const saveValue = actionBy; // 항상 actionBy 사용 (PIN 인증자 또는 "담당자없음" 또는 "")
+    const isDone = saveValue !== "";
+    setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: saveValue, [statusKey]: isDone } : prev);
     setStepSaving(assigneeKey);
     const { error } = await supabase.from("work_orders").update({
-      [assigneeKey]: value || null,
+      [assigneeKey]: saveValue || null,
       [statusKey]: isDone,
       updated_at: new Date().toISOString()
     }).eq("id", selectedWo.id);
@@ -439,18 +435,20 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
       setMsg("진행상태 저장 실패: " + error.message);
     }
   };
-
   if (value === "" || value === "담당자없음") {
     await doSave(value);
     return;
   }
-
+  
+  // "__pin__" 또는 실제 이름 모두 PIN 인증으로 처리
   if (isPinValid() && pinSession) {
     await doSave(pinSession.employeeName);
   } else {
     setPinProgressPending(() => (name: string) => doSave(name));
     setShowPinModalForProgress(true);
   }
+ 
+
 }
 
   const loadWoList = useCallback(async (offset = 0) => {
@@ -1034,12 +1032,43 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
                       return (
                         <div key={step.assigneeKey} className={`rounded-xl border px-3 py-2.5 transition-all duration-300 ${cardCls} ${isFlashing ? "ring-2 ring-blue-400 ring-offset-1 scale-[1.02]" : ""}`}>
                           <div className="flex items-center justify-between mb-2"><div className="text-xs font-semibold text-slate-700 flex items-center gap-1"><span>{step.icon}</span>{step.label}</div><div>{isSaving ? <span className="text-[10px] text-slate-400 animate-pulse">저장 중...</span> : isDone ? <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${step.badgeDone}`}>완료</span> : isSkipped ? <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${step.badgeSkip}`}>⚠ 미입력</span> : <span className="rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-400">대기</span>}</div></div>
-                          <select className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 transition-colors ${isDone ? "border-current bg-white/70 text-slate-700 font-medium" : "border-slate-200 bg-white text-slate-500"} ${isSaving ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`} value={assigneeVal} disabled={isSaving || (selectedWo?.status === "완료" && !isEditMode)} onChange={(e) => handleAssigneeChange(step.assigneeKey, step.statusKey, e.target.value)}>
-                          <option value="">— 담당자 선택 —</option>
-<option value="담당자없음">담당자 없음</option>
-{employees.map((e) => e.name ? <option key={e.id} value={e.name}>{e.name}</option> : null)}
-                          </select>
-                          {isDone && <div className="mt-1.5 text-[11px] font-semibold text-center text-slate-600 truncate">👤 {assigneeVal}</div>}
+                          {isDone ? (
+  <div className="space-y-1.5">
+    <div className="text-[11px] font-semibold text-center text-slate-600 truncate">
+      {assigneeVal === "담당자없음" ? "⏭️ 담당자없음" : `👤 ${assigneeVal}`}
+    </div>
+    {!(selectedWo?.status === "완료" && !isEditMode) && (
+      <button
+        type="button"
+        disabled={isSaving}
+        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-200 hover:text-red-500 disabled:opacity-60"
+        onClick={() => handleAssigneeChange(step.assigneeKey, step.statusKey, "")}
+      >
+        ✕ 취소
+      </button>
+    )}
+  </div>
+) : (
+  <div className="flex flex-col gap-1.5">
+    <button
+      type="button"
+      disabled={isSaving || (selectedWo?.status === "완료" && !isEditMode)}
+      className="w-full rounded-lg border border-blue-300 bg-blue-50 px-2 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+      onClick={() => handleAssigneeChange(step.assigneeKey, step.statusKey, "__pin__")}
+    >
+      🔑 PIN 확인
+    </button>
+    <button
+      type="button"
+      disabled={isSaving || (selectedWo?.status === "완료" && !isEditMode)}
+      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-60"
+      onClick={() => handleAssigneeChange(step.assigneeKey, step.statusKey, "담당자없음")}
+    >
+      ⏭️ 담당자없음
+    </button>
+  </div>
+)}       
+
                         </div>
                       );
                     })}
