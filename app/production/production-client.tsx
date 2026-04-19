@@ -223,7 +223,7 @@ const [hasMore, setHasMore] = useState(false);
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
   const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; unit_weight: string; expiry_date: string }>>({});
   const [printOpen, setPrintOpen] = useState(false);
-  const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
+  const [employees, setEmployees] = useState<{ id: string; name: string | null; pin: string | null }[]>([]);
 
   const [warmerSlots, setWarmerSlots] = useState<{ id: string; slot_name: string; purpose: string }[]>([]);
   const [eCcpSlotId, setECcpSlotId] = useState<string>("");
@@ -497,7 +497,7 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
     return () => { supabase.removeChannel(channel); };
   }, []); // eslint-disable-line
 
-  useEffect(() => { supabase.from("employees").select("id,name,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => { if (data) setEmployees(data); }); }, []);
+  useEffect(() => { supabase.from("employees").select("id,name,pin,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => { if (data) setEmployees(data); }); }, []);
   useEffect(() => { supabase.from("warmer_slots").select("id,slot_name,purpose").eq("is_active", true).order("slot_no").then(({ data }) => { if (data) setWarmerSlots(data); }); }, []);
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10);
