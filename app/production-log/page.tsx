@@ -181,13 +181,13 @@ export default function ProductionLogPage() {
 <div className="flex-1 min-w-0">
 {/* 탭 컨텐츠 */}
 {activeTab === "production" && (
-  <ProductionLogTab role={role} userId={userId} showToast={showToast} />
+  <WorkLogTab role={role} userId={userId} showToast={showToast} />
 )}
         {activeTab === "material" && (
           <MaterialLedgerTab role={role} userId={userId} showToast={showToast} />
         )}
 {activeTab === "work" && (
-  <WorkLogTab role={role} userId={userId} showToast={showToast} />
+  <ProductionLogTab role={role} userId={userId} showToast={showToast} />
 )}
         {activeTab === "ccp1b" && (
           <Ccp1bTab role={role} userId={userId} showToast={showToast} />
