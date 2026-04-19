@@ -440,9 +440,8 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
     }
   };
 
-  if (value === "") {
-    // 담당자 해제는 PIN 불필요
-    await doSave("");
+  if (value === "" || value === "담당자없음") {
+    await doSave(value);
     return;
   }
 
