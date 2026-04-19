@@ -492,7 +492,11 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
         if (slotStatusTimerRef.current) clearTimeout(slotStatusTimerRef.current);
         slotStatusTimerRef.current = setTimeout(() => loadSlotStatusRef.current(), 400);
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log("🌡️ [ccp_slot_events_realtime 채널]", status, err ?? "");
+      });
+
+      
     return () => {
       supabase.removeChannel(channel);
       if (slotStatusTimerRef.current) clearTimeout(slotStatusTimerRef.current);
