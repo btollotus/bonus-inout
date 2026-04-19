@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useCcpState, SlotStatusPanel, WoCcpCard } from "./production-client-ccp";
+import { usePinSession, PinModal } from "@/app/contexts/PinSessionContext";
 
 // ─────────────────────── Types ───────────────────────
 type WoSubItem = { name: string; qty: number };
@@ -229,6 +230,10 @@ const [hasMore, setHasMore] = useState(false);
 
   const currentUserIdRef = useRef<string | null>(null);
 
+const { session: pinSession, isValid: isPinValid, login: pinLogin } = usePinSession();
+const [showPinModalForProgress, setShowPinModalForProgress] = useState(false);
+const [pinProgressPending, setPinProgressPending] = useState<((name: string) => void) | null>(null);
+
   // ── CCP 새 구조 ──
   const ccp = useCcpState(warmerSlots, currentUserIdRef, showToast);
 
@@ -409,20 +414,45 @@ setRealtimeConnected(false);
 };
 }, [selectedWo?.id]);
 
-  async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyof WoChecks, value: string) {
-    if (!woChecks || !selectedWo) return;
+  
+// 기존 handleAssigneeChange 전체를 교체
+async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyof WoChecks, value: string) {
+  if (!woChecks || !selectedWo) return;
+
+  const doSave = async (actionBy: string) => {
     if (value !== "") {
       const stepLabel = PROGRESS_STEPS.find((s) => s.assigneeKey === assigneeKey)?.label ?? assigneeKey;
-      const confirmed = confirm(`[${stepLabel}] 담당자를 "${value}"로 저장합니다.\n본인이 맞습니까?`);
+      const confirmed = confirm(`[${stepLabel}] 담당자를 "${value}"로 저장합니다.\n본인(${actionBy})이 맞습니까?`);
       if (!confirmed) return;
     }
     const isDone = value !== "";
     setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: value, [statusKey]: isDone } : prev);
     setStepSaving(assigneeKey);
-    const { error } = await supabase.from("work_orders").update({ [assigneeKey]: value || null, [statusKey]: isDone, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+    const { error } = await supabase.from("work_orders").update({
+      [assigneeKey]: value || null,
+      [statusKey]: isDone,
+      updated_at: new Date().toISOString()
+    }).eq("id", selectedWo.id);
     setStepSaving(null);
-    if (error) { setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: woChecks[assigneeKey], [statusKey]: woChecks[statusKey] } : prev); setMsg("진행상태 저장 실패: " + error.message); }
+    if (error) {
+      setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: woChecks[assigneeKey], [statusKey]: woChecks[statusKey] } : prev);
+      setMsg("진행상태 저장 실패: " + error.message);
+    }
+  };
+
+  if (value === "") {
+    // 담당자 해제는 PIN 불필요
+    await doSave("");
+    return;
   }
+
+  if (isPinValid() && pinSession) {
+    await doSave(pinSession.employeeName);
+  } else {
+    setPinProgressPending(() => (name: string) => doSave(name));
+    setShowPinModalForProgress(true);
+  }
+}
 
   const loadWoList = useCallback(async (offset = 0) => {
     setLoading(true); setMsg(null);
@@ -696,6 +726,25 @@ setRealtimeConnected(false);
             </div>
           </div>
         )}
+
+{showPinModalForProgress && (
+  <PinModal
+    employees={employees}
+    title="진행상태 입력 — 본인 확인"
+    onSuccess={(empId, empName) => {
+      pinLogin(empId, empName);
+      setShowPinModalForProgress(false);
+      if (pinProgressPending) {
+        pinProgressPending(empName);
+        setPinProgressPending(null);
+      }
+    }}
+    onCancel={() => {
+      setShowPinModalForProgress(false);
+      setPinProgressPending(null);
+    }}
+  />
+)}    
 
         {/* ── 온장고 슬롯 현황 ── */}
         <SlotStatusPanel
