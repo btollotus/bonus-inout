@@ -72,7 +72,7 @@ type PartnerView = "PINNED" | "RECENT" | "ALL";
 type FoodTypeRow = { id: string; name: string };
 type PresetProductRow = { id: string; product_name: string; food_type: string | null; weight_g: number | string | null; barcode: string | null };
 type MasterProductRow = { product_name: string; food_type: string | null; report_no: string | null; weight_g: number | null; unit_type: "EA" | "BOX" | string | null; pack_ea: number | null; barcode: string | null };
-type Line = { food_type: string; name: string; weight_g: number | string; qty: number; unit: number | string; total_incl_vat: number | string; existing_barcode?: string | null };
+type Line = { food_type: string; name: string; weight_g: number | string; qty: number; unit: number | string; total_incl_vat: number | string };
 type ShipmentSnap = { seq: number; ship_to_name: string; ship_to_address1: string; ship_to_address2?: string | null; ship_to_mobile?: string | null; ship_to_phone?: string | null; ship_zipcode?: string | null; delivery_message?: string | null };
 type UnifiedRow = {
   kind: "ORDER" | "LEDGER"; date: string; tsKey: string; partnerName: string;
@@ -296,17 +296,12 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
     <div className={`grid ${gridCols} gap-2`}>
 <input className={inputCls} lang="ko" list="food-types-list" value={l.food_type} onChange={(e) => onUpdate(i, { food_type: e.target.value })} />
 <input className={inputCls} lang="ko" list="preset-products-list" value={l.name}    
-    onChange={(e) => {
-      const v = e.target.value; onUpdate(i, { name: v });
-      const hitPreset = presetByName.get(v);
-      if (hitPreset) onUpdate(i, { food_type: hitPreset.food_type ?? "", weight_g: toNum(hitPreset.weight_g), existing_barcode: hitPreset.barcode ?? null });
-      else {
-        const hitMaster = masterByName.get(v);
-        if (hitMaster) onUpdate(i, { food_type: hitMaster.food_type ?? "", weight_g: Number(hitMaster.weight_g ?? 0), existing_barcode: hitMaster.barcode ?? null });
-        else onUpdate(i, { existing_barcode: null }); // 직접 타이핑 시 초기화
-      }
-    }}  
-
+        onChange={(e) => {
+          const v = e.target.value; onUpdate(i, { name: v });
+          const hitPreset = presetByName.get(v);
+          if (hitPreset) onUpdate(i, { food_type: hitPreset.food_type ?? "", weight_g: toNum(hitPreset.weight_g) });
+          else { const hitMaster = masterByName.get(v); if (hitMaster) onUpdate(i, { food_type: hitMaster.food_type ?? "", weight_g: Number(hitMaster.weight_g ?? 0) }); }
+        }}
       />
       <input className={inputRightCls} inputMode="decimal"
         value={typeof l.weight_g === "string" ? l.weight_g : formatWeight(l.weight_g)}
@@ -1053,18 +1048,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
               }
             }
           } else {
-          
-              // ── 바코드로 2차 조회 (기성제품 등 variant_name 불일치 케이스) ──
-  const existingBarcode = matchedLine?.existing_barcode ?? null;
-  const { data: existByBarcode } = existingBarcode
-    ? await supabase.from("product_barcodes").select("variant_id").eq("barcode", existingBarcode).eq("is_active", true).maybeSingle()
-    : { data: null };
-
-  if (existByBarcode?.variant_id) {
-    itemVariantId = existByBarcode.variant_id as string;
-  } else {
-    // ── 신규 variant 생성: 새 바코드 사용 ──
-
+            // ── 신규 variant 생성: 새 바코드 사용 ──
             const { data: newItemVariant, error: vivErr } = await supabase.from("product_variants").insert({ product_id: productId, variant_name: itemVariantName, barcode: itemBarcodeNo, pack_unit: 1, unit_type: "EA", weight_g: itemWeightG }).select("id").single();
             if (vivErr) throw new Error("품목 규격 등록 실패: " + vivErr.message);
             itemVariantId = (newItemVariant as any).id;
