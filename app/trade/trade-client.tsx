@@ -994,8 +994,10 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         for (let li = 0; li < cleanLines.length; li++) {
           const l = cleanLines[li];
           let itemBarcodeNo: string;
-          if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
-            itemBarcodeNo = wo_itemExistingBarcodes[l.name]; // 기존 바코드 재사용 (품목명 기준)
+          
+          console.log("[바코드재사용] orderIsReorder:", orderIsReorder, "l.name:", l.name, "barcodes:", wo_itemExistingBarcodes);
+if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
+  itemBarcodeNo = wo_itemExistingBarcodes[l.name]; // 기존 바코드 재사용 (품목명 기준)
 
           } else {
             const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
