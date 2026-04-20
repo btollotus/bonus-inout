@@ -1362,8 +1362,11 @@ if (copyPartnerId) {
           });
           visibleWoItemsForBarcode.forEach((wi: any, idx: number) => {
             if (wi.unit_weight) weightByIndex[idx] = Number(wi.unit_weight);
-            if (wi.barcode_no) barcodeMap[idx] = wi.barcode_no;
+            const itemName = wi.sub_items?.[0]?.name ?? "";
+            if (wi.barcode_no && itemName) barcodeMap[itemName] = wi.barcode_no;
           });
+
+
           setWo_itemExistingBarcodes(barcodeMap);
 
           if (Object.keys(weightByIndex).length > 0) {
