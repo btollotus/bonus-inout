@@ -1367,16 +1367,17 @@ if (copyPartnerId) {
 
           // 품목별 이미지 복사 (lines 이름 기준 매핑)
           const woItems: any[] = (wo as any).work_order_items ?? [];
-          const copiedLines = r.order_lines?.length
-            ? r.order_lines.map((l: any) => String(l.name ?? ""))
-            : [];
-          const newExistingMap: Record<number, string[]> = {};
-          for (let lineIdx = 0; lineIdx < copiedLines.length; lineIdx++) {
-            const lineName = copiedLines[lineIdx];
-            // sub_items[0].name이 line name과 일치하는 woItem 찾기
-            const matchedItem = woItems.find((wi: any) =>
-              (wi.sub_items?.[0]?.name ?? "") === lineName
-            ) ?? woItems[lineIdx]; // fallback: 인덱스 순서
+        // 수정
+const copiedLines = r.order_lines?.length
+? r.order_lines.map((l: any) => String(l.name ?? ""))
+: [];
+const newExistingMap: Record<number, string[]> = {};
+const visibleWoItems = woItems.filter((wi: any) => {
+const n = (wi.sub_items?.[0]?.name ?? "").trim();
+return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+});
+for (let lineIdx = 0; lineIdx < copiedLines.length; lineIdx++) {
+const matchedItem = visibleWoItems[lineIdx];
             const rawImages: string[] = matchedItem?.images ?? [];
             if (rawImages.length === 0) continue;
             const paths = rawImages.map((v: string) => {
