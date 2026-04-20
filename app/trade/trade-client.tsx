@@ -1355,9 +1355,18 @@ if (copyPartnerId) {
           const woItemsAll: any[] = (wo as any).work_order_items ?? [];
           const barcodeMap: Record<string, string> = {};
           const weightByIndex: Record<number, number> = {};
-          woItemsAll.forEach((wi, idx) => {
-            if (wi.unit_weight) weightByIndex[idx] = Number(wi.unit_weight);
+          const visibleWoItemsForBarcode = woItemsAll.filter((wi: any) => {
+            const n = (wi.sub_items?.[0]?.name ?? "").trim();
+            return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
           });
+          visibleWoItemsForBarcode.forEach((wi: any, idx: number) => {
+            if (wi.unit_weight) weightByIndex[idx] = Number(wi.unit_weight);
+            if (wi.barcode_no) {
+              const itemName = (wi.sub_items?.[0]?.name ?? "");
+              barcodeMap[itemName] = wi.barcode_no;
+            }
+          });
+          setWo_itemExistingBarcodes(barcodeMap);
           if (Object.keys(weightByIndex).length > 0) {
             setLines((prev) => prev.map((l, i) => ({
               ...l,
