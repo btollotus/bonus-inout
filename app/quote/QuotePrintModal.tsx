@@ -119,12 +119,18 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   for (const item of items) {
     // ── 전사지 단독 품목 처리 ──
     if (item.productType === "전사지") {
-      const itemLabel = items.filter(x => x.productType === "전사지").length > 1
-        ? ` (품목${items.filter(x => x.productType === "전사지").indexOf(item) + 1})`
-        : "";
+      const sheetSupply = item.quantity * 3000;
+      lineItems.push({
+        name: `전사지 (${item.quantity}장 × 3,000원)`,
+        qty: String(item.quantity),
+        unit: 3000,
+        supply: sheetSupply,
+        vat: Math.round(sheetSupply * 0.1),
+        total: sheetSupply + Math.round(sheetSupply * 0.1),
+      });
       if (item.plateCost > 0) {
         lineItems.push({
-          name: `인쇄판비 (최초 1회)${itemLabel}`,
+          name: "인쇄판비 (최초 1회)",
           qty: "1",
           unit: item.plateCost,
           supply: item.plateCost,
@@ -132,17 +138,9 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
           total: item.plateCost + Math.round(item.plateCost * 0.1),
         });
       }
-      const sheetSupply = item.quantity * 3000;
-      lineItems.push({
-        name: `전사지 (${item.quantity}장 × 3,000원)${itemLabel}`,
-        qty: String(item.quantity),
-        unit: 3000,
-        supply: sheetSupply,
-        vat: Math.round(sheetSupply * 0.1),
-        total: sheetSupply + Math.round(sheetSupply * 0.1),
-      });
       continue;
     }
+
     const isDoneum = item.productType.includes("도눔");
     const colorLabel = (isDoneum ? "도눔 " : "") + (item.isRaise ? "컬러인쇄" : item.colorType === "dark" ? "다크" : "화이트");
     const sizeStr = item.widthMm && item.heightMm
