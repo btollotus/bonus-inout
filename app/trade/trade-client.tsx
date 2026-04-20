@@ -469,7 +469,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [wo_itemImagePreviewUrls, setWo_itemImagePreviewUrls] = useState<Record<number, string[]>>({});
   // 복사 시 기존 이미지 (key = line index, value = signed URL 배열)
   const [wo_itemExistingImageUrls, setWo_itemExistingImageUrls] = useState<Record<number, string[]>>({});
-  const [wo_itemExistingBarcodes, setWo_itemExistingBarcodes] = useState<Record<number, string>>({});
+  const [wo_itemExistingBarcodes, setWo_itemExistingBarcodes] = useState<Record<string, string>>({});
   const [wo_saving, setWo_saving] = useState(false);
   const [wo_list, setWo_list] = useState<WorkOrderRow[]>([]);
   const [wo_listLoading, setWo_listLoading] = useState(false);
@@ -994,8 +994,9 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         for (let li = 0; li < cleanLines.length; li++) {
           const l = cleanLines[li];
           let itemBarcodeNo: string;
-          if (orderIsReorder && wo_itemExistingBarcodes[li]) {
-            itemBarcodeNo = wo_itemExistingBarcodes[li]; // 기존 바코드 재사용 (인덱스 기준)
+          if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
+            itemBarcodeNo = wo_itemExistingBarcodes[l.name]; // 기존 바코드 재사용 (품목명 기준)
+
           } else {
             const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
             if (ibErr) throw new Error("품목 바코드 생성 실패: " + ibErr.message);
@@ -1483,12 +1484,16 @@ if (woSubNameVal) {
         }
         // 품목별 이미지 로드 (eLines 이름 기준 매핑)
         const woItems: any[] = (wo as any).work_order_items ?? [];
+        const visibleWoItems = woItems.filter((wi: any) => {
+          const n = (wi.sub_items?.[0]?.name ?? "").trim();
+          return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+        });
         // woItem id를 eLines 이름 순서로 매핑
         const eLineNames = r.order_lines?.length
           ? r.order_lines.map((l: any) => String(l.name ?? ""))
           : [];
         const orderedItemIds: string[] = eLineNames.map((lineName: string) => {
-          const matched = woItems.find((wi: any) =>
+          const matched = visibleWoItems.find((wi: any) =>
             (wi.sub_items?.[0]?.name ?? "") === lineName
           );
           return matched?.id ?? "";
@@ -1497,9 +1502,10 @@ if (woSubNameVal) {
         const newExistingMap: Record<number, string[]> = {};
         for (let idx = 0; idx < eLineNames.length; idx++) {
           const lineName = eLineNames[idx];
-          const matchedItem = woItems.find((wi: any) =>
+          const matchedItem = visibleWoItems.find((wi: any) =>
             (wi.sub_items?.[0]?.name ?? "") === lineName
-          ) ?? woItems[idx];
+          ) ?? visibleWoItems[idx];
+
           const rawItemImages: string[] = matchedItem?.images ?? [];
           if (rawItemImages.length === 0) continue;
           const paths = rawItemImages.map((v: string) => {
