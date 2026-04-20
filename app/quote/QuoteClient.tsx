@@ -199,9 +199,25 @@ export default function QuoteClient() {
   const [listSearch, setListSearch] = useState("");
 
   // 전사지 견적 폼
-  const [sheetCount, setSheetCount] = useState("5");
-  const [sheetIsNew, setSheetIsNew] = useState(true);
-  const [sheetCalcResult, setSheetCalcResult] = useState<any>(null);
+  type SheetItem = {
+    id: string;
+    quantity: string;
+    isNew: boolean;
+    calcResult: { plateCost: number; sheetCost: number; total: number } | null;
+  };
+  
+  const newSheetItem = (): SheetItem => ({
+    id: crypto.randomUUID(),
+    quantity: "",
+    isNew: true,
+    calcResult: null,
+  });
+  
+  const [sheetItems, setSheetItems] = useState<SheetItem[]>([newSheetItem()]);
+  
+  function updateSheetItem(id: string, patch: Partial<SheetItem>) {
+    setSheetItems(prev => prev.map(x => x.id === id ? { ...x, ...patch } : x));
+  }
   const [sheetList, setSheetList] = useState<QuoteRequestRow[]>([]);
   const [sheetSearch, setSheetSearch] = useState("");
   const [sheetStatusFilter, setSheetStatusFilter] = useState<string>("전체");
@@ -250,7 +266,7 @@ const SIG_PAGE_SIZE = 10;
   // ─── 전사지 목록 로드 ───
   async function loadSheetList() {
     const { data } = await supabase.from("quote_requests")
-      .select("*,quotes(*)")
+    .select("*,quotes(*),quote_items(*)")
       .eq("request_type", "sheet")
       .order("created_at", { ascending: false })
       .limit(100);
@@ -288,14 +304,13 @@ async function loadSignageList() {
   // (각 품목의 계산 버튼에서 직접 fetch 호출)
 
   // ─── 전사지 계산 ───
-  async function handleSheetCalc() {
-    const sheets = Math.max(5, parseInt(sheetCount) || 5);
-    const plateCost = sheetIsNew ? 95000 : 0;
+  function calcSheetItem(item: SheetItem) {
+    const sheets = Math.max(1, parseInt(item.quantity) || 0);
+    if (sheets < 1) return;
+    const plateCost = item.isNew ? 95000 : 0;
     const sheetCost = sheets * 3000;
-    const supplyPrice = plateCost + sheetCost;
-    const delivery = supplyPrice < 50000 ? 3300 : 0;
-    const total = supplyPrice + delivery;
-    setSheetCalcResult({ sheets, plateCost, sheetCost, supplyPrice, delivery, total, totalWithVat: Math.round(total * 1.1) });
+    const total = plateCost + sheetCost;
+    updateSheetItem(item.id, { calcResult: { plateCost, sheetCost, total } });
   }
 
   // ─── 견적 저장 (다품목 — 첫 품목 기준으로 저장) ───
@@ -348,33 +363,55 @@ async function loadSignageList() {
   // ─── 전사지 견적 저장 ───
   async function handleSheetSave() {
     if (!activeCustomerName) return setMsg("업체명을 입력하거나 거래처를 선택하세요.");
-    if (!sheetCalcResult) return setMsg("먼저 계산을 실행하세요.");
+    const calcedItems = sheetItems.filter(x => x.calcResult);
+    if (calcedItems.length === 0) return setMsg("먼저 계산을 실행하세요.");
+  
+    const totalPlateCost = calcedItems.reduce((s, x) => s + x.calcResult!.plateCost, 0);
+    const totalSheetCost = calcedItems.reduce((s, x) => s + x.calcResult!.sheetCost, 0);
+    const totalSheets    = calcedItems.reduce((s, x) => s + (parseInt(x.quantity) || 0), 0);
+    const grandTotal     = calcedItems.reduce((s, x) => s + x.calcResult!.total, 0);
+    const delivery       = grandTotal < 50000 ? 3300 : 0;
+    const finalTotal     = grandTotal + delivery;
+  
     const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
-      customer_id: activeCustomerId,
+      customer_id:   activeCustomerId,
       customer_name: activeCustomerName,
-      request_type: "sheet",
-      quantity: sheetCalcResult.sheets,
-      is_new: sheetIsNew,
-      memo: memo || null,
-      status: "견적완료",
+      request_type:  "sheet",
+      quantity:      totalSheets,
+      is_new:        calcedItems.some(x => x.isNew),
+      memo:          memo || null,
+      status:        "견적완료",
+      updated_at:    new Date().toISOString(),
     }).select("id").single();
     if (reqErr) return setMsg(reqErr.message);
-
+  
     const { error: quoteErr } = await supabase.from("quotes").insert({
-      request_id: req.id,
-      plate_cost: sheetCalcResult.plateCost,
-      transfer_sheets: sheetCalcResult.sheets,
-      transfer_cost: sheetCalcResult.sheetCost,
-      delivery_cost: sheetCalcResult.delivery,
-      total: sheetCalcResult.total,
+      request_id:      req.id,
+      plate_cost:      totalPlateCost,
+      transfer_sheets: totalSheets,
+      transfer_cost:   totalSheetCost,
+      delivery_cost:   delivery,
+      total:           finalTotal,
     });
     if (quoteErr) return setMsg(quoteErr.message);
+  
+    const itemRows = calcedItems.map((x, idx) => ({
+      request_id:    req.id,
+      product_type:  "전사지",
+      quantity:      parseInt(x.quantity) || 0,
+      is_new:        x.isNew,
+      plate_cost:    x.calcResult!.plateCost,
+      transfer_cost: x.calcResult!.sheetCost,
+      total:         x.calcResult!.total,
+      sort_order:    idx,
+    }));
+    const { error: itemErr } = await supabase.from("quote_items").insert(itemRows);
+    if (itemErr) return setMsg(itemErr.message);
+  
     setMsg("✅ 전사지 견적이 저장됐어요!");
     setLastQuoteRequestId(req.id);
-    // setSheetCalcResult(null) 은 모달 닫을 때 처리 — 여기서 초기화하면 모달 데이터 사라짐
     loadSheetList();
-  }
-
+  } 
   // ─── 상태 변경 ───
   async function updateStatus(id: string, status: string, lostReason?: string) {
     const { error } = await supabase.from("quote_requests")
@@ -1131,76 +1168,119 @@ async function loadSignageList() {
 
 
             {/* 전사지 입력 */}
-            <div className="space-y-4">
-              <div className={`${card} p-4`}>
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="text-lg font-semibold">전사지 단독 견적</div>
-                  {activeCustomerName && <span className={pill}>{activeCustomerName}</span>}
-                </div>
+           {/* 전사지 입력 */}
+<div className="space-y-4">
+  <div className={`${card} p-4`}>
+    <div className="mb-4 flex items-center gap-3">
+      <div className="text-lg font-semibold">전사지 단독 견적</div>
+      {activeCustomerName && <span className={pill}>{activeCustomerName}</span>}
+    </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div>
-                    <div className="mb-1 text-xs font-semibold text-slate-600">전사지 장수 (최소 5장)</div>
-                    <input className={inp} inputMode="numeric" placeholder="예: 30" value={sheetCount}
-                      onChange={e => { setSheetCount(e.target.value); setSheetCalcResult(null); }} />
-                  </div>
-                  <div className="flex items-end">
-                    <button type="button"
-                      onClick={() => { setSheetIsNew(v => !v); setSheetCalcResult(null); }}
-                      style={{ padding: "8px 20px", borderRadius: 10, fontSize: 13, fontWeight: "bold", cursor: "pointer", border: "none",
-                        background: sheetIsNew ? "#dbeafe" : "#fef3c7",
-                        color: sheetIsNew ? "#1d4ed8" : "#b45309",
-                        outline: `1px solid ${sheetIsNew ? "#93c5fd" : "#fcd34d"}` }}>
-                      {sheetIsNew ? "신규 (인쇄판비 포함)" : "재주문 (인쇄판비 없음)"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <div className="mb-1 text-xs font-semibold text-slate-600">메모</div>
-                  <textarea className={`${inp} resize-none`} rows={2} placeholder="기타 요청사항" value={memo}
-                    onChange={e => setMemo(e.target.value)} />
-                </div>
-
-                <button className={`${btnOn} mt-4 w-full`} onClick={handleSheetCalc}>🔢 계산</button>
+    {/* 품목 행 목록 */}
+    <div className="space-y-2 mb-3">
+      {sheetItems.map((item, idx) => (
+        <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-slate-500">품목 {idx + 1}</span>
+            {sheetItems.length > 1 && (
+              <button className="text-xs text-red-400 hover:text-red-600"
+                onClick={() => setSheetItems(prev => prev.filter(x => x.id !== item.id))}>
+                삭제
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2 items-end flex-wrap">
+            <div>
+              <div className="mb-1 text-xs font-semibold text-slate-600">전사지 장수</div>
+              <input className={`${inp} w-28`} inputMode="numeric" placeholder="예: 10"
+                value={item.quantity}
+                onChange={e => updateSheetItem(item.id, {
+                  quantity: e.target.value.replace(/[^\d]/g, ""),
+                  calcResult: null,
+                })} />
+            </div>
+            <button type="button"
+              className={`rounded-lg border px-4 py-2 text-sm font-bold transition-all ${
+                item.isNew
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "border-amber-300 bg-amber-50 text-amber-700"
+              }`}
+              onClick={() => updateSheetItem(item.id, { isNew: !item.isNew, calcResult: null })}>
+              {item.isNew ? "신규" : "재주문"}
+            </button>
+            <button
+              className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+              onClick={() => calcSheetItem(item)}>
+              🔢 계산
+            </button>
+            {item.calcResult && (
+              <div className="flex gap-2 text-xs text-slate-600 flex-wrap">
+                {item.calcResult.plateCost > 0 && (
+                  <span className="rounded-lg border border-slate-200 bg-white px-2 py-1">
+                    인쇄판비 {fmt(item.calcResult.plateCost)}원
+                  </span>
+                )}
+                <span className="rounded-lg border border-slate-200 bg-white px-2 py-1">
+                  전사지 {fmt(item.calcResult.sheetCost)}원
+                </span>
+                <span className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 font-semibold text-blue-700">
+                  소계 {fmt(item.calcResult.total)}원
+                </span>
               </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
 
-              {/* 전사지 계산 결과 */}
-              {sheetCalcResult && (
-                <div className={`${card} p-4`}>
-                  <div className="mb-3 text-lg font-semibold">계산 결과</div>
-                  <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-                    {[
-                      { label: "전사지 장수", value: `${sheetCalcResult.sheets}장` },
-                      { label: "인쇄판비", value: fmt(sheetCalcResult.plateCost)+"원" },
-                      { label: "전사지 비용", value: fmt(sheetCalcResult.sheetCost)+"원" },
-                      { label: "택배비", value: sheetCalcResult.delivery ? fmt(sheetCalcResult.delivery)+"원" : "없음" },
-                    ].map(({ label, value }) => (
-                      <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <div className="text-xs text-slate-500">{label}</div>
-                        <div className="font-semibold tabular-nums">{value}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <div className="rounded-2xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-center">
-                      <div className="text-xs text-blue-600 font-semibold">공급가 (부가세 별도)</div>
-                      <div className="text-2xl font-black text-blue-700 tabular-nums">{fmt(sheetCalcResult.supplyPrice)}원</div>
-                    </div>
-                    <div className="rounded-2xl border-2 border-slate-300 bg-slate-50 px-4 py-3 text-center">
-                      <div className="text-xs text-slate-600 font-semibold">부가세 포함</div>
-                      <div className="text-2xl font-black text-slate-700 tabular-nums">{fmt(sheetCalcResult.totalWithVat)}원</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <button className={`${btnOn} flex-1`} onClick={async () => {
-                      await handleSheetSave();
-                      setPrintOpen(true);
-                    }}>🖨️ 견적서 출력</button>
-                    <button className={btn} onClick={handleSheetSave}>💾 저장만</button>
-                  </div>
-                </div>
-              )}
+    {/* 품목 추가 */}
+    <button className={`${btn} w-full mb-4`}
+      onClick={() => setSheetItems(prev => [...prev, newSheetItem()])}>
+      + 품목 추가
+    </button>
+
+    {/* 합계 미리보기 */}
+    {sheetItems.some(x => x.calcResult) && (() => {
+      const calced = sheetItems.filter(x => x.calcResult);
+      const grandTotal = calced.reduce((s, x) => s + x.calcResult!.total, 0);
+      const delivery = grandTotal < 50000 ? 3300 : 0;
+      const finalTotal = grandTotal + delivery;
+      return (
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-center">
+            <div className="text-xs text-blue-600 font-semibold">공급가 (부가세 별도)</div>
+            <div className="text-2xl font-black text-blue-700 tabular-nums">{fmt(finalTotal)}원</div>
+            {delivery > 0 && <div className="text-xs text-slate-500 mt-0.5">택배비 {fmt(delivery)}원 포함</div>}
+          </div>
+          <div className="rounded-2xl border-2 border-slate-300 bg-slate-50 px-4 py-3 text-center">
+            <div className="text-xs text-slate-600 font-semibold">부가세 포함</div>
+            <div className="text-2xl font-black text-slate-700 tabular-nums">{fmt(Math.round(finalTotal * 1.1))}원</div>
+          </div>
+        </div>
+      );
+    })()}
+
+    {/* 메모 */}
+    <div className="mb-4">
+      <div className="mb-1 text-xs font-semibold text-slate-600">메모</div>
+      <textarea className={`${inp} resize-none`} rows={2} placeholder="기타 요청사항"
+        value={memo} onChange={e => setMemo(e.target.value)} />
+    </div>
+
+    {/* 저장/출력 버튼 */}
+    <div className="flex gap-2">
+      <button className={`${btnOn} flex-1`}
+        disabled={!sheetItems.some(x => x.calcResult)}
+        onClick={async () => { await handleSheetSave(); setPrintOpen(true); }}>
+        🖨️ 견적서 출력
+      </button>
+      <button className={btn}
+        disabled={!sheetItems.some(x => x.calcResult)}
+        onClick={handleSheetSave}>
+        💾 저장만
+      </button>
+    </div>
+  </div>
 
  {/* 전사지 목록 */}
  {sheetList.length > 0 && (
@@ -1434,48 +1514,50 @@ async function loadSignageList() {
 
         // quote_items 있으면 전체 품목, 없으면 기존 단일 품목
         const printItems = (r.quote_items && r.quote_items.length > 0)
-          ? r.quote_items
-              .sort((a, b) => a.sort_order - b.sort_order)
-              .map(qi => {
-                const qiPt = qi.product_type ?? "";
-                const qiThickness = qiPt.includes("2mm") ? "2mm" : qiPt.includes("3mm") ? "3mm" : qiPt.includes("5mm") ? "5mm" : "";
-                return {
-                  productType: qiPt,
-                  colorType: (qi.color_type as "dark" | "white") ?? "dark",
-                  isRaise: qiPt.startsWith("레이즈"),
-                  widthMm: qi.width_mm,
-                  heightMm: qi.height_mm,
-                  thickness: qiThickness,
-                  quantity: qi.quantity ?? 0,
-                  isNew: qi.is_new,
-                  designChanged: qi.design_changed,
-                  useStockMold: qi.use_stock_mold,
-                  moldCost: qi.mold_cost,
-                  plateCost: qi.plate_cost,
-                  sheetCost: qi.transfer_cost,
-                  workFee: qi.work_fee,
-                  V: qi.final_price,
-                  manualV: 0,
-                };
-              })
-          : [{
-              productType: r.request_type === "sheet" ? "전사지" : pt,
-              colorType: ((r.color_type as "dark" | "white") ?? "dark"),
-              isRaise,
-              widthMm: r.width_mm,
-              heightMm: r.height_mm,
-              thickness,
-              quantity: r.quantity ?? 0,
-              isNew: r.is_new,
-              designChanged: r.design_changed,
-              useStockMold: r.use_stock_mold,
-              moldCost: q?.mold_cost ?? 0,
-              plateCost: q?.plate_cost ?? 0,
-              sheetCost: q?.transfer_cost ?? 0,
-              workFee: q?.work_fee ?? 0,
-              V: r.request_type === "sheet" ? (q?.total ?? 0) : (q?.final_price ?? 0),
-              manualV: 0,
-            }];
+        ? r.quote_items
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .map(qi => {
+              const qiPt = qi.product_type ?? "";
+              const qiThickness = qiPt.includes("2mm") ? "2mm" : qiPt.includes("3mm") ? "3mm" : qiPt.includes("5mm") ? "5mm" : "";
+              return {
+                productType: qiPt,
+                colorType: (qi.color_type as "dark" | "white") ?? "dark",
+                isRaise: qiPt.startsWith("레이즈"),
+                widthMm: qi.width_mm,
+                heightMm: qi.height_mm,
+                thickness: qiThickness,
+                quantity: qi.quantity ?? 0,
+                isNew: qi.is_new,
+                designChanged: qi.design_changed,
+                useStockMold: qi.use_stock_mold,
+                moldCost: qi.mold_cost,
+                plateCost: qi.plate_cost,
+                sheetCost: qi.transfer_cost,  // ← 전사지 비용 복원
+                workFee: qi.work_fee,
+                V: qiPt === "전사지"
+                  ? (qi.plate_cost ?? 0) + (qi.transfer_cost ?? 0)  // ← 전사지는 V 대신 소계로
+                  : (qi.final_price ?? 0),
+                manualV: 0,
+              };
+            })
+        : [{
+            productType: r.request_type === "sheet" ? "전사지" : pt,
+            colorType: ((r.color_type as "dark" | "white") ?? "dark"),
+            isRaise,
+            widthMm: r.width_mm,
+            heightMm: r.height_mm,
+            thickness,
+            quantity: r.quantity ?? 0,
+            isNew: r.is_new,
+            designChanged: r.design_changed,
+            useStockMold: r.use_stock_mold,
+            moldCost: q?.mold_cost ?? 0,
+            plateCost: q?.plate_cost ?? 0,
+            sheetCost: q?.transfer_cost ?? 0,
+            workFee: q?.work_fee ?? 0,
+            V: r.request_type === "sheet" ? (q?.total ?? 0) : (q?.final_price ?? 0),
+            manualV: 0,
+          }]; 
 
         return (
           <QuotePrintModal
@@ -1493,40 +1575,45 @@ async function loadSignageList() {
           />
         );
       })()}
-
-      {/* 견적서 인쇄 모달 — 전사지 탭 */}
-      {printOpen && !selectedQuoteRow && tab === "sheet" && sheetCalcResult && (
-        <QuotePrintModal
-        onClose={() => { setPrintOpen(false); setSheetCalcResult(null); setSheetCount("5"); setSheetIsNew(true); }}
-          quoteData={{
-            customerName: activeCustomerName,
-            quoteDate: new Date().toISOString().slice(0, 10),
-            inputMode: "auto" as const,
-            items: [{
-              productType: "전사지",
-              colorType: "dark" as const,
-              isRaise: false,
-              widthMm: null,
-              heightMm: null,
-              thickness: "",
-              quantity: sheetCalcResult.sheets,
-              isNew: sheetIsNew,
-              designChanged: false,
-              useStockMold: false,
-              moldCost: 0,
-              plateCost: sheetCalcResult.plateCost,
-              sheetCost: sheetCalcResult.sheetCost,
-              workFee: 0,
-              V: sheetCalcResult.total,
-              manualV: 0,
-            }],
-            memo: memo || null,
-            iceboxPrice: 0,
-            deliveryPrice: sheetCalcResult.delivery,
-            quoteRequestId: lastQuoteRequestId,
-          }}
-        />
-      )}
+{/* 견적서 인쇄 모달 — 전사지 탭 */}
+{printOpen && !selectedQuoteRow && tab === "sheet" && sheetItems.some(x => x.calcResult) && (() => {
+  const calced = sheetItems.filter(x => x.calcResult);
+  const grandTotal = calced.reduce((s, x) => s + x.calcResult!.total, 0);
+  const delivery = grandTotal < 50000 ? 3300 : 0;
+  return (
+    <QuotePrintModal
+      onClose={() => { setPrintOpen(false); setSheetItems([newSheetItem()]); }}
+      quoteData={{
+        customerName: activeCustomerName,
+        quoteDate: new Date().toISOString().slice(0, 10),
+        inputMode: "auto" as const,
+        items: calced.map(x => ({
+          productType: "전사지",
+          colorType: "dark" as const,
+          isRaise: false,
+          widthMm: null,
+          heightMm: null,
+          thickness: "",
+          quantity: parseInt(x.quantity) || 0,
+          isNew: x.isNew,
+          designChanged: false,
+          useStockMold: false,
+          moldCost: 0,
+          plateCost: x.calcResult!.plateCost,
+          sheetCost: x.calcResult!.sheetCost,
+          workFee: 0,
+          V: x.calcResult!.total,
+          manualV: 0,
+        })),
+        memo: memo || null,
+        iceboxPrice: 0,
+        deliveryPrice: delivery,
+        quoteRequestId: lastQuoteRequestId,
+      }}
+    />
+  );
+})()}
+     
 
       {/* 견적서 인쇄 모달 — 견적입력 탭 */}
       {printOpen && !selectedQuoteRow && tab !== "sheet" && (
