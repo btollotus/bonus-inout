@@ -1000,7 +1000,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
           const l = cleanLines[li];
           let itemBarcodeNo: string;
           if (orderIsReorder && wo_itemExistingBarcodes[li]) {
-            itemBarcodeNo = wo_itemExistingBarcodes[li];
+            itemBarcodeNo = wo_itemExistingBarcodes[li]; // 기존 바코드 재사용 (인덱스 기준)
           } else {
             const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
             if (ibErr) throw new Error("품목 바코드 생성 실패: " + ibErr.message);
@@ -1028,8 +1028,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
 
         // ── 품목별 variant 생성 (바코드 중복 방지) ──
         let firstVariantId: string | null = null;
-        for (let li2 = 0; li2 < ((createdWoItems as any[]) ?? []).length; li2++) {
-          const createdItem = (createdWoItems as any[])[li2];
+        for (const createdItem of (createdWoItems as any[]) ?? []) {
           const itemBarcodeNo = createdItem.barcode_no as string;
           const itemName = (createdItem.sub_items as WoSubItem[])?.[0]?.name ?? firstItemName;
           const itemVariantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${itemName}`;
@@ -1056,7 +1055,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
           } else {
           
               // ── 바코드로 2차 조회 (기성제품 등 variant_name 불일치 케이스) ──
-              const existingBarcode = cleanLines[li]?.existing_barcode ?? wo_itemExistingBarcodes[li] ?? null;
+  const existingBarcode = cleanLines[li]?.existing_barcode ?? null;
   const { data: existByBarcode } = existingBarcode
     ? await supabase.from("product_barcodes").select("variant_id").eq("barcode", existingBarcode).eq("is_active", true).maybeSingle()
     : { data: null };
@@ -1125,6 +1124,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         await loadTrades(); return;
       }
     }
+
     setOrderIsReorder(false); setOrderTitle(""); setOrdererName("");
     setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
@@ -1133,6 +1133,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
     await loadTrades();
   }
+
   async function createLedger() {
     setMsg(null);
     const amount = Number((amountStr || "0").replaceAll(",", ""));
