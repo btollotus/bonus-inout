@@ -1126,6 +1126,8 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
       }
     }
   
+  }
+  
     setOrderIsReorder(false); setOrderTitle(""); setOrdererName("");
     setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
