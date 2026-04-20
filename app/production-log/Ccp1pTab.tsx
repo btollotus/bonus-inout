@@ -342,15 +342,19 @@ export function Ccp1pTab({ role, userId, showToast }: {
     loadLogs();
   }, [loadWoList, loadLogs]);
 
-  function selectWo(wo: WorkOrderItem) {
-    setSelectedWoId(wo.id);
-    const existing = logMap[wo.id];
-    if (existing) {
-      setFormData({ ...existing });
-    } else {
-      setFormData(emptyLog(wo.id, wo.product_name, wo.client_name, today));
-    }
+// 변경 후
+function selectWo(wo: WorkOrderItem) {
+  setSelectedWoId(wo.id);
+  const existing = logMap[wo.id];
+  if (existing) {
+    setFormData({ ...existing });
+  } else {
+    setFormData(emptyLog(wo.id, wo.product_name, wo.client_name, today));
   }
+  setTimeout(() => {
+    document.getElementById(`form-${wo.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 50);
+}
 
   function setA(key: keyof ZoneFields, val: string | number | null) {
     if (!formData) return;
@@ -624,215 +628,215 @@ export function Ccp1pTab({ role, userId, showToast }: {
             <button className={btn} onClick={() => { loadWoList(); loadLogs(); }}>🔄 새로고침</button>
           </div>
         </div>
+        
         {loading ? (
-          <div className="py-6 text-center text-sm text-slate-400">불러오는 중...</div>
-        ) : woList.length === 0 ? (
-          <div className="py-6 text-center text-sm text-slate-400">오늘 생산완료된 작업지시서가 없습니다.</div>
-        ) : (
-          <div className="space-y-2">
-            {woList.map((wo: any) => {
-              const hasLog = !!logMap[wo.id];
-              const isSelected = selectedWoId === wo.id;
-              const log = logMap[wo.id];
-              return (
-                <button
-                  key={wo.id}
-                  className={`w-full rounded-2xl border p-3 text-left transition-all ${
-                    isSelected
-                      ? "border-blue-400 bg-blue-50"
-                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                  }`}
-                  onClick={() => selectWo(wo)}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="font-semibold text-sm">{wo.client_name} — {wo.product_name}</div>
-                      <div className="mt-1 flex items-center gap-3 text-xs">
-                        <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5">
-                          <span className="text-slate-400">생산완료</span>
-                          <span className="font-semibold text-slate-700 tabular-nums">{toKstTime(wo.updated_at)}</span>
-                        </span>
-                        {hasLog && log?.start_time && (
-                          <span className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-0.5">
-                            <span className="text-green-600">기록</span>
-                            <span className="font-semibold text-green-700 tabular-nums">{log.start_time.slice(0,5)}</span>
-                            {log.b_end_time && <span className="text-green-500">→ {log.b_end_time.slice(0,5)}</span>}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                      hasLog
-                        ? "border-green-200 bg-green-100 text-green-700"
-                        : "border-amber-200 bg-amber-100 text-amber-700"
-                    }`}>
-                      {hasLog ? "기록완료" : "미기록"}
+  <div className="py-6 text-center text-sm text-slate-400">불러오는 중...</div>
+) : woList.length === 0 ? (
+  <div className="py-6 text-center text-sm text-slate-400">오늘 생산완료된 작업지시서가 없습니다.</div>
+) : (
+  <div className="space-y-2">
+    {woList.map((wo: any) => {
+      const hasLog = !!logMap[wo.id];
+      const isSelected = selectedWoId === wo.id;
+      const log = logMap[wo.id];
+      const isEdit = !!logMap[wo.id];
+      return (
+        <React.Fragment key={wo.id}>
+          <button
+            className={`w-full rounded-2xl border p-3 text-left transition-all ${
+              isSelected
+                ? "border-blue-400 bg-blue-50"
+                : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+            }`}
+            onClick={() => selectWo(wo)}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="font-semibold text-sm">{wo.client_name} — {wo.product_name}</div>
+                <div className="mt-1 flex items-center gap-3 text-xs">
+                  <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5">
+                    <span className="text-slate-400">생산완료</span>
+                    <span className="font-semibold text-slate-700 tabular-nums">{toKstTime(wo.updated_at)}</span>
+                  </span>
+                  {hasLog && log?.start_time && (
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-0.5">
+                      <span className="text-green-600">기록</span>
+                      <span className="font-semibold text-green-700 tabular-nums">{log.start_time.slice(0,5)}</span>
+                      {log.b_end_time && <span className="text-green-500">→ {log.b_end_time.slice(0,5)}</span>}
                     </span>
-                  </div>
+                  )}
+                </div>
+              </div>
+              <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                hasLog
+                  ? "border-green-200 bg-green-100 text-green-700"
+                  : "border-amber-200 bg-amber-100 text-amber-700"
+              }`}>
+                {hasLog ? "기록완료" : "미기록"}
+              </span>
+            </div>
+          </button>
+
+          {isSelected && formData && (
+            <div id={`form-${wo.id}`} className={`${card} p-4 print:hidden`}>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-base">{wo.client_name} — {wo.product_name}</div>
+                  <div className="mt-0.5 text-xs text-slate-400">{isEdit ? "✏️ 기존 기록 수정" : "신규 기록 입력"}</div>
+                </div>
+                <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                  isEdit ? "border-green-200 bg-green-100 text-green-700" : "border-amber-200 bg-amber-100 text-amber-700"
+                }`}>{isEdit ? "기록완료" : "미기록"}</span>
+              </div>
+
+              <div className="mb-4 flex flex-wrap items-end gap-4">
+                <div>
+                  <div className="mb-1 text-xs text-slate-500">시작시간 * <span className="text-slate-300">(예: 1430)</span></div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={5}
+                    placeholder="1430"
+                    className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                    value={(formData.start_time ?? "").slice(0, 5)}
+                    onChange={(e: any) => {
+                      let v = e.target.value.replace(/[^\d:]/g, "");
+                      if (/^\d{4}$/.test(v)) v = v.slice(0,2) + ":" + v.slice(2);
+                      setFormData((prev: any) => prev ? { ...prev, start_time: v || null } : prev);
+                    }}
+                  />
+                </div>
+                <div>
+                  <div className="mb-1 text-xs text-slate-500">종료시간 <span className="text-slate-300">(예: 1500)</span></div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={5}
+                    placeholder="1500"
+                    className={`w-28 rounded-xl border px-3 py-2 text-sm focus:outline-none ${
+                      (formData.b_end_time ?? "").slice(0,5).length === 5 && formData.start_time && (formData.b_end_time ?? "").slice(0,5) <= formData.start_time.slice(0,5)
+                        ? "border-red-400 bg-red-50 focus:border-red-500"
+                        : "border-slate-200 focus:border-blue-400"
+                    }`}
+                    value={(formData.b_end_time ?? "").slice(0, 5)}
+                    onChange={(e: any) => {
+                      let v = e.target.value.replace(/[^\d:]/g, "");
+                      if (/^\d{4}$/.test(v)) v = v.slice(0,2) + ":" + v.slice(2);
+                      setFormData((prev: any) => prev ? { ...prev, b_end_time: v || null } : prev);
+                    }}
+                  />
+                  {(formData.b_end_time ?? "").slice(0,5).length === 5 && formData.start_time && (formData.b_end_time ?? "").slice(0,5) <= formData.start_time.slice(0,5) && (
+                    <div className="mt-1 text-[11px] text-red-500">시작시간보다 늦게 입력하세요</div>
+                  )}
+                </div>
+                <div>
+                  <div className="mb-1 text-xs text-slate-500">통과수량</div>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm text-right focus:border-blue-400 focus:outline-none"
+                    value={formData.b_pass_qty ?? ""}
+                    onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, b_pass_qty: e.target.value ? Number(e.target.value) : null } : prev)}
+                  />
+                </div>
+                <div>
+                  <div className="mb-1 text-xs text-slate-500">담당자</div>
+                  <select
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                    value={formData.worker_name ?? ""}
+                    onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, worker_name: e.target.value || null } : prev)}
+                  >
+                    <option value="">— 선택 —</option>
+                    {employees.map((e: any) => e.name ? (
+                      <option key={e.id} value={e.name}>{e.name}</option>
+                    ) : null)}
+                  </select>
+                </div>
+              </div>
+
+              {/* A구역 */}
+              <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200">
+                <ZoneHeader label="A" color="blue" title="제품 1개일 경우" />
+                <div className="p-3">
+                  <ZoneTable zone="A" fields={aFields(formData)} onChange={setA} />
+                </div>
+              </div>
+
+              {/* B구역 */}
+              <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200">
+                <ZoneHeader label="B" color="amber" title="제품 2개 이상일 경우" sub="— 해당 시에만 입력" />
+                <div className="p-3">
+                  {(formData.b_pass_qty ?? 0) <= 1 && (
+                    <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
+                      통과수량이 1개 이하 → 이탈유무만 입력 가능합니다.
+                    </div>
+                  )}
+                  <ZoneTable
+                    zone="B"
+                    fields={bFields(formData)}
+                    onChange={setB}
+                    showExtra
+                    showFull={false}
+                    disabled={(formData.b_pass_qty ?? 0) <= 1}
+                  />
+                </div>
+              </div>
+
+              {/* 비고 */}
+              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div>
+                  <div className="mb-1 text-xs text-slate-500">개선조치 내용</div>
+                  <input
+                    className={inp}
+                    value={formData.action_note ?? ""}
+                    onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, action_note: e.target.value || null } : prev)}
+                    placeholder="이탈 시 조치사항"
+                  />
+                </div>
+                <div>
+                  <div className="mb-1 text-xs text-slate-500">비고</div>
+                  <input
+                    className={inp}
+                    value={formData.note ?? ""}
+                    onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, note: e.target.value || null } : prev)}
+                  />
+                </div>
+              </div>
+
+              <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                <span className="font-semibold text-slate-600">확인:</span> 김영각 &nbsp;&nbsp;
+                <span className="font-semibold text-slate-600">승인:</span> 조대성 &nbsp;&nbsp;
+                <span className="text-slate-400">(저장 시 자동 등록)</span>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  className={`flex-1 rounded-xl py-3 text-sm font-bold text-white disabled:opacity-60 ${saving ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"}`}
+                  disabled={saving}
+                  onClick={save}
+                >
+                  {saving ? "저장 중..." : isEdit ? "💾 수정 저장" : "💾 기록 저장"}
                 </button>
-              );
-            })}
-          </div>
-        )}
+                <button
+                  className={btn}
+                  onClick={() => { setSelectedWoId(null); setFormData(null); }}
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
+        </React.Fragment>
+      );
+    })}
+  </div>
+)}
+
       </div>
 
-      {/* ── 기록 입력 폼 ── */}
-      {formData && selectedWoId && (() => {
-        const wo = woList.find((w: any) => w.id === selectedWoId);
-        const isEdit = !!logMap[selectedWoId];
-        return (
-          <div className={`${card} p-4 print:hidden`}>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <div className="font-bold text-base">{wo?.client_name} — {wo?.product_name}</div>
-                <div className="mt-0.5 text-xs text-slate-400">{isEdit ? "✏️ 기존 기록 수정" : "신규 기록 입력"}</div>
-              </div>
-              <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                isEdit ? "border-green-200 bg-green-100 text-green-700" : "border-amber-200 bg-amber-100 text-amber-700"
-              }`}>{isEdit ? "기록완료" : "미기록"}</span>
-            </div>
-
-            <div className="mb-4 flex flex-wrap items-end gap-4">
-              <div>
-                <div className="mb-1 text-xs text-slate-500">시작시간 * <span className="text-slate-300">(예: 1430)</span></div>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={5}
-                  placeholder="1430"
-                  className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                  value={(formData.start_time ?? "").slice(0, 5)}
-                  onChange={(e: any) => {
-                    let v = e.target.value.replace(/[^\d:]/g, "");
-                    if (/^\d{4}$/.test(v)) v = v.slice(0,2) + ":" + v.slice(2);
-                    setFormData((prev: any) => prev ? { ...prev, start_time: v || null } : prev);
-                  }}
-                />
-              </div>
-              <div>
-                <div className="mb-1 text-xs text-slate-500">종료시간 <span className="text-slate-300">(예: 1500)</span></div>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={5}
-                  placeholder="1500"
-                  className={`w-28 rounded-xl border px-3 py-2 text-sm focus:outline-none ${
-                    (formData.b_end_time ?? "").slice(0,5).length === 5 && formData.start_time && (formData.b_end_time ?? "").slice(0,5) <= formData.start_time.slice(0,5)
-                      ? "border-red-400 bg-red-50 focus:border-red-500"
-                      : "border-slate-200 focus:border-blue-400"
-                  }`}
-                  value={(formData.b_end_time ?? "").slice(0, 5)}
-                  onChange={(e: any) => {
-                    let v = e.target.value.replace(/[^\d:]/g, "");
-                    if (/^\d{4}$/.test(v)) v = v.slice(0,2) + ":" + v.slice(2);
-                    setFormData((prev: any) => prev ? { ...prev, b_end_time: v || null } : prev);
-                  }}
-                />
-                {(formData.b_end_time ?? "").slice(0,5).length === 5 && formData.start_time && (formData.b_end_time ?? "").slice(0,5) <= formData.start_time.slice(0,5) && (
-                  <div className="mt-1 text-[11px] text-red-500">시작시간보다 늦게 입력하세요</div>
-                )}
-              </div>
-              <div>
-                <div className="mb-1 text-xs text-slate-500">통과수량</div>
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="0"
-                  className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm text-right focus:border-blue-400 focus:outline-none"
-                  value={formData.b_pass_qty ?? ""}
-                  onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, b_pass_qty: e.target.value ? Number(e.target.value) : null } : prev)}
-                />
-              </div>
-              <div>
-                <div className="mb-1 text-xs text-slate-500">담당자</div>
-                <select
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                  value={formData.worker_name ?? ""}
-                  onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, worker_name: e.target.value || null } : prev)}
-                >
-                  <option value="">— 선택 —</option>
-                  {employees.map((e: any) => e.name ? (
-                    <option key={e.id} value={e.name}>{e.name}</option>
-                  ) : null)}
-                </select>
-              </div>
-            </div>
-
-            {/* A구역 */}
-            <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200">
-              <ZoneHeader label="A" color="blue" title="제품 1개일 경우" />
-              <div className="p-3">
-                <ZoneTable zone="A" fields={aFields(formData)} onChange={setA} />
-              </div>
-            </div>
-
-            {/* B구역 */}
-            <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200">
-              <ZoneHeader label="B" color="amber" title="제품 2개 이상일 경우" sub="— 해당 시에만 입력" />
-              <div className="p-3">
-                {(formData.b_pass_qty ?? 0) <= 1 && (
-                  <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
-                    통과수량이 1개 이하 → 이탈유무만 입력 가능합니다.
-                  </div>
-                )}
-<ZoneTable
-  zone="B"
-  fields={bFields(formData)}
-  onChange={setB}
-  showExtra
-  showFull={false}
-  disabled={(formData.b_pass_qty ?? 0) <= 1}
-/>
-
-
-              </div>
-            </div>
-
-            {/* 비고 */}
-            <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div>
-                <div className="mb-1 text-xs text-slate-500">개선조치 내용</div>
-                <input
-                  className={inp}
-                  value={formData.action_note ?? ""}
-                  onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, action_note: e.target.value || null } : prev)}
-                  placeholder="이탈 시 조치사항"
-                />
-              </div>
-              <div>
-                <div className="mb-1 text-xs text-slate-500">비고</div>
-                <input
-                  className={inp}
-                  value={formData.note ?? ""}
-                  onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, note: e.target.value || null } : prev)}
-                />
-              </div>
-            </div>
-
-            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-              <span className="font-semibold text-slate-600">확인:</span> 김영각 &nbsp;&nbsp;
-              <span className="font-semibold text-slate-600">승인:</span> 조대성 &nbsp;&nbsp;
-              <span className="text-slate-400">(저장 시 자동 등록)</span>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                className={`flex-1 rounded-xl py-3 text-sm font-bold text-white disabled:opacity-60 ${saving ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"}`}
-                disabled={saving}
-                onClick={save}
-              >
-                {saving ? "저장 중..." : isEdit ? "💾 수정 저장" : "💾 기록 저장"}
-              </button>
-              <button
-                className={btn}
-                onClick={() => { setSelectedWoId(null); setFormData(null); }}
-              >
-                취소
-              </button>
-            </div>
-          </div>
-        );
-      })()}
+    
+   
 
       {/* ══════════════════════════════════════════
           인쇄 전용 영역
