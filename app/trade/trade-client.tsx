@@ -1056,7 +1056,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
           } else {
           
               // ── 바코드로 2차 조회 (기성제품 등 variant_name 불일치 케이스) ──
-              const existingBarcode = cleanLines[li2]?.existing_barcode ?? wo_itemExistingBarcodes[li2] ?? null;
+              const existingBarcode = cleanLines[li]?.existing_barcode ?? wo_itemExistingBarcodes[li] ?? null;
   const { data: existByBarcode } = existingBarcode
     ? await supabase.from("product_barcodes").select("variant_id").eq("barcode", existingBarcode).eq("is_active", true).maybeSingle()
     : { data: null };
