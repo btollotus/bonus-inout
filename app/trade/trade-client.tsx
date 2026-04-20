@@ -217,7 +217,7 @@ function buildMemoText(r: UnifiedRow) {
       const unitText = unit !== 0 ? `단가 ${fmt(unit)}` : `총액입력 ${fmt(total)}`;
       return `${idx + 1}. ${ft ? `[${ft}] ` : ""}${name} / ${w ? `${formatWeight(w)}g, ` : ""}${qtyText} / ${unitText} / 공급가 ${fmt(supply)} / 부가세 ${fmt(vat)} / 총액 ${fmt(total)}`;
     }).join("\n");
-    return `주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 주문자: ${orderer || "(없음)"}\n- 제목: ${title || "(없음)"}\n\n배송정보:\n${shipList || "(배송정보 없음)"}\n\n품목:\n${rows || "(품목 없음)"}`;
+    return `주문/출고 메모\n- 출고방법: ${r.ship_method ?? ""}\n- 주문자: ${orderer || "(없음)"}\n- 제목: ${title || "(없음)"}\n\n배송정보:\n${shipList || "(배송정보 없음)"}\n\n품목:\n${rows || "(제품 없음)"}`;
   }
   const memo = (r.ledger_memo ?? "").trim(), cat = r.ledger_category ?? r.category ?? "";
   const method = methodLabel(r.ledger_method ?? r.method ?? ""), amt = Number(r.ledger_amount ?? 0);
@@ -1001,7 +1001,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
 
           } else {
             const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
-            if (ibErr) throw new Error("품목 바코드 생성 실패: " + ibErr.message);
+            if (ibErr) throw new Error("제품 바코드 생성 실패: " + ibErr.message);
             itemBarcodeNo = itemBarcode as string;
           }
           woItemsPayload.push({ work_order_id: woId, delivery_date: shipDate, sub_items: [{ name: l.name, qty: l.qty }], order_qty: l.qty, barcode_no: itemBarcodeNo, unit_weight: l.weight_g && Number(l.weight_g) > 0 ? Number(l.weight_g) : null });
@@ -1020,7 +1020,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           productId = existProduct.id;
         } else {
           const { data: newProduct, error: pErr } = await supabase.from("products").insert({ name: productName, category: "업체", food_type: foodType || "기타", default_weight_g: 0 }).select("id").single();
-          if (pErr) throw new Error("품목 등록 실패: " + pErr.message);
+          if (pErr) throw new Error("제품 등록 실패: " + pErr.message);
           productId = (newProduct as any).id;
         }
 
@@ -1053,7 +1053,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           } else {
             // ── 신규 variant 생성: 새 바코드 사용 ──
             const { data: newItemVariant, error: vivErr } = await supabase.from("product_variants").insert({ product_id: productId, variant_name: itemVariantName, barcode: itemBarcodeNo, pack_unit: 1, unit_type: "EA", weight_g: itemWeightG }).select("id").single();
-            if (vivErr) throw new Error("품목 규격 등록 실패: " + vivErr.message);
+            if (vivErr) throw new Error("제품 규격 등록 실패: " + vivErr.message);
             itemVariantId = (newItemVariant as any).id;
             const { data: existItemBarcode } = await supabase.from("product_barcodes").select("id").eq("barcode", itemBarcodeNo).maybeSingle();
             if (!existItemBarcode) {
@@ -1063,7 +1063,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           if (!firstVariantId) firstVariantId = itemVariantId;
         }
 
-        // work_orders.variant_id = 첫 번째 품목 variant
+        // work_orders.variant_id = 첫 번째 제품 variant
         if (firstVariantId) {
           await supabase.from("work_orders").update({ variant_id: firstVariantId }).eq("id", woId);
         }
@@ -1235,7 +1235,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
       for (const item of cleanItems) {
         for (const si of item.sub_items.filter((si) => si.name.trim() && si.qty > 0)) {
           const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
-          if (ibErr) return setMsg("품목 바코드 생성 실패: " + ibErr.message);
+          if (ibErr) return setMsg("제품 바코드 생성 실패: " + ibErr.message);
           woItemsPayload.push({ work_order_id: woId, delivery_date: item.delivery_date, sub_items: [{ name: si.name, qty: si.qty }], order_qty: si.qty, barcode_no: itemBarcode as string });
         }
       }
@@ -1252,7 +1252,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           productId = existProduct.id;
         } else {
           const { data: newProduct, error: pErr } = await supabase.from("products").insert({ name: woProductsName, category: "업체", food_type: wo_foodType.trim() || "기타", default_weight_g: 0 }).select("id").single();
-          if (pErr) return setMsg("품목 등록 실패: " + pErr.message);
+          if (pErr) return setMsg("제품 등록 실패: " + pErr.message);
           productId = (newProduct as any).id;
         }
 
@@ -1280,7 +1280,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           } else {
             // ── 신규 variant 생성: 새 바코드 사용 ──
             const { data: newItemVariant, error: vivErr } = await supabase.from("product_variants").insert({ product_id: productId, variant_name: itemVariantName, barcode: itemBarcodeNo, pack_unit: 1, unit_type: "EA", weight_g: itemWeightG }).select("id").single();
-            if (vivErr) return setMsg("품목 규격 등록 실패: " + vivErr.message);
+            if (vivErr) return setMsg("제품 규격 등록 실패: " + vivErr.message);
             itemVariantId = (newItemVariant as any).id;
             const { data: existItemBarcode } = await supabase.from("product_barcodes").select("id").eq("barcode", itemBarcodeNo).maybeSingle();
             if (!existItemBarcode) {
@@ -1290,13 +1290,13 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           if (!firstVariantId) firstVariantId = itemVariantId;
         }
 
-        // work_orders.variant_id = 첫 번째 품목 variant
+        // work_orders.variant_id = 첫 번째 제품 variant
         if (firstVariantId) {
           await supabase.from("work_orders").update({ variant_id: firstVariantId }).eq("id", woId);
         }
       }
 
-      // 작업지시서 모달: 첫 번째 품목(0번) 이미지를 첫 번째 work_order_item에 저장
+      // 작업지시서 모달: 첫 번째 제품(0번) 이미지를 첫 번째 work_order_item에 저장
       const woModalFiles = wo_itemImageFiles[0] ?? [];
       if (woModalFiles.length > 0 && createdItems?.[0]?.id) {
         const uploadedPaths: string[] = [];
@@ -1832,11 +1832,11 @@ if (woSubNameVal) {
                     </div>
                     <ShipBlock s1={eShip1} setS1={setEShip1} s2={eShip2} setS2={setEShip2} two={eTwoShip} setTwo={setETwoShip} prefix={`edit_${editRow.rawId}`} inpClass={inp} />
                     <div className="mt-4 flex items-center justify-between">
-                      <div className="text-sm font-semibold">품목</div>
+                      <div className="text-sm font-semibold">제품</div>
                       <div className="flex items-center gap-2">
                         <button className={btn} onClick={() => insertEditShippingFee(3300)}>+ 택배비 3,300</button>
                         <button className={btn} onClick={() => insertEditShippingFee(4000)}>+ 택배비 4,000</button>
-                        <button className={btn} onClick={addEditLine}>+ 품목 추가</button>
+                        <button className={btn} onClick={addEditLine}>+ 제품 추가</button>
                       </div>
                     </div>
                     <LineHeader gridCols={lineGridCols} />
@@ -2136,11 +2136,11 @@ if (woSubNameVal) {
                 </div>
                 <ShipBlock s1={ship1} setS1={setShip1} s2={ship2} setS2={setShip2} two={twoShip} setTwo={setTwoShip} prefix="create" inpClass={inp} />
                 <div className="mt-4 flex items-center justify-between">
-                  <div className="text-sm font-semibold">품목(식품유형 자동완성 포함)</div>
+                  <div className="text-sm font-semibold">제품명(식품유형 자동완성 포함)</div>
                   <div className="flex items-center gap-2">
                     <button className={btn} onClick={() => insertShippingFee(3300)}>+ 택배비 3,300</button>
                     <button className={btn} onClick={() => insertShippingFee(4000)}>+ 택배비 4,000</button>
-                    <button className={btn} onClick={addLine}>+ 품목 추가</button>
+                    <button className={btn} onClick={addLine}>+ 제품 추가</button>
                   </div>
                 </div>
                 <LineHeader gridCols={lineGridCols} />
