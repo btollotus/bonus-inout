@@ -995,7 +995,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
           const l = cleanLines[li];
           let itemBarcodeNo: string;
           
-          console.log("[바코드재사용] orderIsReorder:", orderIsReorder, "l.name:", l.name, "barcodes:", wo_itemExistingBarcodes);
+         
 if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
   itemBarcodeNo = wo_itemExistingBarcodes[l.name]; // 기존 바코드 재사용 (품목명 기준)
 
