@@ -1125,9 +1125,6 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         await loadTrades(); return;
       }
     }
-  
-  }
-  
     setOrderIsReorder(false); setOrderTitle(""); setOrdererName("");
     setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
@@ -1136,7 +1133,6 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
     await loadTrades();
   }
-
   async function createLedger() {
     setMsg(null);
     const amount = Number((amountStr || "0").replaceAll(",", ""));
