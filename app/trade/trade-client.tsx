@@ -1028,7 +1028,8 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
 
         // ── 품목별 variant 생성 (바코드 중복 방지) ──
         let firstVariantId: string | null = null;
-        for (const createdItem of (createdWoItems as any[]) ?? []) {
+        for (let li2 = 0; li2 < ((createdWoItems as any[]) ?? []).length; li2++) {
+          const createdItem = (createdWoItems as any[])[li2];
           const itemBarcodeNo = createdItem.barcode_no as string;
           const itemName = (createdItem.sub_items as WoSubItem[])?.[0]?.name ?? firstItemName;
           const itemVariantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${itemName}`;
@@ -1055,7 +1056,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
           } else {
           
               // ── 바코드로 2차 조회 (기성제품 등 variant_name 불일치 케이스) ──
-  const existingBarcode = cleanLines[li]?.existing_barcode ?? null;
+              const existingBarcode = cleanLines[li2]?.existing_barcode ?? wo_itemExistingBarcodes[li2] ?? null;
   const { data: existByBarcode } = existingBarcode
     ? await supabase.from("product_barcodes").select("variant_id").eq("barcode", existingBarcode).eq("is_active", true).maybeSingle()
     : { data: null };
