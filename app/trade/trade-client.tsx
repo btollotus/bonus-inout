@@ -999,8 +999,8 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         for (let li = 0; li < cleanLines.length; li++) {
           const l = cleanLines[li];
           let itemBarcodeNo: string;
-          if (orderIsReorder && wo_itemExistingBarcodes[li2]) {
-            itemBarcodeNo = wo_itemExistingBarcodes[li2]; // 기존 바코드 재사용 (인덱스 기준)
+          if (orderIsReorder && wo_itemExistingBarcodes[li]) {
+            itemBarcodeNo = wo_itemExistingBarcodes[li];
           } else {
             const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
             if (ibErr) throw new Error("품목 바코드 생성 실패: " + ibErr.message);
