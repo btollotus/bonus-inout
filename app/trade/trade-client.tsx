@@ -469,7 +469,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [wo_itemImagePreviewUrls, setWo_itemImagePreviewUrls] = useState<Record<number, string[]>>({});
   // 복사 시 기존 이미지 (key = line index, value = signed URL 배열)
   const [wo_itemExistingImageUrls, setWo_itemExistingImageUrls] = useState<Record<number, string[]>>({});
-  const [wo_itemExistingBarcodes, setWo_itemExistingBarcodes] = useState<Record<string, string>>({}); // 재주문 시 기존 바코드 (key=품목명)
+  const [wo_itemExistingBarcodes, setWo_itemExistingBarcodes] = useState<Record<number, string>>({});
   const [wo_saving, setWo_saving] = useState(false);
   const [wo_list, setWo_list] = useState<WorkOrderRow[]>([]);
   const [wo_listLoading, setWo_listLoading] = useState(false);
@@ -994,8 +994,8 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         for (let li = 0; li < cleanLines.length; li++) {
           const l = cleanLines[li];
           let itemBarcodeNo: string;
-          if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
-            itemBarcodeNo = wo_itemExistingBarcodes[l.name]; // 기존 바코드 재사용 (품목명 기준)
+          if (orderIsReorder && wo_itemExistingBarcodes[li]) {
+            itemBarcodeNo = wo_itemExistingBarcodes[li]; // 기존 바코드 재사용 (인덱스 기준)
           } else {
             const { data: itemBarcode, error: ibErr } = await supabase.rpc("generate_work_order_barcode");
             if (ibErr) throw new Error("품목 바코드 생성 실패: " + ibErr.message);
@@ -1361,12 +1361,10 @@ if (copyPartnerId) {
           });
           visibleWoItemsForBarcode.forEach((wi: any, idx: number) => {
             if (wi.unit_weight) weightByIndex[idx] = Number(wi.unit_weight);
-            if (wi.barcode_no) {
-              const itemName = (wi.sub_items?.[0]?.name ?? "");
-              barcodeMap[itemName] = wi.barcode_no;
-            }
+            if (wi.barcode_no) barcodeMap[idx] = wi.barcode_no;
           });
           setWo_itemExistingBarcodes(barcodeMap);
+
           if (Object.keys(weightByIndex).length > 0) {
             setLines((prev) => prev.map((l, i) => ({
               ...l,
