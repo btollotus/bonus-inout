@@ -530,7 +530,12 @@ async function loadSignageList() {
             { key: "sheet", label: "📄 전사지 견적" },
             { key: "signage", label: "🪧 제작문의" },
           ] as { key: Tab; label: string }[]).map(t => (
-            <button key={t.key} className={tab === t.key ? btnOn : btn} onClick={() => setTab(t.key)}>
+            <button key={t.key} className={tab === t.key ? btnOn : btn} onClick={() => {
+              setTab(t.key);
+              if (t.key === "signage") {
+                localStorage.setItem("signage_last_seen_at", String(Date.now()));
+              }
+            }}>
               {t.label}
             </button>
           ))}

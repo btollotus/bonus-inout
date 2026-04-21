@@ -7,6 +7,10 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 
 const HIDE_NAV_PATHS = ["/login", "/accept-invite", "/reset-password"];
 
+const SHEET_ID = "1bCejl7Fw5Zke7lplp1S2_1aNqOij4jyqPn5cwRdNt-I";
+const API_KEY  = "AIzaSyCE_cEcRke2p-hw1RvQzJHnFHXR3gpNIAs";
+const SIGNAGE_LAST_SEEN_KEY = "signage_last_seen_at";
+
 type NewWoNotification = {
   id: string;
   client_name: string;
@@ -75,6 +79,9 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pageLoadTimeRef = useRef<string>(new Date().toISOString());
 
+    // ── 제작문의 배지 ──
+    const [quoteBadge, setQuoteBadge] = useState(0);
+
   // ── 사진 전송 ──
   const [photoStatus, setPhotoStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [photoError, setPhotoError] = useState<string>("");
@@ -83,35 +90,31 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
   const galleryRef = useRef<HTMLInputElement | null>(null);
   const canPhoto = role === "ADMIN" || role === "SUBADMIN";
 
-  useEffect(() => {
+   // ── 제작문의 폴링 ──
+   useEffect(() => {
     if (hide) return;
-    const supabase = createClient();
-    const channel = supabase
-      .channel("wo_global_insert_notify")
-      .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "work_orders" },
-        (payload) => {
-          const d = payload.new as Record<string, unknown>;
-          const createdAt = String(d.created_at ?? "");
-          if (createdAt && createdAt < pageLoadTimeRef.current) return;
-          const notification: NewWoNotification = {
-            id: String(d.id ?? ""),
-            client_name: String(d.client_name ?? ""),
-            product_name: String(d.product_name ?? ""),
-            work_order_no: String(d.work_order_no ?? ""),
-            order_date: String(d.order_date ?? ""),
-            created_at: createdAt,
-          };
-          setNotifications((prev) => [notification, ...prev]);
-          setShowModal(true);
-          playNotificationSound();
+    const RANGE = "'설문지 응답 시트1'!A2:A";
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(RANGE)}?key=${API_KEY}`;
+
+    async function poll() {
+      try {
+        const res  = await fetch(url);
+        const json = await res.json();
+        const rows: string[][] = json.values ?? [];
+        const lastSeenMs = parseInt(localStorage.getItem(SIGNAGE_LAST_SEEN_KEY) ?? "0");
+        let count = 0;
+        for (const row of rows) {
+          const ts = row[0] ?? "";
+          const ms = ts ? new Date(ts).getTime() : 0;
+          if (!isNaN(ms) && ms > lastSeenMs) count++;
         }
-      )
-      .subscribe((status, err) => {
-        console.log("🔔 [TopNavWrapper] 채널 상태:", status, err ?? "");
-      });
-    channelRef.current = channel;
-    return () => { supabase.removeChannel(channel); channelRef.current = null; };
+        setQuoteBadge(count);
+      } catch {}
+    }
+
+    poll();
+    const timer = setInterval(poll, 60_000);
+    return () => clearInterval(timer);
   }, [hide]);
 
   // 성공 메시지 3초 후 자동 사라짐
@@ -165,7 +168,7 @@ export default function TopNavWrapper({ role, email }: { role?: string; email?: 
 
   return (
     <>
-      <TopNav role={role} email={email} />
+      <TopNav role={role} email={email} quoteBadge={quoteBadge} />
 
       {/* ── 작업지시서 알람 모달 ── */}
       {showModal && notifications.length > 0 && (

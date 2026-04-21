@@ -38,7 +38,7 @@ const linkBase: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-export default function TopNav({ role, email }: { role?: string; email?: string }) {
+export default function TopNav({ role, email, quoteBadge }: { role?: string; email?: string; quoteBadge?: number }) {
   const pathname = usePathname();
   const userRole = role ?? "USER";
 
@@ -114,12 +114,14 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
                 const isQuote = QUOTE_MENUS.includes(x.href);
 
                 return (
+                 
                   <Link
                   key={x.href}
                   href={x.href}
                   target="_blank"
                   style={{
                       ...linkBase,
+                      position: "relative",
                       borderColor: active
                         ? "rgba(255,255,255,0.40)"
                         : isQuote
@@ -138,7 +140,18 @@ export default function TopNav({ role, email }: { role?: string; email?: string 
                     }}
                   >
                     {x.label}
-                  </Link>
+                    {isQuote && quoteBadge && quoteBadge > 0 ? (
+                      <span style={{
+                        position: "absolute", top: -6, right: -6,
+                        backgroundColor: "#ef4444", color: "white",
+                        borderRadius: "50%", width: 18, height: 18,
+                        fontSize: 10, fontWeight: 900,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        {quoteBadge > 99 ? "99+" : quoteBadge}
+                      </span>
+                    ) : null}
+                  </Link> 
                 );
               })}
           </div>
