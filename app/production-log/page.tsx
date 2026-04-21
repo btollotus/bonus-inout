@@ -623,7 +623,6 @@ function ProductionLogTab({ role, userId, showToast }: {
           <div className="space-y-2">
             {workOrders.map((wo) => (
              <div key={wo.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-             <span className="font-mono text-xs text-blue-600 font-semibold">{wo.work_order_no}</span>
              <span className="text-sm font-medium text-slate-700">{wo.client_name}</span>
              <span className="text-xs text-slate-500">{wo.product_name}</span>
              <div className="ml-auto flex gap-1">
