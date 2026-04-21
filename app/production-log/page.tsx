@@ -318,7 +318,13 @@ function ProductionLogTab({ role, userId, showToast }: {
     setSelectedEmployee({ id: emp.id, name: emp.name });
     setPinInput("");
     setPinError("");
-    setPinStep(true);
+    if (isAdmin) {
+      // ADMIN은 PIN 없이 바로 진입
+      setPinStep(false);
+      loadTodayData(emp.id, emp.name);
+    } else {
+      setPinStep(true);
+    }
   }
 
   function handlePinDigit(d: string) {
