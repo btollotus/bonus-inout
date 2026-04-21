@@ -190,7 +190,7 @@ function splitVatFromTotalFlexible(totalInclVatRaw: any, vatFree: boolean) {
 }
 
 function inferPackEaFromName(name: string) {
-  const m = String(name ?? "").match(/(\d+)\s*개/);
+  const m = String(name ?? "").match(/(\d+)\s*(?:개|ea)/i);
   if (!m) return 1;
   const n = Number(m[1]);
   return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 1;
