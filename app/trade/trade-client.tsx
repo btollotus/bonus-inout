@@ -314,7 +314,11 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
   onChange={(e) => { const raw = e.target.value.replace(/[^\d,]/g, ""); onUpdate(i, { qty: raw === "" ? 0 : toInt(raw) }); }}
   placeholder="수량"
 />
-        <span className={qtyBadgeCls}>{pack > 1 ? "BOX" : "EA"}</span>
+// 수정 후
+<span className={pack > 1
+  ? "shrink-0 inline-flex items-center justify-center rounded-lg border border-blue-400 bg-blue-600 px-2 py-1 text-[11px] font-extrabold text-white"
+  : "shrink-0 inline-flex items-center justify-center rounded-lg border border-red-400 bg-red-500 px-2 py-1 text-[11px] font-extrabold text-white"
+}>{pack > 1 ? "BOX" : "EA"}</span>
       </div>
       <input className={inputRightCls} inputMode="text"
         value={typeof l.unit === "string" ? l.unit : l.unit !== 0 ? fmt(l.unit) : ""}
