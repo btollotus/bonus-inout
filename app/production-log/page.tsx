@@ -242,12 +242,15 @@ type DailyWorkLog = {
   confirmed_at: string | null;
   created_at: string;
 };
+
 type WorkOrderRef = {
   id: string;
   work_order_no: string;
   client_name: string;
   product_name: string;
   assignee_production: string | null;
+  assignee_transfer: string | null;
+  tags: string[]; // ["생산완료", "전사인쇄"]
 };
 
 function ProductionLogTab({ role, userId, showToast }: {
@@ -292,12 +295,33 @@ function ProductionLogTab({ role, userId, showToast }: {
     const [logRes, woRes] = await Promise.all([
       supabase.from("daily_work_logs")
         .select("*").eq("log_date", today).eq("employee_id", empId).maybeSingle(),
-        supabase.from("work_orders")
-        .select("id,work_order_no,client_name,product_name,assignee_production")
-        .eq("assignee_production", empName)
-        .eq("status_production", true)
-        .gte("updated_at", `${today}T00:00:00+09:00`)
-        .order("updated_at", { ascending: false }), 
+        Promise.all([
+          supabase.from("work_orders")
+            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer")
+            .eq("assignee_production", empName)
+            .eq("status_production", true)
+            .gte("updated_at", `${today}T00:00:00+09:00`)
+            .order("updated_at", { ascending: false }),
+          supabase.from("work_orders")
+            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer")
+            .eq("assignee_transfer", empName)
+            .eq("status_transfer", true)
+            .gte("updated_at", `${today}T00:00:00+09:00`)
+            .order("updated_at", { ascending: false }),
+        ]).then(([prodRes, transferRes]) => {
+          const map = new Map<string, WorkOrderRef>();
+          (prodRes.data ?? []).forEach((w: any) => {
+            map.set(w.id, { ...w, tags: ["생산완료"] });
+          });
+          (transferRes.data ?? []).forEach((w: any) => {
+            if (map.has(w.id)) {
+              map.get(w.id)!.tags.push("전사인쇄");
+            } else {
+              map.set(w.id, { ...w, tags: ["전사인쇄"] });
+            }
+          });
+          return { data: Array.from(map.values()) };
+        }),
     ]);
     const log = logRes.data as DailyWorkLog | null;
     setTodayLog(log);
@@ -598,11 +622,19 @@ function ProductionLogTab({ role, userId, showToast }: {
         ) : (
           <div className="space-y-2">
             {workOrders.map((wo) => (
-              <div key={wo.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <span className="font-mono text-xs text-blue-600 font-semibold">{wo.work_order_no}</span>
-                <span className="text-sm font-medium text-slate-700">{wo.client_name}</span>
-                <span className="text-xs text-slate-500">{wo.product_name}</span>
-              </div>
+             <div key={wo.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+             <span className="font-mono text-xs text-blue-600 font-semibold">{wo.work_order_no}</span>
+             <span className="text-sm font-medium text-slate-700">{wo.client_name}</span>
+             <span className="text-xs text-slate-500">{wo.product_name}</span>
+             <div className="ml-auto flex gap-1">
+               {(wo.tags ?? []).map((tag) => (
+                 <span key={tag} className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold
+                   ${tag === "생산완료" ? "border-green-200 bg-green-100 text-green-700" : "border-blue-200 bg-blue-100 text-blue-700"}`}>
+                   {tag}
+                 </span>
+               ))}
+             </div>
+           </div> 
             ))}
           </div>
         )}
