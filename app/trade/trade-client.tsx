@@ -190,6 +190,7 @@ function splitVatFromTotalFlexible(totalInclVatRaw: any, vatFree: boolean) {
 }
 
 function inferPackEaFromName(name: string) {
+  if (String(name ?? "").trim() === "컬러프린트용트랜스퍼시트(초콜릿중간재)") return 2;
   const m = String(name ?? "").match(/(\d+)\s*(?:개|ea)/i);
   if (!m) return 1;
   const n = Number(m[1]);
