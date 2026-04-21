@@ -295,7 +295,7 @@ function ProductionLogTab({ role, userId, showToast }: {
         supabase.from("work_orders")
         .select("id,work_order_no,client_name,product_name,assignee_production")
         .eq("assignee_production", empName)
-        .eq("status_production", "완료")
+        .eq("status_production", true)
         .gte("updated_at", `${today}T00:00:00+09:00`)
         .order("updated_at", { ascending: false }), 
     ]);
