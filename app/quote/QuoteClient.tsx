@@ -116,6 +116,14 @@ const STATUS_COLOR: Record<string, { bg: string; color: string; border: string }
 // ─────────────────────── Helpers ───────────────────────
 const fmt = (n: number | null | undefined) => Number(n ?? 0).toLocaleString("ko-KR");
 const todayYMD = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+const todayKST = () => {
+  const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+};
+const utcToKSTDate = (utcStr: string) => {
+  const d = new Date(new Date(utcStr).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+};
 
 // ─────────────────────── Main Component ───────────────────────
 export default function QuoteClient() {
@@ -1047,7 +1055,7 @@ async function loadSignageList() {
                     return (
                       <tr key={r.id} className="border-t border-slate-200 bg-white hover:bg-slate-50">
                         <td className="px-3 py-2 tabular-nums text-xs text-slate-500">
-                          {r.created_at.slice(0, 10)}
+                        {utcToKSTDate(r.created_at)}
                         </td>
                         <td className="px-3 py-2 font-semibold">{r.customer_name}</td>
                         <td className="px-3 py-2 text-xs">{r.product_type ?? "—"}</td>
@@ -1344,7 +1352,7 @@ async function loadSignageList() {
                           const sc = STATUS_COLOR[r.status] ?? STATUS_COLOR["견적완료"];
                           return (
                             <tr key={r.id} className="border-t border-slate-200 bg-white hover:bg-slate-50">
-                              <td className="px-3 py-2 tabular-nums text-xs text-slate-500">{r.created_at.slice(0,10)}</td>
+                              <td className="px-3 py-2 tabular-nums text-xs text-slate-500">{utcToKSTDate(r.created_at)}                              </td>
                               <td className="px-3 py-2 font-semibold truncate">{r.customer_name}</td>
                               <td className="px-3 py-2 text-center text-xs">{r.quantity}장</td>
                               <td className="px-3 py-2 text-center text-xs">
@@ -1575,7 +1583,7 @@ async function loadSignageList() {
             onClose={() => { setPrintOpen(false); setSelectedQuoteRow(null); }}
             quoteData={{
               customerName: r.customer_name,
-              quoteDate: r.created_at.slice(0, 10),
+              quoteDate: utcToKSTDate(r.created_at),
               inputMode: "auto" as const,
               items: printItems,
               memo: r.memo,
@@ -1596,7 +1604,7 @@ async function loadSignageList() {
       onClose={() => { setPrintOpen(false); setSheetItems([newSheetItem()]); }}
       quoteData={{
         customerName: activeCustomerName,
-        quoteDate: new Date().toISOString().slice(0, 10),
+        quoteDate: todayKST(),
         inputMode: "auto" as const,
         items: calced.map(x => ({
           productType: "전사지",
@@ -1632,7 +1640,7 @@ async function loadSignageList() {
           onClose={() => { setPrintOpen(false); }}
           quoteData={{
             customerName: activeCustomerName,
-            quoteDate: new Date().toISOString().slice(0, 10),
+            quoteDate: todayKST(),
             inputMode,
             items: items.map(item => ({
               productType: PRODUCT_TYPES.find(p => p.key === item.productType)?.label ?? item.productType,
