@@ -1012,98 +1012,62 @@ async function loadSignageList() {
             ) : filteredList.length === 0 ? (
               <div className="py-8 text-center text-sm text-slate-500">견적 내역이 없습니다.</div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="w-full table-fixed text-sm">
-                  <colgroup>
-                    <col style={{ width: 100 }} /><col style={{ width: 140 }} />
-                    <col style={{ width: 120 }} /><col style={{ width: 120 }} />
-                    <col style={{ width: 80  }} /><col style={{ width: 80  }} />
-                    <col style={{ width: 100 }} /><col style={{ width: 100 }} />
-                    <col style={{ width: 160 }} />
-                  </colgroup>
-                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
-                    <tr>
-                      <th className="px-3 py-2 text-left">날짜</th>
-                      <th className="px-3 py-2 text-left">업체명</th>
-                      <th className="px-3 py-2 text-left">제품</th>
-                      <th className="px-3 py-2 text-left">크기/수량</th>
-                      <th className="px-3 py-2 text-center">신규</th>
-                      <th className="px-3 py-2 text-right">고객 제시가</th>
-                      <th className="px-3 py-2 text-center">상태</th>
-                      <th className="px-3 py-2 text-left">미수주 사유</th>
-                      <th className="px-3 py-2 text-center">상태 변경</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredList.map(r => {
-                      const q = r.quotes?.[0];
-                      const sc = STATUS_COLOR[r.status] ?? STATUS_COLOR["견적완료"];
-                      return (
-                        <tr key={r.id} className="border-t border-slate-200 bg-white hover:bg-slate-50">
-                          <td className="px-3 py-2 tabular-nums text-xs text-slate-500">
-                            {r.created_at.slice(0, 10)}
-                          </td>
-                          <td className="px-3 py-2 font-semibold">{r.customer_name}</td>
-                          <td className="px-3 py-2 text-xs">{r.product_type ?? "—"}</td>
-                          <td className="px-3 py-2 text-xs tabular-nums">
-                            {r.width_mm && r.height_mm ? `${r.width_mm}×${r.height_mm}mm` : "—"}
-                            {r.quantity ? ` / ${fmt(r.quantity)}개` : ""}
-                          </td>
-                          <td className="px-3 py-2 text-center text-xs">
-                            <span style={{ padding: "2px 8px", borderRadius: 8, fontSize: 11, fontWeight: "bold",
-                              background: r.is_new ? "#dbeafe" : "#fef3c7",
-                              color: r.is_new ? "#1d4ed8" : "#b45309" }}>
-                              {r.is_new ? "신규" : "재주문"}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-right font-semibold tabular-nums text-blue-700">
-                            {q?.final_price ? fmt(q.final_price)+"원" : "—"}
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            <span style={{ padding: "2px 8px", borderRadius: 8, fontSize: 11, fontWeight: "bold",
-                              background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
-                              {r.status}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-xs text-slate-500">{r.lost_reason ?? "—"}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex flex-wrap gap-1">
-                              <button className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
-                                onClick={() => { setSelectedQuoteRow(r); setLastQuoteRequestId(r.id); setPrintOpen(true); }}>
-                                🖨️ 견적서
-                              </button>
-                              <button className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-100"
-                                onClick={() => loadQuoteToForm(r)}>
-                                ✏️ 불러오기
-                              </button>
-                              {r.status !== "수주" && (
-                                <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-1 text-[11px] font-semibold text-green-700 hover:bg-green-100"
-                                  onClick={() => updateStatus(r.id, "수주")}>수주</button>
-                              )}
-                              {r.status !== "미수주" && (
-                                <select className="rounded-lg border border-red-200 bg-red-50 px-1 py-1 text-[11px] text-red-700"
-                                  defaultValue=""
-                                  onChange={e => { if (e.target.value) updateStatus(r.id, "미수주", e.target.value); e.target.value = ""; }}>
-                                  <option value="" disabled>미수주▼</option>
-                                  {LOST_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-                                </select>
-                              )}
-                              {r.status !== "견적완료" && (
-                                <button className="rounded-lg border border-slate-300 bg-slate-50 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100"
-                                  onClick={() => updateStatus(r.id, "견적완료")}>견적완료</button>
-                              )}
-                              <button className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-500 hover:bg-red-100"
-                                onClick={() => deleteQuote(r.id)}>
-                                🗑️
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+             
+              <div className="space-y-3">
+              {paginated.map((r, i) => (
+                <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  {/* 헤더: 접수일 + 업체명 + 담당자 */}
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-slate-400 tabular-nums">
+                      {r[0] ? (() => {
+                        const m = r[0].match(/(\d{2,4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
+                        if (m) {
+                          const year = m[1].length === 2 ? `20${m[1]}` : m[1];
+                          return `${year}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
+                        }
+                        return r[0].slice(0, 10);
+                      })() : "—"}
+                    </span>
+                    <span className="font-bold text-slate-900">{r[1] ?? "—"}</span>
+                    {r[2] && <span className="text-sm text-slate-600">{r[2]}</span>}
+                    {r[3] && (
+                      <span className="ml-auto text-xs text-slate-500 tabular-nums">{r[3]}</span>
+                    )}
+                  </div>
+            
+                  {/* 세부 정보 그리드 */}
+                  <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-4">
+                    <div>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">모양</span>
+                      <div className="font-medium text-slate-800">{r[4] ?? "—"}</div>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">크기</span>
+                      <div className="font-medium text-slate-800">{r[5] ?? "—"}</div>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">종류</span>
+                      <div className="font-medium text-slate-800">{r[6] ?? "—"}</div>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">수량</span>
+                      <div className="font-medium text-slate-800">{r[7] ?? "—"}</div>
+                    </div>
+                  </div>
+            
+                  {/* 기타문의 */}
+                  {r[8] && (
+                    <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700 leading-relaxed">
+                      {r[8]}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {paginated.length === 0 && (
+                <div className="py-8 text-center text-sm text-slate-400">검색 결과가 없습니다.</div>
+              )}
+            </div>
+              
             )}
           </div>
         )}
