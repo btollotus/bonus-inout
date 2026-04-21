@@ -292,12 +292,12 @@ function ProductionLogTab({ role, userId, showToast }: {
     const [logRes, woRes] = await Promise.all([
       supabase.from("daily_work_logs")
         .select("*").eq("log_date", today).eq("employee_id", empId).maybeSingle(),
-      supabase.from("work_orders")
+        supabase.from("work_orders")
         .select("id,work_order_no,client_name,product_name,assignee_production")
         .eq("assignee_production", empName)
-        .eq("status", "완료")
-        .gte("order_date", today)
-        .order("created_at", { ascending: false }),
+        .eq("status_production", "완료")
+        .gte("updated_at", `${today}T00:00:00+09:00`)
+        .order("updated_at", { ascending: false }), 
     ]);
     const log = logRes.data as DailyWorkLog | null;
     setTodayLog(log);
