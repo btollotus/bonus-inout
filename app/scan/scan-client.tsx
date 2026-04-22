@@ -34,7 +34,7 @@ function playNotificationSound() {
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type MovementType = "IN" | "OUT" | "DISCARD" | "GIFT";
+type MovementType = "IN" | "OUT" | "DISCARD" | "GIFT" | "CONVERT";
 
 type LotRow = {
   lot_id: string;
@@ -756,7 +756,8 @@ const { error: mErr } = await supabase.from("movements").insert({
         if (row.type === "OUT" || row.type === "GIFT") {
           await issueOutGift(row);
         } else if (row.type === "DISCARD" && row.selectedLotId) {
-          // ▼ 추가: DISCARD도 LOT 직접 지정인 경우 issueOutGift 방식으로 처리
+          await issueOutGift(row);
+        } else if (row.type === "CONVERT") {
           await issueOutGift(row);
         } else {
           await saveInDiscard(row);
@@ -1260,6 +1261,7 @@ const { error: mErr } = await supabase.from("movements").insert({
               <option value="OUT">출고(OUT)</option>
               <option value="DISCARD">폐기(DISCARD)</option>
               <option value="GIFT">증정(GIFT)</option>
+              <option value="CONVERT">재고전환(CONVERT)</option>
             </select>
           </div>
 
