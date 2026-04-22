@@ -892,21 +892,19 @@ export default function ReportClient() {
             PDF/인쇄
           </button>
 
+          <input
+            className="w-44 rounded-xl border border-black/15 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
+            placeholder="제품명 또는 바코드 검색"
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+          />
+
           {msg && (
             <div className={`text-sm ${msg.startsWith("✅") || msg.startsWith("🗑️") ? "text-green-700" : "text-red-600"}`}>
               {msg}
             </div>
           )}
         </div>
-
-        <div className="mt-4 no-print">
-  <input
-    className="w-full max-w-sm rounded-xl border border-black/15 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
-    placeholder="제품명 또는 바코드 검색"
-    value={searchKeyword}
-    onChange={(e) => setSearchKeyword(e.target.value)}
-  />
-</div>
 
 <div className="mt-6 rounded-2xl border border-black/10 overflow-x-auto print-tight print:border-black/20">
 
