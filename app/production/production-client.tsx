@@ -528,7 +528,7 @@ const channel = supabase
 
   const filteredList = useMemo(() => {
     const q = filterSearch.trim();
-let list = q ? woList.filter((wo) => [wo.client_name, wo.sub_name, wo.product_name, wo.barcode_no, wo.work_order_no, wo.food_type].filter(Boolean).join(" ").split(" ").some((word) => matchesSearch(word, q)) || matchesSearch([wo.client_name, wo.sub_name, wo.product_name, wo.barcode_no, wo.work_order_no, wo.food_type].filter(Boolean).join(" "), q)) : [...woList];
+let list = q ? woList.filter((wo) => matchesSearch([wo.client_name, wo.sub_name, wo.product_name, wo.barcode_no, wo.work_order_no, wo.food_type].filter(Boolean).join(" "), q)) : [...woList];
     let list = q ? woList.filter((wo) => [wo.client_name, wo.sub_name, wo.product_name, wo.barcode_no, wo.work_order_no, wo.food_type].filter(Boolean).join(" ").toLowerCase().includes(q)) : [...woList];
     if (filterFoodCategory !== "전체") list = list.filter((wo) => getFoodCategory(wo.food_type) === filterFoodCategory);
     if (sortBy === "delivery_date") {
