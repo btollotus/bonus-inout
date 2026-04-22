@@ -118,6 +118,27 @@ function toBoxAndEa(ea: number, packUnit?: number | null) {
   return { boxText, eaText: `${fmt(e)} EA` };
 }
 
+// 초성 검색 유틸
+const CHOSUNG = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+
+function getChosung(str: string): string {
+  return str.split("").map((ch) => {
+    const code = ch.charCodeAt(0) - 0xAC00;
+    if (code < 0 || code > 11171) return ch;
+    return CHOSUNG[Math.floor(code / 588)];
+  }).join("");
+}
+
+function matchesSearch(target: string, keyword: string): boolean {
+  const t = target.toLowerCase();
+  const k = keyword.toLowerCase();
+  if (t.includes(k)) return true;
+  // 초성 검색: keyword가 모두 초성으로만 이루어진 경우
+  const isAllChosung = [...k].every((ch) => CHOSUNG.includes(ch));
+  if (isAllChosung) return getChosung(t).includes(k);
+  return false;
+}
+
 function csvEscape(v: any) {
   const s = safeStr(v);
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
@@ -272,10 +293,10 @@ export default function ReportClient() {
   .filter((r) => categoryFilter === "ALL" || (r.product_category ?? "") === categoryFilter)
   .filter((r) => {
     if (!searchKeyword.trim()) return true;
-    const k = searchKeyword.trim().toLowerCase();
+    const k = searchKeyword.trim();
     return (
-      safeStr(r.product_name).toLowerCase().includes(k) ||
-      safeStr(r.barcode).toLowerCase().includes(k)
+      matchesSearch(safeStr(r.product_name), k) ||
+      matchesSearch(safeStr(r.barcode), k)
     );
   });
 
