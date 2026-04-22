@@ -324,7 +324,8 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
     if (!kFoodType.trim()) return setMsg("식품유형을 입력하세요.");
     setKiseongSaving(true); setMsg(null);
     try {
-      const today = new Date();
+      const todayKSTStr = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+      const today = todayKSTStr;
       const dateStr = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,"0")}${String(today.getDate()).padStart(2,"0")}`;
       const { data: lastWo } = await supabase
   .from("work_orders")
@@ -336,9 +337,9 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
 const lastSeq = lastWo ? parseInt(lastWo.work_order_no.split("-")[2], 10) : 0;
 const workOrderNo = `WO-${dateStr}-${String(lastSeq + 1).padStart(4, "0")}`;
 
-      const { data: wo, error: woErr } = await supabase.from("work_orders").insert({ work_order_no: workOrderNo, barcode_no: kiseongSelected.barcode, client_id: null, client_name: "재고생산", sub_name: kSubName.trim() || null, order_date: today.toISOString().slice(0, 10), food_type: kFoodType.trim() || null, product_name: kiseongSelected.product_name, logo_spec: kLogoSpec.trim() || null, thickness: kThickness || null, delivery_method: null, packaging_type: kPackagingType || null, tray_slot: null, package_unit: kPackageUnit || null, mold_per_sheet: kMoldPerSheet ? Number(kMoldPerSheet) : null, note: kNote.trim() || null, reference_note: kReferenceNote.trim() || null, status: "생산중", variant_id: kiseongSelected.variant_id, order_type: "재고" }).select("id").single();
+      const { data: wo, error: woErr } = await supabase.from("work_orders").insert({ work_order_no: workOrderNo, barcode_no: kiseongSelected.barcode, client_id: null, client_name: "재고생산", sub_name: kSubName.trim() || null, order_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, food_type: kFoodType.trim() || null, product_name: kiseongSelected.product_name, logo_spec: kLogoSpec.trim() || null, thickness: kThickness || null, delivery_method: null, packaging_type: kPackagingType || null, tray_slot: null, package_unit: kPackageUnit || null, mold_per_sheet: kMoldPerSheet ? Number(kMoldPerSheet) : null, note: kNote.trim() || null, reference_note: kReferenceNote.trim() || null, status: "생산중", variant_id: kiseongSelected.variant_id, order_type: "재고" }).select("id").single();
       if (woErr) throw woErr;
-      const { error: itemErr } = await supabase.from("work_order_items").insert({ work_order_id: wo.id, delivery_date: today.toISOString().slice(0, 10), sub_items: [{ name: kiseongSelected.product_name, qty: toInt(kActualQty) }], order_qty: toInt(kActualQty), barcode_no: kiseongSelected.barcode, actual_qty: toInt(kActualQty), unit_weight: kiseongSelected.weight_g ?? null, expiry_date: null });
+      const { error: itemErr } = await supabase.from("work_order_items").insert({ work_order_id: wo.id, delivery_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, sub_items: [{ name: kiseongSelected.product_name, qty: toInt(kActualQty) }], order_qty: toInt(kActualQty), barcode_no: kiseongSelected.barcode, actual_qty: toInt(kActualQty), unit_weight: kiseongSelected.weight_g ?? null, expiry_date: null });
       if (itemErr) throw itemErr;
       showToast("✅ 재고 작업지시서가 등록되었습니다!"); resetKiseongForm(); await loadWoList();
     } catch (e: any) { setMsg("저장 오류: " + (e?.message ?? e)); } finally { setKiseongSaving(false); }
@@ -452,7 +453,7 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
     setLoading(true); setMsg(null);
     try {
       const LIMIT = filterStatus === "완료" ? 20 : 200;
-      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
+      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,work_order_items(delivery_date,order_qty,actual_qty,unit_weight,expiry_date),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
       if (filterStatus !== "전체") q = q.eq("status", filterStatus);
       if (filterDateFrom) q = q.gte("order_date", filterDateFrom);
       if (filterDateTo) q = q.lte("order_date", filterDateTo);
@@ -470,7 +471,7 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
       } else { setProductionCount(list.filter((w) => w.status === "생산중").length); }
       const ids = list.map((w) => w.id);
       await loadReadMap(ids);
-      if (selectedWo) { const refreshed = list.find((w) => w.id === selectedWo.id); if (refreshed) applySelection(refreshed, false); }
+      if (selectedWo) { const refreshed = list.find((w) => w.id === selectedWo.id); if (refreshed) await applySelection(refreshed, false); }
     } finally { setLoading(false); }
   }, [filterStatus, filterDateFrom, filterDateTo, loadReadMap]); // eslint-disable-line
 
@@ -503,7 +504,7 @@ const channel = supabase
   useEffect(() => { supabase.from("employees").select("id,name,pin,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => { if (data) setEmployees(data); }); }, []);
   useEffect(() => { supabase.from("warmer_slots").select("id,slot_name,purpose").eq("is_active", true).order("slot_no").then(({ data }) => { if (data) setWarmerSlots(data); }); }, []);
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
     supabase.from("expiry_mgmt_logs").select("id,item_name,status,expiry_date,action,log_date").eq("log_date", today).in("status", ["D-30 경보", "만료", "안전재고 미달"]).order("status").then(({ data }) => { if (data) setStockAlerts(data); });
   }, []);
 
@@ -521,8 +522,18 @@ const channel = supabase
     return list;
   }, [woList, filterSearch, sortBy, filterFoodCategory]);
 
-  function applySelection(wo: WorkOrderRow, resetEdit = true) {
-    setIsKiseongForm(false); setIsEditMode(false); setSelectedWo(wo);
+  async function applySelection(wo: WorkOrderRow, resetEdit = true) {
+    setIsKiseongForm(false); setIsEditMode(false);
+    // 목록에 없는 work_order_items 상세를 클릭 시 로드
+    if (!wo.work_order_items || wo.work_order_items.every((i) => i.sub_items == null)) {
+      const { data: items } = await supabase
+        .from("work_order_items")
+        .select("id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images")
+        .eq("work_order_id", wo.id)
+        .order("delivery_date", { ascending: true });
+      wo = { ...wo, work_order_items: (items ?? []) as WoItemRow[] };
+    }
+    setSelectedWo(wo);
     setESubName(wo.sub_name ?? "");
     const woSubNameVal = wo.sub_name ?? "";
     if (woSubNameVal) { setEProductName(woSubNameVal); } else {
@@ -792,7 +803,7 @@ const channel = supabase
             </button>
             {showAlertPanel && (
               <div className="mt-1 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500">오늘({new Date().toISOString().slice(0, 10)}) 기준 알림</div>
+                <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500">오늘({new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10)}) 기준 알림</div>
                 <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
                   {stockAlerts.map((alert) => (
                     <div key={alert.id} className="flex items-center gap-3 px-4 py-2.5">
