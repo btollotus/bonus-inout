@@ -151,7 +151,7 @@ function barcodeCandidates(code: string) {
 }
 
 // LOT 직접 지정이 가능한 유형
-const LOT_SELECTABLE_TYPES: MovementType[] = ["OUT", "GIFT", "DISCARD"];
+const LOT_SELECTABLE_TYPES: MovementType[] = ["OUT", "GIFT", "DISCARD", "CONVERT"];
 
 export default function ScanClient() {
   const supabase = useMemo(() => createClient(), []);
@@ -762,16 +762,23 @@ const { error: mErr } = await supabase.from("movements").insert({
           const CONVERT_TARGET_BARCODE = "BO202604220021";
           const targetResolved = await resolveVariantInfo(CONVERT_TARGET_BARCODE);
           if (!targetResolved) throw new Error("재고전환 대상 제품(도눔(은박))을 찾을 수 없습니다. 품목관리에서 확인해주세요.");
+        
+          // LOT 직접 선택 시 해당 LOT의 소비기한 사용, 아니면 직접 입력한 소비기한 사용
+          const convertExpiry = row.selectedLotId
+            ? (lots.find((l) => l.lot_id === row.selectedLotId)?.expiry_date ?? row.expiry)
+            : row.expiry;
+        
           await saveInDiscard({
             id: uid(),
             type: "IN",
             barcode: targetResolved.code,
-            expiry: row.expiry,
+            expiry: convertExpiry,
             qty_ea: row.qty_ea,
             note: row.note || "재고전환 자동입고",
             variantInfo: targetResolved.vInfo,
           });
-        } else {
+        }
+          else {
           await saveInDiscard(row);
         }
 
