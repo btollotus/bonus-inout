@@ -837,11 +837,11 @@ const channel = supabase
     <button key={s} className={filterStatus === s ? btnOn : btn} onClick={() => {
       setWoOffset(0);
       setHasMore(false);
-      if (s === "완료" && filterStatus !== "완료") {
-        const today = new Date();
+    if (s === "완료" && filterStatus !== "완료") {
+        const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
         const from = new Date(today); from.setDate(today.getDate() - 7);
-        setFilterDateFrom(from.toISOString().slice(0, 10));
-        setFilterDateTo(today.toISOString().slice(0, 10));
+        setFilterDateFrom(`${from.getFullYear()}-${String(from.getMonth()+1).padStart(2,"0")}-${String(from.getDate()).padStart(2,"0")}`);
+        setFilterDateTo(`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`); 
       } else if (s !== "완료") {
         setFilterDateFrom("");
         setFilterDateTo("");
