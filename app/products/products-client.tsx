@@ -190,7 +190,10 @@ export default function ProductsClient() {
     const variantIds = (vData ?? []).map((r: any) => r.id).filter(Boolean);
     let bcMap = new Map<string, string>();
     if (variantIds.length > 0) {
-      const { data: bData, error: bErr } = await supabase.from("product_barcodes").select("variant_id, barcode, is_primary, is_active, created_at").in("variant_id", variantIds);
+      const { data: bData, error: bErr } = await supabase
+      .from("product_barcodes")
+      .select("variant_id, barcode, is_primary, is_active, created_at")
+      .eq("is_active", true);
       if (bErr) { setMsg(bErr.message); }
       else {
         const byVariant = new Map<string, any[]>();
