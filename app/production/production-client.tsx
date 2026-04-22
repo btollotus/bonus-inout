@@ -83,6 +83,24 @@ type KiseongVariant = {
   barcode: string;
 };
 
+const CHOSUNG = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+
+function getChosung(str: string): string {
+  return str.split("").map((ch) => {
+    const code = ch.charCodeAt(0) - 0xAC00;
+    if (code < 0 || code > 11171) return ch;
+    return CHOSUNG[Math.floor(code / 588)];
+  }).join("");
+}
+
+function matchesSearch(target: string, keyword: string): boolean {
+  const t = target.toLowerCase();
+  const k = keyword.toLowerCase();
+  if (t.includes(k)) return true;
+  const isAllChosung = [...k].every((ch) => CHOSUNG.includes(ch));
+  if (isAllChosung) return getChosung(t).includes(k);
+  return false;
+}
 // ─────────────────────── Helpers ───────────────────────
 const supabase = createClient();
 
@@ -509,7 +527,8 @@ const channel = supabase
   }, []);
 
   const filteredList = useMemo(() => {
-    const q = filterSearch.trim().toLowerCase();
+    const q = filterSearch.trim();
+let list = q ? woList.filter((wo) => [wo.client_name, wo.sub_name, wo.product_name, wo.barcode_no, wo.work_order_no, wo.food_type].filter(Boolean).join(" ").split(" ").some((word) => matchesSearch(word, q)) || matchesSearch([wo.client_name, wo.sub_name, wo.product_name, wo.barcode_no, wo.work_order_no, wo.food_type].filter(Boolean).join(" "), q)) : [...woList];
     let list = q ? woList.filter((wo) => [wo.client_name, wo.sub_name, wo.product_name, wo.barcode_no, wo.work_order_no, wo.food_type].filter(Boolean).join(" ").toLowerCase().includes(q)) : [...woList];
     if (filterFoodCategory !== "전체") list = list.filter((wo) => getFoodCategory(wo.food_type) === filterFoodCategory);
     if (sortBy === "delivery_date") {
