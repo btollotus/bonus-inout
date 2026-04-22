@@ -246,6 +246,7 @@ export default function ReportClient() {
 
   const [editSaving, setEditSaving] = useState(false);
   const [expirySaving, setExpirySaving] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState("");
 
   const printedAt = formatYYYYMMDD(new Date());
 
@@ -267,10 +268,16 @@ export default function ReportClient() {
     if (mode === "DAY") setEndDay(startDay);
   }, [mode, startDay]);
 
-  const filteredRows =
-    categoryFilter === "ALL"
-      ? rows
-      : rows.filter((r) => (r.product_category ?? "") === categoryFilter);
+  const filteredRows = rows
+  .filter((r) => categoryFilter === "ALL" || (r.product_category ?? "") === categoryFilter)
+  .filter((r) => {
+    if (!searchKeyword.trim()) return true;
+    const k = searchKeyword.trim().toLowerCase();
+    return (
+      safeStr(r.product_name).toLowerCase().includes(k) ||
+      safeStr(r.barcode).toLowerCase().includes(k)
+    );
+  });
 
   const periodLabel = startDay === endDay ? `${startDay}` : `${startDay} ~ ${endDay}`;
 
@@ -892,7 +899,16 @@ export default function ReportClient() {
           )}
         </div>
 
-        <div className="mt-6 rounded-2xl border border-black/10 overflow-x-auto print-tight print:border-black/20">
+        <div className="mt-4 no-print">
+  <input
+    className="w-full max-w-sm rounded-xl border border-black/15 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
+    placeholder="제품명 또는 바코드 검색"
+    value={searchKeyword}
+    onChange={(e) => setSearchKeyword(e.target.value)}
+  />
+</div>
+
+<div className="mt-6 rounded-2xl border border-black/10 overflow-x-auto print-tight print:border-black/20">
 
           <table className="w-full text-sm">
           <thead className="bg-black/5 print:bg-black/5">
