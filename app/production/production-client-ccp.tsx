@@ -679,6 +679,13 @@ function requirePin(action: (actionBy: string) => void) {
   }
 }
 
+// purpose 기반 원료 선택지
+function getMaterialOptions(purpose: string): string[] {
+  if (purpose === "유동") return ["다크", "화이트", "핑크"];
+  if (purpose === "코팅용도") return ["팜유", "핑크"];
+  return [];
+}
+
 
   const renderSlot = (s: { id: string; slot_name: string; purpose: string }) => {
     const st = slotStatus[s.id];
@@ -698,6 +705,10 @@ function requirePin(action: (actionBy: string) => void) {
       ? "border-amber-300 bg-amber-50 text-amber-800"
       : materialType === "화이트"
       ? "border-yellow-200 bg-yellow-50 text-yellow-700"
+      : materialType === "핑크"
+      ? "border-pink-300 bg-pink-50 text-pink-700"
+      : materialType === "팜유"
+      ? "border-orange-200 bg-orange-50 text-orange-700"
       : "border-blue-200 bg-blue-50 text-blue-700";
 
     const activeCls = isActive
@@ -751,7 +762,11 @@ function requirePin(action: (actionBy: string) => void) {
                   {(() => {
                     const mt = slotStatus[aSlot.id]?.materialType ?? null;
                     if (!mt) return null;
-                    return <span className={`text-[9px] font-semibold whitespace-nowrap ${mt === "다크" ? "text-amber-800" : "text-yellow-700"}`}>{mt}</span>;
+                    const cls = mt === "다크" ? "text-amber-800"
+                      : mt === "화이트" ? "text-yellow-700"
+                      : mt === "핑크" ? "text-pink-700"
+                      : "text-orange-700";
+                    return <span className={`text-[9px] font-semibold whitespace-nowrap ${cls}`}>{mt}</span>;
                   })()}
                 </div>
               )}
@@ -761,7 +776,11 @@ function requirePin(action: (actionBy: string) => void) {
                   {(() => {
                     const mt = slotStatus[bSlot.id]?.materialType ?? null;
                     if (!mt) return null;
-                    return <span className={`text-[9px] font-semibold whitespace-nowrap ${mt === "다크" ? "text-amber-800" : "text-yellow-700"}`}>{mt}</span>;
+                    const cls = mt === "다크" ? "text-amber-800"
+                      : mt === "화이트" ? "text-yellow-700"
+                      : mt === "핑크" ? "text-pink-700"
+                      : "text-orange-700";
+                    return <span className={`text-[9px] font-semibold whitespace-nowrap ${cls}`}>{mt}</span>;
                   })()}
                 </div>
               )}
@@ -827,9 +846,10 @@ function requirePin(action: (actionBy: string) => void) {
               </div>
             </div>
 
-            {/* 코팅 가로 1줄 */}
-            <div>
-              <div className="mb-1.5 text-xs font-semibold text-slate-500">코팅</div>
+{/* 코팅/핑크 가로 1줄 */}
+<div>
+              <div className="mb-1.5 text-xs font-semibold text-slate-500">코팅/핑크</div>
+
               <div className="flex flex-row gap-1.5">
                 {warmerSlots.filter(s => s.purpose === "코팅용도").map(renderSlot)}
               </div>
@@ -867,28 +887,38 @@ function requirePin(action: (actionBy: string) => void) {
                 </div>
 
                 {isEmpty ? (
-                  <div className="flex gap-3 items-center flex-nowrap">
-                    {warmerSlots.find((s) => s.id === activeSlotId)?.purpose === "유동" && (
-                      <div>
-                        <div className="mb-1 text-xs text-slate-500">원료 종류 *</div>
-                        <div className="flex gap-2">
-                          {["다크", "화이트"].map((t) => (
-                            <button
-                              key={t}
-                              type="button"
-                              className={`rounded-xl border px-4 py-2 text-sm font-bold transition-all ${
-                                selectedMaterialType === t
-                                  ? t === "다크"
-                                    ? "border-amber-600 bg-amber-700 text-white"
-                                    : "border-yellow-400 bg-yellow-400 text-amber-900"
-                                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                              }`}
-                              onClick={() => setSelectedMaterialType(t)}
-                            >{t}</button>
-                          ))}
+                  <div className="flex gap-3 items-center flex-wrap">
+                    {(() => {
+                      const materialOptions = getMaterialOptions(slot?.purpose ?? "");
+                      const needsMaterialSelect = materialOptions.length > 0;
+                      return needsMaterialSelect ? (
+                        <div>
+                          <div className="mb-1 text-xs text-slate-500">원료 종류 *</div>
+                          <div className="flex gap-2">
+                            {materialOptions.map((t) => (
+                              <button
+                                key={t}
+                                type="button"
+                                className={`rounded-xl border px-4 py-2 text-sm font-bold transition-all ${
+                                  selectedMaterialType === t
+                                    ? t === "다크"
+                                      ? "border-amber-600 bg-amber-700 text-white"
+                                      : t === "화이트"
+                                      ? "border-yellow-400 bg-yellow-400 text-amber-900"
+                                      : t === "핑크"
+                                      ? "border-pink-500 bg-pink-500 text-white"
+                                      : t === "팜유"
+                                      ? "border-orange-500 bg-orange-500 text-white"
+                                      : "border-slate-400 bg-slate-600 text-white"
+                                    : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                                }`}
+                                onClick={() => setSelectedMaterialType(t)}
+                              >{t}</button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      ) : null;
+                    })()}
                     <div>
                       <div className="mb-1 text-xs text-slate-500">투입시각 (HHmm)</div>
                       <input className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
@@ -903,12 +933,12 @@ function requirePin(action: (actionBy: string) => void) {
                     )}
                     <button
                       className="rounded-xl border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
-                      disabled={slotActionSaving || slotActionTime.length < 4 || (warmerSlots.find((s) => s.id === activeSlotId)?.purpose === "유동" && !selectedMaterialType)}
-                      onClick={() => requirePin((actionBy) => { saveSlotMaterialIn(activeSlotId, undefined, selectedMaterialType, actionBy); setSelectedMaterialType(""); })}
+                      disabled={slotActionSaving || slotActionTime.length < 4 || (getMaterialOptions(slot?.purpose ?? "").length > 0 && !selectedMaterialType)}
+                      onClick={() => requirePin((actionBy) => { saveSlotMaterialIn(activeSlotId, undefined, selectedMaterialType || undefined, actionBy); setSelectedMaterialType(""); })}
                     >
                       {slotActionSaving ? "저장 중..." : "🧪 원료투입"}
                     </button>
-                  </div>
+                  </div>            
              // after
             ) : (
               <div className="space-y-3">
@@ -1123,10 +1153,10 @@ export function WoCcpCard({
             </div>
           )}
 
-          {/* 코팅 가로 1줄 */}
-          {warmerSlots.filter((s: any) => s.purpose === "코팅용도").length > 0 && (
+{/* 코팅/핑크 가로 1줄 */}
+{warmerSlots.filter((s: any) => s.purpose === "코팅용도").length > 0 && (
             <div>
-              <div className="mb-1 text-xs font-semibold text-slate-500">코팅</div>
+              <div className="mb-1 text-xs font-semibold text-slate-500">코팅/핑크</div>
               <div className="flex flex-row gap-1.5">
                 {warmerSlots.filter((s: any) => s.purpose === "코팅용도").map(renderSlotBtn)}
               </div>
