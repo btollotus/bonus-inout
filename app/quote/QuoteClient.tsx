@@ -421,6 +421,30 @@ async function loadSignageList() {
     setLastQuoteRequestId(req.id);
     loadSheetList();
   } 
+
+  // ─── 전사지 견적 불러오기 ───
+  function loadSheetToForm(r: QuoteRequestRow) {
+    setPartnerMode("direct");
+    setCustomerName(r.customer_name);
+    setMemo(r.memo ?? "");
+    const loaded = r.quote_items && r.quote_items.length > 0
+      ? r.quote_items
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map(qi => ({
+            id: crypto.randomUUID(),
+            quantity: String(qi.quantity ?? ""),
+            isNew: qi.is_new,
+            calcResult: {
+              plateCost: qi.plate_cost ?? 0,
+              sheetCost: qi.transfer_cost ?? 0,
+              total: qi.total ?? 0,
+            },
+          }))
+      : [newSheetItem()];
+    setSheetItems(loaded);
+    setMsg("✅ 전사지 견적을 불러왔어요. 수정 후 출력하세요.");
+  }
+
   // ─── 상태 변경 ───
   async function updateStatus(id: string, status: string, lostReason?: string) {
     const { error } = await supabase.from("quote_requests")
@@ -1309,6 +1333,7 @@ async function loadSignageList() {
     </div>
   </div>
 
+ 
  {/* 전사지 목록 */}
  {sheetList.length > 0 && (
                 <div className={`${card} p-4`}>
@@ -1389,6 +1414,13 @@ async function loadSignageList() {
                                     onClick={() => { setSelectedQuoteRow(r); setLastQuoteRequestId(r.id); setPrintOpen(true); }}>
                                     🖨️ 견적서
                                   </button>
+{/* ↓ 이 버튼 추가 (바로 아래에) */}
+<button className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-100"
+  onClick={() => loadSheetToForm(r)}>
+  ✏️ 불러오기
+</button>
+
+
                                   {r.status !== "수주" && (
                                     <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-1 text-[11px] font-semibold text-green-700 hover:bg-green-100"
                                       onClick={() => updateStatus(r.id, "수주")}>수주</button>
