@@ -92,6 +92,23 @@ type UnifiedRow = {
 };
 type EmployeeRow = { id: string; name: string | null };
 
+const CHOSUNG = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+function getChosung(str: string): string {
+  return str.split("").map((ch) => {
+    const code = ch.charCodeAt(0) - 0xAC00;
+    if (code < 0 || code > 11171) return ch;
+    return CHOSUNG[Math.floor(code / 588)];
+  }).join("");
+}
+function matchesSearch(target: string, keyword: string): boolean {
+  const t = target.toLowerCase();
+  const k = keyword.toLowerCase();
+  if (t.includes(k)) return true;
+  const isAllChosung = [...k].every((ch) => CHOSUNG.includes(ch));
+  if (isAllChosung) return getChosung(t).includes(k);
+  return false;
+}
+
 // ─────────────────────── Constants ───────────────────────
 const CATEGORIES = ["매출입금", "매출환불", "급여", "세금", "기타"] as const;
 type Category = (typeof CATEGORIES)[number];
@@ -2402,7 +2419,7 @@ if (woSubNameVal) {
                         if (!q) return true;
                         const orderLineText = x.kind === "ORDER" ? (x.order_lines ?? []).map((l) => `${l.name ?? ""} ${l.food_type ?? ""}`).join(" ") : "";
                         const summaryText = buildOrderSummaryText(x);
-                        return [x.partnerName, x.businessNo ?? "", x.ordererName, summaryText, x.category, x.method, x.order_title ?? "", x.ledger_memo ?? "", orderLineText].filter(Boolean).join(" ").toLowerCase().includes(q);
+                        return matchesSearch([x.partnerName, x.businessNo ?? "", x.ordererName, summaryText, x.category, x.method, x.order_title ?? "", x.ledger_memo ?? "", orderLineText].filter(Boolean).join(" "), q);
                       }).map((x) => (
                         <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
                           <td className="px-3 py-1 font-semibold tabular-nums leading-tight">{x.date}</td>
