@@ -764,9 +764,16 @@ const { error: mErr } = await supabase.from("movements").insert({
           if (!targetResolved) throw new Error("재고전환 대상 제품(도눔(은박))을 찾을 수 없습니다. 품목관리에서 확인해주세요.");
         
           // LOT 직접 선택 시 해당 LOT의 소비기한 사용, 아니면 직접 입력한 소비기한 사용
-          const convertExpiry = row.selectedLotId
-            ? (lots.find((l) => l.lot_id === row.selectedLotId)?.expiry_date ?? row.expiry)
-            : row.expiry;
+          let convertExpiry = row.expiry;
+          if (row.selectedLotId) {
+            const { data: lotData } = await supabase
+              .from("lots")
+              .select("expiry_date")
+              .eq("id", row.selectedLotId)
+              .maybeSingle();
+            convertExpiry = (lotData as any)?.expiry_date ?? row.expiry;
+          }
+          if (!convertExpiry) throw new Error("재고전환 소비기한을 확인할 수 없습니다.");
         
           await saveInDiscard({
             id: uid(),
