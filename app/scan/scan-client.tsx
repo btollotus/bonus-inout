@@ -758,13 +758,10 @@ const { error: mErr } = await supabase.from("movements").insert({
         } else if (row.type === "DISCARD" && row.selectedLotId) {
           await issueOutGift(row);
         } else if (row.type === "CONVERT") {
-          await issueOutGift(row); // 도눔(반제품) CONVERT OUT
-        
-          // 도눔(은박) 자동 IN
+          await issueOutGift(row);
           const CONVERT_TARGET_BARCODE = "BO202604220021";
           const targetResolved = await resolveVariantInfo(CONVERT_TARGET_BARCODE);
           if (!targetResolved) throw new Error("재고전환 대상 제품(도눔(은박))을 찾을 수 없습니다. 품목관리에서 확인해주세요.");
-        
           await saveInDiscard({
             id: uid(),
             type: "IN",
@@ -774,10 +771,10 @@ const { error: mErr } = await supabase.from("movements").insert({
             note: row.note || "재고전환 자동입고",
             variantInfo: targetResolved.vInfo,
           });
-        }
-        } else 
+        } else {
           await saveInDiscard(row);
         }
+
         okCount += 1;
       }
 
