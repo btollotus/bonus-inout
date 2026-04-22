@@ -227,6 +227,7 @@ export default function QuoteClient() {
     setSheetItems(prev => prev.map(x => x.id === id ? { ...x, ...patch } : x));
   }
   const [sheetList, setSheetList] = useState<QuoteRequestRow[]>([]);
+  const [sheetNoDelivery, setSheetNoDelivery] = useState(false); 
   const [sheetSearch, setSheetSearch] = useState("");
   const [sheetStatusFilter, setSheetStatusFilter] = useState<string>("전체");
 
@@ -378,7 +379,7 @@ async function loadSignageList() {
     const totalSheetCost = calcedItems.reduce((s, x) => s + x.calcResult!.sheetCost, 0);
     const totalSheets    = calcedItems.reduce((s, x) => s + (parseInt(x.quantity) || 0), 0);
     const grandTotal     = calcedItems.reduce((s, x) => s + x.calcResult!.total, 0);
-    const delivery       = grandTotal < 50000 ? 3300 : 0;
+    const delivery = sheetNoDelivery ? 0 : (grandTotal < 50000 ? 3300 : 0);
     const finalTotal     = grandTotal + delivery;
   
     const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
@@ -1258,21 +1259,32 @@ async function loadSignageList() {
     {sheetItems.some(x => x.calcResult) && (() => {
       const calced = sheetItems.filter(x => x.calcResult);
       const grandTotal = calced.reduce((s, x) => s + x.calcResult!.total, 0);
-      const delivery = grandTotal < 50000 ? 3300 : 0;
+      const delivery = sheetNoDelivery ? 0 : (grandTotal < 50000 ? 3300 : 0);
       const finalTotal = grandTotal + delivery;
       return (
-        <div className="mb-4 grid grid-cols-2 gap-2">
-          <div className="rounded-2xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-center">
-            <div className="text-xs text-blue-600 font-semibold">공급가 (부가세 별도)</div>
-            <div className="text-2xl font-black text-blue-700 tabular-nums">{fmt(finalTotal)}원</div>
-            {delivery > 0 && <div className="text-xs text-slate-500 mt-0.5">택배비 {fmt(delivery)}원 포함</div>}
+        <>
+          <label className="flex cursor-pointer items-center gap-2 mb-2 text-sm font-semibold text-slate-600">
+            <input
+              type="checkbox"
+              checked={sheetNoDelivery}
+              onChange={e => setSheetNoDelivery(e.target.checked)}
+            />
+            🚚 택배비 제외 (직접수령 / 착불)
+          </label>
+          <div className="mb-4 grid grid-cols-2 gap-2">
+            <div className="rounded-2xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-center">
+              <div className="text-xs text-blue-600 font-semibold">공급가 (부가세 별도)</div>
+              <div className="text-2xl font-black text-blue-700 tabular-nums">{fmt(finalTotal)}원</div>
+              {delivery > 0 && <div className="text-xs text-slate-500 mt-0.5">택배비 {fmt(delivery)}원 포함</div>}
+            </div>
+            <div className="rounded-2xl border-2 border-slate-300 bg-slate-50 px-4 py-3 text-center">
+              <div className="text-xs text-slate-600 font-semibold">부가세 포함</div>
+              <div className="text-2xl font-black text-slate-700 tabular-nums">{fmt(Math.round(finalTotal * 1.1))}원</div>
+            </div>
           </div>
-          <div className="rounded-2xl border-2 border-slate-300 bg-slate-50 px-4 py-3 text-center">
-            <div className="text-xs text-slate-600 font-semibold">부가세 포함</div>
-            <div className="text-2xl font-black text-slate-700 tabular-nums">{fmt(Math.round(finalTotal * 1.1))}원</div>
-          </div>
-        </div>
+        </>
       );
+
     })()}
 
     {/* 메모 */}
@@ -1598,7 +1610,7 @@ async function loadSignageList() {
 {printOpen && !selectedQuoteRow && tab === "sheet" && sheetItems.some(x => x.calcResult) && (() => {
   const calced = sheetItems.filter(x => x.calcResult);
   const grandTotal = calced.reduce((s, x) => s + x.calcResult!.total, 0);
-  const delivery = grandTotal < 50000 ? 3300 : 0;
+  const delivery = sheetNoDelivery ? 0 : (grandTotal < 50000 ? 3300 : 0);
   return (
     <QuotePrintModal
       onClose={() => { setPrintOpen(false); setSheetItems([newSheetItem()]); }}
@@ -1626,7 +1638,7 @@ async function loadSignageList() {
         })),
         memo: memo || null,
         iceboxPrice: 0,
-        deliveryPrice: delivery,
+        deliveryPrice: sheetNoDelivery ? 0 : (grandTotal < 50000 ? 3300 : 0),
         quoteRequestId: lastQuoteRequestId,
       }}
     />
