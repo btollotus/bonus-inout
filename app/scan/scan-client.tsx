@@ -775,7 +775,7 @@ const { error: mErr } = await supabase.from("movements").insert({
             variantInfo: targetResolved.vInfo,
           });
         }
-        } else {
+        } else 
           await saveInDiscard(row);
         }
         okCount += 1;
