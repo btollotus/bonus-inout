@@ -2415,7 +2415,7 @@ if (woSubNameVal) {
                         if (mode === "LEDGER") return x.kind === "LEDGER";
                         return true;
                       }).filter((x) => {
-                        const q = tradeSearch.trim().toLowerCase();
+                        const q = tradeSearch.trim();
                         if (!q) return true;
                         const orderLineText = x.kind === "ORDER" ? (x.order_lines ?? []).map((l) => `${l.name ?? ""} ${l.food_type ?? ""}`).join(" ") : "";
                         const summaryText = buildOrderSummaryText(x);
