@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/browser";
 import { Ccp1bTab, OtherHeatingTab, CompressorTab, PetLedgerTab } from "./tabs-extra";
 import { Ccp1pTab } from "./Ccp1pTab";
 import { ExpiryMgmtTab, WarmerCleaningTab, PestTab, ForeignMatterTab, HygieneCheckTab, TempHumidityTab, StorageTempTab } from "./tabs-hygiene";
+import { todayKST } from "@/lib/utils/date";
 
 const supabase = createClient();
 
@@ -277,12 +278,12 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [confirming, setConfirming] = useState(false);
 
   // ── 조회 ──
-  const [viewDate, setViewDate] = useState(new Date().toISOString().slice(0, 10));
+  const [viewDate, setViewDate] = useState(todayKST());
   const [viewMode, setViewMode] = useState(false);
   const [viewLogs, setViewLogs] = useState<DailyWorkLog[]>([]);
   const [viewLoading, setViewLoading] = useState(false);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayKST();
 
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
@@ -734,7 +735,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
 
   const [stocks, setStocks] = useState<MaterialStock[]>([]);
   const [receipts, setReceipts] = useState<MaterialReceipt[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
+  const [filterDate, setFilterDate] = useState(todayKST());
   const [filterCategory, setFilterCategory] = useState("전체");
   const [loading, setLoading] = useState(false);
   const [showReceiptForm, setShowReceiptForm] = useState(false);
@@ -742,7 +743,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
 
   // 입고 폼
   const [rMaterialId, setRMaterialId] = useState("");
-  const [rDate, setRDate] = useState(new Date().toISOString().slice(0, 10));
+  const [rDate, setRDate] = useState(todayKST());
   const [rQty, setRQty] = useState("");
   const [rExpiry, setRExpiry] = useState("");
   const [rSupplier, setRSupplier] = useState("");
@@ -962,12 +963,12 @@ function WorkLogTab({ role, userId, showToast }: {
 
   const [logs, setLogs] = useState<WorkLog[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
+  const [filterDate, setFilterDate] = useState(todayKST());
   const [showForm, setShowForm] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
 
   // 폼 state
-  const [fDate, setFDate] = useState(new Date().toISOString().slice(0, 10));
+  const [fDate, setFDate] = useState(todayKST());
   const [fWorkerName, setFWorkerName] = useState("");
   const [fClockIn, setFClockIn] = useState("");
   const [fClockOut, setFClockOut] = useState("");
