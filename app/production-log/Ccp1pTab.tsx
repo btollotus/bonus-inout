@@ -280,7 +280,10 @@ export function Ccp1pTab({ role, userId, showToast }: {
   userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
-  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+  const todayKST = () =>
+    new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 10);
+
+  const [selectedDate, setSelectedDate] = useState<string>(todayKST());
 
   const [woList, setWoList] = useState<WorkOrderItem[]>([]);
   const [logMap, setLogMap] = useState<Record<string, MetalLog>>({});
@@ -313,21 +316,20 @@ export function Ccp1pTab({ role, userId, showToast }: {
       .from("work_orders")
       .select("id, product_name, client_name, updated_at")
       .eq("status_production", true)
-      .gte("updated_at", `${today}T00:00:00+09:00`)
-      .lt("updated_at", `${today}T23:59:59+09:00`)
+      .gte("updated_at", `${selectedDate}T00:00:00+09:00`)
+      .lt("updated_at", `${selectedDate}T23:59:59+09:00`)
       .order("updated_at", { ascending: true });
 
     if (error) { showToast("조회 실패: " + error.message, "error"); setLoading(false); return; }
     setWoList((data ?? []) as WorkOrderItem[]);
     setLoading(false);
-  }, [today]);
+  }, [selectedDate]);
 
   const loadLogs = useCallback(async () => {
     const { data } = await supabase
       .from("ccp_metal_logs")
       .select("*")
-      .gte("created_at", `${today}T00:00:00+09:00`)
-      .lt("created_at", `${today}T23:59:59+09:00`);
+      .eq("log_date", selectedDate);
 
     if (!data) return;
     const map: Record<string, MetalLog> = {};
@@ -335,7 +337,7 @@ export function Ccp1pTab({ role, userId, showToast }: {
       if (row.work_order_id) map[row.work_order_id] = row as MetalLog;
     }
     setLogMap(map);
-  }, [today]);
+  }, [selectedDate]);
 
   useEffect(() => {
     loadWoList();
@@ -349,7 +351,7 @@ function selectWo(wo: WorkOrderItem) {
   if (existing) {
     setFormData({ ...existing });
   } else {
-    setFormData(emptyLog(wo.id, wo.product_name, wo.client_name, today));
+    setFormData(emptyLog(wo.id, wo.product_name, wo.client_name, selectedDate)); 
   }
   setTimeout(() => {
     document.getElementById(`form-${wo.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -535,7 +537,7 @@ function selectWo(wo: WorkOrderItem) {
 
   // ── 인쇄용 날짜 포맷 ──
   const printDate = (() => {
-    const d = new Date(today + "T00:00:00+09:00");
+    const d = new Date(selectedDate + "T00:00:00+09:00");
     return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
   })();
 
@@ -566,8 +568,7 @@ function selectWo(wo: WorkOrderItem) {
   const doc = iframe.contentDocument || iframe.contentWindow?.document;
   if (!doc) return;
 
-  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-  const printTitle = `CCP-1P_금속검출_${today}`;
+  const printTitle = `CCP-1P_금속검출_${selectedDate}`;
 
   doc.open();
   doc.write(`<!DOCTYPE html><html><head>
@@ -599,8 +600,37 @@ function selectWo(wo: WorkOrderItem) {
           화면용 UI (기존 그대로)
       ══════════════════════════════════════════ */}
 
+    {/* ── 날짜 선택 ── */}
+    <div className={`${card} p-3 print:hidden flex flex-wrap items-center gap-3`}>
+        <span className="text-sm font-semibold text-slate-600">조회 날짜</span>
+        <input
+          type="date"
+          className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+          value={selectedDate}
+          max={todayKST()}
+          onChange={(e) => {
+            setSelectedDate(e.target.value);
+            setSelectedWoId(null);
+            setFormData(null);
+          }}
+        />
+        {selectedDate !== todayKST() && (
+          <>
+            <button
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium hover:bg-slate-100"
+              onClick={() => { setSelectedDate(todayKST()); setSelectedWoId(null); setFormData(null); }}
+            >
+              오늘로 돌아가기
+            </button>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+              과거 기록 조회 중
+            </span>
+          </>
+        )}
+      </div>
+
       {/* ── 공통사항 ── */}
-      <div className={`${card} p-4 print:hidden`}>
+      <div className={`${card} p-4 print:hidden`}> 
         <div className="mb-2 text-xs font-semibold text-slate-500">공통사항</div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm md:grid-cols-4 mb-3">
           <div><span className="text-xs text-slate-400">한계기준</span><div>Fe 2.5mmφ &nbsp;/&nbsp; SUS 3.0mmφ</div></div>
@@ -622,7 +652,10 @@ function selectWo(wo: WorkOrderItem) {
       {/* ── 오늘 생산완료 목록 ── */}
       <div className={`${card} p-4 print:hidden`}>
         <div className="mb-3 flex items-center justify-between">
-          <div className="text-sm font-semibold">오늘 생산완료 목록 ({today} KST)</div>
+        <div className="text-sm font-semibold">
+            생산완료 목록 ({selectedDate} KST)
+            {selectedDate === todayKST() && <span className="ml-1 text-xs font-normal text-slate-400">오늘</span>}
+          </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">{woList.length}건</span>
             <button className={btn} onClick={() => { loadWoList(); loadLogs(); }}>🔄 새로고침</button>
@@ -632,7 +665,7 @@ function selectWo(wo: WorkOrderItem) {
         {loading ? (
   <div className="py-6 text-center text-sm text-slate-400">불러오는 중...</div>
 ) : woList.length === 0 ? (
-  <div className="py-6 text-center text-sm text-slate-400">오늘 생산완료된 작업지시서가 없습니다.</div>
+  <div className="py-6 text-center text-sm text-slate-400">{selectedDate} 생산완료된 작업지시서가 없습니다.</div>
 ) : (
   <div className="space-y-2">
     {woList.map((wo: any) => {
