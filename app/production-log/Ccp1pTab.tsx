@@ -291,6 +291,11 @@ export function Ccp1pTab({ role, userId, showToast }: {
   const [formData, setFormData] = useState<Omit<MetalLog, "id"> | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [rangePanelOpen, setRangePanelOpen] = useState(false);
+  const [rangeFrom, setRangeFrom] = useState<string>(todayKST());
+  const [rangeTo, setRangeTo] = useState<string>(todayKST());
+  const [rangeLogs, setRangeLogs] = useState<Record<string, MetalLog[]>>({});
+  const [rangeLoading, setRangeLoading] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
 
   useEffect(() => {
@@ -338,6 +343,27 @@ export function Ccp1pTab({ role, userId, showToast }: {
     }
     setLogMap(map);
   }, [selectedDate]);
+
+  async function loadRangeLogs() {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return;
+    setRangeLoading(true);
+    const { data } = await supabase
+      .from("ccp_metal_logs")
+      .select("*")
+      .gte("log_date", rangeFrom)
+      .lte("log_date", rangeTo)
+      .order("log_date", { ascending: true })
+      .order("start_time", { ascending: true });
+    setRangeLoading(false);
+    if (!data) return;
+    const grouped: Record<string, MetalLog[]> = {};
+    for (const row of data) {
+      const d = row.log_date as string;
+      if (!grouped[d]) grouped[d] = [];
+      grouped[d].push(row as MetalLog);
+    }
+    setRangeLogs(grouped);
+  }
 
   useEffect(() => {
     loadWoList();
@@ -502,6 +528,39 @@ function selectWo(wo: WorkOrderItem) {
     });
   }
 
+  function printRange() {
+    const dates = Object.keys(rangeLogs).sort();
+    if (dates.length === 0) return showToast("조회된 기록이 없습니다.", "error");
+    const content = document.getElementById("ccp1p-range-print-inner");
+    if (!content) return;
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) return;
+    const printTitle = `CCP-1P_금속검출_${rangeFrom}_${rangeTo}`;
+    doc.open();
+    doc.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <title>${printTitle}</title>
+      <style>
+        @page { size: A4 landscape; margin: 8mm 10mm; }
+        body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 8.5pt; color: #000; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        table { border-collapse: collapse; }
+        img { max-width: none; }
+        .page-block { page-break-after: always; }
+        .page-block:last-child { page-break-after: avoid; }
+      </style>
+    </head><body>${content.innerHTML}</body></html>`);
+    doc.close();
+    const origTitle = document.title;
+    document.title = printTitle;
+    iframe.contentWindow?.focus();
+    iframe.contentWindow?.print();
+    setTimeout(() => { document.title = origTitle; document.body.removeChild(iframe); }, 1500);
+  }
+
   // ── 인쇄용: logMap을 시작시간 순으로 정렬한 기록 목록 ──
   const sortedLogs: MetalLog[] = Object.values(logMap).sort((a, b) => {
     const ta = a.start_time ?? "";
@@ -599,6 +658,72 @@ function selectWo(wo: WorkOrderItem) {
       {/* ══════════════════════════════════════════
           화면용 UI (기존 그대로)
       ══════════════════════════════════════════ */}
+
+      {/* ── 기간 인쇄 패널 ── */}
+      <div className={`${card} print:hidden overflow-hidden transition-all`}>
+        <button
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          onClick={() => setRangePanelOpen((v) => !v)}
+        >
+          <span>📅 기간별 인쇄</span>
+          <span className="text-slate-400 text-xs">{rangePanelOpen ? "▲ 닫기" : "▼ 열기"}</span>
+        </button>
+        {rangePanelOpen && (
+          <div className="border-t border-slate-100 px-4 py-4 space-y-4">
+            <div className="flex flex-wrap items-end gap-4">
+            <div>
+                <div className="mb-1 text-xs text-slate-500">시작일</div>
+                <input
+                  type="date"
+                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+                  value={rangeFrom}
+                  max={rangeTo}
+                  onChange={(e) => { setRangeFrom(e.target.value); setRangeLogs({}); }}
+                />
+              </div>
+              <div className="text-slate-400 pb-1.5">~</div>
+              <div>
+                <div className="mb-1 text-xs text-slate-500">종료일</div>
+                <input
+                  type="date"
+                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+                  value={rangeTo}
+                  max={todayKST()}
+                  onChange={(e) => { setRangeTo(e.target.value); setRangeLogs({}); }}
+                />
+              </div>
+              <button
+                className={`rounded-xl px-4 py-1.5 text-sm font-semibold text-white ${rangeLoading ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"}`}
+                disabled={rangeLoading || !rangeFrom || !rangeTo || rangeFrom > rangeTo}
+                onClick={loadRangeLogs}
+              >
+                {rangeLoading ? "조회 중..." : "🔍 조회"}
+              </button>
+              {Object.keys(rangeLogs).length > 0 && !rangeLoading && (
+                <button
+                  className="rounded-xl border border-slate-300 bg-slate-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-slate-800"
+                  onClick={printRange}
+                >
+                  🖨️ 인쇄
+                </button>
+              )}
+            </div>
+            {Object.keys(rangeLogs).length > 0 && !rangeLoading && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                {Object.keys(rangeLogs).sort().map((d) => (
+                  <span key={d} className="mr-3">
+                    <span className="font-semibold">{d}</span>
+                    <span className="text-slate-400 ml-1">{rangeLogs[d].length}건</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            {Object.keys(rangeLogs).length === 0 && !rangeLoading && rangeFrom && rangeTo && (
+              <div className="text-xs text-slate-400">조회 버튼을 눌러 기간 내 기록을 불러오세요.</div>
+            )}
+          </div>
+        )}
+      </div>
 
     {/* ── 날짜 선택 ── */}
     <div className={`${card} p-3 print:hidden flex flex-wrap items-center gap-3`}>
@@ -877,6 +1002,212 @@ function selectWo(wo: WorkOrderItem) {
 <style>{`
   .ccp1p-print-only { display: none; }
 `}</style>
+
+{/* ── 기간 인쇄 전용 숨김 영역 ── */}
+<div id="ccp1p-range-print-inner" style={{ display: "none" }}>
+  {Object.keys(rangeLogs).sort().map((date) => {
+    const logs = rangeLogs[date].slice().sort((a, b) => (a.start_time ?? "").localeCompare(b.start_time ?? ""));
+    const d = new Date(date + "T00:00:00+09:00");
+    const dateLabel = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+    const rangeEmptyCount = Math.max(3, 3 - logs.length);
+    return (
+      <div key={date} className="page-block">
+        {/* 제목 + 결재란 */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+          <tbody>
+            <tr>
+              <td rowSpan={2} style={{ ...tdBase, fontSize: "13pt", fontWeight: "bold", textAlign: "center", padding: "6px 8px" }}>
+                중요관리점(CCP-1P) 점검표 [금속검출공정]
+              </td>
+              <td style={{ ...tdBase, width: 28, fontWeight: "bold", background: "#fff", textAlign: "center", fontSize: "8pt" }} rowSpan={2}>결<br/>재<br/>란</td>
+              <td style={{ ...tdBase, width: 80, textAlign: "center", fontWeight: "bold" }}>작성</td>
+              <td style={{ ...tdBase, width: 80, textAlign: "center", fontWeight: "bold" }}>승인</td>
+            </tr>
+            <tr>
+              <td style={{ ...tdBase, textAlign: "center", padding: "3px" }}>
+                <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} alt="김영각" />
+                <div style={{ fontSize: "7pt", marginTop: 2 }}>김영각</div>
+              </td>
+              <td style={{ ...tdBase, textAlign: "center", padding: "3px" }}>
+                <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} alt="조대성" />
+                <div style={{ fontSize: "7pt", marginTop: 2 }}>조대성</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        {/* 작성일자 행 */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+          <tbody>
+            <tr>
+              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff" }}>작성일자</td>
+              <td style={tdBase}>{dateLabel}</td>
+              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff" }}>한계기준</td>
+              <td style={tdBase}>악성 85</td>
+              <td style={{ ...tdBase, width: 20, fontWeight: "bold", background: "#fff" }}>Fe</td>
+              <td style={tdBase}>2.5mmφ</td>
+              <td style={{ ...tdBase, width: 30, fontWeight: "bold", background: "#fff" }}>SUS</td>
+              <td style={tdBase}>3.0mmφ</td>
+              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff" }}>검교정주기</td>
+              <td style={tdBase}>연 1회</td>
+            </tr>
+          </tbody>
+        </table>
+        {/* 점검주기 + 방법 */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 4 }}>
+          <tbody>
+            <tr>
+              <td rowSpan={2} style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff", textAlign: "center" }}>점검주기</td>
+              <td style={{ ...tdBase, width: 80, fontWeight: "bold", background: "#fff" }}>감도 모니터링</td>
+              <td style={tdBase}>금속검출 작업시작 전, 작업중 2시간마다, 작업 종료 후</td>
+            </tr>
+            <tr>
+              <td style={{ ...tdBase, fontWeight: "bold", background: "#fff" }}>공정품 확인</td>
+              <td style={tdBase}>제품변경 시 &amp; 작업 중 상시</td>
+            </tr>
+            <tr>
+              <td rowSpan={3} style={{ ...tdBase, fontWeight: "bold", background: "#fff", textAlign: "center" }}>방&nbsp;&nbsp;&nbsp;법</td>
+              <td style={{ ...tdBase, fontWeight: "bold", background: "#fff", whiteSpace: "nowrap" }}>감도 모니터링</td>
+              <td style={{ ...tdBase, fontSize: "7.5pt" }}>① 표준시편만 통과&nbsp;&nbsp;② 금속이물이 없는 것으로 확인된 공정품 통과&nbsp;&nbsp;③ 표준시편과 공정품을 함께 통과</td>
+            </tr>
+            <tr>
+              <td style={{ ...tdBase, fontWeight: "bold", background: "#fff" }}>공정품 확인</td>
+              <td style={{ ...tdBase, fontSize: "7.5pt" }}>제품 금속검출기 통과</td>
+            </tr>
+            <tr>
+              <td colSpan={2} style={{ ...tdBase, fontSize: "7.5pt", color: "#555" }}>
+                제품 1개 → <span style={{ color: "#1D6FB5", fontWeight: "bold" }}>A단계</span> 실행 후 종료시간 기록&nbsp;&nbsp;|&nbsp;&nbsp;제품 2개 이상 → <span style={{ color: "#B45309", fontWeight: "bold" }}>A단계 + B단계</span> 실행
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        {/* 헤더 테이블 */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 0, tableLayout: "fixed" }}>
+          <colgroup>
+            <col style={{ width: "86px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+            <col style={{ width: "16px" }} /><col style={{ width: "18px" }} />
+            <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+            <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+            <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+            <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+            <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+            <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+            <col style={{ width: "18px" }} /><col style={{ width: "18px" }} /><col style={{ width: "30px" }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th rowSpan={3} style={{ ...thBase }}>품명<br />(업체명)</th>
+              <th rowSpan={3} style={{ ...thBase }}>시작<br />시간</th>
+              <th rowSpan={3} style={{ ...thBase }}>종료<br />시간</th>
+              <th rowSpan={3} style={{ ...thBase }}>구역</th>
+              <th rowSpan={3} style={{ ...thBase, fontSize: "5.5pt" }}>제품<br />통과<br />(B행)</th>
+              <th colSpan={18} style={{ ...thBase }}>A (제품 1개일 경우) / B행: Fe시편·SUS시편</th>
+              <th rowSpan={3} style={{ ...thBase }}>이탈<br />유무</th>
+              <th rowSpan={3} style={{ ...thBase }}>통과<br />수량</th>
+              <th rowSpan={3} style={{ ...thBase }}>확 인<br />(서명)</th>
+            </tr>
+            <tr>
+              <th colSpan={3} style={thSub}>Fe 시편</th>
+              <th colSpan={3} style={thSub}>SUS 시편</th>
+              <th colSpan={3} style={thSub}>Fe+제품(상)</th>
+              <th colSpan={3} style={thSub}>Fe+제품(하)</th>
+              <th colSpan={3} style={thSub}>SUS+제품(상)</th>
+              <th colSpan={3} style={thSub}>SUS+제품(하)</th>
+            </tr>
+            <tr>
+              {["좌","중","우","좌","중","우","좌","중","우","좌","중","우","좌","중","우","좌","중","우"].map((l, i) => (
+                <th key={i} style={thSub}>{l}</th>
+              ))}
+            </tr>
+          </thead>
+        </table>
+        {/* 데이터 행 */}
+        {logs.map((log) => {
+          const signSrc = log.worker_name ? SIGN_MAP[log.worker_name] : null;
+          const hasDeviation = getDeviationDesc(log) !== "";
+          const bActive = (log.b_pass_qty ?? 0) > 1;
+          const cg = (
+            <colgroup>
+              <col style={{ width: "86px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "18px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+              <col style={{ width: "18px" }} /><col style={{ width: "18px" }} /><col style={{ width: "30px" }} />
+            </colgroup>
+          );
+          return (
+            <table key={log.id} style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", pageBreakInside: "avoid" }}>
+              {cg}
+              <tbody>
+                <tr style={{ background: hasDeviation ? "#fff9f9" : "#fff" }}>
+                  <td rowSpan={2} style={{ ...tdBase, textAlign: "left", fontSize: "6.5pt", paddingLeft: 3, whiteSpace: "normal", wordBreak: "keep-all" }}>
+                    {hasDeviation && <span style={{ color: "#DC2626" }}>⚠ </span>}
+                    {log.client_name} — {log.product_name}
+                  </td>
+                  <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{(log.start_time ?? "").slice(0,5)}</td>
+                  <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{(log.b_end_time ?? "").slice(0,5)}</td>
+                  <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>A</td>
+                  <td style={tdBase} />
+                  {(["a_fe_l","a_fe_m","a_fe_r","a_sus_l","a_sus_m","a_sus_r","a_fe_up_l","a_fe_up_m","a_fe_up_r","a_fe_dn_l","a_fe_dn_m","a_fe_dn_r","a_sus_up_l","a_sus_up_m","a_sus_up_r","a_sus_dn_l","a_sus_dn_m","a_sus_dn_r"] as (keyof MetalLog)[]).map((k, i) => (
+                    <td key={i} style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{(log[k] as string) ?? "O"}</td>
+                  ))}
+                  <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{log.b_deviation ?? "X"}</td>
+                  <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{log.b_pass_qty ?? ""}</td>
+                  <td rowSpan={2} style={{ ...tdBase, textAlign: "center", padding: "2px" }}>
+                    {signSrc ? (
+                      <><img src={signSrc} style={{ height: 22, objectFit: "contain", display: "block", margin: "0 auto" }} alt={log.worker_name ?? ""} /><div style={{ fontSize: "6pt" }}>{log.worker_name}</div></>
+                    ) : log.worker_name ? <div style={{ fontSize: "7pt" }}>{log.worker_name}</div> : null}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>B</td>
+                  <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? (log.b_product_pass ?? "X") : ""}</td>
+                  {(["b_fe_l","b_fe_m","b_fe_r","b_sus_l","b_sus_m","b_sus_r"] as (keyof MetalLog)[]).map((k, i) => (
+                    <td key={i} style={{ ...tdBase, textAlign: "center", fontWeight: "bold", color: "#000" }}>{bActive ? ((log[k] as string) ?? "O") : ""}</td>
+                  ))}
+                  {Array.from({ length: 12 }).map((_, i) => <td key={i} style={tdBase} />)}
+                </tr>
+              </tbody>
+            </table>
+          );
+        })}
+        {/* 빈 행 */}
+        {Array.from({ length: rangeEmptyCount }).map((_, i) => (
+          <table key={`re-${i}`} style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", pageBreakInside: "avoid" }}>
+            <colgroup>
+              <col style={{ width: "86px" }} /><col style={{ width: "22px" }} /><col style={{ width: "22px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "18px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+              <col style={{ width: "16px" }} /><col style={{ width: "16px" }} /><col style={{ width: "16px" }} />
+              <col style={{ width: "18px" }} /><col style={{ width: "18px" }} /><col style={{ width: "30px" }} />
+            </colgroup>
+            <tbody>
+              <tr style={{ height: 18 }}>
+                <td rowSpan={2} style={tdBase} /><td rowSpan={2} style={tdBase} /><td rowSpan={2} style={tdBase} />
+                <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>A</td>
+                <td style={tdBase} />
+                {Array.from({ length: 18 }).map((__, j) => <td key={j} style={tdBase} />)}
+                <td rowSpan={2} style={tdBase} /><td rowSpan={2} style={tdBase} /><td rowSpan={2} style={tdBase} />
+              </tr>
+              <tr style={{ height: 18 }}>
+                <td style={{ ...tdBase, textAlign: "center", fontWeight: "bold", fontSize: "7pt" }}>B</td>
+                <td style={tdBase} />
+                {Array.from({ length: 18 }).map((__, j) => <td key={j} style={tdBase} />)}
+              </tr>
+            </tbody>
+          </table>
+        ))}
+      </div>
+    );
+  })}
+</div>
 
       <div
       id="ccp1p-print-inner"
