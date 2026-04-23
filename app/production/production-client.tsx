@@ -489,7 +489,7 @@ async function searchTransferLots(itemId: string, keyword: string) {
     .or(`variant_name.ilike.%${keyword}%,barcode.ilike.%${keyword}%`)
     .limit(20);
 
-  const filtered = (variants ?? []).filter((v: any) => v.products?.food_type === "초콜릿중간재");
+    const filtered = (variants ?? []).filter((v: any) => (v.products?.food_type ?? "").includes("초콜릿중간재"));
   if (filtered.length === 0) {
     setTransferLotOptions((prev) => ({ ...prev, [itemId]: [] }));
     setTransferLotSearching((prev) => ({ ...prev, [itemId]: false }));
