@@ -1214,7 +1214,7 @@ const woAssigneeMapRef = React.useRef<Record<string, string>>({});
                     </td>
                   )}
                
-               // after — 슬롯명 행 (담당자별 열 분리)
+               
                {chunk.flatMap((s, i) => {
   const assignees = slotAssigneesRef.current[s.id] ?? [""];
 
