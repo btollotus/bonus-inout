@@ -463,15 +463,16 @@ const woAssigneeMapRef = React.useRef<Record<string, string>>({});
 
   return (
     <div className="space-y-4">
-      {/* 날짜 필터 */}
-      <div className={`${card} p-4`}>
+    {/* 날짜 필터 + 인쇄 */}
+    <div className={`${card} p-4`}>
         <div className="flex flex-wrap gap-3 items-end">
           <div>
-            <div className="mb-1 text-xs text-slate-500">날짜</div>
+            <div className="mb-1 text-xs text-slate-500">조회 날짜</div>
             <input type="date" className={inp} style={{ width: 160 }} value={filterDate}
+              max={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
               onChange={(e) => { setFilterDate(e.target.value); setSelectedSlotId(null); setEditingEventId(null); }} />
           </div>
-          <button className={btn} onClick={loadData}>🔄 조회</button>
+          <button className={btn} onClick={loadData}>🔄 새로고침</button>
           <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
         </div>
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
