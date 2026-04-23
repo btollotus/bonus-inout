@@ -719,7 +719,7 @@ function selectWo(wo: WorkOrderItem) {
           }}
         />
         <button className={btn} onClick={() => { loadWoList(); loadLogs(); }}>🔄 새로고침</button>
-        <button className={btnSm} onClick={() => {
+        <button className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50" onClick={() => {
           const content = document.getElementById("ccp1p-print-inner");
           if (!content) return;
           const printTitle = `CCP-1P_금속검출_${selectedDate}`;
