@@ -609,30 +609,7 @@ function selectWo(wo: WorkOrderItem) {
   return (
     <div className="space-y-4">
 
-      {/* ── 인쇄 버튼 (화면 전용) ── */}
-      <button className="..." onClick={() => {
-  const content = document.getElementById("ccp1p-print-inner");
-  if (!content) return;
-  const printTitle = `CCP-1P_금속검출_${selectedDate}`;
-  const win = window.open("", "_blank");
-  if (!win) return;
-  win.document.write(`<!DOCTYPE html><html><head>
-    <meta charset="utf-8">
-    <title>${printTitle}</title>
-    <style>
-      @page { size: A4 landscape; margin: 8mm 10mm; }
-      body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 8.5pt; color: #000; }
-      * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-      table { border-collapse: collapse; }
-      img { max-width: none; }
-    </style>
-  </head><body>${content.innerHTML}</body></html>`);
-  win.document.close();
-  win.focus();
-  setTimeout(() => { win.print(); }, 500);
-}}>
-  🖨️ 인쇄
-</button>
+   
 
       {/* ══════════════════════════════════════════
           화면용 UI (기존 그대로)
