@@ -704,8 +704,8 @@ function selectWo(wo: WorkOrderItem) {
         )}
       </div>
 
-    {/* ── 날짜 선택 ── */}
-    <div className={`${card} p-3 print:hidden flex flex-wrap items-center gap-3`}>
+   {/* ── 날짜 선택 ── */}
+   <div className={`${card} p-3 print:hidden flex flex-wrap items-center gap-3`}>
         <span className="text-sm font-semibold text-slate-600">조회 날짜</span>
         <input
           type="date"
@@ -718,6 +718,28 @@ function selectWo(wo: WorkOrderItem) {
             setFormData(null);
           }}
         />
+        <button className={btn} onClick={() => { loadWoList(); loadLogs(); }}>🔄 새로고침</button>
+        <button className={btnSm} onClick={() => {
+          const content = document.getElementById("ccp1p-print-inner");
+          if (!content) return;
+          const printTitle = `CCP-1P_금속검출_${selectedDate}`;
+          const win = window.open("", "_blank");
+          if (!win) return;
+          win.document.write(`<!DOCTYPE html><html><head>
+            <meta charset="utf-8">
+            <title>${printTitle}</title>
+            <style>
+              @page { size: A4 landscape; margin: 8mm 10mm; }
+              body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 8.5pt; color: #000; }
+              * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+              table { border-collapse: collapse; }
+              img { max-width: none; }
+            </style>
+          </head><body>${content.innerHTML}</body></html>`);
+          win.document.close();
+          win.focus();
+          setTimeout(() => { win.print(); }, 500);
+        }}>🖨️ 인쇄</button>
         {selectedDate !== todayKST() && (
           <>
             <button
