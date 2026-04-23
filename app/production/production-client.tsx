@@ -819,6 +819,21 @@ const channel = supabase
         if (!pi?.transfer_lot_id || !pi?.transfer_qty) continue;
         const transferQty = toInt(pi.transfer_qty);
         if (transferQty <= 0) continue;
+
+        // ── 잔량 확인 ──
+        const { data: movData } = await supabase
+          .from("movements")
+          .select("type, qty")
+          .eq("lot_id", pi.transfer_lot_id);
+        const remaining = (movData ?? []).reduce((sum, m) => {
+          return m.type === "IN" ? sum + m.qty : sum - m.qty;
+        }, 0);
+        if (transferQty > remaining) {
+          setMsg(`전사지 차감 실패: 차감 수량(${transferQty})이 잔량(${remaining})을 초과합니다. (납기일: ${item.delivery_date})`);
+          setIsCompleting(false);
+          return;
+        }
+
         const { error: transferErr } = await supabase.from("movements").insert({
           lot_id:      pi.transfer_lot_id,
           type:        "OUT",
