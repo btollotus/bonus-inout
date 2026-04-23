@@ -551,7 +551,7 @@ function selectWo(wo: WorkOrderItem) {
     </head><body>${content.innerHTML}</body></html>`);
     win.document.close();
     win.focus();
-    setTimeout(() => { win.print(); win.close(); }, 500);
+    setTimeout(() => { win.print(); }, 500);
   }
 
   // ── 인쇄용: logMap을 시작시간 순으로 정렬한 기록 목록 ──
@@ -628,7 +628,7 @@ function selectWo(wo: WorkOrderItem) {
   </head><body>${content.innerHTML}</body></html>`);
   win.document.close();
   win.focus();
-  setTimeout(() => { win.print(); win.close(); }, 500);
+  setTimeout(() => { win.print(); }, 500);
 }}>
   🖨️ 인쇄
 </button>
