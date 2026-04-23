@@ -533,14 +533,10 @@ function selectWo(wo: WorkOrderItem) {
     if (dates.length === 0) return showToast("조회된 기록이 없습니다.", "error");
     const content = document.getElementById("ccp1p-range-print-inner");
     if (!content) return;
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
-    document.body.appendChild(iframe);
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!doc) return;
     const printTitle = `CCP-1P_금속검출_${rangeFrom}_${rangeTo}`;
-    doc.open();
-    doc.write(`<!DOCTYPE html><html><head>
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head>
       <meta charset="utf-8">
       <title>${printTitle}</title>
       <style>
@@ -553,12 +549,9 @@ function selectWo(wo: WorkOrderItem) {
         .page-block:last-child { page-break-after: avoid; }
       </style>
     </head><body>${content.innerHTML}</body></html>`);
-    doc.close();
-    const origTitle = document.title;
-    document.title = printTitle;
-    iframe.contentWindow?.focus();
-    iframe.contentWindow?.print();
-    setTimeout(() => { document.title = origTitle; document.body.removeChild(iframe); }, 1500);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); win.close(); }, 500);
   }
 
   // ── 인쇄용: logMap을 시작시간 순으로 정렬한 기록 목록 ──
@@ -619,18 +612,10 @@ function selectWo(wo: WorkOrderItem) {
       <button className="..." onClick={() => {
   const content = document.getElementById("ccp1p-print-inner");
   if (!content) return;
-
-  const iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
-  document.body.appendChild(iframe);
-
-  const doc = iframe.contentDocument || iframe.contentWindow?.document;
-  if (!doc) return;
-
   const printTitle = `CCP-1P_금속검출_${selectedDate}`;
-
-  doc.open();
-  doc.write(`<!DOCTYPE html><html><head>
+  const win = window.open("", "_blank");
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html><head>
     <meta charset="utf-8">
     <title>${printTitle}</title>
     <style>
@@ -641,16 +626,9 @@ function selectWo(wo: WorkOrderItem) {
       img { max-width: none; }
     </style>
   </head><body>${content.innerHTML}</body></html>`);
-  doc.close();
-
-  const origTitle = document.title;
-  document.title = printTitle;
-  iframe.contentWindow?.focus();
-  iframe.contentWindow?.print();
-  setTimeout(() => {
-    document.title = origTitle;
-    document.body.removeChild(iframe);
-  }, 1500);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); win.close(); }, 500);
 }}>
   🖨️ 인쇄
 </button>
