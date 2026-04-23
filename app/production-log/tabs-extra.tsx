@@ -2351,7 +2351,7 @@ export function CompressorTab({ role, userId, showToast }: {
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
   const isAdmin = role === "ADMIN";
   const [logs, setLogs] = useState<CompressorLog[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
+  const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [fWorkType, setFWorkType] = useState("pet_coating");
