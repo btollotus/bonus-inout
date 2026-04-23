@@ -1047,7 +1047,7 @@ function selectWo(wo: WorkOrderItem) {
               <td style={tdBase}>2.5mmφ</td>
               <td style={{ ...tdBase, width: 30, fontWeight: "bold", background: "#fff" }}>SUS</td>
               <td style={tdBase}>3.0mmφ</td>
-              <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff" }}>검교정주기</td>
+              <td style={{ ...tdBase, width: 80, fontWeight: "bold", background: "#fff", whiteSpace: "nowrap" }}>검교정주기</td>
               <td style={tdBase}>연 1회</td>
             </tr>
           </tbody>
