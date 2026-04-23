@@ -734,7 +734,7 @@ const channel = supabase
         alert("CCP-1B 슬롯이 지정되지 않았습니다.\n슬롯 지정 및 온도 기록(시작→중간점검→종료) 후 생산완료 처리해주세요.");
         setIsCompleting(false); return;
       }
-    } else if (foodCat === "중간재") {
+    } else if (foodCat === "중간재" && !selectedWo.product_name.includes("분사-레이즈")) {
       // 중간재: 가열공정 슬롯(코팅롱도/전사롱도) + ccp_wo_events 종료 체크
       if (selectedWo.ccp_slot_id) {
         const todayKst = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
@@ -1233,8 +1233,8 @@ const channel = supabase
               </div>
 
               {/* ── CCP-1B 슬롯 지정 + 온도 기록 ── */}
-              {(getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트" || getFoodCategory(selectedWo.food_type) === "중간재") && (
-                <WoCcpCard
+              {(getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트" || (getFoodCategory(selectedWo.food_type) === "중간재" && !selectedWo.product_name.includes("분사-레이즈"))) && (
+  <WoCcpCard
                   selectedWo={selectedWo}
                   eCcpSlotId={eCcpSlotId}
                   setECcpSlotId={setECcpSlotId}
