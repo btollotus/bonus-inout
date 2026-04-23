@@ -548,59 +548,175 @@ created_by:    currentUserIdRef.current,
 }
 
 async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: string, actionBy?: string) {
-    if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
+  if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
 
-    const fromSlotName = warmerSlots.find((s) => s.id === fromSlotId)?.slot_name ?? fromSlotId;
-    const toSlotName   = warmerSlots.find((s) => s.id === toSlotId)?.slot_name ?? toSlotId;
+  const fromSlotName = warmerSlots.find((s) => s.id === fromSlotId)?.slot_name ?? fromSlotId;
+  const toSlotName   = warmerSlots.find((s) => s.id === toSlotId)?.slot_name ?? toSlotId;
+  const moveMeasuredAt = `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`;
 
-    const { data: lastInEvent } = await supabase
-      .from("ccp_slot_events")
-      .select("material_type")
+  // ── 검증 1: 자기 자신으로 이동 방지 ──
+  if (fromSlotId === toSlotId) {
+    return showToast("⚠ 출발 슬롯과 도착 슬롯이 같습니다.", "error");
+  }
+
+  // ── 검증 3: 출발 슬롯에 원료가 없음 ──
+  if (slotStatus[fromSlotId] === null || slotStatus[fromSlotId] === undefined) {
+    return showToast(`⚠ [${fromSlotName}]에 원료가 없습니다. 이동할 수 없습니다.`, "error");
+  }
+
+  // ── 출발/도착 슬롯 이벤트 조회 (검증 2, 5, 6, 7, 8에서 사용) ──
+  const [fromEventsRes, toEventsRes] = await Promise.all([
+    supabase.from("ccp_slot_events")
+      .select("event_type, measured_at")
       .eq("slot_id", fromSlotId)
-      .eq("event_type", "material_in")
       .order("measured_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const fromSlot = warmerSlots.find((s) => s.id === fromSlotId);
-    const movedMaterialType = lastInEvent?.material_type
-      ?? (fromSlot?.purpose === "화이트컴파운드" ? "화이트"
-        : fromSlot?.purpose === "다크컴파운드" ? "다크"
-        : null);
+      .limit(10),
+    supabase.from("ccp_slot_events")
+      .select("event_type, measured_at")
+      .eq("slot_id", toSlotId)
+      .order("measured_at", { ascending: false })
+      .limit(10),
+  ]);
 
-    setSlotActionSaving(true);
-    try {
-      await supabase.from("ccp_slot_events").insert({
-        slot_id:       fromSlotId,
-        event_date:    slotActionDate,
-        event_type:    "material_out",
-        measured_at: `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`,
-        work_order_no: workOrderNo ?? null,
-        action_note:   `→ ${toSlotName}`,
-        action_by:     actionBy ?? null,
-        created_by:    currentUserIdRef.current,
-      });
-      await supabase.from("ccp_slot_events").insert({
-        slot_id:       toSlotId,
-        event_date:    slotActionDate,
-        event_type:    "material_in",
-        measured_at: `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`,
-        work_order_no: workOrderNo ?? null,
-        action_note:   `${fromSlotName} → ${toSlotName}`,
-        material_type: movedMaterialType,
-        action_by:     actionBy ?? null,
-        created_by:    currentUserIdRef.current,
-      });
-      showToast(`✅ ${fromSlotName} → ${toSlotName} 이동 완료!`);
-      setActiveSlotId(null);
-      setSlotMoveTargetId(null);
-      await loadSlotStatus();
-      await loadSlotEvents();
-    } catch (e: any) {
-      showToast("오류: " + (e?.message ?? e), "error");
-    } finally {
-      setSlotActionSaving(false);
+  const fromEvents = fromEventsRes.data ?? [];
+  const toEvents   = toEventsRes.data ?? [];
+
+  // ── 검증 5: 이동 시각이 출발 슬롯 원료투입 시각보다 이전 ──
+  const lastFromIn = fromEvents.find((e) => e.event_type === "material_in");
+  if (lastFromIn && moveMeasuredAt <= lastFromIn.measured_at) {
+    return showToast(`⚠ 이동 시각은 [${fromSlotName}] 원료투입(${toKSTTime(lastFromIn.measured_at)}) 이후여야 합니다.`, "error");
+  }
+
+  // ── 검증 2: 출발 슬롯이 진행 중(start/mid_check)인지 확인 ──
+  const fromWoEventsRes = await supabase
+    .from("ccp_wo_events")
+    .select("event_type, measured_at")
+    .eq("slot_id", fromSlotId)
+    .gte("measured_at", `${slotActionDate}T00:00:00+09:00`)
+    .lte("measured_at", `${slotActionDate}T23:59:59+09:00`)
+    .order("measured_at", { ascending: false })
+    .limit(1);
+
+  const lastFromWoEv = (fromWoEventsRes.data ?? [])[0];
+  if (lastFromWoEv?.event_type === "start" || lastFromWoEv?.event_type === "mid_check") {
+    return showToast(`⚠ [${fromSlotName}]에 진행 중인 작업이 있습니다. 종료 후 이동해주세요.`, "error");
+  }
+
+  // ── 검증 5 (온도기록 기준): 이동 시각이 마지막 온도기록보다 이전 ──
+  if (lastFromWoEv && moveMeasuredAt <= lastFromWoEv.measured_at) {
+    return showToast(`⚠ 이동 시각은 [${fromSlotName}] 마지막 온도기록(${toKSTTime(lastFromWoEv.measured_at)}) 이후여야 합니다.`, "error");
+  }
+
+  // ── 검증 1: 도착 슬롯에 원료가 이미 있음 ──
+  const toLastEvent = toEvents[0];
+  const toHasMaterial = toLastEvent && toLastEvent.event_type !== "material_out";
+  if (toHasMaterial) {
+    return showToast(`⚠ [${toSlotName}]에 이미 원료가 있습니다. 소진 처리 후 이동해주세요.`, "error");
+  }
+
+  // ── 검증 6: 도착 슬롯이 진행 중인지 확인 ──
+  const toWoEventsRes = await supabase
+    .from("ccp_wo_events")
+    .select("event_type, measured_at")
+    .eq("slot_id", toSlotId)
+    .gte("measured_at", `${slotActionDate}T00:00:00+09:00`)
+    .lte("measured_at", `${slotActionDate}T23:59:59+09:00`)
+    .order("measured_at", { ascending: false })
+    .limit(1);
+
+  const lastToWoEv = (toWoEventsRes.data ?? [])[0];
+  if (lastToWoEv?.event_type === "start" || lastToWoEv?.event_type === "mid_check") {
+    return showToast(`⚠ [${toSlotName}]에 진행 중인 작업이 있습니다. 해당 슬롯의 작업 종료 후 이동해주세요.`, "error");
+  }
+
+  // ── 검증 7: 과거 날짜 소급 이동 시 도착 슬롯에 이후 기록이 있는지 ──
+  const today = todayKST();
+  if (slotActionDate < today) {
+    const futureToEventRes = await supabase
+      .from("ccp_slot_events")
+      .select("measured_at")
+      .eq("slot_id", toSlotId)
+      .gt("measured_at", `${slotActionDate}T23:59:59+09:00`)
+      .limit(1);
+    if ((futureToEventRes.data ?? []).length > 0) {
+      return showToast(`⚠ [${toSlotName}]에 이동일 이후 기록이 있어 소급 이동이 불가합니다.`, "error");
     }
   }
+
+  // ── 검증 8: 동일 슬롯·동일 시각 중복 기록 ──
+  const dupCheck = fromEvents.find(
+    (e) => e.measured_at === moveMeasuredAt && e.event_type === "material_out"
+  );
+  if (dupCheck) {
+    return showToast("⚠ 동일 시각에 이미 이동/소진 기록이 있습니다.", "error");
+  }
+
+  if (!confirm(`[${fromSlotName}] → [${toSlotName}] 슬롯이동을 기록합니다. 맞습니까?`)) return;
+
+  // ── material_type 조회 ──
+  const { data: lastInEvent } = await supabase
+    .from("ccp_slot_events")
+    .select("material_type")
+    .eq("slot_id", fromSlotId)
+    .eq("event_type", "material_in")
+    .order("measured_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const fromSlot = warmerSlots.find((s) => s.id === fromSlotId);
+  const movedMaterialType = lastInEvent?.material_type
+    ?? (fromSlot?.purpose === "화이트컴파운드" ? "화이트"
+      : fromSlot?.purpose === "다크컴파운드" ? "다크"
+      : null);
+
+  setSlotActionSaving(true);
+  try {
+    // ── 검증 6 (트랜잭션 대체): fromSlot insert 먼저, 실패 시 중단 ──
+    const { error: fromErr } = await supabase.from("ccp_slot_events").insert({
+      slot_id:       fromSlotId,
+      event_date:    slotActionDate,
+      event_type:    "material_out",
+      measured_at:   moveMeasuredAt,
+      work_order_no: workOrderNo ?? null,
+      action_note:   `→ ${toSlotName}`,
+      action_by:     actionBy ?? null,
+      created_by:    currentUserIdRef.current,
+    });
+    if (fromErr) {
+      return showToast("이동 기록 실패 (출발): " + fromErr.message, "error");
+    }
+
+    const { error: toErr } = await supabase.from("ccp_slot_events").insert({
+      slot_id:       toSlotId,
+      event_date:    slotActionDate,
+      event_type:    "material_in",
+      measured_at:   moveMeasuredAt,
+      work_order_no: workOrderNo ?? null,
+      action_note:   `${fromSlotName} → ${toSlotName}`,
+      material_type: movedMaterialType,
+      action_by:     actionBy ?? null,
+      created_by:    currentUserIdRef.current,
+    });
+    if (toErr) {
+      // fromSlot insert는 성공했으나 toSlot 실패 → fromSlot 롤백
+      await supabase.from("ccp_slot_events")
+        .delete()
+        .eq("slot_id", fromSlotId)
+        .eq("measured_at", moveMeasuredAt)
+        .eq("event_type", "material_out");
+      return showToast("이동 기록 실패 (도착) — 자동 롤백됐습니다: " + toErr.message, "error");
+    }
+
+    showToast(`✅ ${fromSlotName} → ${toSlotName} 이동 완료!`);
+    setActiveSlotId(null);
+    setSlotMoveTargetId(null);
+    await loadSlotStatus();
+    await loadSlotEvents();
+  } catch (e: any) {
+    showToast("오류: " + (e?.message ?? e), "error");
+  } finally {
+    setSlotActionSaving(false);
+  }
+}
 
   return {
     woEvents, slotEvents, slotStatus,
