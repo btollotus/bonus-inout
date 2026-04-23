@@ -23,6 +23,8 @@ type WoItemRow = {
   order_id: string | null;
   note: string | null;
   images: string[] | null;
+  transfer_lot_id: string | null;
+  transfer_qty: number | null;
 };
 
 type WorkOrderRow = {
@@ -239,12 +241,18 @@ const [hasMore, setHasMore] = useState(false);
   const [eReferenceNote, setEReferenceNote] = useState("");
   const [woChecks, setWoChecks] = useState<WoChecks | null>(null);
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
-  const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; unit_weight: string; expiry_date: string }>>({});
+  const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string }>>({}); 
   const [printOpen, setPrintOpen] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null; pin: string | null }[]>([]);
 
   const [warmerSlots, setWarmerSlots] = useState<{ id: string; slot_name: string; purpose: string }[]>([]);
   const [eCcpSlotId, setECcpSlotId] = useState<string>("");
+
+  // ── 전사지 lot 검색 state ──
+type TransferLot = { lot_id: string; expiry_date: string; remaining_qty: number; variant_name: string; barcode: string };
+const [transferLotSearch, setTransferLotSearch] = useState<Record<string, string>>({});
+const [transferLotOptions, setTransferLotOptions] = useState<Record<string, TransferLot[]>>({});
+const [transferLotSearching, setTransferLotSearching] = useState<Record<string, boolean>>({});
 
   const currentUserIdRef = useRef<string | null>(null);
 
@@ -467,11 +475,70 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
 
 }
 
+// ── 전사지 lot 검색 ──
+async function searchTransferLots(itemId: string, keyword: string) {
+  setTransferLotSearch((prev) => ({ ...prev, [itemId]: keyword }));
+  if (!keyword.trim()) {
+    setTransferLotOptions((prev) => ({ ...prev, [itemId]: [] }));
+    return;
+  }
+  setTransferLotSearching((prev) => ({ ...prev, [itemId]: true }));
+  const { data: variants } = await supabase
+    .from("product_variants")
+    .select("id, variant_name, barcode, products(food_type)")
+    .or(`variant_name.ilike.%${keyword}%,barcode.ilike.%${keyword}%`)
+    .limit(20);
+
+  const filtered = (variants ?? []).filter((v: any) => v.products?.food_type === "초콜릿중간재");
+  if (filtered.length === 0) {
+    setTransferLotOptions((prev) => ({ ...prev, [itemId]: [] }));
+    setTransferLotSearching((prev) => ({ ...prev, [itemId]: false }));
+    return;
+  }
+
+  const variantIds = filtered.map((v: any) => v.id);
+  const { data: lots } = await supabase
+    .from("lots")
+    .select("id, variant_id, expiry_date")
+    .in("variant_id", variantIds)
+    .order("expiry_date", { ascending: true });
+
+  const lotIds = (lots ?? []).map((l: any) => l.id);
+  let remainingMap: Record<string, number> = {};
+  if (lotIds.length > 0) {
+    const { data: movements } = await supabase
+      .from("movements")
+      .select("lot_id, type, qty")
+      .in("lot_id", lotIds);
+    for (const m of movements ?? []) {
+      if (!remainingMap[m.lot_id]) remainingMap[m.lot_id] = 0;
+      if (m.type === "IN") remainingMap[m.lot_id] += m.qty;
+      else remainingMap[m.lot_id] -= m.qty;
+    }
+  }
+
+  const variantMap: Record<string, any> = {};
+  for (const v of filtered) variantMap[(v as any).id] = v;
+
+  const result: TransferLot[] = (lots ?? [])
+    .filter((l: any) => (remainingMap[l.id] ?? 0) > 0)
+    .map((l: any) => ({
+      lot_id: l.id,
+      expiry_date: l.expiry_date,
+      remaining_qty: remainingMap[l.id] ?? 0,
+      variant_name: variantMap[l.variant_id]?.variant_name ?? "",
+      barcode: variantMap[l.variant_id]?.barcode ?? "",
+    }));
+
+  setTransferLotOptions((prev) => ({ ...prev, [itemId]: result }));
+  setTransferLotSearching((prev) => ({ ...prev, [itemId]: false }));
+}
+
   const loadWoList = useCallback(async (offset = 0) => {
     setLoading(true); setMsg(null);
     try {
       const LIMIT = filterStatus === "완료" ? 20 : 200;
-      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,work_order_items(delivery_date,order_qty,actual_qty,unit_weight,expiry_date),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
+      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,work_order_items(delivery_date,order_qty,actual_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
       if (filterStatus !== "전체") q = q.eq("status", filterStatus);
       if (filterDateFrom) q = q.gte("order_date", filterDateFrom);
       if (filterDateTo) q = q.lte("order_date", filterDateTo);
@@ -576,8 +643,8 @@ const channel = supabase
       const { data, error } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
       if (!error && data) setSignedImageUrls(data.map((d) => d.signedUrl)); else setSignedImageUrls(rawPaths);
     })();
-    const inputs: Record<string, { actual_qty: string; unit_weight: string; expiry_date: string }> = {};
-    for (const item of wo.work_order_items ?? []) { inputs[item.id] = { actual_qty: item.actual_qty != null ? String(item.actual_qty) : "", unit_weight: item.unit_weight != null ? String(item.unit_weight) : "", expiry_date: item.expiry_date ?? "" }; }
+    const inputs: Record<string, { actual_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string }> = {};
+    for (const item of wo.work_order_items ?? []) { inputs[item.id] = { actual_qty: item.actual_qty != null ? String(item.actual_qty) : "", unit_weight: item.unit_weight != null ? String(item.unit_weight) : "", expiry_date: item.expiry_date ?? "", transfer_lot_id: item.transfer_lot_id ?? "", transfer_qty: item.transfer_qty != null ? String(item.transfer_qty) : "" }; } 
     setProdInputs(inputs);
     (async () => {
       const items = wo.work_order_items ?? [];
@@ -641,7 +708,8 @@ const channel = supabase
 
     // ── CCP-1B 종료 여부 체크 ──
     const foodCat = getFoodCategory(selectedWo.food_type);
-    if (foodCat === "다크" || foodCat === "화이트" || foodCat === "중간재") {
+    if (foodCat === "다크" || foodCat === "화이트") {
+      // 기존: 온장고 슬롯 + ccp_wo_events 종료 체크
       if (selectedWo.ccp_slot_id) {
         const todayKst = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
         const { data: ccpEvs } = await supabase
@@ -666,7 +734,34 @@ const channel = supabase
         alert("CCP-1B 슬롯이 지정되지 않았습니다.\n슬롯 지정 및 온도 기록(시작→중간점검→종료) 후 생산완료 처리해주세요.");
         setIsCompleting(false); return;
       }
-    }
+    } else if (foodCat === "중간재") {
+      // 중간재: 가열공정 슬롯(코팅롱도/전사롱도) + ccp_wo_events 종료 체크
+      if (selectedWo.ccp_slot_id) {
+        const todayKst = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+        const { data: ccpEvs } = await supabase
+          .from("ccp_wo_events")
+          .select("event_type")
+          .eq("work_order_no", selectedWo.work_order_no)
+          .eq("slot_id", selectedWo.ccp_slot_id)
+          .gte("measured_at", `${todayKst}T00:00:00+09:00`)
+          .lte("measured_at", `${todayKst}T23:59:59+09:00`)
+          .order("measured_at", { ascending: false });
+
+        const lastEv = (ccpEvs ?? [])[0];
+        if (!lastEv) {
+          alert("가열공정 온도 기록이 없습니다.\n시작 → 중간점검 → 종료 순으로 기록 후 생산완료 처리해주세요.");
+          setIsCompleting(false); return;
+        }
+        if (lastEv.event_type !== "end") {
+          const stateLabel = lastEv.event_type === "start" ? "시작" : "중간점검";
+          alert(`가열공정 온도 기록이 종료되지 않았습니다.\n현재 상태: [${stateLabel}]\n\n종료 기록 후 생산완료 처리해주세요.`);
+          setIsCompleting(false); return;
+        }
+      } else {
+        alert("가열공정 슬롯이 지정되지 않았습니다.\n7-1, 7-2, 7-3, 8번 슬롯 중 하나를 지정하고\n온도 기록(시작→중간점검→종료) 후 생산완료 처리해주세요.");
+        setIsCompleting(false); return;
+      }
+    } 
 
     const items = (selectedWo.work_order_items ?? []).filter((item) => {const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); });
     const missingQtyOrExpiry = items.filter((item) => { const pi = prodInputs[item.id]; return !pi || !pi.actual_qty || !pi.expiry_date; });
@@ -717,8 +812,31 @@ const channel = supabase
         const { error: movErr } = await supabase.from("movements").insert({ lot_id: lotId, type: "IN", qty: actual_qty, happened_at: now, note: "작업지시서 생산완료 - " + selectedWo.work_order_no, created_by: userId });
         if (movErr) stockErrors.push("입고 기록 실패 (" + expiry_date + "): " + movErr.message);
       }
-      // ── ccp_heating_sessions 관련 코드 제거됨 (새 구조: ccp_slot_events / ccp_wo_events 사용) ──
-      const { error: statusErr } = await supabase.from("work_orders").update({ status: "완료", status_production: true, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+     // ── 전사지 차감 ──
+     if (foodCat !== "중간재") {
+      for (const item of items) {
+        const pi = prodInputs[item.id];
+        if (!pi?.transfer_lot_id || !pi?.transfer_qty) continue;
+        const transferQty = toInt(pi.transfer_qty);
+        if (transferQty <= 0) continue;
+        const { error: transferErr } = await supabase.from("movements").insert({
+          lot_id:      pi.transfer_lot_id,
+          type:        "OUT",
+          qty:         transferQty,
+          happened_at: new Date().toISOString(),
+          note:        `전사지 차감 - ${selectedWo.work_order_no} - ${item.delivery_date}`,
+          created_by:  userId,
+        });
+        if (transferErr) stockErrors.push("전사지 차감 실패: " + transferErr.message);
+        await supabase.from("work_order_items").update({
+          transfer_lot_id: pi.transfer_lot_id,
+          transfer_qty:    transferQty,
+        }).eq("id", item.id);
+      }
+    }
+
+    // ── ccp_heating_sessions 관련 코드 제거됨 (새 구조: ccp_slot_events / ccp_wo_events 사용) ──
+    const { error: statusErr } = await supabase.from("work_orders").update({ status: "완료", status_production: true, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
       if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
       if (stockErrors.length > 0) showToast("⚠️ 저장됐으나 재고 연동 오류: " + stockErrors.join(" / "), "error"); else showToast("✅ 생산입력 완료!");
       setIsEditMode(false);
@@ -1187,9 +1305,125 @@ const channel = supabase
                             </div>
                           </div>
                           {(item.images ?? []).length > 0 ? <ItemImages images={item.images ?? []} logoSpec={selectedWo.logo_spec} /> : null}
-                        </div>
-                      );
-                    })}
+
+{/* 전사지 차감 — 중간재 제외 */}
+{getFoodCategory(selectedWo.food_type) !== "중간재" && (
+  <div className="mt-3 rounded-xl border border-violet-100 bg-violet-50 p-3">
+    <div className="mb-2 text-xs font-semibold text-violet-700">🖨️ 전사지 차감 (선택)</div>
+
+    {/* 전사지 미선택 상태: 검색 UI */}
+    {!prodInputs[item.id]?.transfer_lot_id && (
+      <div className="relative">
+        <input
+          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-400 focus:outline-none"
+          placeholder="전사지 품목명 또는 바코드 검색"
+          value={transferLotSearch[item.id] ?? ""}
+          disabled={selectedWo?.status === "완료" && !isEditMode}
+          onChange={(e) => searchTransferLots(item.id, e.target.value)}
+        />
+        {transferLotSearching[item.id] && (
+          <div className="mt-1 text-xs text-slate-400">검색 중...</div>
+        )}
+        {(transferLotOptions[item.id] ?? []).length > 0 && (
+          <div className="absolute z-10 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+            {transferLotOptions[item.id].map((lot) => (
+              <button
+                key={lot.lot_id}
+                type="button"
+                className="w-full text-left px-3 py-2.5 text-sm border-b border-slate-100 last:border-0 hover:bg-violet-50"
+                onClick={() => {
+                  setProdInputs((prev) => ({
+                    ...prev,
+                    [item.id]: { ...prev[item.id], transfer_lot_id: lot.lot_id, transfer_qty: "" },
+                  }));
+                  setTransferLotSearch((prev) => ({ ...prev, [item.id]: "" }));
+                  setTransferLotOptions((prev) => ({ ...prev, [item.id]: [] }));
+                }}
+              >
+                <div className="font-medium text-slate-800">{lot.variant_name}</div>
+                <div className="flex gap-2 mt-0.5 text-xs text-slate-500">
+                  <span>소비기한: {lot.expiry_date}</span>
+                  <span>·</span>
+                  <span>잔량: <b className="text-violet-700">{lot.remaining_qty.toLocaleString()} EA</b></span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        {(transferLotOptions[item.id] ?? []).length === 0 &&
+          (transferLotSearch[item.id] ?? "").trim() &&
+          !transferLotSearching[item.id] && (
+          <div className="mt-1 text-xs text-slate-400">검색 결과 없음 (초콜릿중간재 품목만 검색됩니다)</div>
+        )}
+      </div>
+    )}
+
+    {/* 전사지 선택된 상태 */}
+    {prodInputs[item.id]?.transfer_lot_id && (() => {
+      const allLots = Object.values(transferLotOptions).flat();
+      const lotInfo = allLots.find((l) => l.lot_id === prodInputs[item.id].transfer_lot_id);
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 rounded-xl border border-violet-200 bg-white px-3 py-2">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-violet-700 truncate">
+                {lotInfo?.variant_name ?? "전사지 (lot 정보 로딩 필요)"}
+              </div>
+              <div className="text-xs text-slate-500">
+                소비기한: {lotInfo?.expiry_date ?? "—"}
+                {lotInfo && (
+                  <span className="ml-2">잔량: <b className="text-violet-700">{lotInfo.remaining_qty.toLocaleString()} EA</b></span>
+                )}
+              </div>
+            </div>
+            {!(selectedWo?.status === "완료" && !isEditMode) && (
+              <button
+                type="button"
+                className="text-xs text-slate-400 hover:text-red-500 shrink-0"
+                onClick={() => setProdInputs((prev) => ({
+                  ...prev,
+                  [item.id]: { ...prev[item.id], transfer_lot_id: "", transfer_qty: "" },
+                }))}
+              >✕ 취소</button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <div className="mb-1 text-xs text-slate-500">차감 수량 (EA)</div>
+              <input
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-right tabular-nums focus:border-violet-400 focus:outline-none"
+                inputMode="numeric"
+                placeholder="차감할 수량 입력"
+                value={prodInputs[item.id]?.transfer_qty ?? ""}
+                disabled={selectedWo?.status === "완료" && !isEditMode}
+                onChange={(e) => setProdInputs((prev) => ({
+                  ...prev,
+                  [item.id]: { ...prev[item.id], transfer_qty: e.target.value.replace(/[^\d]/g, "") },
+                }))}
+              />
+            </div>
+            {lotInfo && prodInputs[item.id]?.transfer_qty && (
+              <div className="text-xs text-slate-500 shrink-0 pt-5">
+                차감 후 잔량:{" "}
+                <b className={
+                  lotInfo.remaining_qty - toInt(prodInputs[item.id].transfer_qty) < 0
+                    ? "text-red-600"
+                    : "text-violet-700"
+                }>
+                  {(lotInfo.remaining_qty - toInt(prodInputs[item.id].transfer_qty)).toLocaleString()} EA
+                </b>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    })()}
+  </div>
+)}
+
+</div>
+);
+})} 
                   </div>
                 )}
               </div>

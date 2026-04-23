@@ -1245,56 +1245,74 @@ export function WoCcpCard({
       {/* 슬롯 지정 */}
       <div className={`${card} p-4`}>
         <div className="flex items-center gap-2 mb-3">
-          <div className="font-semibold text-sm">🌡️ CCP-1B 온장고 슬롯 지정</div>
+          <div className="font-semibold text-sm">
+            {foodCategory === "중간재" ? "🔥 가열공정 슬롯 지정 (7-1~8번)" : "🌡️ CCP-1B 온장고 슬롯 지정"}
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-4">
-          {/* 다크 3×3 */}
-          {warmerSlots.filter((s: any) => s.purpose === "다크컴파운드").length > 0 && (
-            <div>
-              <div className="mb-1 text-xs font-semibold text-slate-500">다크</div>
-              <div className="grid grid-cols-3 gap-1.5">
-                {warmerSlots.filter((s: any) => s.purpose === "다크컴파운드").map(renderSlotBtn)}
-              </div>
-            </div>
-          )}
-
-          {/* 화이트 3×3 */}
-          {warmerSlots.filter((s: any) => s.purpose === "화이트컴파운드").length > 0 && (
-            <div>
-              <div className="mb-1 text-xs font-semibold text-slate-500">화이트</div>
-              <div className="grid grid-cols-3 gap-1.5">
-                {warmerSlots.filter((s: any) => s.purpose === "화이트컴파운드").map(renderSlotBtn)}
-              </div>
-            </div>
-          )}
-
-{/* 코팅/핑크 가로 1줄 */}
-{warmerSlots.filter((s: any) => s.purpose === "코팅용도").length > 0 && (
-            <div>
-              <div className="mb-1 text-xs font-semibold text-slate-500">코팅/핑크</div>
-              <div className="flex flex-row gap-1.5">
-                {warmerSlots.filter((s: any) => s.purpose === "코팅용도").map(renderSlotBtn)}
-              </div>
-            </div>
-          )}
-
-          {/* 전사 */}
-          {warmerSlots.filter((s: any) => s.purpose === "전사용도").length > 0 && (
-            <div>
-              <div className="mb-1 text-xs font-semibold text-slate-500">전사</div>
-              <div className="flex flex-row gap-1.5">
-                {warmerSlots.filter((s: any) => s.purpose === "전사용도").map(renderSlotBtn)}
-              </div>
-            </div>
-          )}
-
-          {/* 유동 2열 3행, 라벨 없음 */}
-          {warmerSlots.filter((s: any) => s.purpose === "유동").length > 0 && (
-            <div>
-              <div className="mb-1 text-xs font-semibold text-slate-500">유동</div>
-              {renderWoFluidGrid()}
-            </div>
+          {foodCategory === "중간재" ? (
+            // 중간재: 코팅롱도(7-1,7-2,7-3) + 전사롱도(8번)만 표시
+            <>
+              {warmerSlots.filter((s: any) => s.purpose === "코팅용도").length > 0 && (
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-slate-500">코팅 (7-1, 7-2, 7-3)</div>
+                  <div className="flex flex-row gap-1.5">
+                    {warmerSlots.filter((s: any) => s.purpose === "코팅용도").map(renderSlotBtn)}
+                  </div>
+                </div>
+              )}
+              {warmerSlots.filter((s: any) => s.purpose === "전사용도").length > 0 && (
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-slate-500">전사 (8번)</div>
+                  <div className="flex flex-row gap-1.5">
+                    {warmerSlots.filter((s: any) => s.purpose === "전사용도").map(renderSlotBtn)}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            // 다크/화이트: 기존 전체 슬롯 표시
+            <>
+              {warmerSlots.filter((s: any) => s.purpose === "다크컴파운드").length > 0 && (
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-slate-500">다크</div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {warmerSlots.filter((s: any) => s.purpose === "다크컴파운드").map(renderSlotBtn)}
+                  </div>
+                </div>
+              )}
+              {warmerSlots.filter((s: any) => s.purpose === "화이트컴파운드").length > 0 && (
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-slate-500">화이트</div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {warmerSlots.filter((s: any) => s.purpose === "화이트컴파운드").map(renderSlotBtn)}
+                  </div>
+                </div>
+              )}
+              {warmerSlots.filter((s: any) => s.purpose === "코팅용도").length > 0 && (
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-slate-500">코팅/핑크</div>
+                  <div className="flex flex-row gap-1.5">
+                    {warmerSlots.filter((s: any) => s.purpose === "코팅용도").map(renderSlotBtn)}
+                  </div>
+                </div>
+              )}
+              {warmerSlots.filter((s: any) => s.purpose === "전사용도").length > 0 && (
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-slate-500">전사</div>
+                  <div className="flex flex-row gap-1.5">
+                    {warmerSlots.filter((s: any) => s.purpose === "전사용도").map(renderSlotBtn)}
+                  </div>
+                </div>
+              )}
+              {warmerSlots.filter((s: any) => s.purpose === "유동").length > 0 && (
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-slate-500">유동</div>
+                  {renderWoFluidGrid()}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
