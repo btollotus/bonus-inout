@@ -590,7 +590,8 @@ function selectWo(wo: WorkOrderItem) {
   // ── 인쇄용 날짜 포맷 ──
   const printDate = (() => {
     const d = new Date(selectedDate + "T00:00:00+09:00");
-    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+    const days = ["일","월","화","수","목","금","토"];
+    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
   })();
 
   // ── 빈 행 (테이블 여백용, 최소 3행 보장) ──
@@ -986,7 +987,8 @@ function selectWo(wo: WorkOrderItem) {
   {Object.keys(rangeLogs).sort().map((date) => {
     const logs = rangeLogs[date].slice().sort((a, b) => (a.start_time ?? "").localeCompare(b.start_time ?? ""));
     const d = new Date(date + "T00:00:00+09:00");
-    const dateLabel = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+    const days = ["일","월","화","수","목","금","토"];
+    const dateLabel = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;  
     const rangeEmptyCount = Math.max(3, 3 - logs.length);
     return (
       <div key={date} className="page-block">
