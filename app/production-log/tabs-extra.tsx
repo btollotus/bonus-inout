@@ -94,7 +94,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
   const isAdmin = role === "ADMIN";
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
 
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
+  const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
   const [loading, setLoading] = useState(false);
   const [rangePanelOpen, setRangePanelOpen] = useState(false);
   const [rangeFrom, setRangeFrom] = useState<string>(new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
@@ -463,23 +463,7 @@ const woAssigneeMapRef = React.useRef<Record<string, string>>({});
 
   return (
     <div className="space-y-4">
-    {/* 날짜 필터 + 인쇄 */}
-    <div className={`${card} p-4`}>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div>
-            <div className="mb-1 text-xs text-slate-500">조회 날짜</div>
-            <input type="date" className={inp} style={{ width: 160 }} value={filterDate}
-              max={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
-              onChange={(e) => { setFilterDate(e.target.value); setSelectedSlotId(null); setEditingEventId(null); }} />
-          </div>
-          <button className={btn} onClick={loadData}>🔄 새로고침</button>
-          <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
-        </div>
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-          <span className="font-semibold">⚠ 한계기준:</span> 준초콜릿·당류가공품 45±5°C (40~50°C), 4시간 이상 유지 / 주기: 작업시작 전, 작업 중 2시간마다, 작업종료
-        </div>
-      </div>
-{/* ── 기간 인쇄 패널 ── */}
+    {/* ── 기간 인쇄 패널 ── */}
 <div className={`${card} print:hidden overflow-hidden`}>
         <button
           className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -535,11 +519,28 @@ const woAssigneeMapRef = React.useRef<Record<string, string>>({});
                 ))}
               </div>
             )}
-            {rangeData.length === 0 && !rangeLoading && (
+           {rangeData.length === 0 && !rangeLoading && (
               <div className="text-xs text-slate-400">조회 버튼을 눌러 기간 내 기록을 불러오세요.</div>
             )}
           </div>
         )}
+      </div>
+
+      {/* 날짜 필터 + 인쇄 */}
+      <div className={`${card} p-4`}>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <div className="mb-1 text-xs text-slate-500">조회 날짜</div>
+            <input type="date" className={inp} style={{ width: 160 }} value={filterDate}
+              max={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
+              onChange={(e) => { setFilterDate(e.target.value); setSelectedSlotId(null); setEditingEventId(null); }} />
+          </div>
+          <button className={btn} onClick={loadData}>🔄 새로고침</button>
+          <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
+        </div>
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          <span className="font-semibold">⚠ 한계기준:</span> 준초콜릿·당류가공품 45±5°C (40~50°C), 4시간 이상 유지 / 주기: 작업시작 전, 작업 중 2시간마다, 작업종료
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
@@ -2468,7 +2469,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
   const isAdmin = role === "ADMIN";
   const [logs, setLogs] = useState<PetStockLog[]>([]);
   const [stock, setStock] = useState<PetStock | null>(null);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
+  const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [fLogType, setFLogType] = useState("incoming");
