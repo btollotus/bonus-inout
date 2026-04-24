@@ -1247,10 +1247,25 @@ export function WoCcpCard({
     <>
       {/* 슬롯 지정 */}
       <div className={`${card} p-4`}>
-        <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center justify-between mb-3">
           <div className="font-semibold text-sm">
             {foodCategory === "중간재" ? "🔥 가열공정 슬롯 지정 (7-1~8번)" : "🌡️ CCP-1B 온장고 슬롯 지정"}
           </div>
+          {eCcpSlotId && !(selectedWo?.status === "완료" && !isEditMode) && (
+            <button
+              type="button"
+              className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-100"
+              onClick={async () => {
+                setECcpSlotId("");
+                await supabaseClient.from("work_orders")
+                  .update({ ccp_slot_id: null, updated_at: new Date().toISOString() })
+                  .eq("id", selectedWo.id);
+                onSlotSaved?.(null);
+              }}
+            >
+              ✕ 슬롯 해제
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-4">

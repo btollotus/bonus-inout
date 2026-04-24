@@ -1280,11 +1280,10 @@ const channel = supabase
                   currentUserIdRef={currentUserIdRef}
                   foodCategory={getFoodCategory(selectedWo.food_type)} 
 
-                  onSlotSaved={(slotId: string) => {
+                  onSlotSaved={(slotId: string | null) => {
                     setSelectedWo((prev) => prev ? { ...prev, ccp_slot_id: slotId } : prev);
-                    setWoList((prev) => prev.map((w) => w.id === selectedWo!// 삭제할 줄:
-                   .id ? { ...w, ccp_slot_id: slotId } : w));
-                  }}     
+                    setWoList((prev) => prev.map((w) => w.id === selectedWo?.id ? { ...w, ccp_slot_id: slotId } : w));
+                  }}    
                 />
               )}
 
