@@ -657,15 +657,16 @@ const channel = supabase
     // ── CCP 온도기록 로드 ──
     ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id, wo.status);
 
-   // ── 전사지 목록 자동 조회 (중간재 제외) ──
-   if (getFoodCategory(wo.food_type) !== "중간재") {
-    const woItems = wo.work_order_items ?? [];
-    for (const item of woItems) {
-      const name = (item.sub_items ?? [])[0]?.name ?? "";
-      if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
-      if (!item.transfer_lot_id) searchTransferLots(item.id, "");
-    }
+// ── 전사지 자동 조회 (중간재 제외, 업체명 기준) ──
+if (getFoodCategory(wo.food_type) !== "중간재") {
+  const woItems = wo.work_order_items ?? [];
+  const clientName = wo.client_name ?? "";
+  for (const item of woItems) {
+    const name = (item.sub_items ?? [])[0]?.name ?? "";
+    if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
+    if (!item.transfer_lot_id) searchTransferLots(item.id, clientName);
   }
+}
   }
 
   async function deleteWo(woId: string) {
@@ -1333,28 +1334,12 @@ const channel = supabase
   <div className="mt-3 rounded-xl border border-violet-100 bg-violet-50 p-3">
     <div className="mb-2 text-xs font-semibold text-violet-700">🖨️ 전사지 차감 (선택)</div>
 
-   {/* 전사지 미선택 상태: 목록 UI */}
-   {!prodInputs[item.id]?.transfer_lot_id && (
+  {/* 전사지 미선택 상태: 업체명 기준 자동 목록 */}
+  {!prodInputs[item.id]?.transfer_lot_id && (
       <div>
-        <div className="flex items-center gap-2 mb-2">
-          <input
-            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-400 focus:outline-none"
-            placeholder="검색어 입력 (비워두면 전체 표시)"
-            value={transferLotSearch[item.id] ?? ""}
-            disabled={selectedWo?.status === "완료" && !isEditMode}
-            onChange={(e) => setTransferLotSearch((prev) => ({ ...prev, [item.id]: e.target.value }))}
-            onKeyDown={(e) => { if (e.key === "Enter") searchTransferLots(item.id, transferLotSearch[item.id] ?? ""); }}
-          />
-          <button
-            type="button"
-            className="rounded-xl border border-violet-400 bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
-            disabled={selectedWo?.status === "완료" && !isEditMode || transferLotSearching[item.id]}
-            onClick={() => searchTransferLots(item.id, transferLotSearch[item.id] ?? "")}
-          >
-            {transferLotSearching[item.id] ? "조회 중..." : "조회"}
-          </button>
-        </div>
-        {(transferLotOptions[item.id] ?? []).length > 0 && (
+        {transferLotSearching[item.id] ? (
+          <div className="text-xs text-slate-400 py-1">목록 불러오는 중...</div>
+        ) : (transferLotOptions[item.id] ?? []).length > 0 ? (
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden max-h-52 overflow-y-auto">
             {transferLotOptions[item.id].map((lot) => (
               <button
@@ -1378,10 +1363,8 @@ const channel = supabase
               </button>
             ))}
           </div>
-        )}
-        {(transferLotOptions[item.id] ?? []).length === 0 && !transferLotSearching[item.id] &&
-          transferLotSearch[item.id] !== undefined && (
-          <div className="text-xs text-slate-400 mt-1">조회 버튼을 눌러 전사지 재고 목록을 확인하세요.</div>
+        ) : (
+          <div className="text-xs text-slate-400">관련 전사지 재고 없음</div>
         )}
       </div>
     )}
