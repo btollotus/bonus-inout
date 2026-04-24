@@ -1234,16 +1234,15 @@ export function WoCcpCard({
                 
                   if (!existingEvents || existingEvents.length === 0) return;
                 
-                  // 이미 이 작업지시서에 오늘 기록이 있으면 소급 안 함
-                  const { data: myEvents } = await supabaseClient
-                    .from("ccp_wo_events")
-                    .select("id")
-                    .eq("slot_id", s.id)
-                    .eq("work_order_no", selectedWo.work_order_no)
-                    .gte("measured_at", `${todayStr}T00:00:00+09:00`)
-                    .lte("measured_at", `${todayStr}T23:59:59+09:00`);
-                
-                  if (myEvents && myEvents.length > 0) return;
+                 // 이미 이 작업지시서에 오늘 기록이 있으면 소급 안 함 (슬롯 무관)
+                 const { data: myEvents } = await supabaseClient
+                 .from("ccp_wo_events")
+                 .select("id")
+                 .eq("work_order_no", selectedWo.work_order_no)
+                 .gte("measured_at", `${todayStr}T00:00:00+09:00`)
+                 .lte("measured_at", `${todayStr}T23:59:59+09:00`);
+             
+               if (myEvents && myEvents.length > 0) return;
                 // 기존 기록 중 중복 없는 것만 복사. end는 WO별 별도 기록이므로 제외
                 const toInsert = existingEvents
                 .filter((ev: any) => ev.event_type !== "end")
@@ -1303,10 +1302,10 @@ export function WoCcpCard({
 
         if (!existingEvents || existingEvents.length === 0) return;
 
+        // 이미 이 작업지시서에 오늘 기록이 있으면 소급 안 함 (슬롯 무관)
         const { data: myEvents } = await supabaseClient
           .from("ccp_wo_events")
           .select("id")
-          .eq("slot_id", s.id)
           .eq("work_order_no", selectedWo.work_order_no)
           .gte("measured_at", `${todayStr}T00:00:00+09:00`)
           .lte("measured_at", `${todayStr}T23:59:59+09:00`);
