@@ -660,6 +660,19 @@ const channel = supabase
     })();
     // ── CCP 온도기록 로드 ──
     ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id, wo.status);
+
+    // ── 전사지 자동 검색 (중간재 제외) ──
+    if (getFoodCategory(wo.food_type) !== "중간재") {
+      const autoKeyword = wo.client_name ?? "";
+      if (autoKeyword.trim()) {
+        const items = wo.work_order_items ?? [];
+        for (const item of items) {
+          const name = (item.sub_items ?? [])[0]?.name ?? "";
+          if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
+          searchTransferLots(item.id, autoKeyword);
+        }
+      }
+    }
   }
 
   async function deleteWo(woId: string) {
