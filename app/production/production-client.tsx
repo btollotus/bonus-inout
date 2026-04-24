@@ -696,7 +696,12 @@ const channel = supabase
     if (!selectedWo) return;
     setIsCompleting(true);
     if (woChecks) {
-      const missing = [!woChecks.assignee_transfer && "전사인쇄", !woChecks.assignee_print_check && "인쇄검수", !woChecks.assignee_production && "생산완료", ].filter(Boolean) as string[];
+      const isChuganJae = getFoodCategory(selectedWo.food_type) === "중간재";
+      const missing = [
+        !woChecks.assignee_transfer && "전사인쇄",
+        !woChecks.assignee_print_check && "인쇄검수",
+        !isChuganJae && !woChecks.assignee_production && "생산완료",
+      ].filter(Boolean) as string[];
       if (missing.length > 0) { alert(`다음 단계의 담당자를 선택해주세요:\n\n• ${missing.join("\n• ")}`); setIsCompleting(false); return; }
     }
 
@@ -1182,8 +1187,11 @@ const channel = supabase
                   </div>
                 </div>
                 {woChecks ? (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {PROGRESS_STEPS.map((step) => {
+                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                 {PROGRESS_STEPS.filter((step) => {
+                   if (getFoodCategory(selectedWo.food_type) === "중간재" && step.statusKey === "status_production") return false;
+                   return true;
+                 }).map((step) => {
                       const assigneeVal = woChecks[step.assigneeKey] ?? "";
                       const isDone = assigneeVal !== "";
                       const othersDone = PROGRESS_STEPS.some((s) => s.assigneeKey !== step.assigneeKey && (woChecks[s.assigneeKey] ?? "") !== "");
