@@ -657,14 +657,20 @@ const channel = supabase
     // ── CCP 온도기록 로드 ──
     ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id, wo.status);
 
-// ── 전사지 자동 조회 (중간재 제외, 업체명 기준) ──
+// ── 전사지 자동 조회 (중간재 제외, 업체명 핵심어 기준) ──
 if (getFoodCategory(wo.food_type) !== "중간재") {
   const woItems = wo.work_order_items ?? [];
-  const clientName = wo.client_name ?? "";
+  // "주식회사 트리니티디앤씨" → "트리니티", "주식회사 새라울" → "새라울"
+  // "주식회사", "유한회사", "(주)" 등 법인 접두어 제거 후 첫 단어 추출
+  const rawName = wo.client_name ?? "";
+  const stripped = rawName
+    .replace(/^(주식회사|유한회사|합자회사|협동조합|\(주\)|\(유\))\s*/g, "")
+    .trim();
+  const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
   for (const item of woItems) {
     const name = (item.sub_items ?? [])[0]?.name ?? "";
     if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
-    if (!item.transfer_lot_id) searchTransferLots(item.id, clientName);
+    if (!item.transfer_lot_id) searchTransferLots(item.id, clientKeyword);
   }
 }
   }
