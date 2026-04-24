@@ -1475,10 +1475,35 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                           for (const item of items) {
                             const pi = prodInputs[item.id];
                             if (!pi || (!pi.actual_qty && !pi.unit_weight && !pi.expiry_date)) continue;
-                            const { error } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null }).eq("id", item.id);
+                            const { error } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null, transfer_lot_id: pi.transfer_lot_id || null, transfer_qty: pi.transfer_qty ? toInt(pi.transfer_qty) : null }).eq("id", item.id);
                             if (error) { showToast("❌ 수정 실패: " + error.message, "error"); return; }
+
+                            // 전사지 차감 — transfer_lot_id가 새로 입력된 경우만
+                            if (pi.transfer_lot_id && pi.transfer_qty && toInt(pi.transfer_qty) > 0) {
+                              const existingTransfer = selectedWo.work_order_items?.find((i) => i.id === item.id);
+                              if (!existingTransfer?.transfer_lot_id) {
+                                // 기존에 transfer_lot_id가 없었던 경우만 차감
+                                const transferQty = toInt(pi.transfer_qty);
+                                const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", pi.transfer_lot_id);
+                                const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
+                                if (transferQty > remaining) {
+                                  showToast(`❌ 전사지 차감 실패: 차감 수량(${transferQty})이 잔량(${remaining})을 초과합니다.`, "error");
+                                  return;
+                                }
+                                const { data: { user } } = await supabase.auth.getUser();
+                                const { error: transferErr } = await supabase.from("movements").insert({
+                                  lot_id:      pi.transfer_lot_id,
+                                  type:        "OUT",
+                                  qty:         transferQty,
+                                  happened_at: new Date().toISOString(),
+                                  note:        `전사지 차감 - ${selectedWo.work_order_no} - ${item.delivery_date}`,
+                                  created_by:  user?.id ?? null,
+                                });
+                                if (transferErr) { showToast("❌ 전사지 차감 실패: " + transferErr.message, "error"); return; }
+                              }
+                            }
                           }
-                          showToast("✅ 수정완료!"); setIsEditMode(false);
+                          showToast("✅ 수정완료!"); setIsEditMode(false); 
                           if (selectedWo.status === "완료") await triggerPdfUpload(selectedWo, eProductName ?? "품목미상", eFoodType ?? "", eLogoSpec ?? "");
                           await loadWoList();
                         } catch (e: any) { showToast("❌ 수정 오류: " + (e?.message ?? e), "error"); }
