@@ -1244,20 +1244,22 @@ export function WoCcpCard({
                     .lte("measured_at", `${todayStr}T23:59:59+09:00`);
                 
                   if (myEvents && myEvents.length > 0) return;
-                
-                  // 기존 기록 중 중복 없는 것만 복사
-                  const toInsert = existingEvents.map((ev: any) => ({
-                    work_order_no: selectedWo.work_order_no,
-                    slot_id:       ev.slot_id,
-                    event_type:    ev.event_type,
-                    measured_at:   ev.measured_at,
-                    temperature:   ev.temperature,
-                    is_ok:         ev.is_ok,
-                    action_note:   ev.action_note,
-                    created_by:    ev.created_by,
-                  }));
-                
-                  await supabaseClient.from("ccp_wo_events").insert(toInsert);
+                // 기존 기록 중 중복 없는 것만 복사. end는 WO별 별도 기록이므로 제외
+                const toInsert = existingEvents
+                .filter((ev: any) => ev.event_type !== "end")
+                .map((ev: any) => ({
+                  work_order_no: selectedWo.work_order_no,
+                  slot_id:       ev.slot_id,
+                  event_type:    ev.event_type,
+                  measured_at:   ev.measured_at,
+                  temperature:   ev.temperature,
+                  is_ok:         ev.is_ok,
+                  action_note:   ev.action_note,
+                  created_by:    ev.created_by,
+                }));
+            
+              await supabaseClient.from("ccp_wo_events").insert(toInsert);
+                 
                 }}
               >
                 {s.slot_name}
@@ -1311,18 +1313,21 @@ export function WoCcpCard({
 
         if (myEvents && myEvents.length > 0) return;
 
-        const toInsert = existingEvents.map((ev: any) => ({
-          work_order_no: selectedWo.work_order_no,
-          slot_id:       ev.slot_id,
-          event_type:    ev.event_type,
-          measured_at:   ev.measured_at,
-          temperature:   ev.temperature,
-          is_ok:         ev.is_ok,
-          action_note:   ev.action_note,
-          created_by:    ev.created_by,
-        }));
+       // end는 WO별 별도 기록이므로 소급 복사 제외
+       const toInsert = existingEvents
+       .filter((ev: any) => ev.event_type !== "end")
+       .map((ev: any) => ({
+         work_order_no: selectedWo.work_order_no,
+         slot_id:       ev.slot_id,
+         event_type:    ev.event_type,
+         measured_at:   ev.measured_at,
+         temperature:   ev.temperature,
+         is_ok:         ev.is_ok,
+         action_note:   ev.action_note,
+         created_by:    ev.created_by,
+       }));
 
-        await supabaseClient.from("ccp_wo_events").insert(toInsert);
+     await supabaseClient.from("ccp_wo_events").insert(toInsert);
       }}
     >
       {s.slot_name}
