@@ -425,7 +425,7 @@ const ccpEventsChannel = supabase.channel(`ccp_wo_events:${selectedWo.id}_${Math
           const woNo = String(d.work_order_no ?? "");
           const evSlotId = String(d.slot_id ?? "");
           if (evSlotId && selectedWo.ccp_slot_id && evSlotId !== selectedWo.ccp_slot_id) return;
-  ccp.loadWoEvents(selectedWo.work_order_no, selectedWo.ccp_slot_id);
+          ccp.loadWoEvents(selectedWo.work_order_no, selectedWo.ccp_slot_id, selectedWo.status);
 }).subscribe((status, err) => {
   console.log("🌡️ [ccp_wo_events 채널]", status, err ?? "");
 });
@@ -665,7 +665,7 @@ const channel = supabase
       });
     })();
     // ── CCP 온도기록 로드 ──
-    ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id);
+    ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id, wo.status);
   }
 
   async function deleteWo(woId: string) {

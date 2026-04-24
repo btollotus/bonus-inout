@@ -116,19 +116,22 @@ export function useCcpState(
     return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
   }
 
-  const loadWoEvents = useCallback(async (workOrderNo: string, slotId?: string | null) => {
+  const loadWoEvents = useCallback(async (workOrderNo: string, slotId?: string | null, status?: string) => {
     let query = supabase
       .from("ccp_wo_events")
       .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
       .order("measured_at", { ascending: true });
   
       if (slotId) {
-        const today = todayKST();
         query = query
           .eq("slot_id", slotId)
-          .eq("work_order_no", workOrderNo)
-          .gte("measured_at", `${today}T00:00:00+09:00`)
-          .lte("measured_at", `${today}T23:59:59+09:00`);
+          .eq("work_order_no", workOrderNo);
+        if (status !== "완료") {
+          const today = todayKST();
+          query = query
+            .gte("measured_at", `${today}T00:00:00+09:00`)
+            .lte("measured_at", `${today}T23:59:59+09:00`);
+        }
       } else {
         query = query.eq("work_order_no", workOrderNo);
       }
