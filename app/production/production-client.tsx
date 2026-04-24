@@ -472,16 +472,12 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
 // ── 전사지 lot 검색 ──
 async function searchTransferLots(itemId: string, keyword: string) {
   setTransferLotSearch((prev) => ({ ...prev, [itemId]: keyword }));
-  if (!keyword.trim()) {
-    setTransferLotOptions((prev) => ({ ...prev, [itemId]: [] }));
-    return;
-  }
   setTransferLotSearching((prev) => ({ ...prev, [itemId]: true }));
   const { data: variants } = await supabase
     .from("product_variants")
     .select("id, variant_name, barcode, products(food_type)")
-    .or(`variant_name.ilike.%${keyword}%,barcode.ilike.%${keyword}%`)
-    .limit(20);
+    .ilike("variant_name", keyword.trim() ? `%${keyword}%` : "%")
+    .limit(100);
 
     const filtered = (variants ?? []).filter((v: any) => (v.products?.food_type ?? "").includes("초콜릿중간재"));
   if (filtered.length === 0) {
@@ -661,23 +657,15 @@ const channel = supabase
     // ── CCP 온도기록 로드 ──
     ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id, wo.status);
 
-    // ── 전사지 자동 검색 (중간재 제외) ──
-    if (getFoodCategory(wo.food_type) !== "중간재") {
-      const items = wo.work_order_items ?? [];
-      for (const item of items) {
-        const name = (item.sub_items ?? [])[0]?.name ?? "";
-        if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
-        // 제품명에서 첫 단어(업체명 제외) 또는 client_name 앞 2~3글자로 검색
-        const clientName = wo.client_name ?? "";
-        // product_name이 "client_name-품목명" 형태이면 품목명 부분만, 아니면 client_name 사용
-        const productPart = wo.product_name.startsWith(clientName)
-          ? wo.product_name.slice(clientName.length).replace(/^[-_\s]+/, "")
-          : wo.product_name;
-        // 전사지는 보통 제품명 기준으로 등록됨 — 앞 4글자로 검색
-        const autoKeyword = (productPart || clientName).slice(0, 4).trim();
-        if (autoKeyword) searchTransferLots(item.id, autoKeyword);
-      }
+   // ── 전사지 목록 자동 조회 (중간재 제외) ──
+   if (getFoodCategory(wo.food_type) !== "중간재") {
+    const woItems = wo.work_order_items ?? [];
+    for (const item of woItems) {
+      const name = (item.sub_items ?? [])[0]?.name ?? "";
+      if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
+      if (!item.transfer_lot_id) searchTransferLots(item.id, "");
     }
+  }
   }
 
   async function deleteWo(woId: string) {
@@ -1345,21 +1333,29 @@ const channel = supabase
   <div className="mt-3 rounded-xl border border-violet-100 bg-violet-50 p-3">
     <div className="mb-2 text-xs font-semibold text-violet-700">🖨️ 전사지 차감 (선택)</div>
 
-    {/* 전사지 미선택 상태: 검색 UI */}
-    {!prodInputs[item.id]?.transfer_lot_id && (
-      <div className="relative">
-        <input
-          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-400 focus:outline-none"
-          placeholder="전사지 품목명 또는 바코드 검색"
-          value={transferLotSearch[item.id] ?? ""}
-          disabled={selectedWo?.status === "완료" && !isEditMode}
-          onChange={(e) => searchTransferLots(item.id, e.target.value)}
-        />
-        {transferLotSearching[item.id] && (
-          <div className="mt-1 text-xs text-slate-400">검색 중...</div>
-        )}
+   {/* 전사지 미선택 상태: 목록 UI */}
+   {!prodInputs[item.id]?.transfer_lot_id && (
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <input
+            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-400 focus:outline-none"
+            placeholder="검색어 입력 (비워두면 전체 표시)"
+            value={transferLotSearch[item.id] ?? ""}
+            disabled={selectedWo?.status === "완료" && !isEditMode}
+            onChange={(e) => setTransferLotSearch((prev) => ({ ...prev, [item.id]: e.target.value }))}
+            onKeyDown={(e) => { if (e.key === "Enter") searchTransferLots(item.id, transferLotSearch[item.id] ?? ""); }}
+          />
+          <button
+            type="button"
+            className="rounded-xl border border-violet-400 bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+            disabled={selectedWo?.status === "완료" && !isEditMode || transferLotSearching[item.id]}
+            onClick={() => searchTransferLots(item.id, transferLotSearch[item.id] ?? "")}
+          >
+            {transferLotSearching[item.id] ? "조회 중..." : "조회"}
+          </button>
+        </div>
         {(transferLotOptions[item.id] ?? []).length > 0 && (
-          <div className="absolute z-10 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden max-h-52 overflow-y-auto">
             {transferLotOptions[item.id].map((lot) => (
               <button
                 key={lot.lot_id}
@@ -1370,7 +1366,6 @@ const channel = supabase
                     ...prev,
                     [item.id]: { ...prev[item.id], transfer_lot_id: lot.lot_id, transfer_qty: "" },
                   }));
-                  setTransferLotSearch((prev) => ({ ...prev, [item.id]: "" }));
                   setTransferLotOptions((prev) => ({ ...prev, [item.id]: [] }));
                 }}
               >
@@ -1384,10 +1379,9 @@ const channel = supabase
             ))}
           </div>
         )}
-        {(transferLotOptions[item.id] ?? []).length === 0 &&
-          (transferLotSearch[item.id] ?? "").trim() &&
-          !transferLotSearching[item.id] && (
-          <div className="mt-1 text-xs text-slate-400">검색 결과 없음 (초콜릿중간재 품목만 검색됩니다)</div>
+        {(transferLotOptions[item.id] ?? []).length === 0 && !transferLotSearching[item.id] &&
+          transferLotSearch[item.id] !== undefined && (
+          <div className="text-xs text-slate-400 mt-1">조회 버튼을 눌러 전사지 재고 목록을 확인하세요.</div>
         )}
       </div>
     )}
