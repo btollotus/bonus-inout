@@ -725,9 +725,24 @@ function ProductionLogTab({ role, userId, showToast }: {
               </button>
             </>
           ) : (
-            <div className="flex-1 rounded-xl border border-green-200 bg-green-50 py-2.5 text-sm font-semibold text-green-700 text-center">
-              ✅ 오늘 생산일지가 확정되었습니다
-            </div>
+            <>
+              <div className="flex-1 rounded-xl border border-green-200 bg-green-50 py-2.5 text-sm font-semibold text-green-700 text-center">
+                ✅ 오늘 생산일지가 확정되었습니다
+              </div>
+              <button
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                onClick={async () => {
+                  if (!todayLog) return;
+                  const { error } = await supabase.from("daily_work_logs")
+                    .update({ confirmed_at: null, updated_at: new Date().toISOString() })
+                    .eq("id", todayLog.id);
+                  if (error) return showToast("수정 실패: " + error.message, "error");
+                  showToast("🔓 확정이 해제되었습니다. 수정 후 다시 확인 완료를 눌러주세요.");
+                  await loadTodayData(selectedEmployee!.id, selectedEmployee!.name);
+                }}>
+                ✏️ 수정하기
+              </button>
+            </>
           )}
         </div>
       )}
