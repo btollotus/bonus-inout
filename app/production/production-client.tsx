@@ -80,6 +80,7 @@ type KiseongVariant = {
   variant_id: string;
   product_id: string;
   product_name: string;
+  variant_name: string;
   food_type: string | null;
   weight_g: number | null;
   barcode: string;
@@ -325,7 +326,7 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
     (async () => {
       const { data, error } = await supabase.from("product_variants").select("id, variant_name, weight_g, barcode, product_id, products(name, food_type, category)").order("variant_name");
       if (error || !data) return;
-      setKiseongVariants((data as any[]).map((r) => ({ variant_id: r.id, product_id: r.product_id, product_name: r.products?.name ?? r.variant_name, food_type: r.products?.food_type ?? null, weight_g: r.weight_g ?? null, barcode: r.barcode ?? "" })));
+      setKiseongVariants((data as any[]).map((r) => ({ variant_id: r.id, product_id: r.product_id, product_name: r.products?.name ?? r.variant_name, variant_name: r.variant_name ?? "", food_type: r.products?.food_type ?? null, weight_g: r.weight_g ?? null, barcode: r.barcode ?? "" })));
     })();
   }, []);
 
@@ -1102,8 +1103,8 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                     <div className="mt-1 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden max-h-48 overflow-y-auto">
                       {kiseongFilteredVariants.map((v) => (
                         <button key={v.variant_id} className={`w-full text-left px-3 py-2.5 text-sm border-b border-slate-100 last:border-0 ${kiseongSelected?.variant_id === v.variant_id ? "bg-emerald-50 font-semibold" : "hover:bg-emerald-50"}`} onClick={() => { setKiseongSearch(v.product_name); handleKiseongVariantSelect(v); }}>
-                          <span className="font-medium text-slate-800">{v.product_name}</span>{v.food_type && <span className="ml-2 text-xs text-slate-500">{v.food_type}</span>}{v.barcode && <span className="ml-2 text-xs font-mono text-slate-400">{v.barcode}</span>}
-                        </button>
+                        <span className="font-medium text-slate-800">{v.product_name}</span>{v.variant_name && v.variant_name !== v.product_name && <span className="ml-2 text-xs text-slate-500">({v.variant_name})</span>}{v.food_type && <span className="ml-2 text-xs text-slate-500">{v.food_type}</span>}{v.barcode && <span className="ml-2 text-xs font-mono text-slate-400">{v.barcode}</span>}
+                      </button> 
                       ))}
                     </div>
                   )}
