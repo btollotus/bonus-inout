@@ -408,7 +408,6 @@ function ProductionLogTab({ role, userId, showToast }: {
 
   async function confirmLog() {
     if (!selectedEmployee) return;
-    if (!todayLog) { await saveLog(); }
     setConfirming(true);
     const confirmedAt = new Date().toISOString();
     let error;
@@ -417,12 +416,24 @@ function ProductionLogTab({ role, userId, showToast }: {
         .update({ confirmed_at: confirmedAt, task_checks: taskChecks, extra_note: extraNote.trim() || null, work_order_nos: workOrders.map((w) => w.work_order_no), updated_at: confirmedAt })
         .eq("id", todayLog.id));
     } else {
-      ({ error } = await supabase.from("daily_work_logs").insert({
-        log_date: today, employee_id: selectedEmployee.id, employee_name: selectedEmployee.name,
-        work_order_nos: workOrders.map((w) => w.work_order_no),
-        task_checks: taskChecks, extra_note: extraNote.trim() || null,
-        confirmed_at: confirmedAt, created_by: userId,
-      }));
+      const { data: existing } = await supabase
+        .from("daily_work_logs")
+        .select("id")
+        .eq("log_date", today)
+        .eq("employee_id", selectedEmployee.id)
+        .maybeSingle();
+      if (existing) {
+        ({ error } = await supabase.from("daily_work_logs")
+          .update({ confirmed_at: confirmedAt, task_checks: taskChecks, extra_note: extraNote.trim() || null, work_order_nos: workOrders.map((w) => w.work_order_no), updated_at: confirmedAt })
+          .eq("id", existing.id));
+      } else {
+        ({ error } = await supabase.from("daily_work_logs").insert({
+          log_date: today, employee_id: selectedEmployee.id, employee_name: selectedEmployee.name,
+          work_order_nos: workOrders.map((w) => w.work_order_no),
+          task_checks: taskChecks, extra_note: extraNote.trim() || null,
+          confirmed_at: confirmedAt, created_by: userId,
+        }));
+      }
     }
     setConfirming(false);
     if (error) return showToast("확인 실패: " + error.message, "error");
