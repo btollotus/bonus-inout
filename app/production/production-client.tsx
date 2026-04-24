@@ -368,8 +368,9 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
 
   const kiseongFilteredVariants = useMemo(() => {
     const q = kiseongSearch.trim().toLowerCase();
-    if (!q) return kiseongVariants;
-    return kiseongVariants.filter((v) => v.product_name.toLowerCase().includes(q) || v.barcode.toLowerCase().includes(q));
+    const base = kiseongVariants.filter((v) => !v.variant_name.startsWith("성형틀") && !v.variant_name.startsWith("인쇄제판"));
+    if (!q) return base;
+    return base.filter((v) => v.product_name.toLowerCase().includes(q) || v.variant_name.toLowerCase().includes(q) || v.barcode.toLowerCase().includes(q));
   }, [kiseongVariants, kiseongSearch]);
 
   const loadReadMap = useCallback(async (woIds: string[]) => {
