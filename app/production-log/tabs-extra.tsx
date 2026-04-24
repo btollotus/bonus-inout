@@ -558,7 +558,7 @@ const woAssigneeMapRef = React.useRef<Record<string, string>>({});
             </div>
           ) : (
             <div className="space-y-2">
-              {allSlots.filter((s) => activeSlotsToday.has(s.id)).map((s) => {
+              {allSlots.filter((s) => activeSlotsToday.has(s.id) && s.purpose !== "전사용도" && s.purpose !== "코팅용도").map((s) => {
                 const sEvents = slotEvents.filter((e) => e.slot_id === s.id);
                 const wEvents = woEvents.filter((e) => e.slot_id === s.id);
                 const temps = wEvents.filter((e) => e.temperature != null).map((e) => e.temperature as number);
