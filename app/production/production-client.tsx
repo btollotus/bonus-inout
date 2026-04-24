@@ -685,6 +685,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
       await supabase.from("work_order_items").delete().eq("work_order_id", woId);
       if (wo?.work_order_no) {
         await supabase.from("ccp_wo_events").delete().eq("work_order_no", wo.work_order_no);
+        await supabase.from("deleted_work_order_nos").insert({ work_order_no: wo.work_order_no });
       }
       const { error } = await supabase.from("work_orders").delete().eq("id", woId);
       if (error) return setMsg("삭제 실패: " + error.message);
