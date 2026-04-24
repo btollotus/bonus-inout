@@ -663,14 +663,19 @@ const channel = supabase
 
     // ── 전사지 자동 검색 (중간재 제외) ──
     if (getFoodCategory(wo.food_type) !== "중간재") {
-      const autoKeyword = wo.client_name ?? "";
-      if (autoKeyword.trim()) {
-        const items = wo.work_order_items ?? [];
-        for (const item of items) {
-          const name = (item.sub_items ?? [])[0]?.name ?? "";
-          if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
-          searchTransferLots(item.id, autoKeyword);
-        }
+      const items = wo.work_order_items ?? [];
+      for (const item of items) {
+        const name = (item.sub_items ?? [])[0]?.name ?? "";
+        if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
+        // 제품명에서 첫 단어(업체명 제외) 또는 client_name 앞 2~3글자로 검색
+        const clientName = wo.client_name ?? "";
+        // product_name이 "client_name-품목명" 형태이면 품목명 부분만, 아니면 client_name 사용
+        const productPart = wo.product_name.startsWith(clientName)
+          ? wo.product_name.slice(clientName.length).replace(/^[-_\s]+/, "")
+          : wo.product_name;
+        // 전사지는 보통 제품명 기준으로 등록됨 — 앞 4글자로 검색
+        const autoKeyword = (productPart || clientName).slice(0, 4).trim();
+        if (autoKeyword) searchTransferLots(item.id, autoKeyword);
       }
     }
   }
