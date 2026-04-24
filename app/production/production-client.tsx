@@ -353,15 +353,9 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
       const todayKSTStr = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
       const today = todayKSTStr;
       const dateStr = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,"0")}${String(today.getDate()).padStart(2,"0")}`;
-      const { data: lastWo } = await supabase
-  .from("work_orders")
-  .select("work_order_no")
-  .like("work_order_no", `WO-${dateStr}-%`)
-  .order("work_order_no", { ascending: false })
-  .limit(1)
-  .maybeSingle();
-const lastSeq = lastWo ? parseInt(lastWo.work_order_no.split("-")[2], 10) : 0;
-const workOrderNo = `WO-${dateStr}-${String(lastSeq + 1).padStart(4, "0")}`;
+      const { data: newWoNo3, error: woNoErr3 } = await supabase.rpc("generate_work_order_no", { date_str: dateStr });
+      if (woNoErr3 || !newWoNo3) throw new Error("작업지시서 번호 생성 실패: " + (woNoErr3?.message ?? ""));
+      const workOrderNo = newWoNo3;
 
       const { data: wo, error: woErr } = await supabase.from("work_orders").insert({ work_order_no: workOrderNo, barcode_no: kiseongSelected.barcode, client_id: null, client_name: "재고생산", sub_name: kSubName.trim() || null, order_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, food_type: kFoodType.trim() || null, product_name: kiseongSelected.product_name, logo_spec: kLogoSpec.trim() || null, thickness: kThickness || null, delivery_method: null, packaging_type: kPackagingType || null, tray_slot: null, package_unit: kPackageUnit || null, mold_per_sheet: kMoldPerSheet ? Number(kMoldPerSheet) : null, note: kNote.trim() || null, reference_note: kReferenceNote.trim() || null, status: "생산중", variant_id: kiseongSelected.variant_id, order_type: "재고" }).select("id").single();
       if (woErr) throw woErr;

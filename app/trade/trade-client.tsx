@@ -980,7 +980,9 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         if (barcodeErr) throw new Error("바코드 생성 실패: " + barcodeErr.message);
         const barcodeNo = barcodeData as string;
         const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`; })();
-        const workOrderNo = `WO-${todayStr}-${barcodeNo.slice(-4)}`;
+        const { data: newWoNo, error: woNoErr } = await supabase.rpc("generate_work_order_no", { date_str: todayStr });
+        if (woNoErr || !newWoNo) throw new Error("작업지시서 번호 생성 실패: " + (woNoErr?.message ?? ""));
+        const workOrderNo = newWoNo;
 
         const firstItemName = cleanLines[0]?.name ?? "";
         const productName = firstItemName
@@ -1230,7 +1232,9 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
       if (barcodeErr) return setMsg("바코드 생성 실패: " + barcodeErr.message);
       const barcodeNo = barcodeData as string;
       const todayStr2 = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`; })();
-      const workOrderNo = `WO-${todayStr2}-${barcodeNo.slice(-4)}`;
+      const { data: newWoNo2, error: woNoErr2 } = await supabase.rpc("generate_work_order_no", { date_str: todayStr2 });
+      if (woNoErr2 || !newWoNo2) return setMsg("작업지시서 번호 생성 실패: " + (woNoErr2?.message ?? ""));
+      const workOrderNo = newWoNo2;
 
       const { data: createdWo, error: woErr } = await supabase.from("work_orders").insert({
         work_order_no: workOrderNo, barcode_no: barcodeNo,
