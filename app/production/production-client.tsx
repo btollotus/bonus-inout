@@ -1304,7 +1304,10 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                   onSlotSaved={(slotId: string | null) => {
                     setSelectedWo((prev) => prev ? { ...prev, ccp_slot_id: slotId } : prev);
                     setWoList((prev) => prev.map((w) => w.id === selectedWo?.id ? { ...w, ccp_slot_id: slotId } : w));
-                  }}    
+                    if (slotId && selectedWo) {
+                      ccp.loadWoEvents(selectedWo.work_order_no, slotId, selectedWo.status);
+                    }
+                  }} 
                 />
               )}
 

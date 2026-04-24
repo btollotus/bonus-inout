@@ -1209,6 +1209,45 @@ export function WoCcpCard({
                     .update({ ccp_slot_id: s.id, updated_at: new Date().toISOString() })
                     .eq("id", selectedWo.id);
                   onSlotSaved?.(s.id);
+                
+                  // 슬롯 지정 시 오늘 기존 기록 소급 복사
+                  const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+                  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+                
+                  const { data: existingEvents } = await supabaseClient
+                    .from("ccp_wo_events")
+                    .select("*")
+                    .eq("slot_id", s.id)
+                    .gte("measured_at", `${todayStr}T00:00:00+09:00`)
+                    .lte("measured_at", `${todayStr}T23:59:59+09:00`)
+                    .neq("work_order_no", selectedWo.work_order_no);
+                
+                  if (!existingEvents || existingEvents.length === 0) return;
+                
+                  // 이미 이 작업지시서에 오늘 기록이 있으면 소급 안 함
+                  const { data: myEvents } = await supabaseClient
+                    .from("ccp_wo_events")
+                    .select("id")
+                    .eq("slot_id", s.id)
+                    .eq("work_order_no", selectedWo.work_order_no)
+                    .gte("measured_at", `${todayStr}T00:00:00+09:00`)
+                    .lte("measured_at", `${todayStr}T23:59:59+09:00`);
+                
+                  if (myEvents && myEvents.length > 0) return;
+                
+                  // 기존 기록 중 중복 없는 것만 복사
+                  const toInsert = existingEvents.map((ev: any) => ({
+                    work_order_no: selectedWo.work_order_no,
+                    slot_id:       ev.slot_id,
+                    event_type:    ev.event_type,
+                    measured_at:   ev.measured_at,
+                    temperature:   ev.temperature,
+                    is_ok:         ev.is_ok,
+                    action_note:   ev.action_note,
+                    created_by:    ev.created_by,
+                  }));
+                
+                  await supabaseClient.from("ccp_wo_events").insert(toInsert);
                 }}
               >
                 {s.slot_name}
@@ -1237,6 +1276,43 @@ export function WoCcpCard({
           .update({ ccp_slot_id: s.id, updated_at: new Date().toISOString() })
           .eq("id", selectedWo.id);
         onSlotSaved?.(s.id);
+
+        // 슬롯 지정 시 오늘 기존 기록 소급 복사
+        const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+
+        const { data: existingEvents } = await supabaseClient
+          .from("ccp_wo_events")
+          .select("*")
+          .eq("slot_id", s.id)
+          .gte("measured_at", `${todayStr}T00:00:00+09:00`)
+          .lte("measured_at", `${todayStr}T23:59:59+09:00`)
+          .neq("work_order_no", selectedWo.work_order_no);
+
+        if (!existingEvents || existingEvents.length === 0) return;
+
+        const { data: myEvents } = await supabaseClient
+          .from("ccp_wo_events")
+          .select("id")
+          .eq("slot_id", s.id)
+          .eq("work_order_no", selectedWo.work_order_no)
+          .gte("measured_at", `${todayStr}T00:00:00+09:00`)
+          .lte("measured_at", `${todayStr}T23:59:59+09:00`);
+
+        if (myEvents && myEvents.length > 0) return;
+
+        const toInsert = existingEvents.map((ev: any) => ({
+          work_order_no: selectedWo.work_order_no,
+          slot_id:       ev.slot_id,
+          event_type:    ev.event_type,
+          measured_at:   ev.measured_at,
+          temperature:   ev.temperature,
+          is_ok:         ev.is_ok,
+          action_note:   ev.action_note,
+          created_by:    ev.created_by,
+        }));
+
+        await supabaseClient.from("ccp_wo_events").insert(toInsert);
       }}
     >
       {s.slot_name}
