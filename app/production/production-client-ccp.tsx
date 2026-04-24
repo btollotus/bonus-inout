@@ -227,7 +227,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
   useEffect(() => { loadSlotStatus(); }, [loadSlotStatus]);
 
   async function saveWoEvent(
-    selectedWo: { work_order_no: string; ccp_slot_id: string | null },
+    selectedWo: { work_order_no: string; ccp_slot_id: string | null; client_name: string; product_name: string },
     eCcpSlotId: string,
   ) {
     const slotId = eCcpSlotId || selectedWo.ccp_slot_id;
@@ -242,10 +242,15 @@ if (!lastEvent || lastEvent.event_type === "end") {
       .gte("measured_at", `${today}T00:00:00+09:00`)
       .lte("measured_at", `${today}T23:59:59+09:00`)
       .order("measured_at", { ascending: true });
-    const slotAllEvents = (slotEventsData ?? []) as WoEvent[];
+      const slotAllEvents = (slotEventsData ?? []) as WoEvent[];
 
-    if (slotAllEvents.length > 0) {
-      const lastEv = [...slotAllEvents].sort((a,b) => a.measured_at.localeCompare(b.measured_at)).slice(-1)[0];
+    // 이 WO의 기록만 필터
+    const thisWoEvents = slotAllEvents.filter(
+      (e) => e.work_order_no === selectedWo.work_order_no
+    );
+
+    if (thisWoEvents.length > 0) {
+      const lastEv = [...thisWoEvents].sort((a,b) => a.measured_at.localeCompare(b.measured_at)).slice(-1)[0];
       const lastTimeStr = toKSTTime(lastEv.measured_at);
       const newTimeStr = `${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}`;
       if (newTimeStr <= lastTimeStr) {
@@ -257,7 +262,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
     const temp = Number(ccpWoTemp);
     if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
 
-    const sorted = [...slotAllEvents].sort((a,b) => a.measured_at.localeCompare(b.measured_at));
+    const sorted = [...thisWoEvents].sort((a,b) => a.measured_at.localeCompare(b.measured_at));
     const lastEv = sorted[sorted.length - 1];
 
     if (ccpWoEventType === "start") {
@@ -328,29 +333,34 @@ if (!lastEvent || lastEvent.event_type === "end") {
       work_order_no: selectedWo.work_order_no,
       temperature:   temp,
       is_ok:         ccpWoIsOk,
-      action_note:   ccpWoActionNote.trim() || null,
+      action_note:   ccpWoEventType === "end"
+        ? `${selectedWo.client_name} · ${selectedWo.product_name}`
+        : ccpWoActionNote.trim() || null,
       created_by:    currentUserIdRef.current,
     });
 
-    const { data: sameSlotWos } = await supabase
-      .from("work_orders")
-      .select("work_order_no")
-      .eq("ccp_slot_id", slotId)
-      .eq("status", "생산중")
-      .neq("work_order_no", selectedWo.work_order_no);
-
-    for (const wo of sameSlotWos ?? []) {
-      await supabase.from("ccp_wo_events").insert({
-        work_order_no: wo.work_order_no,
-        slot_id: slotId,
-        event_type: ccpWoEventType,
-        measured_at: measuredAt,
-        temperature: temp,
-        is_ok: ccpWoIsOk,
-        action_note: ccpWoActionNote.trim() || null,
-        created_by: currentUserIdRef.current,
-      });
-    }
+      // start/mid_check만 같은 슬롯 다른 WO에 복사. end는 WO별 별도 기록
+      if (ccpWoEventType !== "end") {
+        const { data: sameSlotWos } = await supabase
+          .from("work_orders")
+          .select("work_order_no")
+          .eq("ccp_slot_id", slotId)
+          .eq("status", "생산중")
+          .neq("work_order_no", selectedWo.work_order_no);
+  
+        for (const wo of sameSlotWos ?? []) {
+          await supabase.from("ccp_wo_events").insert({
+            work_order_no: wo.work_order_no,
+            slot_id: slotId,
+            event_type: ccpWoEventType,
+            measured_at: measuredAt,
+            temperature: temp,
+            is_ok: ccpWoIsOk,
+            action_note: ccpWoActionNote.trim() || null,
+            created_by: currentUserIdRef.current,
+          });
+        }
+      } 
 
     showToast("✅ CCP 온도 기록 완료!");
     setCcpWoTemp(""); setCcpWoActionNote(""); setCcpWoIsOk(true); setCcpWoTime("");
