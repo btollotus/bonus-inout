@@ -99,7 +99,7 @@ export default function NaverOrderAlert() {
     };
     init();
 
-    const timer = setInterval(() => { pollNaver(); pollCoupang(); }, 30_000);
+    const timer = setInterval(() => { pollNaver(); pollCoupang(); }, 300_000);
     return () => clearInterval(timer);
   }, []);
 
