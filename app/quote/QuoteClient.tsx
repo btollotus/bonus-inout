@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import QuotePrintModal from "./QuotePrintModal";
+import { PRODUCTS } from "@/lib/quoteCalculator";
 
 // ─────────────────────── Types ───────────────────────
 type Tab = "input" | "list" | "sheet" | "signage";
@@ -1697,8 +1698,8 @@ async function loadSignageList() {
               isNew: item.isNew,
               designChanged: item.designChanged,
               useStockMold: item.useStockMold,
-              moldCost: item.calcResult?.moldCost ?? 0,
-              plateCost: item.calcResult?.plateCost ?? 0,
+              moldCost: item.calcResult?.moldCost ?? (item.reuseExistingMold || item.useStockMold ? 0 : (PRODUCTS[item.productType]?.K ?? 0)),
+              plateCost: item.calcResult?.plateCost ?? (PRODUCTS[item.productType]?.L ?? 0),
               sheetCost: item.calcResult?.sheetCost ?? 0,
               workFee: item.calcResult?.workFee ?? 0,
               V: item.useStockMold && item.calcResult?.V_stock
