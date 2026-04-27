@@ -72,7 +72,7 @@ type PartnerView = "PINNED" | "RECENT" | "ALL";
 type FoodTypeRow = { id: string; name: string };
 type PresetProductRow = { id: string; product_name: string; food_type: string | null; weight_g: number | string | null; barcode: string | null };
 type MasterProductRow = { product_name: string; food_type: string | null; report_no: string | null; weight_g: number | null; unit_type: "EA" | "BOX" | string | null; pack_ea: number | null; barcode: string | null };
-type Line = { food_type: string; name: string; weight_g: number | string; qty: number; unit: number | string; total_incl_vat: number | string };
+type Line = { food_type: string; name: string; weight_g: number | string; qty: number; unit: number | string; total_incl_vat: number | string; is_sample?: boolean };
 type ShipmentSnap = { seq: number; ship_to_name: string; ship_to_address1: string; ship_to_address2?: string | null; ship_to_mobile?: string | null; ship_to_phone?: string | null; ship_zipcode?: string | null; delivery_message?: string | null };
 type UnifiedRow = {
   kind: "ORDER" | "LEDGER"; date: string; tsKey: string; partnerName: string;
@@ -348,7 +348,14 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
         value={toIntSigned(l.unit) !== 0 ? fmt(r.total) : typeof l.total_incl_vat === "string" ? l.total_incl_vat : l.total_incl_vat !== 0 ? fmt(l.total_incl_vat) : ""}
         onChange={(e) => onUpdate(i, { total_incl_vat: sanitizeSignedIntInput(e.target.value) })}
       />
-      <button className={btnCls} onClick={() => onRemove(i)} title="삭제">✕</button>
+     <div className="flex items-center gap-1">
+        <label className="flex items-center gap-1 shrink-0 cursor-pointer select-none">
+          <input type="checkbox" checked={!!l.is_sample}
+            onChange={(e) => onUpdate(i, { is_sample: e.target.checked, ...(e.target.checked ? { unit: 0, total_incl_vat: 0 } : {}) })} />
+          <span className="text-[11px] text-slate-500">샘플</span>
+        </label>
+        <button className={btnCls} onClick={() => onRemove(i)} title="삭제">✕</button>
+      </div>
     </div>
   );
 }
@@ -915,7 +922,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
   }
 
   const updateLine = (i: number, patch: Partial<Line>) => setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
-  const addLine = () => setLines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
+  const addLine = () => setLines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "", is_sample: false }]);
   const removeLine = (i: number) => setLines((prev) => prev.filter((_, idx) => idx !== i));
   const updateEditLine = (i: number, patch: Partial<Line>) => setELines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const addEditLine = () => setELines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
@@ -951,8 +958,8 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     const zeroQtyLine = lines.find((l) => l.name.trim() && toInt(l.qty) <= 0);
     if (zeroQtyLine) return setMsg(`"${zeroQtyLine.name.trim()}" 품목의 수량을 입력하세요. (0 또는 빈칸 불가)`);
     
-    const noAmountLine = lines.find((l) => l.name.trim() && toInt(l.qty) > 0 && calcLineAmounts(toInt(l.qty), toIntSigned(l.unit), l.total_incl_vat).total === 0);
-    if (noAmountLine) return setMsg(`"${noAmountLine.name.trim()}" 품목의 단가 또는 총액을 입력하세요.`);
+    const noAmountLine = lines.find((l) => !l.is_sample && l.name.trim() && toInt(l.qty) > 0 && calcLineAmounts(toInt(l.qty), toIntSigned(l.unit), l.total_incl_vat).total === 0);
+    if (noAmountLine) return setMsg(`"${noAmountLine.name.trim()}" 품목의 단가 또는 총액을 입력하세요.`); 
     
     if (cleanLines.length === 0) return setMsg("제품명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
 
@@ -1577,7 +1584,7 @@ if (woSubNameVal) {
         const pack_ea = inferPackEaFromName(name), unit_type = pack_ea > 1 ? "BOX" : "EA", actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
         const r = calcLineAmounts(qty, unit, l.total_incl_vat);
         return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total };
-      }).filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) !== 0);
+      }).filter((l) => l.name && l.qty > 0 && (l.is_sample || (l.total_amount ?? 0) !== 0));
       if (cleanLines.length === 0) return setMsg("제품명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
       const { error } = await supabase.from("orders").update({ ship_date: eShipDate, ship_method: eShipMethod, memo: JSON.stringify({ title: eOrderTitle.trim() || null, orderer_name: eOrdererName.trim() || null }), supply_amount: editOrderTotals.supply, vat_amount: editOrderTotals.vat, total_amount: editOrderTotals.total }).eq("id", editRow.rawId);
       if (error) return setMsg(error.message);
@@ -1696,7 +1703,7 @@ if (woSubNameVal) {
   const pill = "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700";
   const qtyBadge = "shrink-0 inline-flex items-center justify-center rounded-lg border border-slate-300 bg-slate-900 px-2 py-1 text-[11px] font-extrabold text-white";
   const miniBtn = "rounded-lg border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] hover:bg-slate-50 active:bg-slate-100";
-  const lineGridCols = "grid-cols-[180px_minmax(0,1fr)_120px_110px_130px_120px_120px_130px_44px]";
+  const lineGridCols = "grid-cols-[180px_minmax(0,1fr)_120px_110px_130px_120px_120px_130px_90px]";
   const targetLabel = selectedPartner ? selectedPartner.name : "전체";
 
   const Datalists = () => (
