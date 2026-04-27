@@ -543,12 +543,12 @@ function selectWo(wo: WorkOrderItem) {
             lotId = newLot.id;
           }
 
-          const todayKSTDate = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 10); 
+          const endTime = (formData.b_end_time ?? "00:00").slice(0, 5);
           const { error: movErr } = await supabase.from("movements").insert({
             lot_id: lotId,
             type: "IN",
             qty: actual_qty,
-            happened_at: `${todayKSTDate}T00:00:00+09:00`,
+            happened_at: `${selectedDate}T${endTime}:00+09:00`,
             note: "작업지시서 생산완료 - " + (woData as any).work_order_no,
             created_by: userId,
           });
