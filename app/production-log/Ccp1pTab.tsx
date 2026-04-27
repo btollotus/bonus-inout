@@ -543,8 +543,7 @@ function selectWo(wo: WorkOrderItem) {
             lotId = newLot.id;
           }
 
-          const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }))
-            .toISOString().slice(0, 10);
+          const todayKSTDate = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 10); 
           const { error: movErr } = await supabase.from("movements").insert({
             lot_id: lotId,
             type: "IN",
