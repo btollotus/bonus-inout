@@ -1703,7 +1703,7 @@ if (woSubNameVal) {
   const pill = "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700";
   const qtyBadge = "shrink-0 inline-flex items-center justify-center rounded-lg border border-slate-300 bg-slate-900 px-2 py-1 text-[11px] font-extrabold text-white";
   const miniBtn = "rounded-lg border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] hover:bg-slate-50 active:bg-slate-100";
-  const lineGridCols = "grid-cols-[180px_minmax(0,1fr)_120px_110px_130px_120px_120px_130px_90px]";
+  const lineGridCols = "grid-cols-[180px_minmax(180px,1fr)_80px_110px_80px_120px_120px_130px_90px]";
   const targetLabel = selectedPartner ? selectedPartner.name : "전체";
 
   const Datalists = () => (
