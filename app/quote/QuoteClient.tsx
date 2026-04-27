@@ -1698,8 +1698,8 @@ async function loadSignageList() {
               isNew: item.isNew,
               designChanged: item.designChanged,
               useStockMold: item.useStockMold,
-              moldCost: item.calcResult?.moldCost ?? (item.reuseExistingMold || item.useStockMold ? 0 : (PRODUCTS[item.productType]?.K ?? 0)),
-              plateCost: item.calcResult?.plateCost ?? (PRODUCTS[item.productType]?.L ?? 0),
+              moldCost: item.calcResult?.moldCost ?? (item.reuseExistingMold || item.useStockMold ? 0 : ((PRODUCTS as any)[item.productType]?.K ?? 0)),
+              plateCost: item.calcResult?.plateCost ?? ((PRODUCTS as any)[item.productType]?.L ?? 0),
               sheetCost: item.calcResult?.sheetCost ?? 0,
               workFee: item.calcResult?.workFee ?? 0,
               V: item.useStockMold && item.calcResult?.V_stock
