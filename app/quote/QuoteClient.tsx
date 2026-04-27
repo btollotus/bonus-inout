@@ -831,8 +831,7 @@ async function loadSignageList() {
                                 });
                                 const data = await res.json();
                                 if (data.error) { setMsg(data.error); updateItem(item.id, { calcLoading: false }); return; }
-                                console.log("calcResult", idx, data);
-                                updateItem(item.id, { calcResult: data, calcLoading: false });
+                                updateItem(item.id, { calcResult: data, calcLoading: false }); 
                               } catch (e: any) {
                                 setMsg(e.message); updateItem(item.id, { calcLoading: false });
                               }
