@@ -1686,7 +1686,7 @@ async function loadSignageList() {
             customerName: activeCustomerName,
             quoteDate: todayKST(),
             inputMode,
-            items: items.map(item => ({
+            items: items.filter(item => item.calcResult || item.manualV).map(item => ({
               productType: PRODUCT_TYPES.find(p => p.key === item.productType)?.label ?? item.productType,
               colorType: item.colorType,
               isRaise: item.productType.startsWith("레이즈"),
