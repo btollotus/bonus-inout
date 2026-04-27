@@ -173,7 +173,7 @@ const statusColors: Record<string, string> = {
 const PROGRESS_STEPS = [
   { label: "전사인쇄", statusKey: "status_transfer" as const, assigneeKey: "assignee_transfer" as const, icon: "🖨️", cardDone: "border-blue-300 bg-blue-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-blue-100 text-blue-700 border-blue-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
   { label: "인쇄검수", statusKey: "status_print_check" as const, assigneeKey: "assignee_print_check" as const, icon: "🔍", cardDone: "border-violet-300 bg-violet-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-violet-100 text-violet-700 border-violet-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
-  { label: "생산완료", statusKey: "status_production" as const, assigneeKey: "assignee_production" as const, icon: "✅", cardDone: "border-green-300 bg-green-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-green-100 text-green-700 border-green-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
+  { label: "금속검출", statusKey: "status_input" as const, assigneeKey: "assignee_input" as const, icon: "🧲", cardDone: "border-green-300 bg-green-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-green-100 text-green-700 border-green-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
  ] as const;
 
 const DARK_FOOD_TYPES = ["다크화이트","다크옐로우","데코초콜릿","롤리팝다크화이트","다크핑크","다크연두","롤리팝다크핑크"];
@@ -714,19 +714,18 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
     if (isCompleting) return;
     if (!selectedWo) return;
     setIsCompleting(true);
+    const foodCat = getFoodCategory(selectedWo.food_type);
+    const isChuganJae = foodCat === "중간재";
     if (woChecks) {
-      const isChuganJae = getFoodCategory(selectedWo.food_type) === "중간재";
       const missing = [
         !woChecks.assignee_transfer && "전사인쇄",
         !woChecks.assignee_print_check && "인쇄검수",
-        !isChuganJae && !woChecks.assignee_production && "생산완료",
       ].filter(Boolean) as string[];
       if (missing.length > 0) { alert(`다음 단계의 담당자를 선택해주세요:\n\n• ${missing.join("\n• ")}`); setIsCompleting(false); return; }
     }
-
     // ── CCP-1B 종료 여부 체크 ──
-    const foodCat = getFoodCategory(selectedWo.food_type);
     if (foodCat === "다크" || foodCat === "화이트") {
+   
       // 기존: 온장고 슬롯 + ccp_wo_events 종료 체크
       if (selectedWo.ccp_slot_id) {
         const todayKst = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
@@ -782,10 +781,10 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
     } 
 
     const items = (selectedWo.work_order_items ?? []).filter((item) => {const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); });
-    const missingQtyOrExpiry = items.filter((item) => { const pi = prodInputs[item.id]; return !pi || !pi.actual_qty || !pi.expiry_date; });
-    if (missingQtyOrExpiry.length > 0) { alert("출고수량과 소비기한은 필수 입력 항목입니다.\n\n입력 후 다시 시도해주세요."); setIsCompleting(false); return; }
-    if (!confirm("생산완료 처리하시겠습니까?\n기본정보·담당자·생산입력이 모두 저장되고 재고대장에 입고가 반영됩니다.")) { setIsCompleting(false); return; } 
-    setMsg(`⏳ 시작 - role:${role}, isAdminOrSubadmin:${isAdminOrSubadmin}`);
+    const missingQtyOrExpiry = items.filter((item) => { const pi = prodInputs[item.id]; return !pi || !pi.actual_qty || !pi.unit_weight || !pi.expiry_date; });
+    if (missingQtyOrExpiry.length > 0) { alert("출고수량, 개당중량, 소비기한은 필수 입력 항목입니다.\n\n입력 후 다시 시도해주세요."); setIsCompleting(false); return; }
+    if (!confirm("생산완료 처리하시겠습니까?")) { setIsCompleting(false); return; }
+    setMsg("⏳ 저장 중...");
     try {
       if (isAdminOrSubadmin) {
         const { error: basicErr } = await supabase.from("work_orders").update({ sub_name: eSubName.trim() || null, product_name: eProductName.trim(), food_type: eFoodType.trim() || null, logo_spec: eLogoSpec.trim() || null, thickness: eThickness || null, delivery_method: eDeliveryMethod || null, packaging_type: ePackagingType === "트레이" ? `트레이-${eTraySlot}` : ePackagingType || null,
@@ -805,75 +804,65 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
       const allItems = selectedWo.work_order_items ?? [];
       const firstUw = toNum(prodInputs[allItems[0]?.id]?.unit_weight);
       if (selectedWo.variant_id && firstUw > 0) await supabase.from("product_variants").update({ weight_g: firstUw }).eq("id", selectedWo.variant_id);
-      setMsg("⏳ 4단계: 재고대장 연동 중...");
-      const now = new Date().toISOString();
+
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id ?? null;
-      const stockErrors: string[] = [];
-      for (const item of items) {
-        const pi = prodInputs[item.id];
-        if (!pi || !pi.actual_qty || !pi.expiry_date) continue;
-        const actual_qty = toInt(pi.actual_qty);
-        if (actual_qty <= 0) continue;
-        const expiry_date = pi.expiry_date;
-        let variantId: string | null = null;
-        if (item.barcode_no) { const { data: pbData } = await supabase.from("product_barcodes").select("variant_id").eq("barcode", item.barcode_no).maybeSingle(); variantId = pbData?.variant_id ?? null; }
-        if (!variantId) variantId = selectedWo.variant_id;
-        if (!variantId) { stockErrors.push(`variant 없음 (${(item.sub_items ?? [])[0]?.name ?? item.id})`); continue; }
-        let lotId: string | null = null;
-        const { data: existingLot } = await supabase.from("lots").select("id").eq("variant_id", variantId).eq("expiry_date", expiry_date).maybeSingle();
-        if (existingLot) { lotId = existingLot.id; } else {
-          const { data: newLot, error: lotErr } = await supabase.from("lots").insert({ variant_id: variantId, expiry_date }).select("id").single();
-          if (lotErr) { stockErrors.push("LOT 생성 실패 (" + expiry_date + "): " + lotErr.message); continue; }
-          lotId = newLot.id;
+
+      if (isChuganJae) {
+        // ── 중간재: 재고 입고 + 즉시 완료 ──
+        const stockErrors: string[] = [];
+        for (const item of items) {
+          const pi = prodInputs[item.id];
+          if (!pi || !pi.actual_qty || !pi.expiry_date) continue;
+          const actual_qty = toInt(pi.actual_qty);
+          if (actual_qty <= 0) continue;
+          const expiry_date = pi.expiry_date;
+          let variantId: string | null = null;
+          if (item.barcode_no) { const { data: pbData } = await supabase.from("product_barcodes").select("variant_id").eq("barcode", item.barcode_no).maybeSingle(); variantId = pbData?.variant_id ?? null; }
+          if (!variantId) variantId = selectedWo.variant_id;
+          if (!variantId) { stockErrors.push(`variant 없음 (${(item.sub_items ?? [])[0]?.name ?? item.id})`); continue; }
+          let lotId: string | null = null;
+          const { data: existingLot } = await supabase.from("lots").select("id").eq("variant_id", variantId).eq("expiry_date", expiry_date).maybeSingle();
+          if (existingLot) { lotId = existingLot.id; } else {
+            const { data: newLot, error: lotErr } = await supabase.from("lots").insert({ variant_id: variantId, expiry_date }).select("id").single();
+            if (lotErr) { stockErrors.push("LOT 생성 실패: " + lotErr.message); continue; }
+            lotId = newLot.id;
+          }
+          const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+          const { error: movErr } = await supabase.from("movements").insert({ lot_id: lotId, type: "IN", qty: actual_qty, happened_at: `${todayKSTDate}T00:00:00+09:00`, note: "작업지시서 생산완료 - " + selectedWo.work_order_no, created_by: userId });
+          if (movErr) stockErrors.push("입고 기록 실패: " + movErr.message);
         }
-        const { error: movErr } = await supabase.from("movements").insert({ lot_id: lotId, type: "IN", qty: actual_qty, happened_at: now, note: "작업지시서 생산완료 - " + selectedWo.work_order_no, created_by: userId });
-        if (movErr) stockErrors.push("입고 기록 실패 (" + expiry_date + "): " + movErr.message);
-      }
-     // ── 전사지 차감 ──
-     if (foodCat !== "중간재") {
-      for (const item of items) {
-        const pi = prodInputs[item.id];
-        if (!pi?.transfer_lot_id || !pi?.transfer_qty) continue;
-        const transferQty = toInt(pi.transfer_qty);
-        if (transferQty <= 0) continue;
-
-        // ── 잔량 확인 ──
-        const { data: movData } = await supabase
-          .from("movements")
-          .select("type, qty")
-          .eq("lot_id", pi.transfer_lot_id);
-        const remaining = (movData ?? []).reduce((sum, m) => {
-          return m.type === "IN" ? sum + m.qty : sum - m.qty;
-        }, 0);
-        if (transferQty > remaining) {
-          setMsg(`전사지 차감 실패: 차감 수량(${transferQty})이 잔량(${remaining})을 초과합니다. (납기일: ${item.delivery_date})`);
-          setIsCompleting(false);
-          return;
+        const { error: statusErr } = await supabase.from("work_orders").update({ status: "완료", status_production: true, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+        if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
+        if (stockErrors.length > 0) showToast("⚠️ 저장됐으나 재고 연동 오류: " + stockErrors.join(" / "), "error");
+        else showToast("✅ 생산완료 처리 완료!");
+        await triggerPdfUpload(selectedWo, eProductName ?? "품목미상", eFoodType ?? "", eLogoSpec ?? "");
+      } else {
+        // ── 다크/화이트: status_production = true, "생산중" 유지 → CCP-1P 대기 ──
+        // ── 전사지 차감 ──
+        const stockErrors: string[] = [];
+        for (const item of items) {
+          const pi = prodInputs[item.id];
+          if (!pi?.transfer_lot_id || !pi?.transfer_qty) continue;
+          const transferQty = toInt(pi.transfer_qty);
+          if (transferQty <= 0) continue;
+          const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", pi.transfer_lot_id);
+          const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
+          if (transferQty > remaining) {
+            setMsg(`전사지 차감 실패: 차감 수량(${transferQty})이 잔량(${remaining})을 초과합니다. (납기일: ${item.delivery_date})`);
+            setIsCompleting(false); return;
+          }
+          const { error: transferErr } = await supabase.from("movements").insert({ lot_id: pi.transfer_lot_id, type: "OUT", qty: transferQty, happened_at: new Date().toISOString(), note: `전사지 차감 - ${selectedWo.work_order_no} - ${item.delivery_date}`, created_by: userId });
+          if (transferErr) stockErrors.push("전사지 차감 실패: " + transferErr.message);
+          await supabase.from("work_order_items").update({ transfer_lot_id: pi.transfer_lot_id, transfer_qty: transferQty }).eq("id", item.id);
         }
-
-        const { error: transferErr } = await supabase.from("movements").insert({
-          lot_id:      pi.transfer_lot_id,
-          type:        "OUT",
-          qty:         transferQty,
-          happened_at: new Date().toISOString(),
-          note:        `전사지 차감 - ${selectedWo.work_order_no} - ${item.delivery_date}`,
-          created_by:  userId,
-        });
-        if (transferErr) stockErrors.push("전사지 차감 실패: " + transferErr.message);
-        await supabase.from("work_order_items").update({
-          transfer_lot_id: pi.transfer_lot_id,
-          transfer_qty:    transferQty,
-        }).eq("id", item.id);
+        const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+        if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
+        if (stockErrors.length > 0) showToast("⚠️ 저장됐으나 전사지 차감 오류: " + stockErrors.join(" / "), "error");
+        else showToast("✅ 생산완료 처리 완료! CCP-1P 금속검출 기록을 진행해주세요.");
       }
-    }
 
-    // ── ccp_heating_sessions 관련 코드 제거됨 (새 구조: ccp_slot_events / ccp_wo_events 사용) ──
-    const { error: statusErr } = await supabase.from("work_orders").update({ status: "완료", status_production: true, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
-      if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
-      if (stockErrors.length > 0) showToast("⚠️ 저장됐으나 재고 연동 오류: " + stockErrors.join(" / "), "error"); else showToast("✅ 생산입력 완료!");
       setIsEditMode(false);
-      await triggerPdfUpload(selectedWo, eProductName ?? "품목미상", eFoodType ?? "", eLogoSpec ?? "");
       await loadWoList();
     } catch (e: any) { setMsg("오류: " + (e?.message ?? e)); } finally { setIsCompleting(false); }
   }
@@ -1207,8 +1196,8 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                 </div>
                 {woChecks ? (
                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                 {PROGRESS_STEPS.filter((step) => {
-                   if (getFoodCategory(selectedWo.food_type) === "중간재" && step.statusKey === "status_production") return false;
+                  {PROGRESS_STEPS.filter((step) => {
+                   if (getFoodCategory(selectedWo.food_type) === "중간재" && step.statusKey === "status_input") return false;
                    return true;
                  }).map((step) => {
                       const assigneeVal = woChecks[step.assigneeKey] ?? "";
@@ -1221,7 +1210,15 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                       return (
                         <div key={step.assigneeKey} className={`rounded-xl border px-3 py-2.5 transition-all duration-300 ${cardCls} ${isFlashing ? "ring-2 ring-blue-400 ring-offset-1 scale-[1.02]" : ""}`}>
                           <div className="flex items-center justify-between mb-2"><div className="text-xs font-semibold text-slate-700 flex items-center gap-1"><span>{step.icon}</span>{step.label}</div><div>{isSaving ? <span className="text-[10px] text-slate-400 animate-pulse">저장 중...</span> : isDone ? <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${step.badgeDone}`}>완료</span> : isSkipped ? <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${step.badgeSkip}`}>⚠ 미입력</span> : <span className="rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-400">대기</span>}</div></div>
-                          {isDone ? (
+                          {step.statusKey === "status_input" ? (
+  <div className="text-center">
+    {isDone ? (
+      <div className="text-[11px] font-semibold text-slate-600 truncate">👤 {assigneeVal}</div>
+    ) : (
+      <div className="text-[11px] text-slate-400">CCP-1P 기록 후 자동 완료</div>
+    )}
+  </div>
+) : isDone ? (
   <div className="space-y-1.5">
     <div className="text-[11px] font-semibold text-center text-slate-600 truncate">
       {assigneeVal === "담당자없음" ? "⏭️ 담당자없음" : `👤 ${assigneeVal}`}
@@ -1256,7 +1253,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
       ⏭️ 담당자없음
     </button>
   </div>
-)}       
+)}
 
                         </div>
                       );
@@ -1458,7 +1455,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
               <div className={`${card} p-4 flex gap-3`}>
                 {selectedWo.status !== "완료" && !isEditMode ? (
                   <button className="flex-1 rounded-xl border border-green-500 bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed" onClick={markProductionComplete} disabled={isCompleting}>
-                    {isCompleting ? "⏳ 처리 중..." : "✅ 생산완료 처리 (기본정보 · 담당자 · 생산입력 저장 포함)"}
+                {isCompleting ? "⏳ 처리 중..." : "✅ 생산완료 처리"}
                   </button>
                 ) : selectedWo.status === "완료" && !isEditMode ? (
                   <button className="rounded-xl border border-blue-400 bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 hover:bg-blue-100 active:bg-blue-200" onClick={() => setIsEditMode(true)}>✏️ 수정</button>
