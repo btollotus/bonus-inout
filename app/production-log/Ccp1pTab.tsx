@@ -318,12 +318,13 @@ export function Ccp1pTab({ role, userId, showToast }: {
   const loadWoList = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from("work_orders")
-      .select("id, product_name, client_name, updated_at")
-      .eq("status_production", true)
-      .gte("updated_at", `${selectedDate}T00:00:00+09:00`)
-      .lt("updated_at", `${selectedDate}T23:59:59+09:00`)
-      .order("updated_at", { ascending: true });
+    .from("work_orders")
+    .select("id, product_name, client_name, updated_at")
+    .eq("status_production", true)
+    .eq("status", "생산중")
+    .gte("updated_at", `${selectedDate}T00:00:00+09:00`)
+    .lt("updated_at", `${selectedDate}T23:59:59+09:00`)
+    .order("updated_at", { ascending: true });
 
     if (error) { showToast("조회 실패: " + error.message, "error"); setLoading(false); return; }
     setWoList((data ?? []) as WorkOrderItem[]);
@@ -493,8 +494,91 @@ function selectWo(wo: WorkOrderItem) {
 
     setSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
-    showToast("✅ CCP-1P 기록 저장 완료!");
+
+    // ── CCP-1P 저장 완료 후: 재고 입고 + assignee_input + status = "완료" ──
+    try {
+      const { data: woData } = await supabase
+        .from("work_orders")
+        .select("variant_id, work_order_no, food_type, work_order_items(id, actual_qty, unit_weight, expiry_date, barcode_no, sub_items, transfer_lot_id, transfer_qty)")
+        .eq("id", selectedWoId)
+        .single();
+
+      if (woData) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const userId = user?.id ?? null;
+        const stockErrors: string[] = [];
+
+        const items = ((woData as any).work_order_items ?? []).filter((item: any) => {
+          const name = (item.sub_items ?? [])[0]?.name ?? "";
+          return !name.startsWith("성형틀") && !name.startsWith("인쇄제판");
+        });
+
+        // 재고 입고
+        for (const item of items) {
+          if (!item.actual_qty || !item.expiry_date) continue;
+          const actual_qty = Number(item.actual_qty);
+          if (actual_qty <= 0) continue;
+
+          let variantId: string | null = null;
+          if (item.barcode_no) {
+            const { data: pbData } = await supabase
+              .from("product_barcodes").select("variant_id")
+              .eq("barcode", item.barcode_no).maybeSingle();
+            variantId = pbData?.variant_id ?? null;
+          }
+          if (!variantId) variantId = (woData as any).variant_id;
+          if (!variantId) { stockErrors.push(`variant 없음 (${(item.sub_items ?? [])[0]?.name ?? item.id})`); continue; }
+
+          let lotId: string | null = null;
+          const { data: existingLot } = await supabase
+            .from("lots").select("id")
+            .eq("variant_id", variantId).eq("expiry_date", item.expiry_date).maybeSingle();
+          if (existingLot) {
+            lotId = existingLot.id;
+          } else {
+            const { data: newLot, error: lotErr } = await supabase
+              .from("lots").insert({ variant_id: variantId, expiry_date: item.expiry_date })
+              .select("id").single();
+            if (lotErr) { stockErrors.push("LOT 생성 실패: " + lotErr.message); continue; }
+            lotId = newLot.id;
+          }
+
+          const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }))
+            .toISOString().slice(0, 10);
+          const { error: movErr } = await supabase.from("movements").insert({
+            lot_id: lotId,
+            type: "IN",
+            qty: actual_qty,
+            happened_at: `${todayKSTDate}T00:00:00+09:00`,
+            note: "작업지시서 생산완료 - " + (woData as any).work_order_no,
+            created_by: userId,
+          });
+          if (movErr) stockErrors.push("입고 기록 실패: " + movErr.message);
+        }
+
+        // work_orders: assignee_input = 담당자, status_input = true, status = "완료"
+        const workerName = formData.worker_name ?? null;
+        const { error: updateErr } = await supabase.from("work_orders").update({
+          assignee_input: workerName,
+          status_input: true,
+          status: "완료",
+          updated_at: new Date().toISOString(),
+        }).eq("id", selectedWoId);
+
+        if (updateErr) {
+          showToast("⚠️ CCP-1P 저장됐으나 완료 처리 실패: " + updateErr.message, "error");
+        } else if (stockErrors.length > 0) {
+          showToast("⚠️ CCP-1P 저장됐으나 재고 연동 오류: " + stockErrors.join(" / "), "error");
+        } else {
+          showToast("✅ CCP-1P 기록 완료! 작업지시서가 완료 처리됐습니다.");
+        }
+      }
+    } catch (e: any) {
+      showToast("⚠️ CCP-1P 저장됐으나 완료 처리 오류: " + (e?.message ?? e), "error");
+    }
+
     await loadLogs();
+    await loadWoList();
     setSelectedWoId(null);
     setFormData(null);
   }
@@ -768,7 +852,7 @@ function selectWo(wo: WorkOrderItem) {
         {loading ? (
   <div className="py-6 text-center text-sm text-slate-400">불러오는 중...</div>
 ) : woList.length === 0 ? (
-  <div className="py-6 text-center text-sm text-slate-400">{selectedDate} 생산완료된 작업지시서가 없습니다.</div>
+  <div className="py-6 text-center text-sm text-slate-400">{selectedDate} CCP-1P 대기 중인 작업지시서가 없습니다.</div>
 ) : (
   <div className="space-y-2">
     {woList.map((wo: any) => {
@@ -952,7 +1036,7 @@ function selectWo(wo: WorkOrderItem) {
                   disabled={saving}
                   onClick={save}
                 >
-                  {saving ? "저장 중..." : isEdit ? "💾 수정 저장" : "💾 기록 저장"}
+                 {saving ? "처리 중..." : isEdit ? "💾 수정 저장" : "✅ CCP-1P 기록 저장 및 완료 처리"}
                 </button>
                 <button
                   className={btn}
