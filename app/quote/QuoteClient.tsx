@@ -831,6 +831,7 @@ async function loadSignageList() {
                                 });
                                 const data = await res.json();
                                 if (data.error) { setMsg(data.error); updateItem(item.id, { calcLoading: false }); return; }
+                                console.log("calcResult", idx, data);
                                 updateItem(item.id, { calcResult: data, calcLoading: false });
                               } catch (e: any) {
                                 setMsg(e.message); updateItem(item.id, { calcLoading: false });
@@ -1686,7 +1687,7 @@ async function loadSignageList() {
             customerName: activeCustomerName,
             quoteDate: todayKST(),
             inputMode,
-            items: items.filter(item => item.calcResult || item.manualV).map(item => ({
+            items: items.map(item => ({
               productType: PRODUCT_TYPES.find(p => p.key === item.productType)?.label ?? item.productType,
               colorType: item.colorType,
               isRaise: item.productType.startsWith("레이즈"),
