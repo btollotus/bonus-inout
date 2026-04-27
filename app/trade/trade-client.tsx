@@ -954,7 +954,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
       const pack_ea = inferPackEaFromName(name), unit_type = pack_ea > 1 ? "BOX" : "EA", actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
       const r = calcLineAmounts(qty, unit, l.total_incl_vat);
       return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total };
-    }).filter((l) => l.name && l.qty > 0 && (l.total_amount ?? 0) !== 0);
+    }).filter((l) => l.name && l.qty > 0 && (l.is_sample || (l.total_amount ?? 0) !== 0));
     const zeroQtyLine = lines.find((l) => l.name.trim() && toInt(l.qty) <= 0);
     if (zeroQtyLine) return setMsg(`"${zeroQtyLine.name.trim()}" 품목의 수량을 입력하세요. (0 또는 빈칸 불가)`);
     
