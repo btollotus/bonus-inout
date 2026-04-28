@@ -716,6 +716,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
     setIsCompleting(true);
     const foodCat = getFoodCategory(selectedWo.food_type);
     const isChuganJae = foodCat === "중간재";
+    let ccpEndedAt: string | null = null;
     if (woChecks) {
       const missing = [
         !woChecks.assignee_transfer && "전사인쇄",
@@ -737,12 +738,13 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
           .lte("measured_at", `${todayKst}T23:59:59+09:00`)
           .order("measured_at", { ascending: false });
 
-        const lastEv = (ccpEvs ?? [])[0];
-        if (!lastEv) {
-          alert("CCP-1B 온도 기록이 없습니다.\n시작 → 중간점검 → 종료 순으로 기록 후 생산완료 처리해주세요.");
-          setIsCompleting(false); return;
-        }
-        if (lastEv.event_type !== "end") {
+          const lastEv = (ccpEvs ?? [])[0];
+          ccpEndedAt = lastEv?.measured_at ?? null;
+          if (!lastEv) {
+            alert("CCP-1B 온도 기록이 없습니다.\n시작 → 중간점검 → 종료 순으로 기록 후 생산완료 처리해주세요.");
+            setIsCompleting(false); return;
+          }
+          if (lastEv.event_type !== "end") {
           const stateLabel = lastEv.event_type === "start" ? "시작" : "중간점검";
           alert(`CCP-1B 온도 기록이 종료되지 않았습니다.\n현재 상태: [${stateLabel}]\n\n종료 기록 후 생산완료 처리해주세요.`);
           setIsCompleting(false); return;
@@ -859,7 +861,7 @@ if (!confirm(confirmMsg)) { setIsCompleting(false); return; }
           if (transferErr) stockErrors.push("전사지 차감 실패: " + transferErr.message);
           await supabase.from("work_order_items").update({ transfer_lot_id: pi.transfer_lot_id, transfer_qty: transferQty }).eq("id", item.id);
         }
-        const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+        const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, updated_at: ccpEndedAt ?? new Date().toISOString() }).eq("id", selectedWo.id);
         if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
         if (stockErrors.length > 0) showToast("⚠️ 저장됐으나 전사지 차감 오류: " + stockErrors.join(" / "), "error");
         else showToast("✅ 생산완료 처리 완료!");
