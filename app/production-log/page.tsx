@@ -1037,6 +1037,8 @@ function WorkLogTab({ role, userId, showToast }: {
   const [logs, setLogs] = useState<WorkLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterDate, setFilterDate] = useState(todayKST());
+  const [printFrom, setPrintFrom] = useState(todayKST());
+  const [printTo, setPrintTo] = useState(todayKST());
   const [showForm, setShowForm] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
 
@@ -1107,23 +1109,120 @@ function WorkLogTab({ role, userId, showToast }: {
     loadLogs();
   }
 
-  function printLogs() {
-    const content = document.getElementById("work-log-print-inner");
-    if (!content) return;
+  async function printLogs() {
+    const dates: string[] = [];
+    const cur = new Date(printFrom + "T00:00:00+09:00");
+    const end = new Date(printTo + "T00:00:00+09:00");
+    while (cur <= end) {
+      dates.push(cur.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
+      cur.setDate(cur.getDate() + 1);
+    }
+    if (dates.length === 0) return;
+
+    const results: { date: string; logs: WorkLog[] }[] = [];
+    const woByDate = new Map<string, { client_name: string; product_name: string; assignee_production: string | null; assignee_transfer: string | null }[]>();
+
+    for (const date of dates) {
+      const [logRes, woRes] = await Promise.all([
+        supabase.from("work_logs")
+          .select(`id, log_date, worker_id, worker_name, clock_in, clock_out,
+            production_summary, instruction, extra_work, note,
+            created_by, confirmed_by, approved_by, approved_at,
+            creator:users!created_by(name),
+            confirmer:users!confirmed_by(name),
+            approver:users!approved_by(name)`)
+          .eq("log_date", date)
+          .order("worker_name"),
+        supabase.from("work_orders")
+          .select("client_name, product_name, assignee_production, assignee_transfer")
+          .eq("status_production", true)
+          .gte("updated_at", `${date}T00:00:00+09:00`)
+          .lt("updated_at", `${date}T23:59:59+09:00`),
+      ]);
+      results.push({ date, logs: (logRes.data ?? []) as unknown as WorkLog[] });
+      woByDate.set(date, (woRes.data ?? []) as any);
+    }
+
+    const employeeMap = new Map<string, { date: string; log: WorkLog }[]>();
+    for (const { date, logs: dayLogs } of results) {
+      for (const log of dayLogs) {
+        if (!employeeMap.has(log.worker_name)) employeeMap.set(log.worker_name, []);
+        employeeMap.get(log.worker_name)!.push({ date, log });
+      }
+    }
+
+    const dayBlock = (date: string, log: WorkLog | null, empName: string) => {
+      const d = new Date(date + "T00:00:00+09:00");
+      const days = ["일","월","화","수","목","금","토"];
+      const dateLabel = `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+      if (!log) {
+        return `<div style="flex:1;border:1px solid #ccc;border-radius:6px;padding:10px 12px;min-height:160px;">
+          <div style="font-size:8.5pt;font-weight:bold;color:#999;margin-bottom:6px;border-bottom:0.5px solid #eee;padding-bottom:5px;">${dateLabel}</div>
+          <div style="font-size:8pt;color:#ccc;text-align:center;margin-top:40px;">기록 없음</div>
+        </div>`;
+      }
+      const dayWos = (woByDate.get(date) ?? []).filter((w: any) =>
+        w.assignee_production === empName || w.assignee_transfer === empName
+      );
+      const woHtml = dayWos.length > 0
+        ? dayWos.map((w: any) => `<div style="font-size:7.5pt;padding:2px 0;border-bottom:0.5px solid #f0f0f0;">${w.client_name} — ${w.product_name}</div>`).join("")
+        : "";
+      return `<div style="flex:1;border:1px solid #ccc;border-radius:6px;padding:10px 12px;min-height:160px;display:flex;flex-direction:column;gap:4px;">
+        <div style="font-size:8.5pt;font-weight:bold;margin-bottom:5px;border-bottom:0.5px solid #ddd;padding-bottom:5px;">${dateLabel}</div>
+        ${woHtml ? `<div style="margin-bottom:4px;"><div style="font-size:7pt;color:#888;margin-bottom:2px;font-weight:bold;">처리한 작업지시서</div>${woHtml}</div>` : ""}
+        ${log.instruction ? `<div style="font-size:7.5pt;margin-bottom:3px;"><b>지시사항:</b> ${log.instruction}</div>` : ""}
+        ${log.extra_work ? `<div style="font-size:7.5pt;margin-bottom:3px;"><b>기타작업:</b> ${log.extra_work}</div>` : ""}
+        ${log.note ? `<div style="font-size:7.5pt;color:#666;margin-bottom:3px;">비고: ${log.note}</div>` : ""}
+        <div style="margin-top:auto;padding-top:6px;font-size:7pt;color:#888;display:flex;gap:10px;border-top:0.5px solid #eee;">
+          <span>작성: ${(log.creator as any)?.name ?? "—"}</span>
+          <span>확인: ${(log.confirmer as any)?.name ?? "미확인"}</span>
+          <span>승인: ${(log.approver as any)?.name ?? "미승인"}</span>
+        </div>
+      </div>`;
+    };
+
+    let html = "";
+    const empEntries = Array.from(employeeMap.entries());
+    for (let ei = 0; ei < empEntries.length; ei++) {
+      const [empName, entries] = empEntries[ei];
+      for (let i = 0; i < dates.length; i += 2) {
+        const d1 = dates[i];
+        const d2 = dates[i + 1] ?? null;
+        const e1 = entries.find((e) => e.date === d1)?.log ?? null;
+        const e2 = d2 ? (entries.find((e) => e.date === d2)?.log ?? null) : null;
+        const isLastGroup = i + 2 >= dates.length;
+        html += `<div style="page-break-inside:avoid;">
+          <div style="font-size:12pt;font-weight:bold;margin-bottom:10px;padding-bottom:5px;border-bottom:1.5px solid #222;">
+            ${empName}
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:16px;">
+            ${dayBlock(d1, e1, empName)}
+            ${d2 ? dayBlock(d2, e2, empName) : `<div style="flex:1;"></div>`}
+          </div>
+        </div>`;
+        if (!isLastGroup) {
+          html += `<div style="page-break-after:always;"></div>`;
+        }
+      }
+      if (ei < empEntries.length - 1) {
+        html += `<div style="page-break-after:always;"></div>`;
+      }
+    }
+
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head>
       <meta charset="utf-8">
-      <title>생산일지_${filterDate}</title>
+      <title>근무일지_${printFrom}_${printTo}</title>
       <style>
-        @page { size: A4 portrait; margin: 15mm 20mm; }
+        @page { size: A4 portrait; margin: 15mm 18mm; }
         body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 9pt; color: #000; }
         * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       </style>
-    </head><body>${content.innerHTML}</body></html>`);
+    </head><body>${html}</body></html>`);
     win.document.close();
     win.focus();
-    setTimeout(() => { win.print(); }, 400);
+    setTimeout(() => { win.print(); }, 500);
   }
 
   async function approveLog(logId: string, step: "confirm" | "approve") {
@@ -1155,7 +1254,14 @@ function WorkLogTab({ role, userId, showToast }: {
               {showForm ? "✕ 닫기" : "✚ 근무일지 등록"}
             </button>
           )}
-          <button className={btnSm} onClick={printLogs}>🖨️ 인쇄</button>
+        <div className="flex items-center gap-1.5">
+            <input type="date" className="rounded-lg border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
+              value={printFrom} onChange={(e) => setPrintFrom(e.target.value)} />
+            <span className="text-xs text-slate-400">~</span>
+            <input type="date" className="rounded-lg border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
+              value={printTo} onChange={(e) => setPrintTo(e.target.value)} />
+            <button className={btnSm} onClick={printLogs}>🖨️ 인쇄</button>
+          </div>  
         </div>
       </div>
 
