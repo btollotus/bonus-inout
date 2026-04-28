@@ -225,7 +225,7 @@ export default function ReportClient() {
   const [mode, setMode] = useState<"DAY" | "RANGE">("DAY");
   const [startDay, setStartDay] = useState<string>(() => formatYYYYMMDD(new Date()));
   const [endDay, setEndDay] = useState<string>(() => formatYYYYMMDD(new Date()));
-  const [categoryFilter, setCategoryFilter] = useState<Category>("ALL");
+  const [categoryFilter, setCategoryFilter] = useState<Category>("기성");
 
   const [rows, setRows] = useState<AggRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -253,6 +253,7 @@ export default function ReportClient() {
   }, []); // eslint-disable-line
 
   const [isAdmin, setIsAdmin] = useState(false);
+const [adminLoaded, setAdminLoaded] = useState(false);
 
   // ── 수정 모달 state (소비기한 제외) ──
   const [editModal, setEditModal] = useState<EditModalState>({
@@ -274,7 +275,7 @@ export default function ReportClient() {
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) { setAdminLoaded(true); return; }
       const { data } = await supabase
         .from("user_roles")
         .select("role")
@@ -282,8 +283,13 @@ export default function ReportClient() {
         .limit(1)
         .maybeSingle();
       setIsAdmin(data?.role === "ADMIN");
+      setAdminLoaded(true);
     })();
   }, []);
+  
+  useEffect(() => {
+    if (adminLoaded) fetchReport();
+  }, [adminLoaded]); // eslint-disable-line
 
   useEffect(() => {
     if (mode === "DAY") setEndDay(startDay);
