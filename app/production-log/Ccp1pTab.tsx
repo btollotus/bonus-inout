@@ -372,14 +372,14 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
     loadLogs();
   }, [loadWoList, loadLogs]);
 
-  // URL로 전달된 WO 자동 선택
+  // URL로 전달된 WO 자동 선택 — 미기록 항목만
   useEffect(() => {
     if (!initialWoId || loading) return;
     const wo = woList.find((w) => w.id === initialWoId);
-    if (wo && selectedWoId !== initialWoId) {
+    if (wo && selectedWoId !== initialWoId && !logMap[initialWoId]) {
       selectWo(wo);
     }
-  }, [initialWoId, woList, loading]);
+  }, [initialWoId, woList, loading, logMap]);
 
 // 변경 후
 function selectWo(wo: WorkOrderItem) {
