@@ -610,7 +610,7 @@ function ProductionLogTab({ role, userId, showToast }: {
                 </div>
                 {(log.work_order_nos ?? []).length > 0 && (
                   <div style={{ marginBottom: 6 }}>
-                    <div style={{ fontSize: "7pt", color: "#888", fontWeight: "bold", marginBottom: 2 }}>처리한 작업지시서</div>
+                   <div style={{ fontSize: "7pt", color: "#333", fontWeight: "bold", marginBottom: 2 }}>처리한 작업지시서</div>
                     {(log.work_order_nos ?? []).map((no) => (
                       <div key={no} style={{ fontSize: "8pt", padding: "2px 0", borderBottom: "0.5px solid #f0f0f0" }}>
                         {woInfoMap[no] ? `${woInfoMap[no].client_name} — ${woInfoMap[no].product_name}` : no}
@@ -620,7 +620,7 @@ function ProductionLogTab({ role, userId, showToast }: {
                 )}
                 {Object.values(log.task_checks ?? {}).some(Boolean) && (
                   <div style={{ marginBottom: 6 }}>
-                    <div style={{ fontSize: "7pt", color: "#888", fontWeight: "bold", marginBottom: 3 }}>업무 체크</div>
+                   <div style={{ fontSize: "7pt", color: "#333", fontWeight: "bold", marginBottom: 3 }}>업무 체크</div>
                     <div style={{ fontSize: "7.5pt", color: "#333", lineHeight: 1.8 }}>
                       {taskTypes.filter((t) => (log.task_checks ?? {})[t.id] === true).map((t) => t.name).join(" · ")}
                     </div> 
