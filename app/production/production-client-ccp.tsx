@@ -1242,22 +1242,34 @@ export function WoCcpCard({
                  .gte("measured_at", `${todayStr}T00:00:00+09:00`)
                  .lte("measured_at", `${todayStr}T23:59:59+09:00`);
              
-               if (myEvents && myEvents.length > 0) return;
-                // 기존 기록 중 중복 없는 것만 복사. end는 WO별 별도 기록이므로 제외
-                const toInsert = existingEvents
-                .filter((ev: any) => ev.event_type !== "end")
-                .map((ev: any) => ({
-                  work_order_no: selectedWo.work_order_no,
-                  slot_id:       ev.slot_id,
-                  event_type:    ev.event_type,
-                  measured_at:   ev.measured_at,
-                  temperature:   ev.temperature,
-                  is_ok:         ev.is_ok,
-                  action_note:   ev.action_note,
-                  created_by:    ev.created_by,
-                }));
-            
-              await supabaseClient.from("ccp_wo_events").insert(toInsert);
+                 if (myEvents && myEvents.length > 0) return;
+
+                 // 소급 복사 전 사용자 확인
+                 const slotName = warmerSlots.find((w: any) => w.id === s.id)?.slot_name ?? s.id;
+                 const eventSummary = existingEvents
+                   .filter((ev: any) => ev.event_type !== "end")
+                   .map((ev: any) => `${toKSTTime(ev.measured_at)} ${CCP_WO_EVENT_LABELS[ev.event_type] ?? ev.event_type}`)
+                   .join(", ");
+                 const shouldCopy = confirm(
+                   `[${slotName}] 슬롯에 오늘 진행 중인 온도 기록이 있습니다.\n\n${eventSummary}\n\n이 기록을 이어받겠습니까?\n(같은 슬롯에서 동시 생산 중인 경우 [확인], 아닌 경우 [취소])`
+                 );
+                 if (!shouldCopy) return;
+ 
+                 // 기존 기록 중 중복 없는 것만 복사. end는 WO별 별도 기록이므로 제외
+                 const toInsert = existingEvents
+                 .filter((ev: any) => ev.event_type !== "end")
+                 .map((ev: any) => ({
+                   work_order_no: selectedWo.work_order_no,
+                   slot_id:       ev.slot_id,
+                   event_type:    ev.event_type,
+                   measured_at:   ev.measured_at,
+                   temperature:   ev.temperature,
+                   is_ok:         ev.is_ok,
+                   action_note:   ev.action_note,
+                   created_by:    ev.created_by,
+                 }));
+             
+               await supabaseClient.from("ccp_wo_events").insert(toInsert);
                  
                 }}
               >
