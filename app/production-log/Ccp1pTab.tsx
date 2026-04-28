@@ -322,7 +322,7 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
     .from("work_orders")
     .select("id, product_name, client_name, updated_at")
     .eq("status_production", true)
-    .eq("status", "생산중")
+    .in("status", ["생산중", "완료"])
     .gte("updated_at", `${selectedDate}T00:00:00+09:00`)
     .lt("updated_at", `${selectedDate}T23:59:59+09:00`)
     .order("updated_at", { ascending: true });
