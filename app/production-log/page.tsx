@@ -793,11 +793,10 @@ function ProductionLogTab({ role, userId, showToast }: {
             </>
           )}
         </div>
-      )}
+    )}
     </div>
   );
 }
-
 // ═══════════════════════════════════════════════════════════
 // 탭 2: 원료수불부
 // ═══════════════════════════════════════════════════════════
@@ -1020,7 +1019,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
             ))}
           </div>
         )}
-      </div>
+     </div>
     </div>
   );
 }
@@ -1108,6 +1107,25 @@ function WorkLogTab({ role, userId, showToast }: {
     loadLogs();
   }
 
+  function printLogs() {
+    const content = document.getElementById("work-log-print-inner");
+    if (!content) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <title>생산일지_${filterDate}</title>
+      <style>
+        @page { size: A4 portrait; margin: 15mm 20mm; }
+        body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 9pt; color: #000; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      </style>
+    </head><body>${content.innerHTML}</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
+  }
+
   async function approveLog(logId: string, step: "confirm" | "approve") {
     const field = step === "confirm"
       ? { confirmed_by: userId }
@@ -1137,7 +1155,7 @@ function WorkLogTab({ role, userId, showToast }: {
               {showForm ? "✕ 닫기" : "✚ 근무일지 등록"}
             </button>
           )}
-          <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+          <button className={btnSm} onClick={printLogs}>🖨️ 인쇄</button>
         </div>
       </div>
 
@@ -1259,7 +1277,51 @@ function WorkLogTab({ role, userId, showToast }: {
             ))}
           </div>
         )}
+   </div>
+
+{/* 인쇄 전용 숨김 영역 */}
+<div id="work-log-print-inner" style={{ display: "none" }}>
+  <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
+    <div style={{ textAlign: "center", fontSize: "14pt", fontWeight: "bold", marginBottom: 8 }}>
+      근무일지 — {filterDate}
+    </div>
+    {logs.map((log) => (
+      <div key={log.id} style={{ border: "1px solid #ccc", borderRadius: 8, padding: "12px 16px", marginBottom: 12, pageBreakInside: "avoid" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+          <div style={{ fontSize: "11pt", fontWeight: "bold" }}>👤 {log.worker_name}</div>
+          <div style={{ fontSize: "8pt", color: "#555" }}>
+            {log.clock_in && `출근: ${log.clock_in}`}
+            {log.clock_in && log.clock_out && " · "}
+            {log.clock_out && `퇴근: ${log.clock_out}`}
+          </div>
+        </div>
+        {log.production_summary && (
+          <div style={{ background: "#f8f8f8", border: "1px solid #e0e0e0", borderRadius: 4, padding: "4px 8px", marginBottom: 6, fontSize: "8pt" }}>
+            <span style={{ fontWeight: "bold" }}>생산목록: </span>{log.production_summary}
+          </div>
+        )}
+        {log.instruction && (
+          <div style={{ fontSize: "8pt", marginBottom: 3 }}><span style={{ fontWeight: "bold" }}>지시사항:</span> {log.instruction}</div>
+        )}
+        {log.extra_work && (
+          <div style={{ fontSize: "8pt", marginBottom: 3 }}><span style={{ fontWeight: "bold" }}>기타작업:</span> {log.extra_work}</div>
+        )}
+        {log.note && (
+          <div style={{ fontSize: "8pt", color: "#666", marginBottom: 3 }}>비고: {log.note}</div>
+        )}
+        <div style={{ marginTop: 6, fontSize: "7.5pt", color: "#888", display: "flex", gap: 12 }}>
+          <span>작성: {(log.creator as any)?.name ?? "—"}</span>
+          <span>확인: {(log.confirmer as any)?.name ?? "미확인"}</span>
+          <span>승인: {(log.approver as any)?.name ?? "미승인"}</span>
+          {log.approved_by && <span style={{ color: "#059669", fontWeight: "bold" }}>✅ 승인완료</span>}
+        </div>
       </div>
+    ))}
+{logs.length === 0 && (
+      <div style={{ textAlign: "center", color: "#aaa", padding: 32 }}>해당 날짜 근무일지가 없습니다.</div>
+    )}
+  </div>
+</div>
     </div>
   );
 }
