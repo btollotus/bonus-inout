@@ -2534,23 +2534,24 @@ function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: (
       const isChocBase = foodType.includes("초콜릿중간재");
       const isNeoColor = foodType.includes("네오컬러");
       if (!isChocBase && mold > 0 && qty > 0) {
-        if (isNeoColor) {
-          const perRow = mold === 108 ? 9 : mold === 88 ? 8 : mold === 66 ? 6 : mold === 63 ? 7 : Math.round(Math.sqrt(mold));
-          const buffer = mold === 63 ? 10 : 20;
+       // 바꿀 코드
+if (isNeoColor) {
+  const perRow = mold === 108 ? 9 : mold === 88 ? 8 : mold === 66 ? 6 : mold === 63 ? 7 : Math.round(Math.sqrt(mold));
 
-          const totalNeeded = qty + buffer;
-          const sheets = totalNeeded / mold;
-          const fullSheets = Math.floor(sheets);
-          const remainder = sheets - fullSheets;
-          const extraRows = remainder > 0 ? Math.ceil(remainder * mold / perRow) : 0;
-          const totalProduced = (fullSheets * mold) + (extraRows * perRow);
-          init[item.id] = extraRows > 0
-            ? `전사지: ${fullSheets}장 ${extraRows}줄  참고: ${totalProduced.toLocaleString("ko-KR")}개`
-            : `전사지: ${fullSheets}장  참고: ${(fullSheets * mold).toLocaleString("ko-KR")}개`;
-        } else {
-          const sheets2 = Math.ceil(qty / mold);
-          init[item.id] = `전사지: ${sheets2}장  참고: ${(sheets2 * mold).toLocaleString("ko-KR")}개`;
-        }
+  let totalProduced = qty;
+  while (totalProduced - qty < 16) totalProduced += perRow;
+  const fullSheets = Math.floor(totalProduced / mold);
+  const remainder = totalProduced % mold;
+  const extraRows = remainder > 0 ? Math.ceil(remainder / perRow) : 0;
+  init[item.id] = extraRows > 0
+    ? `전사지: ${fullSheets}장 ${extraRows}줄  참고: ${totalProduced.toLocaleString("ko-KR")}개`
+    : `전사지: ${fullSheets}장  참고: ${totalProduced.toLocaleString("ko-KR")}개`;
+} else {
+  let totalProduced2 = qty;
+  while (totalProduced2 - qty < 16) totalProduced2 += mold;
+  const sheets2 = Math.floor(totalProduced2 / mold);
+  init[item.id] = `전사지: ${sheets2}장  참고: ${totalProduced2.toLocaleString("ko-KR")}개`;
+}
 // ── 라벨 수량 추가 (포장방법이 벌크인 경우) ──
 const needsLabel = (wo.packaging_type ?? "").includes("벌크");
 if (needsLabel) {
