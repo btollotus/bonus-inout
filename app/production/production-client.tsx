@@ -783,7 +783,10 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
     const items = (selectedWo.work_order_items ?? []).filter((item) => {const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); });
     const missingQtyOrExpiry = items.filter((item) => { const pi = prodInputs[item.id]; return !pi || !pi.actual_qty || !pi.unit_weight || !pi.expiry_date; });
     if (missingQtyOrExpiry.length > 0) { alert("출고수량, 개당중량, 소비기한은 필수 입력 항목입니다.\n\n입력 후 다시 시도해주세요."); setIsCompleting(false); return; }
-    if (!confirm("생산완료 처리하시겠습니까?")) { setIsCompleting(false); return; }
+    const confirmMsg = isChuganJae
+  ? "생산완료 처리하시겠습니까?"
+  : "생산완료 처리하시겠습니까?\n\n※ 완료 후 CCP-1P(금속검출) 기록까지 진행해야 최종 완료됩니다.";
+if (!confirm(confirmMsg)) { setIsCompleting(false); return; }
     setMsg("⏳ 저장 중...");
     try {
       if (isAdminOrSubadmin) {
@@ -859,7 +862,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
         const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
         if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
         if (stockErrors.length > 0) showToast("⚠️ 저장됐으나 전사지 차감 오류: " + stockErrors.join(" / "), "error");
-        else showToast("✅ 생산완료 처리 완료! CCP-1P 금속검출 기록을 진행해주세요.");
+        else showToast("✅ 생산완료 처리 완료!");
       }
 
       setIsEditMode(false);
