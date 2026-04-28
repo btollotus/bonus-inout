@@ -264,6 +264,8 @@ type WorkOrderRef = {
   tags: string[]; // ["생산완료", "전사인쇄"]
 };
 
+type WoInfoMap = Record<string, { client_name: string; product_name: string }>;
+
 function ProductionLogTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
@@ -286,6 +288,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [extraNote, setExtraNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [woInfoMap, setWoInfoMap] = useState<WoInfoMap>({});
 
   // ── 조회 ──
   const [viewDate, setViewDate] = useState(todayKST());
@@ -340,6 +343,24 @@ function ProductionLogTab({ role, userId, showToast }: {
       taskTypes.forEach((t) => { init[t.id] = false; });
       setTaskChecks(init);
       setExtraNote("");
+    }
+
+    // WO 번호 → 업체명/제품명 맵 구성
+    const allNos = (logRes.data as DailyWorkLog | null)?.work_order_nos ?? [];
+    const woNosFromOrders = Array.from((woRes.data ?? []) as WorkOrderRef[]).map((w) => w.work_order_no);
+    const mergedNos = [...new Set([...allNos, ...woNosFromOrders])];
+    if (mergedNos.length > 0) {
+      const { data: woData } = await supabase
+        .from("work_orders")
+        .select("work_order_no, client_name, product_name")
+        .in("work_order_no", mergedNos);
+      const map: WoInfoMap = {};
+      (woData ?? []).forEach((w: any) => {
+        map[w.work_order_no] = { client_name: w.client_name, product_name: w.product_name };
+      });
+      setWoInfoMap(map);
+    } else {
+      setWoInfoMap({});
     }
   }, [today, taskTypes]);
 
@@ -455,7 +476,22 @@ function ProductionLogTab({ role, userId, showToast }: {
     setViewLoading(true);
     const { data } = await supabase.from("daily_work_logs")
       .select("*").eq("log_date", viewDate).order("employee_name");
-    setViewLogs((data ?? []) as DailyWorkLog[]);
+    const logs = (data ?? []) as DailyWorkLog[];
+    setViewLogs(logs);
+
+    const allNos = [...new Set(logs.flatMap((l) => l.work_order_nos ?? []))];
+    if (allNos.length > 0) {
+      const { data: woData } = await supabase
+        .from("work_orders")
+        .select("work_order_no, client_name, product_name")
+        .in("work_order_no", allNos);
+      const map: WoInfoMap = {};
+      (woData ?? []).forEach((w: any) => {
+        map[w.work_order_no] = { client_name: w.client_name, product_name: w.product_name };
+      });
+      setWoInfoMap((prev) => ({ ...prev, ...map }));
+    }
+
     setViewLoading(false);
   }
 
@@ -501,9 +537,11 @@ function ProductionLogTab({ role, userId, showToast }: {
                   <div className="mb-1.5 text-xs font-semibold text-slate-500">처리한 작업지시서</div>
                   <div className="flex flex-wrap gap-1.5">
                     {(log.work_order_nos ?? []).map((no) => (
-                      <span key={no} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-mono text-blue-700">{no}</span>
+                      <span key={no} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
+                        {woInfoMap[no] ? `${woInfoMap[no].client_name} — ${woInfoMap[no].product_name}` : no}
+                      </span>
                     ))}
-                  </div>
+                  </div> 
                 </div>
               )}
               <div className="mb-3">
