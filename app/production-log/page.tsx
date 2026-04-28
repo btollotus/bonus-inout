@@ -108,13 +108,16 @@ export default function ProductionLogPage() {
   const [role, setRole] = useState<UserRole>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
-  const searchParams = typeof window !== "undefined"
-    ? new URLSearchParams(window.location.search)
-    : null;
-  const initialTab = (searchParams?.get("tab") as Tab) ?? "production";
-  const initialWoId = searchParams?.get("wo") ?? null;
+  const [activeTab, setActiveTab] = useState<Tab>("production");
+  const [initialWoId, setInitialWoId] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab") as Tab | null;
+    const wo = params.get("wo");
+    if (tab) setActiveTab(tab);
+    if (wo) setInitialWoId(wo);
+  }, []);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   const isAdmin = role === "ADMIN";
