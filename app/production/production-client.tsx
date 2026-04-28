@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useCcpState, SlotStatusPanel, WoCcpCard } from "./production-client-ccp";
@@ -215,8 +216,11 @@ export default function ProductionClient() {
     setTimeout(() => setToast(null), 2500);
   }
 
+  const router = useRouter();
   const [isEditMode, setIsEditMode] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [completeModalWoId, setCompleteModalWoId] = useState<string | null>(null);
   const [productionCount, setProductionCount] = useState(0);
   const [sortBy, setSortBy] = useState<"created_at" | "delivery_date">("created_at");
   const [filterStatus, setFilterStatus] = useState<"전체" | "생산중" | "완료">("생산중");
@@ -788,10 +792,27 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
     const items = (selectedWo.work_order_items ?? []).filter((item) => {const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); });
     const missingQtyOrExpiry = items.filter((item) => { const pi = prodInputs[item.id]; return !pi || !pi.actual_qty || !pi.unit_weight || !pi.expiry_date; });
     if (missingQtyOrExpiry.length > 0) { alert("출고수량, 개당중량, 소비기한은 필수 입력 항목입니다.\n\n입력 후 다시 시도해주세요."); setIsCompleting(false); return; }
-    const confirmMsg = isChuganJae
-  ? "생산완료 처리하시겠습니까?"
-  : "생산완료 처리하시겠습니까?\n\n※ 완료 후 CCP-1P(금속검출) 기록까지 진행해야 최종 완료됩니다.";
-if (!confirm(confirmMsg)) { setIsCompleting(false); return; }
+    if (isChuganJae) {
+      // 중간재는 기존 confirm 유지
+      if (!confirm("생산완료 처리하시겠습니까?")) { setIsCompleting(false); return; }
+    } else {
+      // 다크/화이트는 커스텀 모달
+      setCompleteModalWoId(selectedWo.id);
+      setShowCompleteModal(true);
+      setIsCompleting(false);
+      return;
+    }
+    await doComplete(false);
+  }
+
+  async function doComplete(navigate: boolean) {
+    if (!selectedWo) return;
+    const foodCat = getFoodCategory(selectedWo.food_type);
+    const isChuganJae = foodCat === "중간재";
+    const items = (selectedWo.work_order_items ?? []).filter((item) => {
+      const name = (item.sub_items ?? [])[0]?.name ?? "";
+      return !name.startsWith("성형틀") && !name.startsWith("인쇄제판");
+    });
     setMsg("⏳ 저장 중...");
     try {
       if (isAdminOrSubadmin) {
@@ -864,7 +885,7 @@ if (!confirm(confirmMsg)) { setIsCompleting(false); return; }
           if (transferErr) stockErrors.push("전사지 차감 실패: " + transferErr.message);
           await supabase.from("work_order_items").update({ transfer_lot_id: pi.transfer_lot_id, transfer_qty: transferQty }).eq("id", item.id);
         }
-        const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, updated_at: ccpEndedAt ?? new Date().toISOString() }).eq("id", selectedWo.id);
+        const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
         if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
         if (stockErrors.length > 0) showToast("⚠️ 저장됐으나 전사지 차감 오류: " + stockErrors.join(" / "), "error");
         else showToast("✅ 생산완료 처리 완료!");
@@ -872,6 +893,9 @@ if (!confirm(confirmMsg)) { setIsCompleting(false); return; }
 
       setIsEditMode(false);
       await loadWoList();
+      if (navigate) {
+        router.push(`/production-log?tab=ccp1p&wo=${selectedWo.id}`);
+      }
     } catch (e: any) { setMsg("오류: " + (e?.message ?? e)); } finally { setIsCompleting(false); }
   }
 
@@ -906,6 +930,41 @@ if (!confirm(confirmMsg)) { setIsCompleting(false); return; }
             </div>
           </div>
         )}
+
+{showCompleteModal && completeModalWoId && (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+    <div className="w-full max-w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+      <div className="px-6 py-5">
+        <div className="text-base font-bold text-slate-800 mb-2">✅ 생산완료 처리하시겠습니까?</div>
+        <div className="text-sm text-slate-500 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          ※ 완료 후 CCP-1P(금속검출) 기록까지 진행해야 최종 완료됩니다.
+        </div>
+      </div>
+      <div className="flex gap-2 px-6 pb-5">
+        <button
+          className="flex-1 rounded-xl border border-blue-500 bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
+          onClick={async () => {
+            setShowCompleteModal(false);
+            setIsCompleting(true);
+            await doComplete(true);
+          }}
+        >🧲 생산완료+CCP-1P 이동</button>
+        <button
+          className="flex-1 rounded-xl border border-green-500 bg-green-600 py-2.5 text-sm font-bold text-white hover:bg-green-700"
+          onClick={async () => {
+            setShowCompleteModal(false);
+            setIsCompleting(true);
+            await doComplete(false);
+          }}
+        >✅ 생산완료</button>
+        <button
+          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          onClick={() => { setShowCompleteModal(false); setCompleteModalWoId(null); }}
+        >창닫기</button>
+      </div>
+    </div>
+  </div>
+)}
 
 {showPinModalForProgress && (
   <PinModal
