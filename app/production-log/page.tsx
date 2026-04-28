@@ -600,14 +600,13 @@ function ProductionLogTab({ role, userId, showToast }: {
               {(() => {
                 const d = new Date(viewDate + "T00:00:00+09:00");
                 const days = ["일","월","화","수","목","금","토"];
-                return `생산일지 — ${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+                return `근무일지 — ${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
               })()}
             </div>
             {viewLogs.map((log) => (
               <div key={log.id} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "10px 14px", marginBottom: 10, pageBreakInside: "avoid" }}>
                 <div style={{ fontSize: "10pt", fontWeight: "bold", marginBottom: 6, paddingBottom: 4, borderBottom: "0.5px solid #ddd" }}>
-                  {log.employee_name}
-                  {log.confirmed_at && <span style={{ fontSize: "7pt", color: "#059669", marginLeft: 8 }}>확인완료</span>}
+                {log.employee_name}
                 </div>
                 {(log.work_order_nos ?? []).length > 0 && (
                   <div style={{ marginBottom: 6 }}>
@@ -622,13 +621,9 @@ function ProductionLogTab({ role, userId, showToast }: {
                 {Object.values(log.task_checks ?? {}).some(Boolean) && (
                   <div style={{ marginBottom: 6 }}>
                     <div style={{ fontSize: "7pt", color: "#888", fontWeight: "bold", marginBottom: 3 }}>업무 체크</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                      {taskTypes.filter((t) => (log.task_checks ?? {})[t.id] === true).map((t) => (
-                        <span key={t.id} style={{ fontSize: "7pt", background: "#f0fdf4", border: "0.5px solid #86efac", borderRadius: 4, padding: "1px 6px", color: "#166534" }}>
-                          ✓ {t.name}
-                        </span>
-                      ))}
-                    </div>
+                    <div style={{ fontSize: "7.5pt", color: "#333", lineHeight: 1.8 }}>
+                      {taskTypes.filter((t) => (log.task_checks ?? {})[t.id] === true).map((t) => t.name).join(" · ")}
+                    </div> 
                   </div>
                 )}
                 {log.extra_note && (
