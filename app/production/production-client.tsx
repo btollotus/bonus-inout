@@ -664,11 +664,14 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
   const woItems = wo.work_order_items ?? [];
   // "주식회사 트리니티디앤씨" → "트리니티", "주식회사 새라울" → "새라울"
   // "주식회사", "유한회사", "(주)" 등 법인 접두어 제거 후 첫 단어 추출
-  const rawName = wo.client_name ?? "";
-  const stripped = rawName
-    .replace(/^(주식회사|유한회사|합자회사|협동조합|\(주\)|\(유\))\s*/g, "")
-    .trim();
-  const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
+  const rawName = wo.order_type === "재고"
+  ? (wo.product_name ?? "")
+  : (wo.client_name ?? "");
+const stripped = rawName
+  .replace(/^(주식회사|유한회사|합자회사|협동조합|\(주\)|\(유\))\s*/g, "")
+  .replace(/\(.*?\)/g, "")
+  .trim();
+const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
   for (const item of woItems) {
     const name = (item.sub_items ?? [])[0]?.name ?? "";
     if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
