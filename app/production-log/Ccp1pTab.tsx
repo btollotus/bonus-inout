@@ -275,10 +275,11 @@ function PrintOxEmpty() {
 }
 
 // ─────────────────────── Main Tab ───────────────────────
-export function Ccp1pTab({ role, userId, showToast }: {
+export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
   role: UserRole;
   userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
+  initialWoId?: string | null;
 }) {
   const todayKST = () =>
     new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 10);
@@ -370,6 +371,15 @@ export function Ccp1pTab({ role, userId, showToast }: {
     loadWoList();
     loadLogs();
   }, [loadWoList, loadLogs]);
+
+  // URL로 전달된 WO 자동 선택
+  useEffect(() => {
+    if (!initialWoId || loading) return;
+    const wo = woList.find((w) => w.id === initialWoId);
+    if (wo && selectedWoId !== initialWoId) {
+      selectWo(wo);
+    }
+  }, [initialWoId, woList, loading]);
 
 // 변경 후
 function selectWo(wo: WorkOrderItem) {

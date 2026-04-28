@@ -107,7 +107,14 @@ type WorkLog = {
 export default function ProductionLogPage() {
   const [role, setRole] = useState<UserRole>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>("production");
+
+  const searchParams = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search)
+    : null;
+  const initialTab = (searchParams?.get("tab") as Tab) ?? "production";
+  const initialWoId = searchParams?.get("wo") ?? null;
+
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   const isAdmin = role === "ADMIN";
@@ -194,7 +201,7 @@ export default function ProductionLogPage() {
           <Ccp1bTab role={role} userId={userId} showToast={showToast} />
         )}
         {activeTab === "ccp1p" && (
-          <Ccp1pTab role={role} userId={userId} showToast={showToast} />
+          <Ccp1pTab role={role} userId={userId} showToast={showToast} initialWoId={initialWoId} />
         )}
         {activeTab === "other_heating" && (
           <OtherHeatingTab role={role} userId={userId} showToast={showToast} />
