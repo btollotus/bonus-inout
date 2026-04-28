@@ -732,11 +732,11 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
         const todayKst = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
         const { data: ccpEvs } = await supabase
           .from("ccp_wo_events")
-          .select("event_type")
+          .select("event_type, measured_at")
           .eq("work_order_no", selectedWo.work_order_no)
           .gte("measured_at", `${todayKst}T00:00:00+09:00`)
           .lte("measured_at", `${todayKst}T23:59:59+09:00`)
-          .order("measured_at", { ascending: false });
+          .order("measured_at", { ascending: false }); 
 
           const lastEv = (ccpEvs ?? [])[0];
           ccpEndedAt = lastEv?.measured_at ?? null;
