@@ -511,6 +511,13 @@ function ProductionLogTab({ role, userId, showToast }: {
               <input type="date" className={inp} style={{ width: 160 }} value={viewDate}
                 onChange={(e) => setViewDate(e.target.value)} />
             </div>
+            <span className="text-sm font-medium text-slate-700">
+              {(() => {
+                const d = new Date(viewDate + "T00:00:00+09:00");
+                const days = ["일","월","화","수","목","금","토"];
+                return `(${days[d.getDay()]})`;
+              })()}
+            </span>
             <button className={btn} onClick={loadViewLogs}>🔄 조회</button>
             <button className={btnSm} onClick={() => {
               const content = document.getElementById("production-view-print-inner");
@@ -537,7 +544,7 @@ function ProductionLogTab({ role, userId, showToast }: {
         {viewLoading ? (
           <div className={`${card} p-8 text-center text-sm text-slate-400`}>불러오는 중...</div>
         ) : viewLogs.length === 0 ? (
-          <div className={`${card} p-8 text-center text-sm text-slate-400`}>해당 날짜 생산일지가 없습니다.</div>
+          <div className={`${card} p-8 text-center text-sm text-slate-400`}>{(() => { const d = new Date(viewDate + "T00:00:00+09:00"); const days = ["일","월","화","수","목","금","토"]; return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]}) 생산일지가 없습니다.`; })()}</div>
         ) : (
           viewLogs.map((log) => (
             <div key={log.id} className={`${card} p-4`}>
@@ -589,8 +596,12 @@ function ProductionLogTab({ role, userId, showToast }: {
         )}
         <div id="production-view-print-inner" style={{ display: "none" }}> 
           <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
-            <div style={{ textAlign: "center", fontSize: "13pt", fontWeight: "bold", marginBottom: 12 }}>
-              생산일지 — {viewDate}
+          <div style={{ textAlign: "center", fontSize: "13pt", fontWeight: "bold", marginBottom: 12 }}>
+              {(() => {
+                const d = new Date(viewDate + "T00:00:00+09:00");
+                const days = ["일","월","화","수","목","금","토"];
+                return `생산일지 — ${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+              })()}
             </div>
             {viewLogs.map((log) => (
               <div key={log.id} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "10px 14px", marginBottom: 10, pageBreakInside: "avoid" }}>
@@ -599,13 +610,25 @@ function ProductionLogTab({ role, userId, showToast }: {
                   {log.confirmed_at && <span style={{ fontSize: "7pt", color: "#059669", marginLeft: 8 }}>확인완료</span>}
                 </div>
                 {(log.work_order_nos ?? []).length > 0 && (
-                  <div style={{ marginBottom: 5 }}>
+                  <div style={{ marginBottom: 6 }}>
                     <div style={{ fontSize: "7pt", color: "#888", fontWeight: "bold", marginBottom: 2 }}>처리한 작업지시서</div>
                     {(log.work_order_nos ?? []).map((no) => (
                       <div key={no} style={{ fontSize: "8pt", padding: "2px 0", borderBottom: "0.5px solid #f0f0f0" }}>
                         {woInfoMap[no] ? `${woInfoMap[no].client_name} — ${woInfoMap[no].product_name}` : no}
                       </div>
                     ))}
+                  </div>
+                )}
+                {Object.values(log.task_checks ?? {}).some(Boolean) && (
+                  <div style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: "7pt", color: "#888", fontWeight: "bold", marginBottom: 3 }}>업무 체크</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      {taskTypes.filter((t) => (log.task_checks ?? {})[t.id] === true).map((t) => (
+                        <span key={t.id} style={{ fontSize: "7pt", background: "#f0fdf4", border: "0.5px solid #86efac", borderRadius: 4, padding: "1px 6px", color: "#166534" }}>
+                          ✓ {t.name}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {log.extra_note && (
