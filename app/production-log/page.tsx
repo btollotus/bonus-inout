@@ -512,7 +512,24 @@ function ProductionLogTab({ role, userId, showToast }: {
                 onChange={(e) => setViewDate(e.target.value)} />
             </div>
             <button className={btn} onClick={loadViewLogs}>🔄 조회</button>
-            <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+            <button className={btnSm} onClick={() => {
+              const content = document.getElementById("production-view-print-inner");
+              if (!content) return;
+              const win = window.open("", "_blank");
+              if (!win) return;
+              win.document.write(`<!DOCTYPE html><html><head>
+                <meta charset="utf-8">
+                <title>생산일지_${viewDate}</title>
+                <style>
+                  @page { size: A4 portrait; margin: 15mm 20mm; }
+                  body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 9pt; color: #000; }
+                  * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                </style>
+              </head><body>${content.innerHTML}</body></html>`);
+              win.document.close();
+              win.focus();
+              setTimeout(() => { win.print(); }, 400);
+            }}>🖨️ 인쇄</button>
             <button className="ml-auto rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
               onClick={() => setViewMode(false)}>← 작성 모드</button>
           </div>
@@ -570,7 +587,35 @@ function ProductionLogTab({ role, userId, showToast }: {
             </div>
           ))
         )}
-      </div>
+        <div id="production-view-print-inner" style={{ display: "none" }}> 
+          <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
+            <div style={{ textAlign: "center", fontSize: "13pt", fontWeight: "bold", marginBottom: 12 }}>
+              생산일지 — {viewDate}
+            </div>
+            {viewLogs.map((log) => (
+              <div key={log.id} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "10px 14px", marginBottom: 10, pageBreakInside: "avoid" }}>
+                <div style={{ fontSize: "10pt", fontWeight: "bold", marginBottom: 6, paddingBottom: 4, borderBottom: "0.5px solid #ddd" }}>
+                  {log.employee_name}
+                  {log.confirmed_at && <span style={{ fontSize: "7pt", color: "#059669", marginLeft: 8 }}>확인완료</span>}
+                </div>
+                {(log.work_order_nos ?? []).length > 0 && (
+                  <div style={{ marginBottom: 5 }}>
+                    <div style={{ fontSize: "7pt", color: "#888", fontWeight: "bold", marginBottom: 2 }}>처리한 작업지시서</div>
+                    {(log.work_order_nos ?? []).map((no) => (
+                      <div key={no} style={{ fontSize: "8pt", padding: "2px 0", borderBottom: "0.5px solid #f0f0f0" }}>
+                        {woInfoMap[no] ? `${woInfoMap[no].client_name} — ${woInfoMap[no].product_name}` : no}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {log.extra_note && (
+                  <div style={{ fontSize: "8pt" }}><b>기타:</b> {log.extra_note}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+    </div>
     );
   }
 
@@ -685,12 +730,43 @@ function ProductionLogTab({ role, userId, showToast }: {
               <button className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
                 onClick={() => { setViewMode(true); loadViewLogs(); }}>📋 조회</button>
             )}
-            <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+           <button className={btnSm} onClick={() => {
+              const d = new Date(today + "T00:00:00+09:00");
+              const days = ["일","월","화","수","목","금","토"];
+              const dateLabel = `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+              const woHtml = workOrders.map((wo) =>
+                `<div style="font-size:8pt;padding:3px 0;border-bottom:0.5px solid #f0f0f0;">${wo.client_name} — ${wo.product_name}</div>`
+              ).join("");
+              const html = `
+                <div style="font-size:13pt;font-weight:bold;margin-bottom:10px;padding-bottom:6px;border-bottom:1.5px solid #222;">
+                  ${selectedEmployee.name}
+                </div>
+                <div style="border:1px solid #ccc;border-radius:6px;padding:12px 14px;">
+                  <div style="font-size:9pt;font-weight:bold;margin-bottom:8px;padding-bottom:5px;border-bottom:0.5px solid #ddd;">${dateLabel}</div>
+                  ${woHtml ? `<div style="margin-bottom:8px;"><div style="font-size:7pt;color:#888;font-weight:bold;margin-bottom:3px;">처리한 작업지시서</div>${woHtml}</div>` : ""}
+                  ${extraNote ? `<div style="font-size:8pt;margin-top:6px;"><b>기타:</b> ${extraNote}</div>` : ""}
+                </div>
+              `;
+              const win = window.open("", "_blank");
+              if (!win) return;
+              win.document.write(`<!DOCTYPE html><html><head>
+                <meta charset="utf-8">
+                <title>생산일지_${selectedEmployee.name}_${today}</title>
+                <style>
+                  @page { size: A4 portrait; margin: 20mm; }
+                  body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; color: #000; }
+                  * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                </style>
+              </head><body>${html}</body></html>`);
+              win.document.close();
+              win.focus();
+              setTimeout(() => { win.print(); }, 400);
+            }}>🖨️ 인쇄</button>
           </div>
         </div>
       </div>
 
-      {/* 작업지시서 목록 */}
+      {/* 작업지시서 목록 */} 
       <div className={`${card} p-4`}>
         <div className="mb-3 font-semibold text-sm">✅ 오늘 처리한 작업지시서</div>
         {workOrders.length === 0 ? (
