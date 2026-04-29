@@ -2572,21 +2572,19 @@ function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: (
       const isChocBase = foodType.includes("초콜릿중간재");
       const isNeoColor = foodType.includes("네오컬러");
       if (!isChocBase && mold > 0 && qty > 0) {
-        if (isNeoColor) {
+        {
           const cols = (wo as any).mold_cols ?? Math.round(Math.sqrt(mold));
-          let total = qty;
-          while (total - qty < 20) total += cols;
-          const fullSheets = Math.floor(total / mold);
-          const remainder = total % mold;
-          const extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
+          const fullSheets = Math.floor(qty / mold);
+          const remainder = qty % mold;
+          let extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
+          let total = fullSheets * mold + extraRows * cols;
+          if (total - qty < 16) {
+            extraRows += 1;
+            total += cols;
+          }
           init[item.id] = extraRows > 0
-            ? `전사지: ${fullSheets}장 ${extraRows}줄  참고: ${total.toLocaleString("ko-KR")}개`
-            : `전사지: ${fullSheets}장  참고: ${total.toLocaleString("ko-KR")}개`;
-        } else {
-          let total = qty;
-          while (total - qty < 20) total += mold;
-          const sheets = Math.floor(total / mold);
-          init[item.id] = `전사지: ${sheets}장  참고: ${total.toLocaleString("ko-KR")}개`;
+            ? `전사지: ${fullSheets}장 ${extraRows}줄 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`
+            : `전사지: ${fullSheets}장 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`;
         }
         const needsLabel = (wo.packaging_type ?? "").includes("벌크");
         if (needsLabel) {
