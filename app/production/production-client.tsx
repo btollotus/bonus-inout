@@ -299,6 +299,7 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
   const [kPackageUnit, setKPackageUnit] = useState("100ea");
   const [kMoldCols, setKMoldCols] = useState("");
 const [kMoldRows, setKMoldRows] = useState("");
+  const [kUnitWeight, setKUnitWeight] = useState("");
   const [kNote, setKNote] = useState("");
   const [kReferenceNote, setKReferenceNote] = useState("");
   const [kActualQty, setKActualQty] = useState("");
@@ -353,7 +354,7 @@ const [kMoldRows, setKMoldRows] = useState("");
 
   const resetKiseongForm = () => {
     setIsKiseongForm(false); setKiseongSearch(""); setKiseongSelected(null);
-    setKSubName(""); setKFoodType(""); setKLogoSpec(""); setKThickness("3mm"); setKPackagingType("트레이-정사각20구"); setKPackageUnit("100ea"); setKMoldCols(""); setKMoldRows(""); setKNote(""); setKReferenceNote(""); setKActualQty("");
+    setKSubName(""); setKFoodType(""); setKLogoSpec(""); setKThickness("3mm"); setKPackagingType("트레이-정사각20구"); setKPackageUnit("100ea"); setKMoldCols(""); setKMoldRows(""); setKNote(""); setKReferenceNote(""); setKActualQty(""); setKUnitWeight("");
   };
 
   const saveKiseongOrder = async () => {
@@ -380,7 +381,7 @@ const [kMoldRows, setKMoldRows] = useState("");
 
       const { data: wo, error: woErr } = await supabase.from("work_orders").insert({ work_order_no: workOrderNo, barcode_no: kiseongSelected.barcode, client_id: null, client_name: "재고생산", sub_name: kSubName.trim() || null, order_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, food_type: kFoodType.trim() || null, product_name: kiseongSelected.product_name, logo_spec: kLogoSpec.trim() || null, thickness: kThickness || null, delivery_method: null, packaging_type: kPackagingType || null, tray_slot: null, package_unit: kPackageUnit || null, mold_per_sheet: kMoldPerSheetNum > 0 ? kMoldPerSheetNum : null, mold_cols: kMoldColsNum > 0 ? kMoldColsNum : null, mold_rows: kMoldRowsNum > 0 ? kMoldRowsNum : null, note: kNote.trim() || null, reference_note: kReferenceNote.trim() || null, status: "생산중", variant_id: kiseongSelected.variant_id, order_type: "재고" }).select("id").single();
       if (woErr) throw woErr;
-      const { error: itemErr } = await supabase.from("work_order_items").insert({ work_order_id: wo.id, delivery_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, sub_items: [{ name: kiseongSelected.product_name, qty: toInt(kActualQty) }], order_qty: toInt(kActualQty), barcode_no: kiseongSelected.barcode, actual_qty: toInt(kActualQty), unit_weight: kiseongSelected.weight_g ?? null, expiry_date: null });
+      const { error: itemErr } = await supabase.from("work_order_items").insert({ work_order_id: wo.id, delivery_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, sub_items: [{ name: kiseongSelected.product_name, qty: toInt(kActualQty) }], order_qty: toInt(kActualQty), barcode_no: kiseongSelected.barcode, actual_qty: toInt(kActualQty), unit_weight: kUnitWeight ? toNum(kUnitWeight) : (kiseongSelected.weight_g ?? null), expiry_date: null });
       if (itemErr) throw itemErr;
       showToast("✅ 재고 작업지시서가 등록되었습니다!"); resetKiseongForm(); await loadWoList();
     } catch (e: any) { setMsg("저장 오류: " + (e?.message ?? e)); } finally { setKiseongSaving(false); }
@@ -1221,7 +1222,8 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
                     </div>
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 mb-4">
                       <div className="mb-3 text-sm font-semibold text-emerald-700">🏭 생산 정보 (매번 입력)</div>
-                      <div><div className="mb-1 text-xs text-slate-600">생산수량 *</div><input className={inpR} inputMode="numeric" placeholder="예: 3000" value={kActualQty} onChange={(e) => setKActualQty(e.target.value.replace(/[^\d]/g, ""))} /><div className="mt-2 text-xs text-slate-400">※ 소비기한은 생산완료 처리 시 입력합니다.</div></div>
+                      <div><div className="mb-1 text-xs text-slate-600">생산수량 *</div><input className={inpR} inputMode="numeric" placeholder="예: 3000" value={kActualQty} onChange={(e) => setKActualQty(e.target.value.replace(/[^\d]/g, ""))} /></div>
+                      <div><div className="mb-1 text-xs text-slate-600">개당 중량 (g)</div><input className={inpR} inputMode="decimal" placeholder="예: 3" value={kUnitWeight} onChange={(e) => setKUnitWeight(e.target.value.replace(/[^\d.]/g, ""))} /><div className="mt-2 text-xs text-slate-400">※ 소비기한은 생산완료 처리 시 입력합니다.</div></div>
                     </div>
                     <button className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60" disabled={kiseongSaving} onClick={saveKiseongOrder}>{kiseongSaving ? "저장 중..." : "📦 재고 작업지시서 등록"}</button>
                   </>
