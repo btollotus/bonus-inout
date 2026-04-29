@@ -71,8 +71,8 @@ export default function AttendanceAdminClient() {
   function buildSummaries(records: AttendanceRecord[], targetDate: string): DailySummary[] {
     return employees.map(emp => {
       const empRecords = records.filter(r => {
-        const kst = new Date(r.happened_at).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" });
-        return r.employee_id === emp.id && kst.startsWith(targetDate);
+        const kst = new Date(r.happened_at).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 10);
+        return r.employee_id === emp.id && kst === targetDate;
       });
       return {
         employeeId:   emp.id,
