@@ -310,12 +310,16 @@ const [kMoldRows, setKMoldRows] = useState("");
     if (foodType.includes("초콜릿중간재")) return "";
     const fullSheets = Math.floor(qty / mold);
     const remainder = qty % mold;
-    const extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
-    const total = fullSheets * mold + extraRows * cols;
-    if (extraRows > 0) {
-      return `전사지: ${fullSheets}장 ${extraRows}줄  참고: ${total.toLocaleString("ko-KR")}개`;
+    let extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
+    let total = fullSheets * mold + extraRows * cols;
+    if (total - qty < 16) {
+      extraRows += 1;
+      total += cols;
     }
-    return `전사지: ${fullSheets}장  참고: ${total.toLocaleString("ko-KR")}개`;
+    if (extraRows > 0) {
+      return `전사지: ${fullSheets}장 ${extraRows}줄 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`;
+    }
+    return `전사지: ${fullSheets}장 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`;
   }
 
   useEffect(() => {
