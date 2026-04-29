@@ -822,7 +822,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
     await doComplete(false);
   }
 
-  async function doComplete(navigate: boolean) {
+  async function doComplete(navigate: boolean, ccpEndedAt?: string | null) {
     if (!selectedWo) return;
     const foodCat = getFoodCategory(selectedWo.food_type);
     const isChuganJae = foodCat === "중간재";
@@ -902,7 +902,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
           if (transferErr) stockErrors.push("전사지 차감 실패: " + transferErr.message);
           await supabase.from("work_order_items").update({ transfer_lot_id: pi.transfer_lot_id, transfer_qty: transferQty }).eq("id", item.id);
         }
-        const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+        const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, updated_at: ccpEndedAt ?? new Date().toISOString() }).eq("id", selectedWo.id);
         if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
         if (stockErrors.length > 0) showToast("⚠️ 저장됐으나 전사지 차감 오류: " + stockErrors.join(" / "), "error");
         else showToast("✅ 생산완료 처리 완료!");
@@ -963,7 +963,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
           onClick={async () => {
             setShowCompleteModal(false);
             setIsCompleting(true);
-            await doComplete(true);
+            await doComplete(true, ccpEndedAt);
           }}
         >🧲 생산완료+CCP-1P 이동</button>
         <button
@@ -971,7 +971,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
           onClick={async () => {
             setShowCompleteModal(false);
             setIsCompleting(true);
-            await doComplete(false);
+            await doComplete(false, ccpEndedAt);
           }}
         >✅ 생산완료</button>
         <button
