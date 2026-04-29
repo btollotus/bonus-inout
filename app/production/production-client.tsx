@@ -221,7 +221,7 @@ export default function ProductionClient() {
   const [isCompleting, setIsCompleting] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completeModalWoId, setCompleteModalWoId] = useState<string | null>(null);
-  const [completeCcpEndedAt, setCompleteCcpEndedAt] = useState<string | null>(null);
+  const completeCcpEndedAtRef = useRef<string | null>(null);
   const [productionCount, setProductionCount] = useState(0);
   const [sortBy, setSortBy] = useState<"created_at" | "delivery_date">("created_at");
   const [filterStatus, setFilterStatus] = useState<"전체" | "생산중" | "완료">("생산중");
@@ -816,7 +816,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
     } else {
       // 다크/화이트는 커스텀 모달
       setCompleteModalWoId(selectedWo.id);
-      setCompleteCcpEndedAt(ccpEndedAt);
+      completeCcpEndedAtRef.current = ccpEndedAt;
       setShowCompleteModal(true);
       setIsCompleting(false);
       return; 
@@ -965,7 +965,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
           onClick={async () => {
             setShowCompleteModal(false);
             setIsCompleting(true);
-            await doComplete(true, completeCcpEndedAt);
+            await doComplete(true, completeCcpEndedAtRef.current);
           }}
         >🧲 생산완료+CCP-1P 이동</button>
         <button
@@ -973,7 +973,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
           onClick={async () => {
             setShowCompleteModal(false);
             setIsCompleting(true);
-            await doComplete(false, completeCcpEndedAt);
+            await doComplete(false, completeCcpEndedAtRef.current);
           }}
         >✅ 생산완료</button>
         <button
