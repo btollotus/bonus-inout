@@ -56,7 +56,11 @@ export default function AttendanceAdminClient() {
 
   useEffect(() => {
     if (employees.length > 0) load();
-  }, [viewMode, date, rangeFrom, rangeTo, month, employees]);
+  }, [employees]);
+
+  useEffect(() => {
+    if (employees.length > 0) load();
+  }, [viewMode, date, rangeFrom, rangeTo, month]);
 
   async function fetchRecords(from: string, to: string): Promise<AttendanceRecord[]> {
     const { data } = await supabase
