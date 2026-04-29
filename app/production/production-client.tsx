@@ -345,10 +345,11 @@ const [kMoldRows, setKMoldRows] = useState("");
   const handleKiseongVariantSelect = async (variant: KiseongVariant) => {
     setKiseongSelected(variant);
     setKFoodType(variant.food_type ?? "");
-    const { data, error } = await supabase.from("work_orders").select("sub_name, food_type, logo_spec, thickness, packaging_type, tray_slot, package_unit, mold_per_sheet, mold_cols, mold_rows, note, reference_note").eq("variant_id", variant.variant_id).eq("order_type", "재고").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const { data, error } = await supabase.from("work_orders").select("sub_name, food_type, logo_spec, thickness, packaging_type, tray_slot, package_unit, mold_per_sheet, mold_cols, mold_rows, note, reference_note, work_order_items(unit_weight)").eq("variant_id", variant.variant_id).eq("order_type", "재고").order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (!error && data) {
-      setKSubName(data.sub_name ?? ""); setKFoodType(data.food_type ?? variant.food_type ?? ""); setKLogoSpec(data.logo_spec ?? ""); setKThickness(data.thickness ?? "3mm"); setKPackagingType(data.packaging_type ?? "트레이-정사각20구"); setKPackageUnit(data.package_unit ?? "100ea"); setKMoldCols(data.mold_cols ? String(data.mold_cols) : ""); setKMoldRows(data.mold_rows ? String(data.mold_rows) : ""); setKNote(data.note ?? ""); setKReferenceNote(data.reference_note ?? "");
-    } else { setKSubName(""); setKLogoSpec(""); setKThickness("3mm"); setKPackagingType("트레이-정사각20구"); setKPackageUnit("100ea"); setKMoldCols(""); setKMoldRows(""); setKNote(""); setKReferenceNote(""); } 
+      setKSubName(data.sub_name ?? ""); setKFoodType(data.food_type ?? variant.food_type ?? ""); setKLogoSpec(data.logo_spec ?? ""); setKThickness(data.thickness ?? "3mm"); setKPackagingType(data.packaging_type ?? "트레이-정사각20구"); setKPackageUnit(data.package_unit ?? "100ea"); setKMoldCols(data.mold_cols ? String(data.mold_cols) : ""); setKMoldRows(data.mold_rows ? String(data.mold_rows) : ""); const prevUnitWeight = (data as any).work_order_items?.[0]?.unit_weight;
+      setKUnitWeight(prevUnitWeight ? String(prevUnitWeight) : ""); setKNote(data.note ?? ""); setKReferenceNote(data.reference_note ?? "");
+    } else { setKSubName(""); setKLogoSpec(""); setKThickness("3mm"); setKPackagingType("트레이-정사각20구"); setKPackageUnit("100ea"); setKMoldCols(""); setKMoldRows(""); setKUnitWeight(""); setKNote(""); setKReferenceNote(""); }
     setKActualQty("");
   };
 
@@ -1217,13 +1218,13 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
                           <input className={inpR} inputMode="numeric" placeholder="세로" value={kMoldRows} onChange={(e) => setKMoldRows(e.target.value.replace(/[^\d]/g, ""))} />
                         </div>
                       </div>
+                      <div><div className="mb-1 text-xs text-slate-500">개당 중량 (g)</div><input className={inpR} inputMode="decimal" placeholder="예: 3" value={kUnitWeight} onChange={(e) => setKUnitWeight(e.target.value.replace(/[^\d.]/g, ""))} /></div>
                       <div><div className="mb-1 text-xs text-slate-500 flex items-center justify-between"><span>비고</span>{kMoldCols && kMoldRows && kActualQty && <span className="text-emerald-600 text-[10px] font-medium">✅ 전사지 장수 자동계산</span>}</div><textarea className={`${inp} resize-none`} rows={3} value={kNote} onChange={(e) => setKNote(e.target.value)} placeholder="성형틀+수량 입력 시 자동계산" /></div>
                       <div><div className="mb-1 text-xs text-slate-500">참고사항</div><input className={inp} value={kReferenceNote} onChange={(e) => setKReferenceNote(e.target.value)} /></div>
                     </div>
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 mb-4">
                       <div className="mb-3 text-sm font-semibold text-emerald-700">🏭 생산 정보 (매번 입력)</div>
-                      <div><div className="mb-1 text-xs text-slate-600">생산수량 *</div><input className={inpR} inputMode="numeric" placeholder="예: 3000" value={kActualQty} onChange={(e) => setKActualQty(e.target.value.replace(/[^\d]/g, ""))} /></div>
-                      <div><div className="mb-1 text-xs text-slate-600">개당 중량 (g)</div><input className={inpR} inputMode="decimal" placeholder="예: 3" value={kUnitWeight} onChange={(e) => setKUnitWeight(e.target.value.replace(/[^\d.]/g, ""))} /><div className="mt-2 text-xs text-slate-400">※ 소비기한은 생산완료 처리 시 입력합니다.</div></div>
+                      <div><div className="mb-1 text-xs text-slate-600">생산수량 *</div><input className={inpR} inputMode="numeric" placeholder="예: 3000" value={kActualQty} onChange={(e) => setKActualQty(e.target.value.replace(/[^\d]/g, ""))} /><div className="mt-2 text-xs text-slate-400">※ 소비기한은 생산완료 처리 시 입력합니다.</div></div> 
                     </div>
                     <button className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60" disabled={kiseongSaving} onClick={saveKiseongOrder}>{kiseongSaving ? "저장 중..." : "📦 재고 작업지시서 등록"}</button>
                   </>
