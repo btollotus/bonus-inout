@@ -242,6 +242,8 @@ const [hasMore, setHasMore] = useState(false);
   const [eTraySlot, setETraySlot] = useState("정사각20구");
   const [ePackageUnit, setEPackageUnit] = useState("100ea");
   const [eMoldPerSheet, setEMoldPerSheet] = useState("");
+  const [eMoldCols, setEMoldCols] = useState("");
+  const [eMoldRows, setEMoldRows] = useState("");
   const [eNote, setENote] = useState("");
   const [eReferenceNote, setEReferenceNote] = useState("");
   const [woChecks, setWoChecks] = useState<WoChecks | null>(null);
@@ -294,37 +296,41 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
   const [kThickness, setKThickness] = useState("3mm");
   const [kPackagingType, setKPackagingType] = useState("트레이-정사각20구");
   const [kPackageUnit, setKPackageUnit] = useState("100ea");
-  const [kMoldPerSheet, setKMoldPerSheet] = useState("");
+  const [kMoldCols, setKMoldCols] = useState("");
+const [kMoldRows, setKMoldRows] = useState("");
   const [kNote, setKNote] = useState("");
   const [kReferenceNote, setKReferenceNote] = useState("");
   const [kActualQty, setKActualQty] = useState("");
 
-  function calcKiseongNote(foodType: string, qty: number, mold: number): string {
+  function calcKiseongNote(foodType: string, qty: number, cols: number, rows: number): string {
+    const mold = cols * rows;
     if (!mold || mold <= 0 || !qty || qty <= 0) return "";
     if (foodType.includes("초콜릿중간재")) return "";
     const isNeoColor = foodType.includes("네오컬러");
     if (isNeoColor) {
-      const perRow = mold === 108 ? 9 : mold === 88 ? 8 : mold === 66 ? 6 : mold === 63 ? 7 : Math.round(Math.sqrt(mold));
-      const buffer = mold === 63 ? 10 : 20;
-      const totalNeeded = qty + buffer;
-      const sheets = totalNeeded / mold;
-      const fullSheets = Math.floor(sheets);
-      const remainder = sheets - fullSheets;
-      const extraRows = remainder > 0 ? Math.ceil(remainder * mold / perRow) : 0;
-      const totalProduced = (fullSheets * mold) + (extraRows * perRow);
-      return extraRows > 0 ? `전사지: ${fullSheets}장 ${extraRows}줄  참고: ${totalProduced.toLocaleString("ko-KR")}개` : `전사지: ${fullSheets}장  참고: ${(fullSheets * mold).toLocaleString("ko-KR")}개`;
+      let total = qty;
+      while (total - qty < 20) total += cols;
+      const fullSheets = Math.floor(total / mold);
+      const remainder = total % mold;
+      const extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
+      return extraRows > 0
+        ? `전사지: ${fullSheets}장 ${extraRows}줄  참고: ${total.toLocaleString("ko-KR")}개`
+        : `전사지: ${fullSheets}장  참고: ${total.toLocaleString("ko-KR")}개`;
     } else {
-      const sheets2 = Math.ceil(qty / mold);
-      return `전사지: ${sheets2}장  참고: ${(sheets2 * mold).toLocaleString("ko-KR")}개`;
+      let total = qty;
+      while (total - qty < 20) total += mold;
+      const sheets = Math.floor(total / mold);
+      return `전사지: ${sheets}장  참고: ${total.toLocaleString("ko-KR")}개`;
     }
   }
 
   useEffect(() => {
-    const mold = parseInt(kMoldPerSheet || "0", 10);
+    const cols = parseInt(kMoldCols || "0", 10);
+    const rows = parseInt(kMoldRows || "0", 10);
     const qty = parseInt(kActualQty || "0", 10);
-    const auto = calcKiseongNote(kFoodType, qty, mold);
+    const auto = calcKiseongNote(kFoodType, qty, cols, rows);
     if (auto) setKNote(auto);
-  }, [kMoldPerSheet, kActualQty, kFoodType]); // eslint-disable-line
+  }, [kMoldCols, kMoldRows, kActualQty, kFoodType]); // eslint-disable-line
 
   useEffect(() => {
     (async () => {
@@ -337,22 +343,31 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
   const handleKiseongVariantSelect = async (variant: KiseongVariant) => {
     setKiseongSelected(variant);
     setKFoodType(variant.food_type ?? "");
-    const { data, error } = await supabase.from("work_orders").select("sub_name, food_type, logo_spec, thickness, packaging_type, tray_slot, package_unit, mold_per_sheet, note, reference_note").eq("variant_id", variant.variant_id).eq("order_type", "재고").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const { data, error } = await supabase.from("work_orders").select("sub_name, food_type, logo_spec, thickness, packaging_type, tray_slot, package_unit, mold_per_sheet, mold_cols, mold_rows, note, reference_note").eq("variant_id", variant.variant_id).eq("order_type", "재고").order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (!error && data) {
-      setKSubName(data.sub_name ?? ""); setKFoodType(data.food_type ?? variant.food_type ?? ""); setKLogoSpec(data.logo_spec ?? ""); setKThickness(data.thickness ?? "3mm"); setKPackagingType(data.packaging_type ?? "트레이-정사각20구"); setKPackageUnit(data.package_unit ?? "100ea"); setKMoldPerSheet(data.mold_per_sheet ? String(data.mold_per_sheet) : ""); setKNote(data.note ?? ""); setKReferenceNote(data.reference_note ?? "");
-    } else { setKSubName(""); setKLogoSpec(""); setKThickness("3mm"); setKPackagingType("트레이-정사각20구"); setKPackageUnit("100ea"); setKMoldPerSheet(""); setKNote(""); setKReferenceNote(""); }
+      setKSubName(data.sub_name ?? ""); setKFoodType(data.food_type ?? variant.food_type ?? ""); setKLogoSpec(data.logo_spec ?? ""); setKThickness(data.thickness ?? "3mm"); setKPackagingType(data.packaging_type ?? "트레이-정사각20구"); setKPackageUnit(data.package_unit ?? "100ea"); setKMoldCols(data.mold_cols ? String(data.mold_cols) : ""); setKMoldRows(data.mold_rows ? String(data.mold_rows) : ""); setKNote(data.note ?? ""); setKReferenceNote(data.reference_note ?? "");
+    } else { setKSubName(""); setKLogoSpec(""); setKThickness("3mm"); setKPackagingType("트레이-정사각20구"); setKPackageUnit("100ea"); setKMoldCols(""); setKMoldRows(""); setKNote(""); setKReferenceNote(""); } 
     setKActualQty("");
   };
 
   const resetKiseongForm = () => {
     setIsKiseongForm(false); setKiseongSearch(""); setKiseongSelected(null);
-    setKSubName(""); setKFoodType(""); setKLogoSpec(""); setKThickness("3mm"); setKPackagingType("트레이-정사각20구"); setKPackageUnit("100ea"); setKMoldPerSheet(""); setKNote(""); setKReferenceNote(""); setKActualQty("");
+    setKSubName(""); setKFoodType(""); setKLogoSpec(""); setKThickness("3mm"); setKPackagingType("트레이-정사각20구"); setKPackageUnit("100ea"); setKMoldCols(""); setKMoldRows(""); setKNote(""); setKReferenceNote(""); setKActualQty("");
   };
 
   const saveKiseongOrder = async () => {
     if (!kiseongSelected) return setMsg("제품을 선택하세요.");
     if (!kActualQty || toInt(kActualQty) < 1) return setMsg("생산수량을 입력하세요.");
     if (!kFoodType.trim()) return setMsg("식품유형을 입력하세요.");
+    const foodCatK = getFoodCategory(kFoodType);
+    if (foodCatK !== "중간재") {
+      if (!kLogoSpec.trim()) return setMsg("규격(로고스펙)을 입력하세요.");
+      if (!kMoldCols || !kMoldRows || toInt(kMoldCols) < 1 || toInt(kMoldRows) < 1)
+        return setMsg("성형틀 가로/세로 열수를 입력하세요.");
+    }
+    const kMoldColsNum = toInt(kMoldCols);
+    const kMoldRowsNum = toInt(kMoldRows);
+    const kMoldPerSheetNum = kMoldColsNum * kMoldRowsNum;
     setKiseongSaving(true); setMsg(null);
     try {
       const todayKSTStr = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
@@ -362,7 +377,7 @@ const [pinProgressPending, setPinProgressPending] = useState<((name: string) => 
       if (woNoErr3 || !newWoNo3) throw new Error("작업지시서 번호 생성 실패: " + (woNoErr3?.message ?? ""));
       const workOrderNo = newWoNo3;
 
-      const { data: wo, error: woErr } = await supabase.from("work_orders").insert({ work_order_no: workOrderNo, barcode_no: kiseongSelected.barcode, client_id: null, client_name: "재고생산", sub_name: kSubName.trim() || null, order_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, food_type: kFoodType.trim() || null, product_name: kiseongSelected.product_name, logo_spec: kLogoSpec.trim() || null, thickness: kThickness || null, delivery_method: null, packaging_type: kPackagingType || null, tray_slot: null, package_unit: kPackageUnit || null, mold_per_sheet: kMoldPerSheet ? Number(kMoldPerSheet) : null, note: kNote.trim() || null, reference_note: kReferenceNote.trim() || null, status: "생산중", variant_id: kiseongSelected.variant_id, order_type: "재고" }).select("id").single();
+      const { data: wo, error: woErr } = await supabase.from("work_orders").insert({ work_order_no: workOrderNo, barcode_no: kiseongSelected.barcode, client_id: null, client_name: "재고생산", sub_name: kSubName.trim() || null, order_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, food_type: kFoodType.trim() || null, product_name: kiseongSelected.product_name, logo_spec: kLogoSpec.trim() || null, thickness: kThickness || null, delivery_method: null, packaging_type: kPackagingType || null, tray_slot: null, package_unit: kPackageUnit || null, mold_per_sheet: kMoldPerSheetNum > 0 ? kMoldPerSheetNum : null, mold_cols: kMoldColsNum > 0 ? kMoldColsNum : null, mold_rows: kMoldRowsNum > 0 ? kMoldRowsNum : null, note: kNote.trim() || null, reference_note: kReferenceNote.trim() || null, status: "생산중", variant_id: kiseongSelected.variant_id, order_type: "재고" }).select("id").single();
       if (woErr) throw woErr;
       const { error: itemErr } = await supabase.from("work_order_items").insert({ work_order_id: wo.id, delivery_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, sub_items: [{ name: kiseongSelected.product_name, qty: toInt(kActualQty) }], order_qty: toInt(kActualQty), barcode_no: kiseongSelected.barcode, actual_qty: toInt(kActualQty), unit_weight: kiseongSelected.weight_g ?? null, expiry_date: null });
       if (itemErr) throw itemErr;
@@ -623,7 +638,9 @@ const channel = supabase
       const count = visibleItems.length;
       setEProductName(count > 1 ? `${firstName} 외 ${count - 1}건` : firstName);
     }
-    setEFoodType(wo.food_type ?? ""); setELogoSpec(wo.logo_spec ?? ""); setEThickness(wo.thickness ?? "2mm"); setEDeliveryMethod(wo.delivery_method ?? "택배"); setEPackagingType(wo.packaging_type ?? "트레이"); setETraySlot(wo.tray_slot ?? "정사각20구"); setEPackageUnit(wo.package_unit ?? "100ea"); setEMoldPerSheet(wo.mold_per_sheet ? String(wo.mold_per_sheet) : ""); setENote(wo.note ?? ""); setEReferenceNote(wo.reference_note ?? ""); setECcpSlotId(wo.ccp_slot_id ?? "");
+    setEFoodType(wo.food_type ?? ""); setELogoSpec(wo.logo_spec ?? ""); setEThickness(wo.thickness ?? "2mm"); setEDeliveryMethod(wo.delivery_method ?? "택배"); setEPackagingType(wo.packaging_type ?? "트레이"); setETraySlot(wo.tray_slot ?? "정사각20구"); setEPackageUnit(wo.package_unit ?? "100ea"); setEMoldPerSheet(wo.mold_per_sheet ? String(wo.mold_per_sheet) : "");
+    setEMoldCols((wo as any).mold_cols ? String((wo as any).mold_cols) : "");
+    setEMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : ""); setENote(wo.note ?? ""); setEReferenceNote(wo.reference_note ?? ""); setECcpSlotId(wo.ccp_slot_id ?? "");
     setWoChecks({ status_transfer: wo.status_transfer, status_print_check: wo.status_print_check, status_production: wo.status_production, status_input: wo.status_input, assignee_transfer: (wo as any).assignee_transfer ?? "", assignee_print_check: (wo as any).assignee_print_check ?? "", assignee_production: (wo as any).assignee_production ?? "", assignee_input: (wo as any).assignee_input ?? "" });
     setLastUpdatedAt(null); setFlashKey(null); setSignedImageUrls([]);
     const userId = currentUserIdRef.current;
@@ -817,7 +834,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
     try {
       if (isAdminOrSubadmin) {
         const { error: basicErr } = await supabase.from("work_orders").update({ sub_name: eSubName.trim() || null, product_name: eProductName.trim(), food_type: eFoodType.trim() || null, logo_spec: eLogoSpec.trim() || null, thickness: eThickness || null, delivery_method: eDeliveryMethod || null, packaging_type: ePackagingType === "트레이" ? `트레이-${eTraySlot}` : ePackagingType || null,
-        tray_slot: null, package_unit: ePackageUnit || null, mold_per_sheet: eMoldPerSheet ? Number(eMoldPerSheet) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+        tray_slot: null, package_unit: ePackageUnit || null, mold_per_sheet: (toInt(eMoldCols) * toInt(eMoldRows)) > 0 ? toInt(eMoldCols) * toInt(eMoldRows) : null, mold_cols: toInt(eMoldCols) > 0 ? toInt(eMoldCols) : null, mold_rows: toInt(eMoldRows) > 0 ? toInt(eMoldRows) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
         if (basicErr) { setMsg("기본정보 저장 실패: " + basicErr.message); setIsCompleting(false); return; }
       }
       if (woChecks) {
@@ -1183,7 +1200,19 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
                       <div><div className="mb-1 text-xs text-slate-500">두께</div><select className={inp} value={kThickness} onChange={(e) => setKThickness(e.target.value)}>{["2mm","3mm","5mm","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
                       <div><div className="mb-1 text-xs text-slate-500">포장방법</div><select className={inp} value={kPackagingType} onChange={(e) => setKPackagingType(e.target.value)}>{["트레이-정사각20구","트레이-직사각20구","트레이-35구","벌크"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
                       <div><div className="mb-1 text-xs text-slate-500">포장단위</div><select className={inp} value={kPackageUnit} onChange={(e) => setKPackageUnit(e.target.value)}>{["100ea","200ea","300ea","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
-                      <div><div className="mb-1 text-xs text-slate-500">성형틀 장당 생산수</div><input className={inpR} inputMode="numeric" value={kMoldPerSheet} onChange={(e) => setKMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} /></div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">
+                          성형틀 열수 (가로 × 세로)
+                          {kMoldCols && kMoldRows && toInt(kMoldCols) > 0 && toInt(kMoldRows) > 0 && (
+                            <span className="ml-2 font-semibold text-blue-600">= {toInt(kMoldCols) * toInt(kMoldRows)}개/장</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input className={inpR} inputMode="numeric" placeholder="가로" value={kMoldCols} onChange={(e) => setKMoldCols(e.target.value.replace(/[^\d]/g, ""))} />
+                          <span className="shrink-0 font-bold text-slate-400">×</span>
+                          <input className={inpR} inputMode="numeric" placeholder="세로" value={kMoldRows} onChange={(e) => setKMoldRows(e.target.value.replace(/[^\d]/g, ""))} />
+                        </div>
+                      </div>
                       <div><div className="mb-1 text-xs text-slate-500 flex items-center justify-between"><span>비고</span>{kMoldPerSheet && kActualQty && <span className="text-emerald-600 text-[10px] font-medium">✅ 전사지 장수 자동계산</span>}</div><textarea className={`${inp} resize-none`} rows={3} value={kNote} onChange={(e) => setKNote(e.target.value)} placeholder="성형틀+수량 입력 시 자동계산" /></div>  
                       <div><div className="mb-1 text-xs text-slate-500">참고사항</div><input className={inp} value={kReferenceNote} onChange={(e) => setKReferenceNote(e.target.value)} /></div>
                     </div>
@@ -1237,7 +1266,19 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
                     <div><div className="mb-1 text-xs text-slate-500">포장방법</div><select className={inp} value={ePackagingType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEPackagingType(e.target.value)}>{["트레이-정사각20구","트레이-직사각20구","트레이-35구","벌크"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
                     {ePackagingType === "트레이" ? <div><div className="mb-1 text-xs text-slate-500">트레이 구수</div><select className={inp} value={eTraySlot} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setETraySlot(e.target.value)}>{["정사각20구","직사각20구","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div> : null}
                     <div><div className="mb-1 text-xs text-slate-500">포장단위</div><select className={inp} value={ePackageUnit} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEPackageUnit(e.target.value)}>{["100ea","200ea","300ea","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
-                    <div><div className="mb-1 text-xs text-slate-500">성형틀 장당 생산수</div><input className={inpR} inputMode="numeric" value={eMoldPerSheet} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldPerSheet(e.target.value.replace(/[^\d]/g, ""))} /></div>
+                    <div>
+                      <div className="mb-1 text-xs text-slate-500">
+                        성형틀 열수 (가로 × 세로)
+                        {eMoldCols && eMoldRows && toInt(eMoldCols) > 0 && toInt(eMoldRows) > 0 && (
+                          <span className="ml-2 font-semibold text-blue-600">= {toInt(eMoldCols) * toInt(eMoldRows)}개/장</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input className={inpR} inputMode="numeric" placeholder="가로" value={eMoldCols} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldCols(e.target.value.replace(/[^\d]/g, ""))} />
+                        <span className="shrink-0 font-bold text-slate-400">×</span>
+                        <input className={inpR} inputMode="numeric" placeholder="세로" value={eMoldRows} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldRows(e.target.value.replace(/[^\d]/g, ""))} />
+                      </div>
+                    </div>
                     <div><div className="mb-1 text-xs text-slate-500">비고</div><textarea className={`${inp} resize-none`} rows={3} value={eNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setENote(e.target.value)} /></div>
                     <div><div className="mb-1 text-xs text-slate-500">참고사항</div><input className={inp} value={eReferenceNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEReferenceNote(e.target.value)} /></div>
                   </div>
@@ -1534,7 +1575,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
                         try {
                           if (isAdminOrSubadmin) {
                             const { error } = await supabase.from("work_orders").update({ sub_name: eSubName.trim() || null, product_name: eProductName.trim(), food_type: eFoodType.trim() || null, logo_spec: eLogoSpec.trim() || null, thickness: eThickness || null, delivery_method: eDeliveryMethod || null, packaging_type: ePackagingType === "트레이" ? `트레이-${eTraySlot}` : ePackagingType || null,
-                            tray_slot: null, package_unit: ePackageUnit || null, mold_per_sheet: eMoldPerSheet ? Number(eMoldPerSheet) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+                            tray_slot: null, package_unit: ePackageUnit || null, mold_per_sheet: (toInt(eMoldCols) * toInt(eMoldRows)) > 0 ? toInt(eMoldCols) * toInt(eMoldRows) : null, mold_cols: toInt(eMoldCols) > 0 ? toInt(eMoldCols) : null, mold_rows: toInt(eMoldRows) > 0 ? toInt(eMoldRows) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
                             if (error) { showToast("❌ 수정 실패: " + error.message, "error"); return; }
                           }
                           if (woChecks) {
@@ -1668,21 +1709,21 @@ function WoPrintModal({ wo, onClose, employees }: {
       const isNeoColor = foodType.includes("네오컬러");
       if (!isChocBase && mold > 0 && qty > 0) {
         if (isNeoColor) {
-          const perRow = mold === 108 ? 9 : mold === 88 ? 8 : mold === 66 ? 6 : mold === 63 ? 7 : Math.round(Math.sqrt(mold));
-          const buffer = mold === 63 ? 10 : 20;
-          const totalNeeded = qty + buffer;
-          const sheets = totalNeeded / mold;
-          const fullSheets = Math.floor(sheets);
-          const remainder = sheets - fullSheets;
-          const extraRows = remainder > 0 ? Math.ceil(remainder * mold / perRow) : 0;
-          const totalProduced = (fullSheets * mold) + (extraRows * perRow);
+          const cols = (wo as any).mold_cols ?? Math.round(Math.sqrt(mold));
+          let total = qty;
+          while (total - qty < 20) total += cols;
+          const fullSheets = Math.floor(total / mold);
+          const remainder = total % mold;
+          const extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
           init[item.id] = extraRows > 0
-            ? `전사지: ${fullSheets}장 ${extraRows}줄  참고: ${totalProduced.toLocaleString("ko-KR")}개`
-            : `전사지: ${fullSheets}장  참고: ${(fullSheets * mold).toLocaleString("ko-KR")}개`;
+            ? `전사지: ${fullSheets}장 ${extraRows}줄  참고: ${total.toLocaleString("ko-KR")}개`
+            : `전사지: ${fullSheets}장  참고: ${total.toLocaleString("ko-KR")}개`;
         } else {
-          const sheets2 = Math.ceil(qty / mold);
-          init[item.id] = `전사지: ${sheets2}장  참고: ${(sheets2 * mold).toLocaleString("ko-KR")}개`;
-        }
+          let total = qty;
+          while (total - qty < 20) total += mold;
+          const sheets = Math.floor(total / mold);
+          init[item.id] = `전사지: ${sheets}장  참고: ${total.toLocaleString("ko-KR")}개`;
+        } 
         const needsLabel = (wo.packaging_type ?? "").includes("벌크");
         if (needsLabel) {
           const labelBuffer = mold === 63 ? 10 : 20;
