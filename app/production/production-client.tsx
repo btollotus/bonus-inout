@@ -817,6 +817,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
       // 다크/화이트는 커스텀 모달
       setCompleteModalWoId(selectedWo.id);
       completeCcpEndedAtRef.current = ccpEndedAt;
+      console.log("🔴 ccpEndedAt:", ccpEndedAt, "ref:", completeCcpEndedAtRef.current);
       setShowCompleteModal(true);
       setIsCompleting(false);
       return; 
