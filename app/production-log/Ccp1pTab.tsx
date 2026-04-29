@@ -19,6 +19,7 @@ type WorkOrderItem = {
   product_name: string;
   client_name: string;
   updated_at: string;
+  ccp_end_time?: string | null;
 };
 
 type MetalLog = {
@@ -320,15 +321,34 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
     setLoading(true);
     const { data, error } = await supabase
     .from("work_orders")
-    .select("id, product_name, client_name, updated_at")
+    .select("id, product_name, client_name, updated_at, work_order_no")
     .eq("status_production", true)
     .in("status", ["생산중", "완료"])
     .gte("updated_at", `${selectedDate}T00:00:00+09:00`)
     .lt("updated_at", `${selectedDate}T23:59:59+09:00`)
     .order("updated_at", { ascending: true });
 
-    if (error) { showToast("조회 실패: " + error.message, "error"); setLoading(false); return; }
-    setWoList((data ?? []) as WorkOrderItem[]);
+    // CCP 종료 시각 조회
+    const woNos = (data ?? []).map((w: any) => w.work_order_no);
+    let ccpEndMap: Record<string, string> = {};
+    if (woNos.length > 0) {
+      const { data: ccpEvs } = await supabase
+        .from("ccp_wo_events")
+        .select("work_order_no, measured_at")
+        .in("work_order_no", woNos)
+        .eq("event_type", "end")
+        .order("measured_at", { ascending: false });
+      for (const ev of ccpEvs ?? []) {
+        if (!ccpEndMap[ev.work_order_no]) {
+          ccpEndMap[ev.work_order_no] = ev.measured_at;
+        }
+      }
+    }
+    const enriched = (data ?? []).map((w: any) => ({
+      ...w,
+      ccp_end_time: ccpEndMap[w.work_order_no] ?? null,
+    }));
+    setWoList(enriched as WorkOrderItem[]);
     setLoading(false);
   }, [selectedDate]);
 
@@ -883,8 +903,8 @@ function selectWo(wo: WorkOrderItem) {
                 <div className="font-semibold text-sm">{wo.client_name} — {wo.product_name}</div>
                 <div className="mt-1 flex items-center gap-3 text-xs">
                   <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5">
-                    <span className="text-slate-400">생산완료</span>
-                    <span className="font-semibold text-slate-700 tabular-nums">{toKstTime(wo.updated_at)}</span>
+                  <span className="text-slate-400">생산완료</span>
+                  <span className="font-semibold text-slate-700 tabular-nums">{wo.ccp_end_time ? toKstTime(wo.ccp_end_time) : toKstTime(wo.updated_at)}</span> 
                   </span>
                   {hasLog && log?.start_time && (
                     <span className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-0.5">
