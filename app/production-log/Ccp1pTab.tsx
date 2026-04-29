@@ -571,7 +571,6 @@ function selectWo(wo: WorkOrderItem) {
           assignee_input: workerName,
           status_input: true,
           status: "완료",
-          updated_at: new Date().toISOString(),
         }).eq("id", selectedWoId);
 
         if (updateErr) {
