@@ -6,7 +6,7 @@ import AttendanceClient from "@/app/attendance/attendance-client";
 export const metadata: Metadata = { title: "홈 | BONUSMATE ERP" };
 
 export default async function HomePage() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
