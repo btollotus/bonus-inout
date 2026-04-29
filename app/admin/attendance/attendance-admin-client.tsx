@@ -191,6 +191,7 @@ export default function AttendanceAdminClient() {
 
   // 월별 달력 뷰
   function MonthlyCalendar() {
+    console.log("rangeRows:", JSON.stringify(rangeRows.filter(r => r.date === "2026-04-30")));
     const [y, m] = month.split("-").map(Number);
     const firstDow = new Date(y, m - 1, 1).getDay(); // 0=일
     const lastDay  = new Date(y, m, 0).getDate();
