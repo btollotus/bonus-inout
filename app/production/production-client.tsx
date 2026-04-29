@@ -341,7 +341,8 @@ const [kMoldRows, setKMoldRows] = useState("");
     const { data, error } = await supabase.from("work_orders").select("sub_name, food_type, logo_spec, thickness, packaging_type, tray_slot, package_unit, mold_per_sheet, mold_cols, mold_rows, note, reference_note, work_order_items(unit_weight)").eq("variant_id", variant.variant_id).eq("order_type", "재고").order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (!error && data) {
       setKSubName(data.sub_name ?? ""); setKFoodType(data.food_type ?? variant.food_type ?? ""); setKLogoSpec(data.logo_spec ?? ""); setKThickness(data.thickness ?? "3mm"); setKPackagingType(data.packaging_type ?? "트레이-정사각20구"); setKPackageUnit(data.package_unit ?? "100ea"); setKMoldCols(data.mold_cols ? String(data.mold_cols) : ""); setKMoldRows(data.mold_rows ? String(data.mold_rows) : ""); const prevUnitWeight = (data as any).work_order_items?.[0]?.unit_weight;
-      setKUnitWeight(prevUnitWeight ? String(prevUnitWeight) : ""); setKNote(data.note ?? ""); setKReferenceNote(data.reference_note ?? "");
+      setKMoldCols(data.mold_cols ? String(data.mold_cols) : ""); setKMoldRows(data.mold_rows ? String(data.mold_rows) : ""); const prevUnitWeight = (data as any).work_order_items?.[0]?.unit_weight;
+      setKUnitWeight(prevUnitWeight ? String(prevUnitWeight) : ""); setKNote(""); setKReferenceNote(data.reference_note ?? "");
     } else { setKSubName(""); setKLogoSpec(""); setKThickness("3mm"); setKPackagingType("트레이-정사각20구"); setKPackageUnit("100ea"); setKMoldCols(""); setKMoldRows(""); setKUnitWeight(""); setKNote(""); setKReferenceNote(""); }
     setKActualQty("");
   };
