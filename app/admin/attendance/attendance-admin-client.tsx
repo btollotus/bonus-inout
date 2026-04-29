@@ -63,12 +63,13 @@ export default function AttendanceAdminClient() {
   }, [viewMode, date, rangeFrom, rangeTo, month]);
 
   async function fetchRecords(from: string, to: string): Promise<AttendanceRecord[]> {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("attendance")
       .select("id,employee_id,happened_at,type,distance_m")
       .gte("happened_at", `${from}T00:00:00+09:00`)
       .lte("happened_at", `${to}T23:59:59+09:00`)
       .order("happened_at", { ascending: true });
+    console.log("fetchRecords", from, to, "data:", data, "error:", error);
     return (data ?? []) as AttendanceRecord[];
   }
 
