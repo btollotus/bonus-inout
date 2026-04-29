@@ -1213,7 +1213,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
                           <input className={inpR} inputMode="numeric" placeholder="세로" value={kMoldRows} onChange={(e) => setKMoldRows(e.target.value.replace(/[^\d]/g, ""))} />
                         </div>
                       </div>
-                      <div><div className="mb-1 text-xs text-slate-500 flex items-center justify-between"><span>비고</span>{kMoldPerSheet && kActualQty && <span className="text-emerald-600 text-[10px] font-medium">✅ 전사지 장수 자동계산</span>}</div><textarea className={`${inp} resize-none`} rows={3} value={kNote} onChange={(e) => setKNote(e.target.value)} placeholder="성형틀+수량 입력 시 자동계산" /></div>  
+                      <div><div className="mb-1 text-xs text-slate-500 flex items-center justify-between"><span>비고</span>{kMoldCols && kMoldRows && kActualQty && <span className="text-emerald-600 text-[10px] font-medium">✅ 전사지 장수 자동계산</span>}</div><textarea className={`${inp} resize-none`} rows={3} value={kNote} onChange={(e) => setKNote(e.target.value)} placeholder="성형틀+수량 입력 시 자동계산" /></div>
                       <div><div className="mb-1 text-xs text-slate-500">참고사항</div><input className={inp} value={kReferenceNote} onChange={(e) => setKReferenceNote(e.target.value)} /></div>
                     </div>
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 mb-4">
