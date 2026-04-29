@@ -5,8 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import EmployeesPage from "@/app/admin/employees/page";
 import PayrollPage from "@/app/admin/payroll/page";
+import OfficeLocationClient from "@/app/admin/office-location/office-location-client";
 
-type Tab = "EMPLOYEES" | "PAYROLL";
+type Tab = "EMPLOYEES" | "PAYROLL" | "OFFICE";
 
 export default function HRClient() {
   const searchParams = useSearchParams();
@@ -51,6 +52,7 @@ export default function HRClient() {
   const tabs: { key: Tab; label: string }[] = [
     { key: "EMPLOYEES", label: "👤 인사관리" },
     { key: "PAYROLL",   label: "💰 급여관리" },
+    { key: "OFFICE",    label: "📍 회사위치" },
   ];
 
   return (
@@ -111,6 +113,7 @@ export default function HRClient() {
       {/* ── 탭 콘텐츠 ── */}
       {tab === "EMPLOYEES" && <EmployeesPage />}
       {tab === "PAYROLL"   && <PayrollPage />}
+      {tab === "OFFICE"    && <OfficeLocationClient />}
     </>
   );
 }
