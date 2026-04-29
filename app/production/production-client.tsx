@@ -308,28 +308,21 @@ const [kMoldRows, setKMoldRows] = useState("");
     const mold = cols * rows;
     if (!mold || mold <= 0 || !qty || qty <= 0) return "";
     if (foodType.includes("초콜릿중간재")) return "";
-    const isNeoColor = foodType.includes("네오컬러");
-    if (isNeoColor) {
-      let total = qty;
-      while (total - qty < 20) total += cols;
-      const fullSheets = Math.floor(total / mold);
-      const remainder = total % mold;
-      const extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
-      return extraRows > 0
-        ? `전사지: ${fullSheets}장 ${extraRows}줄  참고: ${total.toLocaleString("ko-KR")}개`
-        : `전사지: ${fullSheets}장  참고: ${total.toLocaleString("ko-KR")}개`;
-    } else {
-      let total = qty;
-      while (total - qty < 20) total += mold;
-      const sheets = Math.floor(total / mold);
-      return `전사지: ${sheets}장  참고: ${total.toLocaleString("ko-KR")}개`;
+    const fullSheets = Math.floor(qty / mold);
+    const remainder = qty % mold;
+    const extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
+    const total = fullSheets * mold + extraRows * cols;
+    if (extraRows > 0) {
+      return `전사지: ${fullSheets}장 ${extraRows}줄  참고: ${total.toLocaleString("ko-KR")}개`;
     }
+    return `전사지: ${fullSheets}장  참고: ${total.toLocaleString("ko-KR")}개`;
   }
 
   useEffect(() => {
     const cols = parseInt(kMoldCols || "0", 10);
     const rows = parseInt(kMoldRows || "0", 10);
     const qty = parseInt(kActualQty || "0", 10);
+    if (!qty) return;
     const auto = calcKiseongNote(kFoodType, qty, cols, rows);
     if (auto) setKNote(auto);
   }, [kMoldCols, kMoldRows, kActualQty, kFoodType]); // eslint-disable-line
