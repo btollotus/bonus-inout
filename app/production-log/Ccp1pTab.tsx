@@ -476,7 +476,7 @@ function selectWo(wo: WorkOrderItem) {
       if (woId === selectedWoId) continue;
       if (!log.start_time) continue;
       const otherStart = log.start_time;
-      const otherEnd = log.b_end_time && log.b_end_time.length === 5 ? log.b_end_time : null;
+      const otherEnd = log.b_end_time ? log.b_end_time.slice(0, 5) : null;
       const otherWo = woList.find((w: any) => w.id === woId);
       const otherName = otherWo ? `${otherWo.client_name} — ${otherWo.product_name}` : woId;
 
