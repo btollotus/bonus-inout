@@ -6,8 +6,9 @@ import { createClient } from "@/lib/supabase/browser";
 import EmployeesPage from "@/app/admin/employees/page";
 import PayrollPage from "@/app/admin/payroll/page";
 import OfficeLocationClient from "@/app/admin/office-location/office-location-client";
+import AttendanceAdminClient from "@/app/admin/attendance/attendance-admin-client";
 
-type Tab = "EMPLOYEES" | "PAYROLL" | "OFFICE";
+type Tab = "EMPLOYEES" | "PAYROLL" | "OFFICE" | "ATTENDANCE";
 
 export default function HRClient() {
   const searchParams = useSearchParams();
@@ -53,6 +54,7 @@ export default function HRClient() {
     { key: "EMPLOYEES", label: "👤 인사관리" },
     { key: "PAYROLL",   label: "💰 급여관리" },
     { key: "OFFICE",    label: "📍 회사위치" },
+    { key: "ATTENDANCE",label: "🕐 출퇴근" },
   ];
 
   return (
@@ -114,6 +116,7 @@ export default function HRClient() {
       {tab === "EMPLOYEES" && <EmployeesPage />}
       {tab === "PAYROLL"   && <PayrollPage />}
       {tab === "OFFICE"    && <OfficeLocationClient />}
+      {tab === "ATTENDANCE" && <AttendanceAdminClient />}
     </>
   );
 }

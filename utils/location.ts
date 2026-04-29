@@ -26,7 +26,13 @@ export function getDistanceMeters(
     );
   }
   
-  /** KST 기준 오늘 날짜 문자열 (YYYY-MM-DD) */
+  /** UTC 문자열을 KST 날짜 문자열로 변환 */
+export function utcToKSTDate(utcStr: string): string {
+  const d = new Date(new Date(utcStr).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+/** KST 기준 오늘 날짜 문자열 (YYYY-MM-DD) */
   export function todayKST(): string {
     const d = new Date(
       new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
