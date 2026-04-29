@@ -476,15 +476,27 @@ function selectWo(wo: WorkOrderItem) {
       if (woId === selectedWoId) continue;
       if (!log.start_time) continue;
       const otherStart = log.start_time;
-      const otherEnd = log.b_end_time && log.b_end_time.length === 5 ? log.b_end_time : otherStart;
-      const overlaps = myStart < otherEnd && myEnd > otherStart;
-      if (overlaps) {
-        const otherWo = woList.find((w: any) => w.id === woId);
-        const otherName = otherWo ? `${otherWo.client_name} — ${otherWo.product_name}` : woId;
+      const otherEnd = log.b_end_time && log.b_end_time.length === 5 ? log.b_end_time : null;
+      const otherWo = woList.find((w: any) => w.id === woId);
+      const otherName = otherWo ? `${otherWo.client_name} — ${otherWo.product_name}` : woId;
+
+      // 진행 중인 작업 (종료시간 없음)
+      if (!otherEnd && myStart >= otherStart) {
         return showToast(
-          `시간이 겹칩니다: "${otherName}" (${otherStart}~${otherEnd})\n금속검출기는 1대이므로 시간이 겹칠 수 없습니다.`,
+          `"${otherName}" 작업이 ${otherStart} 시작 후 아직 종료되지 않았습니다. 종료 후 입력해주세요.`,
           "error"
         );
+      }
+
+      // 종료된 작업과 겹침
+      if (otherEnd) {
+        const overlaps = myStart < otherEnd && myEnd > otherStart;
+        if (overlaps) {
+          return showToast(
+            `시간이 겹칩니다: "${otherName}" (${otherStart}~${otherEnd})\n금속검출기는 1대이므로 시간이 겹칠 수 없습니다.`,
+            "error"
+          );
+        }
       }
     }
 
