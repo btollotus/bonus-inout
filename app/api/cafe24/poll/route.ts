@@ -68,8 +68,10 @@ export async function GET() {
 
     const now = new Date().toISOString().replace("T", " ").substring(0, 19);
 
+    const url = `https://${mallId}.cafe24api.com/api/v2/orders?start_date=${encodeURIComponent(since)}&end_date=${encodeURIComponent(now)}&order_status=N20&limit=50`;
+    console.log("[cafe24/poll] request url:", url);
     const ordersRes = await fetch(
-      `https://${mallId}.cafe24api.com/api/v2/orders?start_date=${encodeURIComponent(since)}&end_date=${encodeURIComponent(now)}&order_status=N20&limit=50`,
+      url,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
