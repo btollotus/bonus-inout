@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   console.log("[cafe24/callback] token response:", JSON.stringify(data));
   if (!res.ok) return NextResponse.json({ error: data }, { status: 500 });
 
-  const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
+  const expiresAt = new Date(data.expires_at + "+09:00").toISOString();
 
   await supabase.from("cafe24_tokens").upsert({
     id: 1,

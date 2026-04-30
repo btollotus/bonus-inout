@@ -37,7 +37,7 @@ async function getAccessToken(): Promise<string> {
     const data = await res.json();
     if (!res.ok) throw new Error(`토큰 갱신 실패: ${JSON.stringify(data)}`);
 
-    const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
+    const expiresAt = new Date(data.expires_at + "+09:00").toISOString();
     await supabase.from("cafe24_tokens").upsert({
       id: 1,
       access_token: data.access_token,
