@@ -492,7 +492,7 @@ async function handleAssigneeChange(assigneeKey: keyof WoChecks, statusKey: keyo
 }
 
 // ── 전사지 lot 검색 ──
-async function searchTransferLots(itemId: string, keyword: string) {
+async function searchTransferLots(itemId: string, keyword: string, skipProductionCheck = false) {
   setTransferLotSearch((prev) => ({ ...prev, [itemId]: keyword }));
   setTransferLotSearching((prev) => ({ ...prev, [itemId]: true }));
   const { data: variants } = await supabase
@@ -501,7 +501,9 @@ async function searchTransferLots(itemId: string, keyword: string) {
     .ilike("variant_name", keyword.trim() ? `%${keyword}%` : "%")
     .limit(100);
 
-    const filtered = (variants ?? []).filter((v: any) => (v.products?.food_type ?? "").includes("초콜릿중간재"));
+  const filtered = skipProductionCheck
+    ? (variants ?? [])
+    : (variants ?? []).filter((v: any) => (v.products?.food_type ?? "").includes("초콜릿중간재"));
   if (filtered.length === 0) {
     setTransferLotOptions((prev) => ({ ...prev, [itemId]: [] }));
     setTransferLotSearching((prev) => ({ ...prev, [itemId]: false }));
@@ -697,7 +699,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
   for (const item of woItems) {
     const name = (item.sub_items ?? [])[0]?.name ?? "";
     if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
-    if (!item.transfer_lot_id) searchTransferLots(item.id, clientKeyword);
+    if (!item.transfer_lot_id) searchTransferLots(item.id, clientKeyword, !!wo.skip_production_check);
   }
 }
   }
