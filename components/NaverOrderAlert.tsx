@@ -26,26 +26,9 @@ export default function NaverOrderAlert() {
 
   const playBeep = async () => {
     try {
-      if (!audioCtxRef.current) return;
-      const ctx = audioCtxRef.current;
-      if (ctx.state === "suspended") await ctx.resume();
-      
-      // 저주파 + 고주파 동시에 울려서 더 크게 들림
-      const frequencies = [880, 1760];
-      [0, 0.2, 0.4].forEach(delay => {
-        frequencies.forEach(freq => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.type = "sine"; // sine보다 훨씬 크고 날카로움
-          osc.frequency.value = freq;
-          gain.gain.setValueAtTime(1.0, ctx.currentTime + delay);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.15);
-          osc.start(ctx.currentTime + delay);
-          osc.stop(ctx.currentTime + delay + 0.2);
-        });
-      });
+      const audio = new Audio("/sounds/cartoon-music-soundtrack-cartoon-game-upgrade-494470.mp3");
+      audio.volume = 1.0;
+      await audio.play();
     } catch {}
   };
 
