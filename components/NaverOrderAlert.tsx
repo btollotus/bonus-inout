@@ -145,7 +145,7 @@ export default function NaverOrderAlert() {
       </span>
     ) : null;
 
-  const Dropdown = ({ channel }: { channel: "naver" | "coupang" }) => {
+    const Dropdown = ({ channel }: { channel: "naver" | "coupang" | "cafe24" }) => {
     const filtered = orders.filter(o => o.channel === channel);
     const color = channel === "naver" ? "#03c75a" : channel === "coupang" ? "#ff6600" : "#6463ff";
     const label = channel === "naver" ? "네이버" : channel === "coupang" ? "쿠팡" : "카페24";
