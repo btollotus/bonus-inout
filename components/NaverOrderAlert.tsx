@@ -9,16 +9,18 @@ type Order = {
   price: number;
   buyer_name: string;
   ordered_at: string;
-  channel?: "naver" | "coupang";
+  channel?: "naver" | "coupang" | "cafe24";
 };
 
 export default function NaverOrderAlert() {
   const [naverCount, setNaverCount] = useState(0);
   const [coupangCount, setCoupangCount] = useState(0);
+  const [cafe24Count, setCafe24Count] = useState(0);
   const [orders, setOrders] = useState<Order[]>([]);
   const [open, setOpen] = useState<"naver" | "coupang" | null>(null);
   const prevNaverRef = useRef(0);
   const prevCoupangRef = useRef(0);
+  const prevCafe24Ref = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const initializedRef = useRef(false);
 
@@ -76,6 +78,19 @@ export default function NaverOrderAlert() {
     } catch {}
   };
   
+  const pollCafe24 = async () => {
+    try {
+      const res = await fetch("/api/cafe24/poll");
+      if (!res.ok) return;
+      const data = await res.json();
+      const count = data.newCount ?? 0;
+      if (count > prevCafe24Ref.current && initializedRef.current) playBeep();
+      prevCafe24Ref.current = count;
+      setCafe24Count(count);
+      if (data.orders?.length) addOrders(data.orders.map((o: Order) => ({ ...o, channel: "cafe24" as const })));
+    } catch {}
+  };
+
   const pollCoupang = async () => {
     try {
       const res = await fetch("/api/coupang/poll");
@@ -95,11 +110,12 @@ export default function NaverOrderAlert() {
     const init = async () => {
       await pollNaver();
       await pollCoupang();
+      await pollCafe24();
       initializedRef.current = true;
     };
     init();
 
-    const timer = setInterval(() => { pollNaver(); pollCoupang(); }, 300_000);
+    const timer = setInterval(() => { pollNaver(); pollCoupang(); pollCafe24(); }, 300_000);
     return () => clearInterval(timer);
   }, []);
 
@@ -131,9 +147,9 @@ export default function NaverOrderAlert() {
 
   const Dropdown = ({ channel }: { channel: "naver" | "coupang" }) => {
     const filtered = orders.filter(o => o.channel === channel);
-    const color = channel === "naver" ? "#03c75a" : "#ff6600";
-    const label = channel === "naver" ? "네이버" : "쿠팡";
-    const count = channel === "naver" ? naverCount : coupangCount;
+    const color = channel === "naver" ? "#03c75a" : channel === "coupang" ? "#ff6600" : "#6463ff";
+    const label = channel === "naver" ? "네이버" : channel === "coupang" ? "쿠팡" : "카페24";
+    const count = channel === "naver" ? naverCount : channel === "coupang" ? coupangCount : cafe24Count;
 
     return (
       <div style={{
@@ -154,9 +170,12 @@ onClick={async () => {
   if (channel === "naver") {
     await fetch("/api/naver/confirm", { method: "POST" });
     setNaverCount(0); prevNaverRef.current = 0;
-  } else {
+  } else if (channel === "coupang") {
     await fetch("/api/coupang/confirm", { method: "POST" });
     setCoupangCount(0); prevCoupangRef.current = 0;
+  } else {
+    await fetch("/api/cafe24/confirm", { method: "POST" });
+    setCafe24Count(0); prevCafe24Ref.current = 0;
   }
   setOpen(null);
 }}
@@ -207,6 +226,14 @@ onClick={async () => {
           <Badge count={coupangCount} />
         </button>
         {open === "coupang" && <Dropdown channel="coupang" />}
+      </div>
+
+      <div style={{ position: "relative" }}>
+        <button style={btnStyle(cafe24Count, "rgba(100,99,255,0.7)")} onClick={() => { unlock(); setOpen(open === "cafe24" ? null : "cafe24"); if (open !== "cafe24") { setCafe24Count(0); prevCafe24Ref.current = 0; } }}>
+          카페24
+          <Badge count={cafe24Count} />
+        </button>
+        {open === "cafe24" && <Dropdown channel="cafe24" />}
       </div>
     </div>
   );
