@@ -85,10 +85,11 @@ export default function AttendanceAdminClient() {
 
   function getDatesInRange(from: string, to: string): string[] {
     const dates: string[] = [];
-    const cur = new Date(from + "T00:00:00");
-    const end = new Date(to + "T00:00:00");
+    const cur = new Date(from + "T00:00:00+09:00");
+    const end = new Date(to + "T00:00:00+09:00");
     while (cur <= end) {
-      dates.push(cur.toISOString().slice(0, 10));
+      const kst = new Date(cur.getTime() + 9 * 60 * 60 * 1000);
+      dates.push(kst.toISOString().slice(0, 10));
       cur.setDate(cur.getDate() + 1);
     }
     return dates;
