@@ -1482,8 +1482,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                     ...prev,
                     [item.id]: { ...prev[item.id], transfer_lot_id: lot.lot_id, transfer_qty: "" },
                   }));
-                  setTransferLotOptions((prev) => ({ ...prev, [item.id]: [] }));
-                }}
+                }} 
               >
                 <div className="font-medium text-slate-800">{lot.variant_name}</div>
                 <div className="flex gap-2 mt-0.5 text-xs text-slate-500">
@@ -1503,7 +1502,9 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
     {/* 전사지 선택된 상태 */}
     {prodInputs[item.id]?.transfer_lot_id && (() => {
       const allLots = Object.values(transferLotOptions).flat();
-      const lotInfo = allLots.find((l) => l.lot_id === prodInputs[item.id].transfer_lot_id);
+      const selectedLotId = prodInputs[item.id].transfer_lot_id;
+      const lotInfo = allLots.find((l) => l.lot_id === selectedLotId)
+        ?? (transferLotOptions[item.id] ?? []).find((l) => l.lot_id === selectedLotId);
       return (
         <div className="space-y-2">
           <div className="flex items-center gap-2 rounded-xl border border-violet-200 bg-white px-3 py-2">
