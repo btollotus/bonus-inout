@@ -14,7 +14,7 @@ type EmployeeRow = {
   hire_date: string | null;
   resign_date: string | null;
   pin: string | null;
-  webauthn_credential: { credentialId: string; registered_at: string } | null;
+  webauthn_credential: { credentialId: string; registered_at: string } | null; // ← 추가
   created_at?: string;
   updated_at?: string;
 };
@@ -50,6 +50,7 @@ export default function EmployeesAdminClient() {
   const [rows, setRows] = useState<EmployeeRow[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // form
   const [name, setName] = useState("");
   const [employeeCode, setEmployeeCode] = useState("");
   const [authUserId, setAuthUserId] = useState("");
@@ -59,8 +60,10 @@ export default function EmployeesAdminClient() {
   const [hireDate, setHireDate] = useState("");
   const [resignDate, setResignDate] = useState("");
 
+  // edit
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  // 주민번호 표시 토글
   const [showFormRrn, setShowFormRrn] = useState(false);
   const [visibleRrnIds, setVisibleRrnIds] = useState<Set<string>>(new Set());
 
@@ -180,20 +183,33 @@ export default function EmployeesAdminClient() {
     }
   }
 
+  // ← 추가: WebAuthn 기기 초기화
   async function resetWebAuthn(r: EmployeeRow) {
-    if (!confirm(`${r.name}의 WebAuthn 기기를 초기화하시겠습니까?\n직원이 다음 출퇴근 시 기기를 재등록해야 합니다.`)) return;
+    const registeredAt = r.webauthn_credential?.registered_at
+      ? new Date(r.webauthn_credential.registered_at).toLocaleDateString("ko-KR", {
+          year: "numeric", month: "long", day: "numeric",
+        })
+      : "알 수 없음";
 
-    const { error } = await supabase
-      .from("employees")
-      .update({ webauthn_credential: null })
-      .eq("id", r.id);
+    const ok = window.confirm(
+      `${r.name}의 WebAuthn 기기를 초기화하시겠습니까?\n\n등록일: ${registeredAt}\n\n초기화 후 직원이 다시 기기를 등록해야 출퇴근 인증이 가능합니다.`
+    );
+    if (!ok) return;
 
-    if (error) {
-      setMsg("WebAuthn 초기화 실패: " + error.message);
-      return;
-    }
+    setLoading(true);
     setMsg(null);
-    await load();
+    try {
+      const { error } = await supabase
+        .from("employees")
+        .update({ webauthn_credential: null })
+        .eq("id", r.id);
+      if (error) throw new Error("기기 초기화 실패: " + error.message);
+      await load();
+    } catch (e: any) {
+      setMsg(e?.message ?? "기기 초기화 오류");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -309,7 +325,7 @@ export default function EmployeesAdminClient() {
           </div>
 
           <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
-            <table className="min-w-[1080px] w-full text-sm">
+            <table className="min-w-[1100px] w-full text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left">
                   <th className="px-3 py-2">이름</th>
@@ -320,7 +336,7 @@ export default function EmployeesAdminClient() {
                   <th className="px-3 py-2">주민번호</th>
                   <th className="px-3 py-2">퇴사일</th>
                   <th className="px-3 py-2">PIN</th>
-                  <th className="px-3 py-2">WebAuthn</th>
+                  <th className="px-3 py-2">WebAuthn</th>{/* ← 추가 */}
                   <th className="px-3 py-2">작업</th>
                 </tr>
               </thead>
@@ -358,7 +374,7 @@ export default function EmployeesAdminClient() {
                       </td>
                       <td className="px-3 py-2">{r.resign_date ?? ""}</td>
 
-                      {/* PIN */}
+                      {/* PIN 뱃지 */}
                       <td className="px-3 py-2">
                         <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
                           r.pin
@@ -369,22 +385,15 @@ export default function EmployeesAdminClient() {
                         </span>
                       </td>
 
-                      {/* WebAuthn */}
+                      {/* ← 추가: WebAuthn 뱃지 */}
                       <td className="px-3 py-2">
-                        {r.webauthn_credential ? (
-                          <div className="flex flex-col gap-0.5">
-                            <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 w-fit">
-                              등록됨
-                            </span>
-                            <span className="text-[10px] text-slate-400">
-                              {new Date(r.webauthn_credential.registered_at).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-400">
-                            미등록
-                          </span>
-                        )}
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                          r.webauthn_credential
+                            ? "border-blue-200 bg-blue-50 text-blue-700"
+                            : "border-slate-200 bg-slate-50 text-slate-400"
+                        }`}>
+                          {r.webauthn_credential ? "등록됨" : "미등록"}
+                        </span>
                       </td>
 
                       {/* 작업 버튼 */}
@@ -411,9 +420,10 @@ export default function EmployeesAdminClient() {
                               PIN초기화
                             </button>
                           )}
+                          {/* ← 추가: WebAuthn 기기 초기화 — 등록된 경우에만 표시 */}
                           {r.webauthn_credential && (
                             <button
-                              className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-purple-700 hover:bg-purple-100 active:scale-95 transition-all"
+                              className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-purple-700 hover:bg-purple-100"
                               disabled={loading}
                               onClick={() => resetWebAuthn(r)}
                             >
