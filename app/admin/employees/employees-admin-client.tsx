@@ -13,7 +13,8 @@ type EmployeeRow = {
   address: string | null;
   hire_date: string | null;
   resign_date: string | null;
-  pin: string | null;       // ← 추가
+  pin: string | null;
+  webauthn_credential: { credentialId: string; registered_at: string } | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -26,7 +27,6 @@ function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
-// ── 추가: 주민번호 마스킹 (앞 6자리 + - + *******)
 function maskRrn(rrn: string | null) {
   if (!rrn) return "";
   const clean = rrn.replace("-", "");
@@ -50,7 +50,6 @@ export default function EmployeesAdminClient() {
   const [rows, setRows] = useState<EmployeeRow[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // form
   const [name, setName] = useState("");
   const [employeeCode, setEmployeeCode] = useState("");
   const [authUserId, setAuthUserId] = useState("");
@@ -60,10 +59,8 @@ export default function EmployeesAdminClient() {
   const [hireDate, setHireDate] = useState("");
   const [resignDate, setResignDate] = useState("");
 
-  // edit
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // ── 추가: 주민번호 표시 토글
   const [showFormRrn, setShowFormRrn] = useState(false);
   const [visibleRrnIds, setVisibleRrnIds] = useState<Set<string>>(new Set());
 
@@ -81,8 +78,7 @@ export default function EmployeesAdminClient() {
     try {
       const { data, error } = await supabase
         .from("employees")
-        .select("id,name,employee_code,auth_user_id,rrn,mobile,address,hire_date,resign_date,pin,created_at,updated_at")
-
+        .select("id,name,employee_code,auth_user_id,rrn,mobile,address,hire_date,resign_date,pin,webauthn_credential,created_at,updated_at")
         .order("created_at", { ascending: false })
         .limit(500);
 
@@ -105,7 +101,7 @@ export default function EmployeesAdminClient() {
     setHireDate("");
     setResignDate("");
     setEditingId(null);
-    setShowFormRrn(false); // ── 추가: 폼 초기화 시 마스킹 복원
+    setShowFormRrn(false);
   }
 
   function fillForm(r: EmployeeRow) {
@@ -118,7 +114,7 @@ export default function EmployeesAdminClient() {
     setAddress(safeStr(r.address));
     setHireDate(safeStr(r.hire_date));
     setResignDate(safeStr(r.resign_date));
-    setShowFormRrn(false); // ── 추가: 수정 폼 열 때 마스킹 복원
+    setShowFormRrn(false);
   }
 
   async function save() {
@@ -184,6 +180,22 @@ export default function EmployeesAdminClient() {
     }
   }
 
+  async function resetWebAuthn(r: EmployeeRow) {
+    if (!confirm(`${r.name}의 WebAuthn 기기를 초기화하시겠습니까?\n직원이 다음 출퇴근 시 기기를 재등록해야 합니다.`)) return;
+
+    const { error } = await supabase
+      .from("employees")
+      .update({ webauthn_credential: null })
+      .eq("id", r.id);
+
+    if (error) {
+      setMsg("WebAuthn 초기화 실패: " + error.message);
+      return;
+    }
+    setMsg(null);
+    await load();
+  }
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -241,7 +253,6 @@ export default function EmployeesAdminClient() {
                 </div>
               </div>
 
-              {/* ── 수정: 주민번호 input 마스킹+토글 */}
               <div>
                 <div className="mb-1 text-xs font-semibold text-slate-700">주민번호(rrn)</div>
                 <div className="relative">
@@ -298,7 +309,7 @@ export default function EmployeesAdminClient() {
           </div>
 
           <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
-            <table className="min-w-[980px] w-full text-sm">
+            <table className="min-w-[1080px] w-full text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left">
                   <th className="px-3 py-2">이름</th>
@@ -306,17 +317,17 @@ export default function EmployeesAdminClient() {
                   <th className="px-3 py-2">auth_user_id</th>
                   <th className="px-3 py-2">휴대폰</th>
                   <th className="px-3 py-2">입사일</th>
-                  <th className="px-3 py-2">주민번호</th>{/* ── 추가 */}
+                  <th className="px-3 py-2">주민번호</th>
                   <th className="px-3 py-2">퇴사일</th>
                   <th className="px-3 py-2">PIN</th>
-
+                  <th className="px-3 py-2">WebAuthn</th>
                   <th className="px-3 py-2">작업</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-3 text-slate-500" colSpan={8}>
+                    <td className="px-3 py-3 text-slate-500" colSpan={10}>
                       {loading ? "불러오는 중..." : "직원 데이터가 없습니다."}
                     </td>
                   </tr>
@@ -328,7 +339,6 @@ export default function EmployeesAdminClient() {
                       <td className="px-3 py-2 font-mono text-xs">{r.auth_user_id ?? ""}</td>
                       <td className="px-3 py-2">{r.mobile ?? ""}</td>
                       <td className="px-3 py-2">{r.hire_date ?? ""}</td>
-                      {/* ── 추가: 주민번호 셀 */}
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-1">
                           <span className="font-mono text-xs">
@@ -347,45 +357,74 @@ export default function EmployeesAdminClient() {
                         </div>
                       </td>
                       <td className="px-3 py-2">{r.resign_date ?? ""}</td>
-                     
-<td className="px-3 py-2">
-  <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-    r.pin
-      ? "border-green-200 bg-green-50 text-green-700"
-      : "border-slate-200 bg-slate-50 text-slate-400"
-  }`}>
-    {r.pin ? "설정됨" : "미설정"}
-  </span>
-</td>
-<td className="px-3 py-2">
-  <div className="flex gap-2">
-    <button className={btn} onClick={() => fillForm(r)} disabled={loading}>
-      수정
-    </button>
-    {r.pin && (
-      <button
-        className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 hover:bg-amber-100"
-        disabled={loading}
-        onClick={async () => {
-          if (!confirm(`${r.name}의 PIN을 초기화하시겠습니까?`)) return;
-          const { error } = await supabase
-            .from("employees")
-            .update({ pin: null })
-            .eq("id", r.id);
-          if (error) return setMsg("PIN 초기화 실패: " + error.message);
-          setMsg(null);
-          await load();
-        }}
-      >
-        PIN초기화
-      </button>
-    )}
-    <button className={btn} onClick={() => remove(r.id)} disabled={loading}>
-      삭제
-    </button>
-  </div>
-</td>
 
+                      {/* PIN */}
+                      <td className="px-3 py-2">
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                          r.pin
+                            ? "border-green-200 bg-green-50 text-green-700"
+                            : "border-slate-200 bg-slate-50 text-slate-400"
+                        }`}>
+                          {r.pin ? "설정됨" : "미설정"}
+                        </span>
+                      </td>
+
+                      {/* WebAuthn */}
+                      <td className="px-3 py-2">
+                        {r.webauthn_credential ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 w-fit">
+                              등록됨
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {new Date(r.webauthn_credential.registered_at).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-400">
+                            미등록
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 작업 버튼 */}
+                      <td className="px-3 py-2">
+                        <div className="flex gap-2 flex-wrap">
+                          <button className={btn} onClick={() => fillForm(r)} disabled={loading}>
+                            수정
+                          </button>
+                          {r.pin && (
+                            <button
+                              className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 hover:bg-amber-100"
+                              disabled={loading}
+                              onClick={async () => {
+                                if (!confirm(`${r.name}의 PIN을 초기화하시겠습니까?`)) return;
+                                const { error } = await supabase
+                                  .from("employees")
+                                  .update({ pin: null })
+                                  .eq("id", r.id);
+                                if (error) return setMsg("PIN 초기화 실패: " + error.message);
+                                setMsg(null);
+                                await load();
+                              }}
+                            >
+                              PIN초기화
+                            </button>
+                          )}
+                          {r.webauthn_credential && (
+                            <button
+                              className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-purple-700 hover:bg-purple-100 active:scale-95 transition-all"
+                              disabled={loading}
+                              onClick={() => resetWebAuthn(r)}
+                            >
+                              기기초기화
+                            </button>
+                          )}
+                          <button className={btn} onClick={() => remove(r.id)} disabled={loading}>
+                            삭제
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))
                 )}
