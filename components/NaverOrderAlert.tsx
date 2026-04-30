@@ -17,7 +17,7 @@ export default function NaverOrderAlert() {
   const [coupangCount, setCoupangCount] = useState(0);
   const [cafe24Count, setCafe24Count] = useState(0);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [open, setOpen] = useState<"naver" | "coupang" | null>(null);
+  const [open, setOpen] = useState<"naver" | "coupang" | "cafe24" | null>(null);
   const prevNaverRef = useRef(0);
   const prevCoupangRef = useRef(0);
   const prevCafe24Ref = useRef(0);
