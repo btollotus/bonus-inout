@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/cafe24/callback`,
+      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "")}/api/cafe24/callback`,
     }),
   });
 
