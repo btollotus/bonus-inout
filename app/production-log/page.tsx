@@ -1487,14 +1487,18 @@ function WorkLogTab({ role, userId, showToast }: {
     </div>
     {logs.map((log) => (
       <div key={log.id} style={{ border: "1px solid #ccc", borderRadius: 8, padding: "12px 16px", marginBottom: 12, pageBreakInside: "avoid" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-          <div style={{ fontSize: "11pt", fontWeight: "bold" }}>👤 {log.worker_name}</div>
-          <div style={{ fontSize: "8pt", color: "#555" }}>
-            {log.clock_in && `출근: ${log.clock_in}`}
-            {log.clock_in && log.clock_out && " · "}
-            {log.clock_out && `퇴근: ${log.clock_out}`}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <div style={{ fontSize: "11pt", fontWeight: "bold" }}>
+            👤 {log.worker_name}
+            {(log.clock_in || log.clock_out) && (
+              <span style={{ fontSize: "8pt", fontWeight: "normal", color: "#555", marginLeft: 10 }}>
+                {log.clock_in && `출근 ${log.clock_in}`}
+                {log.clock_in && log.clock_out && " · "}
+                {log.clock_out && `퇴근 ${log.clock_out}`}
+              </span>
+            )}
           </div>
-        </div>
+        </div>  
         {log.production_summary && (
           <div style={{ background: "#f8f8f8", border: "1px solid #e0e0e0", borderRadius: 4, padding: "4px 8px", marginBottom: 6, fontSize: "8pt" }}>
             <span style={{ fontWeight: "bold" }}>생산목록: </span>{log.production_summary}
