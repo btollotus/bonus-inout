@@ -107,14 +107,16 @@ export default function AttendanceAdminClient() {
         const dates = getDatesInRange(rangeFrom, rangeTo);
         setRangeRows(dates.map(d => ({ date: d, summaries: buildSummaries(records, d) })));
 
-      } else if (viewMode === "monthly") {
+    } else if (viewMode === "monthly") {
         const [y, m] = month.split("-");
         const from = `${y}-${m}-01`;
         const lastDay = new Date(Number(y), Number(m), 0).getDate();
         const to = `${y}-${m}-${String(lastDay).padStart(2, "0")}`;
         const records = await fetchRecords(from, to);
         const dates = getDatesInRange(from, to);
-        setRangeRows(dates.map(d => ({ date: d, summaries: buildSummaries(records, d) })));
+        const grouped = dates.map(d => ({ date: d, summaries: buildSummaries(records, d) }));
+        console.log("30일 grouped:", JSON.stringify(grouped.find(g => g.date === "2026-04-30")));
+        setRangeRows(grouped);
       }
     } finally {
       setLoading(false);
