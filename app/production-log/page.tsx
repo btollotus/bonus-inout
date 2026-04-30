@@ -289,6 +289,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [woInfoMap, setWoInfoMap] = useState<WoInfoMap>({});
+  const [clockInfo, setClockInfo] = useState<{ in: string | null; out: string | null }>({ in: null, out: null });onst [woInfoMap, setWoInfoMap] = useState<WoInfoMap>({});
 
   // ── 조회 ──
   const [viewDate, setViewDate] = useState(todayKST());
@@ -307,7 +308,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   }, []);
 
   const loadTodayData = useCallback(async (empId: string, empName: string) => {
-    const [logRes, woRes] = await Promise.all([
+    const [logRes, woRes, attRes] = await Promise.all([ 
       supabase.from("daily_work_logs")
         .select("*").eq("log_date", today).eq("employee_id", empId).maybeSingle(),
       Promise.all([
@@ -317,13 +318,19 @@ function ProductionLogTab({ role, userId, showToast }: {
           .eq("status_production", true)
           .gte("updated_at", `${today}T00:00:00+09:00`)
           .order("updated_at", { ascending: false }),
-        supabase.from("work_orders")
+          supabase.from("work_orders")
           .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer")
           .eq("assignee_transfer", empName)
           .eq("status_transfer", true)
           .gte("updated_at", `${today}T00:00:00+09:00`)
           .order("updated_at", { ascending: false }),
       ]).then(([prodRes, transferRes]) => {
+      }),
+      supabase.from("attendance")
+        .select("type,happened_at")
+        .eq("employee_id", empId)
+        .gte("happened_at", `${today}T00:00:00+09:00`)
+        .lte("happened_at", `${today}T23:59:59+09:00`),
         const map = new Map<string, WorkOrderRef>();
         (prodRes.data ?? []).forEach((w: any) => { map.set(w.id, { ...w, tags: ["생산완료"] }); });
         (transferRes.data ?? []).forEach((w: any) => {
@@ -363,6 +370,20 @@ function ProductionLogTab({ role, userId, showToast }: {
     } else {
       setWoInfoMap({});
     }
+
+    // 출퇴근 시간 조회
+    const { data: attData } = await supabase.from("attendance")
+      .select("type,happened_at")
+      .eq("employee_id", empId)
+      .gte("happened_at", `${today}T00:00:00+09:00`)
+      .lte("happened_at", `${today}T23:59:59+09:00`);
+    const ci = { in: null as string | null, out: null as string | null };
+    (attData ?? []).forEach((a: any) => {
+      const t = new Date(a.happened_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" });
+      if (a.type === "IN") ci.in = t;
+      if (a.type === "OUT") ci.out = t;
+    });
+    setClockInfo(ci);
   }, [today, taskTypes]);
 
   // ── 열람 진입 (PIN 없이) ──
@@ -749,7 +770,16 @@ function ProductionLogTab({ role, userId, showToast }: {
             <div className="font-bold text-base">
               {readOnly ? "👁" : "📝"} {selectedEmployee.name}의 생산일지
             </div>
-            <div className="text-xs text-slate-500 mt-0.5">{today}</div>
+            <div className="text-xs text-slate-500 mt-0.5">
+              {today}
+              {(clockInfo.in || clockInfo.out) && (
+                <span className="ml-2">
+                  {clockInfo.in && `출근 ${clockInfo.in}`}
+                  {clockInfo.in && clockInfo.out && " · "}
+                  {clockInfo.out && `퇴근 ${clockInfo.out}`}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {/* 열람 모드 배지 */}
