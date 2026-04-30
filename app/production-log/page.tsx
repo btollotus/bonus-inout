@@ -295,6 +295,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [viewMode, setViewMode] = useState(false);
   const [viewLogs, setViewLogs] = useState<DailyWorkLog[]>([]);
   const [viewLoading, setViewLoading] = useState(false);
+  const [viewClockMap, setViewClockMap] = useState<Record<string, { clock_in: string | null; clock_out: string | null }>>({});
 
   const today = todayKST();
 
@@ -474,10 +475,15 @@ function ProductionLogTab({ role, userId, showToast }: {
 
   async function loadViewLogs() {
     setViewLoading(true);
-    const { data } = await supabase.from("daily_work_logs")
-      .select("*").eq("log_date", viewDate).order("employee_name");
+    const [{ data }, { data: wlData }] = await Promise.all([
+      supabase.from("daily_work_logs").select("*").eq("log_date", viewDate).order("employee_name"),
+      supabase.from("work_logs").select("worker_name,clock_in,clock_out").eq("log_date", viewDate),
+    ]);
     const logs = (data ?? []) as DailyWorkLog[];
     setViewLogs(logs);
+    const clockMap: Record<string, { clock_in: string | null; clock_out: string | null }> = {};
+    (wlData ?? []).forEach((w: any) => { clockMap[w.worker_name] = { clock_in: w.clock_in, clock_out: w.clock_out }; });
+    setViewClockMap(clockMap);
 
     const allNos = [...new Set(logs.flatMap((l) => l.work_order_nos ?? []))];
     if (allNos.length > 0) {
@@ -605,8 +611,15 @@ function ProductionLogTab({ role, userId, showToast }: {
             </div>
             {viewLogs.map((log) => (
               <div key={log.id} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "10px 14px", marginBottom: 10, pageBreakInside: "avoid" }}>
-                <div style={{ fontSize: "10pt", fontWeight: "bold", marginBottom: 6, paddingBottom: 4, borderBottom: "0.5px solid #ddd" }}>
-                {log.employee_name}
+               <div style={{ fontSize: "10pt", fontWeight: "bold", marginBottom: 6, paddingBottom: 4, borderBottom: "0.5px solid #ddd", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>{log.employee_name}</span>
+                  {viewClockMap[log.employee_name] && (
+                    <span style={{ fontSize: "8pt", fontWeight: "normal", color: "#555" }}>
+                      {viewClockMap[log.employee_name].clock_in && `출근 ${viewClockMap[log.employee_name].clock_in}`}
+                      {viewClockMap[log.employee_name].clock_in && viewClockMap[log.employee_name].clock_out && " · "}
+                      {viewClockMap[log.employee_name].clock_out && `퇴근 ${viewClockMap[log.employee_name].clock_out}`}
+                    </span>
+                  )}
                 </div>
                 {(log.work_order_nos ?? []).length > 0 && (
                   <div style={{ marginBottom: 6 }}>
