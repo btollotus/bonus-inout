@@ -2301,9 +2301,9 @@ if (woSubNameVal) {
                         <label className="flex items-center gap-2 text-sm cursor-pointer">
                           <input type="checkbox" checked={orderSkipProductionCheck}
                             onChange={(e) => setOrderSkipProductionCheck(e.target.checked)} />
-                          <span className={orderSkipProductionCheck ? "font-semibold text-amber-700" : "text-slate-500"}>
-                            CCP/담당자 생략 (재고 포장 출고용)
-                          </span>
+                       <span className={orderSkipProductionCheck ? "font-semibold text-amber-700" : "text-slate-500"}>
+                            CCP/담당자 생략 (재고 포장 출고용 · 도눔기성만 해당)
+                          </span>   
                         </label>
                       </div>
                       <div className="md:col-span-3">
