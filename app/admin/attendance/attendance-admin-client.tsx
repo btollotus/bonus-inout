@@ -56,11 +56,7 @@ export default function AttendanceAdminClient() {
 
   useEffect(() => {
     if (employees.length > 0) load();
-  }, [employees]);
-
-  useEffect(() => {
-    if (employees.length > 0) load();
-  }, [viewMode, date, rangeFrom, rangeTo, month]);
+  }, [viewMode, date, rangeFrom, rangeTo, month, employees]);
 
   async function fetchRecords(from: string, to: string): Promise<AttendanceRecord[]> {
     const { data, error } = await supabase
@@ -69,8 +65,7 @@ export default function AttendanceAdminClient() {
       .gte("happened_at", `${from}T00:00:00+09:00`)
       .lte("happened_at", `${to}T23:59:59+09:00`)
       .order("happened_at", { ascending: true });
-    console.log("fetchRecords", from, to, "data:", data, "error:", error);
-    return (data ?? []) as AttendanceRecord[];
+      return (data ?? []) as AttendanceRecord[];
   }
 
   function buildSummaries(records: AttendanceRecord[], targetDate: string): DailySummary[] {
@@ -196,7 +191,6 @@ export default function AttendanceAdminClient() {
 
   // 월별 달력 뷰
   function MonthlyCalendar() {
-    console.log("rangeRows:", JSON.stringify(rangeRows.filter(r => r.date === "2026-04-30")));
     const [y, m] = month.split("-").map(Number);
     const firstDow = new Date(y, m - 1, 1).getDay(); // 0=일
     const lastDay  = new Date(y, m, 0).getDate();
