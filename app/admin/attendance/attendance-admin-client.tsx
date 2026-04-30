@@ -116,7 +116,6 @@ export default function AttendanceAdminClient() {
         const records = await fetchRecords(from, to);
         const dates = getDatesInRange(from, to);
         const grouped = dates.map(d => ({ date: d, summaries: buildSummaries(records, d) }));
-        console.log("30일 grouped:", JSON.stringify(grouped.find(g => g.date === "2026-04-30")));
         setRangeRows(grouped);
       }
     } finally {
