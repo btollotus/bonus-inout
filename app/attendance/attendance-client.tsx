@@ -78,6 +78,10 @@ export default function AttendanceClient() {
 
   // WebAuthn 등록
   async function registerWebAuthn(emp: Employee) {
+    if (!window.PublicKeyCredential) {
+      setStatus({ type: "err", msg: "이 브라우저는 생체인증을 지원하지 않습니다. 삼성 인터넷 또는 Chrome으로 접속해 주세요." });
+      return;
+    }
     setStatus({ type: "warn", msg: "기기 등록 중 — 지문 또는 Face ID를 인식해주세요..." });
     try {
       const challenge = new Uint8Array(32);
@@ -129,6 +133,10 @@ export default function AttendanceClient() {
 
     try {
       // ① WebAuthn 인증
+      if (!window.PublicKeyCredential) {
+        setStatus({ type: "err", msg: "이 브라우저는 생체인증을 지원하지 않습니다. 삼성 인터넷 또는 Chrome으로 접속해 주세요." });
+        return;
+      }
       setStatus({ type: "warn", msg: "지문 또는 Face ID를 인식해주세요..." });
       const challenge = new Uint8Array(32);
       crypto.getRandomValues(challenge);
