@@ -181,7 +181,59 @@ function EditModal({
           </div>
         )}
 
-        {/* 버튼 */}
+        {/* 개별 삭제 버튼 */}
+        {(summary.inId || summary.outId) && (
+          <div className="flex gap-2 mb-3">
+            {summary.inId && (
+              <button
+                className="flex-1 rounded-xl border border-red-200 bg-red-50 py-2 text-sm font-semibold text-red-600 hover:bg-red-100 transition-all disabled:opacity-50"
+                disabled={saving}
+                onClick={async () => {
+                  if (!confirm("출근 기록을 삭제하시겠습니까?")) return;
+                  setSaving(true);
+                  setError(null);
+                  try {
+                    const { error: e } = await supabase.from("attendance").delete().eq("id", summary.inId!);
+                    if (e) throw new Error("출근 삭제 실패: " + e.message);
+                    onSaved();
+                    onClose();
+                  } catch (err: any) {
+                    setError(err.message);
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+              >
+                출근 삭제
+              </button>
+            )}
+            {summary.outId && (
+              <button
+                className="flex-1 rounded-xl border border-red-200 bg-red-50 py-2 text-sm font-semibold text-red-600 hover:bg-red-100 transition-all disabled:opacity-50"
+                disabled={saving}
+                onClick={async () => {
+                  if (!confirm("퇴근 기록을 삭제하시겠습니까?")) return;
+                  setSaving(true);
+                  setError(null);
+                  try {
+                    const { error: e } = await supabase.from("attendance").delete().eq("id", summary.outId!);
+                    if (e) throw new Error("퇴근 삭제 실패: " + e.message);
+                    onSaved();
+                    onClose();
+                  } catch (err: any) {
+                    setError(err.message);
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+              >
+                퇴근 삭제
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* 저장/취소 버튼 */}
         <div className="flex gap-2">
           <button
             className="flex-1 rounded-xl border border-slate-200 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all"
