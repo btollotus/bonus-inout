@@ -289,7 +289,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [woInfoMap, setWoInfoMap] = useState<WoInfoMap>({});
-  const [clockInfo, setClockInfo] = useState<{ in: string | null; out: string | null }>({ in: null, out: null });onst [woInfoMap, setWoInfoMap] = useState<WoInfoMap>({});
+  const [clockInfo, setClockInfo] = useState<{ in: string | null; out: string | null }>({ in: null, out: null });
 
   // ── 조회 ──
   const [viewDate, setViewDate] = useState(todayKST());
@@ -311,34 +311,28 @@ function ProductionLogTab({ role, userId, showToast }: {
     const [logRes, woRes, attRes] = await Promise.all([ 
       supabase.from("daily_work_logs")
         .select("*").eq("log_date", today).eq("employee_id", empId).maybeSingle(),
-      Promise.all([
-        supabase.from("work_orders")
-          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer")
-          .eq("assignee_production", empName)
-          .eq("status_production", true)
-          .gte("updated_at", `${today}T00:00:00+09:00`)
-          .order("updated_at", { ascending: false }),
+        Promise.all([
           supabase.from("work_orders")
-          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer")
-          .eq("assignee_transfer", empName)
-          .eq("status_transfer", true)
-          .gte("updated_at", `${today}T00:00:00+09:00`)
-          .order("updated_at", { ascending: false }),
-      ]).then(([prodRes, transferRes]) => {
-      }),
-      supabase.from("attendance")
-        .select("type,happened_at")
-        .eq("employee_id", empId)
-        .gte("happened_at", `${today}T00:00:00+09:00`)
-        .lte("happened_at", `${today}T23:59:59+09:00`),
-        const map = new Map<string, WorkOrderRef>();
-        (prodRes.data ?? []).forEach((w: any) => { map.set(w.id, { ...w, tags: ["생산완료"] }); });
-        (transferRes.data ?? []).forEach((w: any) => {
-          if (map.has(w.id)) { map.get(w.id)!.tags.push("전사인쇄"); }
-          else { map.set(w.id, { ...w, tags: ["전사인쇄"] }); }
-        });
-        return { data: Array.from(map.values()) };
-      }),
+            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer")
+            .eq("assignee_production", empName)
+            .eq("status_production", true)
+            .gte("updated_at", `${today}T00:00:00+09:00`)
+            .order("updated_at", { ascending: false }),
+          supabase.from("work_orders")
+            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer")
+            .eq("assignee_transfer", empName)
+            .eq("status_transfer", true)
+            .gte("updated_at", `${today}T00:00:00+09:00`)
+            .order("updated_at", { ascending: false }),
+        ]).then(([prodRes, transferRes]) => {
+          const map = new Map<string, WorkOrderRef>();
+          (prodRes.data ?? []).forEach((w: any) => { map.set(w.id, { ...w, tags: ["생산완료"] }); });
+          (transferRes.data ?? []).forEach((w: any) => {
+            if (map.has(w.id)) { map.get(w.id)!.tags.push("전사인쇄"); }
+            else { map.set(w.id, { ...w, tags: ["전사인쇄"] }); }
+          });
+          return { data: Array.from(map.values()) };
+        }),
     ]);
     const log = logRes.data as DailyWorkLog | null;
     setTodayLog(log);
