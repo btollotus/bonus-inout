@@ -160,8 +160,26 @@ export default function AttendanceClient() {
         return;
       }
 
-      // ③ 저장
-      const { error } = await supabase.from("attendance").insert({
+      // ③ 중복 체크
+const today = todayKST();
+const { data: existing } = await supabase
+  .from("attendance")
+  .select("id")
+  .eq("employee_id", employeeId)
+  .eq("type", pendingType)
+  .gte("happened_at", `${today}T00:00:00+09:00`)
+  .lte("happened_at", `${today}T23:59:59+09:00`)
+  .limit(1);
+
+if (existing && existing.length > 0) {
+  const label = pendingType === "IN" ? "출근" : "퇴근";
+  setStatus({ type: "warn", msg: `오늘 ${label} 기록이 이미 있습니다.` });
+  return;
+}
+
+// ③ 저장
+const { error } = await supabase.from("attendance").insert({
+      
         employee_id: employeeId,
         happened_at: nowKSTIso(),
         type: pendingType,
