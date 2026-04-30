@@ -308,10 +308,10 @@ function ProductionLogTab({ role, userId, showToast }: {
   }, []);
 
   const loadTodayData = useCallback(async (empId: string, empName: string) => {
-    const [logRes, woRes, attRes] = await Promise.all([ 
+    const [logRes, woRes] = await Promise.all([ 
       supabase.from("daily_work_logs")
         .select("*").eq("log_date", today).eq("employee_id", empId).maybeSingle(),
-        Promise.all([
+      Promise.all([
           supabase.from("work_orders")
             .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer")
             .eq("assignee_production", empName)
