@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
   });
 
   const data = await res.json();
+  console.log("[cafe24/callback] token response:", JSON.stringify(data));
   if (!res.ok) return NextResponse.json({ error: data }, { status: 500 });
 
   const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
