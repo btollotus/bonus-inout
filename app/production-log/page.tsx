@@ -1262,7 +1262,7 @@ function WorkLogTab({ role, userId, showToast }: {
         ? dayWos.map((w: any) => `<div style="font-size:7.5pt;padding:2px 0;border-bottom:0.5px solid #f0f0f0;">${w.client_name} — ${w.product_name}</div>`).join("")
         : "";
       return `<div style="flex:1;border:1px solid #ccc;border-radius:6px;padding:10px 12px;min-height:160px;display:flex;flex-direction:column;gap:4px;">
-        <div style="font-size:8.5pt;font-weight:bold;margin-bottom:5px;border-bottom:0.5px solid #ddd;padding-bottom:5px;">${dateLabel}</div>
+        <div style="font-size:8.5pt;font-weight:bold;margin-bottom:5px;border-bottom:0.5px solid #ddd;padding-bottom:5px;display:flex;justify-content:space-between;align-items:center;"><span>${dateLabel}</span>${(log.clock_in || log.clock_out) ? `<span style="font-size:7.5pt;font-weight:normal;color:#555;">${log.clock_in ? `출근 ${log.clock_in}` : ""}${log.clock_in && log.clock_out ? " · " : ""}${log.clock_out ? `퇴근 ${log.clock_out}` : ""}</span>` : ""}</div>
         ${woHtml ? `<div style="margin-bottom:4px;"><div style="font-size:7pt;color:#888;margin-bottom:2px;font-weight:bold;">처리한 작업지시서</div>${woHtml}</div>` : ""}
         ${log.instruction ? `<div style="font-size:7.5pt;margin-bottom:3px;"><b>지시사항:</b> ${log.instruction}</div>` : ""}
         ${log.extra_work ? `<div style="font-size:7.5pt;margin-bottom:3px;"><b>기타작업:</b> ${log.extra_work}</div>` : ""}
