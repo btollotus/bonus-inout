@@ -501,8 +501,8 @@ async function searchTransferLots(itemId: string, keyword: string, skipProductio
     .ilike("variant_name", keyword.trim() ? `%${keyword}%` : "%")
     .limit(100);
 
-  const filtered = skipProductionCheck
-    ? (variants ?? [])
+    const filtered = skipProductionCheck
+    ? (variants ?? []).filter((v: any) => v.variant_name === "도눔(은박)")
     : (variants ?? []).filter((v: any) => (v.products?.food_type ?? "").includes("초콜릿중간재"));
   if (filtered.length === 0) {
     setTransferLotOptions((prev) => ({ ...prev, [itemId]: [] }));
@@ -1463,7 +1463,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
 {/* 전사지 차감 — 중간재 제외 */}
 {getFoodCategory(selectedWo.food_type) !== "중간재" && (
   <div className="mt-3 rounded-xl border border-violet-100 bg-violet-50 p-3">
-    <div className="mb-2 text-xs font-semibold text-violet-700">🖨️ 전사지 차감 (선택)</div>
+    <div className="mb-2 text-xs font-semibold text-violet-700"> 재고 차감 선택</div>
 
   {/* 전사지 미선택 상태: 업체명 기준 자동 목록 */}
   {!prodInputs[item.id]?.transfer_lot_id && (
