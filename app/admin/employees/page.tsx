@@ -1128,9 +1128,35 @@ bottom_size: form.bottom_size || null,
                             >
                               🔑 PIN초기화
                             </button>
-                          ) : (
-                            <span className="text-xs text-gray-300">PIN미설정</span>
-                          )}
+) : (
+  <span className="text-xs text-gray-300">PIN미설정</span>
+)}
+
+{/* WebAuthn 기기 초기화 */}
+{(emp as any).webauthn_credential ? (
+  <button
+    onClick={async () => {
+      const cred = (emp as any).webauthn_credential
+      const registeredAt = cred?.registered_at
+        ? new Date(cred.registered_at).toLocaleDateString("ko-KR", {
+            year: "numeric", month: "long", day: "numeric",
+          })
+        : "알 수 없음"
+      if (!confirm(`${emp.name}의 WebAuthn 기기를 초기화하시겠습니까?\n\n등록일: ${registeredAt}\n\n초기화 후 직원이 다시 기기를 등록해야 출퇴근 인증이 가능합니다.`)) return
+      const { error } = await supabase
+        .from("employees")
+        .update({ webauthn_credential: null })
+        .eq("id", emp.id)
+      if (error) setError("기기 초기화 실패: " + error.message)
+      else { setSuccess(`${emp.name}의 WebAuthn 기기가 초기화되었습니다.`); fetchEmployees() }
+    }}
+    className="text-xs font-medium px-2.5 py-1 rounded-full border text-purple-600 border-purple-300 hover:bg-purple-50 transition-colors"
+  >
+    📱 기기초기화
+  </button>
+) : (
+  <span className="text-xs text-gray-300">기기미등록</span>
+)}
                           
                           <button onClick={() => handleDelete(emp.id, emp.name)}
                             className="text-xs text-red-400 hover:text-red-600 font-medium">삭제</button>
