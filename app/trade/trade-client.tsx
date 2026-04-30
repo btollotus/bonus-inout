@@ -465,6 +465,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [orderWoNote, setOrderWoNote] = useState("");
   const [orderWoEnabled, setOrderWoEnabled] = useState(!isSubAdmin);
   const [orderIsReorder, setOrderIsReorder] = useState(false);
+  const [orderSkipProductionCheck, setOrderSkipProductionCheck] = useState(false);
   const orderWoFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [entryDate, setEntryDate] = useState(todayYMD());
@@ -1022,6 +1023,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
             return base || null;
           })(),
           status: "생산중", is_reorder: orderIsReorder, images: [], linked_order_id: orderId,
+          skip_production_check: orderSkipProductionCheck,
         }).select("id,barcode_no").single();
         if (woErr) throw new Error("작업지시서 생성 실패: " + woErr.message);
         const woId = (createdWo as any).id as string;
@@ -1145,6 +1147,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
         setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
         setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoNote("");
+        setOrderSkipProductionCheck(false);
         setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
         await loadTrades(); return;
       }
@@ -1155,6 +1158,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
     setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
     setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoNote("");
+    setOrderSkipProductionCheck(false);
     setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
     await loadTrades();
   }
@@ -2293,9 +2297,18 @@ if (woSubNameVal) {
                               <input className={inpR} inputMode="numeric" placeholder="세로" value={orderWoMoldRows} onChange={(e) => setOrderWoMoldRows(e.target.value.replace(/[^\d]/g, ""))} />
                             </div>
                           </div>
+                          <div className="md:col-span-3 flex items-center gap-3">
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input type="checkbox" checked={orderSkipProductionCheck}
+                            onChange={(e) => setOrderSkipProductionCheck(e.target.checked)} />
+                          <span className={orderSkipProductionCheck ? "font-semibold text-amber-700" : "text-slate-500"}>
+                            CCP/담당자 생략 (재고 포장 출고용)
+                          </span>
+                        </label>
+                      </div>
                       <div className="md:col-span-3">
                         <div className="mb-1 text-xs text-slate-600">메모</div>
-                        <textarea className={`${inp} resize-none`} lang="ko" rows={2} placeholder="전달할 메모나 특이사항" value={orderWoNote} onChange={(e) => setOrderWoNote(e.target.value)} />   
+                        <textarea className={`${inp} resize-none`} lang="ko" rows={2} placeholder="전달할 메모나 특이사항" value={orderWoNote} onChange={(e) => setOrderWoNote(e.target.value)} />
                         {(() => {
                           const firstFoodType = lines[0]?.food_type ?? "";
                           if (!firstFoodType.includes("리얼")) return null;

@@ -66,6 +66,7 @@ type WorkOrderRow = {
   work_order_items?: WoItemRow[];
   order_type: string;
   ccp_slot_id?: string | null;
+  skip_production_check?: boolean | null;
 };
 
 type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
@@ -549,7 +550,7 @@ async function searchTransferLots(itemId: string, keyword: string) {
     setLoading(true); setMsg(null);
     try {
       const LIMIT = filterStatus === "완료" ? 20 : 200;
-      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,work_order_items(delivery_date,order_qty,actual_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
+      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,skip_production_check,work_order_items(delivery_date,order_qty,actual_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
       if (filterStatus !== "전체") q = q.eq("status", filterStatus);
       if (filterDateFrom) q = q.gte("order_date", filterDateFrom);
       if (filterDateTo) q = q.lte("order_date", filterDateTo);
@@ -741,7 +742,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
     const foodCat = getFoodCategory(selectedWo.food_type);
     const isChuganJae = foodCat === "중간재";
     let ccpEndedAt: string | null = null;
-    if (woChecks) {
+    if (woChecks && !selectedWo.skip_production_check) {
       const missing = [
         !woChecks.assignee_transfer && "전사인쇄",
         !woChecks.assignee_print_check && "인쇄검수",
@@ -749,7 +750,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
       if (missing.length > 0) { alert(`다음 단계의 담당자를 선택해주세요:\n\n• ${missing.join("\n• ")}`); setIsCompleting(false); return; }
     }
     // ── CCP-1B 종료 여부 체크 ──
-    if (foodCat === "다크" || foodCat === "화이트") {
+    if (!selectedWo.skip_production_check && (foodCat === "다크" || foodCat === "화이트")) {
    
       // 기존: 온장고 슬롯 + ccp_wo_events 종료 체크
       if (selectedWo.ccp_slot_id) {
@@ -777,7 +778,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
         alert("CCP-1B 슬롯이 지정되지 않았습니다.\n슬롯 지정 및 온도 기록(시작→중간점검→종료) 후 생산완료 처리해주세요.");
         setIsCompleting(false); return;
       }
-    } else if (foodCat === "중간재" && !selectedWo.product_name.includes("분사-레이즈")) {
+    } else if (!selectedWo.skip_production_check && foodCat === "중간재" && !selectedWo.product_name.includes("분사-레이즈")) {
       // 중간재: 가열공정 슬롯(코팅롱도/전사롱도) + ccp_wo_events 종료 체크
       if (selectedWo.ccp_slot_id) {
         const todayKst = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
@@ -1241,6 +1242,7 @@ const clientKeyword = stripped.split(/[\s\-_]/)[0] ?? stripped;
                       <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusColors[selectedWo.status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>{selectedWo.status}</span>
                       {selectedWo.order_type === "재고" && <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">재고</span>}
                       {selectedWo.is_reorder ? <span className="rounded-full bg-amber-100 border border-amber-200 px-2.5 py-0.5 text-xs font-semibold text-amber-700">재주문</span> : null}
+                      {selectedWo.skip_production_check ? <span className="rounded-full bg-violet-100 border border-violet-200 px-2.5 py-0.5 text-xs font-semibold text-violet-700">CCP/담당자 생략</span> : null}
                     </div>
                     <div className="mt-1 font-semibold text-slate-700">{selectedWo.product_name}</div>
                     <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500"><span className="tabular-nums font-mono">{selectedWo.barcode_no}</span><span>·</span><span>{selectedWo.work_order_no}</span><span>·</span><span>주문일 {selectedWo.order_date}</span></div>
