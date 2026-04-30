@@ -96,7 +96,7 @@ export default function TopNav({ role, email, quoteBadge }: { role?: string; ema
 
         <div style={{ maxWidth: 1400, margin: "0 auto", padding: "8px 16px" }}>
           <div style={{ display: "flex", gap: 5, flexWrap: "nowrap", alignItems: "center", overflowX: "auto" }}>
-            <span style={{ color: "white", fontWeight: 900, fontSize: 13, marginRight: 6, whiteSpace: "nowrap" }}>BONUSMATE ERP</span>
+          <Link href="/" style={{ color: "white", fontWeight: 900, fontSize: 13, marginRight: 6, whiteSpace: "nowrap", textDecoration: "none" }}>BONUSMATE ERP</Link>
             <NaverOrderAlert />
 
             {nav
