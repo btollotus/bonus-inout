@@ -295,7 +295,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [viewMode, setViewMode] = useState(false);
   const [viewLogs, setViewLogs] = useState<DailyWorkLog[]>([]);
   const [viewLoading, setViewLoading] = useState(false);
-  const [viewClockMap, setViewClockMap] = useState<Record<string, { clock_in: string | null; clock_out: string | null }>>({});
+  const [viewClockMap, setViewClockMap] = useState<Record<string, { in: string | null; out: string | null }>>({});
 
   const today = todayKST();
 
@@ -475,14 +475,24 @@ function ProductionLogTab({ role, userId, showToast }: {
 
   async function loadViewLogs() {
     setViewLoading(true);
-    const [{ data }, { data: wlData }] = await Promise.all([
+    const [{ data }, { data: attData }] = await Promise.all([
       supabase.from("daily_work_logs").select("*").eq("log_date", viewDate).order("employee_name"),
-      supabase.from("work_logs").select("worker_name,clock_in,clock_out").eq("log_date", viewDate),
+      supabase.from("attendance")
+        .select("type, happened_at, employee:employees(name)")
+        .gte("happened_at", `${viewDate}T00:00:00+09:00`)
+        .lte("happened_at", `${viewDate}T23:59:59+09:00`),
     ]);
     const logs = (data ?? []) as DailyWorkLog[];
     setViewLogs(logs);
-    const clockMap: Record<string, { clock_in: string | null; clock_out: string | null }> = {};
-    (wlData ?? []).forEach((w: any) => { clockMap[w.worker_name] = { clock_in: w.clock_in, clock_out: w.clock_out }; });
+    const clockMap: Record<string, { in: string | null; out: string | null }> = {};
+    (attData ?? []).forEach((a: any) => {
+      const name = a.employee?.name;
+      if (!name) return;
+      if (!clockMap[name]) clockMap[name] = { in: null, out: null };
+      const timeKST = new Date(a.happened_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" });
+      if (a.type === "IN") clockMap[name].in = timeKST;
+      if (a.type === "OUT") clockMap[name].out = timeKST;
+    });
     setViewClockMap(clockMap);
 
     const allNos = [...new Set(logs.flatMap((l) => l.work_order_nos ?? []))];
@@ -615,11 +625,11 @@ function ProductionLogTab({ role, userId, showToast }: {
                   <span>{log.employee_name}</span>
                   {viewClockMap[log.employee_name] && (
                     <span style={{ fontSize: "8pt", fontWeight: "normal", color: "#555" }}>
-                      {viewClockMap[log.employee_name].clock_in && `출근 ${viewClockMap[log.employee_name].clock_in}`}
-                      {viewClockMap[log.employee_name].clock_in && viewClockMap[log.employee_name].clock_out && " · "}
-                      {viewClockMap[log.employee_name].clock_out && `퇴근 ${viewClockMap[log.employee_name].clock_out}`}
+                      {viewClockMap[log.employee_name].in && `출근 ${viewClockMap[log.employee_name].in}`}
+                      {viewClockMap[log.employee_name].in && viewClockMap[log.employee_name].out && " · "}
+                      {viewClockMap[log.employee_name].out && `퇴근 ${viewClockMap[log.employee_name].out}`}
                     </span>
-                  )}
+                  )}  
                 </div>
                 {(log.work_order_nos ?? []).length > 0 && (
                   <div style={{ marginBottom: 6 }}>
