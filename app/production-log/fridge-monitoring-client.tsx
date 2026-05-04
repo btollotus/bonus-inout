@@ -735,55 +735,63 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
     return mon.toISOString().slice(0, 10);
   });
   const [printData, setPrintData] = useState<Record<string, Record<string, LogEntry>>>({});
-  const [printSigs, setPrintSigs] = useState<Record<string, SignatureEntry[]>>({});
+  const [printSigs, setPrintSigs] = useState<Record<string, { AM: string | null; PM: string | null }>>({});
+  const [printTimes, setPrintTimes] = useState<Record<string, { AM: string | null; PM: string | null }>>({});
+  const [printNotes, setPrintNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
-  // 주간 날짜 배열 (월~금)
   function getWeekDates(start: string): string[] {
     const dates: string[] = [];
     for (let i = 0; i < 5; i++) {
       const d = new Date(start + "T00:00:00+09:00");
       d.setDate(d.getDate() + i);
-      dates.push(d.toISOString().slice(0, 10));
+      const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+      dates.push(kst.toISOString().slice(0, 10));
     }
     return dates;
   }
 
   const weekDates = getWeekDates(weekStart);
+  const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
   async function loadPrint() {
     setLoading(true);
-    const { data: logs } = await supabase
-      .from("fridge_monitoring_logs")
-      .select("*")
-      .in("log_date", weekDates);
+    const [{ data: logs }, { data: sigs }] = await Promise.all([
+      supabase.from("fridge_monitoring_logs").select("*").in("log_date", weekDates),
+      supabase.from("fridge_monitoring_signatures").select("*").in("log_date", weekDates).eq("role", "inspector"),
+    ]);
 
-    const { data: sigs } = await supabase
-      .from("fridge_monitoring_signatures")
-      .select("*")
-      .in("log_date", weekDates);
-
-    // 날짜-period 키로 맵핑
     const dataMap: Record<string, Record<string, LogEntry>> = {};
+    const notesMap: Record<string, string> = {};
     for (const row of logs ?? []) {
       const colKey = `${row.log_date}-${row.period}`;
       if (!dataMap[colKey]) dataMap[colKey] = {};
       dataMap[colKey][`${row.device_type}-${row.device_no}`] = row;
+      if (row.special_note) notesMap[row.log_date] = row.special_note;
     }
     setPrintData(dataMap);
+    setPrintNotes(notesMap);
 
-    const sigMap: Record<string, SignatureEntry[]> = {};
+    // 점검자/점검시각 맵
+    const sigMap: Record<string, { AM: string | null; PM: string | null }> = {};
+    const timeMap: Record<string, { AM: string | null; PM: string | null }> = {};
     for (const sig of sigs ?? []) {
-      if (!sigMap[sig.log_date]) sigMap[sig.log_date] = [];
-      sigMap[sig.log_date].push(sig);
+      if (!sigMap[sig.log_date]) sigMap[sig.log_date] = { AM: null, PM: null };
+      sigMap[sig.log_date][sig.period as "AM"|"PM"] = sig.inspector_name;
+    }
+    // 점검시각은 logs에서 추출
+    for (const row of logs ?? []) {
+      if (!timeMap[row.log_date]) timeMap[row.log_date] = { AM: null, PM: null };
+      if (row.check_time && !timeMap[row.log_date][row.period as "AM"|"PM"]) {
+        timeMap[row.log_date][row.period as "AM"|"PM"] = row.check_time;
+      }
     }
     setPrintSigs(sigMap);
+    setPrintTimes(timeMap);
     setLoading(false);
   }
 
   useEffect(() => { loadPrint(); }, [weekStart]);
-
-  const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
   function doPrint() {
     const content = document.getElementById("fridge-print-content");
@@ -792,18 +800,25 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
     iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
     document.body.appendChild(iframe);
     const doc = iframe.contentDocument!;
+    const weekEnd = weekDates[4];
+    const title = `냉장냉동온장고_모니터링일지_${weekStart}_${weekEnd}`;
     doc.open();
-    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>냉장냉동온장고 모니터링일지</title>
+    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
       <style>
         @page{size:A4 landscape;margin:8mm 10mm;}
         body{margin:0;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:8pt;color:#111;}
         *{box-sizing:border-box;}
         table{border-collapse:collapse;width:100%;}
-        th,td{border:1px solid #999;padding:2px 4px;text-align:center;font-size:7.5pt;}
-        .header-title{text-align:center;font-size:14pt;font-weight:bold;letter-spacing:4px;margin-bottom:6px;}
-        .ok{color:#1d4ed8;}
+        th,td{border:0.5px solid #aaa;padding:2px 3px;text-align:center;font-size:7pt;}
+        .th{background:#f0f4f8;font-weight:bold;}
+        .ok{color:#1d4ed8;font-weight:bold;}
         .ng{color:#dc2626;font-weight:bold;}
-        .sig-img{max-width:60px;max-height:24px;}
+        .empty{color:#bbb;}
+        .type-cell{writing-mode:vertical-lr;text-orientation:upright;letter-spacing:1px;font-weight:bold;font-size:7pt;}
+        .bg-f{background:#eff6ff;}
+        .bg-z{background:#f0fdf4;}
+        .bg-w{background:#fffbeb;}
+        .foot-row{background:#f8fafc;font-weight:bold;}
       </style>
     </head><body>${content.innerHTML}</body></html>`);
     doc.close();
@@ -811,6 +826,21 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
   }
 
   const inp = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none";
+
+  // 이탈 조치사항 수집 (장비별 주간 전체)
+  function getActionNotes(key: string): string {
+    const notes: string[] = [];
+    for (const d of weekDates) {
+      const amEntry = printData[`${d}-AM`]?.[key];
+      const pmEntry = printData[`${d}-PM`]?.[key];
+      if (amEntry?.action_note) notes.push(`${d.slice(5)} 오전: ${amEntry.action_note}`);
+      if (pmEntry?.action_note) notes.push(`${d.slice(5)} 오후: ${pmEntry.action_note}`);
+    }
+    return notes.join(" / ");
+  }
+
+  // 주간 특이사항 합산
+  const allNotes = weekDates.map(d => printNotes[d]).filter(Boolean).join(" / ");
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-slate-100">
@@ -829,27 +859,34 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
         <div className="bg-white shadow-xl" style={{ width: "297mm", minHeight: "210mm", padding: "8mm 10mm" }}>
           {loading ? <div className="text-center text-sm text-slate-400 py-12">불러오는 중...</div> : (
             <div id="fridge-print-content">
-              <div className="header-title" style={{ textAlign: "center", fontSize: 16, fontWeight: "bold", letterSpacing: 4, marginBottom: 8, borderBottom: "2px solid #111", paddingBottom: 4 }}>
+              {/* 제목 */}
+              <div style={{ textAlign: "center", fontSize: "14pt", fontWeight: "bold", letterSpacing: "4px", marginBottom: "6px", paddingBottom: "4px", borderBottom: "1.5px solid #111" }}>
                 냉장·냉동·온장고 모니터링일지
               </div>
+              {/* 메타 */}
+              <div style={{ fontSize: "7.5pt", color: "#555", marginBottom: "6px", display: "flex", gap: "16px" }}>
+                <span>점검주기: 2회/일 (오전·오후)</span>
+                <span>검사방법: 외부 부착 온도계 값 기록</span>
+                <span>점검기간: {weekDates[0].slice(5).replace("-","/")} (월) ~ {weekDates[4].slice(5).replace("-","/")} (금)</span>
+              </div>
 
-              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "7.5pt" }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "7pt" }}>
                 <thead>
-                  <tr style={{ background: "#f8fafc" }}>
-                    <th style={{ border: "1px solid #999", padding: "3px 4px", width: 55 }} rowSpan={2}>구분</th>
-                    <th style={{ border: "1px solid #999", padding: "3px 4px", width: 40 }} rowSpan={2}>온도기준</th>
+                  <tr style={{ background: "#f0f4f8" }}>
+                    <th className="th" colSpan={2} rowSpan={2} style={{ width: "56px" }}>구분</th>
+                    <th className="th" rowSpan={2} style={{ width: "42px" }}>온도기준</th>
                     {weekDates.map((d, i) => (
-                      <th key={d} colSpan={2} style={{ border: "1px solid #999", padding: "3px 4px" }}>
-                        {d.slice(5).replace("-", "/")} ({DAY_LABELS[i]})
+                      <th key={d} className="th" colSpan={2} style={{ fontSize: "7pt" }}>
+                        {d.slice(5).replace("-","/")} ({DAY_LABELS[i]})
                       </th>
                     ))}
-                    <th style={{ border: "1px solid #999", padding: "3px 4px", width: 50 }} rowSpan={2}>이탈시<br/>조치사항</th>
+                    <th className="th" rowSpan={2} style={{ width: "52px" }}>이탈시<br/>조치사항</th>
                   </tr>
-                  <tr style={{ background: "#f8fafc" }}>
+                  <tr style={{ background: "#f0f4f8" }}>
                     {weekDates.map(d => (
                       <React.Fragment key={d}>
-                        <th style={{ border: "1px solid #999", padding: "2px 3px", fontSize: "7pt" }}>오전</th>
-                        <th style={{ border: "1px solid #999", padding: "2px 3px", fontSize: "7pt" }}>오후</th>
+                        <th className="th" style={{ fontSize: "6.5pt", width: "26px" }}>오전</th>
+                        <th className="th" style={{ fontSize: "6.5pt", width: "26px" }}>오후</th>
                       </React.Fragment>
                     ))}
                   </tr>
@@ -857,84 +894,69 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
                 <tbody>
                   {DEVICES.map((dev, dIdx) => dev.nos.map((no, nIdx) => {
                     const key = `${dev.type}-${no}`;
-                    const actionNotes: string[] = [];
+                    const bgColor = dIdx === 0 ? "#eff6ff" : dIdx === 1 ? "#f0fdf4" : "#fffbeb";
+                    const actionNote = getActionNotes(key);
                     return (
-                      <tr key={key} style={{ borderBottom: "1px solid #ccc" }}>
+                      <tr key={key}>
                         {nIdx === 0 && (
-                          <td rowSpan={dev.nos.length} style={{ border: "1px solid #999", padding: "2px 4px", fontWeight: "bold", background: dIdx === 0 ? "#e0f2fe" : dIdx === 1 ? "#e0e7ff" : "#fef3c7", writingMode: "vertical-lr", textOrientation: "upright", letterSpacing: 2, fontSize: "8pt" }}>
+                          <td rowSpan={dev.nos.length} style={{ border: "0.5px solid #aaa", background: bgColor, writingMode: "vertical-lr", textOrientation: "upright", letterSpacing: "1px", fontWeight: "bold", fontSize: "7pt", width: "16px" }}>
                             {dev.type}
                           </td>
                         )}
-                        <td style={{ border: "1px solid #999", padding: "2px 4px" }}>{dev.type}-{no}</td>
-                        <td style={{ border: "1px solid #999", padding: "2px 4px", fontSize: "7pt", color: "#555" }}>{getTempRange(dev.type)}</td>
+                        <td style={{ border: "0.5px solid #aaa", textAlign: "left", paddingLeft: "3px", fontSize: "7pt", whiteSpace: "nowrap" }}>{dev.type.slice(0,2)}-{no}</td>
+                        <td style={{ border: "0.5px solid #aaa", fontSize: "6.5pt", color: "#666" }}>{getTempRange(dev.type)}</td>
                         {weekDates.map(d => {
-                          const amEntry = printData[`${d}-AM`]?.[key];
-                          const pmEntry = printData[`${d}-PM`]?.[key];
-                          if (amEntry?.action_note) actionNotes.push(amEntry.action_note);
-                          if (pmEntry?.action_note) actionNotes.push(pmEntry.action_note);
+                          const amE = printData[`${d}-AM`]?.[key];
+                          const pmE = printData[`${d}-PM`]?.[key];
+                          const amOk = amE?.temperature != null ? isInRange(amE.temperature, dev.type) : null;
+                          const pmOk = pmE?.temperature != null ? isInRange(pmE.temperature, dev.type) : null;
                           return (
                             <React.Fragment key={d}>
-                              <td style={{ border: "1px solid #999", padding: "2px 3px", textAlign: "center", color: amEntry?.temperature !== null ? (isInRange(amEntry?.temperature ?? null, dev.type) ? "#1d4ed8" : "#dc2626") : "#ccc", fontWeight: amEntry?.is_ok === false ? "bold" : "normal" }}>
-                                {amEntry?.temperature != null ? formatTemp(amEntry.temperature) : "℃"}
+                              <td style={{ border: "0.5px solid #aaa", color: amOk === null ? "#bbb" : amOk ? "#1d4ed8" : "#dc2626", fontWeight: amOk === false ? "bold" : "normal" }}>
+                                {amE?.temperature != null ? formatTemp(amE.temperature) : "—"}
                               </td>
-                              <td style={{ border: "1px solid #999", padding: "2px 3px", textAlign: "center", color: pmEntry?.temperature !== null ? (isInRange(pmEntry?.temperature ?? null, dev.type) ? "#1d4ed8" : "#dc2626") : "#ccc", fontWeight: pmEntry?.is_ok === false ? "bold" : "normal" }}>
-                                {pmEntry?.temperature != null ? formatTemp(pmEntry.temperature) : "℃"}
+                              <td style={{ border: "0.5px solid #aaa", color: pmOk === null ? "#bbb" : pmOk ? "#1d4ed8" : "#dc2626", fontWeight: pmOk === false ? "bold" : "normal" }}>
+                                {pmE?.temperature != null ? formatTemp(pmE.temperature) : "—"}
                               </td>
                             </React.Fragment>
                           );
                         })}
-                        <td style={{ border: "1px solid #999", padding: "2px 4px", fontSize: "6.5pt", color: "#dc2626" }}>
-                          {actionNotes.join(" / ")}
+                        <td style={{ border: "0.5px solid #aaa", fontSize: "6pt", color: "#dc2626", textAlign: "left", padding: "1px 3px" }}>
+                          {actionNote}
                         </td>
                       </tr>
                     );
                   }))}
 
-                  {/* 점검자 사인 행 */}
+                  {/* 점검시각 행 */}
                   <tr style={{ background: "#f8fafc" }}>
-                    <td colSpan={2} style={{ border: "1px solid #999", padding: "3px 4px", fontWeight: "bold", textAlign: "center", fontSize: "7.5pt" }}>점검자</td>
-                    <td style={{ border: "1px solid #999", padding: "2px" }} colSpan={2}>
-                      {/* 서명 여기 */}
-                    </td>
-                    {weekDates.map((d, i) => {
-                      if (i === 0) return null;
-                      const daySigs = printSigs[d] ?? [];
-                      const amSig = daySigs.find(s => s.period === "AM" && s.role === "inspector");
-                      const pmSig = daySigs.find(s => s.period === "PM" && s.role === "inspector");
-                      return (
-                        <React.Fragment key={d}>
-                          <td style={{ border: "1px solid #999", padding: "2px", height: 28, textAlign: "center" }}>
-                            {amSig?.signature_data && <img src={amSig.signature_data} style={{ maxWidth: 60, maxHeight: 24 }} alt="사인" />}
-                          </td>
-                          <td style={{ border: "1px solid #999", padding: "2px", textAlign: "center" }}>
-                            {pmSig?.signature_data && <img src={pmSig.signature_data} style={{ maxWidth: 60, maxHeight: 24 }} alt="사인" />}
-                          </td>
-                        </React.Fragment>
-                      );
-                    })}
-                    <td style={{ border: "1px solid #999" }} />
+                    <td colSpan={3} style={{ border: "0.5px solid #aaa", fontWeight: "bold", textAlign: "center", fontSize: "7pt" }}>점검시각</td>
+                    {weekDates.map(d => (
+                      <React.Fragment key={d}>
+                        <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printTimes[d]?.AM ?? "—"}</td>
+                        <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printTimes[d]?.PM ?? "—"}</td>
+                      </React.Fragment>
+                    ))}
+                    <td style={{ border: "0.5px solid #aaa" }} />
+                  </tr>
+
+                  {/* 점검자 행 */}
+                  <tr style={{ background: "#f8fafc" }}>
+                    <td colSpan={3} style={{ border: "0.5px solid #aaa", fontWeight: "bold", textAlign: "center", fontSize: "7pt" }}>점검자</td>
+                    {weekDates.map(d => (
+                      <React.Fragment key={d}>
+                        <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printSigs[d]?.AM ?? "—"}</td>
+                        <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printSigs[d]?.PM ?? "—"}</td>
+                      </React.Fragment>
+                    ))}
+                    <td style={{ border: "0.5px solid #aaa" }} />
                   </tr>
                 </tbody>
               </table>
 
-              {/* 특이사항 + 작성/승인 */}
-              <div style={{ marginTop: 8, display: "flex", gap: 12, alignItems: "flex-start" }}>
-                <div style={{ flex: 1, border: "1px solid #999", borderRadius: 4, padding: "4px 8px", minHeight: 32, fontSize: "7.5pt" }}>
-                  <span style={{ fontWeight: "bold" }}>특이사항: </span>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {(["AUTHOR", "APPROVER"] as const).map(role => {
-                    const sig = Object.values(printSigs).flat().find(s => s.period === role);
-                    return (
-                      <div key={role} style={{ border: "1px solid #999", borderRadius: 4, padding: "4px 8px", textAlign: "center", width: 80 }}>
-                        <div style={{ fontSize: "7pt", color: "#555", marginBottom: 2 }}>{role === "AUTHOR" ? "작성" : "승인"}</div>
-                        {sig?.signature_data
-                          ? <img src={sig.signature_data} style={{ maxWidth: 60, maxHeight: 24 }} alt="사인" />
-                          : <div style={{ height: 24 }} />}
-                      </div>
-                    );
-                  })}
-                </div>
+              {/* 특이사항 */}
+              <div style={{ marginTop: "6px", border: "0.5px solid #aaa", borderRadius: "3px", padding: "4px 8px", fontSize: "7.5pt", minHeight: "24px" }}>
+                <span style={{ fontWeight: "bold" }}>특이사항: </span>{allNotes}
               </div>
             </div>
           )}
