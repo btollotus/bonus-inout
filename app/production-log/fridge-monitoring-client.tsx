@@ -513,39 +513,6 @@ export default function FridgeMonitoringClient() {
                   />
                 </div>
 
-                {/* 점검자 확인 */}
-                <div className={`${card} p-4`}>
-                  <div className="mb-3 font-semibold text-sm">✍️ 점검자 확인</div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {(["AM", "PM"] as const).map(p => {
-                      const inspector = p === "AM" ? amInspector : pmInspector;
-                      const isCurrentPeriod = period === p;
-                      return (
-                        <div key={p} className={`rounded-xl border px-4 py-3 ${inspector ? "border-green-200 bg-green-50" : "border-slate-200 bg-slate-50"}`}>
-                          <div className="text-xs text-slate-400 mb-1">{p === "AM" ? "오전" : "오후"} 점검자</div>
-                          {inspector ? (
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-semibold text-green-700 text-sm">👤 {inspector.name}</span>
-                              {isCurrentPeriod && !isReadOnly && (
-                                <button type="button" className="text-[10px] text-slate-400 hover:text-red-500 underline"
-                                  onClick={() => { if (p === "AM") setAmInspector(null); else setPmInspector(null); }}>
-                                  변경
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <button type="button"
-                              className="w-full rounded-lg border border-dashed border-amber-300 py-1.5 text-xs font-semibold text-amber-600 hover:bg-amber-50"
-                              onClick={() => { setPinTarget(p); setShowPinModal(true); }}>
-                              🔑 PIN 입력
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
                 {/* 저장 버튼 */}
                 {!isReadOnly && (
                   <div className="flex gap-3">
