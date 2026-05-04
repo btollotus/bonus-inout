@@ -166,9 +166,14 @@ export default function FridgeMonitoringClient() {
   const [toast, setToast] = useState<{ msg: string; type: "success"|"error" } | null>(null);
   const [viewMode, setViewMode] = useState<"input"|"query">("input");
 
-  // PIN
-  const { session: pinSession, login: pinLogin } = usePinSession();
+  // PIN — 오전/오후 각각 독립
+  const { login: pinLogin } = usePinSession();
   const [showPinModal, setShowPinModal] = useState(false);
+  const [pinTarget, setPinTarget] = useState<"AM"|"PM">("AM");
+  const [amInspector, setAmInspector] = useState<{ id: string; name: string } | null>(null);
+  const [pmInspector, setPmInspector] = useState<{ id: string; name: string } | null>(null);
+
+  const currentInspector = period === "AM" ? amInspector : pmInspector;
 
   function showToast(msg: string, type: "success"|"error" = "success") {
     setToast({ msg, type });
@@ -215,12 +220,13 @@ export default function FridgeMonitoringClient() {
         .eq("log_date", logDate)
         .eq("period", period);
 
-      // 사인 로드
+      // 사인(inspector) 로드
       const { data: sigs } = await supabase
         .from("fridge_monitoring_signatures")
         .select("*")
         .eq("log_date", logDate)
-        .in("period", [period, "AUTHOR", "APPROVER"]);
+        .in("period", ["AM", "PM"])
+        .eq("role", "inspector");
 
       const base = initEntries();
 
@@ -237,12 +243,16 @@ export default function FridgeMonitoringClient() {
       }
       setEntries(base);
 
-      // 사인 맵
-      const sigMap: Record<string, SignatureEntry> = {};
+      // 기존 점검자 복원
       for (const sig of sigs ?? []) {
-        sigMap[`${sig.period}-${sig.role}`] = sig;
+        if (sig.period === "AM" && sig.inspector_id && sig.inspector_name) {
+          setAmInspector({ id: sig.inspector_id, name: sig.inspector_name });
+        }
+        if (sig.period === "PM" && sig.inspector_id && sig.inspector_name) {
+          setPmInspector({ id: sig.inspector_id, name: sig.inspector_name });
+        }
+        setSignatures(prev => ({ ...prev, [`${sig.period}-${sig.role}`]: sig }));
       }
-      setSignatures(sigMap);
     } finally {
       setLoading(false);
     }
@@ -269,7 +279,8 @@ export default function FridgeMonitoringClient() {
 
   // 저장
   async function handleSave() {
-    if (!pinSession) {
+    if (!currentInspector) {
+      setPinTarget(period);
       setShowPinModal(true);
       return;
     }
@@ -288,8 +299,8 @@ export default function FridgeMonitoringClient() {
       const toSave = Object.values(entries).map(e => ({
         ...e,
         special_note: specialNote.trim() || null,
-        inspector_id: pinSession.employeeId,
-        inspector_name: pinSession.employeeName,
+        inspector_id: currentInspector.id,
+        inspector_name: currentInspector.name,
         action_note: e.action_note.trim() || null,
       }));
 
@@ -297,6 +308,17 @@ export default function FridgeMonitoringClient() {
         onConflict: "log_date,period,device_type,device_no"
       });
       if (error) throw error;
+
+      // 점검자 사인 기록
+      await supabase.from("fridge_monitoring_signatures").upsert({
+        log_date: logDate,
+        period,
+        role: "inspector",
+        inspector_id: currentInspector.id,
+        inspector_name: currentInspector.name,
+        signature_data: null,
+      }, { onConflict: "log_date,period,role" });
+
       showToast("✅ 저장 완료!");
       await loadData();
     } catch (e: any) {
@@ -306,25 +328,7 @@ export default function FridgeMonitoringClient() {
     }
   }
 
-  // 사인 저장
-  async function handleSignature(sigPeriod: string, role: Role, data: string) {
-    const key = `${sigPeriod}-${role}`;
-    const existing = signatures[key];
-    const payload: any = {
-      log_date: logDate,
-      period: sigPeriod,
-      role,
-      inspector_id: pinSession?.employeeId ?? null,
-      inspector_name: pinSession?.employeeName ?? null,
-      signature_data: data || null,
-    };
-    if (existing?.id) {
-      await supabase.from("fridge_monitoring_signatures").update(payload).eq("id", existing.id);
-    } else {
-      await supabase.from("fridge_monitoring_signatures").upsert(payload, { onConflict: "log_date,period,role" });
-    }
-    setSignatures(prev => ({ ...prev, [key]: { ...payload, id: existing?.id } }));
-  }
+  // 사인 저장 함수 제거됨 (작성/승인란 삭제)
 
   const isTodayOrPast = logDate <= todayKST();
   const isReadOnly = !isTodayOrPast;
@@ -334,10 +338,11 @@ export default function FridgeMonitoringClient() {
     e.temperature !== null && !isInRange(e.temperature, e.device_type)
   );
 
-  // 점검자 정보
+  // 점검자 이름 (현재 period 기준)
   const inspectorName = (() => {
+    if (currentInspector) return currentInspector.name;
     const first = Object.values(entries).find(e => e.inspector_name);
-    return first?.inspector_name ?? pinSession?.employeeName ?? null;
+    return first?.inspector_name ?? null;
   })();
 
   const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none";
@@ -352,9 +357,11 @@ export default function FridgeMonitoringClient() {
         {showPinModal && (
           <PinModal
             employees={employees.filter(e => e.name !== null) as any}
-            title="점검자 확인"
+            title={`${pinTarget === "AM" ? "오전" : "오후"} 점검자 확인`}
             onSuccess={(empId, empName) => {
               pinLogin(empId, empName);
+              if (pinTarget === "AM") setAmInspector({ id: empId, name: empName });
+              else setPmInspector({ id: empId, name: empName });
               setShowPinModal(false);
             }}
             onCancel={() => setShowPinModal(false)}
@@ -401,16 +408,16 @@ export default function FridgeMonitoringClient() {
                   </div>
                 </div>
                 <div className="ml-auto flex items-center gap-3">
-                  {/* 점검자 표시 */}
-                  {pinSession ? (
+                  {/* 현재 period 점검자 표시 */}
+                  {currentInspector ? (
                     <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
-                      <span className="text-green-600 text-sm font-semibold">👤 {pinSession.employeeName}</span>
-                      <span className="text-xs text-green-500">점검자 확인됨</span>
+                      <span className="text-green-600 text-sm font-semibold">👤 {currentInspector.name}</span>
+                      <span className="text-xs text-green-500">{period === "AM" ? "오전" : "오후"} 점검자 확인됨</span>
                     </div>
                   ) : (
                     <button className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
-                      onClick={() => setShowPinModal(true)}>
-                      🔑 PIN 입력
+                      onClick={() => { setPinTarget(period); setShowPinModal(true); }}>
+                      🔑 {period === "AM" ? "오전" : "오후"} PIN 입력
                     </button>
                   )}
                 </div>
@@ -422,7 +429,7 @@ export default function FridgeMonitoringClient() {
             ) : (
               <>
                 {/* PIN 미인증 안내 */}
-                {!pinSession && (
+                {!currentInspector && (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center gap-3">
                     <span className="text-lg">🔑</span>
                     <div className="text-sm text-amber-700 font-semibold">PIN을 입력해야 온도 기록이 가능합니다.</div>
@@ -453,7 +460,7 @@ export default function FridgeMonitoringClient() {
                               type={dev.type}
                               entry={entry}
                               onSelect={(temp) => handleTempSelect(key, temp)}
-                              disabled={isReadOnly || !pinSession}
+                              disabled={isReadOnly || !currentInspector}
                             />
                             {/* 이탈 조치사항 */}
                             {entry.temperature !== null && !isInRange(entry.temperature, dev.type) && (
@@ -509,24 +516,30 @@ export default function FridgeMonitoringClient() {
                 {/* 점검자 확인 */}
                 <div className={`${card} p-4`}>
                   <div className="mb-3 font-semibold text-sm">✍️ 점검자 확인</div>
-                  <div className="flex flex-wrap gap-4 items-center">
-                    {/* 오전/오후 점검자 */}
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm">
-                      <div className="text-xs text-slate-400 mb-0.5">{period === "AM" ? "오전" : "오후"} 점검자</div>
-                      <div className="font-semibold text-slate-700">
-                        {inspectorName ?? <span className="text-slate-300 font-normal">PIN 입력 후 자동 기록</span>}
-                      </div>
-                    </div>
-                    <div className="w-px bg-slate-200 self-stretch" />
-                    {/* 작성/승인 — 이름만 텍스트로 표시 */}
-                    {(["AUTHOR","APPROVER"] as const).map(role => {
-                      const sig = signatures[`${role}-${role.toLowerCase()}`];
+                  <div className="grid grid-cols-2 gap-3">
+                    {(["AM", "PM"] as const).map(p => {
+                      const inspector = p === "AM" ? amInspector : pmInspector;
+                      const isCurrentPeriod = period === p;
                       return (
-                        <div key={role} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm">
-                          <div className="text-xs text-slate-400 mb-0.5">{role === "AUTHOR" ? "작성" : "승인"}</div>
-                          <div className="font-semibold text-slate-700">
-                            {sig?.inspector_name ?? <span className="text-slate-300 font-normal">미입력</span>}
-                          </div>
+                        <div key={p} className={`rounded-xl border px-4 py-3 ${inspector ? "border-green-200 bg-green-50" : "border-slate-200 bg-slate-50"}`}>
+                          <div className="text-xs text-slate-400 mb-1">{p === "AM" ? "오전" : "오후"} 점검자</div>
+                          {inspector ? (
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-green-700 text-sm">👤 {inspector.name}</span>
+                              {isCurrentPeriod && !isReadOnly && (
+                                <button type="button" className="text-[10px] text-slate-400 hover:text-red-500 underline"
+                                  onClick={() => { if (p === "AM") setAmInspector(null); else setPmInspector(null); }}>
+                                  변경
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <button type="button"
+                              className="w-full rounded-lg border border-dashed border-amber-300 py-1.5 text-xs font-semibold text-amber-600 hover:bg-amber-50"
+                              onClick={() => { setPinTarget(p); setShowPinModal(true); }}>
+                              🔑 PIN 입력
+                            </button>
+                          )}
                         </div>
                       );
                     })}
