@@ -330,8 +330,7 @@ export default function FridgeMonitoringClient() {
 
   // 사인 저장 함수 제거됨 (작성/승인란 삭제)
 
-  const isTodayOrPast = logDate <= todayKST();
-  const isReadOnly = !isTodayOrPast;
+  const isReadOnly = logDate !== todayKST();
 
   // 이탈 항목 목록
   const outOfRangeEntries = Object.entries(entries).filter(([, e]) =>
@@ -398,7 +397,11 @@ export default function FridgeMonitoringClient() {
                   <div className="mb-1 text-xs text-slate-500">점검일</div>
                   <input type="date" className={inp} style={{ width: 160 }}
                     value={logDate} max={todayKST()}
-                    onChange={e => setLogDate(e.target.value)} />
+                    onChange={e => {
+                      setLogDate(e.target.value);
+                      setAmInspector(null);
+                      setPmInspector(null);
+                    }} />
                 </div>
                 <div>
                   <div className="mb-1 text-xs text-slate-500">점검시간</div>
