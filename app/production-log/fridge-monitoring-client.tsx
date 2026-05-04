@@ -727,38 +727,55 @@ function PrintButton({ logDate, period, entries, signatures, specialNote }: {
 
 // ─── 인쇄 모달 (주간 단위) ────────────────────────────────────
 function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void }) {
-  const [weekStart, setWeekStart] = useState(() => {
+  // 기간 선택 (시작일 ~ 종료일)
+  const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date(logDate + "T00:00:00+09:00");
     const day = d.getDay();
     const mon = new Date(d);
     mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
     return mon.toISOString().slice(0, 10);
   });
+  const [dateTo, setDateTo] = useState(() => {
+    const d = new Date(logDate + "T00:00:00+09:00");
+    const day = d.getDay();
+    const fri = new Date(d);
+    fri.setDate(d.getDate() + (day === 0 ? 0 : 5 - day));
+    return fri.toISOString().slice(0, 10);
+  });
+
   const [printData, setPrintData] = useState<Record<string, Record<string, LogEntry>>>({});
   const [printSigs, setPrintSigs] = useState<Record<string, { AM: string | null; PM: string | null }>>({});
   const [printTimes, setPrintTimes] = useState<Record<string, { AM: string | null; PM: string | null }>>({});
   const [printNotes, setPrintNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
-  function getWeekDates(start: string): string[] {
+  // 시작~종료 날짜 배열 생성 (KST 기준)
+  function getDates(from: string, to: string): string[] {
     const dates: string[] = [];
-    for (let i = 0; i < 5; i++) {
-      const d = new Date(start + "T00:00:00+09:00");
-      d.setDate(d.getDate() + i);
-      const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+    const cur = new Date(from + "T00:00:00+09:00");
+    const end = new Date(to + "T00:00:00+09:00");
+    while (cur <= end) {
+      const kst = new Date(cur.getTime() + 9 * 60 * 60 * 1000);
       dates.push(kst.toISOString().slice(0, 10));
+      cur.setDate(cur.getDate() + 1);
     }
     return dates;
   }
 
-  const weekDates = getWeekDates(weekStart);
-  const DAY_LABELS = ["월", "화", "수", "목", "금"];
+  const DAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+
+  function getDayLabel(dateStr: string): string {
+    const d = new Date(dateStr + "T00:00:00+09:00");
+    return DAY_LABELS[d.getDay()];
+  }
 
   async function loadPrint() {
+    if (dateFrom > dateTo) return;
     setLoading(true);
+    const dates = getDates(dateFrom, dateTo);
     const [{ data: logs }, { data: sigs }] = await Promise.all([
-      supabase.from("fridge_monitoring_logs").select("*").in("log_date", weekDates),
-      supabase.from("fridge_monitoring_signatures").select("*").in("log_date", weekDates).eq("role", "inspector"),
+      supabase.from("fridge_monitoring_logs").select("*").in("log_date", dates),
+      supabase.from("fridge_monitoring_signatures").select("*").in("log_date", dates).eq("role", "inspector"),
     ]);
 
     const dataMap: Record<string, Record<string, LogEntry>> = {};
@@ -772,14 +789,12 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
     setPrintData(dataMap);
     setPrintNotes(notesMap);
 
-    // 점검자/점검시각 맵
     const sigMap: Record<string, { AM: string | null; PM: string | null }> = {};
     const timeMap: Record<string, { AM: string | null; PM: string | null }> = {};
     for (const sig of sigs ?? []) {
       if (!sigMap[sig.log_date]) sigMap[sig.log_date] = { AM: null, PM: null };
       sigMap[sig.log_date][sig.period as "AM"|"PM"] = sig.inspector_name;
     }
-    // 점검시각은 logs에서 추출
     for (const row of logs ?? []) {
       if (!timeMap[row.log_date]) timeMap[row.log_date] = { AM: null, PM: null };
       if (row.check_time && !timeMap[row.log_date][row.period as "AM"|"PM"]) {
@@ -791,46 +806,40 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
     setLoading(false);
   }
 
-  useEffect(() => { loadPrint(); }, [weekStart]);
+  useEffect(() => { loadPrint(); }, [dateFrom, dateTo]);
 
   function doPrint() {
     const content = document.getElementById("fridge-print-content");
     if (!content) return;
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
-    document.body.appendChild(iframe);
-    const doc = iframe.contentDocument!;
-    const weekEnd = weekDates[4];
-    const title = `냉장냉동온장고_모니터링일지_${weekStart}_${weekEnd}`;
-    doc.open();
-    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+    const title = `냉장냉동온장고_모니터링일지_${dateFrom}_${dateTo}`;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
       <style>
         @page{size:A4 landscape;margin:8mm 10mm;}
         body{margin:0;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:8pt;color:#111;}
-        *{box-sizing:border-box;}
-        table{border-collapse:collapse;width:100%;}
+        *{box-sizing:border-box;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
+        table{border-collapse:collapse;width:100%;page-break-inside:avoid;}
         th,td{border:0.5px solid #aaa;padding:2px 3px;text-align:center;font-size:7pt;}
         .th{background:#f0f4f8;font-weight:bold;}
         .ok{color:#1d4ed8;font-weight:bold;}
         .ng{color:#dc2626;font-weight:bold;}
         .empty{color:#bbb;}
-        .type-cell{writing-mode:vertical-lr;text-orientation:upright;letter-spacing:1px;font-weight:bold;font-size:7pt;}
-        .bg-f{background:#eff6ff;}
-        .bg-z{background:#f0fdf4;}
-        .bg-w{background:#fffbeb;}
-        .foot-row{background:#f8fafc;font-weight:bold;}
       </style>
     </head><body>${content.innerHTML}</body></html>`);
-    doc.close();
-    setTimeout(() => { window.print?.(); document.body.removeChild(iframe); onClose(); }, 500);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 500);
   }
 
   const inp = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none";
 
-  // 이탈 조치사항 수집 (장비별 주간 전체)
+  const dates = getDates(dateFrom, dateTo);
+
+  // 이탈 조치사항 수집
   function getActionNotes(key: string): string {
     const notes: string[] = [];
-    for (const d of weekDates) {
+    for (const d of dates) {
       const amEntry = printData[`${d}-AM`]?.[key];
       const pmEntry = printData[`${d}-PM`]?.[key];
       if (amEntry?.action_note) notes.push(`${d.slice(5)} 오전: ${amEntry.action_note}`);
@@ -839,24 +848,28 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
     return notes.join(" / ");
   }
 
-  // 주간 특이사항 합산
-  const allNotes = weekDates.map(d => printNotes[d]).filter(Boolean).join(" / ");
+  const allNotes = dates.map(d => printNotes[d]).filter(Boolean).join(" / ");
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-slate-100">
       <div className="flex items-center justify-between gap-3 bg-slate-800 px-5 py-3">
         <div className="text-white font-bold">🖨️ 인쇄 미리보기</div>
         <div className="flex items-center gap-3">
-          <div className="text-xs text-slate-300">주 시작일 (월요일)</div>
-          <input type="date" className={`${inp} text-sm`} value={weekStart}
-            onChange={e => setWeekStart(e.target.value)} />
+          <div className="text-xs text-slate-300">출력 기간</div>
+          <input type="date" className={`${inp} text-sm`} value={dateFrom}
+            max={dateTo} onChange={e => setDateFrom(e.target.value)} />
+          <span className="text-slate-300 text-sm">~</span>
+          <input type="date" className={`${inp} text-sm`} value={dateTo}
+            min={dateFrom} max={todayKST()}
+            onChange={e => setDateTo(e.target.value)} />
+          <div className="text-xs text-slate-400">{dates.length}일</div>
           <button className="rounded-xl border border-blue-400 bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700" onClick={doPrint}>인쇄</button>
           <button className="rounded-xl border border-slate-500 bg-slate-600 px-4 py-2 text-sm text-white hover:bg-slate-700" onClick={onClose}>닫기</button>
         </div>
       </div>
 
       <div className="flex-1 overflow-auto p-6 flex justify-center">
-        <div className="bg-white shadow-xl" style={{ width: "297mm", minHeight: "210mm", padding: "8mm 10mm" }}>
+        <div className="bg-white shadow-xl" style={{ minWidth: "297mm", minHeight: "210mm", padding: "8mm 10mm" }}>
           {loading ? <div className="text-center text-sm text-slate-400 py-12">불러오는 중...</div> : (
             <div id="fridge-print-content">
               {/* 제목 */}
@@ -867,7 +880,7 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
               <div style={{ fontSize: "7.5pt", color: "#555", marginBottom: "6px", display: "flex", gap: "16px" }}>
                 <span>점검주기: 2회/일 (오전·오후)</span>
                 <span>검사방법: 외부 부착 온도계 값 기록</span>
-                <span>점검기간: {weekDates[0].slice(5).replace("-","/")} (월) ~ {weekDates[4].slice(5).replace("-","/")} (금)</span>
+                <span>점검기간: {dateFrom.slice(5).replace("-","/")} ({getDayLabel(dateFrom)}) ~ {dateTo.slice(5).replace("-","/")} ({getDayLabel(dateTo)})</span>
               </div>
 
               <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "7pt" }}>
@@ -875,15 +888,15 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
                   <tr style={{ background: "#f0f4f8" }}>
                     <th className="th" colSpan={2} rowSpan={2} style={{ width: "52px" }}>구분</th>
                     <th className="th" rowSpan={2} style={{ width: "38px" }}>온도기준</th>
-                    {weekDates.map((d, i) => (
+                    {dates.map((d) => (
                       <th key={d} className="th" colSpan={2} style={{ fontSize: "7pt" }}>
-                        {d.slice(5).replace("-","/")} ({DAY_LABELS[i]})
+                        {d.slice(5).replace("-","/")} ({getDayLabel(d)})
                       </th>
                     ))}
                     <th className="th" rowSpan={2} style={{ width: "80px" }}>이탈시<br/>조치사항</th>
                   </tr>
                   <tr style={{ background: "#f0f4f8" }}>
-                    {weekDates.map(d => (
+                    {dates.map(d => (
                       <React.Fragment key={d}>
                         <th className="th" style={{ fontSize: "6.5pt", width: "28px" }}>오전</th>
                         <th className="th" style={{ fontSize: "6.5pt", width: "28px" }}>오후</th>
@@ -905,7 +918,7 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
                         )}
                         <td style={{ border: "0.5px solid #aaa", textAlign: "left", paddingLeft: "3px", fontSize: "7pt", whiteSpace: "nowrap", width: "38px" }}>{dev.type.slice(0,2)}-{no}</td>
                         <td style={{ border: "0.5px solid #aaa", fontSize: "6.5pt", color: "#666", width: "38px" }}>{getTempRange(dev.type)}</td>
-                        {weekDates.map(d => {
+                        {dates.map(d => {
                           const amE = printData[`${d}-AM`]?.[key];
                           const pmE = printData[`${d}-PM`]?.[key];
                           const amOk = amE?.temperature != null ? isInRange(amE.temperature, dev.type) : null;
@@ -931,7 +944,7 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
                   {/* 점검시각 행 */}
                   <tr style={{ background: "#f8fafc" }}>
                     <td colSpan={3} style={{ border: "0.5px solid #aaa", fontWeight: "bold", textAlign: "center", fontSize: "7pt" }}>점검시각</td>
-                    {weekDates.map(d => (
+                    {dates.map(d => (
                       <React.Fragment key={d}>
                         <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printTimes[d]?.AM ?? "—"}</td>
                         <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printTimes[d]?.PM ?? "—"}</td>
@@ -943,7 +956,7 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
                   {/* 점검자 행 */}
                   <tr style={{ background: "#f8fafc" }}>
                     <td colSpan={3} style={{ border: "0.5px solid #aaa", fontWeight: "bold", textAlign: "center", fontSize: "7pt" }}>점검자</td>
-                    {weekDates.map(d => (
+                    {dates.map(d => (
                       <React.Fragment key={d}>
                         <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printSigs[d]?.AM ?? "—"}</td>
                         <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printSigs[d]?.PM ?? "—"}</td>
