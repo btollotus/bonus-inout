@@ -167,7 +167,7 @@ export default function FridgeMonitoringClient() {
   const [viewMode, setViewMode] = useState<"input"|"query">("input");
 
   // PIN
-  const { session: pinSession, isValid: isPinValid, login: pinLogin } = usePinSession();
+  const { session: pinSession, login: pinLogin } = usePinSession();
   const [showPinModal, setShowPinModal] = useState(false);
 
   function showToast(msg: string, type: "success"|"error" = "success") {
@@ -269,7 +269,7 @@ export default function FridgeMonitoringClient() {
 
   // 저장
   async function handleSave() {
-    if (!isPinValid() || !pinSession) {
+    if (!pinSession) {
       setShowPinModal(true);
       return;
     }
