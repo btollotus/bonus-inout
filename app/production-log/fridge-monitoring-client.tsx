@@ -873,20 +873,20 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
               <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "7pt" }}>
                 <thead>
                   <tr style={{ background: "#f0f4f8" }}>
-                    <th className="th" colSpan={2} rowSpan={2} style={{ width: "56px" }}>구분</th>
-                    <th className="th" rowSpan={2} style={{ width: "42px" }}>온도기준</th>
+                    <th className="th" colSpan={2} rowSpan={2} style={{ width: "52px" }}>구분</th>
+                    <th className="th" rowSpan={2} style={{ width: "38px" }}>온도기준</th>
                     {weekDates.map((d, i) => (
                       <th key={d} className="th" colSpan={2} style={{ fontSize: "7pt" }}>
                         {d.slice(5).replace("-","/")} ({DAY_LABELS[i]})
                       </th>
                     ))}
-                    <th className="th" rowSpan={2} style={{ width: "52px" }}>이탈시<br/>조치사항</th>
+                    <th className="th" rowSpan={2} style={{ width: "80px" }}>이탈시<br/>조치사항</th>
                   </tr>
                   <tr style={{ background: "#f0f4f8" }}>
                     {weekDates.map(d => (
                       <React.Fragment key={d}>
-                        <th className="th" style={{ fontSize: "6.5pt", width: "26px" }}>오전</th>
-                        <th className="th" style={{ fontSize: "6.5pt", width: "26px" }}>오후</th>
+                        <th className="th" style={{ fontSize: "6.5pt", width: "28px" }}>오전</th>
+                        <th className="th" style={{ fontSize: "6.5pt", width: "28px" }}>오후</th>
                       </React.Fragment>
                     ))}
                   </tr>
@@ -899,12 +899,12 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
                     return (
                       <tr key={key}>
                         {nIdx === 0 && (
-                          <td rowSpan={dev.nos.length} style={{ border: "0.5px solid #aaa", background: bgColor, writingMode: "vertical-lr", textOrientation: "upright", letterSpacing: "1px", fontWeight: "bold", fontSize: "7pt", width: "16px" }}>
+                          <td rowSpan={dev.nos.length} style={{ border: "0.5px solid #aaa", background: bgColor, writingMode: "vertical-lr", textOrientation: "upright", letterSpacing: "1px", fontWeight: "bold", fontSize: "7pt", width: "14px" }}>
                             {dev.type}
                           </td>
                         )}
-                        <td style={{ border: "0.5px solid #aaa", textAlign: "left", paddingLeft: "3px", fontSize: "7pt", whiteSpace: "nowrap" }}>{dev.type.slice(0,2)}-{no}</td>
-                        <td style={{ border: "0.5px solid #aaa", fontSize: "6.5pt", color: "#666" }}>{getTempRange(dev.type)}</td>
+                        <td style={{ border: "0.5px solid #aaa", textAlign: "left", paddingLeft: "3px", fontSize: "7pt", whiteSpace: "nowrap", width: "38px" }}>{dev.type.slice(0,2)}-{no}</td>
+                        <td style={{ border: "0.5px solid #aaa", fontSize: "6.5pt", color: "#666", width: "38px" }}>{getTempRange(dev.type)}</td>
                         {weekDates.map(d => {
                           const amE = printData[`${d}-AM`]?.[key];
                           const pmE = printData[`${d}-PM`]?.[key];
