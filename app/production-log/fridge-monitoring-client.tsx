@@ -293,6 +293,12 @@ export default function FridgeMonitoringClient() {
       return;
     }
 
+    // 점검시각 필수 체크
+    if (currentCheckTime.length < 4) {
+      showToast(`⚠ ${period === "AM" ? "오전" : "오후"} 점검시각을 입력해주세요. (예: 0900)`, "error");
+      return;
+    }
+
     // 이탈 항목에 조치사항 미입력 체크
     const missing = Object.entries(entries).filter(([, e]) =>
       e.temperature !== null && !isInRange(e.temperature, e.device_type) && !e.action_note.trim()
@@ -419,36 +425,36 @@ export default function FridgeMonitoringClient() {
                     }} />
                 </div>
                 <div>
-                  <div className="mb-1 text-xs text-slate-500">점검시간</div>
-                  <div className="flex gap-2">
+                  <div className="mb-1 text-xs text-slate-500">점검시간 · 시각</div>
+                  <div className="flex items-center gap-2">
                     <button className={period === "AM" ? btnOn : btn} onClick={() => setPeriod("AM")}>오전</button>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="0900"
+                      value={amCheckTime}
+                      disabled={isReadOnly}
+                      onChange={e => setAmCheckTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+                      className={`w-20 rounded-xl border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none
+                        ${amCheckTime.length === 4 ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white focus:border-blue-400"}`}
+                    />
+                    <div className="w-px h-5 bg-slate-200" />
                     <button className={period === "PM" ? btnOn : btn} onClick={() => setPeriod("PM")}>오후</button>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="1500"
+                      value={pmCheckTime}
+                      disabled={isReadOnly}
+                      onChange={e => setPmCheckTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+                      className={`w-20 rounded-xl border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none
+                        ${pmCheckTime.length === 4 ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white focus:border-blue-400"}`}
+                    />
                   </div>
                 </div>
                 <div className="ml-auto flex items-center gap-3">
-                  {/* 점검시각 입력 */}
-                  {currentInspector && !isReadOnly && (
-                    <div className="flex items-center gap-1.5">
-                      <div className="text-xs text-slate-500">점검시각</div>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={4}
-                        placeholder="예: 0900"
-                        value={currentCheckTime}
-                        onChange={e => {
-                          const digits = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
-                          setCurrentCheckTime(digits);
-                        }}
-                        className="w-24 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-center tabular-nums focus:border-blue-400 focus:outline-none"
-                      />
-                      {currentCheckTime.length === 4 && (
-                        <span className="text-xs text-slate-500">
-                          {currentCheckTime.slice(0,2)}:{currentCheckTime.slice(2,4)}
-                        </span>
-                      )}
-                    </div>
-                  )}
                   {/* 현재 period 점검자 표시 */}
                   {currentInspector ? (
                     <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
