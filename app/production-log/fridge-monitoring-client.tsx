@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import { PinModal, usePinSession } from "@/app/contexts/PinSessionContext";
 
@@ -48,12 +48,7 @@ const DEVICES: { type: DeviceType; nos: string[]; min: number; max: number }[] =
   { type: "온장고", nos: ["01","02","03","04","05","06","07","08","09"], min: 40, max: 50 },
 ];
 
-// 빠른선택 버튼 (장비별)
-const QUICK_VALUES: Record<DeviceType, number[]> = {
-  "냉장고": [1.0, 2.0, 3.0, 5.0],
-  "냉동고": [-24.0, -25.0, -26.0, -27.0],
-  "온장고": [43.0, 44.0, 45.0, 46.0],
-};
+// 빠른선택 버튼 제거됨
 
 function todayKST(): string {
   const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
@@ -63,10 +58,10 @@ function todayKST(): string {
 function parseTemp(raw: string, type: DeviceType): number | null {
   const digits = raw.replace(/[^\d]/g, "");
   if (digits.length < 1) return null;
-  // 4자리: 앞 3자리.뒷 1자리
-  const padded = digits.padStart(4, "0");
-  const intPart = parseInt(padded.slice(0, 3), 10);
-  const decPart = parseInt(padded.slice(3), 10);
+  // 3자리: 앞 2자리.뒷 1자리 (예: 012 → 1.2, 260 → 26.0, 459 → 45.9)
+  const padded = digits.padStart(3, "0");
+  const intPart = parseInt(padded.slice(0, 2), 10);
+  const decPart = parseInt(padded.slice(2), 10);
   const val = intPart + decPart / 10;
   return type === "냉동고" ? -val : val;
 }
@@ -87,144 +82,25 @@ function getTempRange(type: DeviceType): string {
   return `${dev.min}~${dev.max}℃`;
 }
 
-// ─── 사인 캔버스 ─────────────────────────────────────────────
-function SignatureCanvas({
-  label,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  value: string | null;
-  onChange: (data: string) => void;
-  disabled?: boolean;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const drawing = useRef(false);
-  const [isEmpty, setIsEmpty] = useState(!value);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    if (value) {
-      const img = new Image();
-      img.onload = () => { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img, 0, 0); };
-      img.src = value;
-      setIsEmpty(false);
-    } else {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      setIsEmpty(true);
-    }
-  }, [value]);
-
-  function getPos(e: React.MouseEvent | React.TouchEvent) {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    if ("touches" in e) {
-      const t = e.touches[0];
-      return { x: (t.clientX - rect.left) * scaleX, y: (t.clientY - rect.top) * scaleY };
-    }
-    return { x: ((e as React.MouseEvent).clientX - rect.left) * scaleX, y: ((e as React.MouseEvent).clientY - rect.top) * scaleY };
-  }
-
-  function startDraw(e: React.MouseEvent | React.TouchEvent) {
-    if (disabled) return;
-    e.preventDefault();
-    drawing.current = true;
-    const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d")!;
-    const { x, y } = getPos(e);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-  }
-
-  function draw(e: React.MouseEvent | React.TouchEvent) {
-    if (!drawing.current || disabled) return;
-    e.preventDefault();
-    const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d")!;
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.strokeStyle = "#1e293b";
-    const { x, y } = getPos(e);
-    ctx.lineTo(x, y);
-    ctx.stroke();
-    setIsEmpty(false);
-  }
-
-  function endDraw() {
-    if (!drawing.current) return;
-    drawing.current = false;
-    const canvas = canvasRef.current!;
-    onChange(canvas.toDataURL());
-  }
-
-  function clear() {
-    const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d")!;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setIsEmpty(true);
-    onChange("");
-  }
-
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="text-xs font-semibold text-slate-500 mb-0.5">{label}</div>
-      <div className={`relative rounded-lg border-2 ${disabled ? "border-slate-100 bg-slate-50" : "border-slate-300 bg-white"} overflow-hidden`} style={{ width: 140, height: 60 }}>
-        <canvas
-          ref={canvasRef}
-          width={140}
-          height={60}
-          className="w-full h-full touch-none"
-          onMouseDown={startDraw}
-          onMouseMove={draw}
-          onMouseUp={endDraw}
-          onMouseLeave={endDraw}
-          onTouchStart={startDraw}
-          onTouchMove={draw}
-          onTouchEnd={endDraw}
-          style={{ cursor: disabled ? "default" : "crosshair" }}
-        />
-        {isEmpty && !disabled && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <span className="text-xs text-slate-300">사인</span>
-          </div>
-        )}
-      </div>
-      {!disabled && (
-        <button type="button" onClick={clear} className="text-[10px] text-slate-400 hover:text-red-500 underline">지우기</button>
-      )}
-    </div>
-  );
-}
-
 // ─── 온도 입력 셀 ─────────────────────────────────────────────
 function TempCell({
-  type, no, entry, prevTemp, onSelect, disabled,
+  type, entry, onSelect, disabled,
 }: {
   type: DeviceType;
-  no: string;
   entry: LogEntry;
-  prevTemp: number | null;
-  onSelect: (temp: number | null, raw: string) => void;
+  onSelect: (temp: number | null) => void;
   disabled: boolean;
 }) {
-  const [showInput, setShowInput] = useState(false);
   const [rawInput, setRawInput] = useState("");
   const temp = entry.temperature;
   const ok = temp === null ? null : isInRange(temp, type);
-  const quickVals = QUICK_VALUES[type];
 
   function handleRaw(val: string) {
-    const digits = val.replace(/[^\d]/g, "").slice(0, 4);
+    const digits = val.replace(/[^\d]/g, "").slice(0, 3);
     setRawInput(digits);
-    if (digits.length === 4) {
+    if (digits.length === 3) {
       const parsed = parseTemp(digits, type);
-      onSelect(parsed, digits);
-      setShowInput(false);
+      onSelect(parsed);
       setRawInput("");
     }
   }
@@ -238,85 +114,38 @@ function TempCell({
   return (
     <div className={`rounded-xl border-2 p-2 transition-all ${cellBg}`}>
       {/* 현재값 표시 */}
-      {temp !== null && (
-        <div className={`text-center font-bold tabular-nums text-sm mb-1.5 ${ok ? "text-blue-700" : "text-red-600"}`}>
-          {formatTemp(temp)}
-          {!ok && <span className="ml-1 text-red-500">⚠</span>}
-        </div>
-      )}
-      {temp === null && (
-        <div className="text-center text-xs text-slate-300 mb-1.5">미입력</div>
-      )}
+      <div className={`text-center font-bold tabular-nums text-sm mb-1.5 ${temp === null ? "text-slate-300" : ok ? "text-blue-700" : "text-red-600"}`}>
+        {temp !== null ? (
+          <>{formatTemp(temp)}{!ok && <span className="ml-1">⚠</span>}</>
+        ) : "미입력"}
+      </div>
 
       {!disabled && (
         <div className="space-y-1">
-          {/* 어제값 버튼 */}
-          {prevTemp !== null && (
-            <button
-              type="button"
-              onClick={() => onSelect(prevTemp, "")}
-              className={`w-full rounded-lg border px-1.5 py-1 text-[11px] font-semibold transition-all
-                ${!isInRange(prevTemp, type)
-                  ? "border-red-300 bg-red-100 text-red-700 hover:bg-red-200"
-                  : "border-slate-300 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-300"
-                }`}
-            >
-              어제 {formatTemp(prevTemp)}
-            </button>
-          )}
-
-          {/* 빠른선택 버튼 */}
-          <div className="flex flex-wrap gap-1">
-            {quickVals.map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => onSelect(v, "")}
-                className={`flex-1 rounded-lg border px-1 py-1 text-[11px] font-semibold transition-all min-w-0
-                  ${temp === v
-                    ? "border-blue-500 bg-blue-600 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-300"
-                  }`}
-              >
-                {v > 0 ? v.toFixed(0) : v.toFixed(0)}
-              </button>
-            ))}
-          </div>
-
-          {/* 직접입력 */}
-          {showInput ? (
-            <div className="flex gap-1">
-              <input
-                autoFocus
-                type="text"
-                inputMode="numeric"
-                maxLength={4}
-                placeholder="0459"
-                value={rawInput}
-                onChange={(e) => handleRaw(e.target.value)}
-                className="w-full rounded-lg border border-blue-400 px-2 py-1 text-xs text-center focus:outline-none tabular-nums"
-              />
-              <button type="button" onClick={() => setShowInput(false)} className="text-[11px] text-slate-400 hover:text-slate-600 px-1">✕</button>
+          {/* 3자리 직접입력 */}
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={3}
+            placeholder={type === "냉동고" ? "260" : type === "온장고" ? "459" : "012"}
+            value={rawInput}
+            onChange={(e) => handleRaw(e.target.value)}
+            className={`w-full rounded-lg border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none transition-all
+              ${rawInput.length > 0 ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white"}`}
+          />
+          {/* 입력 힌트 */}
+          {rawInput.length > 0 && rawInput.length < 3 && (
+            <div className="text-center text-[10px] text-slate-400">
+              {type === "냉동고" ? "-" : ""}{parseTemp(rawInput.padEnd(3,"0"), type)?.toFixed(1) ?? ""}℃ (3자리 입력)
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowInput(true)}
-              className="w-full rounded-lg border border-dashed border-slate-300 py-1 text-[11px] text-slate-400 hover:border-blue-300 hover:text-blue-500"
-            >
-              ✏ 직접입력
-            </button>
           )}
-
           {/* 지우기 */}
           {temp !== null && (
             <button
               type="button"
-              onClick={() => onSelect(null, "")}
+              onClick={() => onSelect(null)}
               className="w-full text-[10px] text-slate-300 hover:text-red-400 underline"
-            >
-              지우기
-            </button>
+            >지우기</button>
           )}
         </div>
       )}
@@ -329,7 +158,6 @@ export default function FridgeMonitoringClient() {
   const [logDate, setLogDate] = useState(todayKST());
   const [period, setPeriod] = useState<Period>("AM");
   const [entries, setEntries] = useState<Record<string, LogEntry>>({});
-  const [prevEntries, setPrevEntries] = useState<Record<string, number | null>>({});
   const [specialNote, setSpecialNote] = useState("");
   const [signatures, setSignatures] = useState<Record<string, SignatureEntry>>({});
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -387,16 +215,6 @@ export default function FridgeMonitoringClient() {
         .eq("log_date", logDate)
         .eq("period", period);
 
-      // 전날 같은 period 기록 (어제값 제시용)
-      const prevDate = new Date(logDate);
-      prevDate.setDate(prevDate.getDate() - 1);
-      const prevDateStr = prevDate.toISOString().slice(0, 10);
-      const { data: prevLogs } = await supabase
-        .from("fridge_monitoring_logs")
-        .select("device_type,device_no,temperature")
-        .eq("log_date", prevDateStr)
-        .eq("period", period);
-
       // 사인 로드
       const { data: sigs } = await supabase
         .from("fridge_monitoring_signatures")
@@ -418,13 +236,6 @@ export default function FridgeMonitoringClient() {
         setSpecialNote(note);
       }
       setEntries(base);
-
-      // 어제값 맵
-      const prevMap: Record<string, number | null> = {};
-      for (const pl of prevLogs ?? []) {
-        prevMap[`${pl.device_type}-${pl.device_no}`] = pl.temperature;
-      }
-      setPrevEntries(prevMap);
 
       // 사인 맵
       const sigMap: Record<string, SignatureEntry> = {};
@@ -535,8 +346,7 @@ export default function FridgeMonitoringClient() {
   const btnOn = "rounded-xl border border-blue-500 bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700";
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4">
-      <div className="mx-auto max-w-5xl space-y-4">
+    <div className="space-y-4">
 
         {/* PIN 모달 */}
         {showPinModal && (
@@ -611,6 +421,15 @@ export default function FridgeMonitoringClient() {
               <div className="py-12 text-center text-sm text-slate-400">불러오는 중...</div>
             ) : (
               <>
+                {/* PIN 미인증 안내 */}
+                {!isPinValid() && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center gap-3">
+                    <span className="text-lg">🔑</span>
+                    <div className="text-sm text-amber-700 font-semibold">PIN을 입력해야 온도 기록이 가능합니다.</div>
+                    <button className="ml-auto rounded-xl border border-amber-400 bg-amber-100 px-3 py-1.5 text-sm font-bold text-amber-800 hover:bg-amber-200"
+                      onClick={() => setShowPinModal(true)}>PIN 입력</button>
+                  </div>
+                )}
                 {/* 장비별 입력 */}
                 {DEVICES.map(dev => (
                   <div key={dev.type} className={`${card} p-4`}>
@@ -634,11 +453,9 @@ export default function FridgeMonitoringClient() {
                             <div className="mb-1 text-xs font-semibold text-slate-600">{dev.type}-{no}</div>
                             <TempCell
                               type={dev.type}
-                              no={no}
                               entry={entry}
-                              prevTemp={prevEntries[key] ?? null}
                               onSelect={(temp) => handleTempSelect(key, temp)}
-                              disabled={isReadOnly}
+                              disabled={isReadOnly || !isPinValid()}
                             />
                             {/* 이탈 조치사항 */}
                             {entry.temperature !== null && !isInRange(entry.temperature, dev.type) && (
@@ -691,34 +508,30 @@ export default function FridgeMonitoringClient() {
                   />
                 </div>
 
-                {/* 사인 */}
+                {/* 점검자 확인 */}
                 <div className={`${card} p-4`}>
-                  <div className="mb-3 font-semibold text-sm">✍️ 서명</div>
-                  <div className="flex flex-wrap gap-6 items-start">
-                    {/* 날짜별 점검자 사인 */}
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">점검자 ({period === "AM" ? "오전" : "오후"})</div>
-                      <SignatureCanvas
-                        label={inspectorName ?? "점검자"}
-                        value={signatures[`${period}-inspector`]?.signature_data ?? null}
-                        onChange={data => handleSignature(period, "inspector", data)}
-                        disabled={isReadOnly}
-                      />
+                  <div className="mb-3 font-semibold text-sm">✍️ 점검자 확인</div>
+                  <div className="flex flex-wrap gap-4 items-center">
+                    {/* 오전/오후 점검자 */}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm">
+                      <div className="text-xs text-slate-400 mb-0.5">{period === "AM" ? "오전" : "오후"} 점검자</div>
+                      <div className="font-semibold text-slate-700">
+                        {inspectorName ?? <span className="text-slate-300 font-normal">PIN 입력 후 자동 기록</span>}
+                      </div>
                     </div>
                     <div className="w-px bg-slate-200 self-stretch" />
-                    {/* 작성/승인 (별도) */}
-                    <SignatureCanvas
-                      label="작성"
-                      value={signatures["AUTHOR-author"]?.signature_data ?? null}
-                      onChange={data => handleSignature("AUTHOR", "author", data)}
-                      disabled={isReadOnly}
-                    />
-                    <SignatureCanvas
-                      label="승인"
-                      value={signatures["APPROVER-approver"]?.signature_data ?? null}
-                      onChange={data => handleSignature("APPROVER", "approver", data)}
-                      disabled={isReadOnly}
-                    />
+                    {/* 작성/승인 — 이름만 텍스트로 표시 */}
+                    {(["AUTHOR","APPROVER"] as const).map(role => {
+                      const sig = signatures[`${role}-${role.toLowerCase()}`];
+                      return (
+                        <div key={role} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm">
+                          <div className="text-xs text-slate-400 mb-0.5">{role === "AUTHOR" ? "작성" : "승인"}</div>
+                          <div className="font-semibold text-slate-700">
+                            {sig?.inspector_name ?? <span className="text-slate-300 font-normal">미입력</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -739,7 +552,6 @@ export default function FridgeMonitoringClient() {
             )}
           </>
         )}
-      </div>
     </div>
   );
 }
