@@ -839,6 +839,8 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
         .ok{color:#1d4ed8;font-weight:bold;}
         .ng{color:#dc2626;font-weight:bold;}
         .empty{color:#bbb;}
+        div[style*="page-break-after: always"]{page-break-after:always;}
+        div[style*="pageBreakAfter"]{page-break-after:always;}
       </style>
     </head><body>${content.innerHTML}</body></html>`);
     win.document.close();
@@ -882,112 +884,151 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 flex justify-center">
-        <div className="bg-white shadow-xl" style={{ minWidth: "297mm", minHeight: "210mm", padding: "8mm 10mm" }}>
+      <div className="flex-1 overflow-auto p-6 flex flex-col items-center gap-6">
           {loading ? <div className="text-center text-sm text-slate-400 py-12">불러오는 중...</div> : (
             <div id="fridge-print-content">
-              {/* 제목 */}
-              <div style={{ textAlign: "center", fontSize: "14pt", fontWeight: "bold", letterSpacing: "4px", marginBottom: "6px", paddingBottom: "4px", borderBottom: "1.5px solid #111" }}>
-                냉장·냉동·온장고 모니터링일지
-              </div>
-              {/* 메타 */}
-              <div style={{ fontSize: "7.5pt", color: "#555", marginBottom: "6px", display: "flex", gap: "16px" }}>
-                <span>점검주기: 2회/일 (오전·오후)</span>
-                <span>검사방법: 외부 부착 온도계 값 기록</span>
-                <span>점검기간: {dateFrom.slice(5).replace("-","/")} ({getDayLabel(dateFrom)}) ~ {dateTo.slice(5).replace("-","/")} ({getDayLabel(dateTo)})</span>
-              </div>
+              {/* 날짜를 월~금 단위로 청크 분할 */}
+              {(() => {
+                // 월요일 기준으로 주 청크 생성
+                const chunks: string[][] = [];
+                let chunk: string[] = [];
+                for (const d of dates) {
+                  const dow = new Date(d + "T00:00:00+09:00").getDay();
+                  if (dow === 1 && chunk.length > 0) { chunks.push(chunk); chunk = []; }
+                  chunk.push(d);
+                  if (dow === 0) { chunks.push(chunk); chunk = []; } // 일요일이면 강제 분리
+                }
+                if (chunk.length > 0) chunks.push(chunk);
 
-              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "7pt" }}>
-                <thead>
-                  <tr style={{ background: "#f0f4f8" }}>
-                    <th className="th" colSpan={2} rowSpan={2} style={{ width: "52px" }}>구분</th>
-                    <th className="th" rowSpan={2} style={{ width: "38px" }}>온도기준</th>
-                    {dates.map((d) => (
-                      <th key={d} className="th" colSpan={2} style={{ fontSize: "7pt" }}>
-                        {d.slice(5).replace("-","/")} ({getDayLabel(d)})
-                      </th>
-                    ))}
-                    <th className="th" rowSpan={2} style={{ width: "80px" }}>이탈시<br/>조치사항</th>
-                  </tr>
-                  <tr style={{ background: "#f0f4f8" }}>
-                    {dates.map(d => (
-                      <React.Fragment key={d}>
-                        <th className="th" style={{ fontSize: "6.5pt", width: "28px" }}>오전</th>
-                        <th className="th" style={{ fontSize: "6.5pt", width: "28px" }}>오후</th>
-                      </React.Fragment>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {DEVICES.map((dev, dIdx) => dev.nos.map((no, nIdx) => {
-                    const key = `${dev.type}-${no}`;
-                    const bgColor = dIdx === 0 ? "#eff6ff" : dIdx === 1 ? "#f0fdf4" : "#fffbeb";
-                    const actionNote = getActionNotes(key);
-                    return (
-                      <tr key={key}>
-                        {nIdx === 0 && (
-                          <td rowSpan={dev.nos.length} style={{ border: "0.5px solid #aaa", background: bgColor, writingMode: "vertical-lr", textOrientation: "upright", letterSpacing: "1px", fontWeight: "bold", fontSize: "7pt", width: "14px" }}>
-                            {dev.type}
-                          </td>
-                        )}
-                        <td style={{ border: "0.5px solid #aaa", textAlign: "left", paddingLeft: "3px", fontSize: "7pt", whiteSpace: "nowrap", width: "38px" }}>{dev.type.slice(0,2)}-{no}</td>
-                        <td style={{ border: "0.5px solid #aaa", fontSize: "6.5pt", color: "#666", width: "38px" }}>{getTempRange(dev.type)}</td>
-                        {dates.map(d => {
-                          const amE = printData[`${d}-AM`]?.[key];
-                          const pmE = printData[`${d}-PM`]?.[key];
-                          const amOk = amE?.temperature != null ? isInRange(amE.temperature, dev.type) : null;
-                          const pmOk = pmE?.temperature != null ? isInRange(pmE.temperature, dev.type) : null;
-                          return (
-                            <React.Fragment key={d}>
-                              <td style={{ border: "0.5px solid #aaa", color: amOk === null ? "#bbb" : amOk ? "#1d4ed8" : "#dc2626", fontWeight: amOk === false ? "bold" : "normal" }}>
-                                {amE?.temperature != null ? formatTemp(amE.temperature) : "—"}
-                              </td>
-                              <td style={{ border: "0.5px solid #aaa", color: pmOk === null ? "#bbb" : pmOk ? "#1d4ed8" : "#dc2626", fontWeight: pmOk === false ? "bold" : "normal" }}>
-                                {pmE?.temperature != null ? formatTemp(pmE.temperature) : "—"}
-                              </td>
-                            </React.Fragment>
-                          );
-                        })}
-                        <td style={{ border: "0.5px solid #aaa", fontSize: "6pt", color: "#dc2626", textAlign: "left", padding: "1px 3px" }}>
-                          {actionNote}
-                        </td>
-                      </tr>
-                    );
-                  }))}
+                return chunks.map((weekDates, pageIdx) => {
+                  // 이 주의 이탈 조치사항
+                  function getWeekActionNotes(key: string): string {
+                    const notes: string[] = [];
+                    for (const d of weekDates) {
+                      const amE = printData[`${d}-AM`]?.[key];
+                      const pmE = printData[`${d}-PM`]?.[key];
+                      if (amE?.action_note) notes.push(`${d.slice(5)} 오전: ${amE.action_note}`);
+                      if (pmE?.action_note) notes.push(`${d.slice(5)} 오후: ${pmE.action_note}`);
+                    }
+                    return notes.join(" / ");
+                  }
+                  const weekNotes = weekDates.map(d => printNotes[d]).filter(Boolean).join(" / ");
 
-                  {/* 점검시각 행 */}
-                  <tr style={{ background: "#f8fafc" }}>
-                    <td colSpan={3} style={{ border: "0.5px solid #aaa", fontWeight: "bold", textAlign: "center", fontSize: "7pt" }}>점검시각</td>
-                    {dates.map(d => (
-                      <React.Fragment key={d}>
-                        <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printTimes[d]?.AM ?? "—"}</td>
-                        <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printTimes[d]?.PM ?? "—"}</td>
-                      </React.Fragment>
-                    ))}
-                    <td style={{ border: "0.5px solid #aaa" }} />
-                  </tr>
+                  return (
+                    <div key={pageIdx} style={{
+                      background: "#fff",
+                      width: "297mm",
+                      minHeight: "210mm",
+                      padding: "8mm 10mm",
+                      pageBreakAfter: pageIdx < chunks.length - 1 ? "always" : "auto",
+                      boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
+                      marginBottom: "16px",
+                    }}>
+                      {/* 제목 */}
+                      <div style={{ textAlign: "center", fontSize: "14pt", fontWeight: "bold", letterSpacing: "4px", marginBottom: "6px", paddingBottom: "4px", borderBottom: "1.5px solid #111" }}>
+                        냉장·냉동·온장고 모니터링일지
+                      </div>
+                      {/* 메타 */}
+                      <div style={{ fontSize: "7.5pt", color: "#555", marginBottom: "6px", display: "flex", gap: "16px" }}>
+                        <span>점검주기: 2회/일 (오전·오후)</span>
+                        <span>검사방법: 외부 부착 온도계 값 기록</span>
+                        <span>점검기간: {weekDates[0].slice(5).replace("-","/")} ({getDayLabel(weekDates[0])}) ~ {weekDates[weekDates.length-1].slice(5).replace("-","/")} ({getDayLabel(weekDates[weekDates.length-1])})</span>
+                      </div>
 
-                  {/* 점검자 행 */}
-                  <tr style={{ background: "#f8fafc" }}>
-                    <td colSpan={3} style={{ border: "0.5px solid #aaa", fontWeight: "bold", textAlign: "center", fontSize: "7pt" }}>점검자</td>
-                    {dates.map(d => (
-                      <React.Fragment key={d}>
-                        <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printSigs[d]?.AM ?? "—"}</td>
-                        <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printSigs[d]?.PM ?? "—"}</td>
-                      </React.Fragment>
-                    ))}
-                    <td style={{ border: "0.5px solid #aaa" }} />
-                  </tr>
-                </tbody>
-              </table>
+                      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "7pt" }}>
+                        <thead>
+                          <tr style={{ background: "#f0f4f8" }}>
+                            <th className="th" colSpan={2} rowSpan={2} style={{ width: "52px" }}>구분</th>
+                            <th className="th" rowSpan={2} style={{ width: "38px" }}>온도기준</th>
+                            {weekDates.map((d) => (
+                              <th key={d} className="th" colSpan={2} style={{ fontSize: "7pt" }}>
+                                {d.slice(5).replace("-","/")} ({getDayLabel(d)})
+                              </th>
+                            ))}
+                            <th className="th" rowSpan={2} style={{ width: "80px" }}>이탈시<br/>조치사항</th>
+                          </tr>
+                          <tr style={{ background: "#f0f4f8" }}>
+                            {weekDates.map(d => (
+                              <React.Fragment key={d}>
+                                <th className="th" style={{ fontSize: "6.5pt", width: "28px" }}>오전</th>
+                                <th className="th" style={{ fontSize: "6.5pt", width: "28px" }}>오후</th>
+                              </React.Fragment>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {DEVICES.map((dev, dIdx) => dev.nos.map((no, nIdx) => {
+                            const key = `${dev.type}-${no}`;
+                            const bgColor = dIdx === 0 ? "#eff6ff" : dIdx === 1 ? "#f0fdf4" : "#fffbeb";
+                            const actionNote = getWeekActionNotes(key);
+                            return (
+                              <tr key={key}>
+                                {nIdx === 0 && (
+                                  <td rowSpan={dev.nos.length} style={{ border: "0.5px solid #aaa", background: bgColor, writingMode: "vertical-lr", textOrientation: "upright", letterSpacing: "1px", fontWeight: "bold", fontSize: "7pt", width: "14px" }}>
+                                    {dev.type}
+                                  </td>
+                                )}
+                                <td style={{ border: "0.5px solid #aaa", textAlign: "left", paddingLeft: "3px", fontSize: "7pt", whiteSpace: "nowrap", width: "38px" }}>{dev.type.slice(0,2)}-{no}</td>
+                                <td style={{ border: "0.5px solid #aaa", fontSize: "6.5pt", color: "#666", width: "38px" }}>{getTempRange(dev.type)}</td>
+                                {weekDates.map(d => {
+                                  const amE = printData[`${d}-AM`]?.[key];
+                                  const pmE = printData[`${d}-PM`]?.[key];
+                                  const amOk = amE?.temperature != null ? isInRange(amE.temperature, dev.type) : null;
+                                  const pmOk = pmE?.temperature != null ? isInRange(pmE.temperature, dev.type) : null;
+                                  return (
+                                    <React.Fragment key={d}>
+                                      <td style={{ border: "0.5px solid #aaa", color: amOk === null ? "#bbb" : amOk ? "#1d4ed8" : "#dc2626", fontWeight: amOk === false ? "bold" : "normal" }}>
+                                        {amE?.temperature != null ? formatTemp(amE.temperature) : "—"}
+                                      </td>
+                                      <td style={{ border: "0.5px solid #aaa", color: pmOk === null ? "#bbb" : pmOk ? "#1d4ed8" : "#dc2626", fontWeight: pmOk === false ? "bold" : "normal" }}>
+                                        {pmE?.temperature != null ? formatTemp(pmE.temperature) : "—"}
+                                      </td>
+                                    </React.Fragment>
+                                  );
+                                })}
+                                <td style={{ border: "0.5px solid #aaa", fontSize: "6pt", color: "#dc2626", textAlign: "left", padding: "1px 3px" }}>
+                                  {actionNote}
+                                </td>
+                              </tr>
+                            );
+                          }))}
 
-              {/* 특이사항 */}
-              <div style={{ marginTop: "6px", border: "0.5px solid #aaa", borderRadius: "3px", padding: "4px 8px", fontSize: "7.5pt", minHeight: "24px" }}>
-                <span style={{ fontWeight: "bold" }}>특이사항: </span>{allNotes}
-              </div>
+                          {/* 점검시각 행 */}
+                          <tr style={{ background: "#f8fafc" }}>
+                            <td colSpan={3} style={{ border: "0.5px solid #aaa", fontWeight: "bold", textAlign: "center", fontSize: "7pt" }}>점검시각</td>
+                            {weekDates.map(d => (
+                              <React.Fragment key={d}>
+                                <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printTimes[d]?.AM ?? "—"}</td>
+                                <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printTimes[d]?.PM ?? "—"}</td>
+                              </React.Fragment>
+                            ))}
+                            <td style={{ border: "0.5px solid #aaa" }} />
+                          </tr>
+
+                          {/* 점검자 행 */}
+                          <tr style={{ background: "#f8fafc" }}>
+                            <td colSpan={3} style={{ border: "0.5px solid #aaa", fontWeight: "bold", textAlign: "center", fontSize: "7pt" }}>점검자</td>
+                            {weekDates.map(d => (
+                              <React.Fragment key={d}>
+                                <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printSigs[d]?.AM ?? "—"}</td>
+                                <td style={{ border: "0.5px solid #aaa", fontSize: "7pt" }}>{printSigs[d]?.PM ?? "—"}</td>
+                              </React.Fragment>
+                            ))}
+                            <td style={{ border: "0.5px solid #aaa" }} />
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      {/* 특이사항 */}
+                      <div style={{ marginTop: "6px", border: "0.5px solid #aaa", borderRadius: "3px", padding: "4px 8px", fontSize: "7.5pt", minHeight: "24px" }}>
+                        <span style={{ fontWeight: "bold" }}>특이사항: </span>{weekNotes}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           )}
-        </div>
       </div>
     </div>
   );
