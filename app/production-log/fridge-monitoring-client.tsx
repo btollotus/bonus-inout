@@ -23,6 +23,7 @@ type LogEntry = {
   special_note: string;
   inspector_id: string | null;
   inspector_name: string | null;
+  check_time: string | null;
 };
 
 type SignatureEntry = {
@@ -173,7 +174,13 @@ export default function FridgeMonitoringClient() {
   const [amInspector, setAmInspector] = useState<{ id: string; name: string } | null>(null);
   const [pmInspector, setPmInspector] = useState<{ id: string; name: string } | null>(null);
 
+  // 점검시각 — 오전/오후 각각
+  const [amCheckTime, setAmCheckTime] = useState("");
+  const [pmCheckTime, setPmCheckTime] = useState("");
+
   const currentInspector = period === "AM" ? amInspector : pmInspector;
+  const currentCheckTime = period === "AM" ? amCheckTime : pmCheckTime;
+  const setCurrentCheckTime = (v: string) => period === "AM" ? setAmCheckTime(v) : setPmCheckTime(v);
 
   function showToast(msg: string, type: "success"|"error" = "success") {
     setToast({ msg, type });
@@ -296,12 +303,17 @@ export default function FridgeMonitoringClient() {
 
     setSaving(true);
     try {
+      const checkTimeStr = currentCheckTime.length === 4
+        ? `${currentCheckTime.slice(0,2)}:${currentCheckTime.slice(2,4)}`
+        : null;
+
       const toSave = Object.values(entries).map(e => ({
         ...e,
         special_note: specialNote.trim() || null,
         inspector_id: currentInspector.id,
         inspector_name: currentInspector.name,
         action_note: e.action_note.trim() || null,
+        check_time: checkTimeStr,
       }));
 
       const { error } = await supabase.from("fridge_monitoring_logs").upsert(toSave, {
@@ -401,6 +413,8 @@ export default function FridgeMonitoringClient() {
                       setLogDate(e.target.value);
                       setAmInspector(null);
                       setPmInspector(null);
+                      setAmCheckTime("");
+                      setPmCheckTime("");
                     }} />
                 </div>
                 <div>
@@ -411,6 +425,29 @@ export default function FridgeMonitoringClient() {
                   </div>
                 </div>
                 <div className="ml-auto flex items-center gap-3">
+                  {/* 점검시각 입력 */}
+                  {currentInspector && !isReadOnly && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="text-xs text-slate-500">점검시각</div>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={4}
+                        placeholder="예: 0900"
+                        value={currentCheckTime}
+                        onChange={e => {
+                          const digits = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
+                          setCurrentCheckTime(digits);
+                        }}
+                        className="w-24 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-center tabular-nums focus:border-blue-400 focus:outline-none"
+                      />
+                      {currentCheckTime.length === 4 && (
+                        <span className="text-xs text-slate-500">
+                          {currentCheckTime.slice(0,2)}:{currentCheckTime.slice(2,4)}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {/* 현재 period 점검자 표시 */}
                   {currentInspector ? (
                     <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
@@ -542,6 +579,7 @@ function FridgeQueryView({ employees }: { employees: Employee[] }) {
   const [queryDate, setQueryDate] = useState(todayKST());
   const [queryData, setQueryData] = useState<{ AM: Record<string, LogEntry>; PM: Record<string, LogEntry> }>({ AM: {}, PM: {} });
   const [queryInspectors, setQueryInspectors] = useState<{ AM: string | null; PM: string | null }>({ AM: null, PM: null });
+  const [queryCheckTimes, setQueryCheckTimes] = useState<{ AM: string | null; PM: string | null }>({ AM: null, PM: null });
   const [loading, setLoading] = useState(false);
 
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
@@ -570,6 +608,14 @@ function FridgeQueryView({ employees }: { employees: Employee[] }) {
       if (sig.period === "PM") inspectors.PM = sig.inspector_name;
     }
     setQueryInspectors(inspectors);
+
+    // 점검시각 — 첫 번째 행에서 추출
+    const times = { AM: null as string | null, PM: null as string | null };
+    for (const row of data ?? []) {
+      if (row.period === "AM" && !times.AM && row.check_time) times.AM = row.check_time;
+      if (row.period === "PM" && !times.PM && row.check_time) times.PM = row.check_time;
+    }
+    setQueryCheckTimes(times);
   }
 
   useEffect(() => { loadQuery(); }, [queryDate]);
@@ -614,6 +660,17 @@ function FridgeQueryView({ employees }: { employees: Employee[] }) {
                   </tr>
                 );
               }))}
+              {/* 점검시각 행 */}
+              <tr className="bg-slate-50">
+                <td className="border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500">점검시각</td>
+                <td className="border border-slate-200 px-3 py-2 text-center text-sm text-slate-600 tabular-nums">
+                  {queryCheckTimes.AM ?? <span className="text-slate-300">—</span>}
+                </td>
+                <td className="border border-slate-200 px-3 py-2 text-center text-sm text-slate-600 tabular-nums">
+                  {queryCheckTimes.PM ?? <span className="text-slate-300">—</span>}
+                </td>
+                <td className="border border-slate-200 px-3 py-2" />
+              </tr>
               {/* 점검자 행 */}
               <tr className="bg-slate-50">
                 <td className="border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500">점검자</td>
