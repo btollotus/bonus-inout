@@ -426,8 +426,6 @@ export default function FridgeMonitoringClient() {
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center gap-3">
                     <span className="text-lg">🔑</span>
                     <div className="text-sm text-amber-700 font-semibold">PIN을 입력해야 온도 기록이 가능합니다.</div>
-                    <button className="ml-auto rounded-xl border border-amber-400 bg-amber-100 px-3 py-1.5 text-sm font-bold text-amber-800 hover:bg-amber-200"
-                      onClick={() => setShowPinModal(true)}>PIN 입력</button>
                   </div>
                 )}
                 {/* 장비별 입력 */}
