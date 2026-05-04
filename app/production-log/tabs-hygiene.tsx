@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import FridgeMonitoringClient from "./fridge-monitoring-client";
 
 const supabase = createClient();
 
@@ -802,114 +803,6 @@ export function StorageTempTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
-  const isAdmin = role === "ADMIN";
-  const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
-  const [logs, setLogs] = useState<any[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
-  const [loading, setLoading] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [fEquipmentType, setFEquipmentType] = useState("fridge");
-  const [fEquipmentNo, setFEquipmentNo] = useState("");
-  const [fCheckTime, setFCheckTime] = useState("AM");
-  const [fTemperature, setFTemperature] = useState("");
-  const [fIsOk, setFIsOk] = useState(true);
-  const [fActionNote, setFActionNote] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const EQUIP: Record<string,string> = { fridge:"냉장", freezer:"냉동", warmer:"온장고" };
-  const RANGES: Record<string,string> = { fridge:"0~10°C", freezer:"0~-35°C", warmer:"40~50°C" };
-
-  const loadLogs = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.from("storage_temp_logs").select("*").eq("log_date", filterDate).order("equipment_type").order("equipment_no").order("check_time");
-    setLogs(data ?? []); setLoading(false);
-  }, [filterDate]);
-
-  useEffect(() => { loadLogs(); }, [loadLogs]);
-
-  async function saveLog() {
-    if (!fEquipmentNo || !fTemperature) return showToast("장비 번호와 온도를 입력하세요.", "error");
-    setSaving(true);
-    const { error } = await supabase.from("storage_temp_logs").insert({
-      log_date: filterDate, check_time: fCheckTime, equipment_type: fEquipmentType,
-      equipment_no: fEquipmentNo.trim(), temperature: Number(fTemperature),
-      is_ok: fIsOk, action_note: fActionNote.trim() || null, created_by: userId,
-    });
-    setSaving(false);
-    if (error) return showToast("저장 실패: " + error.message, "error");
-    showToast("✅ 온도 기록 완료!"); setShowForm(false);
-    setFEquipmentNo(""); setFTemperature(""); setFIsOk(true); setFActionNote("");
-    loadLogs();
-  }
-
-  async function approveLog(id: string) {
-    await supabase.from("storage_temp_logs").update({ approved_by: userId, approved_at: new Date().toISOString() }).eq("id", id);
-    showToast("✅ 승인 완료!"); loadLogs();
-  }
-
-  const grouped = logs.reduce((acc, log) => { if (!acc[log.equipment_type]) acc[log.equipment_type] = []; acc[log.equipment_type].push(log); return acc; }, {} as Record<string,any[]>);
-
-  return (
-    <div className="space-y-4">
-      <div className={`${card} p-4`}>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div><div className="mb-1 text-xs text-slate-500">날짜</div>
-            <input type="date" className={inp} style={{ width: 160 }} value={filterDate} onChange={(e) => setFilterDate(e.target.value)} /></div>
-          <button className={btn} onClick={loadLogs}>🔄 조회</button>
-          {isAdminOrSubadmin && <button className={showForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"} onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ 닫기" : "✚ 기록 등록"}</button>}
-          <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
-        </div>
-      </div>
-      {showForm && isAdminOrSubadmin && (
-        <div className={`${card} p-4`}>
-          <div className="mb-3 font-semibold text-sm text-blue-700">✚ 냉장·냉동·온장고 온도 기록</div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div><div className="mb-1 text-xs text-slate-500">장비 유형</div>
-              <select className={inp} value={fEquipmentType} onChange={(e) => setFEquipmentType(e.target.value)}>
-                {Object.entries(EQUIP).map(([k, v]) => <option key={k} value={k}>{v} ({RANGES[k]})</option>)}
-              </select></div>
-            <div><div className="mb-1 text-xs text-slate-500">장비 번호</div>
-              <input className={inp} value={fEquipmentNo} onChange={(e) => setFEquipmentNo(e.target.value)} placeholder="예: 01" /></div>
-            <div><div className="mb-1 text-xs text-slate-500">측정시간</div>
-              <div className="flex gap-2">{["AM","PM"].map((t) => <button key={t} className={fCheckTime === t ? btnOn : btn} onClick={() => setFCheckTime(t)}>{t}</button>)}</div></div>
-            <div><div className="mb-1 text-xs text-slate-500">온도 ({RANGES[fEquipmentType]})</div>
-              <input className={inpR} inputMode="decimal" value={fTemperature} onChange={(e) => setFTemperature(e.target.value.replace(/[^\d.-]/g, ""))} /></div>
-            <div><div className="mb-1 text-xs text-slate-500">적합 여부</div>
-              <select className={inp} value={fIsOk ? "ok" : "ng"} onChange={(e) => setFIsOk(e.target.value === "ok")}>
-                <option value="ok">✅ 적합</option><option value="ng">❌ 부적합</option>
-              </select></div>
-            {!fIsOk && <div><div className="mb-1 text-xs text-slate-500">조치사항</div>
-              <input className={inp} value={fActionNote} onChange={(e) => setFActionNote(e.target.value)} /></div>}
-          </div>
-          <div className="mt-4 flex gap-2">
-            <button className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60" disabled={saving} onClick={saveLog}>{saving ? "저장 중..." : "💾 등록"}</button>
-            <button className={btn} onClick={() => setShowForm(false)}>취소</button>
-          </div>
-        </div>
-      )}
-      <div className={`${card} p-4`}>
-        <div className="mb-3 font-semibold text-sm">❄️ 냉장·냉동·온장고 모니터링 — {filterDate}</div>
-        {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
-          : logs.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
-          : Object.entries(grouped).map(([type, items]) => (
-            <div key={type} className="mb-4">
-              <div className="mb-2 text-xs font-semibold text-slate-500">{EQUIP[type]} ({RANGES[type]})</div>
-              <div className="overflow-x-auto"><table className="w-full text-sm border-collapse">
-                <thead><tr className="border-b border-slate-200">{["번호","측정시간","온도","적합","조치","승인"].map((h) => <th key={h} className="text-left py-1.5 px-3 text-xs text-slate-500 font-semibold">{h}</th>)}</tr></thead>
-                <tbody>{(items as any[]).map((log) => (
-                  <tr key={log.id} className={`border-b border-slate-100 hover:bg-slate-50 ${log.is_ok === false ? "bg-red-50" : ""}`}>
-                    <td className="py-2 px-3 font-medium">{log.equipment_no}</td>
-                    <td className="py-2 px-3">{log.check_time}</td>
-                    <td className={`py-2 px-3 font-bold tabular-nums ${log.is_ok === false ? "text-red-600" : "text-slate-800"}`}>{log.temperature}°C</td>
-                    <td className="py-2 px-3"><span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${log.is_ok ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>{log.is_ok ? "적합" : "부적합"}</span></td>
-                    <td className="py-2 px-3 text-xs text-slate-500">{log.action_note ?? "—"}</td>
-                    <td className="py-2 px-3">{!log.approved_by && isAdmin ? <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700" onClick={() => approveLog(log.id)}>✅ 승인</button> : log.approved_by ? <span className="text-[10px] text-green-600 font-semibold">승인완료</span> : "—"}</td>
-                  </tr>
-                ))}</tbody>
-              </table></div>
-            </div>
-          ))}
-      </div>
-    </div>
-  );
+  return <FridgeMonitoringClient />;
 }
+  

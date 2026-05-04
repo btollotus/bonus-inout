@@ -179,7 +179,7 @@ export default function ProductionLogPage() {
 { key: "foreign",      label: "🔍 이물관리" },
 { key: "hygiene",      label: "🧼 위생관리" },
 { key: "temp_humidity",label: "🌡️ 온습도" },
-{ key: "storage_temp", label: "❄️ 냉장온도" },
+{ key: "storage_temp", label: "❄️ 냉장·냉동·온장고" },
 ] as { key: Tab; label: string }[]).map((t) => (    
   <button key={t.key}
     className={`w-full text-left ${activeTab === t.key ? btnOn : btn}`}
