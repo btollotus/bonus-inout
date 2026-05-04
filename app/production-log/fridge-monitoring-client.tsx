@@ -375,8 +375,8 @@ export default function FridgeMonitoringClient() {
             <div className="text-xs text-slate-500 mt-0.5">냉장 0~10℃ · 냉동 0~-35℃ · 온장 40~50℃ · 2회/일</div>
           </div>
           <div className="flex gap-2">
-            <button className={viewMode === "input" ? btnOn : btn} onClick={() => setViewMode("input")}>📝 입력</button>
-            <button className={viewMode === "query" ? btnOn : btn} onClick={() => setViewMode("query")}>🔍 조회</button>
+            <button className={viewMode === "input" ? btnOn : btn} onClick={() => setViewMode("input")}>📝 기록입력</button>
+            <button className={viewMode === "query" ? btnOn : btn} onClick={() => setViewMode("query")}>🔍 일자별 조회</button>
           </div>
         </div>
 
@@ -402,7 +402,7 @@ export default function FridgeMonitoringClient() {
                 </div>
                 <div className="ml-auto flex items-center gap-3">
                   {/* 점검자 표시 */}
-                  {isPinValid() && pinSession ? (
+                  {pinSession ? (
                     <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
                       <span className="text-green-600 text-sm font-semibold">👤 {pinSession.employeeName}</span>
                       <span className="text-xs text-green-500">점검자 확인됨</span>
@@ -422,7 +422,7 @@ export default function FridgeMonitoringClient() {
             ) : (
               <>
                 {/* PIN 미인증 안내 */}
-                {!isPinValid() && (
+                {!pinSession && (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center gap-3">
                     <span className="text-lg">🔑</span>
                     <div className="text-sm text-amber-700 font-semibold">PIN을 입력해야 온도 기록이 가능합니다.</div>
@@ -453,7 +453,7 @@ export default function FridgeMonitoringClient() {
                               type={dev.type}
                               entry={entry}
                               onSelect={(temp) => handleTempSelect(key, temp)}
-                              disabled={isReadOnly || !isPinValid()}
+                              disabled={isReadOnly || !pinSession}
                             />
                             {/* 이탈 조치사항 */}
                             {entry.temperature !== null && !isInRange(entry.temperature, dev.type) && (
