@@ -538,6 +538,7 @@ export default function FridgeMonitoringClient() {
 function FridgeQueryView({ employees }: { employees: Employee[] }) {
   const [queryDate, setQueryDate] = useState(todayKST());
   const [queryData, setQueryData] = useState<{ AM: Record<string, LogEntry>; PM: Record<string, LogEntry> }>({ AM: {}, PM: {} });
+  const [queryInspectors, setQueryInspectors] = useState<{ AM: string | null; PM: string | null }>({ AM: null, PM: null });
   const [loading, setLoading] = useState(false);
 
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
@@ -545,10 +546,10 @@ function FridgeQueryView({ employees }: { employees: Employee[] }) {
 
   async function loadQuery() {
     setLoading(true);
-    const { data } = await supabase
-      .from("fridge_monitoring_logs")
-      .select("*")
-      .eq("log_date", queryDate);
+    const [{ data }, { data: sigs }] = await Promise.all([
+      supabase.from("fridge_monitoring_logs").select("*").eq("log_date", queryDate),
+      supabase.from("fridge_monitoring_signatures").select("period,inspector_name").eq("log_date", queryDate).eq("role", "inspector"),
+    ]);
     setLoading(false);
 
     const am: Record<string, LogEntry> = {};
@@ -559,6 +560,13 @@ function FridgeQueryView({ employees }: { employees: Employee[] }) {
       else pm[key] = row;
     }
     setQueryData({ AM: am, PM: pm });
+
+    const inspectors = { AM: null as string | null, PM: null as string | null };
+    for (const sig of sigs ?? []) {
+      if (sig.period === "AM") inspectors.AM = sig.inspector_name;
+      if (sig.period === "PM") inspectors.PM = sig.inspector_name;
+    }
+    setQueryInspectors(inspectors);
   }
 
   useEffect(() => { loadQuery(); }, [queryDate]);
@@ -603,6 +611,17 @@ function FridgeQueryView({ employees }: { employees: Employee[] }) {
                   </tr>
                 );
               }))}
+              {/* 점검자 행 */}
+              <tr className="bg-slate-50">
+                <td className="border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500">점검자</td>
+                <td className="border border-slate-200 px-3 py-2 text-center text-sm font-semibold text-slate-700">
+                  {queryInspectors.AM ?? <span className="text-slate-300">—</span>}
+                </td>
+                <td className="border border-slate-200 px-3 py-2 text-center text-sm font-semibold text-slate-700">
+                  {queryInspectors.PM ?? <span className="text-slate-300">—</span>}
+                </td>
+                <td className="border border-slate-200 px-3 py-2" />
+              </tr>
             </tbody>
           </table>
         </div>
