@@ -210,6 +210,7 @@ export default function FridgeMonitoringClient() {
           special_note: "",
           inspector_id: null,
           inspector_name: null,
+          check_time: null,
         };
       }
     }
