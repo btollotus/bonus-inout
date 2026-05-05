@@ -599,7 +599,7 @@ function hygieneBuildDates(ym: string): string[] {
 
 // ── Types ──
 type HygieneCheckItem = { id: string; category: string; item_text: string; order_no: number };
-type HygieneCheckLog  = { log_date: string; item_id: string; result: boolean };
+type HygieneCheckLog  = { log_date: string; item_id: string; result: boolean; inspector_name?: string };
 type HygieneCheckNote = {
   id: string; year_month: string; note_type: string;
   content: string; action_by: string | null; confirmed_by: string | null; order_no: number;
@@ -678,7 +678,7 @@ export function HygieneCheckTab({ role, userId, showToast }: {
     const [itemRes, logRes, noteRes, sigRes] = await Promise.all([
       supabase.from("hygiene_check_items").select("id,category,item_text,order_no")
         .eq("is_active", true).order("order_no"),
-      supabase.from("hygiene_check_logs").select("log_date,item_id,result")
+        supabase.from("hygiene_check_logs").select("log_date,item_id,result,inspector_name")
         .gte("log_date", `${yearMonth}-01`)
         .lte("log_date", `${yearMonth}-${String(dayCount).padStart(2, "0")}`),
       supabase.from("hygiene_check_notes").select("*")
