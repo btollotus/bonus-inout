@@ -1895,7 +1895,7 @@ if (woSubNameVal) {
                           {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                         </select>
                       </div>
-                      <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} value={eOrderTitle} onChange={(e) => setEOrderTitle(e.target.value)} /></div>
+                      <div><div className="mb-1 text-xs text-slate-600">참고사항</div><input className={inp} value={eOrderTitle} onChange={(e) => setEOrderTitle(e.target.value)} /></div>
                     </div>
                     <ShipBlock s1={eShip1} setS1={setEShip1} s2={eShip2} setS2={setEShip2} two={eTwoShip} setTwo={setETwoShip} prefix={`edit_${editRow.rawId}`} inpClass={inp} />
                     <div className="mt-4 flex items-center justify-between">
