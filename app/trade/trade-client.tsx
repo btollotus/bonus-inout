@@ -2211,7 +2211,7 @@ if (woSubNameVal) {
                       {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                     </select>
                   </div>
-                  <div><div className="mb-1 text-xs text-slate-600">메모(title)</div><input className={inp} lang="ko" value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} /></div>  
+                  <div><div className="mb-1 text-xs text-slate-600">참고사항</div><input className={inp} lang="ko" value={orderTitle} onChange={(e) => setOrderTitle(e.target.value)} /></div>
                 </div>
                 <ShipBlock s1={ship1} setS1={setShip1} s2={ship2} setS2={setShip2} two={twoShip} setTwo={setTwoShip} prefix="create" inpClass={inp} />
                 <div className="mt-4 flex items-center justify-between">
@@ -2324,8 +2324,8 @@ if (woSubNameVal) {
                         </label>
                       </div>
                       <div className="md:col-span-3">
-                        <div className="mb-1 text-xs text-slate-600">메모</div>
-                        <textarea className={`${inp} resize-none`} lang="ko" rows={2} placeholder="전달할 메모나 특이사항" value={orderWoNote} onChange={(e) => setOrderWoNote(e.target.value)} />
+                      <div className="mb-1 text-xs text-slate-600">비고</div>
+                      <textarea className={`${inp} resize-none`} lang="ko" rows={2} placeholder="전달할 메모나 특이사항" value={orderWoNote} onChange={(e) => setOrderWoNote(e.target.value)} />
                         {(() => {
                           const firstFoodType = lines[0]?.food_type ?? "";
                           if (!firstFoodType.includes("리얼")) return null;
