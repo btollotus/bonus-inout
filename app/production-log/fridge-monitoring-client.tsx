@@ -429,7 +429,7 @@ export default function FridgeMonitoringClient() {
                   <div className="mb-1 text-xs text-slate-500">점검시간 · 시각</div>
                   <div className="flex items-center gap-2">
                     <button className={period === "AM" ? btnOn : btn} onClick={() => setPeriod("AM")}>오전</button>
-                    <div className="relative">
+                    <div className="relative w-24">
                       <input
                         type="text"
                         inputMode="numeric"
@@ -439,21 +439,21 @@ export default function FridgeMonitoringClient() {
                         disabled={isReadOnly}
                         onChange={e => setAmCheckTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
                         className="w-24 rounded-xl border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none focus:border-blue-400"
-                        style={{
-                          borderColor: amCheckTime.length === 4 ? "#93c5fd" : undefined,
-                          background: amCheckTime.length === 4 ? "#eff6ff" : undefined,
-                          color: amCheckTime.length === 4 ? "transparent" : undefined,
-                        }}
+                        style={{ opacity: amCheckTime.length === 4 ? 0 : 1, position: "relative", zIndex: 1 }}
                       />
                       {amCheckTime.length === 4 && (
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-sm font-semibold tabular-nums text-blue-700">
+                        <div
+                          className="absolute inset-0 flex items-center justify-center text-sm font-semibold tabular-nums text-blue-700 rounded-xl cursor-text"
+                          style={{ border: "1px solid #93c5fd", background: "#eff6ff", zIndex: 2 }}
+                          onClick={() => setAmCheckTime(amCheckTime.slice(0, 3))}
+                        >
                           {amCheckTime.slice(0,2)}:{amCheckTime.slice(2,4)}
                         </div>
                       )}
                     </div>
                     <div className="w-px h-5 bg-slate-200" />
                     <button className={period === "PM" ? btnOn : btn} onClick={() => setPeriod("PM")}>오후</button>
-                    <div className="relative">
+                    <div className="relative w-24">
                       <input
                         type="text"
                         inputMode="numeric"
@@ -463,14 +463,14 @@ export default function FridgeMonitoringClient() {
                         disabled={isReadOnly}
                         onChange={e => setPmCheckTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
                         className="w-24 rounded-xl border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none focus:border-blue-400"
-                        style={{
-                          borderColor: pmCheckTime.length === 4 ? "#93c5fd" : undefined,
-                          background: pmCheckTime.length === 4 ? "#eff6ff" : undefined,
-                          color: pmCheckTime.length === 4 ? "transparent" : undefined,
-                        }}
+                        style={{ opacity: pmCheckTime.length === 4 ? 0 : 1, position: "relative", zIndex: 1 }}
                       />
                       {pmCheckTime.length === 4 && (
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-sm font-semibold tabular-nums text-blue-700">
+                        <div
+                          className="absolute inset-0 flex items-center justify-center text-sm font-semibold tabular-nums text-blue-700 rounded-xl cursor-text"
+                          style={{ border: "1px solid #93c5fd", background: "#eff6ff", zIndex: 2 }}
+                          onClick={() => setPmCheckTime(pmCheckTime.slice(0, 3))}
+                        >
                           {pmCheckTime.slice(0,2)}:{pmCheckTime.slice(2,4)}
                         </div>
                       )}
