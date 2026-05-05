@@ -1434,7 +1434,8 @@ if (copyPartnerId) {
           setOrderWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
           setOrderWoMoldCols((wo as any).mold_cols ? String((wo as any).mold_cols) : "");
           setOrderWoMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : "");
-          setOrderWoNote((wo as any).note ?? ""); 
+          setOrderTitle((wo as any).note ?? "");
+          setOrderWoNote("");
 
           // 품목별 기존 바코드 저장 (재주문 시 재사용) - 품목명을 key로 사용
           const woItemsAll: any[] = (wo as any).work_order_items ?? [];
