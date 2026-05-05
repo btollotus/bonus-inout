@@ -558,7 +558,7 @@ async function searchTransferLots(itemId: string, keyword: string, skipProductio
       if (filterDateTo) q = q.lte("order_date", filterDateTo);
       const { data, error } = await q;
       if (error) return setMsg(error.message);
-      const list = (data ?? []) as WorkOrderRow[];
+      const list = (data ?? []) as unknown as WorkOrderRow[];
       if (offset === 0) {
         setWoList(list);
       } else {
