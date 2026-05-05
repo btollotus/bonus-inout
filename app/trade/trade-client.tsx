@@ -463,6 +463,23 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [orderWoMoldRows, setOrderWoMoldRows] = useState(""); 
   const [orderWoPackagingType, setOrderWoPackagingType] = useState("");
   const [orderWoNote, setOrderWoNote] = useState("");
+
+  useEffect(() => {
+    const cols = parseInt(orderWoMoldCols || "0", 10);
+    const rows = parseInt(orderWoMoldRows || "0", 10);
+    const qty = lines.reduce((s, l) => s + toInt(l.qty), 0);
+    if (!qty || !cols || !rows) return;
+    const mold = cols * rows;
+    const fullSheets = Math.floor(qty / mold);
+    const remainder = qty % mold;
+    let extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
+    let total = fullSheets * mold + extraRows * cols;
+    if (total - qty < 16) { extraRows += 1; total += cols; }
+    const auto = extraRows > 0
+      ? `전사지: ${fullSheets}장 ${extraRows}줄 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`
+      : `전사지: ${fullSheets}장 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`;
+    setOrderWoNote(auto);
+  }, [orderWoMoldCols, orderWoMoldRows, lines]); // eslint-disable-line
   const [orderWoEnabled, setOrderWoEnabled] = useState(!isSubAdmin);
   const [orderIsReorder, setOrderIsReorder] = useState(false);
   const [orderSkipProductionCheck, setOrderSkipProductionCheck] = useState(false);
