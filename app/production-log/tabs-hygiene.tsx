@@ -1070,21 +1070,14 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                     <td style={{ ...hTdP, width:60, textAlign:"center", fontSize:"7pt" }}>점검 기간</td>
                     <td style={{ ...hTdP, fontSize:"7pt" }}>{y}년 {m}월 1일 ～ {m}월 {dayCount}일</td>
                     <td style={{ ...hTdP, width:32, fontWeight:"bold", textAlign:"center", fontSize:"7pt" }} rowSpan={2}>결재란</td>
-                    <td style={{ ...hTdP, width:72, textAlign:"center", fontWeight:"bold", fontSize:"7pt" }}>점검자</td>
                     <td style={{ ...hTdP, width:72, textAlign:"center", fontWeight:"bold", fontSize:"7pt" }}>승인</td>
                   </tr>
                   <tr>
                     <td style={{ ...hTdP, textAlign:"center", fontSize:"7pt" }}>범례</td>
                     <td style={{ ...hTdP, fontSize:"7pt" }}>예: O,  아니오: X</td>
                     <td style={{ ...hTdP, textAlign:"center", padding:"3px" }}>
-                      {sigInspectorSrc
-                        ? <><img src={sigInspectorSrc} style={{ height:24, display:"block", margin:"0 auto" }} alt="" /><div style={{ fontSize:"6pt", marginTop:1 }}>{sig?.inspector_name}</div></>
-                        : <div style={{ fontSize:"6pt", color:"#aaa" }}>{sig?.inspector_name ?? ""}</div>}
-                    </td>
-                    <td style={{ ...hTdP, textAlign:"center", padding:"3px" }}>
-                      {sigApprovedSrc
-                        ? <><img src={sigApprovedSrc} style={{ height:24, display:"block", margin:"0 auto" }} alt="" /><div style={{ fontSize:"6pt", marginTop:1 }}>{sig?.approved_by_name}</div></>
-                        : <div style={{ fontSize:"6pt", color:"#aaa" }}>{sig?.approved_by_name ?? ""}</div>}
+                      <img src="/sign-chods.png" style={{ height:24, display:"block", margin:"0 auto" }} alt="조대성" />
+                      <div style={{ fontSize:"6pt", marginTop:1 }}>조대성</div>
                     </td>
                   </tr>
                 </tbody>
@@ -1138,6 +1131,40 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                   )}
                 </tbody>
               </table>
+              {/* 날짜별 점검자 사인 행 */}
+              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed", marginBottom:4 }}>
+                <colgroup>
+                  <col style={{ width:"20px" }} />
+                  <col style={{ width:"140px" }} />
+                  {printDates.map((d) => <col key={d} />)}
+                </colgroup>
+                <tbody>
+                  <tr>
+                    <td colSpan={2} style={{ ...hThP, textAlign:"center", fontSize:"6pt" }}>점검자 서명</td>
+                    {printDates.map((d) => {
+                      // 해당 날짜에 X가 하나라도 있으면 점검 있음으로 간주
+                      const hasEntry = items.some((item) => getResult(d, item.id) !== null);
+                      // 해당 날짜의 점검자 — hygiene_check_signatures는 월단위라
+                      // logs에서 해당 날짜 데이터 존재 여부로 점검자 표시
+                      // sig.inspector_name을 날짜별로 구분할 수 없으므로
+                      // 데이터가 있는 날짜에만 sig.inspector_name 표시
+                      const signSrc = sig?.inspector_name ? HYGIENE_SIGN_MAP[sig.inspector_name] ?? null : null;
+                      const hasDayData = logs.some((l) => l.log_date === d)
+                        || Object.keys(pending).some((k) => k.startsWith(d + "__"));
+                      return (
+                        <td key={d} style={{ ...hTdP, textAlign:"center", padding:"1px", height:28 }}>
+                          {hasDayData && signSrc
+                            ? <img src={signSrc} style={{ height:20, display:"block", margin:"0 auto" }} alt={sig?.inspector_name} />
+                            : hasDayData && sig?.inspector_name
+                              ? <div style={{ fontSize:"5.5pt", color:"#555" }}>{sig.inspector_name}</div>
+                              : null}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+
               {/* 특이사항 */}
               <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:2 }}>
                 <tbody>
