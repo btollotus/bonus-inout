@@ -157,7 +157,7 @@ export default function ProductionLogPage() {
         {/* 헤더 */}
         <div>
           <h1 className="text-xl font-bold text-slate-800">📋 생산관리</h1>
-          <div className="mt-0.5 text-xs text-slate-500">생산일지 · 원료수불부 · 근무일지</div>
+          
         </div>
 
         {/* 탭 + 컨텐츠 레이아웃 */}
