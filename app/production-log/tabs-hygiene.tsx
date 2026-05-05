@@ -659,8 +659,10 @@ export function HygieneCheckTab({ role, userId, showToast }: {
 
   // 미저장 버퍼  key: `${log_date}__${item_id}`
   const [pending, setPending] = React.useState<Record<string, boolean>>({});
-  // 날짜별 점검자  key: log_date, value: inspector_name
-  const [dayInspectors, setDayInspectors] = React.useState<Record<string, string>>({});
+ // 날짜별 점검자  key: log_date, value: inspector_name
+ const [dayInspectors, setDayInspectors] = React.useState<Record<string, string>>({});
+ // 날짜별 활성화  key: log_date, value: boolean
+ const [dayActive, setDayActive] = React.useState<Record<string, boolean>>({});
 
   const dates = hygieneBuildDates(yearMonth);
   const isCurrentMonth = yearMonth === currentYM;
@@ -695,14 +697,17 @@ export function HygieneCheckTab({ role, userId, showToast }: {
     setNotes((noteRes.data ?? []) as HygieneCheckNote[]);
     setSig(sigRes.data as HygieneSignature ?? null);
 
-    // 날짜별 점검자 복원 — hygiene_daily_inspectors 우선, 없으면 기본값 조대성
+    // 날짜별 점검자/활성화 복원
     const inspMap: Record<string, string> = {};
-    const inspRows = (inspRes.data ?? []) as { log_date: string; inspector_name: string }[];
+    const activeMap: Record<string, boolean> = {};
+    const inspRows = (inspRes.data ?? []) as { log_date: string; inspector_name: string; is_active: boolean }[];
     for (const d of hygieneBuildDates(yearMonth)) {
       const row = inspRows.find((r) => r.log_date === d);
       inspMap[d] = row?.inspector_name ?? "조대성";
+      activeMap[d] = row?.is_active ?? false;
     }
     setDayInspectors(inspMap);
+    setDayActive(activeMap);
     setLoading(false);
   }, [yearMonth]);
 
@@ -715,8 +720,8 @@ export function HygieneCheckTab({ role, userId, showToast }: {
     if (key in pending) return pending[key];
     const log = logs.find((l) => l.log_date === date && l.item_id === itemId);
     if (log) return log.result;
-    // 당월 날짜는 기본값 O (미래 날짜 포함, 실제 저장은 하지 않음)
-    if (date <= todayKST() && hygieneYearMonthOf(date) === yearMonth) return "default";
+    // 활성화된 날짜만 기본값 O
+    if (date <= todayKST() && hygieneYearMonthOf(date) === yearMonth && dayActive[date]) return "default";
     return null;
   }
 
@@ -919,18 +924,36 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                     <th style={{ minWidth:200, background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 6px", textAlign:"left", fontSize:10 }}>점검 사항</th>
                     {dates.map((d) => {
                       const isToday = d === today;
-                      const dow = dowOfDate(d);
-                      const isSun = dow === "일"; const isSat = dow === "토";
+                      const isActive = dayActive[d] ?? false;
+                      const canActivate = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
                       return (
-                        <th key={d} style={{
-                          width:26, minWidth:26,
-                          background: isToday ? "#dbeafe" : isSun ? "#fef2f2" : isSat ? "#eff6ff" : "#f8fafc",
-                          border:"0.5px solid #e2e8f0", padding:"2px 1px", textAlign:"center",
-                          fontSize:9, fontWeight: isToday ? 700 : 400,
-                          color: isToday ? "#1e40af" : isSun ? "#b91c1c" : isSat ? "#1d4ed8" : "#64748b",
-                        }}>
+                        <th key={d}
+                          onClick={() => {
+                            if (!canActivate) return;
+                            const newActive = !isActive;
+                            setDayActive((prev) => ({ ...prev, [d]: newActive }));
+                            // 비활성화 시 해당 날짜 pending 제거
+                            if (!newActive) {
+                              setPending((prev) => {
+                                const n = { ...prev };
+                                Object.keys(n).forEach((k) => { if (k.startsWith(d + "__")) delete n[k]; });
+                                return n;
+                              });
+                            }
+                            supabase.from("hygiene_daily_inspectors").upsert(
+                              { log_date: d, inspector_name: dayInspectors[d] ?? "조대성", is_active: newActive },
+                              { onConflict: "log_date" }
+                            );
+                          }}
+                          style={{
+                            width:26, minWidth:26,
+                            background: isActive ? "#dbeafe" : isToday ? "#f0fdf4" : "#f8fafc",
+                            border:"0.5px solid #e2e8f0", padding:"2px 1px", textAlign:"center",
+                            fontSize:9, fontWeight: isActive ? 700 : 400,
+                            color: isActive ? "#1e40af" : "#64748b",
+                            cursor: canActivate ? "pointer" : "default",
+                          }}>
                           <div>{dayOfDate(d)}</div>
-                          <div style={{ fontSize:8 }}>{dow}</div>
                         </th>
                       );
                     })}
@@ -1160,8 +1183,8 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                       const isSun = dow === 0; const isSat = dow === 6;
                       return (
                         <th key={d} style={{ ...hThP, textAlign:"center", fontSize:"5.5pt", padding:"1px",
-                          color: isSun ? "#b91c1c" : isSat ? "#1d4ed8" : "#000" }}>
-                          {dayOfDate(d)}<br/>{["일","월","화","수","목","금","토"][dow]}
+                          background: dayActive[d] ? "#dbeafe" : "#f0f0f0" }}>
+                          {dayOfDate(d)}
                         </th>
                       );
                     })}
@@ -1204,7 +1227,7 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                   <tr>
                     <td colSpan={2} style={{ ...hThP, textAlign:"center", fontSize:"6pt" }}>점검자 서명</td>
                     {printDates.map((d) => {
-                     const hasDayData = d <= today;
+                    const hasDayData = d <= today && (dayActive[d] ?? false);
                       const inspName = dayInspectors[d] ?? "조대성";
                       const signSrc = HYGIENE_SIGN_MAP[inspName] ?? null;
                       return (
