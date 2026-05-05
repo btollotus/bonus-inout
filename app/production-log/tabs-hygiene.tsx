@@ -943,7 +943,9 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                             supabase.from("hygiene_daily_inspectors").upsert(
                               { log_date: d, inspector_name: dayInspectors[d] ?? "조대성", is_active: newActive },
                               { onConflict: "log_date" }
-                            );
+                            ).then(({ error }) => {
+                              if (error) showToast("저장 실패: " + error.message, "error");
+                            });
                           }}
                           style={{
                             width:26, minWidth:26,
