@@ -675,16 +675,19 @@ export function HygieneCheckTab({ role, userId, showToast }: {
     setLoading(true);
     setPending({});
     const dayCount = hygieneDaysInMonth(yearMonth);
-    const [itemRes, logRes, noteRes, sigRes] = await Promise.all([
+    const [itemRes, logRes, noteRes, sigRes, inspRes] = await Promise.all([
       supabase.from("hygiene_check_items").select("id,category,item_text,order_no")
         .eq("is_active", true).order("order_no"),
-        supabase.from("hygiene_check_logs").select("log_date,item_id,result,inspector_name")
+      supabase.from("hygiene_check_logs").select("log_date,item_id,result,inspector_name")
         .gte("log_date", `${yearMonth}-01`)
         .lte("log_date", `${yearMonth}-${String(dayCount).padStart(2, "0")}`),
       supabase.from("hygiene_check_notes").select("*")
         .eq("year_month", yearMonth).order("order_no"),
       supabase.from("hygiene_check_signatures").select("*")
         .eq("year_month", yearMonth).maybeSingle(),
+      supabase.from("hygiene_daily_inspectors").select("log_date,inspector_name")
+        .gte("log_date", `${yearMonth}-01`)
+        .lte("log_date", `${yearMonth}-${String(dayCount).padStart(2, "0")}`),
     ]);
     const fetchedLogs = (logRes.data ?? []) as HygieneCheckLog[];
     setItems((itemRes.data ?? []) as HygieneCheckItem[]);
@@ -692,11 +695,12 @@ export function HygieneCheckTab({ role, userId, showToast }: {
     setNotes((noteRes.data ?? []) as HygieneCheckNote[]);
     setSig(sigRes.data as HygieneSignature ?? null);
 
-    // 날짜별 점검자 복원 — DB에 저장된 값 우선, 없으면 기본값 조대성
+    // 날짜별 점검자 복원 — hygiene_daily_inspectors 우선, 없으면 기본값 조대성
     const inspMap: Record<string, string> = {};
+    const inspRows = (inspRes.data ?? []) as { log_date: string; inspector_name: string }[];
     for (const d of hygieneBuildDates(yearMonth)) {
-      const dayLog = fetchedLogs.find((l) => l.log_date === d);
-      inspMap[d] = (dayLog as any)?.inspector_name ?? "조대성";
+      const row = inspRows.find((r) => r.log_date === d);
+      inspMap[d] = row?.inspector_name ?? "조대성";
     }
     setDayInspectors(inspMap);
     setLoading(false);
@@ -887,9 +891,13 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
         <PinModal
           employees={employees.filter((e) => e.name !== null) as any}
           title="점검자 확인"
-          onSuccess={(empId, empName) => {
+          onSuccess={async (empId, empName) => {
             setInspector({ id: empId, name: empName });
             setShowPin(false);
+            // 오늘 날짜 점검자 자동 변경 + 즉시 저장
+            setDayInspectors((prev) => ({ ...prev, [today]: empName }));
+            await supabase.from("hygiene_daily_inspectors")
+              .upsert({ log_date: today, inspector_name: empName }, { onConflict: "log_date" });
           }}
           onCancel={() => { setShowPin(false); setPinTarget(null); setPinInput(""); setPinError(""); }}
         />
@@ -943,12 +951,17 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                         }}>
                           {isPast && canEdit ? (
                             <select
-                              value={inspName}
-                              onChange={(e) => setDayInspectors((prev) => ({ ...prev, [d]: e.target.value }))}
-                              style={{
-                                width:"100%", fontSize:8, border:"none", background:"transparent",
-                                textAlign:"center", cursor:"pointer", outline:"none", color:"#1e293b",
-                              }}>
+                            value={inspName}
+                            onChange={async (e) => {
+                              const newName = e.target.value;
+                              setDayInspectors((prev) => ({ ...prev, [d]: newName }));
+                              await supabase.from("hygiene_daily_inspectors")
+                                .upsert({ log_date: d, inspector_name: newName }, { onConflict: "log_date" });
+                            }}
+                            style={{
+                              width:"100%", fontSize:8, border:"none", background:"transparent",
+                              textAlign:"center", cursor:"pointer", outline:"none", color:"#1e293b",
+                            }}>
                               {employees.map((emp) => (
                                 <option key={emp.id} value={emp.name ?? ""}>{emp.name}</option>
                               ))}
@@ -1191,10 +1204,7 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                   <tr>
                     <td colSpan={2} style={{ ...hThP, textAlign:"center", fontSize:"6pt" }}>점검자 서명</td>
                     {printDates.map((d) => {
-                      const hasDayData = d <= today && (
-                        logs.some((l) => l.log_date === d) ||
-                        Object.keys(pending).some((k) => k.startsWith(d + "__"))
-                      );
+                     const hasDayData = d <= today;
                       const inspName = dayInspectors[d] ?? "조대성";
                       const signSrc = HYGIENE_SIGN_MAP[inspName] ?? null;
                       return (
