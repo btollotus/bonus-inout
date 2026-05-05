@@ -691,11 +691,15 @@ export function HygieneCheckTab({ role, userId, showToast }: {
   React.useEffect(() => { loadData(); }, [loadData]);
 
   // ── 결과 조회 ──
-  function getResult(date: string, itemId: string): boolean | null {
+  // 과거 날짜는 실제 DB 값만, 당월은 미입력도 O로 표시
+  function getResult(date: string, itemId: string): boolean | "default" | null {
     const key = `${date}__${itemId}`;
     if (key in pending) return pending[key];
     const log = logs.find((l) => l.log_date === date && l.item_id === itemId);
-    return log ? log.result : null;
+    if (log) return log.result;
+    // 당월 날짜는 기본값 O (미래 날짜 포함, 실제 저장은 하지 않음)
+    if (date <= todayKST() && hygieneYearMonthOf(date) === yearMonth) return "default";
+    return null;
   }
 
   // ── 셀 토글 ──
@@ -704,17 +708,38 @@ export function HygieneCheckTab({ role, userId, showToast }: {
     if (!canEdit) return;
     const key = `${date}__${itemId}`;
     const cur = getResult(date, itemId);
-    setPending((prev) => ({ ...prev, [key]: cur === null ? true : !cur }));
+    // default(O) → X, true(O) → X, false(X) → default(O로 복귀, pending에서 제거)
+    if (cur === false) {
+      setPending((prev) => { const n = { ...prev }; delete n[key]; return n; });
+    } else {
+      setPending((prev) => ({ ...prev, [key]: false }));
+    }
   }
 
   // ── 저장 ──
   async function saveAll() {
     if (Object.keys(pending).length === 0) return showToast("변경 사항이 없습니다.", "error");
     setSaving(true);
-    const upserts = Object.entries(pending).map(([key, result]) => {
-      const [log_date, item_id] = key.split("__");
-      return { log_date, item_id, result };
-    });
+    // pending에 없는 당월 날짜×항목 중 DB에도 없는 것 → result:true 로 일괄 upsert
+    const defaultUpserts: { log_date: string; item_id: string; result: boolean }[] = [];
+    for (const d of dates) {
+      if (d > today) continue;
+      for (const item of items) {
+        const key = `${d}__${item.id}`;
+        const hasLog = logs.some((l) => l.log_date === d && l.item_id === item.id);
+        const hasPending = key in pending;
+        if (!hasLog && !hasPending) {
+          defaultUpserts.push({ log_date: d, item_id: item.id, result: true });
+        }
+      }
+    }
+    const upserts = [
+      ...defaultUpserts,
+      ...Object.entries(pending).map(([key, result]) => {
+        const [log_date, item_id] = key.split("__");
+        return { log_date, item_id, result };
+      }),
+    ];
     const { error } = await supabase.from("hygiene_check_logs")
       .upsert(upserts, { onConflict: "log_date,item_id" });
     if (error) { setSaving(false); return showToast("저장 실패: " + error.message, "error"); }
@@ -779,15 +804,9 @@ export function HygieneCheckTab({ role, userId, showToast }: {
   }
 
   // ── 통계 ──
-  const allResults = [
-    ...logs,
-    ...Object.entries(pending).map(([key, result]) => {
-      const [log_date, item_id] = key.split("__");
-      return { log_date, item_id, result };
-    }),
-  ];
-  const filledCells = allResults.length;
-  const xCount = allResults.filter((l) => l.result === false).length;
+  const xCount = Object.values(pending).filter((v) => v === false).length
+  + logs.filter((l) => l.result === false).length;
+const filledCells = items.length * dates.filter((d) => d <= today).length;
   const pendingCount = Object.keys(pending).length;
 
   // ── 카테고리 그룹 ──
@@ -840,6 +859,13 @@ export function HygieneCheckTab({ role, userId, showToast }: {
           </div>
           <button className={btn} onClick={loadData}>🔄 새로고침</button>
           <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
+          <button
+            className={inspector
+              ? "rounded-xl border border-green-400 bg-green-50 px-3 py-1.5 text-sm font-semibold text-green-700 hover:bg-green-100"
+              : "rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"}
+            onClick={() => { setShowPin(true); setPinTarget(null); setPinInput(""); setPinError(""); }}>
+            🔑 {inspector ? `점검자: ${inspector.name}` : "PIN 입력"}
+          </button>
           {pendingCount > 0 && (
             <button className={btnOn} disabled={saving} onClick={saveAll}>
               {saving ? "저장 중..." : `💾 저장 (${pendingCount}건 변경)`}
@@ -851,85 +877,71 @@ export function HygieneCheckTab({ role, userId, showToast }: {
           </div>
         </div>
       </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[200px_1fr]">
-
-        {/* 좌: PIN 패널 */}
-        <div className="space-y-3">
-          <div className={`${card} p-4`}>
-            <div className="mb-3 font-semibold text-sm">점검자 인증</div>
-            {inspector ? (
-              <div>
-                <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm font-semibold text-green-700 mb-2">
-                  ✅ {inspector.name}
+{/* PIN 모달 */}
+{showPin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => { setShowPin(false); setPinInput(""); setPinError(""); setPinTarget(null); }}>
+          <div className={`${card} p-5 w-72`} onClick={(e) => e.stopPropagation()}>
+            {!pinTarget ? (
+              <>
+                <div className="mb-3 font-semibold text-sm text-center">점검자 선택</div>
+                <div className="space-y-1.5">
+                  {employees.map((emp) => (
+                    <button key={emp.id}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left text-sm font-medium hover:bg-blue-50 hover:border-blue-300 transition-all"
+                      onClick={() => {
+                        if (isAdminOrSubadmin) {
+                          setInspector({ id: emp.id, name: emp.name });
+                          setShowPin(false);
+                        } else {
+                          setPinTarget(emp);
+                          setPinInput(""); setPinError("");
+                        }
+                      }}>
+                      👤 {emp.name}
+                    </button>
+                  ))}
                 </div>
-                <button className="w-full rounded-xl border border-slate-200 bg-white py-1.5 text-xs text-slate-500 hover:bg-slate-50"
-                  onClick={() => setInspector(null)}>변경</button>
-              </div>
+                <button className="mt-3 w-full text-xs text-slate-400 hover:text-slate-600"
+                  onClick={() => { setShowPin(false); setPinTarget(null); }}>취소</button>
+              </>
             ) : (
-              <div className="space-y-1.5">
-                {employees.map((emp) => (
-                  <button key={emp.id}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium hover:bg-blue-50 hover:border-blue-300 transition-all"
-                    onClick={() => openPin(emp)}>
-                    👤 {emp.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* PIN 입력 */}
-          {showPin && pinTarget && (
-            <div className={`${card} p-4`}>
-              <div className="text-sm font-semibold text-center mb-1">{pinTarget.name}</div>
-              <div className="text-xs text-slate-500 text-center mb-3">PIN 4자리 입력</div>
-              <div className="flex justify-center gap-2 mb-3">
-                {[0,1,2,3].map((i) => (
-                  <div key={i} className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center font-bold transition-all
-                    ${pinInput.length > i ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-300"}`}>
-                    {pinInput.length > i ? "●" : "○"}
-                  </div>
-                ))}
-              </div>
-              {pinError && <div className="text-center text-xs text-red-500 mb-2">{pinError}</div>}
-              <div className="grid grid-cols-3 gap-1.5">
-                {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
-                  <button key={i}
-                    className={`rounded-xl border py-2.5 text-base font-semibold transition-all
-                      ${d === "" ? "invisible" : "border-slate-200 bg-white hover:bg-slate-50 active:scale-95"}`}
-                    onClick={() => {
-                      if (d === "⌫") { setPinInput((p) => p.slice(0,-1)); setPinError(""); }
-                      else if (d) handlePinDigit(d);
-                    }}>{d}</button>
-                ))}
-              </div>
-              <button className="mt-2 w-full text-xs text-slate-400 hover:text-slate-600"
-                onClick={() => { setShowPin(false); setPinInput(""); setPinError(""); }}>취소</button>
-            </div>
-          )}
-
-          {/* 현황 */}
-          <div className={`${card} p-4`}>
-            <div className="mb-3 font-semibold text-sm">이달 현황</div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center">
-                <div className="text-xs text-slate-500 mb-1">O 적합</div>
-                <div className="text-xl font-bold text-green-700">{filledCells - xCount}</div>
-              </div>
-              <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-center">
-                <div className="text-xs text-red-600 mb-1">X 부적합</div>
-                <div className="text-xl font-bold text-red-700">{xCount}</div>
-              </div>
-            </div>
-            {pendingCount > 0 && (
-              <div className="mt-2 text-xs text-amber-600 font-semibold text-center">미저장 {pendingCount}건</div>
+              <>
+                <div className="text-sm font-semibold text-center mb-1">{pinTarget.name}</div>
+                <div className="text-xs text-slate-500 text-center mb-3">PIN 4자리 입력</div>
+                <div className="flex justify-center gap-2 mb-3">
+                  {[0,1,2,3].map((i) => (
+                    <div key={i} className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center font-bold transition-all
+                      ${pinInput.length > i ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-300"}`}>
+                      {pinInput.length > i ? "●" : "○"}
+                    </div>
+                  ))}
+                </div>
+                {pinError && <div className="text-center text-xs text-red-500 mb-2">{pinError}</div>}
+                <div className="grid grid-cols-3 gap-1.5">
+                  {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
+                    <button key={i}
+                      className={`rounded-xl border py-2.5 text-base font-semibold transition-all
+                        ${d === "" ? "invisible" : "border-slate-200 bg-white hover:bg-slate-50 active:scale-95"}`}
+                      onClick={() => {
+                        if (d === "⌫") { setPinInput((p) => p.slice(0,-1)); setPinError(""); }
+                        else if (d) handlePinDigit(d);
+                      }}>{d}</button>
+                  ))}
+                </div>
+                <button className="mt-2 w-full text-xs text-slate-400 hover:text-slate-600"
+                  onClick={() => { setPinTarget(null); setPinInput(""); setPinError(""); }}>← 담당자 선택으로</button>
+              </>
             )}
           </div>
         </div>
+      )}
 
-        {/* 우: 점검 그리드 */}
+      <div className="grid grid-cols-1 gap-4">
+
+        {/* 점검 그리드 */}
         <div className={`${card} p-0 overflow-hidden`}>
+      
           {loading ? (
             <div className="py-12 text-center text-sm text-slate-400">불러오는 중...</div>
           ) : (
@@ -976,24 +988,24 @@ export function HygieneCheckTab({ role, userId, showToast }: {
                           maxWidth:220, whiteSpace:"normal",
                         }}>{item.item_text}</td>
                         {dates.map((d) => {
-                          const result = getResult(d, item.id);
-                          const isToday = d === today;
-                          const key = `${d}__${item.id}`;
-                          const isPending = key in pending;
-                          const canEdit = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
-                          return (
-                            <td key={d} onClick={() => toggleCell(d, item.id)} style={{
-                              border:"0.5px solid #e2e8f0", textAlign:"center",
-                              cursor: canEdit ? "pointer" : "default",
-                              background: result === false ? "#fef2f2" : isToday ? "#eff6ff" : isPending ? "#fefce8" : "white",
-                              fontSize:11, fontWeight:500,
-                            }}>
-                              {result === null
-                                ? <span style={{ color:"#cbd5e1" }}>·</span>
-                                : result
-                                  ? <span style={{ color:"#16a34a" }}>O</span>
-                                  : <span style={{ color:"#dc2626" }}>X</span>}
-                            </td>
+                        const result = getResult(d, item.id);
+                        const isToday = d === today;
+                        const key = `${d}__${item.id}`;
+                        const isPending = key in pending;
+                        const canEdit = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                        return (
+                          <td key={d} onClick={() => toggleCell(d, item.id)} style={{
+                            border:"0.5px solid #e2e8f0", textAlign:"center",
+                            cursor: canEdit ? "pointer" : "default",
+                            background: result === false ? "#fef2f2" : isPending ? "#fefce8" : isToday ? "#eff6ff" : "white",
+                            fontSize:11, fontWeight:500,
+                          }}>
+                            {result === null
+                              ? <span style={{ color:"#cbd5e1" }}>·</span>
+                              : result === false
+                                ? <span style={{ color:"#dc2626" }}>X</span>
+                                : <span style={{ color: result === "default" ? "#86efac" : "#16a34a" }}>O</span>}
+                          </td>
                           );
                         })}
                       </tr>
@@ -1171,9 +1183,9 @@ export function HygieneCheckTab({ role, userId, showToast }: {
                           const r = getResult(d, item.id);
                           return (
                             <td key={d} style={{ ...hTdP, textAlign:"center", fontSize:"7pt", fontWeight:"bold",
-                              color: r === false ? "red" : r === true ? "#000" : "#ddd",
+                              color: r === false ? "red" : (r === true || r === "default") ? "#000" : "#ddd",
                               background: r === false ? "#fff0f0" : "white", padding:"1px" }}>
-                              {r === null ? "·" : r ? "O" : "X"}
+                              {r === null ? "·" : r === false ? "X" : "O"}
                             </td>
                           );
                         })}
