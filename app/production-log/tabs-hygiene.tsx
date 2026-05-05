@@ -787,7 +787,7 @@ export function TempHumidityTab({ role, userId, showToast }: {
     setLoading(true);
     try {
       const { data: logs } = await supabase.from("humidity_temp_logs").select("*").eq("log_date", logDate).eq("period", period);
-      const { data: sigs } = await supabase.from("fridge_monitoring_signatures").select("*").eq("log_date", logDate).in("period", ["AM", "PM"]).eq("role", "inspector");
+      const { data: sigs } = await supabase.from("fridge_monitoring_signatures").select("*").eq("log_date", logDate).in("period", ["AM", "PM"]).eq("role", "humidity_inspector");
       const base = initEntries();
       if (logs && logs.length > 0) {
         for (const log of logs) {
@@ -846,7 +846,7 @@ export function TempHumidityTab({ role, userId, showToast }: {
       const { error } = await supabase.from("humidity_temp_logs").upsert(toSave, { onConflict: "log_date,period,room" });
       if (error) throw error;
       const { error: sigError } = await supabase.from("fridge_monitoring_signatures").upsert(
-        { log_date: logDate, period, role: "inspector", inspector_id: currentInspector.id, inspector_name: currentInspector.name, signature_data: null },
+        { log_date: logDate, period, role: "humidity_inspector", inspector_id: currentInspector.id, inspector_name: currentInspector.name, signature_data: null },
         { onConflict: "log_date,period,role" }
       );
       if (sigError) console.error("서명 저장 오류:", sigError.message);
@@ -1012,7 +1012,7 @@ function HumidQueryView() {
     setLoading(true);
     const [{ data: logs }, { data: sigs }] = await Promise.all([
       supabase.from("humidity_temp_logs").select("*").eq("log_date", queryDate),
-      supabase.from("fridge_monitoring_signatures").select("period,inspector_name").eq("log_date", queryDate).eq("role", "inspector"),
+      supabase.from("fridge_monitoring_signatures").select("period,inspector_name").eq("log_date", queryDate).eq("role", "humidity_inspector"),  
     ]);
     setLoading(false);
     const am = {} as Record<HumidRoom, HumidLogEntry>;
@@ -1207,7 +1207,15 @@ function HumidPrintModal({ logDate, onClose }: { logDate: string; onClose: () =>
       <div className="flex-1 overflow-auto p-6 flex flex-col items-center gap-6">
         {loading ? <div className="text-center text-sm text-slate-400 py-12">불러오는 중...</div> : (
           <div id="humidity-print-content">
-            {chunks.map((weekDates, pageIdx) => {
+           {chunks.map((weekDates, pageIdx) => {
+              // 이 주에 실제 데이터가 하나라도 있는지 확인
+              const hasData = weekDates.some((d) =>
+                HUMID_ROOMS.some((room) =>
+                  printData[`${d}-${room}`]?.AM != null || printData[`${d}-${room}`]?.PM != null
+                )
+              );
+              if (!hasData) return null;
+
               const weekNotes = weekDates.flatMap((d) =>
                 HUMID_ROOMS.flatMap((room) => {
                   const an = printData[`${d}-${room}`]?.AM?.note;
