@@ -659,6 +659,8 @@ export function HygieneCheckTab({ role, userId, showToast }: {
 
   // 미저장 버퍼  key: `${log_date}__${item_id}`
   const [pending, setPending] = React.useState<Record<string, boolean>>({});
+  // 날짜별 점검자  key: log_date, value: inspector_name
+  const [dayInspectors, setDayInspectors] = React.useState<Record<string, string>>({});
 
   const dates = hygieneBuildDates(yearMonth);
   const isCurrentMonth = yearMonth === currentYM;
@@ -684,10 +686,19 @@ export function HygieneCheckTab({ role, userId, showToast }: {
       supabase.from("hygiene_check_signatures").select("*")
         .eq("year_month", yearMonth).maybeSingle(),
     ]);
+    const fetchedLogs = (logRes.data ?? []) as HygieneCheckLog[];
     setItems((itemRes.data ?? []) as HygieneCheckItem[]);
-    setLogs((logRes.data ?? []) as HygieneCheckLog[]);
+    setLogs(fetchedLogs);
     setNotes((noteRes.data ?? []) as HygieneCheckNote[]);
     setSig(sigRes.data as HygieneSignature ?? null);
+
+    // 날짜별 점검자 복원 — DB에 저장된 값 우선, 없으면 기본값 조대성
+    const inspMap: Record<string, string> = {};
+    for (const d of hygieneBuildDates(yearMonth)) {
+      const dayLog = fetchedLogs.find((l) => l.log_date === d);
+      inspMap[d] = (dayLog as any)?.inspector_name ?? "조대성";
+    }
+    setDayInspectors(inspMap);
     setLoading(false);
   }, [yearMonth]);
 
@@ -737,10 +748,13 @@ export function HygieneCheckTab({ role, userId, showToast }: {
       }
     }
     const upserts = [
-      ...defaultUpserts,
+      ...defaultUpserts.map((u) => ({
+        ...u,
+        inspector_name: dayInspectors[u.log_date] ?? "조대성",
+      })),
       ...Object.entries(pending).map(([key, result]) => {
         const [log_date, item_id] = key.split("__");
-        return { log_date, item_id, result };
+        return { log_date, item_id, result, inspector_name: dayInspectors[log_date] ?? "조대성" };
       }),
     ];
     const { error } = await supabase.from("hygiene_check_logs")
@@ -892,7 +906,7 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
             <div className="overflow-x-auto" style={{ maxHeight: "calc(100vh - 220px)" }}>
               <table className="text-xs border-collapse" style={{ minWidth: 900 }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
-                  <tr>
+                <tr>
                     <th style={{ width:32, background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 2px", textAlign:"center", fontSize:10 }}>분류</th>
                     <th style={{ minWidth:200, background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 6px", textAlign:"left", fontSize:10 }}>점검 사항</th>
                     {dates.map((d) => {
@@ -909,6 +923,41 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                         }}>
                           <div>{dayOfDate(d)}</div>
                           <div style={{ fontSize:8 }}>{dow}</div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                  {/* 날짜별 점검자 행 */}
+                  <tr>
+                    <th colSpan={2} style={{
+                      background:"#f1f5f9", border:"0.5px solid #e2e8f0",
+                      fontSize:9, textAlign:"center", color:"#64748b", padding:"2px",
+                    }}>점검자</th>
+                    {dates.map((d) => {
+                      const inspName = dayInspectors[d] ?? "조대성";
+                      const isPast = d <= today;
+                      const canEdit = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                      return (
+                        <th key={d} style={{
+                          background:"#f1f5f9", border:"0.5px solid #e2e8f0", padding:"1px",
+                        }}>
+                          {isPast && canEdit ? (
+                            <select
+                              value={inspName}
+                              onChange={(e) => setDayInspectors((prev) => ({ ...prev, [d]: e.target.value }))}
+                              style={{
+                                width:"100%", fontSize:8, border:"none", background:"transparent",
+                                textAlign:"center", cursor:"pointer", outline:"none", color:"#1e293b",
+                              }}>
+                              {employees.map((emp) => (
+                                <option key={emp.id} value={emp.name ?? ""}>{emp.name}</option>
+                              ))}
+                            </select>
+                          ) : isPast ? (
+                            <div style={{ fontSize:8, color:"#475569", textAlign:"center" }}>
+                              {inspName.slice(0, 1)}*
+                            </div>
+                          ) : null}
                         </th>
                       );
                     })}
@@ -1131,8 +1180,8 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                   )}
                 </tbody>
               </table>
-              {/* 날짜별 점검자 사인 행 */}
-              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed", marginBottom:4 }}>
+             {/* 날짜별 점검자 사인 행 */}
+             <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed", marginBottom:4 }}>
                 <colgroup>
                   <col style={{ width:"20px" }} />
                   <col style={{ width:"140px" }} />
@@ -1142,21 +1191,18 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                   <tr>
                     <td colSpan={2} style={{ ...hThP, textAlign:"center", fontSize:"6pt" }}>점검자 서명</td>
                     {printDates.map((d) => {
-                      // 해당 날짜에 X가 하나라도 있으면 점검 있음으로 간주
-                      const hasEntry = items.some((item) => getResult(d, item.id) !== null);
-                      // 해당 날짜의 점검자 — hygiene_check_signatures는 월단위라
-                      // logs에서 해당 날짜 데이터 존재 여부로 점검자 표시
-                      // sig.inspector_name을 날짜별로 구분할 수 없으므로
-                      // 데이터가 있는 날짜에만 sig.inspector_name 표시
-                      const signSrc = sig?.inspector_name ? HYGIENE_SIGN_MAP[sig.inspector_name] ?? null : null;
-                      const hasDayData = logs.some((l) => l.log_date === d)
-                        || Object.keys(pending).some((k) => k.startsWith(d + "__"));
+                      const hasDayData = d <= today && (
+                        logs.some((l) => l.log_date === d) ||
+                        Object.keys(pending).some((k) => k.startsWith(d + "__"))
+                      );
+                      const inspName = dayInspectors[d] ?? "조대성";
+                      const signSrc = HYGIENE_SIGN_MAP[inspName] ?? null;
                       return (
                         <td key={d} style={{ ...hTdP, textAlign:"center", padding:"1px", height:28 }}>
                           {hasDayData && signSrc
-                            ? <img src={signSrc} style={{ height:20, display:"block", margin:"0 auto" }} alt={sig?.inspector_name} />
-                            : hasDayData && sig?.inspector_name
-                              ? <div style={{ fontSize:"5.5pt", color:"#555" }}>{sig.inspector_name}</div>
+                            ? <img src={signSrc} style={{ height:20, display:"block", margin:"0 auto" }} alt={inspName} />
+                            : hasDayData
+                              ? <div style={{ fontSize:"5.5pt", color:"#555" }}>{inspName}</div>
                               : null}
                         </td>
                       );
