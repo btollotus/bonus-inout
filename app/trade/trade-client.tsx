@@ -2541,7 +2541,7 @@ if (woSubNameVal) {
       className={`col-span-2 rounded-lg border px-1.5 py-0.5 text-[11px] font-semibold ${x.tax_invoice_issued ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100" : "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"}`}
       onClick={() => toggleTaxInvoice(x)}
     >
-      {x.tax_invoice_issued ? "✅ 세금계산서 발행" : "☐ 세금계산서 미발행"}
+      {x.tax_invoice_issued ? "✅ 세금계산서 발행완료" : "☐ 세금계산서 미발행"}
     </button>
     <button className={`${miniBtn} col-span-2`} onClick={async () => {
       const { data } = await supabase.from("work_orders").select("*,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id,barcode_no,note,images)").eq("linked_order_id", x.rawId).limit(1).maybeSingle();
@@ -2556,7 +2556,7 @@ if (woSubNameVal) {
       className={`col-span-2 rounded-lg border px-1.5 py-0.5 text-[11px] font-semibold ${x.tax_invoice_received ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100" : "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"}`}
       onClick={() => toggleTaxInvoiceReceived(x)}
     >
-      {x.tax_invoice_received ? "✅ 계산서수령" : "☐ 계산서미수령"}
+      {x.tax_invoice_received ? "✅ 계산서수령완료" : "☐ 계산서미수령"}
     </button>
     <button
       className={`col-span-2 rounded-lg border px-1.5 py-0.5 text-[11px] font-semibold ${x.payment_completed ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100" : "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"}`}
