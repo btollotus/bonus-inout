@@ -574,23 +574,40 @@ export function ForeignMatterTab({ role, userId, showToast }: {
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// 5. 일반위생관리 점검표
-// ═══════════════════════════════════════════════════════════
-
 // ================================================================
-// 일반위생관리 및 공정점검표 탭
-// tabs-hygiene.tsx 의 HygieneCheckTab 을 이 코드로 교체하세요
+// 일반위생관리 및 공정점검표
+// tabs-hygiene.tsx 에서 기존 HygieneCheckTab 함수 전체를 이 코드로 교체
+// (import, const supabase, const card/inp/btn 등 파일 상단 선언은 건드리지 말 것)
 // ================================================================
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/browser";
+// ── 이 파일 고유 유틸 (파일 상단 todayKST와 별도로 내부에서만 사용) ──
+function hygieneYearMonthOf(dateStr: string) { return dateStr.slice(0, 7); }
 
-const supabase = createClient();
+function hygieneDaysInMonth(ym: string): number {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+function hygieneBuildDates(ym: string): string[] {
+  const count = hygieneDaysInMonth(ym);
+  return Array.from({ length: count }, (_, i) =>
+    `${ym}-${String(i + 1).padStart(2, "0")}`
+  );
+}
 
-type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
+// ── Types ──
+type HygieneCheckItem = { id: string; category: string; item_text: string; order_no: number };
+type HygieneCheckLog  = { log_date: string; item_id: string; result: boolean };
+type HygieneCheckNote = {
+  id: string; year_month: string; note_type: string;
+  content: string; action_by: string | null; confirmed_by: string | null; order_no: number;
+};
+type HygieneSignature = {
+  year_month: string;
+  inspector_id: string | null; inspector_name: string;
+  approved_by_id: string | null; approved_by_name: string;
+};
 
-const SIGN_MAP: Record<string, string> = {
+const HYGIENE_SIGN_MAP: Record<string, string> = {
   "조은미": "/sign-choem.png",
   "강미라": "/sign-kangml.png",
   "나현우": "/sign-nahw.png",
@@ -600,44 +617,9 @@ const SIGN_MAP: Record<string, string> = {
   "고한결": "/sign-gohg.png",
 };
 
-// ── 유틸 ──
-function todayKST(): string {
-  const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function yearMonthOf(dateStr: string) { return dateStr.slice(0, 7); }
-
-function daysInMonth(ym: string): number {
-  const [y, m] = ym.split("-").map(Number);
-  return new Date(y, m, 0).getDate();
-}
-function buildDates(ym: string): string[] {
-  const count = daysInMonth(ym);
-  return Array.from({ length: count }, (_, i) => {
-    const d = i + 1;
-    return `${ym}-${String(d).padStart(2, "0")}`;
-  });
-}
-
-// ── Types ──
-type CheckItem = { id: string; category: string; item_text: string; order_no: number };
-type CheckLog  = { log_date: string; item_id: string; result: boolean };
-type CheckNote = {
-  id: string; year_month: string; note_type: string;
-  content: string; action_by: string | null; confirmed_by: string | null; order_no: number;
-};
-type Signature = {
-  year_month: string;
-  inspector_id: string | null; inspector_name: string;
-  approved_by_id: string | null; approved_by_name: string;
-};
-
-// ── Styles ──
-const card  = "rounded-2xl border border-slate-200 bg-white shadow-sm";
-const inp   = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none";
-const btn   = "rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50 active:bg-slate-100";
-const btnOn = "rounded-xl border border-blue-500 bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700";
-const btnSm = "rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50";
+// ── 인쇄용 style 객체 ──
+const hTdP: React.CSSProperties = { border:"1px solid #000", padding:"1px 2px", verticalAlign:"middle" };
+const hThP: React.CSSProperties = { border:"1px solid #000", padding:"1px 2px", background:"#f0f0f0", fontWeight:"bold", verticalAlign:"middle" };
 
 // ================================================================
 export function HygieneCheckTab({ role, userId, showToast }: {
@@ -646,72 +628,69 @@ export function HygieneCheckTab({ role, userId, showToast }: {
 }) {
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
   const today = todayKST();
-  const currentYM = yearMonthOf(today);
+  const currentYM = hygieneYearMonthOf(today);
 
-  // ── 상태 ──
-  const [yearMonth, setYearMonth] = useState(currentYM);
-  const [items, setItems]   = useState<CheckItem[]>([]);
-  const [logs, setLogs]     = useState<CheckLog[]>([]);
-  const [notes, setNotes]   = useState<CheckNote[]>([]);
-  const [sig, setSig]       = useState<Signature | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving]   = useState(false);
+  const [yearMonth, setYearMonth] = React.useState(currentYM);
+  const [items, setItems]   = React.useState<HygieneCheckItem[]>([]);
+  const [logs, setLogs]     = React.useState<HygieneCheckLog[]>([]);
+  const [notes, setNotes]   = React.useState<HygieneCheckNote[]>([]);
+  const [sig, setSig]       = React.useState<HygieneSignature | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [saving, setSaving]   = React.useState(false);
 
   // PIN 인증
-  const [employees, setEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
-  const [inspector, setInspector] = useState<{ id: string; name: string } | null>(null);
-  const [showPin, setShowPin]     = useState(false);
-  const [pinTarget, setPinTarget] = useState<{ id: string; name: string } | null>(null);
-  const [pinInput, setPinInput]   = useState("");
-  const [pinError, setPinError]   = useState("");
+  const [employees, setEmployees] = React.useState<{ id: string; name: string; pin: string | null }[]>([]);
+  const [inspector, setInspector] = React.useState<{ id: string; name: string } | null>(null);
+  const [showPin, setShowPin]     = React.useState(false);
+  const [pinTarget, setPinTarget] = React.useState<{ id: string; name: string; pin: string | null } | null>(null);
+  const [pinInput, setPinInput]   = React.useState("");
+  const [pinError, setPinError]   = React.useState("");
 
   // 특이사항/개선조치 폼
-  const [showNoteForm, setShowNoteForm] = useState(false);
-  const [noteType, setNoteType]     = useState<"special" | "action">("special");
-  const [noteContent, setNoteContent] = useState("");
-  const [noteActionBy, setNoteActionBy]   = useState("");
-  const [noteConfirmedBy, setNoteConfirmedBy] = useState("");
-  const [noteSaving, setNoteSaving] = useState(false);
+  const [showNoteForm, setShowNoteForm] = React.useState(false);
+  const [noteType, setNoteType]         = React.useState<"special" | "action">("special");
+  const [noteContent, setNoteContent]   = React.useState("");
+  const [noteActionBy, setNoteActionBy]         = React.useState("");
+  const [noteConfirmedBy, setNoteConfirmedBy]   = React.useState("");
+  const [noteSaving, setNoteSaving] = React.useState(false);
 
-  // 편집 중인 결과 (미저장 버퍼)
-  const [pending, setPending] = useState<Record<string, boolean>>({});
-  // key: `${log_date}__${item_id}`
+  // 미저장 버퍼  key: `${log_date}__${item_id}`
+  const [pending, setPending] = React.useState<Record<string, boolean>>({});
 
-  const dates = buildDates(yearMonth);
+  const dates = hygieneBuildDates(yearMonth);
   const isCurrentMonth = yearMonth === currentYM;
 
   // ── 데이터 로드 ──
-  useEffect(() => {
+  React.useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
   }, []);
 
-  const loadData = useCallback(async () => {
+  const loadData = React.useCallback(async () => {
     setLoading(true);
     setPending({});
-
+    const dayCount = hygieneDaysInMonth(yearMonth);
     const [itemRes, logRes, noteRes, sigRes] = await Promise.all([
       supabase.from("hygiene_check_items").select("id,category,item_text,order_no")
         .eq("is_active", true).order("order_no"),
       supabase.from("hygiene_check_logs").select("log_date,item_id,result")
         .gte("log_date", `${yearMonth}-01`)
-        .lte("log_date", `${yearMonth}-${String(daysInMonth(yearMonth)).padStart(2, "0")}`),
+        .lte("log_date", `${yearMonth}-${String(dayCount).padStart(2, "0")}`),
       supabase.from("hygiene_check_notes").select("*")
         .eq("year_month", yearMonth).order("order_no"),
       supabase.from("hygiene_check_signatures").select("*")
         .eq("year_month", yearMonth).maybeSingle(),
     ]);
-
-    setItems((itemRes.data ?? []) as CheckItem[]);
-    setLogs((logRes.data ?? []) as CheckLog[]);
-    setNotes((noteRes.data ?? []) as CheckNote[]);
-    setSig(sigRes.data as Signature ?? null);
+    setItems((itemRes.data ?? []) as HygieneCheckItem[]);
+    setLogs((logRes.data ?? []) as HygieneCheckLog[]);
+    setNotes((noteRes.data ?? []) as HygieneCheckNote[]);
+    setSig(sigRes.data as HygieneSignature ?? null);
     setLoading(false);
   }, [yearMonth]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  React.useEffect(() => { loadData(); }, [loadData]);
 
-  // ── 결과 조회 헬퍼 ──
+  // ── 결과 조회 ──
   function getResult(date: string, itemId: string): boolean | null {
     const key = `${date}__${itemId}`;
     if (key in pending) return pending[key];
@@ -723,30 +702,24 @@ export function HygieneCheckTab({ role, userId, showToast }: {
   function toggleCell(date: string, itemId: string) {
     const canEdit = isAdminOrSubadmin || (isCurrentMonth && date === today && inspector !== null);
     if (!canEdit) return;
-
     const key = `${date}__${itemId}`;
     const cur = getResult(date, itemId);
-    // null → true → false → true ... (null은 아직 미입력, 첫클릭은 O)
-    const next = cur === null ? true : !cur;
-    setPending((prev) => ({ ...prev, [key]: next }));
+    setPending((prev) => ({ ...prev, [key]: cur === null ? true : !cur }));
   }
 
   // ── 저장 ──
   async function saveAll() {
     if (Object.keys(pending).length === 0) return showToast("변경 사항이 없습니다.", "error");
     setSaving(true);
-
     const upserts = Object.entries(pending).map(([key, result]) => {
       const [log_date, item_id] = key.split("__");
       return { log_date, item_id, result };
     });
-
     const { error } = await supabase.from("hygiene_check_logs")
       .upsert(upserts, { onConflict: "log_date,item_id" });
-
     if (error) { setSaving(false); return showToast("저장 실패: " + error.message, "error"); }
 
-    // 서명 저장 (이달 + 점검자 있을 때)
+    // 서명 저장
     if (isCurrentMonth && inspector) {
       await supabase.from("hygiene_check_signatures").upsert({
         year_month: yearMonth,
@@ -756,7 +729,6 @@ export function HygieneCheckTab({ role, userId, showToast }: {
         approved_by_name: "조대성",
       }, { onConflict: "year_month" });
     }
-
     setSaving(false);
     showToast("✅ 저장 완료!");
     await loadData();
@@ -764,32 +736,22 @@ export function HygieneCheckTab({ role, userId, showToast }: {
 
   // ── PIN 인증 ──
   function openPin(emp: { id: string; name: string; pin: string | null }) {
-    if (isAdminOrSubadmin) {
-      setInspector({ id: emp.id, name: emp.name });
-      setShowPin(false);
-      return;
-    }
-    setPinTarget({ id: emp.id, name: emp.name });
-    setPinInput("");
-    setPinError("");
-    setShowPin(true);
+    if (isAdminOrSubadmin) { setInspector({ id: emp.id, name: emp.name }); return; }
+    setPinTarget(emp);
+    setPinInput(""); setPinError(""); setShowPin(true);
   }
-
   function handlePinDigit(d: string) {
     if (pinInput.length >= 4) return;
     const next = pinInput + d;
     setPinInput(next);
     if (next.length === 4) setTimeout(() => verifyPin(next), 100);
   }
-
   function verifyPin(pin: string) {
-    const emp = employees.find((e) => e.id === pinTarget?.id);
-    if (!emp || !pinTarget) return;
-    if (!emp.pin) { setPinError("PIN이 설정되지 않았습니다."); setPinInput(""); return; }
-    if (emp.pin !== pin) { setPinError("PIN이 올바르지 않습니다."); setPinInput(""); return; }
+    if (!pinTarget) return;
+    if (!pinTarget.pin) { setPinError("PIN이 설정되지 않았습니다."); setPinInput(""); return; }
+    if (pinTarget.pin !== pin) { setPinError("PIN이 올바르지 않습니다."); setPinInput(""); return; }
     setInspector({ id: pinTarget.id, name: pinTarget.name });
-    setShowPin(false);
-    setPinError("");
+    setShowPin(false); setPinError("");
   }
 
   // ── 특이사항 저장 ──
@@ -798,9 +760,7 @@ export function HygieneCheckTab({ role, userId, showToast }: {
     setNoteSaving(true);
     const maxOrder = Math.max(0, ...notes.filter((n) => n.note_type === noteType).map((n) => n.order_no));
     const { error } = await supabase.from("hygiene_check_notes").insert({
-      year_month: yearMonth,
-      note_type: noteType,
-      content: noteContent.trim(),
+      year_month: yearMonth, note_type: noteType, content: noteContent.trim(),
       action_by: noteActionBy.trim() || null,
       confirmed_by: noteConfirmedBy.trim() || null,
       order_no: maxOrder + 10,
@@ -808,51 +768,46 @@ export function HygieneCheckTab({ role, userId, showToast }: {
     setNoteSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
     showToast("✅ 저장 완료!");
-    setNoteContent(""); setNoteActionBy(""); setNoteConfirmedBy("");
-    setShowNoteForm(false);
+    setNoteContent(""); setNoteActionBy(""); setNoteConfirmedBy(""); setShowNoteForm(false);
     await loadData();
   }
-
   async function deleteNote(id: string) {
     if (!confirm("삭제하시겠습니까?")) return;
     const { error } = await supabase.from("hygiene_check_notes").delete().eq("id", id);
     if (error) return showToast("삭제 실패: " + error.message, "error");
-    showToast("🗑️ 삭제 완료!");
-    await loadData();
+    showToast("🗑️ 삭제 완료!"); await loadData();
   }
 
   // ── 통계 ──
-  const totalCells  = items.length * dates.length;
-  const filledCells = logs.length + Object.keys(pending).length;
-  const xCount = [...logs, ...Object.entries(pending).map(([key, result]) => {
-    const [log_date, item_id] = key.split("__");
-    return { log_date, item_id, result };
-  })].filter((l) => l.result === false).length;
+  const allResults = [
+    ...logs,
+    ...Object.entries(pending).map(([key, result]) => {
+      const [log_date, item_id] = key.split("__");
+      return { log_date, item_id, result };
+    }),
+  ];
+  const filledCells = allResults.length;
+  const xCount = allResults.filter((l) => l.result === false).length;
+  const pendingCount = Object.keys(pending).length;
 
   // ── 카테고리 그룹 ──
-  const categories = [...new Set(items.map((i) => i.category))];
+  const hygieneCategories = [...new Set(items.map((i) => i.category))];
   function itemsOf(cat: string) { return items.filter((i) => i.category === cat); }
-
-  // ── 날짜 헤더 표시 (일만) ──
-  function dayOf(d: string) { return parseInt(d.slice(8)); }
-  function dowOf(d: string) {
+  function dayOfDate(d: string) { return parseInt(d.slice(8)); }
+  function dowOfDate(d: string) {
     const dow = new Date(d + "T00:00:00+09:00").getDay();
     return ["일","월","화","수","목","금","토"][dow];
   }
-
-  const pendingCount = Object.keys(pending).length;
 
   // ── 인쇄 ──
   function handlePrint() {
     const el = document.getElementById("hygiene-check-print-inner");
     if (!el) return;
-    const ym = yearMonth;
-    const [y, m] = ym.split("-").map(Number);
-    const title = `일반위생관리및공정점검표_${y}년${m}월`;
+    const [y, m] = yearMonth.split("-").map(Number);
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head>
-      <meta charset="utf-8"><title>${title}</title>
+      <meta charset="utf-8"><title>일반위생관리및공정점검표_${y}년${m}월</title>
       <style>
         @page { size: A4 landscape; margin: 6mm 8mm; }
         body { margin:0; font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:7pt; color:#000; }
@@ -866,16 +821,11 @@ export function HygieneCheckTab({ role, userId, showToast }: {
     setTimeout(() => { win.print(); }, 500);
   }
 
-  // ── 인쇄 전용 테이블 렌더 ──
-  const tdP: React.CSSProperties = { border:"1px solid #000", padding:"1px 2px", verticalAlign:"middle" };
-  const thP: React.CSSProperties = { border:"1px solid #000", padding:"1px 2px", background:"#f0f0f0", fontWeight:"bold", verticalAlign:"middle" };
-
-  const printDates = buildDates(yearMonth);
-  const sigInspectorSrc = sig?.inspector_name ? SIGN_MAP[sig.inspector_name] ?? null : null;
-  const sigApprovedSrc  = sig?.approved_by_name ? SIGN_MAP[sig.approved_by_name] ?? null : null;
-
   const specialNotes = notes.filter((n) => n.note_type === "special");
   const actionNotes  = notes.filter((n) => n.note_type === "action");
+  const sigInspectorSrc = sig?.inspector_name ? HYGIENE_SIGN_MAP[sig.inspector_name] ?? null : null;
+  const sigApprovedSrc  = sig?.approved_by_name ? HYGIENE_SIGN_MAP[sig.approved_by_name] ?? null : null;
+  const printDates = hygieneBuildDates(yearMonth);
 
   return (
     <div className="space-y-4">
@@ -896,15 +846,15 @@ export function HygieneCheckTab({ role, userId, showToast }: {
             </button>
           )}
           <div className="ml-auto flex gap-3 text-xs text-slate-500">
-            <span>입력 <b>{filledCells}</b>/{totalCells}칸</span>
+            <span>입력 <b>{filledCells}</b>칸</span>
             {xCount > 0 && <span className="text-red-600 font-semibold">⚠ X 발생 <b>{xCount}</b>건</span>}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[200px_1fr]">
 
-        {/* 좌: PIN 인증 패널 */}
+        {/* 좌: PIN 패널 */}
         <div className="space-y-3">
           <div className={`${card} p-4`}>
             <div className="mb-3 font-semibold text-sm">점검자 인증</div>
@@ -923,14 +873,13 @@ export function HygieneCheckTab({ role, userId, showToast }: {
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium hover:bg-blue-50 hover:border-blue-300 transition-all"
                     onClick={() => openPin(emp)}>
                     👤 {emp.name}
-                    {isAdminOrSubadmin && <span className="ml-2 text-[10px] text-slate-400">ADMIN</span>}
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          {/* PIN 입력 모달 */}
+          {/* PIN 입력 */}
           {showPin && pinTarget && (
             <div className={`${card} p-4`}>
               <div className="text-sm font-semibold text-center mb-1">{pinTarget.name}</div>
@@ -960,7 +909,7 @@ export function HygieneCheckTab({ role, userId, showToast }: {
             </div>
           )}
 
-          {/* 이달 현황 */}
+          {/* 현황 */}
           <div className={`${card} p-4`}>
             <div className="mb-3 font-semibold text-sm">이달 현황</div>
             <div className="grid grid-cols-2 gap-2">
@@ -973,9 +922,9 @@ export function HygieneCheckTab({ role, userId, showToast }: {
                 <div className="text-xl font-bold text-red-700">{xCount}</div>
               </div>
             </div>
-            <div className="mt-2 text-xs text-slate-400 text-center">
-              {pendingCount > 0 && <span className="text-amber-600 font-semibold">미저장 {pendingCount}건</span>}
-            </div>
+            {pendingCount > 0 && (
+              <div className="mt-2 text-xs text-amber-600 font-semibold text-center">미저장 {pendingCount}건</div>
+            )}
           </div>
         </div>
 
@@ -987,48 +936,44 @@ export function HygieneCheckTab({ role, userId, showToast }: {
             <div className="overflow-x-auto" style={{ maxHeight: "calc(100vh - 220px)" }}>
               <table className="text-xs border-collapse" style={{ minWidth: 900 }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
-                  {/* 날짜 행 */}
                   <tr>
-                    <th style={{ width: 32, background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 2px", textAlign:"center", fontSize:10 }}>분류</th>
-                    <th style={{ minWidth: 200, background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 6px", textAlign:"left", fontSize:10 }}>점검 사항</th>
+                    <th style={{ width:32, background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 2px", textAlign:"center", fontSize:10 }}>분류</th>
+                    <th style={{ minWidth:200, background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 6px", textAlign:"left", fontSize:10 }}>점검 사항</th>
                     {dates.map((d) => {
                       const isToday = d === today;
-                      const dow = dowOf(d);
-                      const isSun = dow === "일";
-                      const isSat = dow === "토";
+                      const dow = dowOfDate(d);
+                      const isSun = dow === "일"; const isSat = dow === "토";
                       return (
                         <th key={d} style={{
-                          width: 26, minWidth: 26,
+                          width:26, minWidth:26,
                           background: isToday ? "#dbeafe" : isSun ? "#fef2f2" : isSat ? "#eff6ff" : "#f8fafc",
-                          border: "0.5px solid #e2e8f0",
-                          padding: "2px 1px", textAlign: "center", fontSize: 9,
+                          border:"0.5px solid #e2e8f0", padding:"2px 1px", textAlign:"center",
+                          fontSize:9, fontWeight: isToday ? 700 : 400,
                           color: isToday ? "#1e40af" : isSun ? "#b91c1c" : isSat ? "#1d4ed8" : "#64748b",
-                          fontWeight: isToday ? 700 : 400,
                         }}>
-                          <div>{dayOf(d)}</div>
-                          <div style={{ fontSize: 8 }}>{dow}</div>
+                          <div>{dayOfDate(d)}</div>
+                          <div style={{ fontSize:8 }}>{dow}</div>
                         </th>
                       );
                     })}
                   </tr>
                 </thead>
                 <tbody>
-                  {categories.map((cat) => {
+                  {hygieneCategories.map((cat) => {
                     const catItems = itemsOf(cat);
                     return catItems.map((item, idx) => (
                       <tr key={item.id} className="hover:bg-slate-50/50">
                         {idx === 0 && (
                           <td rowSpan={catItems.length} style={{
-                            border: "0.5px solid #e2e8f0", textAlign: "center",
-                            fontSize: 10, fontWeight: 500, color: "#475569",
-                            writingMode: "vertical-rl" as any,
-                            background: "#f8fafc", padding: "4px 2px",
+                            border:"0.5px solid #e2e8f0", textAlign:"center",
+                            fontSize:10, fontWeight:500, color:"#475569",
+                            writingMode:"vertical-rl" as any, background:"#f8fafc", padding:"4px 2px",
                           }}>{cat}</td>
                         )}
                         <td style={{
-                          border: "0.5px solid #e2e8f0", padding: "3px 6px",
-                          fontSize: 10, lineHeight: 1.3, color: "#334155",
-                          maxWidth: 220, whiteSpace: "normal",
+                          border:"0.5px solid #e2e8f0", padding:"3px 6px",
+                          fontSize:10, lineHeight:1.3, color:"#334155",
+                          maxWidth:220, whiteSpace:"normal",
                         }}>{item.item_text}</td>
                         {dates.map((d) => {
                           const result = getResult(d, item.id);
@@ -1037,21 +982,17 @@ export function HygieneCheckTab({ role, userId, showToast }: {
                           const isPending = key in pending;
                           const canEdit = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
                           return (
-                            <td key={d}
-                              onClick={() => toggleCell(d, item.id)}
-                              style={{
-                                border: "0.5px solid #e2e8f0",
-                                textAlign: "center", cursor: canEdit ? "pointer" : "default",
-                                background: result === false ? "#fef2f2" : isToday ? "#eff6ff" : isPending ? "#fefce8" : "white",
-                                transition: "background 0.1s",
-                                fontSize: 11, fontWeight: 500,
-                              }}>
+                            <td key={d} onClick={() => toggleCell(d, item.id)} style={{
+                              border:"0.5px solid #e2e8f0", textAlign:"center",
+                              cursor: canEdit ? "pointer" : "default",
+                              background: result === false ? "#fef2f2" : isToday ? "#eff6ff" : isPending ? "#fefce8" : "white",
+                              fontSize:11, fontWeight:500,
+                            }}>
                               {result === null
-                                ? <span style={{ color: "#cbd5e1" }}>·</span>
+                                ? <span style={{ color:"#cbd5e1" }}>·</span>
                                 : result
-                                  ? <span style={{ color: "#16a34a" }}>O</span>
-                                  : <span style={{ color: "#dc2626" }}>X</span>
-                              }
+                                  ? <span style={{ color:"#16a34a" }}>O</span>
+                                  : <span style={{ color:"#dc2626" }}>X</span>}
                             </td>
                           );
                         })}
@@ -1071,14 +1012,14 @@ export function HygieneCheckTab({ role, userId, showToast }: {
           <div className="font-semibold text-sm">특이사항 · 개선조치</div>
           {isAdminOrSubadmin && (
             <button
-              className={showNoteForm ? "rounded-xl border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100"
+              className={showNoteForm
+                ? "rounded-xl border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100"
                 : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
               onClick={() => setShowNoteForm((v) => !v)}>
               {showNoteForm ? "✕ 닫기" : "✚ 추가"}
             </button>
           )}
         </div>
-
         {showNoteForm && isAdminOrSubadmin && (
           <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
             <div className="flex gap-2">
@@ -1115,7 +1056,6 @@ export function HygieneCheckTab({ role, userId, showToast }: {
             </div>
           </div>
         )}
-
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <div className="mb-2 text-xs font-semibold text-slate-500">특이사항</div>
@@ -1130,8 +1070,7 @@ export function HygieneCheckTab({ role, userId, showToast }: {
                     )}
                   </div>
                 </div>
-              ))
-            }
+              ))}
           </div>
           <div>
             <div className="mb-2 text-xs font-semibold text-slate-500">개선조치 및 결과</div>
@@ -1152,8 +1091,7 @@ export function HygieneCheckTab({ role, userId, showToast }: {
                     )}
                   </div>
                 </div>
-              ))
-            }
+              ))}
           </div>
         </div>
       </div>
@@ -1163,50 +1101,39 @@ export function HygieneCheckTab({ role, userId, showToast }: {
       <div id="hygiene-check-print-inner">
         {(() => {
           const [y, m] = yearMonth.split("-").map(Number);
-          const dayCount = daysInMonth(yearMonth);
-          const days = ["일","월","화","수","목","금","토"];
-
-          // 열이 많아 A4 가로에서 31칸을 모두 넣기 위해 날짜 열 너비를 동적 계산
-          // 고정 열(분류 20px + 항목 140px) + 날짜열 n개
-          const dateCw = Math.floor((270 - 20 - 140) / dayCount); // 가로 270mm 기준 (mm 단위)
-          // 실제 인쇄에서는 table-layout:fixed + 퍼센트로 처리
-
+          const dayCount = hygieneDaysInMonth(yearMonth);
           return (
             <div style={{ fontFamily:"'Malgun Gothic','맑은 고딕',sans-serif", fontSize:"7pt", color:"#000" }}>
-
-              {/* ① 제목 + 결재란 */}
+              {/* 제목 + 결재란 */}
               <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:4 }}>
                 <tbody>
                   <tr>
-                    <td rowSpan={2} style={{ ...tdP, width:120, fontWeight:"bold", fontSize:"10pt", textAlign:"center", padding:"6px 8px" }}>
+                    <td rowSpan={2} style={{ ...hTdP, width:120, fontWeight:"bold", fontSize:"10pt", textAlign:"center", padding:"6px 8px" }}>
                       일반위생관리 및<br/>공정점검표
                     </td>
-                    <td style={{ ...tdP, width:60, textAlign:"center", fontSize:"7pt" }}>점검 기간</td>
-                    <td style={{ ...tdP, fontSize:"7pt" }}>
-                      {y}년 {m}월 1일 ～ {m}월 {dayCount}일
-                    </td>
-                    <td style={{ ...tdP, width:32, fontWeight:"bold", textAlign:"center", fontSize:"7pt" }} rowSpan={2}>결재란</td>
-                    <td style={{ ...tdP, width:72, textAlign:"center", fontWeight:"bold", fontSize:"7pt" }}>점검자</td>
-                    <td style={{ ...tdP, width:72, textAlign:"center", fontWeight:"bold", fontSize:"7pt" }}>승인</td>
+                    <td style={{ ...hTdP, width:60, textAlign:"center", fontSize:"7pt" }}>점검 기간</td>
+                    <td style={{ ...hTdP, fontSize:"7pt" }}>{y}년 {m}월 1일 ～ {m}월 {dayCount}일</td>
+                    <td style={{ ...hTdP, width:32, fontWeight:"bold", textAlign:"center", fontSize:"7pt" }} rowSpan={2}>결재란</td>
+                    <td style={{ ...hTdP, width:72, textAlign:"center", fontWeight:"bold", fontSize:"7pt" }}>점검자</td>
+                    <td style={{ ...hTdP, width:72, textAlign:"center", fontWeight:"bold", fontSize:"7pt" }}>승인</td>
                   </tr>
                   <tr>
-                    <td style={{ ...tdP, textAlign:"center", fontSize:"7pt" }}>범례</td>
-                    <td style={{ ...tdP, fontSize:"7pt" }}>예: O,  아니오: X</td>
-                    <td style={{ ...tdP, textAlign:"center", padding:"3px" }}>
+                    <td style={{ ...hTdP, textAlign:"center", fontSize:"7pt" }}>범례</td>
+                    <td style={{ ...hTdP, fontSize:"7pt" }}>예: O,  아니오: X</td>
+                    <td style={{ ...hTdP, textAlign:"center", padding:"3px" }}>
                       {sigInspectorSrc
-                        ? <><img src={sigInspectorSrc} style={{ height:24, display:"block", margin:"0 auto" }} /><div style={{ fontSize:"6pt", marginTop:1 }}>{sig?.inspector_name}</div></>
+                        ? <><img src={sigInspectorSrc} style={{ height:24, display:"block", margin:"0 auto" }} alt="" /><div style={{ fontSize:"6pt", marginTop:1 }}>{sig?.inspector_name}</div></>
                         : <div style={{ fontSize:"6pt", color:"#aaa" }}>{sig?.inspector_name ?? ""}</div>}
                     </td>
-                    <td style={{ ...tdP, textAlign:"center", padding:"3px" }}>
+                    <td style={{ ...hTdP, textAlign:"center", padding:"3px" }}>
                       {sigApprovedSrc
-                        ? <><img src={sigApprovedSrc} style={{ height:24, display:"block", margin:"0 auto" }} /><div style={{ fontSize:"6pt", marginTop:1 }}>{sig?.approved_by_name}</div></>
+                        ? <><img src={sigApprovedSrc} style={{ height:24, display:"block", margin:"0 auto" }} alt="" /><div style={{ fontSize:"6pt", marginTop:1 }}>{sig?.approved_by_name}</div></>
                         : <div style={{ fontSize:"6pt", color:"#aaa" }}>{sig?.approved_by_name ?? ""}</div>}
                     </td>
                   </tr>
                 </tbody>
               </table>
-
-              {/* ② 점검 그리드 */}
+              {/* 점검 그리드 */}
               <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed", marginBottom:4 }}>
                 <colgroup>
                   <col style={{ width:"20px" }} />
@@ -1215,105 +1142,88 @@ export function HygieneCheckTab({ role, userId, showToast }: {
                 </colgroup>
                 <thead>
                   <tr>
-                    <th style={{ ...thP, textAlign:"center", fontSize:"6pt" }}>분류</th>
-                    <th style={{ ...thP, textAlign:"left", fontSize:"6pt" }}>점검 사항</th>
+                    <th style={{ ...hThP, textAlign:"center", fontSize:"6pt" }}>분류</th>
+                    <th style={{ ...hThP, textAlign:"left", fontSize:"6pt" }}>점검 사항</th>
                     {printDates.map((d) => {
-                      const day = dayOf(d);
                       const dow = new Date(d + "T00:00:00+09:00").getDay();
-                      const dowLabel = ["일","월","화","수","목","금","토"][dow];
-                      const isSun = dow === 0;
-                      const isSat = dow === 6;
+                      const isSun = dow === 0; const isSat = dow === 6;
                       return (
-                        <th key={d} style={{
-                          ...thP, textAlign:"center", fontSize:"5.5pt", padding:"1px",
-                          color: isSun ? "#b91c1c" : isSat ? "#1d4ed8" : "#000",
-                        }}>
-                          {day}<br/>{dowLabel}
+                        <th key={d} style={{ ...hThP, textAlign:"center", fontSize:"5.5pt", padding:"1px",
+                          color: isSun ? "#b91c1c" : isSat ? "#1d4ed8" : "#000" }}>
+                          {dayOfDate(d)}<br/>{["일","월","화","수","목","금","토"][dow]}
                         </th>
                       );
                     })}
                   </tr>
                 </thead>
                 <tbody>
-                  {categories.map((cat) => {
-                    const catItems = itemsOf(cat);
-                    return catItems.map((item, idx) => {
-                      return (
-                        <tr key={item.id}>
-                          {idx === 0 && (
-                            <td rowSpan={catItems.length} style={{
-                              ...tdP, textAlign:"center", fontWeight:"bold", fontSize:"6.5pt",
-                              writingMode:"vertical-rl" as any, background:"#f8f8f8",
-                            }}>{cat}</td>
-                          )}
-                          <td style={{ ...tdP, fontSize:"6pt", lineHeight:1.2, padding:"1px 3px" }}>{item.item_text}</td>
-                          {printDates.map((d) => {
-                            const r = getResult(d, item.id);
-                            return (
-                              <td key={d} style={{
-                                ...tdP, textAlign:"center", fontSize:"7pt", fontWeight:"bold",
-                                color: r === false ? "red" : r === true ? "#000" : "#ddd",
-                                background: r === false ? "#fff0f0" : "white",
-                                padding:"1px",
-                              }}>
-                                {r === null ? "·" : r ? "O" : "X"}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    });
-                  })}
+                  {hygieneCategories.map((cat) =>
+                    itemsOf(cat).map((item, idx) => (
+                      <tr key={item.id}>
+                        {idx === 0 && (
+                          <td rowSpan={itemsOf(cat).length} style={{
+                            ...hTdP, textAlign:"center", fontWeight:"bold", fontSize:"6.5pt",
+                            writingMode:"vertical-rl" as any, background:"#f8f8f8",
+                          }}>{cat}</td>
+                        )}
+                        <td style={{ ...hTdP, fontSize:"6pt", lineHeight:1.2, padding:"1px 3px" }}>{item.item_text}</td>
+                        {printDates.map((d) => {
+                          const r = getResult(d, item.id);
+                          return (
+                            <td key={d} style={{ ...hTdP, textAlign:"center", fontSize:"7pt", fontWeight:"bold",
+                              color: r === false ? "red" : r === true ? "#000" : "#ddd",
+                              background: r === false ? "#fff0f0" : "white", padding:"1px" }}>
+                              {r === null ? "·" : r ? "O" : "X"}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
-
-              {/* ③ 특이사항 */}
+              {/* 특이사항 */}
               <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:2 }}>
                 <tbody>
                   <tr>
-                    <td style={{ ...tdP, width:60, fontWeight:"bold", fontSize:"6.5pt", whiteSpace:"nowrap" }}>특이사항</td>
-                    <td style={{ ...tdP, fontSize:"6.5pt", padding:"3px 6px", lineHeight:1.6 }}>
-                      {specialNotes.map((n, i) => (
-                        <span key={n.id}>{i > 0 ? " / " : ""}{n.content}</span>
-                      ))}
+                    <td style={{ ...hTdP, width:60, fontWeight:"bold", fontSize:"6.5pt", whiteSpace:"nowrap" }}>특이사항</td>
+                    <td style={{ ...hTdP, fontSize:"6.5pt", padding:"3px 6px", lineHeight:1.6 }}>
+                      {specialNotes.map((n, i) => <span key={n.id}>{i > 0 ? " / " : ""}{n.content}</span>)}
                     </td>
                   </tr>
                 </tbody>
               </table>
-
-              {/* ④ 개선조치 */}
+              {/* 개선조치 */}
               <table style={{ width:"100%", borderCollapse:"collapse" }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thP, width:140, fontSize:"6.5pt" }}>개선조치 및 결과</th>
-                    <th style={{ ...thP, fontSize:"6.5pt" }}>내용</th>
-                    <th style={{ ...thP, width:60, fontSize:"6.5pt" }}>조치자</th>
-                    <th style={{ ...thP, width:60, fontSize:"6.5pt" }}>확인</th>
+                    <th style={{ ...hThP, width:140, fontSize:"6.5pt" }}>개선조치 및 결과</th>
+                    <th style={{ ...hThP, fontSize:"6.5pt" }}>내용</th>
+                    <th style={{ ...hThP, width:60, fontSize:"6.5pt" }}>조치자</th>
+                    <th style={{ ...hThP, width:60, fontSize:"6.5pt" }}>확인</th>
                   </tr>
                 </thead>
                 <tbody>
                   {actionNotes.length === 0
-                    ? <tr><td colSpan={4} style={{ ...tdP, height:24 }}></td></tr>
+                    ? <tr><td colSpan={4} style={{ ...hTdP, height:24 }}></td></tr>
                     : actionNotes.map((n) => (
                       <tr key={n.id}>
-                        <td style={{ ...tdP, fontSize:"6.5pt" }}></td>
-                        <td style={{ ...tdP, fontSize:"6.5pt", padding:"2px 6px" }}>{n.content}</td>
-                        <td style={{ ...tdP, fontSize:"6.5pt", textAlign:"center" }}>{n.action_by ?? ""}</td>
-                        <td style={{ ...tdP, fontSize:"6.5pt", textAlign:"center" }}>{n.confirmed_by ?? ""}</td>
+                        <td style={{ ...hTdP, fontSize:"6.5pt" }}></td>
+                        <td style={{ ...hTdP, fontSize:"6.5pt", padding:"2px 6px" }}>{n.content}</td>
+                        <td style={{ ...hTdP, fontSize:"6.5pt", textAlign:"center" }}>{n.action_by ?? ""}</td>
+                        <td style={{ ...hTdP, fontSize:"6.5pt", textAlign:"center" }}>{n.confirmed_by ?? ""}</td>
                       </tr>
-                    ))
-                  }
+                    ))}
                 </tbody>
               </table>
-
             </div>
           );
         })()}
       </div>
-
     </div>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════
 // 6. 중요지점 온·습도 관리일지
