@@ -599,7 +599,7 @@ function hygieneBuildDates(ym: string): string[] {
 
 // ── Types ──
 type HygieneCheckItem = { id: string; category: string; item_text: string; order_no: number };
-type HygieneCheckLog  = { log_date: string; item_id: string; result: boolean; inspector_name?: string };
+type HygieneCheckLog = { log_date: string; item_id: string; result: boolean; inspector_name?: string };
 type HygieneCheckNote = {
   id: string; year_month: string; note_type: string;
   content: string; action_by: string | null; confirmed_by: string | null; order_no: number;
@@ -680,7 +680,7 @@ export function HygieneCheckTab({ role, userId, showToast }: {
     const [itemRes, logRes, noteRes, sigRes, inspRes] = await Promise.all([
       supabase.from("hygiene_check_items").select("id,category,item_text,order_no")
         .eq("is_active", true).order("order_no"),
-      supabase.from("hygiene_check_logs").select("log_date,item_id,result,inspector_name")
+        supabase.from("hygiene_check_results").select("log_date,item_id,result,inspector_name")
         .gte("log_date", `${yearMonth}-01`)
         .lte("log_date", `${yearMonth}-${String(dayCount).padStart(2, "0")}`),
       supabase.from("hygiene_check_notes").select("*")
@@ -694,6 +694,7 @@ export function HygieneCheckTab({ role, userId, showToast }: {
     const fetchedLogs = (logRes.data ?? []) as HygieneCheckLog[];
     setItems((itemRes.data ?? []) as HygieneCheckItem[]);
     setLogs(fetchedLogs);
+    // hygiene_check_results 테이블 사용 확인
     setNotes((noteRes.data ?? []) as HygieneCheckNote[]);
     setSig(sigRes.data as HygieneSignature ?? null);
 
@@ -766,7 +767,7 @@ export function HygieneCheckTab({ role, userId, showToast }: {
         return { log_date, item_id, result, inspector_name: dayInspectors[log_date] ?? "조대성" };
       }),
     ];
-    const { error } = await supabase.from("hygiene_check_logs")
+    const { error } = await supabase.from("hygiene_check_results")
       .upsert(upserts, { onConflict: "log_date,item_id" });
     if (error) { setSaving(false); return showToast("저장 실패: " + error.message, "error"); }
 
