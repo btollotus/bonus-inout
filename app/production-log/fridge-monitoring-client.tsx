@@ -402,6 +402,7 @@ export default function FridgeMonitoringClient() {
           <div className="flex gap-2">
             <button className={viewMode === "input" ? btnOn : btn} onClick={() => setViewMode("input")}>📝 기록입력</button>
             <button className={viewMode === "query" ? btnOn : btn} onClick={() => setViewMode("query")}>🔍 일자별 조회</button>
+            <PrintButton logDate={logDate} />
           </div>
         </div>
 
@@ -437,8 +438,12 @@ export default function FridgeMonitoringClient() {
                         value={amCheckTime}
                         disabled={isReadOnly}
                         onChange={e => setAmCheckTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
-                        className={`w-24 rounded-xl border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none
-                          ${amCheckTime.length === 4 ? "border-blue-300 bg-blue-50 text-transparent" : "border-slate-200 bg-white focus:border-blue-400"}`}
+                        className="w-24 rounded-xl border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none focus:border-blue-400"
+                        style={{
+                          borderColor: amCheckTime.length === 4 ? "#93c5fd" : undefined,
+                          background: amCheckTime.length === 4 ? "#eff6ff" : undefined,
+                          color: amCheckTime.length === 4 ? "transparent" : undefined,
+                        }}
                       />
                       {amCheckTime.length === 4 && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-sm font-semibold tabular-nums text-blue-700">
@@ -457,8 +462,12 @@ export default function FridgeMonitoringClient() {
                         value={pmCheckTime}
                         disabled={isReadOnly}
                         onChange={e => setPmCheckTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
-                        className={`w-24 rounded-xl border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none
-                          ${pmCheckTime.length === 4 ? "border-blue-300 bg-blue-50 text-transparent" : "border-slate-200 bg-white focus:border-blue-400"}`}
+                        className="w-24 rounded-xl border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none focus:border-blue-400"
+                        style={{
+                          borderColor: pmCheckTime.length === 4 ? "#93c5fd" : undefined,
+                          background: pmCheckTime.length === 4 ? "#eff6ff" : undefined,
+                          color: pmCheckTime.length === 4 ? "transparent" : undefined,
+                        }}
                       />
                       {pmCheckTime.length === 4 && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-sm font-semibold tabular-nums text-blue-700">
@@ -584,7 +593,6 @@ export default function FridgeMonitoringClient() {
                     >
                       {saving ? "⏳ 저장 중..." : "💾 저장"}
                     </button>
-                    <PrintButton logDate={logDate} period={period} entries={entries} signatures={signatures} specialNote={specialNote} />
                   </div>
                 )}
               </>
@@ -712,13 +720,7 @@ function FridgeQueryView({ employees }: { employees: Employee[] }) {
 }
 
 // ─── 인쇄 버튼 ─────────────────────────────────────────────
-function PrintButton({ logDate, period, entries, signatures, specialNote }: {
-  logDate: string;
-  period: Period;
-  entries: Record<string, LogEntry>;
-  signatures: Record<string, SignatureEntry>;
-  specialNote: string;
-}) {
+function PrintButton({ logDate }: { logDate: string }) {
   const [showModal, setShowModal] = useState(false);
 
   return (
@@ -839,8 +841,7 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
         .ok{color:#1d4ed8;font-weight:bold;}
         .ng{color:#dc2626;font-weight:bold;}
         .empty{color:#bbb;}
-        div[style*="page-break-after: always"]{page-break-after:always;}
-        div[style*="pageBreakAfter"]{page-break-after:always;}
+        .print-page-break{page-break-after:always !important;}
       </style>
     </head><body>${content.innerHTML}</body></html>`);
     win.document.close();
@@ -915,12 +916,11 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
                   const weekNotes = weekDates.map(d => printNotes[d]).filter(Boolean).join(" / ");
 
                   return (
-                    <div key={pageIdx} style={{
+                    <div key={pageIdx} className={pageIdx < chunks.length - 1 ? "print-page-break" : ""} style={{
                       background: "#fff",
                       width: "297mm",
                       minHeight: "210mm",
                       padding: "8mm 10mm",
-                      pageBreakAfter: pageIdx < chunks.length - 1 ? "always" : "auto",
                       boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
                       marginBottom: "16px",
                     }}>
@@ -964,7 +964,7 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
                             return (
                               <tr key={key}>
                                 {nIdx === 0 && (
-                                  <td rowSpan={dev.nos.length} style={{ border: "0.5px solid #aaa", background: bgColor, writingMode: "vertical-lr", textOrientation: "upright", letterSpacing: "1px", fontWeight: "bold", fontSize: "7pt", width: "14px" }}>
+                                  <td rowSpan={dev.nos.length} style={{ border: "0.5px solid #aaa", writingMode: "vertical-lr", textOrientation: "upright", letterSpacing: "1px", fontWeight: "bold", fontSize: "7pt", width: "14px", textAlign: "center", verticalAlign: "middle" }}>
                                     {dev.type}
                                   </td>
                                 )}
