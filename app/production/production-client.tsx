@@ -248,6 +248,26 @@ const [hasMore, setHasMore] = useState(false);
   const [eMoldRows, setEMoldRows] = useState("");
   const [eNote, setENote] = useState("");
   const [eReferenceNote, setEReferenceNote] = useState("");
+
+  useEffect(() => {
+    const cols = parseInt(eMoldCols || "0", 10);
+    const rows = parseInt(eMoldRows || "0", 10);
+    const qty = (selectedWo?.work_order_items ?? [])
+      .filter((item) => { const n = (item.sub_items ?? [])[0]?.name ?? ""; return !n.startsWith("성형틀") && !n.startsWith("인쇄제판"); })
+      .reduce((s, i) => s + (i.order_qty ?? 0), 0);
+    if (!qty || !cols || !rows) return;
+    if (getFoodCategory(eFoodType) === "중간재") return;
+    const mold = cols * rows;
+    const fullSheets = Math.floor(qty / mold);
+    const remainder = qty % mold;
+    let extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
+    let total = fullSheets * mold + extraRows * cols;
+    if (total - qty < 16) { extraRows += 1; total += cols; }
+    const auto = extraRows > 0
+      ? `전사지: ${fullSheets}장 ${extraRows}줄 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`
+      : `전사지: ${fullSheets}장 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`;
+    setENote(auto);
+  }, [eMoldCols, eMoldRows]); // eslint-disable-line
   const [woChecks, setWoChecks] = useState<WoChecks | null>(null);
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
   const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string }>>({}); 
