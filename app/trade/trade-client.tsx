@@ -548,6 +548,23 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [eWoMoldCols, setEWoMoldCols] = useState("");
   const [eWoMoldRows, setEWoMoldRows] = useState(""); 
   const [eWoNote, setEWoNote] = useState("");
+
+  useEffect(() => {
+    const cols = parseInt(eWoMoldCols || "0", 10);
+    const rows = parseInt(eWoMoldRows || "0", 10);
+    const qty = eLines.reduce((s, l) => s + toInt(l.qty), 0);
+    if (!qty || !cols || !rows) return;
+    const mold = cols * rows;
+    const fullSheets = Math.floor(qty / mold);
+    const remainder = qty % mold;
+    let extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
+    let total = fullSheets * mold + extraRows * cols;
+    if (total - qty < 16) { extraRows += 1; total += cols; }
+    const auto = extraRows > 0
+      ? `전사지: ${fullSheets}장 ${extraRows}줄 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`
+      : `전사지: ${fullSheets}장 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`;
+    setEWoNote(auto);
+  }, [eWoMoldCols, eWoMoldRows, eLines]); // eslint-disable-line
   const [eWoImageFiles, setEWoImageFiles] = useState<File[]>([]);
   const [eWoImagePreviewUrls, setEWoImagePreviewUrls] = useState<string[]>([]);
   const [eWoExistingImages, setEWoExistingImages] = useState<string[]>([]);
@@ -1546,7 +1563,8 @@ if (woSubNameVal) {
         setEWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
         setEWoMoldCols((wo as any).mold_cols ? String((wo as any).mold_cols) : "");
         setEWoMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : "");
-        setEWoNote((wo as any).note ?? "");
+        setEOrderTitle((wo as any).note ?? "");
+        setEWoNote("");
         const rawImages: string[] = (wo as any).images ?? [];
         setEWoExistingImages(rawImages);
         if (rawImages.length > 0) {
@@ -1639,7 +1657,7 @@ if (woSubNameVal) {
             if (!upErr) uploadedUrls.push(path);
           }
         }
-        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, note: eWoNote.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString()}).eq("id", eWoId);
+        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, note: eOrderTitle.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString()}).eq("id", eWoId);
         await supabase.from("work_order_items").update({ delivery_date: eShipDate }).eq("work_order_id", eWoId);
 
       
