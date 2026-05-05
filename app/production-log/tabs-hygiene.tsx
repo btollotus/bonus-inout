@@ -580,6 +580,9 @@ export function ForeignMatterTab({ role, userId, showToast }: {
 // (import, const supabase, const card/inp/btn 등 파일 상단 선언은 건드리지 말 것)
 // ================================================================
 
+// ── PinModal import — tabs-hygiene.tsx 상단에 아래 import가 없으면 추가하세요 ──
+// import { PinModal } from "@/app/contexts/PinSessionContext";
+
 // ── 이 파일 고유 유틸 (파일 상단 todayKST와 별도로 내부에서만 사용) ──
 function hygieneYearMonthOf(dateStr: string) { return dateStr.slice(0, 7); }
 
@@ -759,25 +762,7 @@ export function HygieneCheckTab({ role, userId, showToast }: {
     await loadData();
   }
 
-  // ── PIN 인증 ──
-  function openPin(emp: { id: string; name: string; pin: string | null }) {
-    if (isAdminOrSubadmin) { setInspector({ id: emp.id, name: emp.name }); return; }
-    setPinTarget(emp);
-    setPinInput(""); setPinError(""); setShowPin(true);
-  }
-  function handlePinDigit(d: string) {
-    if (pinInput.length >= 4) return;
-    const next = pinInput + d;
-    setPinInput(next);
-    if (next.length === 4) setTimeout(() => verifyPin(next), 100);
-  }
-  function verifyPin(pin: string) {
-    if (!pinTarget) return;
-    if (!pinTarget.pin) { setPinError("PIN이 설정되지 않았습니다."); setPinInput(""); return; }
-    if (pinTarget.pin !== pin) { setPinError("PIN이 올바르지 않습니다."); setPinInput(""); return; }
-    setInspector({ id: pinTarget.id, name: pinTarget.name });
-    setShowPin(false); setPinError("");
-  }
+  // PIN 인증은 PinModal이 처리 — openPin/handlePinDigit/verifyPin 불필요
 
   // ── 특이사항 저장 ──
   async function saveNote() {
@@ -859,13 +844,19 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
           </div>
           <button className={btn} onClick={loadData}>🔄 새로고침</button>
           <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
-          <button
-            className={inspector
-              ? "rounded-xl border border-green-400 bg-green-50 px-3 py-1.5 text-sm font-semibold text-green-700 hover:bg-green-100"
-              : "rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"}
-            onClick={() => { setShowPin(true); setPinTarget(null); setPinInput(""); setPinError(""); }}>
-            🔑 {inspector ? `점검자: ${inspector.name}` : "PIN 입력"}
-          </button>
+          {inspector ? (
+            <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
+              <span className="text-green-600 text-sm font-semibold">👤 {inspector.name}</span>
+              <button className="text-xs text-green-400 hover:text-green-600 underline"
+                onClick={() => setInspector(null)}>변경</button>
+            </div>
+          ) : (
+            <button
+              className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+              onClick={() => { setShowPin(true); setPinTarget(null); setPinInput(""); setPinError(""); }}>
+              🔑 PIN 입력
+            </button>
+          )} 
           {pendingCount > 0 && (
             <button className={btnOn} disabled={saving} onClick={saveAll}>
               {saving ? "저장 중..." : `💾 저장 (${pendingCount}건 변경)`}
@@ -877,64 +868,17 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
           </div>
         </div>
       </div>
-{/* PIN 모달 */}
+{/* PIN 모달 — 온습도 탭과 동일한 PinModal 패턴 */}
 {showPin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-          onClick={() => { setShowPin(false); setPinInput(""); setPinError(""); setPinTarget(null); }}>
-          <div className={`${card} p-5 w-72`} onClick={(e) => e.stopPropagation()}>
-            {!pinTarget ? (
-              <>
-                <div className="mb-3 font-semibold text-sm text-center">점검자 선택</div>
-                <div className="space-y-1.5">
-                  {employees.map((emp) => (
-                    <button key={emp.id}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left text-sm font-medium hover:bg-blue-50 hover:border-blue-300 transition-all"
-                      onClick={() => {
-                        if (isAdminOrSubadmin) {
-                          setInspector({ id: emp.id, name: emp.name });
-                          setShowPin(false);
-                        } else {
-                          setPinTarget(emp);
-                          setPinInput(""); setPinError("");
-                        }
-                      }}>
-                      👤 {emp.name}
-                    </button>
-                  ))}
-                </div>
-                <button className="mt-3 w-full text-xs text-slate-400 hover:text-slate-600"
-                  onClick={() => { setShowPin(false); setPinTarget(null); }}>취소</button>
-              </>
-            ) : (
-              <>
-                <div className="text-sm font-semibold text-center mb-1">{pinTarget.name}</div>
-                <div className="text-xs text-slate-500 text-center mb-3">PIN 4자리 입력</div>
-                <div className="flex justify-center gap-2 mb-3">
-                  {[0,1,2,3].map((i) => (
-                    <div key={i} className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center font-bold transition-all
-                      ${pinInput.length > i ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-300"}`}>
-                      {pinInput.length > i ? "●" : "○"}
-                    </div>
-                  ))}
-                </div>
-                {pinError && <div className="text-center text-xs text-red-500 mb-2">{pinError}</div>}
-                <div className="grid grid-cols-3 gap-1.5">
-                  {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
-                    <button key={i}
-                      className={`rounded-xl border py-2.5 text-base font-semibold transition-all
-                        ${d === "" ? "invisible" : "border-slate-200 bg-white hover:bg-slate-50 active:scale-95"}`}
-                      onClick={() => {
-                        if (d === "⌫") { setPinInput((p) => p.slice(0,-1)); setPinError(""); }
-                        else if (d) handlePinDigit(d);
-                      }}>{d}</button>
-                  ))}
-                </div>
-                <button className="mt-2 w-full text-xs text-slate-400 hover:text-slate-600"
-                  onClick={() => { setPinTarget(null); setPinInput(""); setPinError(""); }}>← 담당자 선택으로</button>
-              </>
-            )}
-          </div>
-        </div>
+        <PinModal
+          employees={employees.filter((e) => e.name !== null) as any}
+          title="점검자 확인"
+          onSuccess={(empId, empName) => {
+            setInspector({ id: empId, name: empName });
+            setShowPin(false);
+          }}
+          onCancel={() => { setShowPin(false); setPinTarget(null); setPinInput(""); setPinError(""); }}
+        />
       )}
 
       <div className="grid grid-cols-1 gap-4">
