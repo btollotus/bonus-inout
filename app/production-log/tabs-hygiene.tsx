@@ -687,7 +687,7 @@ export function HygieneCheckTab({ role, userId, showToast }: {
         .eq("year_month", yearMonth).order("order_no"),
       supabase.from("hygiene_check_signatures").select("*")
         .eq("year_month", yearMonth).maybeSingle(),
-      supabase.from("hygiene_daily_inspectors").select("log_date,inspector_name")
+        supabase.from("hygiene_daily_inspectors").select("log_date,inspector_name,is_active")
         .gte("log_date", `${yearMonth}-01`)
         .lte("log_date", `${yearMonth}-${String(dayCount).padStart(2, "0")}`),
     ]);
