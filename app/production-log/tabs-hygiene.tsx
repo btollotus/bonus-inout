@@ -145,139 +145,563 @@ export function ExpiryMgmtTab({ role, userId, showToast }: {
 // ═══════════════════════════════════════════════════════════
 // 2. 온장고 세척소독 관리일지
 // ═══════════════════════════════════════════════════════════
+
+const WARMER_NOS = ["No.01","No.02","No.03","No.04","No.05","No.06","No.07","No.08","No.09"];
+
+function wcYearMonthOf(d: string) { return d.slice(0, 7); }
+function wcDaysInMonth(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+function wcBuildDates(ym: string) {
+  const count = wcDaysInMonth(ym);
+  return Array.from({ length: count }, (_, i) => `${ym}-${String(i + 1).padStart(2, "0")}`);
+}
+
+type WcResult = { log_date: string; warmer_no: string; result: "clean" | "unused" };
+type WcNote = { id: string; year_month: string; note_type: string; content: string; action_by: string | null; confirmed_by: string | null; order_no: number };
+
+const WC_SIGN_MAP: Record<string, string> = {
+  "조은미": "/sign-choem.png", "강미라": "/sign-kangml.png",
+  "나현우": "/sign-nahw.png",  "나미영": "/sign-namiy.png",
+  "조대성": "/sign-chods.png", "김영각": "/sign-kimyg.png",
+  "고한결": "/sign-gohg.png",
+};
+const wcTdP: React.CSSProperties = { border:"1px solid #000", padding:"1px 2px", verticalAlign:"middle" };
+const wcThP: React.CSSProperties = { border:"1px solid #000", padding:"1px 2px", background:"#f0f0f0", fontWeight:"bold", verticalAlign:"middle" };
+
 export function WarmerCleaningTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
-  const isAdmin = role === "ADMIN";
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
-  const [logs, setLogs] = useState<any[]>([]);
-  const [slots, setSlots] = useState<any[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
-  const [loading, setLoading] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [fSlotId, setFSlotId] = useState("");
-  const [fWarmerNo, setFWarmerNo] = useState("");
-  const [checks, setChecks] = useState({ disassemble_ok: true, wash_ok: true, disinfect_ok: true, dry_ok: true, reassemble_ok: true });
-  const [fNote, setFNote] = useState("");
-  const [saving, setSaving] = useState(false);
+  const today = todayKST();
+  const currentYM = wcYearMonthOf(today);
 
-  const CHECK_LABELS = [
-    { key: "disassemble_ok", label: "분해" }, { key: "wash_ok", label: "세척" },
-    { key: "disinfect_ok", label: "소독" }, { key: "dry_ok", label: "건조" },
-    { key: "reassemble_ok", label: "재조립" },
-  ];
+  const [yearMonth, setYearMonth] = React.useState(currentYM);
+  const [results, setResults]     = React.useState<WcResult[]>([]);
+  const [notes, setNotes]         = React.useState<WcNote[]>([]);
+  const [loading, setLoading]     = React.useState(false);
+  const [saving, setSaving]       = React.useState(false);
 
-  const loadLogs = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.from("warmer_cleaning_logs")
-      .select("*, slot:warmer_slots(slot_name,purpose)").eq("log_date", filterDate).order("created_at", { ascending: false });
-    setLogs(data ?? []);
-    setLoading(false);
-  }, [filterDate]);
+  // PIN
+  const [employees, setEmployees] = React.useState<{ id: string; name: string; pin: string | null }[]>([]);
+  const [inspector, setInspector] = React.useState<{ id: string; name: string } | null>(null);
+  const [showPin, setShowPin]     = React.useState(false);
 
-  useEffect(() => { loadLogs(); }, [loadLogs]);
-  useEffect(() => {
-    supabase.from("warmer_slots").select("id,slot_name,warmer_no,purpose").eq("is_active", true).order("slot_no")
-      .then(({ data }) => setSlots(data ?? []));
+  // 비고 폼
+  const [showNoteForm, setShowNoteForm]     = React.useState(false);
+  const [noteContent, setNoteContent]       = React.useState("");
+  const [noteActionBy, setNoteActionBy]     = React.useState("");
+  const [noteConfirmedBy, setNoteConfirmedBy] = React.useState("");
+  const [noteSaving, setNoteSaving]         = React.useState(false);
+
+  // 미저장 버퍼  key: `${log_date}__${warmer_no}`  value: "clean"|"unused"|null(삭제)
+  const [pending, setPending] = React.useState<Record<string, "clean" | "unused" | null>>({});
+  const [dayInspectors, setDayInspectors] = React.useState<Record<string, string>>({});
+  const [dayActive, setDayActive]         = React.useState<Record<string, boolean>>({});
+
+  const dates = wcBuildDates(yearMonth);
+  const isCurrentMonth = yearMonth === currentYM;
+
+  React.useEffect(() => {
+    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+      .then(({ data }) => setEmployees((data ?? []) as any));
   }, []);
 
-  async function saveLog() {
-    setSaving(true);
-    const { error } = await supabase.from("warmer_cleaning_logs").insert({
-      log_date: filterDate, slot_id: fSlotId || null,
-      warmer_no: fWarmerNo.trim() || null, ...checks,
-      note: fNote.trim() || null, created_by: userId,
-    });
-    setSaving(false);
-    if (error) return showToast("저장 실패: " + error.message, "error");
-    showToast("✅ 세척소독 기록 완료!");
-    setShowForm(false); setFSlotId(""); setFWarmerNo(""); setFNote("");
-    setChecks({ disassemble_ok: true, wash_ok: true, disinfect_ok: true, dry_ok: true, reassemble_ok: true });
-    loadLogs();
+  const loadData = React.useCallback(async () => {
+    setLoading(true);
+    setPending({});
+    const dayCount = wcDaysInMonth(yearMonth);
+    const [resRes, noteRes, inspRes] = await Promise.all([
+      supabase.from("warmer_cleaning_results").select("log_date,warmer_no,result")
+        .gte("log_date", `${yearMonth}-01`)
+        .lte("log_date", `${yearMonth}-${String(dayCount).padStart(2, "0")}`),
+      supabase.from("warmer_cleaning_notes").select("*")
+        .eq("year_month", yearMonth).order("order_no"),
+      supabase.from("warmer_cleaning_daily").select("log_date,inspector_name,is_active")
+        .gte("log_date", `${yearMonth}-01`)
+        .lte("log_date", `${yearMonth}-${String(dayCount).padStart(2, "0")}`),
+    ]);
+    setResults((resRes.data ?? []) as WcResult[]);
+    setNotes((noteRes.data ?? []) as WcNote[]);
+
+    const inspMap: Record<string, string>   = {};
+    const activeMap: Record<string, boolean> = {};
+    const inspRows = (inspRes.data ?? []) as { log_date: string; inspector_name: string; is_active: boolean }[];
+    for (const d of wcBuildDates(yearMonth)) {
+      const row = inspRows.find((r) => r.log_date === d);
+      inspMap[d]   = row?.inspector_name ?? "조대성";
+      activeMap[d] = row?.is_active ?? false;
+    }
+    setDayInspectors(inspMap);
+    setDayActive(activeMap);
+    setLoading(false);
+  }, [yearMonth]);
+
+  React.useEffect(() => { loadData(); }, [loadData]);
+
+  // ── 결과 조회: "clean" | "unused" | "default"(활성화된 날 기본 ○) | null ──
+  function getResult(date: string, warmerNo: string): "clean" | "unused" | "default" | null {
+    const key = `${date}__${warmerNo}`;
+    if (key in pending) return pending[key] as any;
+    const r = results.find((x) => x.log_date === date && x.warmer_no === warmerNo);
+    if (r) return r.result;
+    if (date <= today && wcYearMonthOf(date) === yearMonth && dayActive[date]) return "default";
+    return null;
   }
 
-  async function approveLog(id: string) {
-    await supabase.from("warmer_cleaning_logs").update({ approved_by: userId, approved_at: new Date().toISOString() }).eq("id", id);
-    showToast("✅ 승인 완료!"); loadLogs();
+  // ── 셀 토글: null/default → clean → unused → null(pending 제거) ──
+  function toggleCell(date: string, warmerNo: string) {
+    const canEdit = isAdminOrSubadmin || (isCurrentMonth && date === today && inspector !== null);
+    if (!canEdit) return;
+    const key = `${date}__${warmerNo}`;
+    const cur = getResult(date, warmerNo);
+    if (cur === null) {
+      setPending((prev) => ({ ...prev, [key]: "clean" }));
+    } else if (cur === "default" || cur === "clean") {
+      setPending((prev) => ({ ...prev, [key]: "unused" }));
+    } else {
+      // unused → 삭제(null)
+      setPending((prev) => { const n = { ...prev }; delete n[key]; return n; });
+    }
   }
+
+  // ── 저장 ──
+  async function saveAll() {
+    if (Object.keys(pending).length === 0) return showToast("변경 사항이 없습니다.", "error");
+    setSaving(true);
+
+    // 활성화된 날짜 중 pending에도 DB에도 없는 셀 → clean 기본값 upsert
+    const defaultUpserts: { log_date: string; warmer_no: string; result: string }[] = [];
+    for (const d of dates) {
+      if (d > today || !dayActive[d]) continue;
+      for (const wn of WARMER_NOS) {
+        const key = `${d}__${wn}`;
+        const hasDB = results.some((x) => x.log_date === d && x.warmer_no === wn);
+        if (!hasDB && !(key in pending)) {
+          defaultUpserts.push({ log_date: d, warmer_no: wn, result: "clean" });
+        }
+      }
+    }
+
+    const toDelete: string[] = [];
+    const toUpsert: { log_date: string; warmer_no: string; result: string; inspector_name: string }[] = [
+      ...defaultUpserts.map((u) => ({ ...u, inspector_name: dayInspectors[u.log_date] ?? "조대성" })),
+    ];
+
+    for (const [key, val] of Object.entries(pending)) {
+      const [log_date, warmer_no] = key.split("__");
+      if (val === null) {
+        toDelete.push(key);
+      } else {
+        toUpsert.push({ log_date, warmer_no, result: val, inspector_name: dayInspectors[log_date] ?? "조대성" });
+      }
+    }
+
+    if (toUpsert.length > 0) {
+      const { error } = await supabase.from("warmer_cleaning_results")
+        .upsert(toUpsert, { onConflict: "log_date,warmer_no" });
+      if (error) { setSaving(false); return showToast("저장 실패: " + error.message, "error"); }
+    }
+    for (const key of toDelete) {
+      const [log_date, warmer_no] = key.split("__");
+      await supabase.from("warmer_cleaning_results")
+        .delete().eq("log_date", log_date).eq("warmer_no", warmer_no);
+    }
+
+    setSaving(false);
+    showToast("✅ 저장 완료!");
+    await loadData();
+  }
+
+  // ── 비고 저장/삭제 ──
+  async function saveNote() {
+    if (!noteContent.trim()) return showToast("내용을 입력하세요.", "error");
+    setNoteSaving(true);
+    const maxOrder = Math.max(0, ...notes.map((n) => n.order_no));
+    const { error } = await supabase.from("warmer_cleaning_notes").insert({
+      year_month: yearMonth, note_type: "special", content: noteContent.trim(),
+      action_by: noteActionBy.trim() || null,
+      confirmed_by: noteConfirmedBy.trim() || null,
+      order_no: maxOrder + 10,
+    });
+    setNoteSaving(false);
+    if (error) return showToast("저장 실패: " + error.message, "error");
+    showToast("✅ 저장 완료!");
+    setNoteContent(""); setNoteActionBy(""); setNoteConfirmedBy(""); setShowNoteForm(false);
+    await loadData();
+  }
+  async function deleteNote(id: string) {
+    if (!confirm("삭제하시겠습니까?")) return;
+    await supabase.from("warmer_cleaning_notes").delete().eq("id", id);
+    showToast("🗑️ 삭제 완료!"); await loadData();
+  }
+
+  const pendingCount = Object.keys(pending).length;
+  function dayOfDate(d: string) { return parseInt(d.slice(8)); }
+
+  // ── 셀 표시 ──
+  function CellDisplay({ val }: { val: "clean" | "unused" | "default" | null }) {
+    if (val === null) return <span style={{ color:"#cbd5e1" }}>·</span>;
+    if (val === "unused") return <span style={{ color:"#94a3b8", fontSize:13 }}>/</span>;
+    // clean or default
+    return <span style={{ color: val === "default" ? "#86efac" : "#16a34a", fontSize:13 }}>○</span>;
+  }
+
+  // ── 인쇄 ──
+  function handlePrint() {
+    const el = document.getElementById("warmer-cleaning-print-inner");
+    if (!el) return;
+    const [y, m] = yearMonth.split("-").map(Number);
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8"><title>온장고세척소독관리일지_${y}년${m}월</title>
+      <style>
+        @page { size: A4 portrait; margin: 8mm 10mm; }
+        body { margin:0; font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:7pt; color:#000; }
+        * { box-sizing:border-box; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+        table { border-collapse:collapse; }
+      </style>
+    </head><body>${el.innerHTML}</body></html>`);
+    win.document.close(); win.focus();
+    setTimeout(() => { win.print(); }, 500);
+  }
+
+  const printDates = wcBuildDates(yearMonth);
 
   return (
     <div className="space-y-4">
+
+      {/* ── 상단 컨트롤 ── */}
       <div className={`${card} p-4`}>
         <div className="flex flex-wrap gap-3 items-end">
-          <div><div className="mb-1 text-xs text-slate-500">날짜</div>
-            <input type="date" className={inp} style={{ width: 160 }} value={filterDate} onChange={(e) => setFilterDate(e.target.value)} /></div>
-          <button className={btn} onClick={loadLogs}>🔄 조회</button>
-          {isAdminOrSubadmin && (
-            <button className={showForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
-              onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ 닫기" : "✚ 기록 등록"}</button>
+          <div>
+            <div className="mb-1 text-xs text-slate-500">점검 월</div>
+            <input type="month" className={inp} style={{ width: 160 }} value={yearMonth}
+              onChange={(e) => { setYearMonth(e.target.value); setInspector(null); }} />
+          </div>
+          <button className={btn} onClick={loadData}>🔄 새로고침</button>
+          <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
+          {inspector ? (
+            <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
+              <span className="text-green-600 text-sm font-semibold">👤 {inspector.name}</span>
+              <button className="text-xs text-green-400 hover:text-green-600 underline"
+                onClick={() => setInspector(null)}>변경</button>
+            </div>
+          ) : (
+            <button className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+              onClick={() => setShowPin(true)}>🔑 PIN 입력</button>
           )}
-          <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+          {pendingCount > 0 && (
+            <button className={btnOn} disabled={saving} onClick={saveAll}>
+              {saving ? "저장 중..." : `💾 저장 (${pendingCount}건 변경)`}
+            </button>
+          )}
+          <div className="ml-auto text-xs text-slate-400">
+            셀 클릭: · → ○(청소완료) → /(미사용) → ·
+          </div>
         </div>
       </div>
-      {showForm && isAdminOrSubadmin && (
-        <div className={`${card} p-4`}>
-          <div className="mb-3 font-semibold text-sm text-blue-700">✚ 온장고 세척소독 기록</div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div><div className="mb-1 text-xs text-slate-500">슬롯 선택</div>
-              <select className={inp} value={fSlotId} onChange={(e) => { setFSlotId(e.target.value); const s = slots.find((s) => s.id === e.target.value); if (s) setFWarmerNo(String(s.warmer_no ?? "")); }}>
-                <option value="">— 선택 —</option>
-                {slots.map((s) => <option key={s.id} value={s.id}>{s.slot_name} ({s.purpose})</option>)}
-              </select></div>
-            <div><div className="mb-1 text-xs text-slate-500">온장고 번호</div>
-              <input className={inp} value={fWarmerNo} onChange={(e) => setFWarmerNo(e.target.value)} placeholder="예: 3" /></div>
-            <div><div className="mb-1 text-xs text-slate-500">비고</div>
-              <input className={inp} value={fNote} onChange={(e) => setFNote(e.target.value)} /></div>
-            <div className="md:col-span-3">
-              <div className="mb-2 text-xs text-slate-500">점검항목</div>
-              <div className="flex flex-wrap gap-4">
-                {CHECK_LABELS.map(({ key, label }) => (
-                  <label key={key} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={(checks as any)[key]}
-                      onChange={(e) => setChecks((p) => ({ ...p, [key]: e.target.checked }))} className="w-4 h-4 rounded" />
-                    {label}
-                  </label>
-                ))}
+
+      {/* PIN 모달 */}
+      {showPin && (
+        <PinModal
+          employees={employees.filter((e) => e.name !== null) as any}
+          title="점검자 확인"
+          onSuccess={async (empId, empName) => {
+            setInspector({ id: empId, name: empName });
+            setShowPin(false);
+            setDayInspectors((prev) => ({ ...prev, [today]: empName }));
+            await supabase.from("warmer_cleaning_daily")
+              .upsert({ log_date: today, inspector_name: empName }, { onConflict: "log_date" });
+          }}
+          onCancel={() => setShowPin(false)}
+        />
+      )}
+
+      {/* ── 점검 그리드 ── */}
+      <div className={`${card} p-0 overflow-hidden`}>
+        {loading ? (
+          <div className="py-12 text-center text-sm text-slate-400">불러오는 중...</div>
+        ) : (
+          <div className="overflow-x-auto" style={{ maxHeight: "calc(100vh - 220px)" }}>
+            <table className="text-xs border-collapse w-full">
+              <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
+                <tr>
+                  <th style={{ width:60, background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 6px", textAlign:"center", fontSize:10 }}>날짜</th>
+                  {WARMER_NOS.map((wn) => (
+                    <th key={wn} style={{ background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 2px", textAlign:"center", fontSize:10, minWidth:36 }}>{wn}</th>
+                  ))}
+                  <th style={{ width:48, background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 2px", textAlign:"center", fontSize:10 }}>확인</th>
+                  <th style={{ minWidth:80, background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 6px", textAlign:"center", fontSize:10 }}>비고</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dates.map((d) => {
+                  const isToday = d === today;
+                  const isActive = dayActive[d] ?? false;
+                  const canActivate = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                  const canEdit = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                  const inspName = dayInspectors[d] ?? "조대성";
+                  const signSrc = WC_SIGN_MAP[inspName] ?? null;
+                  const isPast = d <= today;
+
+                  return (
+                    <tr key={d} className="hover:bg-slate-50/50"
+                      style={{ background: isActive ? "#f0f9ff" : isToday ? "#f0fdf4" : "white" }}>
+                      {/* 날짜 헤더 — 클릭으로 활성화 */}
+                      <td
+                        onClick={() => {
+                          if (!canActivate) return;
+                          const newActive = !isActive;
+                          setDayActive((prev) => ({ ...prev, [d]: newActive }));
+                          if (!newActive) {
+                            setPending((prev) => {
+                              const n = { ...prev };
+                              Object.keys(n).forEach((k) => { if (k.startsWith(d + "__")) delete n[k]; });
+                              return n;
+                            });
+                          }
+                          supabase.from("warmer_cleaning_daily").upsert(
+                            { log_date: d, inspector_name: inspName, is_active: newActive },
+                            { onConflict: "log_date" }
+                          ).then(({ error }) => { if (error) showToast("저장 실패: " + error.message, "error"); });
+                        }}
+                        style={{
+                          border:"0.5px solid #e2e8f0", padding:"3px 6px", textAlign:"center",
+                          fontSize:10, fontWeight: isActive ? 700 : 400,
+                          color: isActive ? "#1e40af" : isToday ? "#15803d" : "#64748b",
+                          cursor: canActivate ? "pointer" : "default",
+                          background: isActive ? "#dbeafe" : isToday ? "#f0fdf4" : "#f8fafc",
+                        }}>
+                        {dayOfDate(d)}
+                      </td>
+
+                      {/* 온장고별 셀 */}
+                      {WARMER_NOS.map((wn) => {
+                        const val = getResult(d, wn);
+                        return (
+                          <td key={wn}
+                            onClick={() => toggleCell(d, wn)}
+                            style={{
+                              border:"0.5px solid #e2e8f0", textAlign:"center",
+                              cursor: canEdit ? "pointer" : "default",
+                              background: val === "unused" ? "#f1f5f9" : "inherit",
+                              fontSize:12, fontWeight:500, padding:"2px",
+                            }}>
+                            <CellDisplay val={val} />
+                          </td>
+                        );
+                      })}
+
+                      {/* 확인 (서명) */}
+                      <td style={{ border:"0.5px solid #e2e8f0", textAlign:"center", padding:"1px" }}>
+                        {isPast && isActive && signSrc ? (
+                          <img src={signSrc} style={{ height:18, display:"block", margin:"0 auto" }} alt={inspName} />
+                        ) : isPast && isActive ? (
+                          <div style={{ fontSize:8, color:"#475569" }}>{inspName.slice(0,1)}*</div>
+                        ) : null}
+                      </td>
+
+                      {/* 비고 — 점검자 셀렉트 */}
+                      <td style={{ border:"0.5px solid #e2e8f0", padding:"1px 3px" }}>
+                        {isPast && canEdit ? (
+                          <select
+                            value={inspName}
+                            onChange={async (e) => {
+                              const newName = e.target.value;
+                              setDayInspectors((prev) => ({ ...prev, [d]: newName }));
+                              await supabase.from("warmer_cleaning_daily")
+                                .upsert({ log_date: d, inspector_name: newName }, { onConflict: "log_date" });
+                            }}
+                            style={{ width:"100%", fontSize:9, border:"none", background:"transparent", cursor:"pointer", outline:"none" }}>
+                            {employees.map((emp) => (
+                              <option key={emp.id} value={emp.name ?? ""}>{emp.name}</option>
+                            ))}
+                          </select>
+                        ) : isPast && isActive ? (
+                          <div style={{ fontSize:9, color:"#475569" }}>{inspName}</div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── 비고 ── */}
+      <div className={`${card} p-4`}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-semibold text-sm">비고</div>
+          {isAdminOrSubadmin && (
+            <button
+              className={showNoteForm
+                ? "rounded-xl border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100"
+                : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
+              onClick={() => setShowNoteForm((v) => !v)}>
+              {showNoteForm ? "✕ 닫기" : "✚ 추가"}
+            </button>
+          )}
+        </div>
+        {showNoteForm && isAdminOrSubadmin && (
+          <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
+            <div>
+              <div className="mb-1 text-xs text-slate-500">내용 *</div>
+              <textarea className={`${inp} resize-none`} rows={2}
+                value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="비고 내용" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="mb-1 text-xs text-slate-500">조치자</div>
+                <input className={inp} value={noteActionBy} onChange={(e) => setNoteActionBy(e.target.value)} />
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-slate-500">확인</div>
+                <input className={inp} value={noteConfirmedBy} onChange={(e) => setNoteConfirmedBy(e.target.value)} />
               </div>
             </div>
+            <div className="flex gap-2">
+              <button className="flex-1 rounded-xl bg-blue-600 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+                disabled={noteSaving} onClick={saveNote}>{noteSaving ? "저장 중..." : "💾 저장"}</button>
+              <button className={btn} onClick={() => setShowNoteForm(false)}>취소</button>
+            </div>
           </div>
-          <div className="mt-4 flex gap-2">
-            <button className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
-              disabled={saving} onClick={saveLog}>{saving ? "저장 중..." : "💾 등록"}</button>
-            <button className={btn} onClick={() => setShowForm(false)}>취소</button>
-          </div>
-        </div>
-      )}
-      <div className={`${card} p-4`}>
-        <div className="mb-3 font-semibold text-sm">🧹 온장고 세척소독 기록 — {filterDate}</div>
-        {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
-          : logs.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
-          : <div className="space-y-2">{logs.map((log) => (
-              <div key={log.id} className="rounded-2xl border border-slate-200 p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <div className="font-semibold text-sm">{(log.slot as any)?.slot_name ?? log.warmer_no ?? "—"}
-                      {(log.slot as any)?.purpose && <span className="ml-2 text-xs text-slate-500">({(log.slot as any).purpose})</span>}
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap gap-2">
-                      {CHECK_LABELS.map(({ key, label }) => (
-                        <span key={key} className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${(log as any)[key] ? "bg-green-100 border-green-200 text-green-700" : "bg-red-100 border-red-200 text-red-700"}`}>
-                          {label} {(log as any)[key] ? "✅" : "❌"}
-                        </span>
-                      ))}
-                    </div>
-                    {log.note && <div className="mt-1 text-xs text-slate-400">비고: {log.note}</div>}
+        )}
+        {notes.length === 0
+          ? <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-xs text-slate-400">없음</div>
+          : notes.map((n) => (
+            <div key={n.id} className="mb-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1">
+                  <div>{n.content}</div>
+                  <div className="mt-1 flex gap-3 text-[11px] text-slate-400">
+                    {n.action_by && <span>조치자: {n.action_by}</span>}
+                    {n.confirmed_by && <span>확인: {n.confirmed_by}</span>}
                   </div>
-                  <div className="shrink-0">{!log.approved_by && isAdmin ? <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700" onClick={() => approveLog(log.id)}>✅ 승인</button> : log.approved_by ? <span className="text-[10px] text-green-600 font-semibold">승인완료</span> : null}</div>
                 </div>
+                {isAdminOrSubadmin && (
+                  <button className="shrink-0 text-[10px] text-slate-300 hover:text-red-500" onClick={() => deleteNote(n.id)}>✕</button>
+                )}
               </div>
-            ))}</div>}
+            </div>
+          ))}
+      </div>
+
+      {/* ── 인쇄 전용 숨김 영역 ── */}
+      <style>{`#warmer-cleaning-print-inner { display: none; }`}</style>
+      <div id="warmer-cleaning-print-inner">
+        {(() => {
+          const [y, m] = yearMonth.split("-").map(Number);
+          const dayCount = wcDaysInMonth(yearMonth);
+          return (
+            <div style={{ fontFamily:"'Malgun Gothic','맑은 고딕',sans-serif", fontSize:"7pt", color:"#000" }}>
+              {/* 제목 */}
+              <div style={{ textAlign:"center", fontSize:"11pt", fontWeight:"bold", marginBottom:4, borderBottom:"1.5px solid #000", paddingBottom:3 }}>
+                온장고세척소독관리일지(1회/일)
+              </div>
+              {/* 안내 + 범례 */}
+              <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:4 }}>
+                <tbody>
+                  <tr>
+                    <td style={{ ...wcTdP, width:"55%", fontSize:"6.5pt", padding:"3px 6px", lineHeight:1.6 }}>
+                      <div style={{ fontWeight:"bold", marginBottom:2 }}>세척소독방법</div>
+                      <div>1. 젖은 행주로 이물질을 제거한다.</div>
+                      <div>2. 마른 행주로 한번 더 닦아준다.</div>
+                      <div>3. 소독액을 뿌려 마무리한다.</div>
+                      <div style={{ marginTop:2 }}>※미사용 상태인 온장고는 제외.</div>
+                    </td>
+                    <td style={{ ...wcTdP, textAlign:"center", fontSize:"6.5pt", verticalAlign:"middle" }}>
+                      <div style={{ fontWeight:"bold", marginBottom:2 }}>표시기호</div>
+                    </td>
+                    <td style={{ ...wcTdP, textAlign:"center", fontSize:"6.5pt", verticalAlign:"middle" }}>
+                      <div style={{ fontWeight:"bold" }}>청소완료</div>
+                      <div style={{ fontSize:"10pt" }}>○</div>
+                    </td>
+                    <td style={{ ...wcTdP, textAlign:"center", fontSize:"6.5pt", verticalAlign:"middle" }}>
+                      <div style={{ fontWeight:"bold" }}>온장고 미사용</div>
+                      <div style={{ fontSize:"10pt" }}>대각선(/)</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* 점검 그리드 */}
+              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+                <colgroup>
+                  <col style={{ width:"28px" }} />
+                  {WARMER_NOS.map((wn) => <col key={wn} />)}
+                  <col style={{ width:"32px" }} />
+                  <col style={{ width:"50px" }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style={{ ...wcThP, textAlign:"center", fontSize:"6pt" }}>날짜</th>
+                    {WARMER_NOS.map((wn) => (
+                      <th key={wn} style={{ ...wcThP, textAlign:"center", fontSize:"5.5pt", padding:"1px" }}>{wn}</th>
+                    ))}
+                    <th style={{ ...wcThP, textAlign:"center", fontSize:"6pt" }}>확인</th>
+                    <th style={{ ...wcThP, textAlign:"center", fontSize:"6pt" }}>비고</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {printDates.map((d) => {
+                    const isAct = dayActive[d] ?? false;
+                    const inspName = dayInspectors[d] ?? "조대성";
+                    const signSrc = WC_SIGN_MAP[inspName] ?? null;
+                    const isPast = d <= today;
+                    return (
+                      <tr key={d}>
+                        <td style={{ ...wcTdP, textAlign:"center", fontSize:"6.5pt",
+                          background: isAct ? "#dbeafe" : "#f8f8f8", fontWeight: isAct ? 700 : 400 }}>
+                          {dayOfDate(d)}
+                        </td>
+                        {WARMER_NOS.map((wn) => {
+                          const r = getResult(d, wn);
+                          return (
+                            <td key={wn} style={{ ...wcTdP, textAlign:"center", fontSize:"9pt", fontWeight:"bold", padding:"0px",
+                              color: r === "unused" ? "#888" : (r === "clean" || r === "default") ? "#000" : "#ddd" }}>
+                              {r === null ? "·" : r === "unused" ? "/" : "○"}
+                            </td>
+                          );
+                        })}
+                        <td style={{ ...wcTdP, textAlign:"center", padding:"1px" }}>
+                          {isPast && isAct && signSrc
+                            ? <img src={signSrc} style={{ height:14, display:"block", margin:"0 auto" }} alt={inspName} />
+                            : isPast && isAct ? <div style={{ fontSize:"5.5pt" }}>{inspName.slice(0,1)}*</div>
+                            : null}
+                        </td>
+                        <td style={{ ...wcTdP, fontSize:"5.5pt", padding:"1px 2px" }}></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* 비고 */}
+              {notes.length > 0 && (
+                <table style={{ width:"100%", borderCollapse:"collapse", marginTop:4 }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ ...wcTdP, width:40, fontWeight:"bold", fontSize:"6.5pt", textAlign:"center" }}>비고</td>
+                      <td style={{ ...wcTdP, fontSize:"6.5pt", padding:"3px 6px", lineHeight:1.6 }}>
+                        {notes.map((n, i) => <span key={n.id}>{i > 0 ? " / " : ""}{n.content}</span>)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
 }
-
 // ═══════════════════════════════════════════════════════════
 // 3. 방충·방서 (보행+비래 통합)
 // ═══════════════════════════════════════════════════════════
