@@ -266,8 +266,8 @@ const [hasMore, setHasMore] = useState(false);
     const auto = extraRows > 0
       ? `전사지: ${fullSheets}장 ${extraRows}줄 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`
       : `전사지: ${fullSheets}장 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`;
-    setENote(auto);
-  }, [eMoldCols, eMoldRows]); // eslint-disable-line
+      if (!eNote) setENote(auto);
+    }, [eMoldCols, eMoldRows]); // eslint-disable-line
   const [woChecks, setWoChecks] = useState<WoChecks | null>(null);
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
   const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string }>>({}); 
@@ -717,7 +717,7 @@ const channel = supabase
     }
     setEFoodType(wo.food_type ?? ""); setELogoSpec(wo.logo_spec ?? ""); setEThickness(wo.thickness ?? "2mm"); setEDeliveryMethod(wo.delivery_method ?? "택배"); setEPackagingType(wo.packaging_type ?? ""); setETraySlot(wo.tray_slot ?? "정사각20구"); setEPackageUnit(wo.package_unit ?? "100ea"); setEMoldPerSheet(wo.mold_per_sheet ? String(wo.mold_per_sheet) : "");
     setEMoldCols((wo as any).mold_cols ? String((wo as any).mold_cols) : "");
-    setEMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : ""); setENote(""); setEReferenceNote(wo.note ?? ""); setECcpSlotId(wo.ccp_slot_id ?? "");
+    setEMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : ""); setENote(wo.note ?? ""); setEReferenceNote(wo.reference_note ?? ""); setECcpSlotId(wo.ccp_slot_id ?? "");
     setWoChecks({ status_transfer: wo.status_transfer, status_print_check: wo.status_print_check, status_production: wo.status_production, status_input: wo.status_input, assignee_transfer: (wo as any).assignee_transfer ?? "", assignee_print_check: (wo as any).assignee_print_check ?? "", assignee_production: (wo as any).assignee_production ?? "", assignee_input: (wo as any).assignee_input ?? "" });
     setLastUpdatedAt(null); setFlashKey(null); setSignedImageUrls([]);
     const userId = currentUserIdRef.current;
