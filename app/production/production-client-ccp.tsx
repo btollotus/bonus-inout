@@ -565,7 +565,7 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
 
   const fromSlotName = warmerSlots.find((s) => s.id === fromSlotId)?.slot_name ?? fromSlotId;
   const toSlotName   = warmerSlots.find((s) => s.id === toSlotId)?.slot_name ?? toSlotId;
-  const moveMeasuredAt = `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:00+09:00`;
+  const moveInMeasuredAt = `${slotActionDate}T${slotActionTime.slice(0,2)}:${slotActionTime.slice(2,4)}:01+09:00`;
 
   // ── 검증 1: 자기 자신으로 이동 방지 ──
   if (fromSlotId === toSlotId) {
@@ -596,7 +596,7 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
 
   // ── 검증 5: 이동 시각이 출발 슬롯 원료투입 시각보다 이전 ──
   const lastFromIn = fromEvents.find((e) => e.event_type === "material_in");
-  if (lastFromIn && moveMeasuredAt <= lastFromIn.measured_at) {
+  if (lastFromIn && moveInMeasuredAt <= lastFromIn.measured_at) {
     return showToast(`⚠ 이동 시각은 [${fromSlotName}] 원료투입(${toKSTTime(lastFromIn.measured_at)}) 이후여야 합니다.`, "error");
   }
 
@@ -616,7 +616,7 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
   }
 
   // ── 검증 5 (온도기록 기준): 이동 시각이 마지막 온도기록보다 이전 ──
-  if (lastFromWoEv && moveMeasuredAt <= lastFromWoEv.measured_at) {
+  if (lastFromWoEv && moveInMeasuredAt <= lastFromWoEv.measured_at) {
     return showToast(`⚠ 이동 시각은 [${fromSlotName}] 마지막 온도기록(${toKSTTime(lastFromWoEv.measured_at)}) 이후여야 합니다.`, "error");
   }
 
@@ -658,7 +658,7 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
 
   // ── 검증 8: 동일 슬롯·동일 시각 중복 기록 ──
   const dupCheck = fromEvents.find(
-    (e) => e.measured_at === moveMeasuredAt && e.event_type === "material_out"
+    (e) => e.measured_at === moveInMeasuredAt && e.event_type === "material_out" 
   );
   if (dupCheck) {
     return showToast("⚠ 동일 시각에 이미 이동/소진 기록이 있습니다.", "error");
@@ -688,7 +688,7 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
       slot_id:       fromSlotId,
       event_date:    slotActionDate,
       event_type:    "material_out",
-      measured_at:   moveMeasuredAt,
+      measured_at:   moveInMeasuredAt,
       work_order_no: workOrderNo ?? null,
       action_note:   `→ ${toSlotName}`,
       action_by:     actionBy ?? null,
@@ -704,13 +704,13 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
     .eq("slot_id", fromSlotId)
     .eq("event_date", slotActionDate)
     .eq("event_type", "material_in")
-    .lte("measured_at", moveMeasuredAt);
+    .lte("measured_at", moveInMeasuredAt);
 
     const { error: toErr } = await supabase.from("ccp_slot_events").insert({
       slot_id:       toSlotId,
       event_date:    slotActionDate,
       event_type:    "material_in",
-      measured_at:   moveMeasuredAt,
+      measured_at:   moveInMeasuredAt,
       work_order_no: workOrderNo ?? null,
       action_note:   `${fromSlotName} → ${toSlotName}`,
       material_type: movedMaterialType,
@@ -722,7 +722,7 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
       await supabase.from("ccp_slot_events")
         .delete()
         .eq("slot_id", fromSlotId)
-        .eq("measured_at", moveMeasuredAt)
+        .eq("measured_at", moveInMeasuredAt)
         .eq("event_type", "material_out");
       return showToast("이동 기록 실패 (도착) — 자동 롤백됐습니다: " + toErr.message, "error");
     }
