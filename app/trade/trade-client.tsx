@@ -2628,7 +2628,7 @@ function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: (
           const remainder = qty % mold;
           let extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
           let total = fullSheets * mold + extraRows * cols;
-          if (total - qty < 16) {
+          while (total - qty < 16) {
             extraRows += 1;
             total += cols;
           }
