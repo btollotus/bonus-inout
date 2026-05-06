@@ -474,7 +474,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
     const remainder = qty % mold;
     let extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
     let total = fullSheets * mold + extraRows * cols;
-    if (total - qty < 16) { extraRows += 1; total += cols; }
+    while (total - qty < 16) { extraRows += 1; total += cols; }
     const auto = extraRows > 0
       ? `전사지: ${fullSheets}장 ${extraRows}줄 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`
       : `전사지: ${fullSheets}장 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`;
