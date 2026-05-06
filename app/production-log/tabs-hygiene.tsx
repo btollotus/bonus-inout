@@ -480,95 +480,632 @@ export function PestTab({ role, userId, showToast }: {
 // ═══════════════════════════════════════════════════════════
 // 4. 이물관리 점검표
 // ═══════════════════════════════════════════════════════════
+
+function fmYearMonthOf(dateStr: string) { return dateStr.slice(0, 7); }
+function fmDaysInMonth(ym: string): number {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+function fmBuildDates(ym: string): string[] {
+  const count = fmDaysInMonth(ym);
+  return Array.from({ length: count }, (_, i) =>
+    `${ym}-${String(i + 1).padStart(2, "0")}`
+  );
+}
+
+type FmCheckItem = { id: string; category: string; item_text: string; order_no: number };
+type FmCheckLog  = { log_date: string; item_id: string; result: boolean };
+type FmCheckNote = {
+  id: string; year_month: string; note_type: string;
+  content: string; action_by: string | null; confirmed_by: string | null; order_no: number;
+};
+
+const FM_SIGN_MAP: Record<string, string> = {
+  "조은미": "/sign-choem.png",
+  "강미라": "/sign-kangml.png",
+  "나현우": "/sign-nahw.png",
+  "나미영": "/sign-namiy.png",
+  "조대성": "/sign-chods.png",
+  "김영각": "/sign-kimyg.png",
+  "고한결": "/sign-gohg.png",
+};
+
+const fmTdP: React.CSSProperties = { border:"1px solid #000", padding:"1px 2px", verticalAlign:"middle" };
+const fmThP: React.CSSProperties = { border:"1px solid #000", padding:"1px 2px", background:"#f0f0f0", fontWeight:"bold", verticalAlign:"middle" };
+
 export function ForeignMatterTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
-  const isAdmin = role === "ADMIN";
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
-  const [logs, setLogs] = useState<any[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
-  const [loading, setLoading] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [fTarget, setFTarget] = useState("");
-  const [fCheckItem, setFCheckItem] = useState("");
-  const [fResult, setFResult] = useState("");
-  const [fDeviation, setFDeviation] = useState("");
-  const [fImprovement, setFImprovement] = useState("");
-  const [fNote, setFNote] = useState("");
-  const [saving, setSaving] = useState(false);
+  const today = todayKST();
+  const currentYM = fmYearMonthOf(today);
 
-  const loadLogs = useCallback(async () => {
+  const [yearMonth, setYearMonth] = React.useState(currentYM);
+  const [items, setItems]   = React.useState<FmCheckItem[]>([]);
+  const [logs, setLogs]     = React.useState<FmCheckLog[]>([]);
+  const [notes, setNotes]   = React.useState<FmCheckNote[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [saving, setSaving]   = React.useState(false);
+
+  // PIN 인증
+  const [employees, setEmployees] = React.useState<{ id: string; name: string; pin: string | null }[]>([]);
+  const [inspector, setInspector] = React.useState<{ id: string; name: string } | null>(null);
+  const [showPin, setShowPin]     = React.useState(false);
+
+  // 특이사항/개선조치 폼
+  const [showNoteForm, setShowNoteForm]   = React.useState(false);
+  const [noteType, setNoteType]           = React.useState<"special" | "action">("special");
+  const [noteContent, setNoteContent]     = React.useState("");
+  const [noteActionBy, setNoteActionBy]   = React.useState("");
+  const [noteConfirmedBy, setNoteConfirmedBy] = React.useState("");
+  const [noteSaving, setNoteSaving]       = React.useState(false);
+
+  // 미저장 버퍼
+  const [pending, setPending] = React.useState<Record<string, boolean>>({});
+  // 날짜별 점검자/활성화
+  const [dayInspectors, setDayInspectors] = React.useState<Record<string, string>>({});
+  const [dayActive, setDayActive]         = React.useState<Record<string, boolean>>({});
+
+  const dates = fmBuildDates(yearMonth);
+  const isCurrentMonth = yearMonth === currentYM;
+
+  // ── 데이터 로드 ──
+  React.useEffect(() => {
+    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+      .then(({ data }) => setEmployees((data ?? []) as any));
+  }, []);
+
+  const loadData = React.useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from("foreign_matter_logs").select("*").eq("log_date", filterDate).order("created_at", { ascending: false });
-    setLogs(data ?? []); setLoading(false);
-  }, [filterDate]);
+    setPending({});
+    const dayCount = fmDaysInMonth(yearMonth);
+    const [itemRes, logRes, noteRes, inspRes] = await Promise.all([
+      supabase.from("foreign_matter_check_items").select("id,category,item_text,order_no")
+        .eq("is_active", true).order("order_no"),
+      supabase.from("foreign_matter_check_results").select("log_date,item_id,result")
+        .gte("log_date", `${yearMonth}-01`)
+        .lte("log_date", `${yearMonth}-${String(dayCount).padStart(2, "0")}`),
+      supabase.from("foreign_matter_check_notes").select("*")
+        .eq("year_month", yearMonth).order("order_no"),
+      supabase.from("foreign_matter_daily_inspectors").select("log_date,inspector_name,is_active")
+        .gte("log_date", `${yearMonth}-01`)
+        .lte("log_date", `${yearMonth}-${String(dayCount).padStart(2, "0")}`),
+    ]);
+    setItems((itemRes.data ?? []) as FmCheckItem[]);
+    setLogs((logRes.data ?? []) as FmCheckLog[]);
+    setNotes((noteRes.data ?? []) as FmCheckNote[]);
 
-  useEffect(() => { loadLogs(); }, [loadLogs]);
+    const inspMap: Record<string, string>  = {};
+    const activeMap: Record<string, boolean> = {};
+    const inspRows = (inspRes.data ?? []) as { log_date: string; inspector_name: string; is_active: boolean }[];
+    for (const d of fmBuildDates(yearMonth)) {
+      const row = inspRows.find((r) => r.log_date === d);
+      inspMap[d]  = row?.inspector_name ?? "조대성";
+      activeMap[d] = row?.is_active ?? false;
+    }
+    setDayInspectors(inspMap);
+    setDayActive(activeMap);
+    setLoading(false);
+  }, [yearMonth]);
 
-  async function saveLog() {
-    if (!fTarget || !fCheckItem) return showToast("점검 대상과 점검사항을 입력하세요.", "error");
-    setSaving(true);
-    const { error } = await supabase.from("foreign_matter_logs").insert({
-      log_date: filterDate, target: fTarget.trim(), check_item: fCheckItem.trim(),
-      result: fResult.trim() || null, deviation: fDeviation.trim() || null,
-      improvement: fImprovement.trim() || null, note: fNote.trim() || null, created_by: userId,
-    });
-    setSaving(false);
-    if (error) return showToast("저장 실패: " + error.message, "error");
-    showToast("✅ 이물관리 기록 완료!"); setShowForm(false);
-    setFTarget(""); setFCheckItem(""); setFResult(""); setFDeviation(""); setFImprovement(""); setFNote("");
-    loadLogs();
+  React.useEffect(() => { loadData(); }, [loadData]);
+
+  // ── 결과 조회 ──
+  function getResult(date: string, itemId: string): boolean | "default" | null {
+    const key = `${date}__${itemId}`;
+    if (key in pending) return pending[key];
+    const log = logs.find((l) => l.log_date === date && l.item_id === itemId);
+    if (log) return log.result;
+    if (date <= today && fmYearMonthOf(date) === yearMonth && dayActive[date]) return "default";
+    return null;
   }
 
-  async function approveLog(id: string) {
-    await supabase.from("foreign_matter_logs").update({ approved_by: userId, approved_at: new Date().toISOString() }).eq("id", id);
-    showToast("✅ 승인 완료!"); loadLogs();
+  // ── 셀 토글 ──
+  function toggleCell(date: string, itemId: string) {
+    const canEdit = isAdminOrSubadmin || (isCurrentMonth && date === today && inspector !== null);
+    if (!canEdit) return;
+    const key = `${date}__${itemId}`;
+    const cur = getResult(date, itemId);
+    if (cur === false) {
+      setPending((prev) => { const n = { ...prev }; delete n[key]; return n; });
+    } else {
+      setPending((prev) => ({ ...prev, [key]: false }));
+    }
+  }
+
+  // ── 저장 ──
+  async function saveAll() {
+    if (Object.keys(pending).length === 0) return showToast("변경 사항이 없습니다.", "error");
+    setSaving(true);
+    const defaultUpserts: { log_date: string; item_id: string; result: boolean }[] = [];
+    for (const d of dates) {
+      if (d > today) continue;
+      if (!dayActive[d]) continue;
+      for (const item of items) {
+        const key = `${d}__${item.id}`;
+        const hasLog = logs.some((l) => l.log_date === d && l.item_id === item.id);
+        const hasPending = key in pending;
+        if (!hasLog && !hasPending) {
+          defaultUpserts.push({ log_date: d, item_id: item.id, result: true });
+        }
+      }
+    }
+    const upserts = [
+      ...defaultUpserts.map((u) => ({
+        ...u,
+        inspector_name: dayInspectors[u.log_date] ?? "조대성",
+      })),
+      ...Object.entries(pending).map(([key, result]) => {
+        const [log_date, item_id] = key.split("__");
+        return { log_date, item_id, result, inspector_name: dayInspectors[log_date] ?? "조대성" };
+      }),
+    ];
+    const { error } = await supabase.from("foreign_matter_check_results")
+      .upsert(upserts, { onConflict: "log_date,item_id" });
+    setSaving(false);
+    if (error) return showToast("저장 실패: " + error.message, "error");
+    showToast("✅ 저장 완료!");
+    await loadData();
+  }
+
+  // ── 특이사항 저장/삭제 ──
+  async function saveNote() {
+    if (!noteContent.trim()) return showToast("내용을 입력하세요.", "error");
+    setNoteSaving(true);
+    const maxOrder = Math.max(0, ...notes.filter((n) => n.note_type === noteType).map((n) => n.order_no));
+    const { error } = await supabase.from("foreign_matter_check_notes").insert({
+      year_month: yearMonth, note_type: noteType, content: noteContent.trim(),
+      action_by: noteActionBy.trim() || null,
+      confirmed_by: noteConfirmedBy.trim() || null,
+      order_no: maxOrder + 10,
+    });
+    setNoteSaving(false);
+    if (error) return showToast("저장 실패: " + error.message, "error");
+    showToast("✅ 저장 완료!");
+    setNoteContent(""); setNoteActionBy(""); setNoteConfirmedBy(""); setShowNoteForm(false);
+    await loadData();
+  }
+  async function deleteNote(id: string) {
+    if (!confirm("삭제하시겠습니까?")) return;
+    const { error } = await supabase.from("foreign_matter_check_notes").delete().eq("id", id);
+    if (error) return showToast("삭제 실패: " + error.message, "error");
+    showToast("🗑️ 삭제 완료!"); await loadData();
+  }
+
+  // ── 통계 ──
+  const xCount = Object.values(pending).filter((v) => v === false).length
+    + logs.filter((l) => l.result === false).length;
+  const pendingCount = Object.keys(pending).length;
+
+  // ── 카테고리 그룹 ──
+  const fmCategories = [...new Set(items.map((i) => i.category))];
+  function itemsOf(cat: string) { return items.filter((i) => i.category === cat); }
+  function dayOfDate(d: string) { return parseInt(d.slice(8)); }
+
+  const specialNotes = notes.filter((n) => n.note_type === "special");
+  const actionNotes  = notes.filter((n) => n.note_type === "action");
+  const printDates   = fmBuildDates(yearMonth);
+
+  // ── 인쇄 ──
+  function handlePrint() {
+    const el = document.getElementById("foreign-matter-print-inner");
+    if (!el) return;
+    const [y, m] = yearMonth.split("-").map(Number);
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8"><title>이물관리점검표_${y}년${m}월</title>
+      <style>
+        @page { size: A4 landscape; margin: 6mm 8mm; }
+        body { margin:0; font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:7pt; color:#000; }
+        * { box-sizing:border-box; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+        table { border-collapse:collapse; }
+        img { max-width:none; }
+      </style>
+    </head><body>${el.innerHTML}</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 500);
   }
 
   return (
     <div className="space-y-4">
+
+      {/* ── 상단 컨트롤 ── */}
       <div className={`${card} p-4`}>
         <div className="flex flex-wrap gap-3 items-end">
-          <div><div className="mb-1 text-xs text-slate-500">날짜</div>
-            <input type="date" className={inp} style={{ width: 160 }} value={filterDate} onChange={(e) => setFilterDate(e.target.value)} /></div>
-          <button className={btn} onClick={loadLogs}>🔄 조회</button>
-          {isAdminOrSubadmin && <button className={showForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"} onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ 닫기" : "✚ 기록 등록"}</button>}
-          <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+          <div>
+            <div className="mb-1 text-xs text-slate-500">점검 월</div>
+            <input type="month" className={inp} style={{ width: 160 }} value={yearMonth}
+              onChange={(e) => { setYearMonth(e.target.value); setInspector(null); }} />
+          </div>
+          <button className={btn} onClick={loadData}>🔄 새로고침</button>
+          <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
+          {inspector ? (
+            <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
+              <span className="text-green-600 text-sm font-semibold">👤 {inspector.name}</span>
+              <button className="text-xs text-green-400 hover:text-green-600 underline"
+                onClick={() => setInspector(null)}>변경</button>
+            </div>
+          ) : (
+            <button
+              className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+              onClick={() => { setShowPin(true); }}>
+              🔑 PIN 입력
+            </button>
+          )}
+          {pendingCount > 0 && (
+            <button className={btnOn} disabled={saving} onClick={saveAll}>
+              {saving ? "저장 중..." : `💾 저장 (${pendingCount}건 변경)`}
+            </button>
+          )}
+          <div className="ml-auto flex gap-3 text-xs text-slate-500">
+            {xCount > 0 && <span className="text-red-600 font-semibold">⚠ X 발생 <b>{xCount}</b>건</span>}
+          </div>
         </div>
       </div>
-      {showForm && isAdminOrSubadmin && (
-        <div className={`${card} p-4`}>
-          <div className="mb-3 font-semibold text-sm text-blue-700">✚ 이물관리 점검 기록</div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {[["점검 대상 *", fTarget, setFTarget],["점검사항 *", fCheckItem, setFCheckItem],["점검결과", fResult, setFResult],["이탈사항", fDeviation, setFDeviation],["개선조치사항", fImprovement, setFImprovement],["비고", fNote, setFNote]].map(([label, value, set]) => (
-              <div key={label as string}><div className="mb-1 text-xs text-slate-500">{label as string}</div>
-                <input className={inp} value={value as string} onChange={(e) => (set as any)(e.target.value)} /></div>
-            ))}
+
+      {/* PIN 모달 */}
+      {showPin && (
+        <PinModal
+          employees={employees.filter((e) => e.name !== null) as any}
+          title="점검자 확인"
+          onSuccess={async (empId, empName) => {
+            setInspector({ id: empId, name: empName });
+            setShowPin(false);
+            setDayInspectors((prev) => ({ ...prev, [today]: empName }));
+            await supabase.from("foreign_matter_daily_inspectors")
+              .upsert({ log_date: today, inspector_name: empName }, { onConflict: "log_date" });
+          }}
+          onCancel={() => setShowPin(false)}
+        />
+      )}
+
+      {/* ── 점검 그리드 ── */}
+      <div className={`${card} p-0 overflow-hidden`}>
+        {loading ? (
+          <div className="py-12 text-center text-sm text-slate-400">불러오는 중...</div>
+        ) : (
+          <div className="overflow-x-auto" style={{ maxHeight: "calc(100vh - 220px)" }}>
+            <table className="text-xs border-collapse" style={{ minWidth: 900 }}>
+              <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
+                <tr>
+                  <th style={{ width:32, background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 2px", textAlign:"center", fontSize:10 }}>대상</th>
+                  <th style={{ minWidth:200, background:"#f8fafc", border:"0.5px solid #e2e8f0", padding:"4px 6px", textAlign:"left", fontSize:10 }}>점검 사항</th>
+                  {dates.map((d) => {
+                    const isToday = d === today;
+                    const isActive = dayActive[d] ?? false;
+                    const canActivate = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                    return (
+                      <th key={d}
+                        onClick={() => {
+                          if (!canActivate) return;
+                          const newActive = !isActive;
+                          setDayActive((prev) => ({ ...prev, [d]: newActive }));
+                          if (!newActive) {
+                            setPending((prev) => {
+                              const n = { ...prev };
+                              Object.keys(n).forEach((k) => { if (k.startsWith(d + "__")) delete n[k]; });
+                              return n;
+                            });
+                          }
+                          supabase.from("foreign_matter_daily_inspectors").upsert(
+                            { log_date: d, inspector_name: dayInspectors[d] ?? "조대성", is_active: newActive },
+                            { onConflict: "log_date" }
+                          ).then(({ error }) => {
+                            if (error) showToast("저장 실패: " + error.message, "error");
+                          });
+                        }}
+                        style={{
+                          width:26, minWidth:26,
+                          background: isActive ? "#dbeafe" : isToday ? "#f0fdf4" : "#f8fafc",
+                          border:"0.5px solid #e2e8f0", padding:"2px 1px", textAlign:"center",
+                          fontSize:9, fontWeight: isActive ? 700 : 400,
+                          color: isActive ? "#1e40af" : "#64748b",
+                          cursor: canActivate ? "pointer" : "default",
+                        }}>
+                        <div>{dayOfDate(d)}</div>
+                      </th>
+                    );
+                  })}
+                </tr>
+                {/* 날짜별 점검자 행 */}
+                <tr>
+                  <th colSpan={2} style={{
+                    background:"#f1f5f9", border:"0.5px solid #e2e8f0",
+                    fontSize:9, textAlign:"center", color:"#64748b", padding:"2px",
+                  }}>점검자</th>
+                  {dates.map((d) => {
+                    const inspName = dayInspectors[d] ?? "조대성";
+                    const isPast = d <= today;
+                    const canEdit = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                    return (
+                      <th key={d} style={{ background:"#f1f5f9", border:"0.5px solid #e2e8f0", padding:"1px" }}>
+                        {isPast && canEdit ? (
+                          <select
+                            value={inspName}
+                            onChange={async (e) => {
+                              const newName = e.target.value;
+                              setDayInspectors((prev) => ({ ...prev, [d]: newName }));
+                              await supabase.from("foreign_matter_daily_inspectors")
+                                .upsert({ log_date: d, inspector_name: newName }, { onConflict: "log_date" });
+                            }}
+                            style={{ width:"100%", fontSize:8, border:"none", background:"transparent", textAlign:"center", cursor:"pointer", outline:"none", color:"#1e293b" }}>
+                            {employees.map((emp) => (
+                              <option key={emp.id} value={emp.name ?? ""}>{emp.name}</option>
+                            ))}
+                          </select>
+                        ) : isPast ? (
+                          <div style={{ fontSize:8, color:"#475569", textAlign:"center" }}>{inspName.slice(0, 1)}*</div>
+                        ) : null}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {fmCategories.map((cat) => {
+                  const catItems = itemsOf(cat);
+                  return catItems.map((item, idx) => (
+                    <tr key={item.id} className="hover:bg-slate-50/50">
+                      {idx === 0 && (
+                        <td rowSpan={catItems.length} style={{
+                          border:"0.5px solid #e2e8f0", textAlign:"center",
+                          fontSize:10, fontWeight:500, color:"#475569",
+                          writingMode:"vertical-rl" as any, background:"#f8fafc", padding:"4px 2px",
+                        }}>{cat}</td>
+                      )}
+                      <td style={{
+                        border:"0.5px solid #e2e8f0", padding:"3px 6px",
+                        fontSize:10, lineHeight:1.3, color:"#334155",
+                        maxWidth:220, whiteSpace:"normal",
+                      }}>{item.item_text}</td>
+                      {dates.map((d) => {
+                        const result = getResult(d, item.id);
+                        const isToday = d === today;
+                        const key = `${d}__${item.id}`;
+                        const isPending = key in pending;
+                        const canEdit = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                        return (
+                          <td key={d} onClick={() => toggleCell(d, item.id)} style={{
+                            border:"0.5px solid #e2e8f0", textAlign:"center",
+                            cursor: canEdit ? "pointer" : "default",
+                            background: result === false ? "#fef2f2" : isPending ? "#fefce8" : isToday ? "#eff6ff" : "white",
+                            fontSize:11, fontWeight:500,
+                          }}>
+                            {result === null
+                              ? <span style={{ color:"#cbd5e1" }}>·</span>
+                              : result === false
+                                ? <span style={{ color:"#dc2626" }}>X</span>
+                                : <span style={{ color: result === "default" ? "#86efac" : "#16a34a" }}>O</span>}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ));
+                })}
+              </tbody>
+            </table>
           </div>
-          <div className="mt-4 flex gap-2">
-            <button className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60" disabled={saving} onClick={saveLog}>{saving ? "저장 중..." : "💾 등록"}</button>
-            <button className={btn} onClick={() => setShowForm(false)}>취소</button>
+        )}
+      </div>
+
+      {/* ── 이탈사항 / 개선조치 ── */}
+      <div className={`${card} p-4`}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-semibold text-sm">이탈사항 · 개선조치사항</div>
+          {isAdminOrSubadmin && (
+            <button
+              className={showNoteForm
+                ? "rounded-xl border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100"
+                : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
+              onClick={() => setShowNoteForm((v) => !v)}>
+              {showNoteForm ? "✕ 닫기" : "✚ 추가"}
+            </button>
+          )}
+        </div>
+        {showNoteForm && isAdminOrSubadmin && (
+          <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
+            <div className="flex gap-2">
+              {([["special","이탈사항"], ["action","개선조치"]] as const).map(([v, label]) => (
+                <button key={v}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all ${noteType === v
+                    ? "border-blue-400 bg-blue-600 text-white"
+                    : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
+                  onClick={() => setNoteType(v)}>{label}</button>
+              ))}
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-500">내용 *</div>
+              <textarea className={`${inp} resize-none`} rows={2}
+                value={noteContent} onChange={(e) => setNoteContent(e.target.value)}
+                placeholder={noteType === "special" ? "이탈사항 내용" : "개선조치 내용"} />
+            </div>
+            {noteType === "action" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="mb-1 text-xs text-slate-500">조치자</div>
+                  <input className={inp} value={noteActionBy} onChange={(e) => setNoteActionBy(e.target.value)} />
+                </div>
+                <div>
+                  <div className="mb-1 text-xs text-slate-500">확인</div>
+                  <input className={inp} value={noteConfirmedBy} onChange={(e) => setNoteConfirmedBy(e.target.value)} />
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button className="flex-1 rounded-xl bg-blue-600 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+                disabled={noteSaving} onClick={saveNote}>{noteSaving ? "저장 중..." : "💾 저장"}</button>
+              <button className={btn} onClick={() => setShowNoteForm(false)}>취소</button>
+            </div>
+          </div>
+        )}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div>
+            <div className="mb-2 text-xs font-semibold text-slate-500">이탈사항</div>
+            {specialNotes.length === 0
+              ? <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-xs text-slate-400">없음</div>
+              : specialNotes.map((n) => (
+                <div key={n.id} className="mb-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>{n.content}</div>
+                    {isAdminOrSubadmin && (
+                      <button className="shrink-0 text-[10px] text-slate-300 hover:text-red-500" onClick={() => deleteNote(n.id)}>✕</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+          <div>
+            <div className="mb-2 text-xs font-semibold text-slate-500">개선조치사항</div>
+            {actionNotes.length === 0
+              ? <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-xs text-slate-400">없음</div>
+              : actionNotes.map((n) => (
+                <div key={n.id} className="mb-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <div>{n.content}</div>
+                      <div className="mt-1 flex gap-3 text-[11px] text-slate-400">
+                        {n.action_by && <span>조치자: {n.action_by}</span>}
+                        {n.confirmed_by && <span>확인: {n.confirmed_by}</span>}
+                      </div>
+                    </div>
+                    {isAdminOrSubadmin && (
+                      <button className="shrink-0 text-[10px] text-slate-300 hover:text-red-500" onClick={() => deleteNote(n.id)}>✕</button>
+                    )}
+                  </div>
+                </div>
+              ))}
           </div>
         </div>
-      )}
-      <div className={`${card} p-4`}>
-        <div className="mb-3 font-semibold text-sm">🔍 이물관리 점검표 — {filterDate}</div>
-        {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
-          : logs.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
-          : <div className="overflow-x-auto"><table className="w-full text-sm border-collapse">
-              <thead><tr className="border-b border-slate-200">{["점검 대상","점검사항","점검결과","이탈사항","개선조치","승인"].map((h) => <th key={h} className="text-left py-2 px-3 text-xs text-slate-500 font-semibold">{h}</th>)}</tr></thead>
-              <tbody>{logs.map((log) => (
-                <tr key={log.id} className={`border-b border-slate-100 hover:bg-slate-50 ${log.deviation ? "bg-amber-50" : ""}`}>
-                  <td className="py-2 px-3 font-medium">{log.target}</td>
-                  <td className="py-2 px-3 text-xs">{log.check_item}</td>
-                  <td className="py-2 px-3 text-xs">{log.result ?? "—"}</td>
-                  <td className="py-2 px-3 text-xs text-amber-700">{log.deviation ?? "—"}</td>
-                  <td className="py-2 px-3 text-xs">{log.improvement ?? "—"}</td>
-                  <td className="py-2 px-3">{!log.approved_by && isAdmin ? <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700" onClick={() => approveLog(log.id)}>✅ 승인</button> : log.approved_by ? <span className="text-[10px] text-green-600 font-semibold">승인완료</span> : "—"}</td>
-                </tr>
-              ))}</tbody>
-            </table></div>}
+      </div>
+
+      {/* ── 인쇄 전용 숨김 영역 ── */}
+      <style>{`#foreign-matter-print-inner { display: none; }`}</style>
+      <div id="foreign-matter-print-inner">
+        {(() => {
+          const [y, m] = yearMonth.split("-").map(Number);
+          const dayCount = fmDaysInMonth(yearMonth);
+          return (
+            <div style={{ fontFamily:"'Malgun Gothic','맑은 고딕',sans-serif", fontSize:"7pt", color:"#000" }}>
+              {/* 제목 + 결재란 */}
+              <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:4 }}>
+                <tbody>
+                  <tr>
+                    <td rowSpan={3} style={{ ...fmTdP, width:100, textAlign:"center", padding:"4px 6px" }}>
+                      <div style={{ fontWeight:"bold", fontSize:"10pt", lineHeight:1.4 }}>이물관리<br/>점검표</div>
+                      <div style={{ fontSize:"6pt", marginTop:2 }}>점검주기(1회/일)</div>
+                    </td>
+                    <td style={{ ...fmTdP, width:56, textAlign:"center", fontSize:"7pt" }}>점검 기간</td>
+                    <td style={{ ...fmTdP, fontSize:"7pt" }}>{y}년 {m}월 1일 ～ {m}월 {dayCount}일</td>
+                    <td style={{ ...fmTdP, width:40, textAlign:"center", fontSize:"7pt" }}>점검자</td>
+                    <td style={{ ...fmTdP, width:60, textAlign:"center", fontSize:"7pt" }}></td>
+                    <td style={{ ...fmTdP, width:40, textAlign:"center", fontSize:"7pt" }}>승 인</td>
+                    <td style={{ ...fmTdP, width:60, textAlign:"center", padding:"3px" }}>
+                      <img src="/sign-chods.png" style={{ height:22, display:"block", margin:"0 auto" }} alt="조대성" />
+                      <div style={{ fontSize:"6pt", marginTop:1 }}>조대성</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ ...fmTdP, textAlign:"center", fontSize:"7pt" }}>검사방법 / 범례</td>
+                    <td colSpan={4} style={{ ...fmTdP, fontSize:"7pt" }}>육안검사 / 적합 : ○, 부적합 : ×</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* 점검 그리드 */}
+              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed", marginBottom:4 }}>
+                <colgroup>
+                  <col style={{ width:"22px" }} />
+                  <col style={{ width:"150px" }} />
+                  {printDates.map((d) => <col key={d} />)}
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style={{ ...fmThP, textAlign:"center", fontSize:"6pt" }}>대상</th>
+                    <th style={{ ...fmThP, textAlign:"left", fontSize:"6pt" }}>점검 사항</th>
+                    {printDates.map((d) => (
+                      <th key={d} style={{ ...fmThP, textAlign:"center", fontSize:"5.5pt", padding:"1px",
+                        background: dayActive[d] ? "#dbeafe" : "#f0f0f0" }}>
+                        {dayOfDate(d)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {fmCategories.map((cat) =>
+                    itemsOf(cat).map((item, idx) => (
+                      <tr key={item.id}>
+                        {idx === 0 && (
+                          <td rowSpan={itemsOf(cat).length} style={{
+                            ...fmTdP, textAlign:"center", fontWeight:"bold", fontSize:"6pt",
+                            writingMode:"vertical-rl" as any, background:"#f8f8f8",
+                          }}>{cat}</td>
+                        )}
+                        <td style={{ ...fmTdP, fontSize:"6pt", lineHeight:1.2, padding:"1px 3px" }}>{item.item_text}</td>
+                        {printDates.map((d) => {
+                          const r = getResult(d, item.id);
+                          return (
+                            <td key={d} style={{ ...fmTdP, textAlign:"center", fontSize:"7pt", fontWeight:"bold",
+                              color: r === false ? "red" : (r === true || r === "default") ? "#000" : "#ddd",
+                              background: r === false ? "#fff0f0" : "white", padding:"1px" }}>
+                              {r === null ? "·" : r === false ? "X" : "O"}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+
+              {/* 점검자 서명 행 */}
+              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed", marginBottom:4 }}>
+                <colgroup>
+                  <col style={{ width:"22px" }} />
+                  <col style={{ width:"150px" }} />
+                  {printDates.map((d) => <col key={d} />)}
+                </colgroup>
+                <tbody>
+                  <tr>
+                    <td colSpan={2} style={{ ...fmThP, textAlign:"center", fontSize:"6pt" }}>점검자 서명</td>
+                    {printDates.map((d) => {
+                      const hasDayData = d <= today && (dayActive[d] ?? false);
+                      const inspName = dayInspectors[d] ?? "조대성";
+                      const signSrc = FM_SIGN_MAP[inspName] ?? null;
+                      return (
+                        <td key={d} style={{ ...fmTdP, textAlign:"center", padding:"1px", height:28 }}>
+                          {hasDayData && signSrc
+                            ? <img src={signSrc} style={{ height:20, display:"block", margin:"0 auto" }} alt={inspName} />
+                            : hasDayData
+                              ? <div style={{ fontSize:"5.5pt", color:"#555" }}>{inspName}</div>
+                              : null}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* 이탈사항 / 개선조치사항 */}
+              <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                <tbody>
+                  <tr>
+                    <td style={{ ...fmTdP, width:56, fontWeight:"bold", fontSize:"6.5pt", whiteSpace:"nowrap", textAlign:"center" }}>이탈사항</td>
+                    <td style={{ ...fmTdP, fontSize:"6.5pt", padding:"3px 6px", lineHeight:1.6, width:"50%" }}>
+                      {specialNotes.map((n, i) => <span key={n.id}>{i > 0 ? " / " : ""}{n.content}</span>)}
+                    </td>
+                    <td style={{ ...fmTdP, width:70, fontWeight:"bold", fontSize:"6.5pt", textAlign:"center" }}>개선조치사항</td>
+                    <td style={{ ...fmTdP, fontSize:"6.5pt", padding:"3px 6px", lineHeight:1.6 }}>
+                      {actionNotes.map((n, i) => <span key={n.id}>{i > 0 ? " / " : ""}{n.content}{n.action_by ? ` (${n.action_by})` : ""}</span>)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
