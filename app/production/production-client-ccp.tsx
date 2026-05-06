@@ -181,7 +181,13 @@ if (!lastEvent || lastEvent.event_type === "end") {
     const map: Record<string, { date: string; daysAgo: number; materialType: string | null } | null> = {};
   
     for (const slot of warmerSlots) {
-      const events = (todayEvents ?? []).filter((e) => e.slot_id === slot.id);
+      const events = (todayEvents ?? []).filter((e) => e.slot_id === slot.id).sort((a, b) => {
+        const timeDiff = a.measured_at.localeCompare(b.measured_at);
+        if (timeDiff !== 0) return timeDiff;
+        if (a.event_type === "material_out" && b.event_type !== "material_out") return 1;
+        if (a.event_type !== "material_out" && b.event_type === "material_out") return -1;
+        return 0;
+      });
       const last = events[events.length - 1];
       if (!last || last.event_type === "material_out") {
         needsHistorySlotIds.push(slot.id);
@@ -202,9 +208,15 @@ if (!lastEvent || lastEvent.event_type === "end") {
         .in("slot_id", needsHistorySlotIds)
         .order("measured_at", { ascending: false });
   
-      for (const slotId of needsHistorySlotIds) {
-        const slotHistory = (historyEvents ?? []).filter((e) => e.slot_id === slotId);
-        const lastEvent = slotHistory[0];
+        for (const slotId of needsHistorySlotIds) {
+          const slotHistory = (historyEvents ?? []).filter((e) => e.slot_id === slotId).sort((a, b) => {
+            const timeDiff = b.measured_at.localeCompare(a.measured_at);
+            if (timeDiff !== 0) return timeDiff;
+            if (a.event_type === "material_out" && b.event_type !== "material_out") return -1;
+            if (a.event_type !== "material_out" && b.event_type === "material_out") return 1;
+            return 0;
+          });
+          const lastEvent = slotHistory[0];
         if (!lastEvent || lastEvent.event_type === "material_out") {
           map[slotId] = null; continue;
         }
