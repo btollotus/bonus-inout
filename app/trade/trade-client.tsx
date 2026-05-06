@@ -1536,7 +1536,7 @@ if (editPartnerId) {
       setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("");
       setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoImagePreviewUrls([]);
       setEWoExistingImages([]); setEWoExistingSignedLoading(false); setEWoExistingSignedUrls([]);
-      const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,mold_per_sheet,mold_cols,mold_rows,note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no)").eq("linked_order_id", r.rawId).limit(1).maybeSingle(); 
+      const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,mold_per_sheet,mold_cols,mold_rows,note,reference_note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no)").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
       // 품목별 이미지 초기화
       setEItemImageFiles({}); setEItemImagePreviewUrls({}); setEItemExistingImageUrls({}); setEWoItemIds([]);
       if (wo) {
@@ -1565,8 +1565,8 @@ if (woSubNameVal) {
         setEWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
         setEWoMoldCols((wo as any).mold_cols ? String((wo as any).mold_cols) : "");
         setEWoMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : "");
-        setEOrderTitle((wo as any).note ?? "");
-        setEWoNote("");
+        setEOrderTitle((wo as any).reference_note ?? "");
+        setEWoNote((wo as any).note ?? "");
         const rawImages: string[] = (wo as any).images ?? [];
         setEWoExistingImages(rawImages);
         if (rawImages.length > 0) {
@@ -1659,7 +1659,7 @@ if (woSubNameVal) {
             if (!upErr) uploadedUrls.push(path);
           }
         }
-        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, note: eOrderTitle.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString()}).eq("id", eWoId);
+        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, note: eWoNote.trim() || null, reference_note: eOrderTitle.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString()}).eq("id", eWoId);
         await supabase.from("work_order_items").update({ delivery_date: eShipDate }).eq("work_order_id", eWoId);
 
       
