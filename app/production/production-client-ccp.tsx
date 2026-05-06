@@ -698,6 +698,14 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
       return showToast("이동 기록 실패 (출발): " + fromErr.message, "error");
     }
 
+    // 출발 슬롯의 기존 material_in 레코드 삭제 (원료투입 후 이동 시 잔존 레코드 정리)
+    await supabase.from("ccp_slot_events")
+      .delete()
+      .eq("slot_id", fromSlotId)
+      .eq("event_date", slotActionDate)
+      .eq("event_type", "material_in")
+      .lt("measured_at", moveMeasuredAt);
+
     const { error: toErr } = await supabase.from("ccp_slot_events").insert({
       slot_id:       toSlotId,
       event_date:    slotActionDate,
