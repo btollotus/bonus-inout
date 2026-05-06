@@ -2351,113 +2351,367 @@ export function CompressorTab({ role, userId, showToast }: {
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
-  const isAdmin = role === "ADMIN";
-  const [logs, setLogs] = useState<CompressorLog[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
+  const today = todayKST();
+
+  const [logs, setLogs] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [fWorkType, setFWorkType] = useState("pet_coating");
-  const [fTime, setFTime] = useState(new Date().toTimeString().slice(0, 5));
-  const [fWorkHours, setFWorkHours] = useState("");
-  const [fCumulativeHours, setFCumulativeHours] = useState("");
-  const [fIsDamaged, setFIsDamaged] = useState(false);
-  const [fNote, setFNote] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // PIN
+  const [inspector, setInspector] = useState<{ id: string; name: string } | null>(null);
+  const [showPin, setShowPin] = useState(false);
+
+  // 입력 폼
+  const [showForm, setShowForm] = useState(false);
+  const [fDate, setFDate] = useState(today);
+  const [fWorkHours, setFWorkHours] = useState("");
+  const [fDamageOk, setFDamageOk] = useState(true);
+  const [fNote, setFNote] = useState("");
+
+  // 조회 필터
+  const [filterFrom, setFilterFrom] = useState(() => {
+    const d = new Date(today + "T00:00:00+09:00");
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  });
+  const [filterTo, setFilterTo] = useState(today);
+
+  useEffect(() => {
+    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+      .then(({ data }) => setEmployees((data ?? []) as any));
+  }, []);
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from("compressor_logs").select("*").eq("log_date", filterDate).order("worked_at", { ascending: false });
-    setLogs((data ?? []) as CompressorLog[]);
+    const { data } = await supabase.from("compressor_logs")
+      .select("*")
+      .gte("log_date", filterFrom)
+      .lte("log_date", filterTo)
+      .order("worked_at", { ascending: true });
+    setLogs(data ?? []);
     setLoading(false);
-  }, [filterDate]);
+  }, [filterFrom, filterTo]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
 
+  // 마지막 누계 계산
+  async function getLastCumulative(): Promise<number> {
+    const { data } = await supabase.from("compressor_logs")
+      .select("cumulative_hours")
+      .order("worked_at", { ascending: false })
+      .limit(1);
+    return (data?.[0]?.cumulative_hours ?? 0) as number;
+  }
+
   async function saveLog() {
+    if (!inspector) return showToast("PIN을 입력해주세요.", "error");
+    if (!fWorkHours || isNaN(Number(fWorkHours))) return showToast("작업시간을 입력하세요.", "error");
     setSaving(true);
+    const lastCum = await getLastCumulative();
+    const newCum = Math.round((lastCum + Number(fWorkHours)) * 10) / 10;
     const { error } = await supabase.from("compressor_logs").insert({
-      log_date: filterDate, work_type: fWorkType, worked_at: `${filterDate}T${fTime}:00`,
-      work_hours: fWorkHours ? Number(fWorkHours) : null, cumulative_hours: fCumulativeHours ? Number(fCumulativeHours) : null,
-      is_damaged: fIsDamaged, note: fNote.trim() || null, created_by: userId,
+      log_date: fDate,
+      worked_at: `${fDate}T00:00:00+09:00`,
+      work_hours: Number(fWorkHours),
+      cumulative_hours: newCum,
+      is_damaged: !fDamageOk,
+      worker_name: inspector.name,
+      note: fNote.trim() || null,
+      created_by: userId,
     });
     setSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
-    showToast("✅ 압축공기 기록 완료!");
-    setShowForm(false); setFWorkHours(""); setFCumulativeHours(""); setFIsDamaged(false); setFNote("");
+    showToast("✅ 저장 완료!");
+    setShowForm(false);
+    setFWorkHours(""); setFNote(""); setFDamageOk(true); setFDate(today);
     loadLogs();
   }
 
-  async function approveLog(logId: string) {
-    const { error } = await supabase.from("compressor_logs").update({ approved_by: userId, approved_at: new Date().toISOString() }).eq("id", logId);
-    if (error) return showToast("실패: " + error.message, "error");
-    showToast("✅ 승인 완료!"); loadLogs();
+  async function deleteLog(id: string) {
+    if (!confirm("이 기록을 삭제하시겠습니까?\n삭제 후 누계가 맞지 않을 수 있으니 주의하세요.")) return;
+    const { error } = await supabase.from("compressor_logs").delete().eq("id", id);
+    if (error) return showToast("삭제 실패: " + error.message, "error");
+    showToast("🗑️ 삭제 완료!"); loadLogs();
+  }
+
+  function handlePrint() {
+    const el = document.getElementById("compressor-print-inner");
+    if (!el) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8"><title>압축공기작업기록</title>
+      <style>
+        @page { size: A4 portrait; margin: 10mm 12mm; }
+        body { margin:0; font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:8pt; color:#000; }
+        * { box-sizing:border-box; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+        table { border-collapse:collapse; width:100%; }
+        th,td { border:0.5px solid #000; padding:2px 4px; }
+      </style>
+    </head><body>${el.innerHTML}</body></html>`);
+    win.document.close(); win.focus();
+    setTimeout(() => { win.print(); }, 400);
   }
 
   return (
     <div className="space-y-4">
+
+      {/* ── 상단 컨트롤 ── */}
       <div className={`${card} p-4`}>
         <div className="flex flex-wrap gap-3 items-end">
-          <div><div className="mb-1 text-xs text-slate-500">날짜</div><input type="date" className={inp} style={{ width: 160 }} value={filterDate} onChange={(e) => setFilterDate(e.target.value)} /></div>
+          <div>
+            <div className="mb-1 text-xs text-slate-500">조회 기간</div>
+            <div className="flex items-center gap-1.5">
+              <input type="date" className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:border-blue-400"
+                value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} />
+              <span className="text-xs text-slate-400">~</span>
+              <input type="date" className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:border-blue-400"
+                value={filterTo} onChange={(e) => setFilterTo(e.target.value)} />
+            </div>
+          </div>
           <button className={btn} onClick={loadLogs}>🔄 조회</button>
-          {isAdminOrSubadmin && <button className={showForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"} onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ 닫기" : "✚ 압축공기 기록"}</button>}
-          <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+          <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
+
+          {inspector ? (
+            <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
+              <span className="text-green-600 text-sm font-semibold">👤 {inspector.name}</span>
+              <button className="text-xs text-green-400 hover:text-green-600 underline"
+                onClick={() => setInspector(null)}>변경</button>
+            </div>
+          ) : (
+            <button className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+              onClick={() => setShowPin(true)}>🔑 PIN 입력</button>
+          )}
+
+          {isAdminOrSubadmin && (
+            <button
+              className={showForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
+              onClick={() => setShowForm((v) => !v)}>
+              {showForm ? "✕ 닫기" : "✚ 기록 등록"}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* PIN 모달 */}
+      {showPin && (
+        <PinModal
+          employees={employees.filter((e) => e.name !== null) as any}
+          title="담당자 확인"
+          onSuccess={(empId, empName) => {
+            setInspector({ id: empId, name: empName });
+            setShowPin(false);
+          }}
+          onCancel={() => setShowPin(false)}
+        />
+      )}
+
+      {/* ── 등록 폼 ── */}
       {showForm && isAdminOrSubadmin && (
         <div className={`${card} p-4`}>
-          <div className="mb-3 font-semibold text-sm text-blue-700">✚ 압축공기 작업기록</div>
+          <div className="mb-3 font-semibold text-sm text-blue-700">✚ 압축공기 작업 기록 등록</div>
+
+          {/* 고정 정보 */}
+          <div className="mb-4 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
+            <div><span className="font-semibold">필터명:</span> Airfinn 에어핀 유수분리기 압축공기 콤프레사 필터</div>
+            <div><span className="font-semibold">설치위치:</span> 기계실</div>
+            <div><span className="font-semibold">용도:</span> 압송탱크 공급</div>
+            <div><span className="font-semibold">확인담당자:</span> 해섭팀장</div>
+          </div>
+
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div><div className="mb-1 text-xs text-slate-500">작업유형 *</div>
-              <select className={inp} value={fWorkType} onChange={(e) => setFWorkType(e.target.value)}>
-                <option value="pet_coating">④ PET 코팅</option><option value="pet_spray">⑤ PET 분사</option>
-              </select></div>
-            <div><div className="mb-1 text-xs text-slate-500">작업시각</div><input type="time" className={inp} value={fTime} onChange={(e) => setFTime(e.target.value)} /></div>
-            <div><div className="mb-1 text-xs text-slate-500">작업시간 (h)</div><input className={inpR} inputMode="decimal" value={fWorkHours} onChange={(e) => setFWorkHours(e.target.value.replace(/[^\d.]/g, ""))} placeholder="예: 2.5" /></div>
-            <div><div className="mb-1 text-xs text-slate-500">누계시간 (h)</div><input className={inpR} inputMode="decimal" value={fCumulativeHours} onChange={(e) => setFCumulativeHours(e.target.value.replace(/[^\d.]/g, ""))} /></div>
-            <div className="flex items-center gap-2 pt-5"><label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={fIsDamaged} onChange={(e) => setFIsDamaged(e.target.checked)} className="w-4 h-4 rounded" />손상 발생</label></div>
-            <div><div className="mb-1 text-xs text-slate-500">비고</div><input className={inp} value={fNote} onChange={(e) => setFNote(e.target.value)} /></div>
+            <div>
+              <div className="mb-1 text-xs text-slate-500">날짜 *</div>
+              <input type="date" className={inp} value={fDate} onChange={(e) => setFDate(e.target.value)} />
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-500">작업시간 (h) *</div>
+              <input className={inp} inputMode="decimal" placeholder="예: 6" value={fWorkHours}
+                onChange={(e) => setFWorkHours(e.target.value.replace(/[^\d.]/g, ""))} />
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-500">파손여부</div>
+              <div className="flex gap-2 mt-1">
+                <button
+                  className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition-all ${fDamageOk
+                    ? "border-green-400 bg-green-50 text-green-700"
+                    : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
+                  onClick={() => setFDamageOk(true)}>○ 이상없음</button>
+                <button
+                  className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition-all ${!fDamageOk
+                    ? "border-red-400 bg-red-50 text-red-700"
+                    : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
+                  onClick={() => setFDamageOk(false)}>× 파손</button>
+              </div>
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-500">담당자</div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                {inspector ? `👤 ${inspector.name}` : <span className="text-slate-400">PIN 입력 후 자동 설정</span>}
+              </div>
+            </div>
+            <div className="md:col-span-2">
+              <div className="mb-1 text-xs text-slate-500">비고</div>
+              <input className={inp} value={fNote} onChange={(e) => setFNote(e.target.value)}
+                placeholder="분사, 코팅, 분사+코팅 등" />
+            </div>
           </div>
           <div className="mt-4 flex gap-2">
-            <button className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60" disabled={saving} onClick={saveLog}>{saving ? "저장 중..." : "💾 기록"}</button>
+            <button
+              className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+              disabled={saving || !inspector} onClick={saveLog}>
+              {saving ? "저장 중..." : "💾 등록"}
+            </button>
             <button className={btn} onClick={() => setShowForm(false)}>취소</button>
           </div>
         </div>
       )}
+
+      {/* ── 목록 ── */}
       <div className={`${card} p-4`}>
-        <div className="mb-3 font-semibold text-sm">💨 압축공기 작업기록 — {filterDate}</div>
-        {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
-          : logs.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
-          : (
-            <div className="space-y-2">
-              {logs.map((log) => (
-                <div key={log.id} className={`rounded-2xl border p-3 ${log.is_damaged ? "border-red-200 bg-red-50" : "border-slate-200 bg-slate-50"}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-sm">{log.work_type === "pet_coating" ? "④ PET 코팅" : "⑤ PET 분사"}</span>
-                        <span className="text-xs font-mono text-slate-500">{log.worked_at.slice(11, 16)}</span>
-                        {log.is_damaged && <span className="rounded-full border border-red-200 bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">⚠ 손상</span>}
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
-                        {log.work_hours != null && <span>작업시간: {log.work_hours}h</span>}
-                        {log.cumulative_hours != null && <span>누계: {log.cumulative_hours}h</span>}
-                        {log.note && <span>비고: {log.note}</span>}
-                      </div>
-                    </div>
-                    <div className="shrink-0">
-                      {!log.approved_by && isAdmin && <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700 hover:bg-green-100" onClick={() => approveLog(log.id)}>✅ 승인</button>}
-                      {log.approved_by && <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">승인완료</span>}
-                    </div>
-                  </div>
-                </div>
+        {/* 고정 헤더 정보 */}
+        <div className="mb-3 grid grid-cols-2 gap-1 text-xs text-slate-500 border-b border-slate-100 pb-3">
+          <div><span className="font-semibold text-slate-600">필터명:</span> Airfinn 에어핀 유수분리기 압축공기 콤프레사 필터</div>
+          <div><span className="font-semibold text-slate-600">설치위치:</span> 기계실 &nbsp;|&nbsp; <span className="font-semibold text-slate-600">용도:</span> 압송탱크 공급</div>
+          <div><span className="font-semibold text-slate-600">기록담당자:</span> 작업자</div>
+          <div><span className="font-semibold text-slate-600">확인담당자:</span> 해섭팀장</div>
+        </div>
+
+        {loading ? (
+          <div className="py-8 text-center text-sm text-slate-400">불러오는 중...</div>
+        ) : logs.length === 0 ? (
+          <div className="py-8 text-center text-sm text-slate-400">기록이 없습니다.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center w-8">no</th>
+                  <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-left">일시</th>
+                  <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-right">작업시간</th>
+                  <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-right">누계</th>
+                  <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center">파손여부</th>
+                  <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center">담당</th>
+                  <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-left">비고</th>
+                  {isAdminOrSubadmin && <th className="py-2 px-3 w-8"></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log, idx) => (
+                  <tr key={log.id} className={`border-b border-slate-100 hover:bg-slate-50 ${log.is_damaged ? "bg-red-50" : ""}`}>
+                    <td className="py-2 px-3 text-center text-xs text-slate-400">{idx + 1}</td>
+                    <td className="py-2 px-3 tabular-nums text-slate-700">{log.log_date}</td>
+                    <td className="py-2 px-3 text-right tabular-nums font-medium">{Number(log.work_hours).toFixed(1)} h</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-blue-700 font-semibold">{Number(log.cumulative_hours).toFixed(1)} h</td>
+                    <td className="py-2 px-3 text-center">
+                      {log.is_damaged
+                        ? <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">× 파손</span>
+                        : <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">○ 이상없음</span>}
+                    </td>
+                    <td className="py-2 px-3 text-center text-sm font-medium text-slate-700">{log.worker_name ?? "—"}</td>
+                    <td className="py-2 px-3 text-xs text-slate-500">{log.note ?? "—"}</td>
+                    {isAdminOrSubadmin && (
+                      <td className="py-2 px-3 text-center">
+                        <button className="text-[10px] text-slate-300 hover:text-red-500" onClick={() => deleteLog(log.id)}>✕</button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-slate-200 bg-slate-50">
+                  <td colSpan={2} className="py-2 px-3 text-xs font-semibold text-slate-500">합계</td>
+                  <td className="py-2 px-3 text-right tabular-nums text-sm font-bold text-slate-700">
+                    {logs.reduce((s, l) => s + Number(l.work_hours), 0).toFixed(1)} h
+                  </td>
+                  <td className="py-2 px-3 text-right tabular-nums text-sm font-bold text-blue-700">
+                    {logs.length > 0 ? Number(logs[logs.length - 1].cumulative_hours).toFixed(1) + " h" : "—"}
+                  </td>
+                  <td colSpan={isAdminOrSubadmin ? 4 : 3} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── 인쇄 전용 숨김 영역 ── */}
+      <style>{`#compressor-print-inner { display: none; }`}</style>
+      <div id="compressor-print-inner">
+        <div style={{ fontFamily:"'Malgun Gothic','맑은 고딕',sans-serif", fontSize:"8pt", color:"#000" }}>
+          <div style={{ textAlign:"center", fontSize:"13pt", fontWeight:"bold", marginBottom:8, paddingBottom:4, borderBottom:"1.5px solid #000" }}>
+            압축공기 작업기록
+          </div>
+          {/* 헤더 정보 */}
+          <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:8, fontSize:"7.5pt" }}>
+            <tbody>
+              <tr>
+                <td style={{ border:"0.5px solid #000", padding:"2px 6px", fontWeight:"bold", width:60 }}>필터명</td>
+                <td style={{ border:"0.5px solid #000", padding:"2px 6px" }} colSpan={3}>Airfinn 에어핀 유수분리기 압축공기 콤프레사 필터</td>
+              </tr>
+              <tr>
+                <td style={{ border:"0.5px solid #000", padding:"2px 6px", fontWeight:"bold" }}>설치위치</td>
+                <td style={{ border:"0.5px solid #000", padding:"2px 6px" }}>기계실</td>
+                <td style={{ border:"0.5px solid #000", padding:"2px 6px", fontWeight:"bold", width:40 }}>용 도</td>
+                <td style={{ border:"0.5px solid #000", padding:"2px 6px" }}>압송탱크 공급</td>
+              </tr>
+              <tr>
+                <td style={{ border:"0.5px solid #000", padding:"2px 6px", fontWeight:"bold" }}>기록담당자</td>
+                <td style={{ border:"0.5px solid #000", padding:"2px 6px" }}>작업자</td>
+                <td style={{ border:"0.5px solid #000", padding:"2px 6px", fontWeight:"bold" }}>확인담당자</td>
+                <td style={{ border:"0.5px solid #000", padding:"2px 6px" }}>해섭팀장</td>
+              </tr>
+            </tbody>
+          </table>
+          {/* 기록 테이블 */}
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"7.5pt" }}>
+            <thead>
+              <tr style={{ background:"#f0f0f0" }}>
+                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:24 }}>no</th>
+                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:60 }}>일 시</th>
+                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:52 }}>작업시간</th>
+                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:52 }}>누 계</th>
+                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:52 }}>파손여부(O,×)</th>
+                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:44 }}>담 당</th>
+                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:44 }}>확 인</th>
+                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}>비 고</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log, idx) => (
+                <tr key={log.id}>
+                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}>{idx + 1}</td>
+                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}>{log.log_date}</td>
+                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}>{Number(log.work_hours).toFixed(1)} h</td>
+                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}>{Number(log.cumulative_hours).toFixed(1)} h</td>
+                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", color: log.is_damaged ? "red" : "#000" }}>
+                    {log.is_damaged ? "×" : "○"}
+                  </td>
+                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}>{log.worker_name ?? ""}</td>
+                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}></td>
+                  <td style={{ border:"0.5px solid #000", padding:"2px 4px" }}>{log.note ?? ""}</td>
+                </tr>
               ))}
-            </div>
-          )}
+              {/* 빈 행 채우기 (최소 20행) */}
+              {Array.from({ length: Math.max(0, 20 - logs.length) }).map((_, i) => (
+                <tr key={`empty-${i}`}>
+                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", color:"#ccc" }}>{logs.length + i + 1}</td>
+                  <td style={{ border:"0.5px solid #000", padding:"4px" }}></td>
+                  <td style={{ border:"0.5px solid #000", padding:"4px", textAlign:"center", color:"#ccc", fontSize:"6pt" }}>h</td>
+                  <td style={{ border:"0.5px solid #000", padding:"4px", textAlign:"center", color:"#ccc", fontSize:"6pt" }}>h</td>
+                  <td style={{ border:"0.5px solid #000", padding:"4px" }}></td>
+                  <td style={{ border:"0.5px solid #000", padding:"4px" }}></td>
+                  <td style={{ border:"0.5px solid #000", padding:"4px" }}></td>
+                  <td style={{ border:"0.5px solid #000", padding:"4px" }}></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
-
 // ═══════════════════════════════════════════════════════════
 // PET 수불부
 // ═══════════════════════════════════════════════════════════
