@@ -1051,13 +1051,12 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
           note: (() => {
             const realMemo = "화이트초콜릿(이산화티타늄첨가)\n이산화티타늄 혼합. 흰색으로 만들것.\n배합비 2kg + 100g";
             const hasReal = (foodType ?? "").includes("리얼");
-            const title = orderTitle.trim();
             const base = orderWoNote.trim();
-            const parts = [title, base].filter(Boolean).join("\n");
-            if (hasReal && parts) return `${realMemo}\n\n${parts}`;
+            if (hasReal && base) return `${realMemo}\n\n${base}`;
             if (hasReal) return realMemo;
-            return parts || null;
+            return base || null;
           })(),
+          reference_note: orderTitle.trim() || null, 
           status: "생산중", is_reorder: orderIsReorder, images: [], linked_order_id: orderId,
           skip_production_check: orderSkipProductionCheck,
         }).select("id,barcode_no").single();
