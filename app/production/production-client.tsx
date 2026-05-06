@@ -564,9 +564,63 @@ async function searchTransferLots(itemId: string, keyword: string, skipProductio
       barcode: variantMap[l.variant_id]?.barcode ?? "",
     }));
 
-  setTransferLotOptions((prev) => ({ ...prev, [itemId]: result }));
-  setTransferLotSearching((prev) => ({ ...prev, [itemId]: false }));
-}
+    setTransferLotOptions((prev) => ({ ...prev, [itemId]: result }));
+    setTransferLotSearching((prev) => ({ ...prev, [itemId]: false }));
+  }
+  
+  // ── 전사지 lot 다중 키워드 검색 (1차 결과 없으면 2차 키워드 시도) ──
+  async function searchTransferLotsMulti(itemId: string, keywords: string[], skipProductionCheck = false) {
+    const uniqueKeywords = [...new Set(keywords.filter(Boolean))];
+    for (const keyword of uniqueKeywords) {
+      setTransferLotSearch((prev) => ({ ...prev, [itemId]: keyword }));
+      setTransferLotSearching((prev) => ({ ...prev, [itemId]: true }));
+      const { data: variants } = await supabase
+        .from("product_variants")
+        .select("id, variant_name, barcode, products(food_type)")
+        .ilike("variant_name", keyword.trim() ? `%${keyword}%` : "%")
+        .limit(100);
+      const filtered = skipProductionCheck
+        ? (variants ?? []).filter((v: any) => v.variant_name === "도눔(은박)")
+        : (variants ?? []).filter((v: any) => (v.products?.food_type ?? "").includes("초콜릿중간재"));
+      if (filtered.length === 0) continue; // 결과 없으면 다음 키워드
+      const variantIds = filtered.map((v: any) => v.id);
+      const { data: lots } = await supabase
+        .from("lots")
+        .select("id, variant_id, expiry_date")
+        .in("variant_id", variantIds)
+        .order("expiry_date", { ascending: true });
+      const lotIds = (lots ?? []).map((l: any) => l.id);
+      let remainingMap: Record<string, number> = {};
+      if (lotIds.length > 0) {
+        const { data: movements } = await supabase
+          .from("movements")
+          .select("lot_id, type, qty")
+          .in("lot_id", lotIds);
+        for (const m of movements ?? []) {
+          if (!remainingMap[m.lot_id]) remainingMap[m.lot_id] = 0;
+          if (m.type === "IN") remainingMap[m.lot_id] += m.qty;
+          else remainingMap[m.lot_id] -= m.qty;
+        }
+      }
+      const variantMap: Record<string, any> = {};
+      for (const v of filtered) variantMap[(v as any).id] = v;
+      const result: TransferLot[] = (lots ?? [])
+        .filter((l: any) => (remainingMap[l.id] ?? 0) > 0)
+        .map((l: any) => ({
+          lot_id: l.id,
+          expiry_date: l.expiry_date,
+          remaining_qty: remainingMap[l.id] ?? 0,
+          variant_name: variantMap[l.variant_id]?.variant_name ?? "",
+          barcode: variantMap[l.variant_id]?.barcode ?? "",
+        }));
+      setTransferLotOptions((prev) => ({ ...prev, [itemId]: result }));
+      setTransferLotSearching((prev) => ({ ...prev, [itemId]: false }));
+      return; // 결과 찾았으면 종료
+    }
+    // 모든 키워드 실패
+    setTransferLotOptions((prev) => ({ ...prev, [itemId]: [] }));
+    setTransferLotSearching((prev) => ({ ...prev, [itemId]: false }));
+  }
 
   const loadWoList = useCallback(async (offset = 0) => {
     setLoading(true); setMsg(null);
@@ -703,27 +757,29 @@ const channel = supabase
     // ── CCP 온도기록 로드 ──
     ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id, wo.status);
 
-// ── 전사지 자동 조회 (중간재 제외, 업체명 핵심어 기준) ──
+// ── 전사지 자동 조회 (중간재 제외, 업체명+아이템명 핵심어 다중 시도) ──
 if (getFoodCategory(wo.food_type) !== "중간재") {
   const woItems = wo.work_order_items ?? [];
-  // "주식회사 트리니티디앤씨" → "트리니티", "주식회사 새라울" → "새라울"
-  // "주식회사", "유한회사", "(주)" 등 법인 접두어 제거 후 첫 단어 추출
-  const clientKeyword = wo.skip_production_check
-  ? "도눔"
-  : (() => {
-      const rawName = wo.order_type === "재고"
-        ? (wo.product_name ?? "")
-        : (wo.client_name ?? "");
-      const stripped = rawName
-        .replace(/^(주식회사|유한회사|합자회사|협동조합|\(주\)|\(유\))\s*/g, "")
-        .replace(/\(.*?\)/g, "")
-        .trim();
-      return stripped.split(/[\s\-_]/)[0] ?? stripped;
-    })();
+  const extractKeyword = (raw: string) =>
+    raw
+      .replace(/^(주식회사|유한회사|합자회사|협동조합|\(주\)|\(유\))\s*/g, "")
+      .replace(/\(.*?\)/g, "")
+      .trim()
+      .split(/[\s\-_]/)[0] ?? raw.trim();
+  const clientRaw = wo.order_type === "재고"
+    ? (wo.product_name ?? "")
+    : (wo.client_name ?? "");
+  const clientKeyword = wo.skip_production_check ? "도눔" : extractKeyword(clientRaw);
   for (const item of woItems) {
     const name = (item.sub_items ?? [])[0]?.name ?? "";
     if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
-    if (!item.transfer_lot_id) searchTransferLots(item.id, clientKeyword, !!wo.skip_production_check);
+    if (item.transfer_lot_id) continue;
+    // 아이템명에서도 키워드 추출 → 업체명 키워드와 다를 때 2차 시도
+    const itemKeyword = extractKeyword(name);
+    const keywords = [clientKeyword, itemKeyword].filter(
+      (k, i, arr) => k && arr.indexOf(k) === i  // 중복 제거
+    );
+    searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
   }
 }
   }
