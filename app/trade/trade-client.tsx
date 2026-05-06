@@ -1422,7 +1422,7 @@ if (copyPartnerId) {
       try {
         const { data: wo } = await supabase
           .from("work_orders")
-          .select("id,sub_name,logo_spec,thickness,packaging_type,mold_per_sheet,mold_cols,mold_rows,note,work_order_items(id,sub_items,images,barcode_no,unit_weight)")
+          .select("id,sub_name,logo_spec,thickness,packaging_type,mold_per_sheet,mold_cols,mold_rows,note,reference_note,work_order_items(id,sub_items,images,barcode_no,unit_weight)")
           .eq("linked_order_id", r.rawId)
           .limit(1)
           .maybeSingle();
