@@ -2414,6 +2414,7 @@ export function CompressorTab({ role, userId, showToast }: {
     const { error } = await supabase.from("compressor_logs").insert({
       log_date: fDate,
       worked_at: `${fDate}T00:00:00+09:00`,
+      work_type: fWorkType,
       work_hours: Number(fWorkHours),
       cumulative_hours: newCum,
       is_damaged: !fDamageOk,
@@ -2424,7 +2425,7 @@ export function CompressorTab({ role, userId, showToast }: {
     setSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
     showToast("✅ 저장 완료!");
-    setFWorkHours(""); setFNote(""); setFDamageOk(true); setFDate(today);
+    setFWorkHours(""); setFNote(""); setFDamageOk(true); setFDate(today); setFWorkType("분사");
     loadLogs();
   }
 
@@ -2515,9 +2516,23 @@ export function CompressorTab({ role, userId, showToast }: {
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div>
+          <div>
               <div className="mb-1 text-xs text-slate-500">날짜 *</div>
               <input type="date" className={inp} value={fDate} onChange={(e) => setFDate(e.target.value)} />
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-500">작업 *</div>
+              <div className="flex gap-2 mt-1">
+                {(["분사", "코팅", "분사+코팅"] as const).map((t) => (
+                  <button key={t} type="button"
+                    className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition-all ${
+                      fWorkType === t
+                        ? "border-blue-400 bg-blue-50 text-blue-700"
+                        : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                    }`}
+                    onClick={() => setFWorkType(t)}>{t}</button>
+                ))}
+              </div>
             </div>
             <div>
               <div className="mb-1 text-xs text-slate-500">작업시간 (h) *</div>
@@ -2586,6 +2601,7 @@ export function CompressorTab({ role, userId, showToast }: {
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-right">누계</th>
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center">파손여부</th>
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center">담당</th>
+                  <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center">작업</th>
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-left">비고</th>
                   {isAdminOrSubadmin && <th className="py-2 px-3 w-8"></th>}
                 </tr>
@@ -2603,6 +2619,7 @@ export function CompressorTab({ role, userId, showToast }: {
                         : <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">○ 이상없음</span>}
                     </td>
                     <td className="py-2 px-3 text-center text-sm font-medium text-slate-700">{log.worker_name ?? "—"}</td>
+                    <td className="py-2 px-3 text-center text-xs font-medium text-slate-700">{log.work_type ?? "—"}</td>
                     <td className="py-2 px-3 text-xs text-slate-500">{log.note ?? "—"}</td>
                     {isAdminOrSubadmin && (
                       <td className="py-2 px-3 text-center">
@@ -2723,6 +2740,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
   const [fLogType, setFLogType] = useState("incoming");
   const [fQty, setFQty] = useState("");
   const [fDefectQty, setFDefectQty] = useState("");
+  const [fWorkType, setFWorkType] = useState<"분사" | "코팅" | "분사+코팅">("분사");
   const [fNote, setFNote] = useState("");
   const [saving, setSaving] = useState(false);
 
