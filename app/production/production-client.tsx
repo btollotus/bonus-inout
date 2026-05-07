@@ -889,7 +889,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
       }
     } 
 
-    const items = (selectedWo.work_order_items ?? []).filter((item) => {const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); });
+    const items = (selectedWo.work_order_items ?? []).filter((item) => {const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비"); });
     const missingQtyOrExpiry = items.filter((item) => { const pi = prodInputs[item.id]; return !pi || !pi.actual_qty || !pi.unit_weight || !pi.expiry_date; });
     if (missingQtyOrExpiry.length > 0) { alert("출고수량, 개당중량, 소비기한은 필수 입력 항목입니다.\n\n입력 후 다시 시도해주세요."); setIsCompleting(false); return; }
     if (isChuganJae) {
@@ -913,7 +913,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
     const isChuganJae = foodCat === "중간재";
     const items = (selectedWo.work_order_items ?? []).filter((item) => {
       const name = (item.sub_items ?? [])[0]?.name ?? "";
-      return !name.startsWith("성형틀") && !name.startsWith("인쇄제판");
+      return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비");
     });
     setMsg("⏳ 저장 중...");
     try {
@@ -1514,7 +1514,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                 <div className="mb-3 flex items-center justify-between"><div className="font-semibold text-sm">🏭 납기일별 생산 입력</div><div className="text-xs text-slate-400">{isEditMode ? "✏️ 수정 모드" : "수정 버튼을 눌러 편집하세요"}</div></div>
                 {(selectedWo.work_order_items ?? []).length === 0 ? <div className="py-4 text-center text-sm text-slate-400">납기일별 항목이 없습니다.</div> : (
                   <div className="space-y-3">
-                    {(selectedWo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date)).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); }).map((item) => {
+                    {(selectedWo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date)).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비"); }).map((item) => {
                       const pi = prodInputs[item.id] ?? { actual_qty: "", unit_weight: "", expiry_date: "" };
                       const actualQty = toInt(pi.actual_qty); const unitWeight = toNum(pi.unit_weight);
                       const totalWeight = actualQty > 0 && unitWeight > 0 ? actualQty * unitWeight : null;
@@ -1670,7 +1670,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                             const { error } = await supabase.from("work_orders").update({ assignee_transfer: woChecks.assignee_transfer || null, assignee_print_check: woChecks.assignee_print_check || null, assignee_production: woChecks.assignee_production || null, assignee_input: woChecks.assignee_input || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
                             if (error) { showToast("❌ 수정 실패: " + error.message, "error"); return; }
                           }
-                          const items = (selectedWo.work_order_items ?? []).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판"); });
+                          const items = (selectedWo.work_order_items ?? []).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비"); });
                           for (const item of items) {
                             const pi = prodInputs[item.id];
                             if (!pi || (!pi.actual_qty && !pi.unit_weight && !pi.expiry_date)) continue;
