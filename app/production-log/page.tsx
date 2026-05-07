@@ -271,6 +271,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
   const isAdmin = role === "ADMIN";
+  const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
 
   // ── 작업자 선택 + PIN 인증 ──
   const [employees, setEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
