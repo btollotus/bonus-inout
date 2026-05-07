@@ -312,25 +312,45 @@ function ProductionLogTab({ role, userId, showToast }: {
     const [logRes, woRes] = await Promise.all([ 
       supabase.from("daily_work_logs")
         .select("*").eq("log_date", today).eq("employee_id", empId).maybeSingle(),
-      Promise.all([
+        Promise.all([
           supabase.from("work_orders")
-            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer")
+            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
             .eq("assignee_production", empName)
             .eq("status_production", true)
             .gte("updated_at", `${today}T00:00:00+09:00`)
             .order("updated_at", { ascending: false }),
           supabase.from("work_orders")
-            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer")
+            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
             .eq("assignee_transfer", empName)
             .eq("status_transfer", true)
             .gte("updated_at", `${today}T00:00:00+09:00`)
             .order("updated_at", { ascending: false }),
-        ]).then(([prodRes, transferRes]) => {
+          supabase.from("work_orders")
+            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
+            .eq("assignee_print_check", empName)
+            .eq("status_print_check", true)
+            .gte("updated_at", `${today}T00:00:00+09:00`)
+            .order("updated_at", { ascending: false }),
+          supabase.from("work_orders")
+            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
+            .eq("assignee_input", empName)
+            .eq("status_input", true)
+            .gte("updated_at", `${today}T00:00:00+09:00`)
+            .order("updated_at", { ascending: false }),
+        ]).then(([prodRes, transferRes, printCheckRes, inputRes]) => {
           const map = new Map<string, WorkOrderRef>();
           (prodRes.data ?? []).forEach((w: any) => { map.set(w.id, { ...w, tags: ["생산완료"] }); });
           (transferRes.data ?? []).forEach((w: any) => {
             if (map.has(w.id)) { map.get(w.id)!.tags.push("전사인쇄"); }
             else { map.set(w.id, { ...w, tags: ["전사인쇄"] }); }
+          });
+          (printCheckRes.data ?? []).forEach((w: any) => {
+            if (map.has(w.id)) { map.get(w.id)!.tags.push("인쇄검수"); }
+            else { map.set(w.id, { ...w, tags: ["인쇄검수"] }); }
+          });
+          (inputRes.data ?? []).forEach((w: any) => {
+            if (map.has(w.id)) { map.get(w.id)!.tags.push("금속검출"); }
+            else { map.set(w.id, { ...w, tags: ["금속검출"] }); }
           });
           return { data: Array.from(map.values()) };
         }),
@@ -852,9 +872,12 @@ function ProductionLogTab({ role, userId, showToast }: {
                 <span className="text-sm font-medium text-slate-700">{wo.client_name}</span>
                 <span className="text-xs text-slate-500">{wo.product_name}</span>
                 <div className="ml-auto flex gap-1">
-                  {(wo.tags ?? []).map((tag) => (
+                {(wo.tags ?? []).map((tag) => (
                     <span key={tag} className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold
-                      ${tag === "생산완료" ? "border-green-200 bg-green-100 text-green-700" : "border-blue-200 bg-blue-100 text-blue-700"}`}>
+                      ${tag === "생산완료" ? "border-green-200 bg-green-100 text-green-700"
+                      : tag === "전사인쇄" ? "border-blue-200 bg-blue-100 text-blue-700"
+                      : tag === "인쇄검수" ? "border-violet-200 bg-violet-100 text-violet-700"
+                      : "border-orange-200 bg-orange-100 text-orange-700"}`}>
                       {tag}
                     </span>
                   ))}
