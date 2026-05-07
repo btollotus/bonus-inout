@@ -2366,7 +2366,8 @@ export function CompressorTab({ role, userId, showToast }: {
 
   // 입력 폼
   const [showForm, setShowForm] = useState(true);
-  const [fDate, setFDate] = useState(today); 
+  const [fDate, setFDate] = useState(today);
+  const [fWorkType, setFWorkType] = useState<"분사" | "코팅" | "분사+코팅">("분사");
   const [fWorkHours, setFWorkHours] = useState("");
   const [fDamageOk, setFDamageOk] = useState(true);
   const [fNote, setFNote] = useState("");
@@ -2740,7 +2741,6 @@ export function PetLedgerTab({ role, userId, showToast }: {
   const [fLogType, setFLogType] = useState("incoming");
   const [fQty, setFQty] = useState("");
   const [fDefectQty, setFDefectQty] = useState("");
-  const [fWorkType, setFWorkType] = useState<"분사" | "코팅" | "분사+코팅">("분사");
   const [fNote, setFNote] = useState("");
   const [saving, setSaving] = useState(false);
 
