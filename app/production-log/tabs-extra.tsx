@@ -2557,10 +2557,11 @@ export function CompressorTab({ role, userId, showToast }: {
               disabled={saving || !inspector} onClick={saveLog}>
               {saving ? "저장 중..." : "💾 등록"}
             </button>
-            </div>
+          </div>
         </div>
+      )}
 
-      {/* ── 목록 ── */}
+      {/* ── 목록 ── */} 
       <div className={`${card} p-4`}>
         {/* 고정 헤더 정보 */}
         <div className="mb-3 grid grid-cols-2 gap-1 text-xs text-slate-500 border-b border-slate-100 pb-3">
