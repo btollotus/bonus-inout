@@ -568,8 +568,14 @@ function ProductionLogTab({ role, userId, showToast }: {
               win.focus();
               setTimeout(() => { win.print(); }, 400);
             }}>🖨️ 인쇄</button>
-            <button className="ml-auto rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-              onClick={() => setViewMode(false)}>← 작성 모드</button>
+           {isAdmin && (
+              <button className="ml-auto rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+                onClick={() => setViewMode(false)}>← 작성 모드</button>
+            )}
+            {!isAdmin && (
+              <button className="ml-auto rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+                onClick={() => { setViewMode(false); setSelectedEmployee(null); }}>← 돌아가기</button>
+            )}
           </div>
         </div>
         {viewLoading ? (
@@ -679,7 +685,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   if (!selectedEmployee || pinStep) {
     return (
       <div className="space-y-4">
-        {isAdmin && (
+        {isAdminOrSubadmin && (
           <div className="flex justify-end">
             <button className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
               onClick={() => { setViewMode(true); loadViewLogs(); }}>📋 조회 모드</button>
@@ -791,7 +797,7 @@ function ProductionLogTab({ role, userId, showToast }: {
               onClick={() => { setSelectedEmployee(null); setPinStep(false); setPinInput(""); setReadOnly(false); }}>
               작업자 변경
             </button>
-            {isAdmin && (
+             {isAdminOrSubadmin && (
               <button className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
                 onClick={() => { setViewMode(true); loadViewLogs(); }}>📋 조회</button>
             )}
@@ -1174,6 +1180,9 @@ function WorkLogTab({ role, userId, showToast }: {
 }) {
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
   const isAdmin = role === "ADMIN";
+  const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
+
+  // ── 작업자 선택 + PIN 인증 ──
 
   const [logs, setLogs] = useState<WorkLog[]>([]);
   const [loading, setLoading] = useState(false);
