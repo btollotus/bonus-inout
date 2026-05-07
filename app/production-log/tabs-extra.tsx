@@ -2562,9 +2562,9 @@ export function CompressorTab({ role, userId, showToast }: {
               </div>
             </div>
             <div className="md:col-span-2">
-              <div className="mb-1 text-xs text-slate-500">비고</div>
+              <div className="mb-1 text-xs text-slate-500">특이사항</div>
               <input className={inp} value={fNote} onChange={(e) => setFNote(e.target.value)}
-                placeholder="분사, 코팅, 분사+코팅 등" />
+                placeholder="" />
             </div>
           </div>
           <div className="mt-4 flex gap-2">
