@@ -532,8 +532,8 @@ function ProductionLogTab({ role, userId, showToast }: {
   // 실질적으로 수정 불가 조건: 열람 모드이거나 이미 확인완료된 경우
   const isDisabled = readOnly || isConfirmed;
 
-  // ── 렌더: ADMIN 조회 모드 ──
-  if (isAdmin && viewMode) {
+    // ── 렌더: ADMIN/SUBADMIN 조회 모드 ──
+    if (isAdminOrSubadmin && viewMode) {
     return (
       <div className="space-y-4">
         <div className={`${card} p-4`}>
