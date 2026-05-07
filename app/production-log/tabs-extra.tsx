@@ -2365,8 +2365,8 @@ export function CompressorTab({ role, userId, showToast }: {
   const [showPin, setShowPin] = useState(false);
 
   // 입력 폼
-  const [showForm, setShowForm] = useState(false);
-  const [fDate, setFDate] = useState(today);
+  const [showForm, setShowForm] = useState(true);
+  const [fDate, setFDate] = useState(today); 
   const [fWorkHours, setFWorkHours] = useState("");
   const [fDamageOk, setFDamageOk] = useState(true);
   const [fNote, setFNote] = useState("");
@@ -2424,7 +2424,6 @@ export function CompressorTab({ role, userId, showToast }: {
     setSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
     showToast("✅ 저장 완료!");
-    setShowForm(false);
     setFWorkHours(""); setFNote(""); setFDamageOk(true); setFDate(today);
     loadLogs();
   }
@@ -2485,13 +2484,7 @@ export function CompressorTab({ role, userId, showToast }: {
               onClick={() => setShowPin(true)}>🔑 PIN 입력</button>
           )}
 
-          {isAdminOrSubadmin && (
-            <button
-              className={showForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
-              onClick={() => setShowForm((v) => !v)}>
-              {showForm ? "✕ 닫기" : "✚ 기록 등록"}
-            </button>
-          )}
+         
         </div>
       </div>
 
@@ -2564,10 +2557,8 @@ export function CompressorTab({ role, userId, showToast }: {
               disabled={saving || !inspector} onClick={saveLog}>
               {saving ? "저장 중..." : "💾 등록"}
             </button>
-            <button className={btn} onClick={() => setShowForm(false)}>취소</button>
-          </div>
+            </div>
         </div>
-      )}
 
       {/* ── 목록 ── */}
       <div className={`${card} p-4`}>
