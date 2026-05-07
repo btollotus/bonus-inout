@@ -121,7 +121,7 @@ export default function ProductionLogPage() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   const isAdmin = role === "ADMIN";
-  const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
+  
 
   function showToast(msg: string, type: "success" | "error" = "success") {
     setToast({ msg, type });
