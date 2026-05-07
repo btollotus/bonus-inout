@@ -137,16 +137,18 @@ function totalCellClass(step: number): string {
   return "bg-blue-50 text-blue-700 font-semibold";
 }
 
-// 숫자 입력 셀 — 0이면 빈칸, PIN 없으면 비활성
+// 숫자 입력 셀 — 0이면 빈칸, 포커스 시에도 0 숨기고 커서만 위치, PIN 없으면 비활성
 function NumCell({ value, onChange, disabled }: {
   value: number; onChange: (v: number) => void; disabled: boolean;
 }) {
   const [focused, setFocused] = useState(false);
+  // 포커스 중이고 값이 0이면 빈문자열로 표시 → 커서만 위치
+  const displayVal = focused && value === 0 ? "" : value !== 0 ? value : "";
   return (
     <input
       type="number" min={0}
-      value={focused || value !== 0 ? value : ""}
-      placeholder={disabled ? "—" : ""}
+      value={displayVal}
+      placeholder=""
       disabled={disabled}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
