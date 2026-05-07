@@ -298,6 +298,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [viewLogs, setViewLogs] = useState<DailyWorkLog[]>([]);
   const [viewLoading, setViewLoading] = useState(false);
   const [viewClockMap, setViewClockMap] = useState<Record<string, { in: string | null; out: string | null }>>({});
+  const [woTagMap, setWoTagMap] = useState<Record<string, Record<string, string[]>>>({});
 
   const today = todayKST();
 
@@ -535,13 +536,32 @@ function ProductionLogTab({ role, userId, showToast }: {
     if (allNos.length > 0) {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("work_order_no, client_name, product_name")
+        .select("work_order_no, client_name, product_name, assignee_production, assignee_transfer, assignee_print_check, assignee_input")
         .in("work_order_no", allNos);
       const map: WoInfoMap = {};
+      const tagMap: Record<string, Record<string, string[]>> = {};
       (woData ?? []).forEach((w: any) => {
         map[w.work_order_no] = { client_name: w.client_name, product_name: w.product_name };
+        tagMap[w.work_order_no] = {};
+        if (w.assignee_production) {
+          if (!tagMap[w.work_order_no][w.assignee_production]) tagMap[w.work_order_no][w.assignee_production] = [];
+          tagMap[w.work_order_no][w.assignee_production].push("생산완료");
+        }
+        if (w.assignee_transfer) {
+          if (!tagMap[w.work_order_no][w.assignee_transfer]) tagMap[w.work_order_no][w.assignee_transfer] = [];
+          tagMap[w.work_order_no][w.assignee_transfer].push("전사인쇄");
+        }
+        if (w.assignee_print_check) {
+          if (!tagMap[w.work_order_no][w.assignee_print_check]) tagMap[w.work_order_no][w.assignee_print_check] = [];
+          tagMap[w.work_order_no][w.assignee_print_check].push("인쇄검수");
+        }
+        if (w.assignee_input) {
+          if (!tagMap[w.work_order_no][w.assignee_input]) tagMap[w.work_order_no][w.assignee_input] = [];
+          tagMap[w.work_order_no][w.assignee_input].push("금속검출");
+        }
       });
       setWoInfoMap((prev) => ({ ...prev, ...map }));
+      setWoTagMap((prev) => ({ ...prev, ...tagMap }));
     }
 
     setViewLoading(false);
@@ -618,11 +638,23 @@ function ProductionLogTab({ role, userId, showToast }: {
                 <div className="mb-3">
                   <div className="mb-1.5 text-xs font-semibold text-slate-500">처리한 작업지시서</div>
                   <div className="flex flex-wrap gap-1.5">
-                    {(log.work_order_nos ?? []).map((no) => (
-                      <span key={no} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
-                        {woInfoMap[no] ? `${woInfoMap[no].client_name} — ${woInfoMap[no].product_name}` : no}
-                      </span>
-                    ))}
+                  {(log.work_order_nos ?? []).map((no) => {
+                      const tags = woTagMap[no]?.[log.employee_name] ?? [];
+                      return (
+                        <span key={no} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-700 flex items-center gap-1 flex-wrap">
+                          {woInfoMap[no] ? `${woInfoMap[no].client_name} — ${woInfoMap[no].product_name}` : no}
+                          {tags.map((tag) => (
+                            <span key={tag} className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold
+                              ${tag === "생산완료" ? "border-green-200 bg-green-100 text-green-700"
+                              : tag === "전사인쇄" ? "border-blue-300 bg-blue-200 text-blue-800"
+                              : tag === "인쇄검수" ? "border-violet-200 bg-violet-100 text-violet-700"
+                              : "border-orange-200 bg-orange-100 text-orange-700"}`}>
+                              {tag}
+                            </span>
+                          ))}
+                        </span>
+                      );
+                    })}
                   </div> 
                 </div>
               )}
