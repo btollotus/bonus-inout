@@ -2797,10 +2797,9 @@ export function PetLedgerTab({ role, userId, showToast }: {
           </div>
           <div className="mt-4 flex gap-2">
             <button className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60" disabled={saving} onClick={saveLog}>{saving ? "저장 중..." : "💾 기록"}</button>
-            <button className={btn} onClick={() => setShowForm(false)}>취소</button>
-          </div>
+            </div>
         </div>
-      )}
+      )}   
       <div className={`${card} p-4`}>
         <div className="mb-3 font-semibold text-sm">📋 PET 수불 내역 — {filterDate}</div>
         {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
