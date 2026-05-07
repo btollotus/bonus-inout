@@ -1470,8 +1470,7 @@ const copiedLines = r.order_lines?.length
 : [];
 const newExistingMap: Record<number, string[]> = {};
 const visibleWoItems = woItems.filter((wi: any) => {
-const n = (wi.sub_items?.[0]?.name ?? "").trim();
-return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+  return !isSpecialItem(wi.sub_items?.[0]?.name ?? "");
 });
 for (let lineIdx = 0; lineIdx < copiedLines.length; lineIdx++) {
 const matchedItem = visibleWoItems[lineIdx];
@@ -1548,8 +1547,7 @@ if (woSubNameVal) {
 } else {
   const woItemsAll: any[] = (wo as any).work_order_items ?? [];
   const visibleWoItems = woItemsAll.filter((i: any) => {
-    const n = (i.sub_items?.[0]?.name ?? "").trim();
-    return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+    return !isSpecialItem(i.sub_items?.[0]?.name ?? "");
   });
   const firstName = visibleWoItems[0]?.sub_items?.[0]?.name ?? (wo as any).product_name ?? "";
   const count = visibleWoItems.length;
@@ -1577,8 +1575,7 @@ if (woSubNameVal) {
         // 품목별 이미지 로드 (eLines 이름 기준 매핑)
         const woItems: any[] = (wo as any).work_order_items ?? [];
         const visibleWoItems = woItems.filter((wi: any) => {
-          const n = (wi.sub_items?.[0]?.name ?? "").trim();
-          return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+          return !isSpecialItem(wi.sub_items?.[0]?.name ?? "");
         });
         // woItem id를 eLines 이름 순서로 매핑
         const eLineNames = r.order_lines?.length
@@ -2782,7 +2779,7 @@ function WoPrintModal({ wo, onClose, employees }: { wo: WorkOrderRow; onClose: (
 
 function isSpecialItem(itemName: string): boolean {
   const n = String(itemName ?? "").trim();
-  return n.startsWith("성형틀") || n.startsWith("인쇄제판");
+  return n.startsWith("성형틀") || n.startsWith("인쇄제판") || n.startsWith("아이스박스");
 }
 
 function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, signedItemImagesMap, onItemNoteChange, isReorder }: {
