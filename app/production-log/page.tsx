@@ -1178,9 +1178,8 @@ function WorkLogTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
-  const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
+   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
   const isAdmin = role === "ADMIN";
-  const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
 
   // ── 작업자 선택 + PIN 인증 ──
 
