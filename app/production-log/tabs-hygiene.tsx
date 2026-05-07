@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import FridgeMonitoringClient from "./fridge-monitoring-client";
 import { PinModal, usePinSession } from "@/app/contexts/PinSessionContext";
+import { todayKST } from "@/lib/utils/date";
 
 const supabase = createClient();
 
@@ -702,204 +703,7 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
     </div>
   );
 }
-// ═══════════════════════════════════════════════════════════
-// 3. 방충·방서 (보행+비래 통합)
-// ═══════════════════════════════════════════════════════════
-export function PestTab({ role, userId, showToast }: {
-  role: UserRole; userId: string | null;
-  showToast: (msg: string, type?: "success" | "error") => void;
-}) {
-  const isAdmin = role === "ADMIN";
-  const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
-  const [walkLogs, setWalkLogs] = useState<any[]>([]);
-  const [flyLogs, setFlyLogs] = useState<any[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
-  const [loading, setLoading] = useState(false);
-  const [showWalkForm, setShowWalkForm] = useState(false);
-  const [showFlyForm, setShowFlyForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const LOCS = ["01","02","03","04","05","06","07","08"];
-  const BUGS = ["grimy","spider","centipede","mosquito","earwig","other"];
-  const BUG_LABELS: Record<string,string> = { grimy:"그리마", spider:"거미", centipede:"노래기", mosquito:"모기", earwig:"집게벌레", other:"기타" };
-  const FLY_TYPES = ["fly","midge","chironomid","fruitfly","moth","gnat","other"];
-  const FLY_LABELS: Record<string,string> = { fly:"파리", midge:"각다귀", chironomid:"깔따구", fruitfly:"초파리", moth:"나방", gnat:"날파리", other:"기타" };
-
-  const initWalk = () => { const o: Record<string,number> = {}; LOCS.forEach((l) => BUGS.forEach((b) => { o[`loc${l}_${b}`] = 0; })); return o; };
-  const initFly = () => { const o: Record<string,boolean> = {}; FLY_TYPES.forEach((t) => { o[`${t}_found`] = false; }); return { ...o, bait_left_bait_ok: true, bait_left_damaged: false, bait_left_rat_sign: false, bait_right_bait_ok: true, bait_right_damaged: false, bait_right_rat_sign: false }; };
-  const [walkForm, setWalkForm] = useState(initWalk());
-  const [walkNote, setWalkNote] = useState("");
-  const [flyForm, setFlyForm] = useState(initFly());
-  const [flyNote, setFlyNote] = useState("");
-
-  const loadLogs = useCallback(async () => {
-    setLoading(true);
-    const [w, f] = await Promise.all([
-      supabase.from("pest_walk_logs").select("*").eq("log_date", filterDate).order("created_at", { ascending: false }),
-      supabase.from("pest_fly_logs").select("*").eq("log_date", filterDate).order("created_at", { ascending: false }),
-    ]);
-    setWalkLogs(w.data ?? []); setFlyLogs(f.data ?? []);
-    setLoading(false);
-  }, [filterDate]);
-
-  useEffect(() => { loadLogs(); }, [loadLogs]);
-
-  async function saveWalk() {
-    setSaving(true);
-    const { error } = await supabase.from("pest_walk_logs").insert({ log_date: filterDate, ...walkForm, action_note: walkNote.trim() || null, created_by: userId });
-    setSaving(false);
-    if (error) return showToast("저장 실패: " + error.message, "error");
-    showToast("✅ 보행해충 기록 완료!"); setShowWalkForm(false); setWalkForm(initWalk()); setWalkNote(""); loadLogs();
-  }
-
-  async function saveFly() {
-    setSaving(true);
-    const { error } = await supabase.from("pest_fly_logs").insert({ log_date: filterDate, ...flyForm, action_note: flyNote.trim() || null, created_by: userId });
-    setSaving(false);
-    if (error) return showToast("저장 실패: " + error.message, "error");
-    showToast("✅ 비래해충 기록 완료!"); setShowFlyForm(false); setFlyForm(initFly()); setFlyNote(""); loadLogs();
-  }
-
-  async function approveLog(table: string, id: string) {
-    await supabase.from(table).update({ approved_by: userId, approved_at: new Date().toISOString() }).eq("id", id);
-    showToast("✅ 승인 완료!"); loadLogs();
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className={`${card} p-4`}>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div><div className="mb-1 text-xs text-slate-500">날짜</div>
-            <input type="date" className={inp} style={{ width: 160 }} value={filterDate} onChange={(e) => setFilterDate(e.target.value)} /></div>
-          <button className={btn} onClick={loadLogs}>🔄 조회</button>
-          {isAdminOrSubadmin && (<>
-            <button className={showWalkForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
-              onClick={() => { setShowWalkForm((v) => !v); setShowFlyForm(false); }}>{showWalkForm ? "✕ 닫기" : "✚ 보행해충"}</button>
-            <button className={showFlyForm ? btnOn : "rounded-xl border border-purple-300 bg-purple-50 px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-100"}
-              onClick={() => { setShowFlyForm((v) => !v); setShowWalkForm(false); }}>{showFlyForm ? "✕ 닫기" : "✚ 비래해충"}</button>
-          </>)}
-          <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
-        </div>
-      </div>
-
-      {showWalkForm && isAdminOrSubadmin && (
-        <div className={`${card} p-4`}>
-          <div className="mb-3 font-semibold text-sm text-blue-700">✚ 보행해충 점검 기록</div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
-              <thead><tr className="border-b border-slate-200">
-                <th className="py-1.5 px-2 text-left text-slate-500">위치</th>
-                {BUGS.map((b) => <th key={b} className="py-1.5 px-2 text-slate-500">{BUG_LABELS[b]}</th>)}
-              </tr></thead>
-              <tbody>{LOCS.map((loc) => (
-                <tr key={loc} className="border-b border-slate-100">
-                  <td className="py-1.5 px-2 font-medium text-slate-600">{loc}번</td>
-                  {BUGS.map((bug) => (
-                    <td key={bug} className="py-1 px-1">
-                      <input type="number" min="0" className="w-14 rounded-lg border border-slate-200 px-2 py-1 text-xs text-right"
-                        value={(walkForm as any)[`loc${loc}_${bug}`]}
-                        onChange={(e) => setWalkForm((p) => ({ ...p, [`loc${loc}_${bug}`]: Number(e.target.value) }))} />
-                    </td>
-                  ))}
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-          <div className="mt-3"><div className="mb-1 text-xs text-slate-500">조치사항</div>
-            <input className={inp} value={walkNote} onChange={(e) => setWalkNote(e.target.value)} /></div>
-          <div className="mt-3 flex gap-2">
-            <button className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
-              disabled={saving} onClick={saveWalk}>{saving ? "저장 중..." : "💾 등록"}</button>
-            <button className={btn} onClick={() => setShowWalkForm(false)}>취소</button>
-          </div>
-        </div>
-      )}
-
-      {showFlyForm && isAdminOrSubadmin && (
-        <div className={`${card} p-4`}>
-          <div className="mb-3 font-semibold text-sm text-purple-700">✚ 비래해충 점검 기록</div>
-          <div className="mb-3">
-            <div className="mb-2 text-xs text-slate-500">발견된 해충</div>
-            <div className="flex flex-wrap gap-4">
-              {FLY_TYPES.map((t) => (
-                <label key={t} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox" checked={(flyForm as any)[`${t}_found`]}
-                    onChange={(e) => setFlyForm((p) => ({ ...p, [`${t}_found`]: e.target.checked }))} className="w-4 h-4 rounded" />
-                  {FLY_LABELS[t]}
-                </label>
-              ))}
-            </div>
-          </div>
-          <div className="mb-3">
-            <div className="mb-2 text-xs text-slate-500">쥐먹이상자</div>
-            <div className="grid grid-cols-2 gap-4">
-              {[["left","좌측"],["right","우측"]].map(([side, label]) => (
-                <div key={side}><div className="text-xs font-semibold text-slate-600 mb-1.5">{label}</div>
-                  {[[`bait_${side}_bait_ok`,"먹이 정상"],[`bait_${side}_damaged`,"파손"],[`bait_${side}_rat_sign`,"쥐 흔적"]].map(([key, lbl]) => (
-                    <label key={key} className="flex items-center gap-2 text-xs cursor-pointer mb-1">
-                      <input type="checkbox" checked={(flyForm as any)[key]}
-                        onChange={(e) => setFlyForm((p) => ({ ...p, [key]: e.target.checked }))} className="w-3.5 h-3.5 rounded" />
-                      {lbl}
-                    </label>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="mb-3"><div className="mb-1 text-xs text-slate-500">조치사항</div>
-            <input className={inp} value={flyNote} onChange={(e) => setFlyNote(e.target.value)} /></div>
-          <div className="flex gap-2">
-            <button className="flex-1 rounded-xl bg-purple-600 py-2.5 text-sm font-bold text-white hover:bg-purple-700 disabled:opacity-60"
-              disabled={saving} onClick={saveFly}>{saving ? "저장 중..." : "💾 등록"}</button>
-            <button className={btn} onClick={() => setShowFlyForm(false)}>취소</button>
-          </div>
-        </div>
-      )}
-
-      <div className={`${card} p-4`}>
-        <div className="mb-3 font-semibold text-sm">🪲 보행해충 기록 — {filterDate}</div>
-        {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
-          : walkLogs.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
-          : walkLogs.map((log) => {
-              const total = LOCS.reduce((s, l) => s + BUGS.reduce((ss, b) => ss + (log[`loc${l}_${b}`] ?? 0), 0), 0);
-              return (
-                <div key={log.id} className={`rounded-2xl border p-3 mb-2 ${total > 0 ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
-                  <div className="flex items-center justify-between">
-                    <div><span className="font-semibold text-sm">총 {total}마리 발견</span>
-                      {log.action_note && <div className="text-xs text-slate-500 mt-0.5">조치: {log.action_note}</div>}</div>
-                    <div className="flex items-center gap-2">
-                      {!log.approved_by && isAdmin && <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700" onClick={() => approveLog("pest_walk_logs", log.id)}>✅ 승인</button>}
-                      {log.approved_by && <span className="text-[10px] text-green-600 font-semibold">승인완료</span>}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-      </div>
-
-      <div className={`${card} p-4`}>
-        <div className="mb-3 font-semibold text-sm">🦟 비래해충 기록 — {filterDate}</div>
-        {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
-          : flyLogs.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
-          : flyLogs.map((log) => {
-              const found = FLY_TYPES.filter((t) => log[`${t}_found`]);
-              return (
-                <div key={log.id} className={`rounded-2xl border p-3 mb-2 ${found.length > 0 ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
-                  <div className="flex items-center justify-between">
-                    <div><div className="text-sm font-semibold">{found.length > 0 ? found.map((t) => FLY_LABELS[t]).join(", ") + " 발견" : "발견 없음"}</div>
-                      {log.action_note && <div className="text-xs text-slate-500 mt-0.5">조치: {log.action_note}</div>}</div>
-                    <div className="flex items-center gap-2">
-                      {!log.approved_by && isAdmin && <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700" onClick={() => approveLog("pest_fly_logs", log.id)}>✅ 승인</button>}
-                      {log.approved_by && <span className="text-[10px] text-green-600 font-semibold">승인완료</span>}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-      </div>
-    </div>
-  );
-}
+export { PestTab } from "./PestTab";
 
 // ═══════════════════════════════════════════════════════════
 // 4. 이물관리 점검표
@@ -2273,11 +2077,6 @@ type HumidLogEntry = {
 };
 
 const HUMID_ROOMS: HumidRoom[] = ["외포장실", "원부재료실", "생산실"];
-
-function todayKST(): string {
-  const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 function getHumidDates(from: string, to: string): string[] {
   const dates: string[] = [];
