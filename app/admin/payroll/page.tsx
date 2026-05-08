@@ -1149,15 +1149,19 @@ export default function PayrollPage() {
                                           </div>
                                           {/* 연비 / 출근일수 표시 / 자동계산 */}
                                           <div className="flex items-center gap-2 pl-24 flex-wrap">
-                                            <span className="text-xs text-gray-500">연비</span>
-                                            <div className="relative flex items-center gap-1">
-                                              <input type="number" value={eff} min={1} max={50} step={0.5} onChange={e=>setFuelEfficiency(prev=>({...prev,[row.employee_id]:Number(e.target.value)}))} disabled={isF}
-                                                className={`w-16 text-center border rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:bg-gray-50 ${hasDbEfficiency?'border-emerald-400 bg-emerald-50':'border-gray-200'}`}/>
-                                              <span className="text-xs text-gray-400">km/L</span>
-                                              {hasDbEfficiency&&(
-                                                <span className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">인사관리 연동</span>
-                                              )}
-                                            </div>
+                                            {!detail.isElectric && (
+                                              <>
+                                                <span className="text-xs text-gray-500">연비</span>
+                                                <div className="relative flex items-center gap-1">
+                                                  <input type="number" value={eff} min={1} max={50} step={0.5} onChange={e=>setFuelEfficiency(prev=>({...prev,[row.employee_id]:Number(e.target.value)}))} disabled={isF}
+                                                    className={`w-16 text-center border rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:bg-gray-50 ${hasDbEfficiency?'border-emerald-400 bg-emerald-50':'border-gray-200'}`}/>
+                                                  <span className="text-xs text-gray-400">km/L</span>
+                                                  {hasDbEfficiency&&(
+                                                    <span className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">인사관리 연동</span>
+                                                  )}
+                                                </div>
+                                              </>
+                                            )}
                                             {/* 출근일수: 공통값 표시 + 개인 조정 가능 */}
                                             <span className="text-xs text-gray-500 ml-2">출근일수</span>
                                             <input type="number" value={row.work_days||''} min={0} max={31}
@@ -1175,7 +1179,7 @@ export default function PayrollPage() {
                                                 자동계산 → {formatKRW(detail.final)}원
                                               </button>
                                             )}
-                                            {!isF&&!canCalc&&(row.work_days||0)===0&&dist>0&&monthWorkDays===0&&(
+                                            {!isF&&!canCalc&&(row.work_days||0)===0&&!detail.isElectric&&dist>0&&monthWorkDays===0&&(
                                               <span className="text-[10px] text-blue-500 ml-1">← 출근일수를 입력하세요</span>
                                             )}
                                           </div>
