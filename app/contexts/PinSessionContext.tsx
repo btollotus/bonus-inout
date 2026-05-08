@@ -64,12 +64,12 @@ type PinModalProps = {
 };
 
 export function PinModal({ employees, onSuccess, onCancel, title = "본인 확인" }: PinModalProps) {
-  const [selectedEmployee, setSelectedEmployee] = useState<{ id: string; name: string; pin: string | null } | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<{ id: string; name: string; pin: string | null; auth_user_id: string | null } | null>(null);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState("");
   const [step, setStep] = useState<"select" | "pin">("select");
 
-  function handleSelect(emp: { id: string; name: string; pin: string | null }) {
+  function handleSelect(emp: { id: string; name: string; pin: string | null; auth_user_id: string | null }) { 
     setSelectedEmployee(emp);
     setPinInput("");
     setPinError("");
