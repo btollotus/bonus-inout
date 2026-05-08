@@ -242,7 +242,7 @@ export function PestTab({ role, userId, showToast }: {
     ]);
     const fMap = initFlying(date);
     const wMap = initWalking(date);
-    let firstInspector: { id: string; name: string } | null = null;
+    let firstInspector: { id: string; name: string; authUserId: string } | null = null;
     for (const row of fRows ?? []) {
       if (fMap[row.location]) {
         fMap[row.location] = {
