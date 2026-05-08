@@ -280,7 +280,7 @@ const { error } = await supabase.from("attendance").insert({
         <button
           className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all"
           onClick={() => handleAttendanceClick("OUT")}
-          disabled={loading || !todayIn}
+          disabled={loading || (!!verifiedEmployee && !todayIn)}
         >
           {todayOut ? `퇴근완료 ${formatTime(todayOut.happened_at)}` : "퇴근 기록"}
         </button>
