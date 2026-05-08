@@ -994,13 +994,21 @@ bottom_size: form.bottom_size || null,
                       placeholder="편도 km" min="0" step="0.1"
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">연비 (km/L)</label>
-                    <input type="number" name="fuel_efficiency" value={form.fuel_efficiency} onChange={handleChange}
-                      placeholder="예: 12.5" min="1" max="50" step="0.1"
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    <p className="text-xs text-gray-400 mt-1">급여 유류비 자동계산에 사용</p>
-                  </div>
+                  {form.fuel_type !== '전기' ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">연비 (km/L)</label>
+                      <input type="number" name="fuel_efficiency" value={form.fuel_efficiency} onChange={handleChange}
+                        placeholder="예: 12.5" min="1" max="50" step="0.1"
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <p className="text-xs text-gray-400 mt-1">급여 유류비 자동계산에 사용</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">연비 (km/L)</label>
+                      <div className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm bg-gray-50 text-gray-400">해당 없음 (전기차)</div>
+                      <p className="text-xs text-blue-500 mt-1">⚡ 1일 충전비용은 급여관리 → 유가 설정에서 입력하세요</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
