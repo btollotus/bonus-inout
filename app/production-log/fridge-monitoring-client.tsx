@@ -128,7 +128,7 @@ function TempCell({
             type="text"
             inputMode="numeric"
             maxLength={3}
-            placeholder={type === "냉동고" ? "260" : type === "온장고" ? "459" : "012"}
+            placeholder="" 
             value={rawInput}
             onChange={(e) => handleRaw(e.target.value)}
             className={`w-full rounded-lg border px-2 py-1.5 text-sm text-center tabular-nums focus:outline-none transition-all
@@ -237,18 +237,28 @@ export default function FridgeMonitoringClient() {
         .eq("role", "inspector");
 
       const base = initEntries();
-
       if (logs && logs.length > 0) {
         let note = "";
+        let amTimeRestored = false;
+        let pmTimeRestored = false;
         for (const log of logs) {
           const key = `${log.device_type}-${log.device_no}`;
           if (base[key]) {
             base[key] = { ...base[key], ...log };
           }
           if (log.special_note) note = log.special_note;
+          if (log.period === "AM" && log.check_time && !amTimeRestored) {
+            setAmCheckTime(log.check_time.replace(":", ""));
+            amTimeRestored = true;
+          }
+          if (log.period === "PM" && log.check_time && !pmTimeRestored) {
+            setPmCheckTime(log.check_time.replace(":", ""));
+            pmTimeRestored = true;
+          }
         }
         setSpecialNote(note);
       }
+      
       setEntries(base);
 
       // 기존 점검자 복원
@@ -434,7 +444,7 @@ export default function FridgeMonitoringClient() {
                         type="text"
                         inputMode="numeric"
                         maxLength={4}
-                        placeholder="0900"
+                        placeholder=""
                         value={amCheckTime}
                         disabled={isReadOnly}
                         onChange={e => setAmCheckTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
@@ -458,7 +468,7 @@ export default function FridgeMonitoringClient() {
                         type="text"
                         inputMode="numeric"
                         maxLength={4}
-                        placeholder="1500"
+                        placeholder=""
                         value={pmCheckTime}
                         disabled={isReadOnly}
                         onChange={e => setPmCheckTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
