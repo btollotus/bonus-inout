@@ -57,8 +57,8 @@ export function usePinSession() {
 
 // ── PIN 입력 모달 컴포넌트 ──
 type PinModalProps = {
-  employees: { id: string; name: string; pin: string | null }[];
-  onSuccess: (employeeId: string, employeeName: string) => void;
+  employees: { id: string; name: string; pin: string | null; auth_user_id: string | null }[];
+  onSuccess: (employeeId: string, employeeName: string, authUserId: string) => void;
   onCancel: () => void;
   title?: string;
 };
@@ -97,7 +97,7 @@ export function PinModal({ employees, onSuccess, onCancel, title = "본인 확�
       setPinInput("");
       return;
     }
-    onSuccess(selectedEmployee.id, selectedEmployee.name);
+    onSuccess(selectedEmployee.id, selectedEmployee.name, selectedEmployee.auth_user_id ?? "");
   }
 
   return (

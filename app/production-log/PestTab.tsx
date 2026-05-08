@@ -49,7 +49,7 @@ type WalkingRecord = {
   inspector_name: string | null;
 };
 
-type Employee = { id: string; name: string; pin: string | null };
+type Employee = { id: string; name: string; pin: string | null; auth_user_id: string | null };
 
 const LOCATIONS = [
   "P1-입구",
@@ -219,7 +219,7 @@ export function PestTab({ role, userId, showToast }: {
   const [walking, setWalking] = useState<Record<string, WalkingRecord>>(() => initWalking(todayKST()));
   const [saving,  setSaving]  = useState(false);
   const [employees,    setEmployees]    = useState<Employee[]>([]);
-  const [inspector,    setInspector]    = useState<{ id: string; name: string } | null>(null);
+  const [inspector,    setInspector]    = useState<{ id: string; name: string; authUserId: string } | null>(null);
   const [showPinModal, setShowPinModal] = useState(false);
   const [viewYear,    setViewYear]    = useState(new Date().getFullYear());
   const [viewMonth,   setViewMonth]   = useState(new Date().getMonth() + 1);
@@ -231,7 +231,7 @@ export function PestTab({ role, userId, showToast }: {
   const inputDisabled = !inspector;
 
   useEffect(() => {
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin,auth_user_id").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as Employee[]));
   }, []);
 
@@ -257,14 +257,14 @@ export function PestTab({ role, userId, showToast }: {
           rat_right:    row.rat_right    ?? "X",
         };
         if (!firstInspector && row.inspector_id)
-          firstInspector = { id: row.inspector_id, name: row.inspector_name };
+          firstInspector = { id: row.inspector_id, name: row.inspector_name, authUserId: row.inspector_id };
       }
     }
     for (const row of wRows ?? []) {
       if (wMap[row.trap_no]) {
         wMap[row.trap_no] = { ...wMap[row.trap_no], ...row };
         if (!firstInspector && row.inspector_id)
-          firstInspector = { id: row.inspector_id, name: row.inspector_name };
+          firstInspector = { id: row.inspector_id, name: row.inspector_name, authUserId: row.inspector_id };
       }
     }
     setFlying(fMap);
@@ -315,17 +315,17 @@ export function PestTab({ role, userId, showToast }: {
       const happenedAt = `${recDate}T00:00:00+09:00`;
       const flyRows = LOCATIONS.map(loc => ({
         ...flying[loc],
-        happened_at: happenedAt, inspector_id: inspector.id,
+        happened_at: happenedAt, inspector_id: inspector.authUserId,
         inspector_name: inspector.name, created_by: userId,
         action_note:     flying[loc].action_note.trim()     || null,
-        rat_action_note: flying[loc].rat_action_note.trim() || null,
+        rat_action_note: flying[loc].rat_action_note.trim() || null, 
       }));
       const { error: fErr } = await supabase.from("pest_flying_records")
         .upsert(flyRows, { onConflict: "record_date,location" });
       if (fErr) throw fErr;
       const walkRows = TRAPS.map(trap => ({
         ...walking[trap],
-        happened_at: happenedAt, inspector_id: inspector.id,
+        happened_at: happenedAt, inspector_id: inspector.authUserId,
         inspector_name: inspector.name, created_by: userId,
       }));
       const { error: wErr } = await supabase.from("pest_walking_records")
@@ -406,7 +406,7 @@ export function PestTab({ role, userId, showToast }: {
         <PinModal
           employees={employees.filter(e => e.name !== null) as any}
           title="점검자 PIN 확인"
-          onSuccess={(empId, empName) => { setInspector({ id: empId, name: empName }); setShowPinModal(false); }}
+          onSuccess={(empId, empName, authUserId) => { setInspector({ id: empId, name: empName, authUserId }); setShowPinModal(false); }}
           onCancel={() => setShowPinModal(false)}
         />
       )}
