@@ -57,19 +57,19 @@ export function usePinSession() {
 
 // ── PIN 입력 모달 컴포넌트 ──
 type PinModalProps = {
-  employees: { id: string; name: string; pin: string | null; auth_user_id: string | null }[];
-  onSuccess: (employeeId: string, employeeName: string, authUserId: string) => void;
+  employees: { id: string; name: string; pin: string | null }[];
+  onSuccess: (employeeId: string, employeeName: string) => void;
   onCancel: () => void;
   title?: string;
 };
 
 export function PinModal({ employees, onSuccess, onCancel, title = "본인 확인" }: PinModalProps) {
-  const [selectedEmployee, setSelectedEmployee] = useState<{ id: string; name: string; pin: string | null; auth_user_id: string | null } | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<{ id: string; name: string; pin: string | null } | null>(null);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState("");
   const [step, setStep] = useState<"select" | "pin">("select");
 
-  function handleSelect(emp: { id: string; name: string; pin: string | null; auth_user_id: string | null }) { 
+  function handleSelect(emp: { id: string; name: string; pin: string | null }) {
     setSelectedEmployee(emp);
     setPinInput("");
     setPinError("");
@@ -97,7 +97,7 @@ export function PinModal({ employees, onSuccess, onCancel, title = "본인 확�
       setPinInput("");
       return;
     }
-    onSuccess(selectedEmployee.id, selectedEmployee.name, selectedEmployee.auth_user_id ?? "");
+    onSuccess(selectedEmployee.id, selectedEmployee.name);
   }
 
   return (

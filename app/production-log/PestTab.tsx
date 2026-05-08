@@ -406,7 +406,11 @@ export function PestTab({ role, userId, showToast }: {
         <PinModal
           employees={employees.filter(e => e.name !== null) as any}
           title="점검자 PIN 확인"
-          onSuccess={(empId, empName, authUserId) => { setInspector({ id: empId, name: empName, authUserId }); setShowPinModal(false); }}
+          onSuccess={(empId, empName) => {
+            const emp = employees.find(e => e.id === empId);
+            setInspector({ id: empId, name: empName, authUserId: emp?.auth_user_id ?? "" });
+            setShowPinModal(false);
+          }}
           onCancel={() => setShowPinModal(false)}
         />
       )}
