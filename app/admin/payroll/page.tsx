@@ -103,7 +103,7 @@ const DEFAULT_FUEL_PRICE: Record<string, number> = {
 const DEFAULT_FUEL_EFFICIENCY: Record<string, number> = {
   '휘발유': 12, '경유': 14, 'LPG': 10, '전기': 0, '하이브리드': 18, '없음': 0,
 }
-const FUEL_TYPES_PRICED = ['휘발유', '경유', 'LPG', '하이브리드']
+const FUEL_TYPES_PRICED = ['휘발유', '경유', 'LPG', '하이브리드', '전기']
 
 // ── 한국 공휴일 (2024~2027) ─────────────────────────────
 const KR_HOLIDAYS: Set<string> = new Set([
@@ -164,6 +164,8 @@ type FuelCalcDetail = {
   efficiency: number
   pricePerL: number
   fuelType: string
+  isElectric: boolean      // 전기차 여부
+  dailyCharge: number      // 전기차 1일 충전비용
 }
 
 function calcFuelPayDetail(
@@ -178,7 +180,23 @@ function calcFuelPayDetail(
   const fuelType = emp.fuel_type || '없음'
   const price = priceMap[fuelType] ?? DEFAULT_FUEL_PRICE[fuelType] ?? 0
   const effectiveWorkDays = Math.max(0, workDays - annualDaysOff)
+  const isElectric = fuelType === '전기'
 
+  // ── 전기차: 1일 충전비용 × 출근일수 ──
+  if (isElectric) {
+    const dailyCharge = price
+    const rawTotal = dailyCharge * effectiveWorkDays
+    const capped = Math.min(rawTotal, 100000)
+    const final = isTrial ? Math.floor(capped / 2 / 10) * 10 : capped
+    return {
+      dailyFuel: 0, dailyFuelCeiled: 0,
+      workDays, annualDaysOff, rawTotal, capped, final, isTrial,
+      distKm: dist, efficiency: 0, pricePerL: price, fuelType,
+      isElectric: true, dailyCharge,
+    }
+  }
+
+  // ── 기존 유종: 왕복거리 ÷ 연비 × ℓ당 단가 ──
   const dailyFuel = dist > 0 && price > 0 && efficiency > 0
     ? (dist * 2) / efficiency * price
     : 0
@@ -187,7 +205,7 @@ function calcFuelPayDetail(
   const capped = Math.min(rawTotal, 100000)
   const final = isTrial ? Math.floor(capped / 2 / 10) * 10 : capped
 
-  return { dailyFuel, dailyFuelCeiled, workDays, annualDaysOff, rawTotal, capped, final, isTrial, distKm: dist, efficiency, pricePerL: price, fuelType }
+  return { dailyFuel, dailyFuelCeiled, workDays, annualDaysOff, rawTotal, capped, final, isTrial, distKm: dist, efficiency, pricePerL: price, fuelType, isElectric: false, dailyCharge: 0 }
 }
 
 function calcFuelPay(emp: Employee, workDays: number, efficiency: number, priceMap: Record<string, number>, annualDaysOff = 0, isTrial = false): number {
@@ -253,7 +271,31 @@ function buildSlipHTML(
 
   // ── 유류지원비 계산내역 HTML ──
   const fuelSection = (()=>{
-    if (!fuelDetail || fuelDetail.distKm === 0 || row.fuel_pay === 0) return ''
+    if (!fuelDetail || row.fuel_pay === 0) return ''
+
+    // ── 전기차 ──
+    if (fuelDetail.isElectric && fuelDetail.dailyCharge > 0) {
+      const d = fuelDetail
+      const effectiveWorkDays = d.workDays - d.annualDaysOff
+      const cellStyle = `border:1px solid #e0c97a;padding:4px 8px;font-size:10px;`
+      const labelStyle = `${cellStyle}background:#fffbeb;font-weight:600;width:140px;color:#78350f;`
+      const valStyle = `${cellStyle}background:#fff;`
+      let rows = `
+<tr><td style="${labelStyle}">유종</td><td style="${valStyle}">전기차</td></tr>
+<tr><td style="${labelStyle}">① 1일 충전비용</td><td style="${valStyle}"><strong>${formatKRW(d.dailyCharge)}원/일</strong></td></tr>
+<tr><td style="${labelStyle}">② 기준 출근일수</td><td style="${valStyle}">${d.workDays}일${d.annualDaysOff>0?` − 연차 ${d.annualDaysOff}일 = <strong>${effectiveWorkDays}일</strong>`:''}</td></tr>
+<tr><td style="${labelStyle}">③ 월 충전비 합계</td><td style="${valStyle}">${formatKRW(d.dailyCharge)}원 × ${effectiveWorkDays}일 = <strong>${formatKRW(d.rawTotal)}원</strong></td></tr>`
+      if (d.rawTotal > 100000) rows += `<tr><td style="${labelStyle}">④ 한도 적용</td><td style="${valStyle}">월 최대 <strong>100,000원</strong> 한도 적용</td></tr>`
+      if (d.isTrial) rows += `<tr><td style="${labelStyle}">⑤ 수습 50% 적용</td><td style="${valStyle}">${formatKRW(d.capped)}원 × 50% = <strong>${formatKRW(d.final)}원</strong></td></tr>`
+      rows += `<tr style="background:#fef9c3;font-weight:bold;"><td style="${labelStyle}font-size:11px;">최종 유류지원비</td><td style="${valStyle}font-size:12px;color:#b45309;font-weight:bold;">${formatKRW(row.fuel_pay)}원</td></tr>`
+      return `<div style="margin-top:10px;">
+<div style="${sh}">▶ 유류지원비 계산 내역 (전기차)</div>
+<table style="width:100%;border-collapse:collapse;font-size:10px;"><tbody>${rows}</tbody></table>
+</div>`
+    }
+
+    // ── 기존 유종 ──
+    if (fuelDetail.distKm === 0) return ''
     const d = fuelDetail
     const cellStyle = `border:1px solid #e0c97a;padding:4px 8px;font-size:10px;`
     const labelStyle = `${cellStyle}background:#fffbeb;font-weight:600;width:140px;color:#78350f;`
@@ -973,7 +1015,7 @@ export default function PayrollPage() {
                               onChange={e=>setFuelPriceEdit(p=>({...p,[ft]:parseInt(e.target.value)||0}))}
                               className="w-24 text-right border border-amber-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
                               placeholder="0" />
-                            <span className="text-xs text-amber-600">원/L</span>
+                           <span className="text-xs text-amber-600">{ft === '전기' ? '원/일' : '원/L'}</span>
                           </div>
                         </div>
                       ))}
@@ -982,7 +1024,7 @@ export default function PayrollPage() {
                         {fuelPriceSaving ? '저장 중...' : '💾 저장'}
                       </button>
                     </div>
-                    <p className="text-xs text-amber-600 mt-2">※ 현재 적용 중: {FUEL_TYPES_PRICED.map(ft => ft + ' ' + (fuelPriceMap[ft]||0).toLocaleString() + '원').join(' · ')}</p>
+                    <p className="text-xs text-amber-600 mt-2">※ 현재 적용 중: {FUEL_TYPES_PRICED.map(ft => ft + ' ' + (fuelPriceMap[ft]||0).toLocaleString() + (ft === '전기' ? '원/일' : '원/L')).join(' · ')}</p>
                   </div>
                 )}
 
@@ -1082,7 +1124,9 @@ export default function PayrollPage() {
                                         .reduce((s,u)=>s+u.count,0)
                                       const isTrial=emp?.position==='수습'
                                       const detail=calcFuelPayDetail(emp||{} as Employee,row.work_days||0,eff,fuelPriceMap,annualDaysOff,isTrial)
-                                      const canCalc=price>0&&dist>0&&eff>0&&(row.work_days||0)>0
+                                      const canCalc=isElectric
+                                      ? price>0&&(row.work_days||0)>0
+                                      : price>0&&dist>0&&eff>0&&(row.work_days||0)>0
                                       // 인사관리 연비 여부
                                       const hasDbEfficiency=!!emp?.fuel_efficiency
                                       // 이 달 기준 출근일수 (달력 참고용)
@@ -1138,10 +1182,21 @@ export default function PayrollPage() {
                                           {/* 계산 상세 박스 */}
                                           {canCalc&&(
                                             <div className="ml-24 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[11px] text-gray-600 space-y-0.5">
-                                              <div>① 1일 유류비 = 왕복 {dist*2}km ÷ {eff}km/L × {formatKRW(price)}원 = <strong>{formatKRW(Math.round(detail.dailyFuel))}원</strong> → 10원 올림 = <strong className="text-amber-700">{formatKRW(detail.dailyFuelCeiled)}원</strong></div>
-                                              <div>② 입력 출근일수 {detail.workDays}일{detail.annualDaysOff>0?` - 연차 ${detail.annualDaysOff}일 = ${detail.workDays - detail.annualDaysOff}일`:''} × {formatKRW(detail.dailyFuelCeiled)}원 = <strong>{formatKRW(detail.rawTotal)}원</strong></div>
-                                              {detail.rawTotal>100000&&<div className="text-red-500">③ 월 최대 100,000원 한도 적용 → <strong>100,000원</strong></div>}
-                                              {detail.isTrial&&<div className="text-orange-600">④ 수습 50% 적용 → <strong>{formatKRW(detail.final)}원</strong></div>}
+                                              {detail.isElectric ? (
+                                                <>
+                                                  <div>① 1일 충전비용 = <strong className="text-amber-700">{formatKRW(detail.dailyCharge)}원/일</strong></div>
+                                                  <div>② 출근일수 {detail.workDays}일{detail.annualDaysOff>0?` - 연차 ${detail.annualDaysOff}일 = ${detail.workDays - detail.annualDaysOff}일`:''} × {formatKRW(detail.dailyCharge)}원 = <strong>{formatKRW(detail.rawTotal)}원</strong></div>
+                                                  {detail.rawTotal>100000&&<div className="text-red-500">③ 월 최대 100,000원 한도 적용 → <strong>100,000원</strong></div>}
+                                                  {detail.isTrial&&<div className="text-orange-600">④ 수습 50% 적용 → <strong>{formatKRW(detail.final)}원</strong></div>}
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <div>① 1일 유류비 = 왕복 {dist*2}km ÷ {eff}km/L × {formatKRW(price)}원 = <strong>{formatKRW(Math.round(detail.dailyFuel))}원</strong> → 10원 올림 = <strong className="text-amber-700">{formatKRW(detail.dailyFuelCeiled)}원</strong></div>
+                                                  <div>② 입력 출근일수 {detail.workDays}일{detail.annualDaysOff>0?` - 연차 ${detail.annualDaysOff}일 = ${detail.workDays - detail.annualDaysOff}일`:''} × {formatKRW(detail.dailyFuelCeiled)}원 = <strong>{formatKRW(detail.rawTotal)}원</strong></div>
+                                                  {detail.rawTotal>100000&&<div className="text-red-500">③ 월 최대 100,000원 한도 적용 → <strong>100,000원</strong></div>}
+                                                  {detail.isTrial&&<div className="text-orange-600">④ 수습 50% 적용 → <strong>{formatKRW(detail.final)}원</strong></div>}
+                                                </>
+                                              )}
                                               <div className="pt-0.5 border-t border-gray-200 font-bold text-gray-800">최종 지급액: <span className="text-amber-700">{formatKRW(detail.final)}원</span></div>
                                             </div>
                                           )}
@@ -1435,8 +1490,32 @@ const PrintSlip = forwardRef<HTMLDivElement, { row: PayrollRow; emp: Employee | 
           </div>
         </div>
 
-        {/* 유류지원비 계산내역 */}
-        {fd && fd.distKm > 0 && row.fuel_pay > 0 && (()=>{
+          {/* 유류지원비 계산내역 */}
+          {fd && row.fuel_pay > 0 && fd.isElectric && fd.dailyCharge > 0 && (()=>{
+          const effectiveWorkDays = fd.workDays - fd.annualDaysOff
+          return (
+            <div className="mt-3">
+              <div className="section-header">▶ 유류지원비 계산 내역 (전기차)</div>
+              <table className="slip-table" style={{fontSize:'10px'}}>
+                <tbody>
+                  <tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>유종</td><td>전기차</td></tr>
+                  <tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>① 1일 충전비용</td><td><strong>{formatKRW(fd.dailyCharge)}원/일</strong></td></tr>
+                  <tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>② 기준 출근일수</td>
+                    <td>{fd.workDays}일{fd.annualDaysOff>0&&<> − 연차 {fd.annualDaysOff}일 = <strong>{effectiveWorkDays}일</strong></>}</td></tr>
+                  <tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>③ 월 충전비 합계</td>
+                    <td>{formatKRW(fd.dailyCharge)}원 × {effectiveWorkDays}일 = <strong>{formatKRW(fd.rawTotal)}원</strong></td></tr>
+                  {fd.rawTotal>100000&&<tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>④ 한도 적용</td><td>월 최대 <strong>100,000원</strong> 한도 적용</td></tr>}
+                  {fd.isTrial&&<tr><td className="label-col" style={{fontSize:'10px',color:'#78350f'}}>⑤ 수습 50%</td><td>{formatKRW(fd.capped)}원 × 50% = <strong>{formatKRW(fd.final)}원</strong></td></tr>}
+                  <tr style={{background:'#fef9c3',fontWeight:'bold'}}>
+                    <td className="label-col" style={{fontSize:'11px',color:'#78350f'}}>최종 유류지원비</td>
+                    <td style={{textAlign:'right',fontSize:'12px',color:'#b45309',fontWeight:'bold'}}>{formatKRW(row.fuel_pay)}원</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )
+        })()}
+        {fd && row.fuel_pay > 0 && !fd.isElectric && fd.distKm > 0 && (()=>{
           const effectiveWorkDays = fd.workDays - fd.annualDaysOff
           return (
             <div className="mt-3">
