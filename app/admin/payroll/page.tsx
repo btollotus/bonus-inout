@@ -1136,7 +1136,7 @@ export default function PayrollPage() {
                                           {/* 차량 정보 배지 */}
                                           <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg border border-amber-200 flex-wrap">
                                             <span className="text-xs text-amber-700 font-medium">🚗</span>
-                                            <span className="text-xs text-amber-800">{emp?.car_type||'차량미등록'} / {fuelType}{dist?` / 편도 ${dist}km`:''}{price?` / ℓ당 ${formatKRW(price)}원`:''}</span>
+                                            <span className="text-xs text-amber-800">{emp?.car_type||'차량미등록'} / {fuelType}{dist?` / 편도 ${dist}km`:''}{price&&fuelType!=='전기'?` / ℓ당 ${formatKRW(price)}원`:''}{price&&fuelType==='전기'?` / 1일 ${formatKRW(price)}원`:''}</span>
                                             {isTrial&&<span className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full font-bold">수습 50%</span>}
                                             {annualDaysOff>0&&<span className="text-[10px] bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded-full">연차 -{annualDaysOff}일</span>}
                                           </div>
