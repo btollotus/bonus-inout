@@ -380,8 +380,9 @@ async function loadSignageList() {
     const totalSheetCost = calcedItems.reduce((s, x) => s + x.calcResult!.sheetCost, 0);
     const totalSheets    = calcedItems.reduce((s, x) => s + (parseInt(x.quantity) || 0), 0);
     const grandTotal     = calcedItems.reduce((s, x) => s + x.calcResult!.total, 0);
-    const delivery = sheetNoDelivery ? 0 : (grandTotal < 50000 ? 3300 : 0);
-    const finalTotal     = grandTotal + delivery;
+    const iceboxCost = useIcebox ? iceboxPrice : 0;
+  const finalTotal = grandTotal + deliveryPrice + iceboxCost;
+  const delivery = deliveryPrice + iceboxCost;
   
     const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
       customer_id:   activeCustomerId,
@@ -1284,33 +1285,59 @@ async function loadSignageList() {
     {sheetItems.some(x => x.calcResult) && (() => {
       const calced = sheetItems.filter(x => x.calcResult);
       const grandTotal = calced.reduce((s, x) => s + x.calcResult!.total, 0);
-      const delivery = sheetNoDelivery ? 0 : (grandTotal < 50000 ? 3300 : 0);
-      const finalTotal = grandTotal + delivery;
+      const iceboxCost = useIcebox ? iceboxPrice : 0;
+      const finalTotal = grandTotal + deliveryPrice + iceboxCost;
       return (
-        <>
-          <label className="flex cursor-pointer items-center gap-2 mb-2 text-sm font-semibold text-slate-600">
-            <input
-              type="checkbox"
-              checked={sheetNoDelivery}
-              onChange={e => setSheetNoDelivery(e.target.checked)}
-            />
-            🚚 택배비 제외 (직접수령 / 착불)
-          </label>
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            <div className="rounded-2xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-center">
-              <div className="text-xs text-blue-600 font-semibold">공급가 (부가세 별도)</div>
-              <div className="text-2xl font-black text-blue-700 tabular-nums">{fmt(finalTotal)}원</div>
-              {delivery > 0 && <div className="text-xs text-slate-500 mt-0.5">택배비 {fmt(delivery)}원 포함</div>}
-            </div>
-            <div className="rounded-2xl border-2 border-slate-300 bg-slate-50 px-4 py-3 text-center">
-              <div className="text-xs text-slate-600 font-semibold">부가세 포함</div>
-              <div className="text-2xl font-black text-slate-700 tabular-nums">{fmt(Math.round(finalTotal * 1.1))}원</div>
-            </div>
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-center">
+            <div className="text-xs text-blue-600 font-semibold">공급가 (부가세 별도)</div>
+            <div className="text-2xl font-black text-blue-700 tabular-nums">{fmt(finalTotal)}원</div>
+            {deliveryPrice > 0 && <div className="text-xs text-slate-500 mt-0.5">택배비 {fmt(deliveryPrice)}원 포함</div>}
+            {iceboxCost > 0 && <div className="text-xs text-slate-500 mt-0.5">아이스박스 {fmt(iceboxCost)}원 포함</div>}
           </div>
-        </>
+          <div className="rounded-2xl border-2 border-slate-300 bg-slate-50 px-4 py-3 text-center">
+            <div className="text-xs text-slate-600 font-semibold">부가세 포함</div>
+            <div className="text-2xl font-black text-slate-700 tabular-nums">{fmt(Math.round(finalTotal * 1.1))}원</div>
+          </div>
+        </div>
       );
-
     })()}
+
+    {/* 추가 옵션: 아이스박스 / 택배비 */}
+    <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 text-sm font-semibold text-slate-600">추가 옵션</div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div>
+          <label className="flex cursor-pointer items-center gap-2 text-sm mb-2">
+            <input type="checkbox" checked={useIcebox} onChange={e => setUseIcebox(e.target.checked)} />
+            <span className="font-semibold text-blue-700">🧊 아이스박스 (5~10월)</span>
+          </label>
+          {useIcebox && (
+            <div className="flex gap-2 flex-wrap">
+              {ICEBOX_OPTIONS.map(o => (
+                <button key={o.value} type="button"
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${iceboxPrice === o.value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  onClick={() => setIceboxPrice(o.value)}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <div className="mb-2 text-sm font-semibold text-slate-700">🚚 택배비</div>
+          <div className="flex gap-2 flex-wrap">
+            {DELIVERY_OPTIONS.map(o => (
+              <button key={o.value} type="button"
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${deliveryPrice === o.value ? "border-green-300 bg-green-50 text-green-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                onClick={() => setDeliveryPrice(o.value)}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
 
     {/* 메모 */}
     <div className="mb-4">
@@ -1328,7 +1355,7 @@ async function loadSignageList() {
       </button>
       <button className={btn}
         disabled={!sheetItems.some(x => x.calcResult)}
-        onClick={handleSheetSave}>
+        onClick={async () => { await handleSheetSave(); setUseIcebox(false); setIceboxPrice(4620); setDeliveryPrice(0); }}>
         💾 저장만
       </button>
     </div>
@@ -1670,8 +1697,8 @@ async function loadSignageList() {
           manualV: 0,
         })),
         memo: memo || null,
-        iceboxPrice: 0,
-        deliveryPrice: sheetNoDelivery ? 0 : (grandTotal < 50000 ? 3300 : 0),
+        iceboxPrice: useIcebox ? iceboxPrice : 0,
+        deliveryPrice,
         quoteRequestId: lastQuoteRequestId,
       }}
     />
