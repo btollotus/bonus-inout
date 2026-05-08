@@ -1124,7 +1124,7 @@ export default function PayrollPage() {
                                         .reduce((s,u)=>s+u.count,0)
                                       const isTrial=emp?.position==='수습'
                                       const detail=calcFuelPayDetail(emp||{} as Employee,row.work_days||0,eff,fuelPriceMap,annualDaysOff,isTrial)
-                                      const canCalc=isElectric
+                                      const canCalc=detail.isElectric
                                       ? price>0&&(row.work_days||0)>0
                                       : price>0&&dist>0&&eff>0&&(row.work_days||0)>0
                                       // 인사관리 연비 여부
