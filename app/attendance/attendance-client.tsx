@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/browser";
 import { PinModal } from "@/app/contexts/PinSessionContext";
 import { getDistanceMeters, getCurrentPosition, nowKSTIso, todayKST } from "@/utils/location";
 
-type Employee = { id: string; name: string; pin: string | null; webauthn_credential: any };
+type Employee = { id: string; name: string; pin: string | null; auth_user_id: string | null; webauthn_credential: any };
 type AttendanceRecord = { type: string; happened_at: string };
 
 export default function AttendanceClient() {
@@ -25,7 +25,7 @@ export default function AttendanceClient() {
   useEffect(() => {
     async function init() {
       const [{ data: emps }, { data: office }] = await Promise.all([
-        supabase.from("employees").select("id,name,pin,webauthn_credential").is("resign_date", null).order("name"),  
+        supabase.from("employees").select("id,name,pin,auth_user_id,webauthn_credential").is("resign_date", null).order("name"),
         supabase.from("office_location").select("latitude,longitude,radius_m").single(),
       ]);
       setEmployees((emps ?? []) as Employee[]);
@@ -58,7 +58,7 @@ export default function AttendanceClient() {
   }
 
   // PIN 인증 성공 후 WebAuthn + GPS 진행
-  async function handlePinSuccess(employeeId: string, employeeName: string) {
+  async function handlePinSuccess(employeeId: string, employeeName: string, _authUserId: string) {
     setShowPinModal(false);
     const emp = employees.find(e => e.id === employeeId);
     if (!emp) return;
