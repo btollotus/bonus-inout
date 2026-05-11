@@ -337,8 +337,15 @@ useEffect(() => {
         return { ...spec, orderId: oid };
       });
 
-      setRawLines(mappedRaw);
-      rebuildLines(orderIds, mappedRaw);
+     // ✅ orderIds는 created_at 오름차순 → 그 순서로 rawLines 재정렬
+     const sortedRaw = [...mappedRaw].sort((a, b) => {
+      const ai = orderIds.indexOf(a.orderId);
+      const bi = orderIds.indexOf(b.orderId);
+      return ai - bi;
+    });
+
+    setRawLines(sortedRaw);
+    rebuildLines(orderIds, sortedRaw);
     } catch (e: any) {
       setMsg(e?.message ?? String(e));
       setOrders([]);
