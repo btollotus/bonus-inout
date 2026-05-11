@@ -1055,12 +1055,12 @@ async function loadSignageList() {
              
               <div className="overflow-x-auto rounded-2xl border border-slate-200">
               <table className="w-full table-fixed text-sm">
-                <colgroup>
+              <colgroup>
                   <col style={{ width: 100 }} /><col style={{ width: 140 }} />
                   <col style={{ width: 120 }} /><col style={{ width: 120 }} />
                   <col style={{ width: 80  }} /><col style={{ width: 80  }} />
                   <col style={{ width: 100 }} /><col style={{ width: 100 }} />
-                  <col style={{ width: 160 }} />
+                  <col style={{ width: 100 }} /><col style={{ width: 160 }} />
                 </colgroup>
                 <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                   <tr>
@@ -1070,6 +1070,7 @@ async function loadSignageList() {
                     <th className="px-3 py-2 text-left">크기/수량</th>
                     <th className="px-3 py-2 text-center">신규</th>
                     <th className="px-3 py-2 text-right">고객 제시가</th>
+                    <th className="px-3 py-2 text-right">합계</th>
                     <th className="px-3 py-2 text-center">상태</th>
                     <th className="px-3 py-2 text-left">미수주 사유</th>
                     <th className="px-3 py-2 text-center">상태 변경</th>
@@ -1099,6 +1100,9 @@ async function loadSignageList() {
                         </td>
                         <td className="px-3 py-2 text-right font-semibold tabular-nums text-blue-700">
                           {q?.final_price ? fmt(q.final_price)+"원" : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-700">
+                          {q?.total ? fmt(q.total)+"원" : "—"}
                         </td>
                         <td className="px-3 py-2 text-center">
                           <span style={{ padding: "2px 8px", borderRadius: 8, fontSize: 11, fontWeight: "bold",
