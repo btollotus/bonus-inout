@@ -2016,7 +2016,7 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, signe
           <tr><td style={thS}>제품명</td><td style={tdS} colSpan={3}>{productNameDisplay}</td></tr>
           <tr><td style={thS}>식품유형</td><td style={tdS}>{wo.food_type ?? "—"}</td><td style={thS}>두께</td><td style={tdS}>{wo.thickness ?? "—"}</td></tr>
           <tr><td style={thS}>규격(로고)</td><td style={tdS}>{wo.logo_spec ?? "—"}</td><td style={thS}>포장방법</td><td style={tdS}>{wo.packaging_type ?? "—"}{wo.packaging_type === "트레이" && wo.tray_slot ? ` / ${wo.tray_slot}` : ""}</td></tr>
-          <tr><td style={thS}>포장단위</td><td style={tdS}>{wo.package_unit ?? "—"}</td><td style={thS}>장/성형틀</td><td style={tdS}>{wo.mold_per_sheet ? `${wo.mold_per_sheet}개` : "—"}</td></tr>
+          <tr><td style={thS}>포장단위</td><td style={tdS}>{wo.package_unit ?? "—"}</td><td style={thS}>장당 갯수/아크릴 갯수</td><td style={tdS}>{wo.mold_per_sheet ? `${wo.mold_per_sheet}개` : "—"}{(wo as any).mold_count ? ` / ${(wo as any).mold_count}장` : ""}</td></tr>
           <tr><td style={thS}>성형틀 장수</td><td style={tdS} colSpan={3}>{(wo as any).mold_count ? `${(wo as any).mold_count}장` : "—"}</td></tr>
           <tr><td style={thS}>납품방법</td><td style={tdS}>{wo.delivery_method ?? "—"}</td><td style={thS}>주문일</td><td style={tdS}>{(() => { const d = wo.order_date; return d ? `${d} (${["일","월","화","수","목","금","토"][new Date(d + "T00:00:00+09:00").getDay()]})` : ""; })()}</td></tr>
           <tr><td style={thS}>지시번호</td><td style={tdS} colSpan={3}>{wo.work_order_no}</td></tr>
