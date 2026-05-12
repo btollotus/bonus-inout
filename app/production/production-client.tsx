@@ -1798,7 +1798,7 @@ function ItemImages({ images, logoSpec }: { images: string[]; logoSpec: string |
 // ─────────────────────── 유틸 함수 ───────────────────────
 function isSpecialItem(itemName: string): boolean {
   const n = String(itemName ?? "").trim();
-  return n.startsWith("성형틀") || n.startsWith("인쇄제판");
+  return n.startsWith("성형틀") || n.startsWith("인쇄제판") || n.startsWith("아이스박스") || n.startsWith("택배비");
 }
 
 function parseLogoSize(logoSpec: string | null): { width: string; height: string } | null {
