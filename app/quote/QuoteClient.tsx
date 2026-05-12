@@ -941,6 +941,7 @@ async function loadSignageList() {
                             total: firstCr.totalActual ?? 0,
                             final_price: firstV,
                             final_price_stock: firstCr.V_stock ?? null,
+                            delivery_cost: (useIcebox ? iceboxPrice : 0) + deliveryPrice,
                           });
                           // quote_items — 전체 품목 저장
                           const itemRows = calcItems.map((fi, idx) => {
