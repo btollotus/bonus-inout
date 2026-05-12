@@ -1104,7 +1104,7 @@ async function loadSignageList() {
                         </td>
                         <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-700">
                         {q?.final_price && r.quantity
-                            ? fmt(Math.round(((q.final_price * r.quantity) + (q.mold_cost ?? 0) + (q.plate_cost ?? 0) + (q.transfer_cost ?? 0) + (q.delivery_cost ?? 0)) * 1.1)) + "원"
+                            ? fmt(Math.round(((q.final_price * r.quantity) + (q.mold_cost ?? 0) + (q.plate_cost ?? 0) + (q.transfer_cost ?? 0)) * 1.1) + (q.delivery_cost ?? 0)) + "원"
                             : "—"}
                         </td> 
                         <td className="px-3 py-2 text-center">
