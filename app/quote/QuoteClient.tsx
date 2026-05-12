@@ -402,7 +402,8 @@ async function loadSignageList() {
       plate_cost:      totalPlateCost,
       transfer_sheets: totalSheets,
       transfer_cost:   totalSheetCost,
-      delivery_cost:   delivery,
+      icebox_cost:     iceboxCost,
+      delivery_cost:   deliveryPrice,
       total:           finalTotal,
     });
     if (quoteErr) return setMsg(quoteErr.message);
