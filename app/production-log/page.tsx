@@ -637,38 +637,51 @@ function ProductionLogTab({ role, userId, showToast }: {
               {(log.work_order_nos ?? []).length > 0 && (
                 <div className="mb-3">
                   <div className="mb-1.5 text-xs font-semibold text-slate-500">처리한 작업지시서</div>
-                  <div className="flex flex-wrap gap-1.5">
-                  {(log.work_order_nos ?? []).map((no) => {
+                  <div className="space-y-1.5">
+                  {(() => {
+                    const TAG_LIST = ["생산완료", "전사인쇄", "인쇄검수", "금속검출"];
+                    const TAG_CLS: Record<string, string> = {
+                      "생산완료": "border-green-300 bg-green-100 text-green-800",
+                      "전사인쇄": "border-blue-300 bg-blue-100 text-blue-800",
+                      "인쇄검수": "border-violet-300 bg-violet-100 text-violet-800",
+                      "금속검출": "border-orange-300 bg-orange-100 text-orange-800",
+                    };
+                    const grouped: Record<string, string[]> = {};
+                    for (const no of (log.work_order_nos ?? [])) {
                       const tags = woTagMap[no]?.[log.employee_name] ?? [];
-                      return (
-                        <span key={no} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-700 flex items-center gap-1 flex-wrap">
-                          {woInfoMap[no] ? `${woInfoMap[no].client_name} — ${woInfoMap[no].product_name}` : no}
-                          {tags.map((tag) => (
-                            <span key={tag} className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold
-                              ${tag === "생산완료" ? "border-green-200 bg-green-100 text-green-700"
-                              : tag === "전사인쇄" ? "border-blue-300 bg-blue-200 text-blue-800"
-                              : tag === "인쇄검수" ? "border-violet-200 bg-violet-100 text-violet-700"
-                              : "border-orange-200 bg-orange-100 text-orange-700"}`}>
-                              {tag}
+                      for (const tag of tags) {
+                        if (!grouped[tag]) grouped[tag] = [];
+                        grouped[tag].push(no);
+                      }
+                    }
+                    return TAG_LIST.filter((tag) => grouped[tag]?.length > 0).map((tag) => (
+                      <div key={tag} className="flex flex-wrap items-start gap-1.5">
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-bold ${TAG_CLS[tag]}`}>
+                          {tag} {grouped[tag].length}건
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {grouped[tag].map((no) => (
+                            <span key={no} className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700">
+                              {woInfoMap[no] ? `${woInfoMap[no].client_name} — ${woInfoMap[no].product_name}` : no}
                             </span>
                           ))}
-                        </span>
-                      );
-                    })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
                   </div> 
                 </div>
               )}
               <div className="mb-3">
                 <div className="mb-1.5 text-xs font-semibold text-slate-500">업무 체크</div>
                 <div className="flex flex-wrap gap-2">
-                  {taskTypes.map((t) => {
-                    const checked = (log.task_checks ?? {})[t.id] === true;
-                    return (
-                      <span key={t.id} className={`rounded-lg border px-2 py-1 text-xs font-medium ${checked ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-400 line-through"}`}>
-                        {checked ? "✅" : "☐"} {t.name}
-                      </span>
-                    );
-                  })}
+                  {taskTypes.filter((t) => (log.task_checks ?? {})[t.id] === true).length === 0 ? (
+                    <span className="text-xs text-slate-400">체크된 항목 없음</span>
+                  ) : taskTypes.filter((t) => (log.task_checks ?? {})[t.id] === true).map((t) => (
+                    <span key={t.id} className="rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-700">
+                      ✅ {t.name}
+                    </span>
+                  ))}
                 </div>
               </div>
               {log.extra_note && (
