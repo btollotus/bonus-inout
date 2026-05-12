@@ -1060,20 +1060,28 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
         </div>
       </div>
       <div className="flex gap-2 px-6 pb-5">
-        <button
+      <button
           className="flex-1 rounded-xl border border-blue-500 bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
-          onClick={async () => {
+          onClick={() => {
             setShowCompleteModal(false);
-            setIsCompleting(true);
-            await doComplete(true, completeCcpEndedAtRef.current);
+            setPinProgressPending(() => async (name: string) => {
+              setWoChecks((prev) => prev ? { ...prev, assignee_production: name } : prev);
+              setIsCompleting(true);
+              await doComplete(true, completeCcpEndedAtRef.current);
+            });
+            setShowPinModalForProgress(true);
           }}
         >🧲 생산완료+CCP-1P 이동</button>
-        <button
+      <button
           className="flex-1 rounded-xl border border-green-500 bg-green-600 py-2.5 text-sm font-bold text-white hover:bg-green-700"
-          onClick={async () => {
+          onClick={() => {
             setShowCompleteModal(false);
-            setIsCompleting(true);
-            await doComplete(false, completeCcpEndedAtRef.current);
+            setPinProgressPending(() => async (name: string) => {
+              setWoChecks((prev) => prev ? { ...prev, assignee_production: name } : prev);
+              setIsCompleting(true);
+              await doComplete(false, completeCcpEndedAtRef.current);
+            });
+            setShowPinModalForProgress(true);
           }}
         >✅ 생산완료</button>
         <button
