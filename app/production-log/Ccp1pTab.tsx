@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import { PinModal } from "@/app/contexts/PinSessionContext";
 
 const supabase = createClient();
 
@@ -294,6 +295,8 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rangePanelOpen, setRangePanelOpen] = useState(false);
+  const [showWorkerPin, setShowWorkerPin] = useState(false);
+  const [confirmedWorker, setConfirmedWorker] = useState<string | null>(null);
   const [rangeFrom, setRangeFrom] = useState<string>(todayKST());
   const [rangeTo, setRangeTo] = useState<string>(todayKST());
   const [rangeLogs, setRangeLogs] = useState<Record<string, MetalLog[]>>({});
@@ -301,7 +304,7 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
   const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
 
   useEffect(() => {
-    supabase.from("employees").select("id,name").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
       .then(({ data }: { data: any[] | null }) => setEmployees(data ?? []));
   }, []);
 
@@ -404,9 +407,11 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
 // 변경 후
 function selectWo(wo: WorkOrderItem) {
   setSelectedWoId(wo.id);
+  setConfirmedWorker(null);
   const existing = logMap[wo.id];
   if (existing) {
     setFormData({ ...existing });
+    if (existing.worker_name) setConfirmedWorker(existing.worker_name);
   } else {
     setFormData(emptyLog(wo.id, wo.product_name, wo.client_name, selectedDate)); 
   }
@@ -604,6 +609,7 @@ function selectWo(wo: WorkOrderItem) {
           assignee_input: workerName,
           status_input: true,
           status: "완료",
+          input_done_at: new Date().toISOString(),
         }).eq("id", selectedWoId);
 
         if (updateErr) {
@@ -733,6 +739,18 @@ function selectWo(wo: WorkOrderItem) {
 
   return (
     <div className="space-y-4">
+      {showWorkerPin && (
+        <PinModal
+          employees={employees.filter((e: any) => e.name !== null) as any}
+          title="금속검출 담당자 확인"
+          onSuccess={(_empId: string, empName: string) => {
+            setConfirmedWorker(empName);
+            setFormData((prev: any) => prev ? { ...prev, worker_name: empName } : prev);
+            setShowWorkerPin(false);
+          }}
+          onCancel={() => setShowWorkerPin(false)}
+        />
+      )}
 
    
 
@@ -1003,16 +1021,21 @@ function selectWo(wo: WorkOrderItem) {
                 </div>
                 <div>
                   <div className="mb-1 text-xs text-slate-500">담당자</div>
-                  <select
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                    value={formData.worker_name ?? ""}
-                    onChange={(e: any) => setFormData((prev: any) => prev ? { ...prev, worker_name: e.target.value || null } : prev)}
-                  >
-                    <option value="">— 선택 —</option>
-                    {employees.map((e: any) => e.name ? (
-                      <option key={e.id} value={e.name}>{e.name}</option>
-                    ) : null)}
-                  </select>
+                  {confirmedWorker ? (
+                    <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
+                      <span className="text-green-700 text-sm font-semibold">👤 {confirmedWorker}</span>
+                      <button className="text-xs text-green-400 hover:text-green-600 underline"
+                        onClick={() => { setConfirmedWorker(null); setFormData((prev: any) => prev ? { ...prev, worker_name: null } : prev); }}>
+                        변경
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="w-full rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100 text-left"
+                      onClick={() => setShowWorkerPin(true)}>
+                      🔑 PIN으로 담당자 확인
+                    </button>
+                  )}
                 </div>
               </div>
 
