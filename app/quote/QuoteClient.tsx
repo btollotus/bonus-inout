@@ -49,6 +49,7 @@ type QuoteRow = {
   transfer_cost: number | null;
   work_fee: number | null;
   packaging_cost: number | null;
+  icebox_cost: number | null;
   delivery_cost: number | null;
   total: number | null;
   t_price: number | null;
@@ -941,7 +942,8 @@ async function loadSignageList() {
                             total: firstCr.totalActual ?? 0,
                             final_price: firstV,
                             final_price_stock: firstCr.V_stock ?? null,
-                            delivery_cost: (useIcebox ? iceboxPrice : 0) + deliveryPrice,
+                            icebox_cost: useIcebox ? iceboxPrice : 0,
+                            delivery_cost: deliveryPrice,
                           });
                           // quote_items — 전체 품목 저장
                           const itemRows = calcItems.map((fi, idx) => {
@@ -1104,7 +1106,7 @@ async function loadSignageList() {
                         </td>
                         <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-700">
                         {q?.final_price && r.quantity
-                            ? fmt(Math.round(((q.final_price * r.quantity) + (q.mold_cost ?? 0) + (q.plate_cost ?? 0) + (q.transfer_cost ?? 0) + (q.work_fee ?? 0)) * 1.1) + (q.delivery_cost ?? 0)) + "원"
+                            ? fmt(Math.round(((q.final_price * r.quantity) + (q.mold_cost ?? 0) + (q.plate_cost ?? 0) + (q.transfer_cost ?? 0) + (q.work_fee ?? 0)) * 1.1) + (q.delivery_cost ?? 0) + (q.icebox_cost ?? 0)) + "원"
                             : "—"}
                         </td> 
                         <td className="px-3 py-2 text-center">
@@ -1666,7 +1668,7 @@ async function loadSignageList() {
               inputMode: "auto" as const,
               items: printItems,
               memo: r.memo,
-              iceboxPrice: 0,
+              iceboxPrice: q?.icebox_cost ?? 0,
               deliveryPrice: q?.delivery_cost ?? 0,
               quoteRequestId: r.id,
             }}
