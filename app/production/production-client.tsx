@@ -915,7 +915,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
     await doComplete(false);
   }
 
-  async function doComplete(navigate: boolean, ccpEndedAt?: string | null) {
+  async function doComplete(navigate: boolean, ccpEndedAt?: string | null, productionAssignee?: string) {
     if (!selectedWo) return;
     const foodCat = getFoodCategory(selectedWo.food_type);
     const isChuganJae = foodCat === "중간재";
@@ -931,7 +931,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
         if (basicErr) { setMsg("기본정보 저장 실패: " + basicErr.message); setIsCompleting(false); return; }
       }
       if (woChecks) {
-        const { error: checksErr } = await supabase.from("work_orders").update({ assignee_transfer: woChecks.assignee_transfer || null, assignee_print_check: woChecks.assignee_print_check || null, assignee_production: woChecks.assignee_production || null, assignee_input: woChecks.assignee_input || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+        const { error: checksErr } = await supabase.from("work_orders").update({ assignee_transfer: woChecks.assignee_transfer || null, assignee_print_check: woChecks.assignee_print_check || null, assignee_production: productionAssignee || woChecks.assignee_production || null, assignee_input: woChecks.assignee_input || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
         if (checksErr) { setMsg("담당자 저장 실패: " + checksErr.message); setIsCompleting(false); return; }
       }
       for (const item of items) {
@@ -1065,10 +1065,9 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
           onClick={() => {
             setShowCompleteModal(false);
             setPinProgressPending(() => async (name: string) => {
-              setWoChecks((prev) => prev ? { ...prev, assignee_production: name } : prev);
               setIsCompleting(true);
-              await doComplete(true, completeCcpEndedAtRef.current);
-            });
+              await doComplete(true, completeCcpEndedAtRef.current, name);
+            }); 
             setShowPinModalForProgress(true);
           }}
         >🧲 생산완료+CCP-1P 이동</button>
@@ -1077,9 +1076,8 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
           onClick={() => {
             setShowCompleteModal(false);
             setPinProgressPending(() => async (name: string) => {
-              setWoChecks((prev) => prev ? { ...prev, assignee_production: name } : prev);
               setIsCompleting(true);
-              await doComplete(false, completeCcpEndedAtRef.current);
+              await doComplete(false, completeCcpEndedAtRef.current, name);
             });
             setShowPinModalForProgress(true);
           }}
