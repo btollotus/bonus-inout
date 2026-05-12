@@ -315,29 +315,29 @@ function ProductionLogTab({ role, userId, showToast }: {
         .select("*").eq("log_date", today).eq("employee_id", empId).maybeSingle(),
         Promise.all([
           supabase.from("work_orders")
-            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
-            .eq("assignee_production", empName)
-            .eq("status_production", true)
-            .gte("updated_at", `${today}T00:00:00+09:00`)
-            .order("updated_at", { ascending: false }),
-          supabase.from("work_orders")
-            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
-            .eq("assignee_transfer", empName)
-            .eq("status_transfer", true)
-            .gte("updated_at", `${today}T00:00:00+09:00`)
-            .order("updated_at", { ascending: false }),
-          supabase.from("work_orders")
-            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
-            .eq("assignee_print_check", empName)
-            .eq("status_print_check", true)
-            .gte("updated_at", `${today}T00:00:00+09:00`)
-            .order("updated_at", { ascending: false }),
-          supabase.from("work_orders")
-            .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
-            .eq("assignee_input", empName)
-            .eq("status_input", true)
-            .gte("updated_at", `${today}T00:00:00+09:00`)
-            .order("updated_at", { ascending: false }),
+          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
+          .eq("assignee_production", empName)
+          .eq("status_production", true)
+          .gte("production_done_at", `${today}T00:00:00+09:00`)
+          .order("production_done_at", { ascending: false }),
+        supabase.from("work_orders")
+          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
+          .eq("assignee_transfer", empName)
+          .eq("status_transfer", true)
+          .gte("transfer_done_at", `${today}T00:00:00+09:00`)
+          .order("transfer_done_at", { ascending: false }),
+        supabase.from("work_orders")
+          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
+          .eq("assignee_print_check", empName)
+          .eq("status_print_check", true)
+          .gte("print_check_done_at", `${today}T00:00:00+09:00`)
+          .order("print_check_done_at", { ascending: false }),
+        supabase.from("work_orders")
+          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
+          .eq("assignee_input", empName)
+          .eq("status_input", true)
+          .gte("input_done_at", `${today}T00:00:00+09:00`)
+          .order("input_done_at", { ascending: false }),
         ]).then(([prodRes, transferRes, printCheckRes, inputRes]) => {
           const map = new Map<string, WorkOrderRef>();
           (prodRes.data ?? []).forEach((w: any) => { map.set(w.id, { ...w, tags: ["생산완료"] }); });
