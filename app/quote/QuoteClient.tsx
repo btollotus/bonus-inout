@@ -1363,11 +1363,7 @@ async function loadSignageList() {
         onClick={async () => { await handleSheetSave(); setPrintOpen(true); }}>
         🖨️ 견적서 출력
       </button>
-      <button className={btn}
-        disabled={!sheetItems.some(x => x.calcResult)}
-        onClick={async () => { await handleSheetSave(); setUseIcebox(false); setIceboxPrice(4620); setDeliveryPrice(0); }}>
-        💾 저장만
-      </button>
+
     </div>
   </div>
 
