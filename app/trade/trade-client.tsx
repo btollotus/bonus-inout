@@ -461,6 +461,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [orderWoMoldPerSheet, setOrderWoMoldPerSheet] = useState("");
   const [orderWoMoldCols, setOrderWoMoldCols] = useState("");
   const [orderWoMoldRows, setOrderWoMoldRows] = useState(""); 
+  const [orderWoMoldCount, setOrderWoMoldCount] = useState("");
   const [orderWoPackagingType, setOrderWoPackagingType] = useState("");
   const [orderWoNote, setOrderWoNote] = useState("");
 
@@ -547,6 +548,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [eWoMoldPerSheet, setEWoMoldPerSheet] = useState("");
   const [eWoMoldCols, setEWoMoldCols] = useState("");
   const [eWoMoldRows, setEWoMoldRows] = useState(""); 
+  const [eWoMoldCount, setEWoMoldCount] = useState("");
   const [eWoNote, setEWoNote] = useState("");
 
   useEffect(() => {
@@ -1048,6 +1050,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
           mold_per_sheet: (toInt(orderWoMoldCols) * toInt(orderWoMoldRows)) > 0 ? toInt(orderWoMoldCols) * toInt(orderWoMoldRows) : null,
           mold_cols: toInt(orderWoMoldCols) > 0 ? toInt(orderWoMoldCols) : null,
           mold_rows: toInt(orderWoMoldRows) > 0 ? toInt(orderWoMoldRows) : null,
+          mold_count: toInt(orderWoMoldCount) > 0 ? toInt(orderWoMoldCount) : null,
           note: (() => {
             const realMemo = "화이트초콜릿(이산화티타늄첨가)\n이산화티타늄 혼합. 흰색으로 만들것.\n배합비 2kg + 100g";
             const hasReal = (foodType ?? "").includes("리얼");
@@ -1181,10 +1184,10 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
         setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
         setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
-        setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoNote("");
+        setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
         setOrderSkipProductionCheck(false);
         setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
-        await loadTrades(); return;
+        await loadTrades(); return; 
       }
     }
 
@@ -1192,7 +1195,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
     setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
     setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
-    setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoNote("");
+    setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
     setOrderSkipProductionCheck(false);
     setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
     await loadTrades();
@@ -1435,6 +1438,7 @@ if (copyPartnerId) {
           setOrderWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
           setOrderWoMoldCols((wo as any).mold_cols ? String((wo as any).mold_cols) : "");
           setOrderWoMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : "");
+          setOrderWoMoldCount((wo as any).mold_count ? String((wo as any).mold_count) : "");
           setOrderTitle((wo as any).reference_note ?? "");
           setOrderWoNote((wo as any).note ?? "");
 
@@ -1563,6 +1567,7 @@ if (woSubNameVal) {
         setEWoMoldPerSheet((wo as any).mold_per_sheet ? String((wo as any).mold_per_sheet) : "");
         setEWoMoldCols((wo as any).mold_cols ? String((wo as any).mold_cols) : "");
         setEWoMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : "");
+        setEWoMoldCount((wo as any).mold_count ? String((wo as any).mold_count) : "");
         setEOrderTitle((wo as any).reference_note ?? "");
         setEWoNote((wo as any).note ?? "");
         const rawImages: string[] = (wo as any).images ?? [];
@@ -1656,7 +1661,7 @@ if (woSubNameVal) {
             if (!upErr) uploadedUrls.push(path);
           }
         }
-        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, note: eWoNote.trim() || null, reference_note: eOrderTitle.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString()}).eq("id", eWoId);
+        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, mold_count: toInt(eWoMoldCount) > 0 ? toInt(eWoMoldCount) : null, note: eWoNote.trim() || null, reference_note: eOrderTitle.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString()}).eq("id", eWoId);
         await supabase.from("work_order_items").update({ delivery_date: eShipDate }).eq("work_order_id", eWoId);
 
       
@@ -2009,6 +2014,12 @@ if (woSubNameVal) {
                               <input className={inpR} inputMode="numeric" placeholder="세로" value={eWoMoldRows} onChange={(e) => setEWoMoldRows(e.target.value.replace(/[^\d]/g, ""))} />
                             </div>
                           </div>
+                          <div>
+                            <div className="mb-1 text-xs text-slate-600">성형틀 장수 (ea)</div>
+                            <input className={inpR} inputMode="numeric" placeholder="예: 10"
+                              value={eWoMoldCount}
+                              onChange={(e) => setEWoMoldCount(e.target.value.replace(/[^\d]/g, ""))} />
+                          </div>
                           <div><div className="mb-1 text-xs text-slate-600">비고</div><input className={inp} value={eWoNote} onChange={(e) => setEWoNote(e.target.value)} /></div>
                           <div className="md:col-span-3">
                             <div className="mb-1 text-xs text-slate-600">인쇄 디자인 이미지 추가</div>
@@ -2165,7 +2176,7 @@ if (woSubNameVal) {
   setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
   setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
   setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
-  setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoNote("");
+  setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
   setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin);
   setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({});
   setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
@@ -2191,7 +2202,7 @@ if (woSubNameVal) {
   setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
   setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
   setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
-  setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoNote("");
+  setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
   setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin);
   setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({});
   setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
@@ -2331,7 +2342,13 @@ if (woSubNameVal) {
                               <input className={inpR} inputMode="numeric" placeholder="세로" value={orderWoMoldRows} onChange={(e) => setOrderWoMoldRows(e.target.value.replace(/[^\d]/g, ""))} />
                             </div>
                           </div>
-                          <div className="md:col-span-3 flex items-center gap-3">
+                          <div>
+                        <div className="mb-1 text-xs text-slate-600">성형틀 장수 (ea)</div>
+                        <input className={inpR} inputMode="numeric" placeholder="예: 10"
+                          value={orderWoMoldCount}
+                          onChange={(e) => setOrderWoMoldCount(e.target.value.replace(/[^\d]/g, ""))} />
+                      </div>
+                      <div className="md:col-span-3 flex items-center gap-3">
                         <label className="flex items-center gap-2 text-sm cursor-pointer">
                           <input type="checkbox" checked={orderSkipProductionCheck}
                             onChange={(e) => setOrderSkipProductionCheck(e.target.checked)} />

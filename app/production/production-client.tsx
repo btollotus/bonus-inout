@@ -246,6 +246,7 @@ const [hasMore, setHasMore] = useState(false);
   const [eMoldPerSheet, setEMoldPerSheet] = useState("");
   const [eMoldCols, setEMoldCols] = useState("");
   const [eMoldRows, setEMoldRows] = useState("");
+  const [eMoldCount, setEMoldCount] = useState("");
   const [eNote, setENote] = useState("");
   const [eReferenceNote, setEReferenceNote] = useState("");
 
@@ -725,7 +726,9 @@ const channel = supabase
     }
     setEFoodType(wo.food_type ?? ""); setELogoSpec(wo.logo_spec ?? ""); setEThickness(wo.thickness ?? "2mm"); setEDeliveryMethod(wo.delivery_method ?? "택배"); setEPackagingType(wo.packaging_type ?? ""); setETraySlot(wo.tray_slot ?? "정사각20구"); setEPackageUnit(wo.package_unit ?? "100ea"); setEMoldPerSheet(wo.mold_per_sheet ? String(wo.mold_per_sheet) : "");
     setEMoldCols((wo as any).mold_cols ? String((wo as any).mold_cols) : "");
-    setEMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : ""); setENote(wo.note ?? ""); setEReferenceNote(wo.reference_note ?? ""); setECcpSlotId(wo.ccp_slot_id ?? "");
+    setEMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : "");
+    setEMoldCount((wo as any).mold_count ? String((wo as any).mold_count) : "");
+    setENote(wo.note ?? ""); setEReferenceNote(wo.reference_note ?? ""); setECcpSlotId(wo.ccp_slot_id ?? "");
     setWoChecks({ status_transfer: wo.status_transfer, status_print_check: wo.status_print_check, status_production: wo.status_production, status_input: wo.status_input, assignee_transfer: (wo as any).assignee_transfer ?? "", assignee_print_check: (wo as any).assignee_print_check ?? "", assignee_production: (wo as any).assignee_production ?? "", assignee_input: (wo as any).assignee_input ?? "" });
     setLastUpdatedAt(null); setFlashKey(null); setSignedImageUrls([]);
     const userId = currentUserIdRef.current;
@@ -927,7 +930,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
     try {
       if (isAdminOrSubadmin) {
         const { error: basicErr } = await supabase.from("work_orders").update({ sub_name: eSubName.trim() || null, product_name: eProductName.trim(), food_type: eFoodType.trim() || null, logo_spec: eLogoSpec.trim() || null, thickness: eThickness || null, delivery_method: eDeliveryMethod || null, packaging_type: ePackagingType === "트레이" ? `트레이-${eTraySlot}` : ePackagingType || null,
-        tray_slot: null, package_unit: ePackageUnit || null, mold_per_sheet: (toInt(eMoldCols) * toInt(eMoldRows)) > 0 ? toInt(eMoldCols) * toInt(eMoldRows) : null, mold_cols: toInt(eMoldCols) > 0 ? toInt(eMoldCols) : null, mold_rows: toInt(eMoldRows) > 0 ? toInt(eMoldRows) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+        tray_slot: null, package_unit: ePackageUnit || null, mold_per_sheet: (toInt(eMoldCols) * toInt(eMoldRows)) > 0 ? toInt(eMoldCols) * toInt(eMoldRows) : null, mold_cols: toInt(eMoldCols) > 0 ? toInt(eMoldCols) : null, mold_rows: toInt(eMoldRows) > 0 ? toInt(eMoldRows) : null, mold_count: toInt(eMoldCount) > 0 ? toInt(eMoldCount) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
         if (basicErr) { setMsg("기본정보 저장 실패: " + basicErr.message); setIsCompleting(false); return; }
       }
       if (woChecks) {
@@ -1389,6 +1392,13 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                         <input className={inpR} inputMode="numeric" placeholder="세로" value={eMoldRows} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldRows(e.target.value.replace(/[^\d]/g, ""))} />
                       </div>
                     </div>
+                    <div>
+                      <div className="mb-1 text-xs text-slate-500">성형틀 장수 (ea)</div>
+                      <input className={inpR} inputMode="numeric" placeholder="예: 10"
+                        value={eMoldCount}
+                        disabled={selectedWo?.status === "완료" && !isEditMode}
+                        onChange={(e) => setEMoldCount(e.target.value.replace(/[^\d]/g, ""))} />
+                    </div>
                     <div><div className="mb-1 text-xs text-slate-500">비고</div><textarea className={`${inp} resize-none`} rows={3} value={eNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setENote(e.target.value)} /></div>
                     <div><div className="mb-1 text-xs text-slate-500">참고사항</div><input className={inp} value={eReferenceNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEReferenceNote(e.target.value)} /></div>
                   </div>
@@ -1686,7 +1696,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                         try {
                           if (isAdminOrSubadmin) {
                             const { error } = await supabase.from("work_orders").update({ sub_name: eSubName.trim() || null, product_name: eProductName.trim(), food_type: eFoodType.trim() || null, logo_spec: eLogoSpec.trim() || null, thickness: eThickness || null, delivery_method: eDeliveryMethod || null, packaging_type: ePackagingType === "트레이" ? `트레이-${eTraySlot}` : ePackagingType || null,
-                            tray_slot: null, package_unit: ePackageUnit || null, mold_per_sheet: (toInt(eMoldCols) * toInt(eMoldRows)) > 0 ? toInt(eMoldCols) * toInt(eMoldRows) : null, mold_cols: toInt(eMoldCols) > 0 ? toInt(eMoldCols) : null, mold_rows: toInt(eMoldRows) > 0 ? toInt(eMoldRows) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+                            tray_slot: null, package_unit: ePackageUnit || null, mold_per_sheet: (toInt(eMoldCols) * toInt(eMoldRows)) > 0 ? toInt(eMoldCols) * toInt(eMoldRows) : null, mold_cols: toInt(eMoldCols) > 0 ? toInt(eMoldCols) : null, mold_rows: toInt(eMoldRows) > 0 ? toInt(eMoldRows) : null, mold_count: toInt(eMoldCount) > 0 ? toInt(eMoldCount) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
                             if (error) { showToast("❌ 수정 실패: " + error.message, "error"); return; }
                           }
                           if (woChecks) {
