@@ -1103,8 +1103,10 @@ async function loadSignageList() {
                           {q?.final_price ? fmt(q.final_price)+"원" : "—"}
                         </td>
                         <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-700">
-                          {q?.total ? fmt(q.total)+"원" : "—"}
-                        </td>
+                          {q?.final_price && r.quantity
+                            ? fmt(Math.round(((q.final_price * r.quantity) + (q.mold_cost ?? 0) + (q.plate_cost ?? 0) + (q.delivery_cost ?? 0)) * 1.1)) + "원"
+                            : "—"}
+                        </td> 
                         <td className="px-3 py-2 text-center">
                           <span style={{ padding: "2px 8px", borderRadius: 8, fontSize: 11, fontWeight: "bold",
                             background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
