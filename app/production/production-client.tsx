@@ -1990,6 +1990,7 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, signe
     { label: "전사인쇄", checked: wo.status_transfer },
     { label: "인쇄검수", checked: wo.status_print_check },
     { label: "생산완료", checked: wo.status_production },
+    { label: "입력완료", checked: wo.status_input },
   ];
   const visibleItems = items.filter((i) => !isSpecialItem((i.sub_items ?? [])[0]?.name || ""));
   const deliveryDate = items[0]?.delivery_date ?? wo.order_date;
@@ -2017,7 +2018,6 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, signe
           <tr><td style={thS}>식품유형</td><td style={tdS}>{wo.food_type ?? "—"}</td><td style={thS}>두께</td><td style={tdS}>{wo.thickness ?? "—"}</td></tr>
           <tr><td style={thS}>규격(로고)</td><td style={tdS}>{wo.logo_spec ?? "—"}</td><td style={thS}>포장방법</td><td style={tdS}>{wo.packaging_type ?? "—"}{wo.packaging_type === "트레이" && wo.tray_slot ? ` / ${wo.tray_slot}` : ""}</td></tr>
           <tr><td style={thS}>포장단위</td><td style={tdS}>{wo.package_unit ?? "—"}</td><td style={thS}>장당 갯수/아크릴 갯수</td><td style={tdS}>{wo.mold_per_sheet ? `${wo.mold_per_sheet}개` : "—"}{(wo as any).mold_count ? ` / ${(wo as any).mold_count}장` : ""}</td></tr>
-          <tr><td style={thS}>성형틀 장수</td><td style={tdS} colSpan={3}>{(wo as any).mold_count ? `${(wo as any).mold_count}장` : "—"}</td></tr>
           <tr><td style={thS}>납품방법</td><td style={tdS}>{wo.delivery_method ?? "—"}</td><td style={thS}>주문일</td><td style={tdS}>{(() => { const d = wo.order_date; return d ? `${d} (${["일","월","화","수","목","금","토"][new Date(d + "T00:00:00+09:00").getDay()]})` : ""; })()}</td></tr>
           <tr><td style={thS}>지시번호</td><td style={tdS} colSpan={3}>{wo.work_order_no}</td></tr>
           {wo.note ? <tr><td style={thS}>비고</td><td style={tdS} colSpan={3}>{wo.note}</td></tr> : null}
@@ -2050,7 +2050,7 @@ function WoPrintContent({ wo, items, totalOrder, itemNotes, imagesLoading, signe
                   <td style={{ border: "1px solid #94a3b8", borderBottom: "none", borderLeft: "none", padding: "5px 10px", background: "#f8fafc", verticalAlign: "middle" }}>
                     {itemBarcode ? (
                       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <span style={{ fontFamily: "monospace", fontSize: "8pt", color: "#444", whiteSpace: "nowrap" }}>{itemBarcode}</span>
+                       <span style={{ fontFamily: "monospace", fontSize: "11pt", color: "#444", whiteSpace: "nowrap" }}>{itemBarcode}</span>
                         <svg data-barcode={itemBarcode} style={{ height: "26px", flex: 1, display: "block", minWidth: 0 }} />
                       </div>
                     ) : <span style={{ color: "#aaa", fontSize: "8pt" }}>바코드 없음</span>}
