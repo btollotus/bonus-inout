@@ -138,12 +138,26 @@ function getChosung(str: string): string {
   }).join("");
 }
 
+// 키워드를 초성 배열로 변환 (한글 음절이면 초성만 추출, 자모면 그대로)
+function keywordToChosung(keyword: string): string {
+  return [...keyword].map(ch => {
+    const code = ch.charCodeAt(0) - 0xAC00;
+    if (code >= 0 && code <= 11171) {
+      // 한글 음절 → 초성만 추출 (예: '랗' → 'ㄹ')
+      return CHOSUNG[Math.floor(code / 588)];
+    }
+    // 자모 그대로 (겹자음 분해 포함)
+    return JAMO_DECOMP[ch] ?? ch;
+  }).join("");
+}
+
 function matchesSearch(target: string, keyword: string): boolean {
   const t = target.toLowerCase();
-  const k = decomposeJamo(keyword.normalize("NFC")).toLowerCase();
-  if (t.includes(k)) return true;
-  const isAllChosung = k.length > 0 && [...k].every((ch) => CHOSUNG.includes(ch));
-  if (isAllChosung) return getChosung(target).includes(k);
+  const k = keyword.normalize("NFC");
+  if (t.includes(k.toLowerCase())) return true;
+  const decomposed = keywordToChosung(k);
+  const isAllChosung = decomposed.length > 0 && [...decomposed].every((ch) => CHOSUNG.includes(ch));
+  if (isAllChosung) return getChosung(target).includes(decomposed);
   return false;
 }
 // ─────────────────────── Helpers ───────────────────────
