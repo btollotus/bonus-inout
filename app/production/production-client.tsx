@@ -1204,14 +1204,14 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                       }
                       setFilterStatus(s);
                     }}>
-                      {s}
+                     {s === "생산중" ? "생산" : s}
                       {s === "생산중" && <span className={`ml-1 tabular-nums text-xs ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>{productionCount}</span>}
                       {s === "완료" && <span className={`ml-1 tabular-nums text-xs ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>{woList.filter(w => w.status === "완료").length}</span>}
                     </button>
                   ))}
                   <div className="w-px bg-slate-200 mx-0.5" />
-                  <button className={sortBy === "created_at" ? btnOn : btn} onClick={() => setSortBy("created_at")}>주문일순</button>
-                  <button className={sortBy === "delivery_date" ? btnOn : btn} onClick={() => setSortBy("delivery_date")}>납기일순</button>
+                  <button className={sortBy === "created_at" ? btnOn : btn} onClick={() => setSortBy("created_at")}>주문일</button>
+                  <button className={sortBy === "delivery_date" ? btnOn : btn} onClick={() => setSortBy("delivery_date")}>납기일</button>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {(["전체", "다크", "화이트", "전사지"] as const).map((c) => (
