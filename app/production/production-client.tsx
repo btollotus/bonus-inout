@@ -99,13 +99,25 @@ function getChosung(str: string): string {
   }).join("");
 }
 
+const JAMO_TO_CHOSUNG: Record<string, string> = {
+  "\u3130": "\u3131", "\u3131": "\u3131", "\u3132": "\u3132",
+  "\u3133": "\u3131", "\u3134": "\u3134", "\u3135": "\u3134",
+  "\u3136": "\u3134", "\u3137": "\u3137", "\u3138": "\u3138",
+  "\u3139": "\u3139", "\u313a": "\u3139", "\u313b": "\u3139",
+  "\u313c": "\u3139", "\u313d": "\u3139", "\u313e": "\u3139",
+  "\u313f": "\u3139", "\u3140": "\u3139",
+  "\u3141": "\u3141", "\u3142": "\u3142", "\u3143": "\u3142",
+  "\u3144": "\u3142", "\u3145": "\u3145", "\u3146": "\u3146",
+  "\u3147": "\u3147", "\u3148": "\u3148", "\u3149": "\u3149",
+  "\u314a": "\u314a", "\u314b": "\u314b", "\u314c": "\u314c",
+  "\u314d": "\u314d", "\u314e": "\u314e",
+};
+
 function extractKeywordChosung(keyword: string): string {
   return [...keyword].map(ch => {
     const code = ch.charCodeAt(0) - 0xAC00;
-    if (code >= 0 && code <= 11171) return CHOSUNG[Math.floor(code / 588)]; // 음절 → 초성
-    const jamoCode = ch.charCodeAt(0);
-    if (jamoCode >= 0x3131 && jamoCode <= 0x314E) return ch; // 자모 → 그대로
-    return ch;
+    if (code >= 0 && code <= 11171) return CHOSUNG[Math.floor(code / 588)];
+    return JAMO_TO_CHOSUNG[ch] ?? ch;
   }).join("");
 }
 
