@@ -91,63 +91,21 @@ type KiseongVariant = {
 
 const CHOSUNG = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"].map(ch => ch.normalize("NFC"));
 
-// 겹자음 → 단일 초성 분해 맵 (IME 조합으로 생기는 겹자음 처리)
-const JAMO_DECOMP: Record<string, string> = {
-  "\u3130": "\u3131", // ㄱ (호환)
-  "\u3131": "\u3131", // ㄱ
-  "\u3132": "\u3132", // ㄲ
-  "\u3133": "\u3131", // ㄳ → ㄱ
-  "\u3134": "\u3134", // ㄴ
-  "\u3135": "\u3134", // ㄵ → ㄴ
-  "\u3136": "\u3134", // ㄶ → ㄴ
-  "\u3137": "\u3137", // ㄷ
-  "\u3138": "\u3138", // ㄸ
-  "\u3139": "\u3139", // ㄹ
-  "\u313a": "\u3139", // ㄺ → ㄹ
-  "\u313b": "\u3139", // ㄻ → ㄹ
-  "\u313c": "\u3139", // ㄼ → ㄹ
-  "\u313d": "\u3139", // ㄽ → ㄹ
-  "\u313e": "\u3139", // ㄾ → ㄹ
-  "\u313f": "\u3139", // ㄿ → ㄹ
-  "\u3140": "\u3139", // ㅀ → ㄹ  ← ㄹ+ㅎ 조합 시 생기는 문자
-  "\u3141": "\u3141", // ㅁ
-  "\u3142": "\u3142", // ㅂ
-  "\u3143": "\u3142", // ㅄ → ㅂ  (실제로는 ㅂ+ㅅ이지만 ㅂ으로)
-  "\u3144": "\u3142", // ㅄ 변형 → ㅂ
-  "\u3145": "\u3145", // ㅅ
-  "\u3146": "\u3146", // ㅆ
-  "\u3147": "\u3147", // ㅇ
-  "\u3148": "\u3148", // ㅈ
-  "\u3149": "\u3149", // ㅉ
-  "\u314a": "\u314a", // ㅊ
-  "\u314b": "\u314b", // ㅋ
-  "\u314c": "\u314c", // ㅌ
-  "\u314d": "\u314d", // ㅍ
-  "\u314e": "\u314e", // ㅎ
-};
-
-function decomposeJamo(str: string): string {
-  return [...str].map(ch => JAMO_DECOMP[ch] ?? ch).join("");
-}
-
 function getChosung(str: string): string {
-  return str.split("").map((ch) => {
+  return [...str].map(ch => {
     const code = ch.charCodeAt(0) - 0xAC00;
-    if (code < 0 || code > 11171) return "";
-    return CHOSUNG[Math.floor(code / 588)];
+    if (code >= 0 && code <= 11171) return CHOSUNG[Math.floor(code / 588)];
+    return "";
   }).join("");
 }
 
-// 키워드를 초성 배열로 변환 (한글 음절이면 초성만 추출, 자모면 그대로)
-function keywordToChosung(keyword: string): string {
+function extractKeywordChosung(keyword: string): string {
   return [...keyword].map(ch => {
     const code = ch.charCodeAt(0) - 0xAC00;
-    if (code >= 0 && code <= 11171) {
-      // 한글 음절 → 초성만 추출 (예: '랗' → 'ㄹ')
-      return CHOSUNG[Math.floor(code / 588)];
-    }
-    // 자모 그대로 (겹자음 분해 포함)
-    return JAMO_DECOMP[ch] ?? ch;
+    if (code >= 0 && code <= 11171) return CHOSUNG[Math.floor(code / 588)]; // 음절 → 초성
+    const jamoCode = ch.charCodeAt(0);
+    if (jamoCode >= 0x3131 && jamoCode <= 0x314E) return ch; // 자모 → 그대로
+    return ch;
   }).join("");
 }
 
@@ -155,9 +113,9 @@ function matchesSearch(target: string, keyword: string): boolean {
   const t = target.toLowerCase();
   const k = keyword.normalize("NFC");
   if (t.includes(k.toLowerCase())) return true;
-  const decomposed = keywordToChosung(k);
-  const isAllChosung = decomposed.length > 0 && [...decomposed].every((ch) => CHOSUNG.includes(ch));
-  if (isAllChosung) return getChosung(target).includes(decomposed);
+  const kChosung = extractKeywordChosung(k);
+  const isAllChosung = kChosung.length > 0 && [...kChosung].every(ch => CHOSUNG.includes(ch));
+  if (isAllChosung) return getChosung(target).includes(kChosung);
   return false;
 }
 // ─────────────────────── Helpers ───────────────────────
