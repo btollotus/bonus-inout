@@ -521,6 +521,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [wo_itemImagePreviewUrls, setWo_itemImagePreviewUrls] = useState<Record<number, string[]>>({});
   // 복사 시 기존 이미지 (key = line index, value = signed URL 배열)
   const [wo_itemExistingImageUrls, setWo_itemExistingImageUrls] = useState<Record<number, string[]>>({});
+  const [wo_itemExistingImagePaths, setWo_itemExistingImagePaths] = useState<Record<number, string[]>>({});
   const [wo_itemExistingBarcodes, setWo_itemExistingBarcodes] = useState<Record<string, string>>({});
   const [wo_saving, setWo_saving] = useState(false);
   const [wo_list, setWo_list] = useState<WorkOrderRow[]>([]);
@@ -1153,15 +1154,8 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           const createdItem = (createdWoItems as any[])?.[lineIdx];
           if (!createdItem?.id) continue;
 
-          // 기존 이미지 URL → storage 경로로 변환 (복사 시)
-          const existingUrls: string[] = wo_itemExistingImageUrls[lineIdx] ?? [];
-          const existingPaths: string[] = existingUrls.map((url: string) => {
-            if (url.startsWith("http")) {
-              const m = url.match(/work-order-images\/(.+?)(\?|$)/);
-              return m ? m[1] : null;
-            }
-            return url;
-          }).filter(Boolean) as string[];
+         // raw 경로 직접 사용 (signed URL 역변환 불필요)
+         const existingPaths: string[] = wo_itemExistingImagePaths[lineIdx] ?? [];
 
           // 새로 선택한 파일 업로드
           const newFiles = wo_itemImageFiles[lineIdx] ?? [];
@@ -1187,8 +1181,8 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
         setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
         setOrderSkipProductionCheck(false);
-        setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
-        await loadTrades(); return; 
+        setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
+        await loadTrades(); return;
       }
     }
 
@@ -1198,7 +1192,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
     setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
     setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
     setOrderSkipProductionCheck(false);
-    setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
+    setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
     await loadTrades();
   }
 
@@ -1237,7 +1231,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
     setWo_moldPerSheet(""); setWo_moldCols(""); setWo_moldRows(""); setWo_note(""); setWo_referenceNote(""); 
     setWo_isReorder(false); setWo_originalId("");
     setWo_items([{ id: crypto.randomUUID(), delivery_date: todayYMD(), sub_items: [{ name: "", qty: 0 }], order_qty: 0 }]);
-    setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
+    setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
     setWo_linkedOrderId(null); setWo_linkedOrderSummary("");
   }
 
@@ -1496,6 +1490,14 @@ const matchedItem = visibleWoItems[lineIdx];
           }
           if (Object.keys(newExistingMap).length > 0) {
             setWo_itemExistingImageUrls(newExistingMap);
+            // raw 경로 별도 저장 (저장 시 URL 역변환 없이 직접 사용)
+            const newPathsMap: Record<number, string[]> = {};
+            for (let lineIdx = 0; lineIdx < copiedLines.length; lineIdx++) {
+              const matchedItem = visibleWoItems[lineIdx];
+              const rawImages: string[] = matchedItem?.images ?? [];
+              if (rawImages.length > 0) newPathsMap[lineIdx] = rawImages;
+            }
+            setWo_itemExistingImagePaths(newPathsMap);
           }
         }
       } catch (e) {
@@ -2180,7 +2182,7 @@ if (woSubNameVal) {
   setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
   setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin);
   setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({});
-  setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
+  setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
 }}>
   
                       <div className="font-semibold">{p.name}</div>
@@ -2206,7 +2208,7 @@ if (woSubNameVal) {
   setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
   setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin);
   setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({});
-  setWo_itemExistingImageUrls({}); setWo_itemExistingBarcodes({});
+  setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
   setManualCounterpartyName(""); setManualBusinessNo("");
   setAmountStr(""); setLedgerMemo(""); setVatFree(false); setSalaryEmployeeId("");
 }}>선택 해제</button>
