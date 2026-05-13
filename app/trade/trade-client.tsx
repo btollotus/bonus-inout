@@ -1158,10 +1158,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
          const existingPaths: string[] = wo_itemExistingImagePaths[lineIdx] ?? [];
 
           // 새로 선택한 파일 업로드
-          const allKeys = Object.keys(wo_itemImageFiles);
-          console.log("[이미지디버그] lineIdx:", lineIdx, "cleanLines 이름:", cleanLines[lineIdx]?.name, "wo_itemImageFiles 키:", allKeys, "lines 이름목록:", lines.map((l,i)=>i+":"+l.name));
           const newFiles = wo_itemImageFiles[lineIdx] ?? [];
-          console.log("[이미지디버그] newFiles.length:", newFiles.length);
           const uploadedPaths: string[] = [];
           for (const file of newFiles) {
             const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
@@ -2270,7 +2267,10 @@ if (woSubNameVal) {
                               <div key={`exist-${j}`} className="group relative">
                                 <img src={url} alt={`기존이미지${j+1}`} className="h-14 w-14 rounded-lg border border-slate-200 object-cover opacity-80" />
                                 <button className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
-                                  onClick={() => setWo_itemExistingImageUrls((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }))}>✕</button>
+                                  onClick={() => {
+                                    setWo_itemExistingImageUrls((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }));
+                                    setWo_itemExistingImagePaths((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }));
+                                  }}>✕</button>
                               </div>
                             ))}
                             {/* 새로 선택한 이미지 */}
