@@ -2183,8 +2183,13 @@ if (woSubNameVal) {
                 </div>
               </div>
             ) : null}
-<input className={`${inp} mb-3`} lang="ko" placeholder="목록 필터(이름/사업자번호)" value={partnerFilter}  
-              onChange={(e) => { setTradeSearch(""); setPartnerFilter(e.target.value); }} />
+<input className={`${inp} mb-3`} lang="ko" placeholder="목록 필터(이름/사업자번호)" value={partnerFilter}
+              onChange={(e) => {
+                const decomposed = [...e.target.value].map(ch =>
+                  ch === '\u3140' ? '\u3139\u314e' : ch
+                ).join('');
+                setTradeSearch(""); setPartnerFilter(decomposed);
+              }} />
             <div className="mb-2 text-xs text-slate-600">선택된 거래처: {selectedPartner ? `${selectedPartner.name}${selectedPartner.business_no ? ` · ${selectedPartner.business_no}` : ""}` : "없음"}</div>
             <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
               {partnersToShow.length === 0 ? (
