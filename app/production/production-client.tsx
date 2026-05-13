@@ -1187,38 +1187,40 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
             <div className="mb-3 text-base font-semibold">작업지시서 목록</div>
             <div className="mb-3 space-y-2">
               <input className={inp} placeholder="거래처명 / 제품명 / 바코드 검색" value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} />
-              <div className="flex flex-wrap gap-1">
-              {(["전체", "생산중", "완료"] as const).map((s) => (
-    <button key={s} className={filterStatus === s ? btnOn : btn} onClick={() => {
-      setWoOffset(0);
-      setHasMore(false);
-    if (s === "완료" && filterStatus !== "완료") {
-        const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
-        const from = new Date(today); from.setDate(today.getDate() - 7);
-        setFilterDateFrom(`${from.getFullYear()}-${String(from.getMonth()+1).padStart(2,"0")}-${String(from.getDate()).padStart(2,"0")}`);
-        setFilterDateTo(`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`); 
-      } else if (s !== "완료") {
-        setFilterDateFrom("");
-        setFilterDateTo("");
-      }
-      setFilterStatus(s);
-    }}>
-
-      {s}
-      {s === "생산중" && <span className={`ml-1 tabular-nums text-xs ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>{productionCount}</span>}
-      {s === "완료" && <span className={`ml-1 tabular-nums text-xs ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>{woList.filter(w => w.status === "완료").length}</span>}
-    </button>
-  ))}
-  <div className="w-px bg-slate-200 mx-0.5" />
-  <button className={sortBy === "created_at" ? btnOn : btn} onClick={() => setSortBy("created_at")}>주문일순</button>
-  <button className={sortBy === "delivery_date" ? btnOn : btn} onClick={() => setSortBy("delivery_date")}>납기일순</button>
-  <div className="w-px bg-slate-200 mx-0.5" />
-  {(["전체", "다크", "화이트", "전사지"] as const).map((c) => (
-    <button key={c} className={filterFoodCategory === c ? btnOn : btn} onClick={() => setFilterFoodCategory(c)}>
-      {c === "다크" ? "다크" : c === "화이트" ? "화이트" : c === "전사지" ? "전사지" : "전체"}
-    </button>
-  ))}
-</div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap gap-1">
+                  {(["전체", "생산중", "완료"] as const).map((s) => (
+                    <button key={s} className={filterStatus === s ? btnOn : btn} onClick={() => {
+                      setWoOffset(0);
+                      setHasMore(false);
+                      if (s === "완료" && filterStatus !== "완료") {
+                        const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+                        const from = new Date(today); from.setDate(today.getDate() - 7);
+                        setFilterDateFrom(`${from.getFullYear()}-${String(from.getMonth()+1).padStart(2,"0")}-${String(from.getDate()).padStart(2,"0")}`);
+                        setFilterDateTo(`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`);
+                      } else if (s !== "완료") {
+                        setFilterDateFrom("");
+                        setFilterDateTo("");
+                      }
+                      setFilterStatus(s);
+                    }}>
+                      {s}
+                      {s === "생산중" && <span className={`ml-1 tabular-nums text-xs ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>{productionCount}</span>}
+                      {s === "완료" && <span className={`ml-1 tabular-nums text-xs ${filterStatus === s ? "opacity-80" : "text-slate-400"}`}>{woList.filter(w => w.status === "완료").length}</span>}
+                    </button>
+                  ))}
+                  <div className="w-px bg-slate-200 mx-0.5" />
+                  <button className={sortBy === "created_at" ? btnOn : btn} onClick={() => setSortBy("created_at")}>주문일순</button>
+                  <button className={sortBy === "delivery_date" ? btnOn : btn} onClick={() => setSortBy("delivery_date")}>납기일순</button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {(["전체", "다크", "화이트", "전사지"] as const).map((c) => (
+                    <button key={c} className={filterFoodCategory === c ? btnOn : btn} onClick={() => setFilterFoodCategory(c)}>
+                      {c === "다크" ? "다크" : c === "화이트" ? "화이트" : c === "전사지" ? "전사지" : "전체"}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div><div className="mb-1 text-xs text-slate-500">주문일 From</div><input type="date" className={inp} value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} /></div>
