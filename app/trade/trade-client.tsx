@@ -662,8 +662,13 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
       return partners.filter((p) => !!p.is_pinned);
     }
     if (partnerView === "RECENT") { const map = new Map(partners.map((p) => [p.id, p])); return recentPartnerIds.map((id) => map.get(id)).filter(Boolean) as PartnerRow[]; }
-    return partners;
-  }, [partners, partnerView, recentPartnerIds, isSubAdmin]);
+    const f = partnerFilter.trim();
+    if (!f) return partners;
+    return partners.filter((p) =>
+      matchesSearch(p.name ?? "", f) ||
+      (p.business_no ?? "").includes(f)
+    );
+  }, [partners, partnerView, recentPartnerIds, isSubAdmin, partnerFilter]);
 
   const unifiedRows = useMemo<UnifiedRow[]>(() => {
     const normalizeIso = (s: string | null | undefined) => {
@@ -750,7 +755,9 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
   async function loadPartners() {
    setMsg(null);
     try {
-      let q = supabase.from("partners")
+      const { data, error } = await supabase.from("partners")
+        .select("id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone")
+        .order("is_pinned", { ascending: false }).order("pin_order", { ascending: true }).order("name", { ascending: true }).limit(500);et q = supabase.from("partners")
         .select("id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone")
         .order("is_pinned", { ascending: false }).order("pin_order", { ascending: true }).order("name", { ascending: true }).limit(500);
       const f = partnerFilter.trim();
@@ -929,7 +936,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
   }
 
   useEffect(() => { setRecentPartnerIds(loadRecentFromLS()); loadPartners(); loadFoodTypes(); loadPresetProducts(); loadMasterProducts(); loadEmployees(); /* eslint-disable-next-line */ }, []);
-  useEffect(() => { loadPartners(); /* eslint-disable-next-line */ }, [partnerFilter]);
+  
   useEffect(() => { loadTrades(); /* eslint-disable-next-line */ }, [selectedPartner?.id, fromYMD, toYMD, toTouched]);
 
   function resetPartnerForm() { setP_name(""); setP_businessNo(""); setP_ceo(""); setP_phone(""); setP_address1(""); setP_bizType(""); setP_bizItem(""); setP_partnerType("CUSTOMER"); }
