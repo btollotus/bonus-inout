@@ -757,8 +757,6 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     try {
       const { data, error } = await supabase.from("partners")
         .select("id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone")
-        .order("is_pinned", { ascending: false }).order("pin_order", { ascending: true }).order("name", { ascending: true }).limit(500);et q = supabase.from("partners")
-        .select("id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone")
         .order("is_pinned", { ascending: false }).order("pin_order", { ascending: true }).order("name", { ascending: true }).limit(500);
       const f = partnerFilter.trim();
       if (f) q = q.or(`name.ilike.%${f}%,business_no.ilike.%${f}%`);
