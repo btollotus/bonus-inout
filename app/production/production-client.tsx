@@ -89,7 +89,7 @@ type KiseongVariant = {
   barcode: string;
 };
 
-const CHOSUNG = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+const CHOSUNG = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"].map(ch => ch.normalize("NFC"));
 
 function getChosung(str: string): string {
   return str.split("").map((ch) => {
@@ -101,13 +101,10 @@ function getChosung(str: string): string {
 
 function matchesSearch(target: string, keyword: string): boolean {
   const t = target.toLowerCase();
-  const k = keyword.toLowerCase();
+  const k = keyword.normalize("NFC").toLowerCase();
   if (t.includes(k)) return true;
   const isAllChosung = k.length > 0 && [...k].every((ch) => CHOSUNG.includes(ch));
-  if (isAllChosung) {
-    const targetChosung = getChosung(target);
-    return targetChosung.includes(k);
-  }
+  if (isAllChosung) return getChosung(target).includes(k);
   return false;
 }
 // ─────────────────────── Helpers ───────────────────────
