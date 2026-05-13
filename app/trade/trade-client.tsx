@@ -1163,7 +1163,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           for (const file of newFiles) {
             const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
             const path = `orders/${finalBarcode}/item_${lineIdx}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-            const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file);
+            const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file, { upsert: true });
             if (!upErr) uploadedPaths.push(path);
           }
 
