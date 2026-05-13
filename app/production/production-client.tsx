@@ -1209,7 +1209,19 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
             </div>
             <div className="mb-3 text-base font-semibold">작업지시서 목록</div>
             <div className="mb-3 space-y-2">
-              <input className={inp} placeholder="거래처명 / 제품명 / 바코드 검색" value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} />
+            <input className={inp} placeholder="거래처명 / 제품명 / 바코드 검색" value={filterSearch} onChange={(e) => {
+  const decomposed = [...e.target.value].map(ch => {
+    const DECOMP: Record<string, string> = {
+      '\u3133': '\u3131\u3145', '\u3135': '\u3134\u3148', '\u3136': '\u3134\u314e',
+      '\u313a': '\u3139\u3131', '\u313b': '\u3139\u3141', '\u313c': '\u3139\u3142',
+      '\u313d': '\u3139\u3145', '\u313e': '\u3139\u314c', '\u313f': '\u3139\u314d',
+      '\u3140': '\u3139\u314e', // ㅀ → ㄹㅎ
+      '\u3143': '\u3142\u3145', '\u3144': '\u3142\u3145',
+    };
+    return DECOMP[ch] ?? ch;
+  }).join('');
+  setFilterSearch(decomposed);
+}} />
               <div className="space-y-1">
                 <div className="flex flex-wrap gap-1">
                   {(["전체", "생산중", "완료"] as const).map((s) => (
