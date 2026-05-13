@@ -1148,7 +1148,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           await supabase.from("work_orders").update({ variant_id: firstVariantId }).eq("id", woId);
         }
 
-        // 품목별 이미지 업로드 → work_order_items.images
+       // 품목별 이미지 업로드 → work_order_items.images
         // (기존 이미지 경로 + 새 파일 업로드 합쳐서 저장)
         for (let lineIdx = 0; lineIdx < cleanLines.length; lineIdx++) {
           const createdItem = (createdWoItems as any[])?.[lineIdx];
@@ -1158,7 +1158,10 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
          const existingPaths: string[] = wo_itemExistingImagePaths[lineIdx] ?? [];
 
           // 새로 선택한 파일 업로드
+          const allKeys = Object.keys(wo_itemImageFiles);
+          console.log("[이미지디버그] lineIdx:", lineIdx, "cleanLines 이름:", cleanLines[lineIdx]?.name, "wo_itemImageFiles 키:", allKeys, "lines 이름목록:", lines.map((l,i)=>i+":"+l.name));
           const newFiles = wo_itemImageFiles[lineIdx] ?? [];
+          console.log("[이미지디버그] newFiles.length:", newFiles.length);
           const uploadedPaths: string[] = [];
           for (const file of newFiles) {
             const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
