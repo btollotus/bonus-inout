@@ -94,7 +94,7 @@ const CHOSUNG = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","�
 function getChosung(str: string): string {
   return str.split("").map((ch) => {
     const code = ch.charCodeAt(0) - 0xAC00;
-    if (code < 0 || code > 11171) return ch;
+    if (code < 0 || code > 11171) return "";
     return CHOSUNG[Math.floor(code / 588)];
   }).join("");
 }
@@ -103,8 +103,11 @@ function matchesSearch(target: string, keyword: string): boolean {
   const t = target.toLowerCase();
   const k = keyword.toLowerCase();
   if (t.includes(k)) return true;
-  const isAllChosung = [...k].every((ch) => CHOSUNG.includes(ch));
-  if (isAllChosung) return getChosung(t).includes(k);
+  const isAllChosung = k.length > 0 && [...k].every((ch) => CHOSUNG.includes(ch));
+  if (isAllChosung) {
+    const targetChosung = getChosung(target);
+    return targetChosung.includes(k);
+  }
   return false;
 }
 // ─────────────────────── Helpers ───────────────────────
