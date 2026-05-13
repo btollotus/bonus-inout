@@ -93,20 +93,41 @@ type UnifiedRow = {
 };
 type EmployeeRow = { id: string; name: string | null };
 
-const CHOSUNG = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+const CHOSUNG = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"].map(ch => ch.normalize("NFC"));
+const JAMO_TO_CHOSUNG: Record<string, string> = {
+  "\u3130": "\u3131", "\u3131": "\u3131", "\u3132": "\u3132",
+  "\u3133": "\u3131", "\u3134": "\u3134", "\u3135": "\u3134",
+  "\u3136": "\u3134", "\u3137": "\u3137", "\u3138": "\u3138",
+  "\u3139": "\u3139", "\u313a": "\u3139", "\u313b": "\u3139",
+  "\u313c": "\u3139", "\u313d": "\u3139", "\u313e": "\u3139",
+  "\u313f": "\u3139", "\u3140": "\u3139",
+  "\u3141": "\u3141", "\u3142": "\u3142", "\u3143": "\u3142",
+  "\u3144": "\u3142", "\u3145": "\u3145", "\u3146": "\u3146",
+  "\u3147": "\u3147", "\u3148": "\u3148", "\u3149": "\u3149",
+  "\u314a": "\u314a", "\u314b": "\u314b", "\u314c": "\u314c",
+  "\u314d": "\u314d", "\u314e": "\u314e",
+};
 function getChosung(str: string): string {
-  return str.split("").map((ch) => {
+  return [...str].map(ch => {
     const code = ch.charCodeAt(0) - 0xAC00;
-    if (code < 0 || code > 11171) return ch;
-    return CHOSUNG[Math.floor(code / 588)];
+    if (code >= 0 && code <= 11171) return CHOSUNG[Math.floor(code / 588)];
+    return "";
+  }).join("");
+}
+function extractKeywordChosung(keyword: string): string {
+  return [...keyword].map(ch => {
+    const code = ch.charCodeAt(0) - 0xAC00;
+    if (code >= 0 && code <= 11171) return CHOSUNG[Math.floor(code / 588)];
+    return JAMO_TO_CHOSUNG[ch] ?? ch;
   }).join("");
 }
 function matchesSearch(target: string, keyword: string): boolean {
   const t = target.toLowerCase();
-  const k = keyword.toLowerCase();
-  if (t.includes(k)) return true;
-  const isAllChosung = [...k].every((ch) => CHOSUNG.includes(ch));
-  if (isAllChosung) return getChosung(t).includes(k);
+  const k = keyword.normalize("NFC");
+  if (t.includes(k.toLowerCase())) return true;
+  const kChosung = extractKeywordChosung(k);
+  const isAllChosung = kChosung.length > 0 && [...kChosung].every(ch => CHOSUNG.includes(ch));
+  if (isAllChosung) return getChosung(target).includes(kChosung);
   return false;
 }
 
@@ -2498,7 +2519,12 @@ if (woSubNameVal) {
              
                 </div>
               </div>
-              <div className="mb-3"><input className={inp} lang="ko" value={tradeSearch} onChange={(e) => setTradeSearch(e.target.value)} placeholder="검색: 매입처/사업자번호/메모/제품명/카테고리/방법" /></div>
+              <div className="mb-3"><input className={inp} lang="ko" value={tradeSearch} onChange={(e) => {
+  const decomposed = [...e.target.value].map(ch =>
+    ch === '\u3140' ? '\u3139\u314e' : ch
+  ).join('');
+  setTradeSearch(decomposed);
+}} placeholder="검색: 매입처/사업자번호/메모/제품명/카테고리/방법" /></div>
 
               <div className="rounded-2xl border border-slate-200">
                 <div ref={tradeTopScrollRef} className="overflow-x-auto"
