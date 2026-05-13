@@ -523,7 +523,6 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [wo_itemExistingImageUrls, setWo_itemExistingImageUrls] = useState<Record<number, string[]>>({});
   const [wo_itemExistingImagePaths, setWo_itemExistingImagePaths] = useState<Record<number, string[]>>({});
   const [wo_itemExistingBarcodes, setWo_itemExistingBarcodes] = useState<Record<string, string>>({});
-  const [wo_itemExistingBarcodes, setWo_itemExistingBarcodes] = useState<Record<string, string>>({});
   const [wo_saving, setWo_saving] = useState(false);
   const [wo_list, setWo_list] = useState<WorkOrderRow[]>([]);
   const [wo_listLoading, setWo_listLoading] = useState(false);
