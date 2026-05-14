@@ -317,11 +317,19 @@ async function loadSignageList() {
   const [presetProducts, setPresetProducts] = useState<PresetProductRow[]>([]);
 
   useEffect(() => {
-    supabase.from("preset_products")
-      .select("id,product_name,food_type,weight_g,barcode")
+    supabase.from("v_tradeclient_products")
+      .select("product_name,food_type,weight_g,barcode")
       .order("product_name", { ascending: true })
-      .limit(5000)
-      .then(({ data }) => { if (data) setPresetProducts(data as PresetProductRow[]); });
+      .limit(10000)
+      .then(({ data }) => {
+        if (data) setPresetProducts(data.map((p: any) => ({
+          id: p.barcode ?? p.product_name,
+          product_name: p.product_name,
+          food_type: p.food_type,
+          weight_g: p.weight_g,
+          barcode: p.barcode,
+        })));
+      });
   }, []); // eslint-disable-line
  
 
