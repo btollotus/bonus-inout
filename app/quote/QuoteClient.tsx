@@ -735,15 +735,12 @@ async function loadSignageList() {
                         {item.itemCategory === "preset" ? (
                           /* ── 기성제품 입력 ── */
                           <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 1fr 1fr" }}>
-                            <div>
+                           <div>
                               <div className="mb-1 text-[10px] font-semibold text-slate-500">제품명</div>
-                              <input className={inp} list={`preset-list-${item.id}`}
+                              <input className={inp} list="quote-preset-products"
                                 placeholder="제품명 선택 또는 직접 입력"
                                 value={item.presetName}
                                 onChange={e => updateItem(item.id, { presetName: e.target.value })} />
-                              <datalist id={`preset-list-${item.id}`}>
-                                {presetProducts.map(p => <option key={p.id} value={p.product_name} />)}
-                              </datalist>
                             </div>
                             <div>
                               <div className="mb-1 text-[10px] font-semibold text-slate-500">수량</div>
@@ -923,6 +920,11 @@ async function loadSignageList() {
                     );
                   })}
                 </div>
+
+                {/* 기성제품 자동완성 datalist — 루프 밖, 고정 id */}
+                <datalist id="quote-preset-products">
+                  {presetProducts.map(p => <option key={p.id} value={p.product_name} />)}
+                </datalist>
 
                 {/* 품목 추가 버튼 */}
                 <button className={`${btn} w-full mb-4`}
