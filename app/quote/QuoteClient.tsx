@@ -1033,9 +1033,9 @@ async function loadSignageList() {
                 <div className="flex gap-2">
                   <button
                     className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-white ${inputMode === "manual" ? "border border-orange-300 bg-orange-500 hover:bg-orange-600" : `${btnOn}`}`}
-                    disabled={
-                      (inputMode === "auto" && items.every(x => !x.calcResult)) ||
-                      (inputMode === "manual" && items.every(x => !x.manualV))
+                   disabled={
+                      (inputMode === "auto" && items.every(x => !x.calcResult && x.itemCategory !== "preset")) ||
+                      (inputMode === "manual" && items.every(x => !x.manualV && x.itemCategory !== "preset"))
                     }
                     onClick={async () => {
                       if (!activeCustomerName) return setMsg("업체명을 입력하세요.");
@@ -1865,28 +1865,54 @@ async function loadSignageList() {
             customerName: activeCustomerName,
             quoteDate: todayKST(),
             inputMode,
-            items: items.map(item => ({
-              productType: item.itemCategory === "preset"
-              ? item.presetName
-              : (PRODUCT_TYPES.find(p => p.key === item.productType)?.label ?? item.productType),
-              colorType: item.colorType,
-              isRaise: item.productType.startsWith("레이즈"),
-              widthMm: parseFloat(item.widthMm) || null,
-              heightMm: parseFloat(item.heightMm) || null,
-              thickness: getThickness(item.productType),
-              quantity: parseInt(item.quantity) || 0,
-              isNew: item.isNew,
-              designChanged: item.designChanged,
-              useStockMold: item.useStockMold,
-              moldCost: item.calcResult?.moldCost ?? ((!item.isNew || item.reuseExistingMold || item.useStockMold) ? 0 : ((PRODUCTS as any)[item.productType]?.K ?? 0)),
-              plateCost: item.calcResult?.plateCost ?? ((!item.isNew && !item.designChanged) ? 0 : ((PRODUCTS as any)[item.productType]?.L ?? 0)),
-              sheetCost: item.calcResult?.sheetCost ?? 0,
-              workFee: item.calcResult?.workFee ?? 0,
-              V: item.useStockMold && item.calcResult?.V_stock
-                ? item.calcResult.V_stock
-                : (item.calcResult?.V ?? 0),
-              manualV: parseInt(item.manualV) || 0,
-            })),
+            items: items.map(item => {
+              if (item.itemCategory === "preset") {
+                const presetUnit = parseInt(item.manualV) || 0;
+                const presetTotalInclVat = parseInt(item.presetTotal ?? "") || 0;
+                const presetQty = parseInt(item.quantity) || 1;
+                const V = presetUnit !== 0
+                  ? presetUnit
+                  : Math.round(presetTotalInclVat / 1.1 / presetQty);
+                return {
+                  productType: item.presetName,
+                  colorType: "dark" as const,
+                  isRaise: false,
+                  widthMm: null,
+                  heightMm: null,
+                  thickness: "",
+                  quantity: presetQty,
+                  isNew: true,
+                  designChanged: false,
+                  useStockMold: false,
+                  moldCost: 0,
+                  plateCost: 0,
+                  sheetCost: 0,
+                  workFee: 0,
+                  V,
+                  manualV: V,
+                };
+              }
+              return {
+                productType: PRODUCT_TYPES.find(p => p.key === item.productType)?.label ?? item.productType,
+                colorType: item.colorType,
+                isRaise: item.productType.startsWith("레이즈"),
+                widthMm: parseFloat(item.widthMm) || null,
+                heightMm: parseFloat(item.heightMm) || null,
+                thickness: getThickness(item.productType),
+                quantity: parseInt(item.quantity) || 0,
+                isNew: item.isNew,
+                designChanged: item.designChanged,
+                useStockMold: item.useStockMold,
+                moldCost: item.calcResult?.moldCost ?? ((!item.isNew || item.reuseExistingMold || item.useStockMold) ? 0 : ((PRODUCTS as any)[item.productType]?.K ?? 0)),
+                plateCost: item.calcResult?.plateCost ?? ((!item.isNew && !item.designChanged) ? 0 : ((PRODUCTS as any)[item.productType]?.L ?? 0)),
+                sheetCost: item.calcResult?.sheetCost ?? 0,
+                workFee: item.calcResult?.workFee ?? 0,
+                V: item.useStockMold && item.calcResult?.V_stock
+                  ? item.calcResult.V_stock
+                  : (item.calcResult?.V ?? 0),
+                manualV: parseInt(item.manualV) || 0,
+              };
+            }),
             memo: memo || null,
             iceboxPrice: useIcebox ? iceboxPrice : 0,
             deliveryPrice,
