@@ -313,6 +313,8 @@ const [transferLotSearching, setTransferLotSearching] = useState<Record<string, 
 const { session: pinSession, isValid: isPinValid, login: pinLogin } = usePinSession();
 const [showPinModalForProgress, setShowPinModalForProgress] = useState(false);
 const [pinProgressPending, setPinProgressPending] = useState<((name: string) => void) | null>(null);
+const [showDeletePinModal, setShowDeletePinModal] = useState(false);
+const [deletePinTargetId, setDeletePinTargetId] = useState<string | null>(null);
 
   // ── CCP 새 구조 ──
   const ccp = useCcpState(warmerSlots, currentUserIdRef, showToast);
@@ -820,24 +822,68 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
 }
   }
 
-  async function deleteWo(woId: string) {
-    if (!isAdmin) return;
-    if (!confirm("작업지시서를 삭제하시겠습니까?\n(연결된 주문의 work_order_item_id도 초기화됩니다)")) return;
+  function handleDeleteClick(woId: string) {
+    if (!isAdminOrSubadmin) return;
+    setDeletePinTargetId(woId);
+    setShowDeletePinModal(true);
+  }
+
+  async function deleteWo(woId: string, pinName: string) {
     try {
-      await supabase.from("work_order_items").update({ order_id: null }).eq("work_order_id", woId);
-      const wo = woList.find((w) => w.id === woId);
-      if (wo?.linked_order_id) await supabase.from("orders").update({ work_order_item_id: null }).eq("id", wo.linked_order_id);
-      await supabase.from("work_order_items").delete().eq("work_order_id", woId);
-      if (wo?.work_order_no) {
-        await supabase.from("ccp_wo_events").delete().eq("work_order_no", wo.work_order_no);
-        await supabase.from("deleted_work_order_nos").insert({ work_order_no: wo.work_order_no });
+      // 1. 백업 저장
+      const { data: woData, error: woFetchErr } = await supabase
+        .from("work_orders")
+        .select("*")
+        .eq("id", woId)
+        .single();
+      if (woFetchErr || !woData) {
+        showToast("❌ 작업지시서 조회 실패", "error");
+        return;
       }
-      const { error } = await supabase.from("work_orders").delete().eq("id", woId);
-      if (error) return setMsg("삭제 실패: " + error.message);
+      const { data: itemsData } = await supabase
+        .from("work_order_items")
+        .select("*")
+        .eq("work_order_id", woId);
+
+      const { error: backupErr } = await supabase
+        .from("deleted_work_orders")
+        .insert({
+          original_id:     woId,
+          work_order_no:   woData.work_order_no,
+          snapshot:        woData,
+          items_snapshot:  itemsData ?? [],
+          deleted_by:      currentUserIdRef.current,
+          deleted_by_name: pinName,
+        });
+      if (backupErr) {
+        showToast("❌ 백업 저장 실패: " + backupErr.message, "error");
+        return;
+      }
+
+      // 2. 연관 데이터 정리
+      await supabase.from("work_order_items").update({ order_id: null }).eq("work_order_id", woId);
+      if (woData.linked_order_id) {
+        await supabase.from("orders").update({ work_order_item_id: null }).eq("id", woData.linked_order_id);
+      }
+      await supabase.from("work_order_items").delete().eq("work_order_id", woId);
+      if (woData.work_order_no) {
+        await supabase.from("ccp_wo_events").delete().eq("work_order_no", woData.work_order_no);
+        await supabase.from("deleted_work_order_nos").insert({ work_order_no: woData.work_order_no });
+      }
+
+      // 3. 작업지시서 삭제
+      const { error: deleteErr } = await supabase.from("work_orders").delete().eq("id", woId);
+      if (deleteErr) {
+        showToast("❌ 삭제 실패: " + deleteErr.message, "error");
+        return;
+      }
+
       if (selectedWo?.id === woId) setSelectedWo(null);
-      setMsg("🗑️ 작업지시서가 삭제되었습니다.");
+      showToast("🗑️ 삭제 완료 (복원 가능)");
       await loadWoList();
-    } catch (e: any) { setMsg("삭제 오류: " + (e?.message ?? e)); }
+    } catch (e: any) {
+      showToast("❌ 삭제 오류: " + (e?.message ?? e), "error");
+    }
   }
 
   async function triggerPdfUpload(wo: WorkOrderRow, productName: string, foodType: string, logoSpec: string) {
@@ -1136,7 +1182,27 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
       setPinProgressPending(null);
     }}
   />
-)}    
+)}
+
+{showDeletePinModal && (
+  <PinModal
+    employees={employees.filter(
+      (e): e is { id: string; name: string; pin: string | null } => e.name !== null
+    )}
+    title="작업지시서 삭제 — 본인 확인"
+    onSuccess={(empId, empName) => {
+      setShowDeletePinModal(false);
+      if (deletePinTargetId) {
+        deleteWo(deletePinTargetId, empName);
+        setDeletePinTargetId(null);
+      }
+    }}
+    onCancel={() => {
+      setShowDeletePinModal(false);
+      setDeletePinTargetId(null);
+    }}
+  />
+)}
 
         {/* ── 온장고 슬롯 현황 ── */}
         <SlotStatusPanel
@@ -1168,6 +1234,9 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
           <div className="flex items-center gap-2">
             <button className={isKiseongForm ? "rounded-xl border border-emerald-500 bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700" : "rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"}
               onClick={() => { if (isKiseongForm) resetKiseongForm(); else { setIsKiseongForm(true); setSelectedWo(null); } }}>📦 재고생산</button>
+            {isAdminOrSubadmin && (
+              <a href="/production/deleted" className="rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-100">🗑️ 삭제내역</a>
+            )}
           <button className={btn} onClick={() => { setWoOffset(0); loadWoList(0); }}>🔄 새로고침</button>
           </div>
         </div>
@@ -1291,7 +1360,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                             <div className="shrink-0 flex flex-col items-end gap-1.5"><span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusCls}`}>{wo.status}</span></div>
                           </div>
                         </button>
-                        {isAdmin ? <button className="absolute top-2 right-2 hidden group-hover:flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-500 hover:bg-red-500 hover:text-white text-xs font-bold transition-colors z-10" onClick={(e) => { e.stopPropagation(); deleteWo(wo.id); }} title="작업지시서 삭제">✕</button> : null}
+                        {isAdminOrSubadmin ? <button className="absolute top-2 right-2 hidden group-hover:flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-500 hover:bg-red-500 hover:text-white text-xs font-bold transition-colors z-10" onClick={(e) => { e.stopPropagation(); handleDeleteClick(wo.id); }} title="작업지시서 삭제">✕</button> : null}
                         </div>
                     );
                   })}
