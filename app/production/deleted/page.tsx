@@ -3,8 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import DeletedClient from "./deleted-client";
 
 export default async function DeletedWorkOrdersPage() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const { data: roleData } = await supabase
