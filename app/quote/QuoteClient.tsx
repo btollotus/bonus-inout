@@ -831,7 +831,7 @@ async function loadSignageList() {
                             )}
                           </div>
                         </div>
-                        </div>
+                     
                       )} {/* preset 조건부 끝 */}
 
                       {/* 옵션 행 — 제조제품 전용 */}
