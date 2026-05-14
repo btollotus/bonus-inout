@@ -884,7 +884,6 @@ async function loadSignageList() {
                           )}
                         </div>
 
-</div>
 )} {/* 옵션 행 preset 조건부 끝 */}
 
 {/* 자동 계산 버튼 (품목별) — 제조제품 전용 */}
