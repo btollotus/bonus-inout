@@ -8,6 +8,14 @@ import { PRODUCTS } from "@/lib/quoteCalculator";
 // ─────────────────────── Types ───────────────────────
 type Tab = "input" | "list" | "sheet" | "signage";
 
+type PresetProductRow = {
+  id: string;
+  product_name: string;
+  food_type: string | null;
+  weight_g: number | null;
+  barcode: string | null;
+};
+
 type PartnerRow = {
   id: string;
   name: string;
@@ -151,6 +159,8 @@ export default function QuoteClient() {
   // ─── 품목 타입 ───
   type QuoteItem = {
     id: string;
+    itemCategory: "custom" | "preset";
+    presetName: string;
     productType: string;
     colorType: "dark" | "white";
     widthMm: string;
@@ -167,6 +177,8 @@ export default function QuoteClient() {
 
   const newItem = (): QuoteItem => ({
     id: crypto.randomUUID(),
+    itemCategory: "custom",
+    presetName: "",
     productType: "전사3mm", colorType: "dark",
     widthMm: "", heightMm: "", quantity: "",
     isNew: true, designChanged: false,
@@ -302,6 +314,17 @@ async function loadSignageList() {
     }
   }
 
+
+  const [presetProducts, setPresetProducts] = useState<PresetProductRow[]>([]);
+
+  useEffect(() => {
+    supabase.from("preset_products")
+      .select("id,product_name,food_type,weight_g,barcode")
+      .eq("is_active", true)
+      .order("product_name", { ascending: true })
+      .limit(5000)
+      .then(({ data }) => { if (data) setPresetProducts(data as PresetProductRow[]); });
+  }, [supabase]);
 
   useEffect(() => { loadPartners(); }, [partnerFilter]);
   useEffect(() => { if (tab === "list") loadQuoteList(); }, [tab, statusFilter]);
@@ -479,6 +502,8 @@ async function loadSignageList() {
     setCustomerName(r.customer_name);
     setItems([{
       id: crypto.randomUUID(),
+      itemCategory: "custom",
+      presetName: "",
       productType: pt,
       colorType: (r.color_type as "dark" | "white") ?? "dark",
       widthMm: r.width_mm ? String(r.width_mm) : "",
@@ -689,7 +714,53 @@ async function loadSignageList() {
                           )}
                         </div>
 
-                        {/* 입력 그리드: 제품 | 색상 | 가로 | 세로 | 수량 | 단가 */}
+                        {/* 제조/기성 토글 */}
+                        <div className="mb-2 flex gap-1">
+                          {(["custom", "preset"] as const).map(cat => (
+                            <button key={cat}
+                              className={`rounded-lg border px-3 py-1 text-xs font-semibold transition-all ${
+                                item.itemCategory === cat
+                                  ? cat === "custom"
+                                    ? "border-blue-300 bg-blue-50 text-blue-700"
+                                    : "border-purple-300 bg-purple-50 text-purple-700"
+                                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                              }`}
+                              onClick={() => updateItem(item.id, {
+                                itemCategory: cat, calcResult: null, manualV: "", presetName: "",
+                              })}>
+                              {cat === "custom" ? "제조제품" : "🏪 기성제품"}
+                            </button>
+                          ))}
+                        </div>
+
+                        {item.itemCategory === "preset" ? (
+                          /* ── 기성제품 입력 ── */
+                          <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 1fr 1fr" }}>
+                            <div>
+                              <div className="mb-1 text-[10px] font-semibold text-slate-500">제품명</div>
+                              <input className={inp} list={`preset-list-${item.id}`}
+                                placeholder="제품명 선택 또는 직접 입력"
+                                value={item.presetName}
+                                onChange={e => updateItem(item.id, { presetName: e.target.value })} />
+                              <datalist id={`preset-list-${item.id}`}>
+                                {presetProducts.map(p => <option key={p.id} value={p.product_name} />)}
+                              </datalist>
+                            </div>
+                            <div>
+                              <div className="mb-1 text-[10px] font-semibold text-slate-500">수량</div>
+                              <input className={inp} type="number" placeholder="예: 100"
+                                value={item.quantity}
+                                onChange={e => updateItem(item.id, { quantity: e.target.value, calcResult: null })} />
+                            </div>
+                            <div>
+                              <div className="mb-1 text-[10px] font-semibold text-purple-600">단가(원) ✏️</div>
+                              <input className={`${inp} border-purple-300 bg-purple-50`} type="number" placeholder="직접 입력"
+                                value={item.manualV}
+                                onChange={e => updateItem(item.id, { manualV: e.target.value })} />
+                            </div>
+                          </div>
+                        ) : (
+                        /* ── 제조제품 입력 그리드: 제품 | 색상 | 가로 | 세로 | 수량 | 단가 ── */
                         <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr" }}>
                           {/* 제품 */}
                           <div>
@@ -760,9 +831,13 @@ async function loadSignageList() {
                             )}
                           </div>
                         </div>
+                        </div>
+                      )} {/* preset 조건부 끝 */}
 
-                        {/* 옵션 행 */}
-                        <div className="mt-2 flex flex-wrap gap-2 items-center">
+                      {/* 옵션 행 — 제조제품 전용 */}
+                      {item.itemCategory !== "preset" && (
+                      <div className="mt-2 flex flex-wrap gap-2 items-center">
+                       
                           {/* 신규/재주문 토글 */}
                           <button type="button"
                             className={`rounded-lg border px-3 py-1 text-xs font-semibold ${item.isNew ? "border-blue-300 bg-blue-50 text-blue-700" : "border-amber-300 bg-amber-50 text-amber-700"}`}
@@ -809,8 +884,11 @@ async function loadSignageList() {
                           )}
                         </div>
 
-                        {/* 자동 계산 버튼 (품목별) */}
-                        {inputMode === "auto" && !isManualItem && (
+</div>
+)} {/* 옵션 행 preset 조건부 끝 */}
+
+{/* 자동 계산 버튼 (품목별) — 제조제품 전용 */}
+{inputMode === "auto" && !isManualItem && item.itemCategory !== "preset" && (
                           <button className={`mt-2 w-full rounded-xl border px-3 py-1.5 text-xs font-semibold ${item.calcLoading ? "bg-slate-100 text-slate-400" : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"}`}
                             disabled={item.calcLoading}
                             onClick={async () => {
@@ -910,25 +988,32 @@ async function loadSignageList() {
                       setMsg(null);
                       // 자동 계산 모드: DB 저장 후 quoteRequestId 획득
                       if (inputMode === "auto") {
-                        const calcItems = items.filter(x => x.calcResult);
+                        const calcItems = items.filter(x =>
+                          x.itemCategory === "preset"
+                            ? (!!x.presetName.trim() && !!x.manualV)
+                            : !!x.calcResult
+                        );
                         if (calcItems.length === 0) return;
                         const firstItem = calcItems[0];
                         const firstCr = firstItem.calcResult;
-                        const firstV = firstItem.useStockMold && firstCr.V_stock ? firstCr.V_stock : firstCr.V;
+                        const firstIsPreset = firstItem.itemCategory === "preset";
+                        const firstV = firstIsPreset
+                          ? (parseInt(firstItem.manualV) || 0)
+                          : (firstItem.useStockMold && firstCr?.V_stock ? firstCr.V_stock : firstCr?.V ?? 0);
                         // 헤더(첫 품목 기준)로 quote_requests 1건 저장
                         const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
                           customer_id: activeCustomerId,
                           customer_name: activeCustomerName,
                           request_type: "product",
-                          product_type: firstItem.productType,
-                          color_type: firstItem.colorType,
-                          width_mm: parseFloat(firstItem.widthMm) || null,
-                          height_mm: parseFloat(firstItem.heightMm) || null,
+                          product_type: firstIsPreset ? firstItem.presetName : firstItem.productType,
+                          color_type: firstIsPreset ? null : firstItem.colorType,
+                          width_mm: firstIsPreset ? null : (parseFloat(firstItem.widthMm) || null),
+                          height_mm: firstIsPreset ? null : (parseFloat(firstItem.heightMm) || null),
                           quantity: parseInt(firstItem.quantity) || null,
                           is_new: firstItem.isNew,
-                          design_changed: firstItem.designChanged,
-                          use_stock_mold: firstItem.useStockMold,
-                          reuse_existing_mold: firstItem.reuseExistingMold,
+                          design_changed: firstIsPreset ? false : firstItem.designChanged,
+                          use_stock_mold: false,
+                          reuse_existing_mold: false,
                           mold_qty: 1, memo: memo || null, status: "견적완료",
                           updated_at: new Date().toISOString(),
                         }).select("id").single();
@@ -948,27 +1033,30 @@ async function loadSignageList() {
                           });
                           // quote_items — 전체 품목 저장
                           const itemRows = calcItems.map((fi, idx) => {
+                            const isPreset = fi.itemCategory === "preset";
                             const cr = fi.calcResult;
-                            const V = fi.useStockMold && cr.V_stock ? cr.V_stock : cr.V;
+                            const V = isPreset
+                              ? (parseInt(fi.manualV) || 0)
+                              : (fi.useStockMold && cr?.V_stock ? cr.V_stock : cr?.V ?? 0);
                             return {
                               request_id: req.id,
-                              product_type: fi.productType,
-                              color_type: fi.colorType,
-                              width_mm: parseFloat(fi.widthMm) || null,
-                              height_mm: parseFloat(fi.heightMm) || null,
+                              product_type: isPreset ? fi.presetName : fi.productType,
+                              color_type: isPreset ? null : fi.colorType,
+                              width_mm: isPreset ? null : (parseFloat(fi.widthMm) || null),
+                              height_mm: isPreset ? null : (parseFloat(fi.heightMm) || null),
                               quantity: parseInt(fi.quantity) || null,
                               is_new: fi.isNew,
-                              design_changed: fi.designChanged,
-                              use_stock_mold: fi.useStockMold,
-                              reuse_existing_mold: fi.reuseExistingMold,
-                              unit_price: cr.unitPrice ?? 0,
-                              mold_cost: cr.moldCost ?? 0,
-                              plate_cost: cr.plateCost ?? 0,
-                              transfer_cost: cr.sheetCost ?? 0,
-                              work_fee: cr.workFee ?? 0,
-                              total: cr.totalActual ?? 0,
+                              design_changed: isPreset ? false : fi.designChanged,
+                              use_stock_mold: isPreset ? false : fi.useStockMold,
+                              reuse_existing_mold: isPreset ? false : fi.reuseExistingMold,
+                              unit_price: isPreset ? (parseInt(fi.manualV) || 0) : (cr?.unitPrice ?? 0),
+                              mold_cost: 0,
+                              plate_cost: 0,
+                              transfer_cost: 0,
+                              work_fee: 0,
+                              total: V * (parseInt(fi.quantity) || 0),
                               final_price: V,
-                              final_price_stock: cr.V_stock ?? null,
+                              final_price_stock: null,
                               sort_order: idx,
                             };
                           });
@@ -1721,7 +1809,9 @@ async function loadSignageList() {
             quoteDate: todayKST(),
             inputMode,
             items: items.map(item => ({
-              productType: PRODUCT_TYPES.find(p => p.key === item.productType)?.label ?? item.productType,
+              productType: item.itemCategory === "preset"
+              ? item.presetName
+              : (PRODUCT_TYPES.find(p => p.key === item.productType)?.label ?? item.productType),
               colorType: item.colorType,
               isRaise: item.productType.startsWith("레이즈"),
               widthMm: parseFloat(item.widthMm) || null,

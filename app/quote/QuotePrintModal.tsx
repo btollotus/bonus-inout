@@ -142,10 +142,16 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
     }
 
     const isDoneum = item.productType.includes("도눔");
-    const colorLabel = (isDoneum ? "도눔 " : "") + (item.isRaise ? "컬러인쇄" : item.colorType === "dark" ? "다크" : "화이트");
-    const sizeStr = item.widthMm && item.heightMm
-      ? `${item.widthMm}×${item.heightMm}mm${item.thickness ? `, 두께 ${item.thickness}` : ""}`
-      : item.thickness ? `두께 ${item.thickness}` : "";
+    const knownPrefixes = ["전사", "레이즈", "도눔", "롤리팝", "입체초콜릿"];
+    const isPresetItem = !item.isRaise && !knownPrefixes.some(k => item.productType.includes(k));
+    const colorLabel = isPresetItem
+      ? item.productType
+      : (isDoneum ? "도눔 " : "") + (item.isRaise ? "컬러인쇄" : item.colorType === "dark" ? "다크" : "화이트");
+    const sizeStr = isPresetItem ? "" : (
+      item.widthMm && item.heightMm
+        ? `${item.widthMm}×${item.heightMm}mm${item.thickness ? `, 두께 ${item.thickness}` : ""}`
+        : item.thickness ? `두께 ${item.thickness}` : ""
+    );
     const productName = sizeStr ? `${colorLabel}(${sizeStr})` : colorLabel;
     const unitPrice = inputMode === "manual" ? item.manualV : item.V;
     if (!unitPrice || !item.quantity) continue;
