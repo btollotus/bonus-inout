@@ -314,17 +314,29 @@ async function loadSignageList() {
     }
   }
 
-
   const [presetProducts, setPresetProducts] = useState<PresetProductRow[]>([]);
 
   useEffect(() => {
-    supabase.from("preset_products")
-      .select("id,product_name,food_type,weight_g,barcode")
-      .eq("is_active", true)
-      .order("product_name", { ascending: true })
-      .limit(5000)
-      .then(({ data }) => { if (data) setPresetProducts(data as PresetProductRow[]); });
+    async function loadPresetProducts() {
+      const { data, error } = await supabase.from("preset_products")
+        .select("id,product_name,food_type,weight_g,barcode")
+        .eq("is_active", true)
+        .order("product_name", { ascending: true })
+        .limit(5000);
+      if (error) {
+        // is_active 컬럼 없는 경우 fallback: 필터 없이 재시도
+        const { data: fallback } = await supabase.from("preset_products")
+          .select("id,product_name,food_type,weight_g,barcode")
+          .order("product_name", { ascending: true })
+          .limit(5000);
+        if (fallback) setPresetProducts(fallback as PresetProductRow[]);
+      } else if (data) {
+        setPresetProducts(data as PresetProductRow[]);
+      }
+    }
+    loadPresetProducts();
   }, [supabase]);
+ 
 
   useEffect(() => { loadPartners(); }, [partnerFilter]);
   useEffect(() => { if (tab === "list") loadQuoteList(); }, [tab, statusFilter]);
