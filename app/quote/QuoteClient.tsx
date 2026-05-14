@@ -537,6 +537,7 @@ async function loadSignageList() {
       } : null,
       calcLoading: false,
       manualV: "",
+      presetTotal: "",
     }]);
     setMemo(r.memo ?? "");
     setInputMode("auto");
