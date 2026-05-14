@@ -766,7 +766,7 @@ async function loadSignageList() {
                               vat = total - supply;
                             }
                             return (
-                              <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 80px 100px 80px 100px 100px 110px" }}>
+                              <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 120px 90px 90px 90px 100px" }}>
                                 <div>
                                   <div className="mb-1 text-[10px] font-semibold text-slate-500">제품명</div>
                                   <input className={inp} list="quote-preset-products"
@@ -774,13 +774,13 @@ async function loadSignageList() {
                                     value={item.presetName}
                                     onChange={e => updateItem(item.id, { presetName: e.target.value })} />
                                 </div>
-                                <div>
+                                <div className="col-span-1">
                                   <div className="mb-1 text-[10px] font-semibold text-slate-500">수량</div>
                                   <div className="flex items-center gap-1">
-                                    <input className={inp} type="number" placeholder="수량"
+                                    <input className={`${inp} min-w-0`} type="number" placeholder="수량"
                                       value={item.quantity}
                                       onChange={e => updateItem(item.id, { quantity: e.target.value })} />
-                                    <span className={`shrink-0 inline-flex items-center justify-center rounded-lg border px-2 py-1 text-[11px] font-extrabold text-white ${unitType === "BOX" ? "border-blue-400 bg-blue-600" : "border-red-400 bg-red-500"}`}>
+                                    <span className={`shrink-0 inline-flex items-center justify-center rounded-lg border px-1.5 py-1 text-[10px] font-extrabold text-white ${unitType === "BOX" ? "border-blue-400 bg-blue-600" : "border-red-400 bg-red-500"}`}>
                                       {unitType}
                                     </span>
                                   </div>
