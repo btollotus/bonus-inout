@@ -173,6 +173,7 @@ export default function QuoteClient() {
     calcResult: any;
     calcLoading: boolean;
     manualV: string;
+    presetTotal: string;
   };
 
   const newItem = (): QuoteItem => ({
@@ -183,7 +184,7 @@ export default function QuoteClient() {
     widthMm: "", heightMm: "", quantity: "",
     isNew: true, designChanged: false,
     useStockMold: false, reuseExistingMold: false,
-    calcResult: null, calcLoading: false, manualV: "",
+    calcResult: null, calcLoading: false, manualV: "", presetTotal: "",
   });
 
   // 견적 입력 폼
@@ -742,27 +743,71 @@ async function loadSignageList() {
 
                         {item.itemCategory === "preset" ? (
                           /* ── 기성제품 입력 ── */
-                          <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 1fr 1fr" }}>
-                           <div>
-                              <div className="mb-1 text-[10px] font-semibold text-slate-500">제품명</div>
-                              <input className={inp} list="quote-preset-products"
-                                placeholder="제품명 선택 또는 직접 입력"
-                                value={item.presetName}
-                                onChange={e => updateItem(item.id, { presetName: e.target.value })} />
-                            </div>
-                            <div>
-                              <div className="mb-1 text-[10px] font-semibold text-slate-500">수량</div>
-                              <input className={inp} type="number" placeholder="예: 100"
-                                value={item.quantity}
-                                onChange={e => updateItem(item.id, { quantity: e.target.value, calcResult: null })} />
-                            </div>
-                            <div>
-                              <div className="mb-1 text-[10px] font-semibold text-purple-600">단가(원) ✏️</div>
-                              <input className={`${inp} border-purple-300 bg-purple-50`} type="number" placeholder="직접 입력"
-                                value={item.manualV}
-                                onChange={e => updateItem(item.id, { manualV: e.target.value })} />
-                            </div>
-                          </div>
+                          (() => {
+                            const presetQty = parseInt(item.quantity) || 0;
+                            const presetUnit = parseInt(item.manualV) || 0;
+                            const presetTotalInclVat = parseInt(item.presetTotal ?? "") || 0;
+                            const packEa = (() => {
+                              const m = item.presetName.match(/(\d+)\s*(?:개|ea)/i);
+                              if (!m) return 1;
+                              const n = Number(m[1]);
+                              return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 1;
+                            })();
+                            const unitType = packEa > 1 ? "BOX" : "EA";
+                            let supply = 0, vat = 0, total = 0;
+                            if (presetUnit !== 0 && presetQty > 0) {
+                              supply = presetQty * presetUnit;
+                              vat = Math.round(supply * 0.1);
+                              total = supply + vat;
+                            } else if (presetTotalInclVat !== 0) {
+                              total = presetTotalInclVat;
+                              supply = Math.round(total / 1.1);
+                              vat = total - supply;
+                            }
+                            return (
+                              <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 80px 100px 80px 100px 100px 110px" }}>
+                                <div>
+                                  <div className="mb-1 text-[10px] font-semibold text-slate-500">제품명</div>
+                                  <input className={inp} list="quote-preset-products"
+                                    placeholder="제품명 선택 또는 직접 입력"
+                                    value={item.presetName}
+                                    onChange={e => updateItem(item.id, { presetName: e.target.value })} />
+                                </div>
+                                <div>
+                                  <div className="mb-1 text-[10px] font-semibold text-slate-500">수량</div>
+                                  <div className="flex items-center gap-1">
+                                    <input className={inp} type="number" placeholder="수량"
+                                      value={item.quantity}
+                                      onChange={e => updateItem(item.id, { quantity: e.target.value })} />
+                                    <span className={`shrink-0 inline-flex items-center justify-center rounded-lg border px-2 py-1 text-[11px] font-extrabold text-white ${unitType === "BOX" ? "border-blue-400 bg-blue-600" : "border-red-400 bg-red-500"}`}>
+                                      {unitType}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="mb-1 text-[10px] font-semibold text-slate-500">단가</div>
+                                  <input className={inp} type="number" placeholder="단가"
+                                    value={item.manualV}
+                                    onChange={e => updateItem(item.id, { manualV: e.target.value, presetTotal: "" })} />
+                                </div>
+                                <div>
+                                  <div className="mb-1 text-[10px] font-semibold text-slate-500">공급가</div>
+                                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{supply ? fmt(supply) : "0"}</div>
+                                </div>
+                                <div>
+                                  <div className="mb-1 text-[10px] font-semibold text-slate-500">부가세</div>
+                                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right tabular-nums">{vat ? fmt(vat) : "0"}</div>
+                                </div>
+                                <div>
+                                  <div className="mb-1 text-[10px] font-semibold text-slate-500">총액(입력)</div>
+                                  <input className={inp} type="number" placeholder="총액"
+                                    disabled={presetUnit !== 0}
+                                    value={presetUnit !== 0 ? (total || "") : (item.presetTotal ?? "")}
+                                    onChange={e => updateItem(item.id, { presetTotal: e.target.value, manualV: "" })} />
+                                </div>
+                              </div>
+                            );
+                          })()
                         ) : (
                         /* ── 제조제품 입력 그리드: 제품 | 색상 | 가로 | 세로 | 수량 | 단가 ── */
                         <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr" }}>
@@ -1043,8 +1088,11 @@ async function loadSignageList() {
                           const itemRows = calcItems.map((fi, idx) => {
                             const isPreset = fi.itemCategory === "preset";
                             const cr = fi.calcResult;
+                            const presetUnit = parseInt(fi.manualV) || 0;
+                            const presetTotalInclVat = parseInt(fi.presetTotal ?? "") || 0;
+                            const presetQty = parseInt(fi.quantity) || 1;
                             const V = isPreset
-                              ? (parseInt(fi.manualV) || 0)
+                              ? (presetUnit !== 0 ? presetUnit : Math.round(presetTotalInclVat / 1.1 / presetQty))
                               : (fi.useStockMold && cr?.V_stock ? cr.V_stock : cr?.V ?? 0);
                             return {
                               request_id: req.id,
