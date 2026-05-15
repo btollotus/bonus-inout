@@ -1357,10 +1357,10 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                               <div className="mt-1 flex flex-wrap gap-1"><span className="text-[10px] text-slate-400 tabular-nums font-mono">{wo.barcode_no}</span>{wo.thickness ? <span className={`${pill} text-[10px]`}>{wo.thickness}</span> : null}{wo.packaging_type ? <span className={`${pill} text-[10px]`}>{wo.packaging_type}</span> : null}</div>
                               <div className="mt-1 text-[11px] text-slate-400">주문일 {wo.order_date}{totalOrder > 0 ? ` · ${fmt(totalOrder)}개` : ""}{allItemsDone ? " · ✅생산완료" : ""}{(() => { const dates = (wo.work_order_items ?? []).map((i) => i.delivery_date).filter(Boolean).sort(); if (dates.length === 0) return null; return <span className="ml-1 font-semibold text-orange-500">· 납기 {dates[0]}</span>; })()}{readMap[wo.id] && <span className="ml-1 text-green-500">· 확인 {new Date(readMap[wo.id].read_at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>}</div>
                             </div>
-                            <div className="shrink-0 flex flex-col items-end gap-1.5"><span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusCls}`}>{wo.status}</span></div>
+                            <div className="shrink-0 flex flex-col items-end gap-1.5 pr-7"><span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusCls}`}>{wo.status}</span></div>
                           </div>
                         </button>
-                        {isAdminOrSubadmin ? <button className="absolute top-2 right-2 flex items-center justify-center w-7 h-7 rounded-full bg-red-100 text-red-400 hover:bg-red-500 hover:text-white active:bg-red-600 text-xs font-bold transition-colors z-10 opacity-40 hover:opacity-100" onClick={(e) => { e.stopPropagation(); handleDeleteClick(wo.id); }} title="작업지시서 삭제">✕</button> : null}
+                        {isAdminOrSubadmin ? <button className="absolute top-1 right-1 flex items-center justify-center w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold z-20 opacity-50 hover:opacity-100 active:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); handleDeleteClick(wo.id); }} title="작업지시서 삭제">✕</button> : null}
                         </div>
                     );
                   })}
