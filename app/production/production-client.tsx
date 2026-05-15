@@ -1360,7 +1360,7 @@ if (getFoodCategory(wo.food_type) !== "중간재") {
                             <div className="shrink-0 flex flex-col items-end gap-1.5"><span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusCls}`}>{wo.status}</span></div>
                           </div>
                         </button>
-                        {isAdminOrSubadmin ? <button className="absolute top-2 right-2 hidden group-hover:flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-500 hover:bg-red-500 hover:text-white text-xs font-bold transition-colors z-10" onClick={(e) => { e.stopPropagation(); handleDeleteClick(wo.id); }} title="작업지시서 삭제">✕</button> : null}
+                        {isAdminOrSubadmin ? <button className="absolute top-2 right-2 flex items-center justify-center w-7 h-7 rounded-full bg-red-100 text-red-400 hover:bg-red-500 hover:text-white active:bg-red-600 text-xs font-bold transition-colors z-10 opacity-40 hover:opacity-100" onClick={(e) => { e.stopPropagation(); handleDeleteClick(wo.id); }} title="작업지시서 삭제">✕</button> : null}
                         </div>
                     );
                   })}
