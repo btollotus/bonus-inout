@@ -1603,6 +1603,9 @@ function WorkLogTab({ role, userId, showToast }: {
         )}
    </div>
 
+{/* 색소/구아검/분사/코팅 배합 섹션 */}
+<BlendSection userId={userId} showToast={showToast} />
+
 {/* 인쇄 전용 숨김 영역 */}
 <div id="work-log-print-inner" style={{ display: "none" }}>
   <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
@@ -1650,6 +1653,323 @@ function WorkLogTab({ role, userId, showToast }: {
     )}
   </div>
 </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 배합 섹션 (색소/구아검/분사/코팅)
+// ═══════════════════════════════════════════════════════════
+type BlendRecipe = { id: string; name: string; category: string };
+type BlendRecipeItem = { material_name: string; quantity_g: number; step_no: number | null };
+type BlendLog = {
+  id: string; happened_at: string; log_date: string;
+  employee_name: string; recipe_name: string; multiplier: number; note: string | null;
+  items: { material_name: string; quantity_g: number }[];
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  pigment_oil:   "🎨 지용성 색소",
+  pigment_water: "💧 수용성 색소",
+  spray:         "💨 레이즈 분사",
+  coating:       "🧴 레이즈 코팅",
+};
+
+function BlendSection({ userId, showToast }: {
+  userId: string | null;
+  showToast: (msg: string, type?: "success" | "error") => void;
+}) {
+  const [recipes, setRecipes] = useState<BlendRecipe[]>([]);
+  const [selectedRecipeId, setSelectedRecipeId] = useState("");
+  const [recipeItems, setRecipeItems] = useState<BlendRecipeItem[]>([]);
+  const [multiplier, setMultiplier] = useState("1");
+  const [employeeName, setEmployeeName] = useState("");
+  const [employees, setEmployees] = useState<{ id: string; name: string }[]>([]);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [logs, setLogs] = useState<BlendLog[]>([]);
+  const [logDate, setLogDate] = useState(todayKST());
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [activeCategory, setActiveCategory] = useState("pigment_oil");
+
+  useEffect(() => {
+    supabase.from("blend_recipes").select("id,name,category").order("category").order("name")
+      .then(({ data }) => setRecipes(data ?? []));
+    supabase.from("employees").select("id,name").is("resign_date", null).order("name")
+      .then(({ data }) => setEmployees(data ?? []));
+  }, []);
+
+  useEffect(() => { loadLogs(); }, [logDate]);
+
+  const filteredRecipes = recipes.filter((r) => r.category === activeCategory);
+
+  async function handleRecipeSelect(id: string) {
+    setSelectedRecipeId(id);
+    if (!id) { setRecipeItems([]); return; }
+    const { data } = await supabase
+      .from("blend_recipe_items")
+      .select("material_name,quantity_g,step_no")
+      .eq("recipe_id", id)
+      .order("step_no");
+    setRecipeItems(data ?? []);
+  }
+
+  const mult = parseFloat(multiplier) || 1;
+  const previewItems = recipeItems.map((i) => ({
+    ...i,
+    actual_g: Math.round(i.quantity_g * mult * 10) / 10,
+  }));
+
+  async function handleSave() {
+    if (!selectedRecipeId || !employeeName)
+      return showToast("레시피와 작업자를 선택하세요.", "error");
+    if (mult <= 0) return showToast("배합 횟수를 확인하세요.", "error");
+    setSaving(true);
+
+    const recipe = recipes.find((r) => r.id === selectedRecipeId);
+    if (!recipe) { setSaving(false); return; }
+
+    const happenedAt = `${logDate}T00:00:00+09:00`;
+
+    const { data: blendLog, error: blendErr } = await supabase
+      .from("blend_logs")
+      .insert({
+        happened_at: happenedAt,
+        log_date: logDate,
+        employee_name: employeeName,
+        recipe_id: selectedRecipeId,
+        recipe_name: recipe.name,
+        multiplier: mult,
+        note: note.trim() || null,
+        created_by: userId,
+      })
+      .select("id")
+      .single();
+
+    if (blendErr || !blendLog) {
+      setSaving(false);
+      return showToast("저장 실패: " + blendErr?.message, "error");
+    }
+
+    const logItems = previewItems.map((i) => ({
+      blend_log_id: blendLog.id,
+      material_name: i.material_name,
+      quantity_g: i.actual_g,
+    }));
+    const { error: itemErr } = await supabase.from("blend_log_items").insert(logItems);
+    if (itemErr) { setSaving(false); return showToast("차감 내역 저장 실패: " + itemErr.message, "error"); }
+
+    const { data: matsData } = await supabase
+      .from("materials").select("id,name")
+      .in("name", previewItems.map((i) => i.material_name));
+    const matMap: Record<string, string> = {};
+    (matsData ?? []).forEach((m: any) => { matMap[m.name] = m.id; });
+
+    const usageLogs = previewItems
+      .filter((i) => matMap[i.material_name])
+      .map((i) => ({
+        material_id: matMap[i.material_name],
+        used_date: logDate,
+        quantity: i.actual_g,
+        unit: "g",
+        work_type: "blend",
+        note: `${recipe.name} ${mult}배합`,
+        created_by: userId,
+      }));
+
+    if (usageLogs.length > 0) {
+      const { error: usageErr } = await supabase.from("material_usage_logs").insert(usageLogs);
+      if (usageErr) { setSaving(false); return showToast("재고 차감 실패: " + usageErr.message, "error"); }
+    }
+
+    setSaving(false);
+    showToast(`✅ ${recipe.name} ${mult}배합 저장! 원료 ${usageLogs.length}종 차감됨`);
+    setSelectedRecipeId(""); setRecipeItems([]); setMultiplier("1"); setNote(""); setShowForm(false);
+    loadLogs();
+  }
+
+  async function loadLogs() {
+    setLoadingLogs(true);
+    const { data } = await supabase
+      .from("blend_logs")
+      .select(`id,happened_at,log_date,employee_name,recipe_name,multiplier,note,
+        items:blend_log_items(material_name,quantity_g)`)
+      .eq("log_date", logDate)
+      .order("happened_at", { ascending: false });
+    setLogs((data ?? []) as any);
+    setLoadingLogs(false);
+  }
+
+  async function handleDelete(logId: string) {
+    if (!confirm("삭제하면 재고 차감도 취소됩니다. 삭제하시겠습니까?")) return;
+    const { data: items } = await supabase
+      .from("blend_log_items").select("material_name,quantity_g").eq("blend_log_id", logId);
+    const log = logs.find((l) => l.id === logId);
+    if (log && items && items.length > 0) {
+      const { data: matsData } = await supabase.from("materials").select("id,name")
+        .in("name", items.map((i: any) => i.material_name));
+      const matMap: Record<string, string> = {};
+      (matsData ?? []).forEach((m: any) => { matMap[m.name] = m.id; });
+      const matIds = items.map((i: any) => matMap[i.material_name]).filter(Boolean);
+      if (matIds.length > 0) {
+        await supabase.from("material_usage_logs").delete()
+          .eq("used_date", log.log_date)
+          .eq("work_type", "blend")
+          .eq("note", `${log.recipe_name} ${log.multiplier}배합`)
+          .in("material_id", matIds);
+      }
+    }
+    const { error } = await supabase.from("blend_logs").delete().eq("id", logId);
+    if (error) return showToast("삭제 실패: " + error.message, "error");
+    showToast("🗑️ 삭제 완료");
+    loadLogs();
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className={`${card} p-4`}>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="font-semibold text-sm text-slate-700">🧪 배합 기록</div>
+          <div>
+            <input type="date" className={inp} style={{ width: 160 }} value={logDate}
+              onChange={(e) => setLogDate(e.target.value)} />
+          </div>
+          <button className={btn} onClick={loadLogs}>🔄 조회</button>
+          <button
+            className={showForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
+            onClick={() => setShowForm((v) => !v)}>
+            {showForm ? "✕ 닫기" : "✚ 배합 기록 추가"}
+          </button>
+        </div>
+      </div>
+
+      {showForm && (
+        <div className={`${card} p-4 space-y-4`}>
+          <div className="font-semibold text-sm text-blue-700">✚ 배합 기록 추가</div>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+              <button key={key}
+                className={`rounded-xl px-3 py-1.5 text-sm font-semibold border transition-all
+                  ${activeCategory === key ? "border-blue-500 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                onClick={() => { setActiveCategory(key); setSelectedRecipeId(""); setRecipeItems([]); }}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div>
+            <div className="mb-1 text-xs text-slate-500">레시피 선택 *</div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+              {filteredRecipes.map((r) => (
+                <button key={r.id}
+                  className={`rounded-xl border-2 px-3 py-2.5 text-sm font-medium text-left transition-all
+                    ${selectedRecipeId === r.id ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}
+                  onClick={() => handleRecipeSelect(r.id)}>
+                  {r.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            <div>
+              <div className="mb-1 text-xs text-slate-500">배합 횟수 *{activeCategory === "spray" && <span className="ml-1 text-slate-400">(1~5번)</span>}</div>
+              {activeCategory === "spray" ? (
+                <div className="flex gap-1.5">
+                  {[1,2,3,4,5].map((n) => (
+                    <button key={n}
+                      className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition-all
+                        ${mult === n ? "border-blue-500 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}
+                      onClick={() => setMultiplier(String(n))}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <input className={inpR} inputMode="decimal" value={multiplier}
+                  onChange={(e) => setMultiplier(e.target.value)} placeholder="1" />
+              )}
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-500">작업자 *</div>
+              <select className={inp} value={employeeName} onChange={(e) => setEmployeeName(e.target.value)}>
+                <option value="">— 선택 —</option>
+                {employees.map((e) => <option key={e.id} value={e.name}>{e.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-500">비고</div>
+              <input className={inp} value={note} onChange={(e) => setNote(e.target.value)} placeholder="선택 입력" />
+            </div>
+          </div>
+
+          {previewItems.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="mb-2 text-xs font-semibold text-slate-500">📋 차감 원료 미리보기 ({mult}배합)</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+                {previewItems.map((i, idx) => (
+                  <div key={idx} className="flex justify-between text-xs py-0.5 border-b border-slate-100">
+                    <span className="text-slate-600">{i.material_name}</span>
+                    <span className="tabular-nums font-semibold text-slate-800">{i.actual_g}g</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-right text-xs font-bold text-slate-700">
+                총 {previewItems.reduce((s, i) => s + i.actual_g, 0).toLocaleString()}g
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+              disabled={saving || !selectedRecipeId || !employeeName}
+              onClick={handleSave}>
+              {saving ? "저장 중..." : "💾 배합 기록 저장 (재고 차감)"}
+            </button>
+            <button className={btn} onClick={() => { setShowForm(false); setSelectedRecipeId(""); setRecipeItems([]); setMultiplier("1"); setNote(""); }}>취소</button>
+          </div>
+        </div>
+      )}
+
+      <div className={`${card} p-4`}>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="font-semibold text-sm">배합 기록 — {logDate}</div>
+          <div className="text-xs text-slate-400">{logs.length}건</div>
+        </div>
+        {loadingLogs ? (
+          <div className="py-6 text-center text-sm text-slate-400">불러오는 중...</div>
+        ) : logs.length === 0 ? (
+          <div className="py-6 text-center text-sm text-slate-400">해당 날짜 배합 기록이 없습니다.</div>
+        ) : (
+          <div className="space-y-3">
+            {logs.map((log) => (
+              <div key={log.id} className="rounded-xl border border-slate-200 p-3">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div>
+                    <span className="font-semibold text-sm">{log.recipe_name}</span>
+                    <span className="ml-2 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700">{log.multiplier}배합</span>
+                    <span className="ml-1.5 text-xs text-slate-500">{log.employee_name}</span>
+                  </div>
+                  <button
+                    className="rounded-lg border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-500 hover:bg-red-100"
+                    onClick={() => handleDelete(log.id)}>삭제</button>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 sm:grid-cols-3 md:grid-cols-4">
+                  {(log.items ?? []).map((item, idx) => (
+                    <div key={idx} className="flex justify-between text-xs py-0.5 border-b border-slate-100">
+                      <span className="text-slate-500">{item.material_name}</span>
+                      <span className="tabular-nums font-medium">{item.quantity_g}g</span>
+                    </div>
+                  ))}
+                </div>
+                {log.note && <div className="mt-1.5 text-xs text-slate-400">비고: {log.note}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
