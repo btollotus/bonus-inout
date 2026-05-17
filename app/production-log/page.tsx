@@ -1830,11 +1830,25 @@ function PigmentBlendForm({ employeeName, userId, showToast }: {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+<div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         <div>
           <div className="mb-1 text-xs text-slate-500">배합 횟수 *</div>
-          <input className={inpR} inputMode="decimal" value={multiplier}
-            onChange={(e) => setMultiplier(e.target.value)} placeholder="1" />
+          <div className="flex items-center gap-2">
+            <button
+              className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white text-lg font-bold text-slate-600 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40"
+              disabled={parseFloat(multiplier) <= 1 || !multiplier}
+              onClick={() => setMultiplier(String(Math.max(1, (parseFloat(multiplier) || 1) - 1)))}>
+              −
+            </button>
+            <div className="flex-1 rounded-xl border-2 border-blue-300 bg-blue-50 py-2 text-center text-lg font-bold text-blue-700">
+              {multiplier || "0"}
+            </div>
+            <button
+              className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white text-lg font-bold text-slate-600 hover:bg-slate-50 active:bg-slate-100"
+              onClick={() => setMultiplier(String((parseFloat(multiplier) || 0) + 1))}>
+              ＋
+            </button>
+          </div>
         </div>
         <div>
           <div className="mb-1 text-xs text-slate-500">비고</div>
@@ -1943,17 +1957,23 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
         </span>
       )}
 
-      <div>
-        <div className="mb-1 text-xs text-slate-600">배합 횟수 선택 *</div>
-        <div className="flex gap-2">
-          {[1,2,3,4,5].map((n) => (
-            <button key={n}
-              className={`flex-1 rounded-xl border-2 py-2.5 text-sm font-bold transition-all
-                ${multiplier === n ? "border-emerald-500 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300"}`}
-              onClick={() => setMultiplier(n)}>
-              {n}번
-            </button>
-          ))}
+<div>
+        <div className="mb-1 text-xs text-slate-600">배합 횟수 *</div>
+        <div className="flex items-center gap-2">
+          <button
+            className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white text-lg font-bold text-slate-600 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40"
+            disabled={multiplier <= 1}
+            onClick={() => setMultiplier((n) => Math.max(1, n - 1))}>
+            −
+          </button>
+          <div className="flex-1 rounded-xl border-2 border-emerald-300 bg-emerald-50 py-2 text-center text-lg font-bold text-emerald-700">
+            {multiplier}
+          </div>
+          <button
+            className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white text-lg font-bold text-slate-600 hover:bg-slate-50 active:bg-slate-100"
+            onClick={() => setMultiplier((n) => n + 1)}>
+            ＋
+          </button>
         </div>
         <div className="mt-2 text-xs text-slate-500">
           구아검 {GUAR_RECIPE_ITEMS[multiplier].구아검}g · 물 {GUAR_RECIPE_ITEMS[multiplier].물.toLocaleString()}g
