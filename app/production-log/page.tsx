@@ -1776,8 +1776,8 @@ function PigmentBlendForm({ employeeName, userId, showToast }: {
 
     setSaving(false);
     showToast(`✅ ${recipe.name} ${mult}배합 저장! 원료 ${usageLogs.length}종 차감됨`);
-    setSelectedRecipeId(""); setRecipeItems([]); setMultiplier("1"); setNote("");
-    loadSavedLogs();
+    setSelectedRecipeId(""); setRecipeItems([]); setMultiplier(""); setNote("");
+    loadSavedLogs(); // 저장 기록 갱신, 폼은 유지
   }
 
   return (
