@@ -1695,7 +1695,7 @@ function PigmentBlendForm({ employeeName, userId, showToast }: {
   const [activeCategory, setActiveCategory] = useState("pigment_oil");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
   const [recipeItems, setRecipeItems] = useState<BlendRecipeItem[]>([]);
-  const [multiplier, setMultiplier] = useState("1");
+  const [multiplier, setMultiplier] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedLogs, setSavedLogs] = useState<{ recipe_name: string; multiplier: number }[]>([]);
