@@ -933,8 +933,8 @@ function ProductionLogTab({ role, userId, showToast }: {
         )}
       </div>
 
-      {/* 업무 체크리스트 */}
-      <div className={`${card} p-4`}>
+     {/* 업무 체크리스트 */}
+     <div className={`${card} p-4`}>
         <div className="mb-3 flex items-center justify-between">
           <div className="font-semibold text-sm">📋 업무 체크리스트</div>
           <div className="text-xs text-slate-400">{checkedCount}/{taskTypes.length} 완료</div>
@@ -942,21 +942,43 @@ function ProductionLogTab({ role, userId, showToast }: {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {taskTypes.map((t) => {
             const checked = taskChecks[t.id] === true;
+            const isPigment = t.id === "7e8ecc06-6f92-49b5-802e-7da0bd868a2c";
+            const isGuar = t.id === "3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673";
             return (
               <button key={t.id}
                 disabled={isDisabled}
                 className={`rounded-xl border-2 px-3 py-3 text-sm font-medium text-left transition-all
                   ${checked
-                    ? "border-green-400 bg-green-50 text-green-700"
+                    ? (isPigment || isGuar)
+                      ? "border-blue-400 bg-blue-50 text-blue-700"
+                      : "border-green-400 bg-green-50 text-green-700"
                     : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}
                   ${isDisabled ? "opacity-60 cursor-not-allowed" : "active:scale-95"}`}
                 onClick={() => !isDisabled && setTaskChecks((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}>
-                <span className="mr-1.5">{checked ? "✅" : "☐"}</span>
+                <span className="mr-1.5">{checked ? (isPigment || isGuar ? "🧪" : "✅") : "☐"}</span>
                 {t.name}
               </button>
             );
           })}
         </div>
+
+        {/* 색소 배합 폼 */}
+        {taskChecks["7e8ecc06-6f92-49b5-802e-7da0bd868a2c"] && !isDisabled && (
+          <PigmentBlendForm
+            employeeName={selectedEmployee.name}
+            userId={userId}
+            showToast={showToast}
+          />
+        )}
+
+        {/* 구아검 배합 폼 */}
+        {taskChecks["3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673"] && !isDisabled && (
+          <GuarBlendForm
+            employeeName={selectedEmployee.name}
+            userId={userId}
+            showToast={showToast}
+          />
+        )}
       </div>
 
       {/* 기타 입력 */}
@@ -1653,6 +1675,297 @@ function WorkLogTab({ role, userId, showToast }: {
     )}
   </div>
 </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 색소 배합 폼 (체크리스트 연동)
+// ═══════════════════════════════════════════════════════════
+const PIGMENT_TASK_ID = "7e8ecc06-6f92-49b5-802e-7da0bd868a2c";
+const GUAR_TASK_ID    = "3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673";
+
+function PigmentBlendForm({ employeeName, userId, showToast }: {
+  employeeName: string;
+  userId: string | null;
+  showToast: (msg: string, type?: "success" | "error") => void;
+}) {
+  const today = todayKST();
+  const [recipes, setRecipes] = useState<BlendRecipe[]>([]);
+  const [activeCategory, setActiveCategory] = useState("pigment_oil");
+  const [selectedRecipeId, setSelectedRecipeId] = useState("");
+  const [recipeItems, setRecipeItems] = useState<BlendRecipeItem[]>([]);
+  const [multiplier, setMultiplier] = useState("1");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedLogs, setSavedLogs] = useState<{ recipe_name: string; multiplier: number }[]>([]);
+
+  useEffect(() => {
+    supabase.from("blend_recipes").select("id,name,category")
+      .in("category", ["pigment_oil", "pigment_water"])
+      .order("name")
+      .then(({ data }) => setRecipes(data ?? []));
+    loadSavedLogs();
+  }, []);
+
+  async function loadSavedLogs() {
+    const { data } = await supabase.from("blend_logs")
+      .select("recipe_name,multiplier")
+      .eq("log_date", today)
+      .eq("employee_name", employeeName)
+      .in("recipe_id",
+        (await supabase.from("blend_recipes").select("id").in("category", ["pigment_oil", "pigment_water"])).data?.map((r: any) => r.id) ?? []
+      )
+      .order("happened_at", { ascending: false });
+    setSavedLogs(data ?? []);
+  }
+
+  const filteredRecipes = recipes.filter((r) => r.category === activeCategory);
+  const mult = parseFloat(multiplier) || 1;
+  const previewItems = recipeItems.map((i) => ({
+    ...i,
+    actual_g: Math.round(i.quantity_g * mult * 10) / 10,
+  }));
+
+  async function handleRecipeSelect(id: string) {
+    setSelectedRecipeId(id);
+    if (!id) { setRecipeItems([]); return; }
+    const { data } = await supabase.from("blend_recipe_items")
+      .select("material_name,quantity_g,step_no").eq("recipe_id", id).order("step_no");
+    setRecipeItems(data ?? []);
+  }
+
+  async function handleSave() {
+    if (!selectedRecipeId) return showToast("레시피를 선택하세요.", "error");
+    if (mult <= 0) return showToast("배합 횟수를 확인하세요.", "error");
+    setSaving(true);
+
+    const recipe = recipes.find((r) => r.id === selectedRecipeId);
+    if (!recipe) { setSaving(false); return; }
+
+    const { data: blendLog, error: blendErr } = await supabase.from("blend_logs")
+      .insert({
+        happened_at: `${today}T00:00:00+09:00`,
+        log_date: today,
+        employee_name: employeeName,
+        recipe_id: selectedRecipeId,
+        recipe_name: recipe.name,
+        multiplier: mult,
+        note: note.trim() || null,
+        created_by: userId,
+      })
+      .select("id").single();
+
+    if (blendErr || !blendLog) { setSaving(false); return showToast("저장 실패: " + blendErr?.message, "error"); }
+
+    const logItems = previewItems.map((i) => ({ blend_log_id: blendLog.id, material_name: i.material_name, quantity_g: i.actual_g }));
+    const { error: itemErr } = await supabase.from("blend_log_items").insert(logItems);
+    if (itemErr) { setSaving(false); return showToast("차감 내역 저장 실패: " + itemErr.message, "error"); }
+
+    const { data: matsData } = await supabase.from("materials").select("id,name").in("name", previewItems.map((i) => i.material_name));
+    const matMap: Record<string, string> = {};
+    (matsData ?? []).forEach((m: any) => { matMap[m.name] = m.id; });
+    const usageLogs = previewItems.filter((i) => matMap[i.material_name]).map((i) => ({
+      material_id: matMap[i.material_name], used_date: today, quantity: i.actual_g,
+      unit: "g", work_type: "blend", note: `${recipe.name} ${mult}배합`, created_by: userId,
+    }));
+    if (usageLogs.length > 0) {
+      const { error: usageErr } = await supabase.from("material_usage_logs").insert(usageLogs);
+      if (usageErr) { setSaving(false); return showToast("재고 차감 실패: " + usageErr.message, "error"); }
+    }
+
+    setSaving(false);
+    showToast(`✅ ${recipe.name} ${mult}배합 저장! 원료 ${usageLogs.length}종 차감됨`);
+    setSelectedRecipeId(""); setRecipeItems([]); setMultiplier("1"); setNote("");
+    loadSavedLogs();
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+      <div className="font-semibold text-sm text-blue-700">🎨 색소 배합 기록</div>
+
+      {savedLogs.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {savedLogs.map((l, i) => (
+            <span key={i} className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+              ✅ {l.recipe_name} {l.multiplier}배합
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {[{ key: "pigment_oil", label: "🎨 지용성" }, { key: "pigment_water", label: "💧 수용성" }].map(({ key, label }) => (
+          <button key={key}
+            className={`rounded-xl px-3 py-1.5 text-sm font-semibold border transition-all
+              ${activeCategory === key ? "border-blue-500 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+            onClick={() => { setActiveCategory(key); setSelectedRecipeId(""); setRecipeItems([]); }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+        {filteredRecipes.map((r) => (
+          <button key={r.id}
+            className={`rounded-xl border-2 px-3 py-2 text-sm font-medium text-left transition-all
+              ${selectedRecipeId === r.id ? "border-blue-500 bg-white text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}
+            onClick={() => handleRecipeSelect(r.id)}>
+            {r.name}
+          </button>
+        ))}
+      </div>
+
+      {previewItems.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <div className="mb-2 text-xs font-semibold text-slate-500">📋 차감 원료 ({mult}배합)</div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+            {previewItems.map((i, idx) => (
+              <div key={idx} className="flex justify-between text-xs py-0.5 border-b border-slate-100">
+                <span className="text-slate-600">{i.material_name}</span>
+                <span className="tabular-nums font-semibold">{i.actual_g}g</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <div>
+          <div className="mb-1 text-xs text-slate-500">배합 횟수 *</div>
+          <input className={inpR} inputMode="decimal" value={multiplier}
+            onChange={(e) => setMultiplier(e.target.value)} placeholder="1" />
+        </div>
+        <div>
+          <div className="mb-1 text-xs text-slate-500">비고</div>
+          <input className={inp} value={note} onChange={(e) => setNote(e.target.value)} placeholder="선택 입력" />
+        </div>
+      </div>
+
+      <button
+        className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+        disabled={saving || !selectedRecipeId}
+        onClick={handleSave}>
+        {saving ? "저장 중..." : "💾 색소 배합 저장 (재고 차감)"}
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 구아검 배합 폼 (체크리스트 연동)
+// ═══════════════════════════════════════════════════════════
+function GuarBlendForm({ employeeName, userId, showToast }: {
+  employeeName: string;
+  userId: string | null;
+  showToast: (msg: string, type?: "success" | "error") => void;
+}) {
+  const today = todayKST();
+  const [multiplier, setMultiplier] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [savedLog, setSavedLog] = useState<{ multiplier: number } | null>(null);
+
+  // 구아검 레시피 ID (spray 카테고리, 레이즈 분사)
+  // 구아검 배합은 별도 레시피: guar 카테고리로 찾음
+  const GUAR_RECIPE_ITEMS: Record<number, { 구아검: number; 물: number }> = {
+    1: { 구아검: 6,  물: 1500 },
+    2: { 구아검: 12, 물: 3000 },
+    3: { 구아검: 18, 물: 4500 },
+    4: { 구아검: 24, 물: 6000 },
+    5: { 구아검: 30, 물: 7500 },
+  };
+
+  useEffect(() => { loadSavedLog(); }, []);
+
+  async function loadSavedLog() {
+    const { data: guarRecipe } = await supabase.from("blend_recipes")
+      .select("id").eq("name", "레이즈 분사").single();
+    if (!guarRecipe) return;
+    const { data } = await supabase.from("blend_logs")
+      .select("multiplier").eq("log_date", today).eq("employee_name", employeeName)
+      .eq("recipe_id", guarRecipe.id).maybeSingle();
+    if (data) setSavedLog(data);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    const { data: guarRecipe } = await supabase.from("blend_recipes")
+      .select("id").eq("name", "레이즈 분사").single();
+    if (!guarRecipe) { setSaving(false); return showToast("구아검 레시피를 찾을 수 없습니다.", "error"); }
+
+    const { data: blendLog, error: blendErr } = await supabase.from("blend_logs")
+      .insert({
+        happened_at: `${today}T00:00:00+09:00`,
+        log_date: today,
+        employee_name: employeeName,
+        recipe_id: guarRecipe.id,
+        recipe_name: "구아검 배합",
+        multiplier,
+        note: null,
+        created_by: userId,
+      })
+      .select("id").single();
+
+    if (blendErr || !blendLog) { setSaving(false); return showToast("저장 실패: " + blendErr?.message, "error"); }
+
+    const items = GUAR_RECIPE_ITEMS[multiplier];
+    const logItems = [
+      { blend_log_id: blendLog.id, material_name: "구아검", quantity_g: items.구아검 },
+    ];
+    await supabase.from("blend_log_items").insert(logItems);
+
+    // 재고 차감 (구아검만, 물은 차감 불필요)
+    const { data: matsData } = await supabase.from("materials").select("id,name").eq("name", "구아검");
+    if (matsData && matsData.length > 0) {
+      await supabase.from("material_usage_logs").insert({
+        material_id: matsData[0].id,
+        used_date: today,
+        quantity: items.구아검,
+        unit: "g",
+        work_type: "blend",
+        note: `구아검 배합 ${multiplier}번`,
+        created_by: userId,
+      });
+    }
+
+    setSaving(false);
+    showToast(`✅ 구아검 배합 ${multiplier}번 저장! 구아검 ${items.구아검}g 차감됨`);
+    setSavedLog({ multiplier });
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+      <div className="font-semibold text-sm text-emerald-700">🌿 구아검 배합 기록</div>
+
+      {savedLog && (
+        <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+          ✅ 구아검 배합 {savedLog.multiplier}번 완료
+        </span>
+      )}
+
+      <div>
+        <div className="mb-1 text-xs text-slate-600">배합 횟수 선택 *</div>
+        <div className="flex gap-2">
+          {[1,2,3,4,5].map((n) => (
+            <button key={n}
+              className={`flex-1 rounded-xl border-2 py-2.5 text-sm font-bold transition-all
+                ${multiplier === n ? "border-emerald-500 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300"}`}
+              onClick={() => setMultiplier(n)}>
+              {n}번
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 text-xs text-slate-500">
+          구아검 {GUAR_RECIPE_ITEMS[multiplier].구아검}g · 물 {GUAR_RECIPE_ITEMS[multiplier].물.toLocaleString()}g
+        </div>
+      </div>
+
+      <button
+        className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+        disabled={saving}
+        onClick={handleSave}>
+        {saving ? "저장 중..." : "💾 구아검 배합 저장 (재고 차감)"}
+      </button>
     </div>
   );
 }
