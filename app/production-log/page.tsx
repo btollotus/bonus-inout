@@ -165,9 +165,9 @@ export default function ProductionLogPage() {
         {/* 왼쪽 사이드바 탭 */}
         <div className="flex flex-col gap-1 w-36 shrink-0">
         {([
-        { key: "production",    label: "👷 근무일지" },
-        { key: "material",      label: "🧪 원료수불부" },
-        { key: "work",          label: "📝 생산일지" },
+            { key: "production",    label: "📝 생산일지" },
+            { key: "material",      label: "🧪 원료수불부" },
+            { key: "work",          label: "👷 근무일지" },
             { key: "ccp1b",         label: "🌡️ CCP-1B" },
             { key: "ccp1p",         label: "🔍 CCP-1P" },
             { key: "other_heating", label: "🔥 가열공정" },
