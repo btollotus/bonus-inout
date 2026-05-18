@@ -326,10 +326,10 @@ export default function FridgeMonitoringClient() {
 
       const toSave = Object.values(entries).map(e => ({
         ...e,
-        special_note: specialNote.trim() || null,
+        special_note: (specialNote ?? "").trim() || null,
         inspector_id: currentInspector.id,
         inspector_name: currentInspector.name,
-        action_note: e.action_note.trim() || null,
+        action_note: (e.action_note ?? "").trim() || null,
         check_time: checkTimeStr,
       }));
 
