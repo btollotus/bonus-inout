@@ -31,8 +31,10 @@ type QuotePrintProps = {
     items: PrintItem[];
     memo: string | null;
     iceboxPrice: number;
+    iceboxQty?: number;
     deliveryPrice: number;
-    quoteRequestId?: string | null;  // DB 저장된 견적 ID (드라이브 업로드용)
+    deliveryQty?: number;
+    quoteRequestId?: string | null;
   };
 };
 
@@ -93,7 +95,7 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   const [saving, setSaving] = React.useState(false);
   const [saveMsg, setSaveMsg] = React.useState<string | null>(null);
 
-  const { customerName, quoteDate, inputMode, items, memo, iceboxPrice, deliveryPrice, quoteRequestId } = quoteData;
+  const { customerName, quoteDate, inputMode, items, memo, iceboxPrice, iceboxQty, deliveryPrice, deliveryQty, quoteRequestId } = quoteData;
 
   // ── 식품유형 (첫 품목 기준) ──
   const firstItem = items[0];
@@ -183,16 +185,20 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
 
   // 아이스박스
   if (iceboxPrice > 0) {
+    const qty = iceboxQty ?? 1;
+    const unitPrice = Math.round(iceboxPrice / qty);
     const supply = Math.round(iceboxPrice / 1.1);
     const vat = iceboxPrice - supply;
-    lineItems.push({ name: "아이스박스/택배포장(5~10월)", qty: "1", unit: iceboxPrice, supply, vat, total: iceboxPrice });
+    lineItems.push({ name: "아이스박스/택배포장(5~10월)", qty: String(qty), unit: unitPrice, supply, vat, total: iceboxPrice });
   }
 
   // 택배비
   if (deliveryPrice > 0) {
+    const qty = deliveryQty ?? 1;
+    const unitPrice = Math.round(deliveryPrice / qty);
     const supply = Math.round(deliveryPrice / 1.1);
     const vat = deliveryPrice - supply;
-    lineItems.push({ name: "택배비", qty: "1", unit: deliveryPrice, supply, vat, total: deliveryPrice });
+    lineItems.push({ name: "택배비", qty: String(qty), unit: unitPrice, supply, vat, total: deliveryPrice });
   }
 
   const sumSupply = lineItems.reduce((a, r) => a + r.supply, 0);
