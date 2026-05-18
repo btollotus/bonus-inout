@@ -1206,6 +1206,7 @@ export function WoCcpCard({
   currentUserIdRef,
   onSlotSaved,
   foodCategory,
+  isCoating,
 }: any) {
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const inp  = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none";
@@ -1413,7 +1414,7 @@ export function WoCcpCard({
                   </div>
                 </div>
               )}
-              {warmerSlots.filter((s: any) => s.purpose === "전사용도").length > 0 && (
+              {!isCoating && warmerSlots.filter((s: any) => s.purpose === "전사용도").length > 0 && (
                 <div>
                   <div className="mb-1 text-xs font-semibold text-slate-500">전사 (8번)</div>
                   <div className="flex flex-row gap-1.5">
