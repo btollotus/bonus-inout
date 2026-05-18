@@ -1185,6 +1185,8 @@ async function loadSignageList() {
                             const { error: quoteErr } = await supabase.from("quotes").insert({
                               request_id: req.id,
                               final_price: parseInt(firstManualItem.manualV) || 0,
+                              icebox_cost: useIcebox ? iceboxPrice * iceboxQty : 0,
+                              delivery_cost: deliveryPrice * deliveryQty,
                             });
                             if (quoteErr) setMsg("⚠️ 견적 상세 저장 오류: " + quoteErr.message);
                             setLastQuoteRequestId(req.id);
