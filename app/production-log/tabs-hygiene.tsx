@@ -2266,7 +2266,7 @@ export function TempHumidityTab({ role, userId, showToast }: {
       const toSave = HUMID_ROOMS.map((room) => ({
         ...entries[room], log_date: logDate, period, check_time: checkTimeStr,
         inspector_id: currentInspector.id, inspector_name: currentInspector.name,
-        note: entries[room].note.trim() || null,
+        note: (entries[room].note ?? "").trim() || null,
       }));
       const { error } = await supabase.from("humidity_temp_logs").upsert(toSave, { onConflict: "log_date,period,room" });
       if (error) throw error;
