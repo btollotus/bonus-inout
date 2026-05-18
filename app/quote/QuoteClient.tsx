@@ -205,7 +205,9 @@ export default function QuoteClient() {
   ];
   const [useIcebox, setUseIcebox] = useState(false);
   const [iceboxPrice, setIceboxPrice] = useState(4620);
+  const [iceboxQty, setIceboxQty] = useState(1);
   const [deliveryPrice, setDeliveryPrice] = useState(0);
+  const [deliveryQty, setDeliveryQty] = useState(1);
 
   // 전사지 탭용 레거시
   const [quantity, setQuantity] = useState("");
@@ -547,7 +549,8 @@ async function loadSignageList() {
 
   function resetForm() {
     setItems([newItem()]); setMemo("");
-    setUseIcebox(false); setIceboxPrice(4620); setDeliveryPrice(0);
+    setUseIcebox(false); setIceboxPrice(4620); setIceboxQty(1);
+    setDeliveryPrice(0); setDeliveryQty(1);
   }
 
   const filteredList = quoteList.filter(r => {
@@ -1003,7 +1006,7 @@ async function loadSignageList() {
                         <span className="font-semibold text-blue-700">🧊 아이스박스 (5~10월)</span>
                       </label>
                       {useIcebox && (
-                        <div className="flex gap-2 flex-wrap">
+                        <div className="flex gap-2 flex-wrap items-center">
                           {ICEBOX_OPTIONS.map(o => (
                             <button key={o.value} type="button"
                               className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${iceboxPrice === o.value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
@@ -1011,12 +1014,19 @@ async function loadSignageList() {
                               {o.label}
                             </button>
                           ))}
+                          <div className="flex items-center gap-1 ml-1">
+                            <span className="text-xs text-slate-500">수량</span>
+                            <input type="number" min={1}
+                              className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-center"
+                              value={iceboxQty}
+                              onChange={e => setIceboxQty(Math.max(1, parseInt(e.target.value) || 1))} />
+                          </div>
                         </div>
                       )}
                     </div>
                     <div>
                       <div className="mb-2 text-sm font-semibold text-slate-700">🚚 택배비</div>
-                      <div className="flex gap-2 flex-wrap">
+                      <div className="flex gap-2 flex-wrap items-center">
                         {DELIVERY_OPTIONS.map(o => (
                           <button key={o.value} type="button"
                             className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${deliveryPrice === o.value ? "border-green-300 bg-green-50 text-green-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
@@ -1024,6 +1034,15 @@ async function loadSignageList() {
                             {o.label}
                           </button>
                         ))}
+                        {deliveryPrice > 0 && (
+                          <div className="flex items-center gap-1 ml-1">
+                            <span className="text-xs text-slate-500">수량</span>
+                            <input type="number" min={1}
+                              className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-center"
+                              value={deliveryQty}
+                              onChange={e => setDeliveryQty(Math.max(1, parseInt(e.target.value) || 1))} />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1165,7 +1184,7 @@ async function loadSignageList() {
                     }}>
                     🖨️ 견적서 출력
                   </button>
-                  <button className={btn} onClick={() => { setItems([newItem()]); setMemo(""); setUseIcebox(false); setIceboxPrice(4620); setDeliveryPrice(0); }}>
+                  <button className={btn} onClick={() => { setItems([newItem()]); setMemo(""); setUseIcebox(false); setIceboxPrice(4620); setIceboxQty(1); setDeliveryPrice(0); setDeliveryQty(1); }}>
                     초기화
                   </button>
                 </div>
@@ -1468,7 +1487,7 @@ async function loadSignageList() {
             <span className="font-semibold text-blue-700">🧊 아이스박스 (5~10월)</span>
           </label>
           {useIcebox && (
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap items-center">
               {ICEBOX_OPTIONS.map(o => (
                 <button key={o.value} type="button"
                   className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${iceboxPrice === o.value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
@@ -1476,12 +1495,19 @@ async function loadSignageList() {
                   {o.label}
                 </button>
               ))}
+              <div className="flex items-center gap-1 ml-1">
+                <span className="text-xs text-slate-500">수량</span>
+                <input type="number" min={1}
+                  className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-center"
+                  value={iceboxQty}
+                  onChange={e => setIceboxQty(Math.max(1, parseInt(e.target.value) || 1))} />
+              </div>
             </div>
           )}
         </div>
         <div>
           <div className="mb-2 text-sm font-semibold text-slate-700">🚚 택배비</div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             {DELIVERY_OPTIONS.map(o => (
               <button key={o.value} type="button"
                 className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${deliveryPrice === o.value ? "border-green-300 bg-green-50 text-green-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
@@ -1489,6 +1515,15 @@ async function loadSignageList() {
                 {o.label}
               </button>
             ))}
+            {deliveryPrice > 0 && (
+              <div className="flex items-center gap-1 ml-1">
+                <span className="text-xs text-slate-500">수량</span>
+                <input type="number" min={1}
+                  className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-center"
+                  value={deliveryQty}
+                  onChange={e => setDeliveryQty(Math.max(1, parseInt(e.target.value) || 1))} />
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1848,8 +1883,8 @@ async function loadSignageList() {
           manualV: 0,
         })),
         memo: memo || null,
-        iceboxPrice: useIcebox ? iceboxPrice : 0,
-        deliveryPrice,
+        iceboxPrice: useIcebox ? iceboxPrice * iceboxQty : 0,
+        deliveryPrice: deliveryPrice * deliveryQty,
         quoteRequestId: lastQuoteRequestId,
       }}
     />
@@ -1914,8 +1949,8 @@ async function loadSignageList() {
               };
             }),
             memo: memo || null,
-            iceboxPrice: useIcebox ? iceboxPrice : 0,
-            deliveryPrice,
+            iceboxPrice: useIcebox ? iceboxPrice * iceboxQty : 0,
+            deliveryPrice: deliveryPrice * deliveryQty,
             quoteRequestId: lastQuoteRequestId,
           }}
         />
