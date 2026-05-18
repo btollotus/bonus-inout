@@ -1884,7 +1884,9 @@ async function loadSignageList() {
         })),
         memo: memo || null,
         iceboxPrice: useIcebox ? iceboxPrice * iceboxQty : 0,
+        iceboxQty: useIcebox ? iceboxQty : 1,
         deliveryPrice: deliveryPrice * deliveryQty,
+        deliveryQty: deliveryPrice > 0 ? deliveryQty : 1,
         quoteRequestId: lastQuoteRequestId,
       }}
     />
@@ -1950,7 +1952,9 @@ async function loadSignageList() {
             }),
             memo: memo || null,
             iceboxPrice: useIcebox ? iceboxPrice * iceboxQty : 0,
+            iceboxQty: useIcebox ? iceboxQty : 1,
             deliveryPrice: deliveryPrice * deliveryQty,
+            deliveryQty: deliveryPrice > 0 ? deliveryQty : 1,
             quoteRequestId: lastQuoteRequestId,
           }}
         />
