@@ -641,8 +641,14 @@ async function loadSignageList() {
               {partnerMode === "direct" && (
                 <div>
                   <div className="mb-1 text-xs font-semibold text-slate-600">업체명</div>
-                  <input className={inp} placeholder="예: 아난티앳강남" value={customerName}
-                    onChange={e => setCustomerName(e.target.value)} />
+                  <div className="relative">
+                    <input className={`${inp} pr-7`} placeholder="예: 아난티앳강남" value={customerName}
+                      onChange={e => setCustomerName(e.target.value)} />
+                    {customerName && (
+                      <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                        onClick={() => setCustomerName("")}>✕</button>
+                    )}
+                  </div>
                   <div className="mt-2 text-xs text-slate-400">
                     신규 문의 업체는 업체명만 입력하세요.<br/>수주 확정 후 거래처 등록을 권장해요.
                   </div>
