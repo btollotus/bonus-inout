@@ -652,8 +652,14 @@ async function loadSignageList() {
               {/* 기존 거래처 선택 모드 */}
               {partnerMode === "select" && (
                 <div>
-                  <input className={`${inp} mb-2`} placeholder="업체명 검색" value={partnerFilter}
-                    onChange={e => setPartnerFilter(e.target.value)} />
+                  <div className="relative mb-2">
+                    <input className={`${inp} pr-7`} placeholder="업체명 검색" value={partnerFilter}
+                      onChange={e => setPartnerFilter(e.target.value)} />
+                    {partnerFilter && (
+                      <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                        onClick={() => setPartnerFilter("")}>✕</button>
+                    )}
+                  </div>
                   {selectedPartner && (
                     <div className="mb-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
                       ✓ {selectedPartner.name}
@@ -1356,8 +1362,14 @@ async function loadSignageList() {
 
               {partnerMode === "select" && (
                 <div>
-                  <input className={`${inp} mb-2`} placeholder="업체명 검색" value={partnerFilter}
-                    onChange={e => setPartnerFilter(e.target.value)} />
+                 <div className="relative mb-2">
+                    <input className={`${inp} pr-7`} placeholder="업체명 검색" value={partnerFilter}
+                      onChange={e => setPartnerFilter(e.target.value)} />
+                    {partnerFilter && (
+                      <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                        onClick={() => setPartnerFilter("")}>✕</button>
+                    )}
+                  </div>
                   {selectedPartner && (
                     <div className="mb-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
                       ✓ {selectedPartner.name}
@@ -1674,12 +1686,18 @@ async function loadSignageList() {
   <div className={`${card} p-4`}>
     <div className="mb-4 flex flex-wrap items-center gap-3">
       <div className="text-lg font-semibold">🪧 사인판(장식물) 제작문의</div>
-      <input
-        className={`${inp} max-w-[240px]`}
-        placeholder="업체명, 담당자 검색..."
-        value={signageSearch}
-        onChange={e => { setSignageSearch(e.target.value); setSigPage(1); }}
-      />
+      <div className="relative">
+        <input
+          className={`${inp} max-w-[240px] pr-7`}
+          placeholder="업체명, 담당자 검색..."
+          value={signageSearch}
+          onChange={e => { setSignageSearch(e.target.value); setSigPage(1); }}
+        />
+        {signageSearch && (
+          <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+            onClick={() => { setSignageSearch(""); setSigPage(1); }}>✕</button>
+        )}
+      </div>
       <button className={btn} onClick={loadSignageList}>🔄 새로고침</button>
       <span className="text-xs text-slate-400 ml-auto">총 {signageList.length}건</span>
     </div>
