@@ -186,18 +186,18 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   // 아이스박스
   if (iceboxPrice > 0) {
     const qty = iceboxQty ?? 1;
-    const unitPrice = Math.round(iceboxPrice / qty);
     const supply = Math.round(iceboxPrice / 1.1);
     const vat = iceboxPrice - supply;
+    const unitPrice = Math.round(supply / qty);
     lineItems.push({ name: "아이스박스/택배포장(5~10월)", qty: String(qty), unit: unitPrice, supply, vat, total: iceboxPrice });
   }
 
   // 택배비
   if (deliveryPrice > 0) {
     const qty = deliveryQty ?? 1;
-    const unitPrice = Math.round(deliveryPrice / qty);
     const supply = Math.round(deliveryPrice / 1.1);
     const vat = deliveryPrice - supply;
+    const unitPrice = Math.round(supply / qty);
     lineItems.push({ name: "택배비", qty: String(qty), unit: unitPrice, supply, vat, total: deliveryPrice });
   }
 
