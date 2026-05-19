@@ -122,17 +122,15 @@ function renderBody(body: string): string {
 
 // ─── 드래그 순서 변경 훅 ─────────────────────────────────────────────────────
 // ─── 직원 선택 그리드 (PIN 모달용) ──────────────────────────────────────────
-function EmployeeGrid({onSelect,onCancel}:{onSelect:(name:string)=>void;onCancel:()=>void}) {
-    const [emps,setEmps]=useState<{name:string;pin:string|null}[]>([]);
-    useEffect(()=>{
-      createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-        .from("employees").select("name,pin").is("resign_date",null).order("name").limit(100)
-        .then(({data})=>{ if(data) setEmps(data); });
-    },[]);
-    return(
-      <div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,maxHeight:320,overflowY:"auto",marginBottom:12}}>
-          {emps.map(e=>(
+function EmployeeGrid({emps,onSelect,onCancel}:{
+    emps:{name:string;pin:string|null}[];
+    onSelect:(name:string)=>void;
+    onCancel:()=>void;
+  }) {
+      return(
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,maxHeight:320,overflowY:"auto",marginBottom:12}}>
+            {emps.map(e=>(
             <button key={e.name} onClick={()=>onSelect(e.name)}
               style={{padding:"12px 8px",border:"1px solid #e2e5ea",borderRadius:8,background:"#f8f9fb",cursor:"pointer",textAlign:"center",fontSize:13,fontWeight:600,color:"#333"}}>
               <div>{e.name}</div>
@@ -515,9 +513,10 @@ export default function ManualPage() {
             {/* 직원 선택 단계 */}
             {!pinSelectedName ? (
               <EmployeeGrid
-                onSelect={(name)=>{ setPinSelectedName(name); setPinError(""); }}
-                onCancel={()=>{ setShowPin(false); setPinInput(""); setPinError(""); setPinSelectedName(""); }}
-              />
+              emps={employees}
+              onSelect={(name)=>{ setPinSelectedName(name); setPinError(""); }}
+              onCancel={()=>{ setShowPin(false); setPinInput(""); setPinError(""); setPinSelectedName(""); }}
+            />
             ) : (
               /* PIN 입력 단계 */
               <div>
