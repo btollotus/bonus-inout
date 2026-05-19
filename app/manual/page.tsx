@@ -551,9 +551,9 @@ export default function ManualPage() {
              emps={employees}
              onSelect={(name)=>{ setPinSelectedName(name); setPinError(""); }}
              onCancel={()=>{
-               if(viewLocked) { window.history.back(); return; }
-               setShowPin(false); setPinInput(""); setPinError(""); setPinSelectedName("");
-             }}
+                if(viewLocked) { window.location.href="/"; return; }
+                setShowPin(false); setPinInput(""); setPinError(""); setPinSelectedName("");
+              }}
            />
             ) : (
               /* PIN 입력 단계 */
