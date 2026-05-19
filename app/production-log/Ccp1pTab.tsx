@@ -357,11 +357,11 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
       ccp_end_time: ccpEndMap[w.work_order_no] ?? null,
     }));
     const filtered = (enriched as WorkOrderItem[]).filter(
-      (wo) => !loggedWoIds.has(wo.id) || !!logMap[wo.id]
+      (wo) => !loggedWoIds.has(wo.id)
     );
     setWoList(filtered);
     setLoading(false);
-  }, [selectedDate, logMap]);
+  }, [selectedDate]);
 
   const loadLogs = useCallback(async () => {
     const { data } = await supabase
