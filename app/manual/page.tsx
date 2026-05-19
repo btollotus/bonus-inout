@@ -238,6 +238,7 @@ export default function ManualPage() {
  const [showViewLog, setShowViewLog] = useState(false);
  const [viewLogs, setViewLogs] = useState<{id:number;viewer_name:string;menu_item_name:string;viewed_at:string}[]>([]);
  const [viewLogLoading, setViewLogLoading] = useState(false);
+ const [viewLogFilter, setViewLogFilter] = useState("");
 
   // ── mobile sidebar ──
   const [showSidebar, setShowSidebar] = useState(false);
@@ -543,50 +544,7 @@ export default function ManualPage() {
   return(
     <div style={{fontFamily:"'Malgun Gothic','Apple SD Gothic Neo',sans-serif",fontSize:14,background:"#f5f6f8",minHeight:"100vh",color:"#333"}}>
 
-    {/* ── 열람 기록 모달 ── */}
-    {showViewLog&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-          <div style={{background:white,borderRadius:12,width:"100%",maxWidth:640,maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 40px rgba(0,0,0,0.2)"}}>
-            <div style={{padding:"16px 20px",borderBottom:`1px solid ${border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div style={{fontWeight:700,fontSize:16}}>📋 열람 기록</div>
-              <button onClick={()=>setShowViewLog(false)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#888"}}>×</button>
-            </div>
-            <div style={{overflowY:"auto",flex:1}}>
-              {viewLogLoading?(
-                <div style={{padding:32,textAlign:"center",color:"#aaa"}}>불러오는 중...</div>
-              ):viewLogs.length===0?(
-                <div style={{padding:32,textAlign:"center",color:"#aaa"}}>열람 기록이 없습니다</div>
-              ):(
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                  <thead>
-                    <tr style={{background:"#f8f9fb",position:"sticky",top:0}}>
-                      {["열람자","항목명","열람시각"].map(h=>(
-                        <th key={h} style={{padding:"10px 16px",textAlign:"left",fontWeight:600,color:"#555",borderBottom:`1px solid ${border}`}}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {viewLogs.map((log,i)=>(
-                      <tr key={log.id} style={{borderBottom:`1px solid ${border}`,background:i%2===0?white:"#fafafa"}}>
-                        <td style={{padding:"9px 16px",fontWeight:600,color:blue}}>{log.viewer_name}</td>
-                        <td style={{padding:"9px 16px"}}>{log.menu_item_name}</td>
-                        <td style={{padding:"9px 16px",color:"#888",whiteSpace:"nowrap"}}>
-                          {new Date(log.viewed_at).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"})}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <div style={{padding:"12px 20px",borderTop:`1px solid ${border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"#aaa"}}>최근 200건</span>
-              <button onClick={loadViewLogs} style={{padding:"6px 16px",background:blueLt,color:blue,border:`1px solid ${blue}`,borderRadius:6,cursor:"pointer",fontSize:13}}>새로고침</button>
-            </div>
-          </div>
-        </div>
-      )}
-
+   
       {/* ── Lightbox ── */}
       {lightbox&&(
         <div onClick={()=>setLightbox(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
@@ -718,9 +676,9 @@ export default function ManualPage() {
        <div style={{display:"flex",gap:6,flexShrink:0}}>
           {/* 열람 기록 버튼 — PIN 확인된 사람이면 누구나 */}
           {viewerName&&(
-            <button onClick={()=>{ setShowViewLog(true); loadViewLogs(); }}
-              style={{padding:"5px 12px",background:"#f0fdf4",color:"#16a34a",border:"1px solid #86efac",borderRadius:6,cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}}>
-              📋 열람 기록
+            <button onClick={()=>{ setShowViewLog(v=>{ if(!v) loadViewLogs(); return !v; }); }}
+              style={{padding:"5px 12px",background:showViewLog?"#16a34a":"#f0fdf4",color:showViewLog?white:"#16a34a",border:"1px solid #86efac",borderRadius:6,cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}}>
+              📋 {showViewLog?"기록 닫기":"열람 기록"}
             </button>
           )}
           {isAdmin?(
@@ -737,16 +695,78 @@ export default function ManualPage() {
         </div>
       </div>
 
-      {/* ── Body ── */}
-      <div style={{display:"flex",maxWidth:1400,margin:"0 auto",padding:"16px"}}>
+    {/* ── Body ── */}
+    <div style={{display:"flex",maxWidth:1400,margin:"0 auto",padding:"16px"}}>
 
-        {/* ── Desktop 사이드바 ── */}
-        <div style={{width:240,flexShrink:0,marginRight:18}} className="manual-sidebar-desktop">
-          {SidebarContent()}
-        </div>
+{/* ── 열람 기록 페이지 ── */}
+{showViewLog&&(
+  <div style={{width:"100%"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:8}}>
+      <div style={{fontWeight:700,fontSize:18}}>📋 열람 기록</div>
+      <div style={{display:"flex",gap:8}}>
+        <input
+          value={viewLogFilter}
+          onChange={e=>setViewLogFilter(e.target.value)}
+          placeholder="이름 또는 항목명 검색"
+          style={{padding:"6px 12px",border:`1px solid ${border}`,borderRadius:6,fontSize:13,width:220,background:white}}
+        />
+        <button onClick={loadViewLogs}
+          style={{padding:"6px 14px",background:blueLt,color:blue,border:`1px solid ${blue}`,borderRadius:6,cursor:"pointer",fontSize:13}}>
+          새로고침
+        </button>
+      </div>
+    </div>
+    <div style={{background:white,borderRadius:10,border:`1px solid ${border}`,overflow:"hidden"}}>
+      {viewLogLoading?(
+        <div style={{padding:48,textAlign:"center",color:"#aaa",fontSize:14}}>불러오는 중...</div>
+      ):viewLogs.length===0?(
+        <div style={{padding:48,textAlign:"center",color:"#aaa",fontSize:14}}>열람 기록이 없습니다</div>
+      ):(
+        <>
+          <div style={{padding:"10px 16px",background:"#f8f9fb",borderBottom:`1px solid ${border}`,fontSize:12,color:"#888"}}>
+            총 {viewLogs.filter(l=>!viewLogFilter||l.viewer_name.includes(viewLogFilter)||(l.menu_item_name??'').includes(viewLogFilter)).length}건
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead>
+                <tr style={{background:"#f8f9fb"}}>
+                  {["#","열람자","항목명","열람시각"].map(h=>(
+                    <th key={h} style={{padding:"10px 16px",textAlign:"left",fontWeight:600,color:"#555",borderBottom:`1px solid ${border}`,whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {viewLogs
+                  .filter(l=>!viewLogFilter||l.viewer_name.includes(viewLogFilter)||(l.menu_item_name??'').includes(viewLogFilter))
+                  .map((log,i)=>(
+                    <tr key={log.id} style={{borderBottom:`1px solid ${border}`,background:i%2===0?white:"#fafafa"}}>
+                      <td style={{padding:"9px 16px",color:"#ccc",fontSize:12}}>{i+1}</td>
+                      <td style={{padding:"9px 16px",fontWeight:600,color:blue}}>{log.viewer_name}</td>
+                      <td style={{padding:"9px 16px"}}>{log.menu_item_name}</td>
+                      <td style={{padding:"9px 16px",color:"#888",whiteSpace:"nowrap"}}>
+                        {new Date(log.viewed_at).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"})}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{padding:"10px 16px",borderTop:`1px solid ${border}`,fontSize:12,color:"#aaa",textAlign:"right"}}>
+            최근 200건 표시
+          </div>
+        </>
+      )}
+    </div>
+  </div>
+)}
 
-        {/* ── 콘텐츠 영역 ── */}
-        <div style={{flex:1,minWidth:0}}>
+{/* ── Desktop 사이드바 ── */}
+<div style={{width:240,flexShrink:0,marginRight:18,display:showViewLog?"none":"block"}} className="manual-sidebar-desktop">
+  {SidebarContent()}
+</div>
+
+{/* ── 콘텐츠 영역 ── */}
+<div style={{flex:1,minWidth:0,display:showViewLog?"none":"block"}}>
 
           {/* sticky 소분류 탭 */}
           {selectedSub&&(
