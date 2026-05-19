@@ -118,8 +118,7 @@ function renderBody(body: string): string {
   return h;
 }
 
-const ADMIN_PIN = "고한결";
-const ADMIN_DISPLAY_NAME = "관리자"; // 최종수정자 표시명
+
 
 // ─── 드래그 순서 변경 훅 ─────────────────────────────────────────────────────
 function useDragOrder<T extends {id:number;sort_order:number}>(
@@ -158,11 +157,12 @@ export default function ManualPage() {
   const [selectedItem, setSelectedItem] = useState<number|null>(null);
 
   // ── admin ──
-  const [isAdmin,      setIsAdmin]      = useState(false);
-  const [showPin,      setShowPin]      = useState(false);
-  const [pinInput,     setPinInput]     = useState("");
-  const [pinError,     setPinError]     = useState("");
-  const [showManage,   setShowManage]   = useState(false);
+  const [isAdmin,    setIsAdmin]    = useState(false);
+  const [showPin,    setShowPin]    = useState(false);
+  const [pinInput,   setPinInput]   = useState("");
+  const [pinError,   setPinError]   = useState("");
+  const [showManage, setShowManage] = useState(false);
+  const [adminName,  setAdminName]  = useState("");
 
   // ── edit ──
   const [editing,    setEditing]    = useState(false);
@@ -270,10 +270,23 @@ export default function ManualPage() {
   const totalItems  = (catId:number)=>{ const subIds=subcategories.filter(s=>s.category_id===catId).map(s=>s.id); return menuItems.filter(m=>subIds.includes(m.subcategory_id)).length; };
   const totalSubItems=(subId:number)=>menuItems.filter(m=>m.subcategory_id===subId).length;
 
-  // ── PIN ──
-  const handlePin=()=>{
-    if(pinInput===ADMIN_PIN){setIsAdmin(true);setShowPin(false);setPinInput("");setPinError("");}
-    else setPinError("PIN이 올바르지 않습니다.");
+  // ── PIN (employees 테이블에서 검증) ──
+  const handlePin=async()=>{
+    const pin=pinInput.trim();
+    if(!pin){setPinError("PIN을 입력하세요.");return;}
+    const{data,error}=await supabase
+      .from("employees")
+      .select("name,pin")
+      .eq("pin",pin)
+      .is("resign_date",null)
+      .limit(1)
+      .maybeSingle();
+    if(error||!data){setPinError("PIN이 올바르지 않습니다.");return;}
+    setIsAdmin(true);
+    setAdminName(data.name??"관리자");
+    setShowPin(false);
+    setPinInput("");
+    setPinError("");
   };
 
   const selectItem=(id:number)=>{ setSelectedItem(id);setEditing(false);setShowSidebar(false);setTimeout(()=>contentRef.current?.scrollIntoView({behavior:"smooth"}),100); };
@@ -316,7 +329,7 @@ export default function ManualPage() {
   // ── 저장 (updated_by 포함) ──
   const saveContent=async()=>{
     if(!selectedItem) return;
-    const payload={title:editTitle,body:editBody,image_urls:editImages,updated_at:new Date().toISOString(),updated_by:ADMIN_DISPLAY_NAME};
+    const payload={title:editTitle,body:editBody,image_urls:editImages,updated_at:new Date().toISOString(),updated_by:adminName||"관리자"};
     if(currentContent){
       const{error}=await supabase.from("manual_contents").update(payload).eq("menu_item_id",selectedItem);
       if(error){alert("저장 실패: "+error.message);return;}
@@ -572,7 +585,7 @@ export default function ManualPage() {
                 style={{padding:"5px 12px",background:showManage?blue:blueLt,color:showManage?white:blue,border:`1px solid ${blue}`,borderRadius:6,cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}}>
                 {showManage?"관리 닫기":"항목 관리"}
               </button>
-              <button onClick={()=>setIsAdmin(false)} style={{padding:"5px 12px",background:white,color:"#888",border:`1px solid ${border}`,borderRadius:6,cursor:"pointer",fontSize:13}}>종료</button>
+              <button onClick={()=>{setIsAdmin(false);setAdminName("");}} style={{padding:"5px 12px",background:white,color:"#888",border:`1px solid ${border}`,borderRadius:6,cursor:"pointer",fontSize:13}}>종료</button>
             </>
           ):(
             <button onClick={()=>setShowPin(true)} style={{padding:"5px 12px",background:"#f8f9fa",color:"#555",border:`1px solid ${border}`,borderRadius:6,cursor:"pointer",fontSize:13,whiteSpace:"nowrap"}}>🔐 관리자</button>
