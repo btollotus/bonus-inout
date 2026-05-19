@@ -580,8 +580,7 @@ export default function ManualPage() {
                 {pinError&&<div style={{color:"#e53e3e",fontSize:12,marginBottom:8}}>{pinError}</div>}
                 <div style={{display:"flex",gap:8,marginTop:8}}>
                   <button onClick={handlePin} style={{flex:1,padding:"9px 0",background:blue,color:white,border:"none",borderRadius:6,cursor:"pointer",fontWeight:600}}>확인</button>
-                  <button onClick={()=>{ setPinSelectedName(""); setPinInput(""); setPinError(""); }} style={{flex:1,padding:"9px 0",background:"#f0f0f0",border:"none",borderRadius:6,cursor:"pointer"}}>뒤로</button>
-                  <button onClick={()=>{ setShowPin(false); setPinInput(""); setPinError(""); setPinSelectedName(""); }} style={{padding:"9px 14px",background:"#f0f0f0",border:"none",borderRadius:6,cursor:"pointer"}}>취소</button>
+                  <button onClick={()=>{ if(viewLocked){window.location.href="/";return;} setShowPin(false); setPinInput(""); setPinError(""); setPinSelectedName(""); }} style={{padding:"9px 14px",background:"#f0f0f0",border:"none",borderRadius:6,cursor:"pointer"}}>취소</button>
                 </div>
               </div>
             )}
