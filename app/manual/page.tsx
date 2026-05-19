@@ -185,13 +185,21 @@ export default function ManualPage() {
   const [pinSelectedName, setPinSelectedName] = useState("");
   const [employees,       setEmployees]       = useState<{name:string;pin:string|null}[]>([]);
 
-  // 직원 목록 로드
+  // 직원 목록 로드 + SUBADMIN이면 열람 잠금
   useEffect(()=>{
     supabase.from("employees").select("name,pin").is("resign_date",null).order("name").limit(100)
       .then(({data,error})=>{ 
         if(data) setEmployees(data); 
         if(error) console.error("직원 목록 로드 실패:", error.message);
       });
+    // 현재 로그인 유저 role 확인
+    supabase.auth.getUser().then(({data:{user}})=>{
+      if(!user) return;
+      supabase.from("user_roles").select("role").eq("user_id",user.id).single()
+        .then(({data})=>{
+          if(data?.role==="SUBADMIN"||data?.role==="SUBUSER") setViewLocked(true);
+        });
+    });
   },[]);
 
   // ── edit ──
@@ -221,6 +229,10 @@ export default function ManualPage() {
 
   const contentRef  = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── 열람 잠금 (SUBADMIN용) ──
+  const [viewLocked, setViewLocked] = useState(false);
+  const [viewerName, setViewerName] = useState("");
 
   // ── mobile sidebar ──
   const [showSidebar, setShowSidebar] = useState(false);
@@ -306,15 +318,38 @@ export default function ManualPage() {
     if(!pin){setPinError("PIN을 입력하세요.");return;}
     const found=employees.find(e=>e.name===pinSelectedName&&e.pin===pin);
     if(!found){setPinError("PIN이 올바르지 않습니다.");return;}
-    setIsAdmin(true);
-    setAdminName(pinSelectedName);
+    // 열람 잠금 해제
+    setViewLocked(false);
+    setViewerName(pinSelectedName);
+    // 관리자 권한은 별도 (기존 유지)
+    if(!viewLocked){
+      setIsAdmin(true);
+      setAdminName(pinSelectedName);
+    }
     setShowPin(false);
     setPinInput("");
     setPinError("");
     setPinSelectedName("");
   };
 
-  const selectItem=(id:number)=>{ setSelectedItem(id);setEditing(false);setShowSidebar(false);setTimeout(()=>contentRef.current?.scrollIntoView({behavior:"smooth"}),100); };
+  // 열람 기록 저장
+  const logView=async(itemId:number,itemName:string)=>{
+    if(!viewerName) return;
+    await supabase.from("manual_view_logs").insert({
+      viewer_name:viewerName,
+      menu_item_id:itemId,
+      menu_item_name:itemName,
+      viewed_at:new Date().toISOString(),
+    });
+  };
+
+  const selectItem=(id:number)=>{
+    if(viewLocked){alert("본인 확인 후 열람 가능합니다.");setShowPin(true);return;}
+    const itemName=menuItems.find(m=>m.id===id)?.name||"";
+    setSelectedItem(id);setEditing(false);setShowSidebar(false);
+    logView(id,itemName);
+    setTimeout(()=>contentRef.current?.scrollIntoView({behavior:"smooth"}),100);
+  };
 
   const startEdit=()=>{
     if(currentContent){setEditTitle(currentContent.title||"");setEditBody(currentContent.body||"");setEditImages(currentContent.image_urls||[]);}
@@ -503,12 +538,12 @@ export default function ManualPage() {
         </div>
       )}
 
-      {/* ── PIN Modal ── */}
-      {showPin&&(
+      {/* ── PIN Modal (열람잠금 또는 관리자) ── */}
+      {(showPin||viewLocked)&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
           <div style={{background:white,borderRadius:12,padding:"24px 28px",width:"100%",maxWidth:480,boxShadow:"0 8px 40px rgba(0,0,0,0.2)"}}>
             <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>본인 확인</div>
-            <div style={{color:"#888",fontSize:12,marginBottom:16}}>이름을 선택하고 PIN을 입력하세요</div>
+            <div style={{color:"#888",fontSize:12,marginBottom:16}}>{viewLocked?"메뉴얼 열람을 위해 본인 확인이 필요합니다":"이름을 선택하고 PIN을 입력하세요"}</div>
 
             {/* 직원 선택 단계 */}
             {!pinSelectedName ? (
