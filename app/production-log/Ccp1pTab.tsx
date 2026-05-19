@@ -365,10 +365,12 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
   }, [selectedDate]);
 
   const loadLogs = useCallback(async () => {
+    const ids = woList.map((w) => w.id);
+    if (ids.length === 0) { setLogMap({}); return; }
     const { data } = await supabase
       .from("ccp_metal_logs")
       .select("*")
-      .eq("log_date", selectedDate);
+      .in("work_order_id", ids);
 
     if (!data) return;
     const map: Record<string, MetalLog> = {};
@@ -376,7 +378,7 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
       if (row.work_order_id) map[row.work_order_id] = row as MetalLog;
     }
     setLogMap(map);
-  }, [selectedDate]);
+  }, [woList]);
 
   async function loadRangeLogs() {
     if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return;
@@ -401,8 +403,11 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
 
   useEffect(() => {
     loadWoList();
+  }, [loadWoList]);
+
+  useEffect(() => {
     loadLogs();
-  }, [loadWoList, loadLogs]);
+  }, [woList]);
 
   // URL로 전달된 WO 자동 선택 — 미기록 항목만
   useEffect(() => {
