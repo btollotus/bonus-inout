@@ -406,7 +406,7 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
   }, [loadWoList]);
 
   useEffect(() => {
-    loadLogs();
+    if (woList.length > 0) loadLogs();
   }, [woList]);
 
   // URL로 전달된 WO 자동 선택 — 미기록 항목만
