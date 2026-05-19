@@ -1,12 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { createClient } from "@/lib/supabase/browser";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Category    { id: number; name: string; sort_order: number; }
@@ -167,8 +162,10 @@ function EmployeeGrid({emps,onSelect,onCancel}:{
 }
 
 export default function ManualPage() {
-  // ── data ──
-  const [categories,    setCategories]    = useState<Category[]>([]);
+    const supabase = useMemo(() => createClient(), []);
+  
+    // ── data ──
+    const [categories,    setCategories]    = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<SubCategory[]>([]);
   const [menuItems,     setMenuItems]     = useState<MenuItem[]>([]);
   const [contents,      setContents]      = useState<Record<number,ManualContent>>({});
@@ -185,13 +182,16 @@ export default function ManualPage() {
   const [pinError,   setPinError]   = useState("");
   const [showManage, setShowManage] = useState(false);
   const [adminName,       setAdminName]       = useState("");
-  const [pinSelectedName, setPinSelectedName] = useState("");  // PIN 모달 선택된 이름
+  const [pinSelectedName, setPinSelectedName] = useState("");
   const [employees,       setEmployees]       = useState<{name:string;pin:string|null}[]>([]);
 
   // 직원 목록 로드
   useEffect(()=>{
     supabase.from("employees").select("name,pin").is("resign_date",null).order("name").limit(100)
-      .then(({data})=>{ if(data) setEmployees(data); });
+      .then(({data,error})=>{ 
+        if(data) setEmployees(data); 
+        if(error) console.error("직원 목록 로드 실패:", error.message);
+      });
   },[]);
 
   // ── edit ──
