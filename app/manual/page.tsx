@@ -420,7 +420,7 @@ export default function ManualPage() {
   const inp:React.CSSProperties={width:"100%",padding:"7px 10px",border:`1px solid ${border}`,borderRadius:6,fontSize:13,boxSizing:"border-box",background:white};
 
   // ─── Sidebar content (shared between desktop and mobile overlay) ───────────
-  const SidebarContent = ()=>(
+  const SidebarContent = useCallback(()=>(
     <div style={{background:white,borderRadius:10,border:`1px solid ${border}`,overflow:"hidden"}}>
       <div style={{padding:"12px 16px",background:"#f8f9fb",borderBottom:`1px solid ${border}`,fontWeight:700,fontSize:13,color:"#555",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <span>카테고리</span>
@@ -490,7 +490,7 @@ export default function ManualPage() {
       })}
       {categories.length===0&&<div style={{padding:"24px 16px",color:"#aaa",fontSize:13,textAlign:"center"}}>{isAdmin?"대분류를 추가해주세요":"항목이 없습니다"}</div>}
     </div>
-  );
+  ),[categories,subcategories,menuItems,contents,selectedCat,selectedSub,selectedItem,isAdmin,showManage,newCatName,newSubName,newItemName,catDrag,subDrag,itemDrag,filteredSubs,filteredItems,blue,blueLt,blueMd,border,white,inp]);
 
   return(
     <div style={{fontFamily:"'Malgun Gothic','Apple SD Gothic Neo',sans-serif",fontSize:14,background:"#f5f6f8",minHeight:"100vh",color:"#333"}}>
