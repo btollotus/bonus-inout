@@ -121,7 +121,31 @@ function renderBody(body: string): string {
 
 
 // ─── 드래그 순서 변경 훅 ─────────────────────────────────────────────────────
-function useDragOrder<T extends {id:number;sort_order:number}>(
+// ─── 직원 선택 그리드 (PIN 모달용) ──────────────────────────────────────────
+function EmployeeGrid({onSelect,onCancel}:{onSelect:(name:string)=>void;onCancel:()=>void}) {
+    const [emps,setEmps]=useState<{name:string;pin:string|null}[]>([]);
+    useEffect(()=>{
+      createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+        .from("employees").select("name,pin").is("resign_date",null).order("name").limit(100)
+        .then(({data})=>{ if(data) setEmps(data); });
+    },[]);
+    return(
+      <div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,maxHeight:320,overflowY:"auto",marginBottom:12}}>
+          {emps.map(e=>(
+            <button key={e.name} onClick={()=>onSelect(e.name)}
+              style={{padding:"12px 8px",border:"1px solid #e2e5ea",borderRadius:8,background:"#f8f9fb",cursor:"pointer",textAlign:"center",fontSize:13,fontWeight:600,color:"#333"}}>
+              <div>{e.name}</div>
+              <div style={{fontSize:11,color:"#aaa",marginTop:2,fontWeight:400}}>{e.pin?"PIN 설정됨":"PIN 미설정"}</div>
+            </button>
+          ))}
+        </div>
+        <button onClick={onCancel} style={{width:"100%",padding:"8px 0",background:"#f0f0f0",border:"none",borderRadius:6,cursor:"pointer",fontSize:13}}>취소</button>
+      </div>
+    );
+  }
+  
+  function useDragOrder<T extends {id:number;sort_order:number}>(
   items: T[],
   onReorder: (reordered: T[]) => Promise<void>
 ) {
@@ -162,7 +186,15 @@ export default function ManualPage() {
   const [pinInput,   setPinInput]   = useState("");
   const [pinError,   setPinError]   = useState("");
   const [showManage, setShowManage] = useState(false);
-  const [adminName,  setAdminName]  = useState("");
+  const [adminName,       setAdminName]       = useState("");
+  const [pinSelectedName, setPinSelectedName] = useState("");  // PIN 모달 선택된 이름
+  const [employees,       setEmployees]       = useState<{name:string;pin:string|null}[]>([]);
+
+  // 직원 목록 로드
+  useEffect(()=>{
+    supabase.from("employees").select("name,pin").is("resign_date",null).order("name").limit(100)
+      .then(({data})=>{ if(data) setEmployees(data); });
+  },[]);
 
   // ── edit ──
   const [editing,    setEditing]    = useState(false);
@@ -270,23 +302,18 @@ export default function ManualPage() {
   const totalItems  = (catId:number)=>{ const subIds=subcategories.filter(s=>s.category_id===catId).map(s=>s.id); return menuItems.filter(m=>subIds.includes(m.subcategory_id)).length; };
   const totalSubItems=(subId:number)=>menuItems.filter(m=>m.subcategory_id===subId).length;
 
-  // ── PIN (employees 테이블에서 검증) ──
+  // ── PIN 검증 (이름 선택 후 PIN 매칭) ──
   const handlePin=async()=>{
     const pin=pinInput.trim();
     if(!pin){setPinError("PIN을 입력하세요.");return;}
-    const{data,error}=await supabase
-      .from("employees")
-      .select("name,pin")
-      .eq("pin",pin)
-      .is("resign_date",null)
-      .limit(1)
-      .maybeSingle();
-    if(error||!data){setPinError("PIN이 올바르지 않습니다.");return;}
+    const found=employees.find(e=>e.name===pinSelectedName&&e.pin===pin);
+    if(!found){setPinError("PIN이 올바르지 않습니다.");return;}
     setIsAdmin(true);
-    setAdminName(data.name??"관리자");
+    setAdminName(pinSelectedName);
     setShowPin(false);
     setPinInput("");
     setPinError("");
+    setPinSelectedName("");
   };
 
   const selectItem=(id:number)=>{ setSelectedItem(id);setEditing(false);setShowSidebar(false);setTimeout(()=>contentRef.current?.scrollIntoView({behavior:"smooth"}),100); };
@@ -480,16 +507,32 @@ export default function ManualPage() {
 
       {/* ── PIN Modal ── */}
       {showPin&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <div style={{background:white,borderRadius:12,padding:"32px 40px",width:320,boxShadow:"0 8px 40px rgba(0,0,0,0.2)"}}>
-            <div style={{fontWeight:700,fontSize:16,marginBottom:16}}>관리자 인증</div>
-            <div style={{marginBottom:8,color:"#666",fontSize:13}}>PIN을 입력하세요</div>
-            <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handlePin()} autoFocus style={{...inp}}/>
-            {pinError&&<div style={{color:"#e53e3e",fontSize:12,marginTop:6}}>{pinError}</div>}
-            <div style={{display:"flex",gap:8,marginTop:16}}>
-              <button onClick={handlePin} style={{flex:1,padding:"8px 0",background:blue,color:white,border:"none",borderRadius:6,cursor:"pointer",fontWeight:600}}>확인</button>
-              <button onClick={()=>{setShowPin(false);setPinInput("");setPinError("");}} style={{flex:1,padding:"8px 0",background:"#f0f0f0",border:"none",borderRadius:6,cursor:"pointer"}}>취소</button>
-            </div>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{background:white,borderRadius:12,padding:"24px 28px",width:"100%",maxWidth:480,boxShadow:"0 8px 40px rgba(0,0,0,0.2)"}}>
+            <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>본인 확인</div>
+            <div style={{color:"#888",fontSize:12,marginBottom:16}}>이름을 선택하고 PIN을 입력하세요</div>
+
+            {/* 직원 선택 단계 */}
+            {!pinSelectedName ? (
+              <EmployeeGrid
+                onSelect={(name)=>{ setPinSelectedName(name); setPinError(""); }}
+                onCancel={()=>{ setShowPin(false); setPinInput(""); setPinError(""); setPinSelectedName(""); }}
+              />
+            ) : (
+              /* PIN 입력 단계 */
+              <div>
+                <div style={{marginBottom:12,fontWeight:600,fontSize:14,color:blue}}>👤 {pinSelectedName}</div>
+                <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&handlePin()} autoFocus
+                  placeholder="PIN 입력" style={{...inp,marginBottom:6}}/>
+                {pinError&&<div style={{color:"#e53e3e",fontSize:12,marginBottom:8}}>{pinError}</div>}
+                <div style={{display:"flex",gap:8,marginTop:8}}>
+                  <button onClick={handlePin} style={{flex:1,padding:"9px 0",background:blue,color:white,border:"none",borderRadius:6,cursor:"pointer",fontWeight:600}}>확인</button>
+                  <button onClick={()=>{ setPinSelectedName(""); setPinInput(""); setPinError(""); }} style={{flex:1,padding:"9px 0",background:"#f0f0f0",border:"none",borderRadius:6,cursor:"pointer"}}>뒤로</button>
+                  <button onClick={()=>{ setShowPin(false); setPinInput(""); setPinError(""); setPinSelectedName(""); }} style={{padding:"9px 14px",background:"#f0f0f0",border:"none",borderRadius:6,cursor:"pointer"}}>취소</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
