@@ -1239,7 +1239,13 @@ export default function ProductionClient() {
                     const isSelected = selectedWo?.id === wo.id;
                     const statusCls = statusColors[wo.status] ?? "bg-slate-100 text-slate-600 border-slate-200";
                     const items = wo.work_order_items ?? [];
-                    const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
+const totalOrder = items
+  .filter((item) => {
+    const n = (item.sub_items ?? [])[0]?.name ?? "";
+    return !n.startsWith("성형틀") && !n.startsWith("인쇄제판")
+      && !n.startsWith("아이스박스") && !n.startsWith("택배비");
+  })
+  .reduce((s, i) => s + (i.order_qty ?? 0), 0);
                     const allItemsDone = items.length > 0 && items.every((i) => i.actual_qty && i.unit_weight && i.expiry_date);
                     return (
                       <div key={wo.id} className="relative group">
