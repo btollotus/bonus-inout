@@ -322,6 +322,11 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
 
   const loadWoList = useCallback(async () => {
     setLoading(true);
+    const { data: loggedData } = await supabase
+      .from("ccp_metal_logs")
+      .select("work_order_id");
+    const loggedWoIds = new Set((loggedData ?? []).map((l: any) => l.work_order_id));
+
     const { data, error } = await supabase
     .from("work_orders")
     .select("id, product_name, client_name, updated_at, work_order_no")
@@ -351,9 +356,12 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
       ...w,
       ccp_end_time: ccpEndMap[w.work_order_no] ?? null,
     }));
-    setWoList(enriched as WorkOrderItem[]);
+    const filtered = (enriched as WorkOrderItem[]).filter(
+      (wo) => !loggedWoIds.has(wo.id) || !!logMap[wo.id]
+    );
+    setWoList(filtered);
     setLoading(false);
-  }, [selectedDate]);
+  }, [selectedDate, logMap]);
 
   const loadLogs = useCallback(async () => {
     const { data } = await supabase
