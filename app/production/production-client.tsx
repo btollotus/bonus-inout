@@ -725,8 +725,10 @@ export default function ProductionClient() {
         if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
         if (item.transfer_lot_id) continue;
         const itemKeyword = extractKeyword(name);
-        const keywords = [clientKeyword, itemKeyword].filter((k, i, arr) => k && arr.indexOf(k) === i);
-        searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
+        const keywords = clientKeyword
+  ? [clientKeyword]
+  : itemKeyword ? [itemKeyword] : [];
+searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
       }
     }
   }
