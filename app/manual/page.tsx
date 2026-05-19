@@ -133,7 +133,7 @@ function EmployeeGrid({emps,onSelect,onCancel}:{
             </button>
           ))}
         </div>
-        <button onClick={onCancel} style={{width:"100%",padding:"8px 0",background:"#f0f0f0",border:"none",borderRadius:6,cursor:"pointer",fontSize:13}}>취소</button>
+        <button onClick={onCancel} style={{width:"100%",padding:"8px 0",background:"#f0f0f0",border:"none",borderRadius:6,cursor:"pointer",fontSize:13}}>취소 (나가기)</button>
       </div>
     );
   }
@@ -547,11 +547,14 @@ export default function ManualPage() {
 
             {/* 직원 선택 단계 */}
             {!pinSelectedName ? (
-              <EmployeeGrid
-              emps={employees}
-              onSelect={(name)=>{ setPinSelectedName(name); setPinError(""); }}
-              onCancel={()=>{ setShowPin(false); setPinInput(""); setPinError(""); setPinSelectedName(""); }}
-            />
+             <EmployeeGrid
+             emps={employees}
+             onSelect={(name)=>{ setPinSelectedName(name); setPinError(""); }}
+             onCancel={()=>{
+               if(viewLocked) { window.history.back(); return; }
+               setShowPin(false); setPinInput(""); setPinError(""); setPinSelectedName("");
+             }}
+           />
             ) : (
               /* PIN 입력 단계 */
               <div>
