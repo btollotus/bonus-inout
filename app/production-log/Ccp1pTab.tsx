@@ -323,9 +323,10 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
   const loadWoList = useCallback(async () => {
     setLoading(true);
     const { data: loggedData } = await supabase
-      .from("ccp_metal_logs")
-      .select("work_order_id");
-    const loggedWoIds = new Set((loggedData ?? []).map((l: any) => l.work_order_id));
+    .from("ccp_metal_logs")
+    .select("work_order_id")
+    .eq("log_date", selectedDate);
+  const loggedWoIds = new Set((loggedData ?? []).map((l: any) => l.work_order_id));
 
     const { data, error } = await supabase
     .from("work_orders")
