@@ -544,7 +544,7 @@ export default function ManualPage() {
               <span style={{fontWeight:700,color:blue}}>카테고리</span>
               <button onClick={()=>setShowSidebar(false)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#888"}}>×</button>
             </div>
-            <SidebarContent/>
+            {SidebarContent()}
           </div>
           <div style={{flex:1,background:"rgba(0,0,0,0.4)"}} onClick={()=>setShowSidebar(false)}/>
         </div>
@@ -640,7 +640,7 @@ export default function ManualPage() {
 
         {/* ── Desktop 사이드바 ── */}
         <div style={{width:240,flexShrink:0,marginRight:18}} className="manual-sidebar-desktop">
-          <SidebarContent/>
+          {SidebarContent()}
         </div>
 
         {/* ── 콘텐츠 영역 ── */}
