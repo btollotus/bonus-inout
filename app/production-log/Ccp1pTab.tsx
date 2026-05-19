@@ -322,12 +322,6 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
 
   const loadWoList = useCallback(async () => {
     setLoading(true);
-    const { data: loggedData } = await supabase
-    .from("ccp_metal_logs")
-    .select("work_order_id")
-    .eq("log_date", selectedDate);
-  const loggedWoIds = new Set((loggedData ?? []).map((l: any) => l.work_order_id));
-
     const { data, error } = await supabase
     .from("work_orders")
     .select("id, product_name, client_name, updated_at, work_order_no")
@@ -357,10 +351,7 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
       ...w,
       ccp_end_time: ccpEndMap[w.work_order_no] ?? null,
     }));
-    const filtered = (enriched as WorkOrderItem[]).filter(
-      (wo) => !loggedWoIds.has(wo.id)
-    );
-    setWoList(filtered);
+    setWoList(enriched as WorkOrderItem[]);
     setLoading(false);
   }, [selectedDate]);
 
@@ -549,7 +540,8 @@ function selectWo(wo: WorkOrderItem) {
 
     let error;
     if (existing?.id) {
-      ({ error } = await supabase.from("ccp_metal_logs").update(payload).eq("id", existing.id));
+      const { log_date, ...payloadWithoutDate } = payload;
+      ({ error } = await supabase.from("ccp_metal_logs").update(payloadWithoutDate).eq("id", existing.id));
     } else {
       ({ error } = await supabase.from("ccp_metal_logs").insert(payload));
     }
