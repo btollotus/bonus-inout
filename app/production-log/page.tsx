@@ -506,7 +506,7 @@ function ProductionLogTab({ role, userId, showToast }: {
     }
     setConfirming(false);
     if (error) return showToast("확인 실패: " + error.message, "error");
-    showToast("✅ 확인 완료! 오늘 생산일지가 확정되었습니다.");
+    showToast("✅ 확인 완료! 오늘 근무일지가 확정되었습니다.");
     await loadTodayData(selectedEmployee.id, selectedEmployee.name);
   }
 
@@ -622,7 +622,7 @@ function ProductionLogTab({ role, userId, showToast }: {
         {viewLoading ? (
           <div className={`${card} p-8 text-center text-sm text-slate-400`}>불러오는 중...</div>
         ) : viewLogs.length === 0 ? (
-          <div className={`${card} p-8 text-center text-sm text-slate-400`}>{(() => { const d = new Date(viewDate + "T00:00:00+09:00"); const days = ["일","월","화","수","목","금","토"]; return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]}) 생산일지가 없습니다.`; })()}</div>
+          <div className={`${card} p-8 text-center text-sm text-slate-400`}>{(() => { const d = new Date(viewDate + "T00:00:00+09:00"); const days = ["일","월","화","수","목","금","토"]; return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]}) 근무일지가 없습니다.`; })()}</div>
         ) : (
           viewLogs.map((log) => (
             <div key={log.id} className={`${card} p-4`}>
@@ -1013,7 +1013,7 @@ function ProductionLogTab({ role, userId, showToast }: {
           ) : (
             <>
               <div className="flex-1 rounded-xl border border-green-200 bg-green-50 py-2.5 text-sm font-semibold text-green-700 text-center">
-                ✅ 오늘 생산일지가 확정되었습니다
+                ✅ 오늘 근무일지가 확정되었습니다
               </div>
               <button
                 className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
