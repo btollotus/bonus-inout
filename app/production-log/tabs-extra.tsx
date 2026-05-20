@@ -1040,17 +1040,18 @@ const woAssigneeMapRef = React.useRef<Record<string, string>>({});
       <span style={{ fontSize: "9pt" }}>[가열공정] 일반</span><br/>
       <span style={{ fontSize: "8pt" }}>*온장고 내 보관기간 : 1개월 미만*</span>
     </td>
-    <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", fontSize: "8pt", width: 36 }}>결재</td>
-    <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 64 }}>작성</td>
-    <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", width: 64 }}>승인</td>
+    <td rowSpan={2} style={{ border: "1px solid #000", padding: "2px 4px", fontWeight: "bold", textAlign: "center", fontSize: "8pt", width: 28 }}>결<br/>재<br/>란</td>
+    <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", fontWeight: "bold", width: 80 }}>작성</td>
+    <td style={{ border: "1px solid #000", padding: "2px 6px", textAlign: "center", fontSize: "8pt", fontWeight: "bold", width: 80 }}>승인</td>
   </tr>
   <tr>
-    <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}></td>
-    <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
-      <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
+    <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>
+      <img src="/sign-kimyg.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} alt="김영각" />
+      <div style={{ fontSize: "7pt", marginTop: 2 }}>김영각</div>
     </td>
-    <td style={{ border: "1px solid #000", padding: "2px 4px", textAlign: "center" }}>
-      <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} />
+    <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>
+      <img src="/sign-chods.png" style={{ height: 30, objectFit: "contain", display: "block", margin: "0 auto" }} alt="조대성" />
+      <div style={{ fontSize: "7pt", marginTop: 2 }}>조대성</div>
     </td>
   </tr>
 </tbody>
