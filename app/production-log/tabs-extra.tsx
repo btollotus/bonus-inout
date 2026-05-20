@@ -107,6 +107,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
     slotEvents: any[];
     woEvents: any[];
     woLabelMap: Record<string, string>;
+    assigneeMap: Record<string, string>;
   }[]>([]);
   const [allSlots, setAllSlots] = useState<WarmSlot[]>([]);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
@@ -255,9 +256,26 @@ setSlotWoMap(slotMap);
         }
       }
 
-      if (sEvents.length > 0 || wEvents.length > 0) {
-        results.push({ date, slotEvents: sEvents, woEvents: wEvents, woLabelMap: labelMap });
+    // 담당자 맵 조회
+    const allWoNosForAssignee = [...new Set([
+      ...sEvents.map((e: any) => e.work_order_no).filter(Boolean),
+      ...wEvents.map((e: any) => e.work_order_no).filter(Boolean),
+    ])] as string[];
+    const assigneeMap: Record<string, string> = {};
+    if (allWoNosForAssignee.length > 0) {
+      const { data: assigneeData } = await supabase
+        .from("work_orders")
+        .select("work_order_no,assignee_production")
+        .in("work_order_no", allWoNosForAssignee)
+        .not("assignee_production", "is", null);
+      for (const row of assigneeData ?? []) {
+        if (row.assignee_production) assigneeMap[row.work_order_no] = row.assignee_production;
       }
+    }
+
+    if (sEvents.length > 0 || wEvents.length > 0) {
+      results.push({ date, slotEvents: sEvents, woEvents: wEvents, woLabelMap: labelMap, assigneeMap });
+    }
     }
 
     setRangeData(results);
@@ -925,9 +943,23 @@ const woAssigneeMapRef = React.useRef<Record<string, string>>({});
                       const evs = dayData.woEvents.filter((e: any) => e.slot_id === s.id);
                       if (evs.length === 0) return <td key={i} style={{ ...tdS, height:28 }} />;
                       const hasNG = evs.some((e: any) => e.is_ok === false);
+                      // 담당자 서명 — slotEvents에서 work_order_no 추출 후 assigneeMap에서 조회
+                      const woNos = [...new Set(dayData.slotEvents.filter((e: any) => e.slot_id === s.id).map((e: any) => e.work_order_no).filter(Boolean))] as string[];
+                      const assignees = [...new Set(woNos.map((no: string) => dayData.woLabelMap[no]).filter(Boolean))];
+                      // woLabelMap은 레이블이므로 서명은 work_order_no 기반으로 별도 조회 불가 — assignee는 woEvents created_by 또는 별도 prop 필요
+                      // 여기서는 slotEvents의 work_order_no로 woLabelMap에서 레이블을 가져오되, 서명은 SIGN_MAP 직접 참조
+                      const slotWoNos = [...new Set(dayData.slotEvents.filter((e: any) => e.slot_id === s.id).map((e: any) => e.work_order_no).filter(Boolean))];
+                      const woNos = [...new Set(dayData.slotEvents.filter((e: any) => e.slot_id === s.id).map((e: any) => e.work_order_no).filter(Boolean))] as string[];
+                      const assignees = [...new Set(woNos.map((no: string) => dayData.assigneeMap?.[no]).filter(Boolean))] as string[];
+                      const signSrc = assignees.length > 0 ? SIGN_MAP[assignees[0]] ?? null : null;
+                      const assigneeName = assignees[0] ?? null;
                       return (
                         <td key={i} style={{ ...tdS, textAlign:"center", fontSize:"8pt", height:28 }}>
-                          <span style={{ fontWeight:"bold", color: hasNG?"red":"#000" }}>판정: {hasNG?"X":"O"}</span>
+                          <div style={{ marginBottom: 1 }}>
+                            <span style={{ fontWeight:"bold", color: hasNG?"red":"#000" }}>판정: {hasNG?"X":"O"}</span>
+                          </div>
+                          {signSrc && <img src={signSrc} style={{ height: 20, objectFit:"contain", display:"block", margin:"0 auto" }} alt={assigneeName ?? ""} />}
+                          {assigneeName && !signSrc && <div style={{ fontSize:"7pt", color:"#555" }}>{assigneeName}</div>}
                         </td>
                       );
                     })}
