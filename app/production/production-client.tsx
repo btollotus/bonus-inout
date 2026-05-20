@@ -771,6 +771,74 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
     } catch (pdfErr) { console.error("PDF 업로드 트리거 오류:", pdfErr); }
   }
 
+   // ─── 포장완료 처리 (skip_production_check = true, 도눔 포장 출고용) ───
+   async function doCompletePackaging(productionAssignee: string) {
+    if (!selectedWo) return;
+    setIsCompleting(true);
+    setMsg("저장 중...");
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id ?? null;
+      const items = (selectedWo.work_order_items ?? []).filter((item) => {
+        const name = (item.sub_items ?? [])[0]?.name ?? "";
+        return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비");
+      });
+      // work_order_items 저장
+      for (const item of items) {
+        const pi = prodInputs[item.id];
+        if (!pi || (!pi.actual_qty && !pi.unit_weight && !pi.expiry_date)) continue;
+        await supabase.from("work_order_items").update({
+          actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null,
+          unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null,
+          expiry_date: pi.expiry_date || null,
+        }).eq("id", item.id);
+      }
+      // 도눔(은박) 재고 차감
+      const stockErrors: string[] = [];
+      for (const item of items) {
+        const pi = prodInputs[item.id];
+        if (!pi?.transfer_lot_id || !pi?.transfer_qty) continue;
+        const transferQty = toInt(pi.transfer_qty);
+        if (transferQty <= 0) continue;
+        const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", pi.transfer_lot_id);
+        const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
+        if (transferQty > remaining) {
+          setMsg(`도눔(은박) 차감 실패: 차감 수량(${transferQty})이 잔량(${remaining})을 초과합니다.`);
+          setIsCompleting(false);
+          return;
+        }
+        const { error: transferErr } = await supabase.from("movements").insert({
+          lot_id: pi.transfer_lot_id, type: "OUT", qty: transferQty,
+          happened_at: `${new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10)}T00:00:00+09:00`,
+          note: `도눔 포장완료 - ${selectedWo.work_order_no}`,
+          created_by: userId,
+        });
+        if (transferErr) stockErrors.push("차감 실패: " + transferErr.message);
+        await supabase.from("work_order_items").update({
+          transfer_lot_id: pi.transfer_lot_id,
+          transfer_qty: transferQty,
+        }).eq("id", item.id);
+      }
+      // 상태 완료
+      const { error: statusErr } = await supabase.from("work_orders").update({
+        status: "완료",
+        status_production: true,
+        assignee_production: productionAssignee,
+        production_done_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", selectedWo.id);
+      if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
+      if (stockErrors.length > 0) showToast("포장완료됐으나 차감 오류: " + stockErrors.join(" / "), "error");
+      else showToast("포장완료 처리 완료!");
+      setIsEditMode(false);
+      await loadWoList();
+    } catch (e: any) {
+      setMsg("오류: " + (e?.message ?? e));
+    } finally {
+      setIsCompleting(false);
+    }
+  }
+
   // ─── 분사/코팅 생산완료 처리 ───
   async function doCompleteSprayCoating(productionAssignee: string, subType: "분사" | "코팅") {
     if (!selectedWo) return;
@@ -893,6 +961,16 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
     if (isCompleting) return;
     if (!selectedWo) return;
     setIsCompleting(true);
+
+     // ── 포장완료(도눔 포장 출고) 처리 ──
+     if (selectedWo.skip_production_check) {
+      setPinProgressPending(() => async (name: string) => {
+        await doCompletePackaging(name);
+      });
+      setShowPinModalForProgress(true);
+      setIsCompleting(false);
+      return;
+    }
 
     // ── 분사/코팅 별도 처리 ──
     const subType = getWoSubType(selectedWo.product_name);
@@ -1392,8 +1470,8 @@ const totalOrder = items
                 </div>
               )}
 
-              {/* 진행상태 카드 — 분사/코팅 숨김 */}
-              {!getWoSubType(selectedWo.product_name) && (
+             {/* 진행상태 카드 — 분사/코팅 및 포장완료(skip) 숨김 */}
+             {!getWoSubType(selectedWo.product_name) && !selectedWo.skip_production_check && (
                 <div className={`${card} p-3`}>
                   <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -1493,8 +1571,8 @@ const totalOrder = items
                 );
               })()}
 
-              {/* CCP-1B 슬롯 지정 + 온도 기록 */}
-              {(getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트" || (getFoodCategory(selectedWo.food_type) === "중간재" && !selectedWo.product_name.includes("분사-레이즈"))) && (
+            {/* CCP-1B 슬롯 지정 + 온도 기록 */}
+            {!selectedWo.skip_production_check && (getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트" || (getFoodCategory(selectedWo.food_type) === "중간재" && !selectedWo.product_name.includes("분사-레이즈"))) && (
                 <WoCcpCard
                   selectedWo={selectedWo}
                   eCcpSlotId={eCcpSlotId}
@@ -1627,7 +1705,7 @@ const totalOrder = items
               <div className={`${card} p-3 flex gap-2`}>
                 {selectedWo.status !== "완료" && !isEditMode ? (
                   <button className="flex-1 rounded-lg border border-green-500 bg-green-600 py-2 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed" onClick={markProductionComplete} disabled={isCompleting}>
-                    {isCompleting ? "처리 중..." : "생산완료 처리"}
+                   {isCompleting ? "처리 중..." : selectedWo.skip_production_check ? "포장완료 처리" : "생산완료 처리"}
                   </button>
                 ) : selectedWo.status === "완료" && !isEditMode ? (
                   <button className="rounded-lg border border-blue-400 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100" onClick={() => setIsEditMode(true)}>수정</button>
