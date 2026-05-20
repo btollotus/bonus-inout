@@ -945,11 +945,6 @@ const woAssigneeMapRef = React.useRef<Record<string, string>>({});
                       const hasNG = evs.some((e: any) => e.is_ok === false);
                       // 담당자 서명 — slotEvents에서 work_order_no 추출 후 assigneeMap에서 조회
                       const woNos = [...new Set(dayData.slotEvents.filter((e: any) => e.slot_id === s.id).map((e: any) => e.work_order_no).filter(Boolean))] as string[];
-                      const assignees = [...new Set(woNos.map((no: string) => dayData.woLabelMap[no]).filter(Boolean))];
-                      // woLabelMap은 레이블이므로 서명은 work_order_no 기반으로 별도 조회 불가 — assignee는 woEvents created_by 또는 별도 prop 필요
-                      // 여기서는 slotEvents의 work_order_no로 woLabelMap에서 레이블을 가져오되, 서명은 SIGN_MAP 직접 참조
-                      const slotWoNos = [...new Set(dayData.slotEvents.filter((e: any) => e.slot_id === s.id).map((e: any) => e.work_order_no).filter(Boolean))];
-                      const woNos = [...new Set(dayData.slotEvents.filter((e: any) => e.slot_id === s.id).map((e: any) => e.work_order_no).filter(Boolean))] as string[];
                       const assignees = [...new Set(woNos.map((no: string) => dayData.assigneeMap?.[no]).filter(Boolean))] as string[];
                       const signSrc = assignees.length > 0 ? SIGN_MAP[assignees[0]] ?? null : null;
                       const assigneeName = assignees[0] ?? null;
