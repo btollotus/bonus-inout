@@ -1094,6 +1094,51 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
           if (transferErr) stockErrors.push("전사지 차감 실패: " + transferErr.message);
           await supabase.from("work_order_items").update({ transfer_lot_id: pi.transfer_lot_id, transfer_qty: transferQty }).eq("id", item.id);
         }
+        // ── 컴파운드 자동 차감 (다크/화이트/딸기) ──
+        {
+          const ft = selectedWo.food_type ?? "";
+          const compoundName = ft.includes("딸기") ? "딸기컴파운드"
+            : getFoodCategory(ft) === "다크" ? "다크컴파운드"
+            : "화이트컴파운드";
+
+          let totalCompoundG = 0;
+          for (const item of items) {
+            const pi = prodInputs[item.id];
+            const aqty = toInt(pi?.actual_qty);
+            const uw   = toNum(pi?.unit_weight);
+            if (aqty > 0 && uw > 0) totalCompoundG += aqty * uw;
+          }
+
+          if (totalCompoundG > 0) {
+            const dupNote = `작업지시서 생산완료 - ${selectedWo.work_order_no}`;
+            const { data: dupCheck } = await supabase.from("material_usage_logs")
+              .select("id").eq("note", dupNote).eq("work_type", "product").limit(1);
+
+            if (!dupCheck || dupCheck.length === 0) {
+              const { data: matData } = await supabase.from("materials")
+                .select("id").eq("name", compoundName).maybeSingle();
+
+              if (matData?.id) {
+                const todayKSTDate = new Date(
+                  new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
+                ).toISOString().slice(0, 10);
+                const { error: compoundErr } = await supabase.from("material_usage_logs").insert({
+                  material_id: matData.id,
+                  used_date:   todayKSTDate,
+                  quantity:    totalCompoundG,
+                  unit:        "g",
+                  work_type:   "product",
+                  note:        dupNote,
+                  created_by:  userId,
+                });
+                if (compoundErr) stockErrors.push(`${compoundName} 차감 실패: ${compoundErr.message}`);
+              } else {
+                stockErrors.push(`원료 '${compoundName}'을 찾을 수 없습니다.`);
+              }
+            }
+          }
+        }
+
         const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, production_done_at: new Date().toISOString(), updated_at: ccpEndedAt ?? new Date().toISOString() }).eq("id", selectedWo.id);
         if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
         if (stockErrors.length > 0) showToast("저장됐으나 전사지 차감 오류: " + stockErrors.join(" / "), "error");
