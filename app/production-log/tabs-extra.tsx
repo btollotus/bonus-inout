@@ -998,6 +998,7 @@ async function handlePrint() {
                             <span style={{ fontWeight:"bold", color: hasNG?"red":"#000" }}>판정: {hasNG?"X":"O"}</span>
                           </div>
                           {signSrc && <img src={signSrc} style={{ height: 20, objectFit:"contain", display:"block", margin:"0 auto" }} alt={assigneeName ?? ""} />}
+                          {signSrc && <div style={{ fontSize:"6pt", color:"#000", marginTop: 1 }}>{assigneeName}</div>}
                           {assigneeName && !signSrc && <div style={{ fontSize:"7pt", color:"#555" }}>{assigneeName}</div>}
                         </td>
                       );
@@ -1432,6 +1433,7 @@ async function handlePrint() {
             <span style={{ color: hasNG ? "red" : "#000", fontWeight: "bold" }}>판정: {hasNG ? "X" : "O"}</span>
           </div>
           {signSrc && <img src={signSrc} style={{ height: 22, display: "block", margin: "0 auto" }} alt={assignee} />}
+          {signSrc && <div style={{ fontSize: "6pt", color: "#000", marginTop: 1 }}>{assignee}</div>}
           {assignee && !signSrc && <div style={{ fontSize: "7pt", color: "#555" }}>{assignee}</div>}
         </td>
       );
