@@ -91,28 +91,63 @@ function RteToolbar({onFormat}:{onFormat:(fn:(v:string,ta:HTMLTextAreaElement)=>
 // 마크다운 → HTML (간단 렌더러)
 function renderBody(body: string): string {
   if(!body) return "";
-  let h = body
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+  // 줄 단위로 처리
+  const lines = body.split("\n");
+  const out: string[] = [];
+  let i = 0;
+  while(i < lines.length) {
+    const raw = lines[i];
+    // HTML 이스케이프 (ul/ol 내부에서도 적용)
+    const esc = (s: string) => s
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")
+      .replace(/_(.+?)_/g,"<em>$1</em>")
+      .replace(/`(.+?)`/g,"<code style='background:#f0f4ff;color:#2d5be3;border-radius:3px;padding:1px 5px;font-size:13px'>$1</code>")
+      .replace(/&lt;u&gt;(.+?)&lt;\/u&gt;/g,"<u>$1</u>")
+      // 앞 공백 보존
+      .replace(/^ +/, m => "&nbsp;".repeat(m.length));
     // 구분선
-    .replace(/^---$/gm,"<hr style='border:none;border-top:1.5px solid #e2e5ea;margin:16px 0'>")
-    // h2, h3
-    .replace(/^### (.+)$/gm,"<h3 style='font-size:15px;font-weight:700;margin:16px 0 6px;color:#1a1a2e'>$1</h3>")
-    .replace(/^## (.+)$/gm,"<h2 style='font-size:18px;font-weight:700;margin:20px 0 8px;color:#1a1a2e'>$1</h2>")
-    // bold, italic, underline, code (unescape for html tags)
-    .replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")
-    .replace(/_(.+?)_/g,"<em>$1</em>")
-    .replace(/`(.+?)`/g,"<code style='background:#f0f4ff;color:#2d5be3;border-radius:3px;padding:1px 5px;font-size:13px'>$1</code>")
-    .replace(/&lt;u&gt;(.+?)&lt;\/u&gt;/g,"<u>$1</u>")
-    // bullet list
-    .replace(/^- (.+)$/gm,"<li style='margin:3px 0'>$1</li>")
-    .replace(/(<li.*<\/li>\n?)+/g,"<ul style='padding-left:20px;margin:8px 0'>$&</ul>")
-    // numbered list
-    .replace(/^\d+\. (.+)$/gm,"<li style='margin:3px 0'>$1</li>")
-    // 줄바꿈
-    .replace(/\n/g,"<br/>");
-  return h;
+    if(raw.trim()==="---"){
+      out.push("<hr style='border:none;border-top:1.5px solid #e2e5ea;margin:16px 0;width:100%'>");
+      i++; continue;
+    }
+    // h2
+    const h2 = raw.match(/^## (.+)$/);
+    if(h2){ out.push(`<h2 style='font-size:18px;font-weight:700;margin:20px 0 8px;color:#1a1a2e'>${esc(h2[1])}</h2>`); i++; continue; }
+    // h3
+    const h3 = raw.match(/^### (.+)$/);
+    if(h3){ out.push(`<h3 style='font-size:15px;font-weight:700;margin:16px 0 6px;color:#1a1a2e'>${esc(h3[1])}</h3>`); i++; continue; }
+    // bullet list — 연속된 - 줄을 하나의 ul로 묶음
+    if(/^- /.test(raw)){
+      const items: string[] = [];
+      while(i < lines.length && /^- /.test(lines[i])){
+        items.push(`<li style='margin:1px 0;padding:0'>${esc(lines[i].slice(2))}</li>`);
+        i++;
+      }
+      out.push(`<ul style='list-style:disc;padding-left:16px;margin:4px 0'>${items.join("")}</ul>`);
+      continue;
+    }
+    // numbered list — 연속된 숫자. 줄을 하나의 ol로 묶음
+    if(/^\d+\. /.test(raw)){
+      const items: string[] = [];
+      while(i < lines.length && /^\d+\. /.test(lines[i])){
+        items.push(`<li style='margin:1px 0;padding:0'>${esc(lines[i].replace(/^\d+\. /,""))}</li>`);
+        i++;
+      }
+      out.push(`<ol style='padding-left:16px;margin:4px 0'>${items.join("")}</ol>`);
+      continue;
+    }
+    // 빈 줄
+    if(raw.trim()===""){
+      out.push("<br/>");
+      i++; continue;
+    }
+    // 일반 줄
+    out.push(`<span>${esc(raw)}</span><br/>`);
+    i++;
+  }
+  return out.join("");
 }
-
 
 
 // ─── 드래그 순서 변경 훅 ─────────────────────────────────────────────────────
@@ -385,17 +420,18 @@ export default function ManualClient() {
   const handleImageUpload=async(e:React.ChangeEvent<HTMLInputElement>)=>{
     const files=Array.from(e.target.files||[]); if(!files.length) return;
     setUploading(true);
-    const newUrls:string[]=[];
-    for(const file of files){
+    // 선택 순서 보존: index 기반으로 결과 배열 미리 확보 후 병렬 업로드
+    const slots: (string|null)[] = new Array(files.length).fill(null);
+    await Promise.all(files.map(async(file,idx)=>{
       const ext=file.name.split(".").pop();
-      const path=`manual/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const path=`manual/${Date.now()}_${idx}_${Math.random().toString(36).slice(2)}.${ext}`;
       const{error}=await supabase.storage.from("manual-images").upload(path,file,{upsert:false});
       if(!error){
-        // Public 버킷이므로 getPublicUrl 사용
         const{data:pub}=supabase.storage.from("manual-images").getPublicUrl(path);
-        newUrls.push(pub.publicUrl);
+        slots[idx]=pub.publicUrl;
       }
-    }
+    }));
+    const newUrls=slots.filter((u): u is string => u!==null);
     setEditImages(prev=>[...prev,...newUrls]); setUploading(false);
     if(fileInputRef.current) fileInputRef.current.value="";
   };
@@ -434,7 +470,8 @@ export default function ManualClient() {
   };
   const delSub=async(id:number)=>{
     if(!confirm("중분류를 삭제하면 하위 항목이 모두 삭제됩니다.")) return;
-    await supabase.from("manual_subcategories").delete().eq("id",id);
+    const{error}=await supabase.from("manual_subcategories").delete().eq("id",id);
+    if(error){alert("삭제 실패: "+error.message);return;}
     await loadAll(); setSelectedSub(null); setSelectedItem(null);
   };
   const addItem=async()=>{
@@ -444,7 +481,8 @@ export default function ManualClient() {
   };
   const delItem=async(id:number)=>{
     if(!confirm("소분류를 삭제합니다.")) return;
-    await supabase.from("manual_menu_items").delete().eq("id",id);
+    const{error}=await supabase.from("manual_menu_items").delete().eq("id",id);
+    if(error){alert("삭제 실패: "+error.message);return;}
     await loadAll(); if(selectedItem===id) setSelectedItem(null);
   };
 
@@ -792,7 +830,7 @@ export default function ManualClient() {
 
           {/* sticky 소분류 탭 */}
           {selectedSub&&(
-            <div style={{position:"sticky",top:0,zIndex:100,background:white,border:`1px solid ${border}`,borderRadius:10,marginBottom:14,padding:"10px 14px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
+           <div style={{position:"sticky",top:44,zIndex:100,background:white,border:`1px solid ${border}`,borderRadius:10,marginBottom:14,padding:"10px 14px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
               <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
                 <span style={{fontSize:12,color:"#aaa",whiteSpace:"nowrap"}}>소분류:</span>
                 {filteredItems.map((item,itemIdx)=>(
@@ -832,7 +870,7 @@ export default function ManualClient() {
               <div style={{fontSize:44,marginBottom:12}}>📋</div>
               <div style={{fontSize:15,marginBottom:6,color:"#666"}}>왼쪽에서 카테고리를 선택하거나 상단 검색창을 이용하세요</div>
               <div style={{fontSize:13,marginBottom:4}}>대분류 → 중분류 → 소분류 순으로 선택하면 메뉴얼 내용이 표시됩니다</div>
-              <div style={{fontSize:12,marginTop:10}}>💡 초성 검색 가능 — 예: "ㅈㅁ" → 주문, "ㄱㅈ" → 거래처, "ㄷㅇ" → 대응</div>
+            
             </div>
           )}
 
@@ -869,7 +907,51 @@ export default function ManualClient() {
                     <label style={{fontSize:12,color:"#666",display:"block",marginBottom:4}}>내용</label>
                     <RteToolbar onFormat={handleFormat}/>
                     <textarea ref={textareaRef} value={editBody} onChange={e=>setEditBody(e.target.value)} rows={14}
-                      style={{...inp,padding:"10px 12px",fontSize:13,resize:"vertical",lineHeight:1.75,fontFamily:"inherit"}}/>
+                      style={{...inp,padding:"10px 12px",fontSize:13,resize:"vertical",lineHeight:1.75,fontFamily:"inherit"}}
+                      onKeyDown={e=>{
+                        if(e.key!=="Enter") return;
+                        const ta=e.currentTarget;
+                        const pos=ta.selectionStart;
+                        const textBefore=ta.value.slice(0,pos);
+                        const lastLine=textBefore.split("\n").pop()||"";
+                        // 번호 목록 이어쓰기
+                        const numMatch=lastLine.match(/^(\d+)\. (.*)$/);
+                        if(numMatch){
+                          e.preventDefault();
+                          if(numMatch[2].trim()===""){
+                            // 빈 번호줄 → 목록 종료
+                            const newVal=ta.value.slice(0,pos-lastLine.length)+ta.value.slice(pos);
+                            setEditBody(newVal);
+                            setTimeout(()=>{ ta.selectionStart=ta.selectionEnd=pos-lastLine.length; });
+                          } else {
+                            // 다음 번호 삽입
+                            const next=Number(numMatch[1])+1;
+                            const ins=`\n${next}. `;
+                            const newVal=ta.value.slice(0,pos)+ins+ta.value.slice(pos);
+                            setEditBody(newVal);
+                            setTimeout(()=>{ ta.selectionStart=ta.selectionEnd=pos+ins.length; });
+                          }
+                          return;
+                        }
+                        // 글머리표 이어쓰기
+                        const bulletMatch=lastLine.match(/^- (.*)$/);
+                        if(bulletMatch){
+                          e.preventDefault();
+                          if(bulletMatch[1].trim()===""){
+                            // 빈 bullet줄 → 목록 종료
+                            const newVal=ta.value.slice(0,pos-lastLine.length)+ta.value.slice(pos);
+                            setEditBody(newVal);
+                            setTimeout(()=>{ ta.selectionStart=ta.selectionEnd=pos-lastLine.length; });
+                          } else {
+                            const ins="\n- ";
+                            const newVal=ta.value.slice(0,pos)+ins+ta.value.slice(pos);
+                            setEditBody(newVal);
+                            setTimeout(()=>{ ta.selectionStart=ta.selectionEnd=pos+ins.length; });
+                          }
+                          return;
+                        }
+                      }}
+                    />
                     <div style={{fontSize:11,color:"#bbb",marginTop:4}}>**굵게** / _기울임_ / ## 제목 / - 목록 / `코드` / --- 구분선</div>
                   </div>
                   <div style={{marginBottom:14}}>
