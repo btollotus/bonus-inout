@@ -68,6 +68,7 @@ type MaterialStock = {
   total_disposed: number;
   current_stock: number;
   is_below_safety_stock: boolean;
+  daily_used: number;
 };
 
 type MaterialReceipt = {
@@ -1073,14 +1074,26 @@ function MaterialLedgerTab({ role, userId, showToast }: {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [stockRes, receiptRes] = await Promise.all([
+    const [stockRes, receiptRes, usageRes] = await Promise.all([
       supabase.from("v_material_stock").select("*").order("category").order("material_name"),
       supabase.from("material_receipts")
         .select("id,received_date,material_id,quantity,unit,expiry_date,supplier,note,material:materials(name)")
         .eq("received_date", filterDate)
         .order("created_at", { ascending: false }),
+      supabase.from("material_usage_logs")
+        .select("material_id, quantity")
+        .eq("used_date", filterDate),
     ]);
-    setStocks((stockRes.data ?? []) as MaterialStock[]);
+    const dailyUsageMap: Record<string, number> = {};
+    (usageRes.data ?? []).forEach((u: any) => {
+      if (!dailyUsageMap[u.material_id]) dailyUsageMap[u.material_id] = 0;
+      dailyUsageMap[u.material_id] += u.quantity;
+    });
+    const stocksWithDaily = (stockRes.data ?? []).map((s: any) => ({
+      ...s,
+      daily_used: dailyUsageMap[s.material_id] ?? 0,
+    }));
+    setStocks(stocksWithDaily as MaterialStock[]);
     setReceipts((receiptRes.data ?? []) as unknown as MaterialReceipt[]);
     setLoading(false);
   }, [filterDate]);
@@ -1215,7 +1228,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                     <td className="py-2 px-3 text-xs text-slate-500">{s.category}</td>
                     <td className="py-2 px-3 font-medium">{s.material_name}</td>
                     <td className="py-2 px-3 text-right tabular-nums text-green-700">{s.total_received.toLocaleString()}{s.unit}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-blue-700">{s.total_used.toLocaleString()}{s.unit}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-blue-700">{s.daily_used > 0 ? s.daily_used.toLocaleString() : "0"}{s.unit}</td>
                     <td className="py-2 px-3 text-right tabular-nums text-slate-500">{s.total_disposed.toLocaleString()}{s.unit}</td>
                     <td className={`py-2 px-3 text-right tabular-nums font-bold ${s.current_stock < 0 ? "text-red-600" : s.is_below_safety_stock ? "text-amber-600" : "text-slate-800"}`}>
                       {s.current_stock.toLocaleString()}{s.unit}
