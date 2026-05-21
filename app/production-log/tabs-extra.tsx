@@ -422,8 +422,10 @@ setSlotWoMap(slotMap);
   // 슬롯 목록에서 오늘 활동있는 슬롯 구분
   const activeSlotsToday = new Set(slotEvents.map((e) => e.slot_id));
 
+  const [slotAssigneesState, setSlotAssigneesState] = React.useState<Record<string, string[]>>({});
+  const [woAssigneeMapState, setWoAssigneeMapState] = React.useState<Record<string, string>>({});
   const slotAssigneesRef = React.useRef<Record<string, string[]>>({});
-const woAssigneeMapRef = React.useRef<Record<string, string>>({});
+  const woAssigneeMapRef = React.useRef<Record<string, string>>({});
 
 async function handlePrint() {
   const activeSlotIds = [...activeSlotsToday];
@@ -494,7 +496,9 @@ async function handlePrint() {
   
     slotAssigneesRef.current = newSlotAssignees;
     woAssigneeMapRef.current = assigneeMap;
-    console.log("slotAssigneesRef:", JSON.stringify(slotAssigneesRef.current));
+    setSlotAssigneesState(newSlotAssignees);
+    setWoAssigneeMapState(assigneeMap);
+    console.log("slotAssigneesRef:", JSON.stringify(newSlotAssignees));
     console.log("woAssigneeMapRef:", JSON.stringify(woAssigneeMapRef.current));
     console.log("slotWoMap:", JSON.stringify(slotWoMap));
   
@@ -518,7 +522,7 @@ async function handlePrint() {
       win.document.close();
       win.focus();
       setTimeout(() => { win.print(); }, 500);
-    }, 150);
+    }, 400);
   }
 
   return (
