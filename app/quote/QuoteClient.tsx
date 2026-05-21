@@ -108,9 +108,10 @@ const PRODUCT_TYPES = [
   { key: "도눔별도1000미만",      label: "도눔 별도 1천개↓" },
   { key: "도눔별도1000이상인쇄",  label: "도눔 별도 1천개↑+인쇄" },
   { key: "도눔별도1000미만인쇄",  label: "도눔 별도 1천개↓+인쇄" },
-  { key: "롤리팝1도55", label: "롤리팝 1도 55mm" },
-  { key: "롤리팝2도55", label: "롤리팝 2도 55mm" },
-  { key: "입체초콜릿",  label: "입체초콜릿 (수동)" },
+  { key: "롤리팝1도55",    label: "롤리팝 1도 55mm" },
+  { key: "롤리팝2도55",    label: "롤리팝 2도 55mm" },
+  { key: "롤리팝레이즈-별도", label: "롤리팝레이즈-별도" },
+  { key: "입체초콜릿",     label: "입체초콜릿 (수동)" },
 ];
 
 const SHAPES = ["정사각형", "직사각형", "원형", "타원형", "기타"];
@@ -174,6 +175,7 @@ export default function QuoteClient() {
     calcLoading: boolean;
     manualV: string;
     presetTotal: string;
+    sheetPerPage: string;
   };
 
   const newItem = (): QuoteItem => ({
@@ -185,6 +187,7 @@ export default function QuoteClient() {
     isNew: true, designChanged: false,
     useStockMold: false, reuseExistingMold: false,
     calcResult: null, calcLoading: false, manualV: "", presetTotal: "",
+    sheetPerPage: "",
   });
 
   // 견적 입력 폼
@@ -899,6 +902,21 @@ async function loadSignageList() {
                      
                       )} {/* preset 조건부 끝 */}
 
+                     {/* 장당 인쇄 수 — 롤리팝레이즈-별도 전용 */}
+                     {item.productType === "롤리팝레이즈-별도" && item.itemCategory !== "preset" && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="text-xs font-semibold text-slate-600 whitespace-nowrap">장당 인쇄 수</div>
+                          <input
+                            className={`${inp} w-24`}
+                            type="number"
+                            placeholder="예: 12"
+                            value={item.sheetPerPage}
+                            onChange={e => updateItem(item.id, { sheetPerPage: e.target.value, calcResult: null })}
+                          />
+                          <span className="text-xs text-slate-400">개/장</span>
+                        </div>
+                      )}
+
                       {/* 옵션 행 — 제조제품 전용 */}
                       {item.itemCategory !== "preset" && (
                       <div className="mt-2 flex flex-wrap gap-2 items-center">
@@ -958,6 +976,7 @@ async function loadSignageList() {
                             onClick={async () => {
                               if (!item.widthMm || !item.heightMm) return setMsg("가로/세로를 입력하세요.");
                               if (!item.quantity) return setMsg("수량을 입력하세요.");
+                              if (item.productType === "롤리팝레이즈-별도" && !item.sheetPerPage) return setMsg("장당 인쇄 수를 입력하세요.");
                               updateItem(item.id, { calcLoading: true, calcResult: null });
                               try {
                                 const res = await fetch("/api/quote/calculate", {
@@ -973,6 +992,9 @@ async function loadSignageList() {
                                     useStockMold: item.useStockMold,
                                     reuseExistingMold: item.reuseExistingMold,
                                     moldQty: 1,
+                                    ...(item.productType === "롤리팝레이즈-별도" && item.sheetPerPage
+                                      ? { sheetPerPage: parseInt(item.sheetPerPage) }
+                                      : {}),
                                   }),
                                 });
                                 const data = await res.json();
