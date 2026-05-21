@@ -1074,8 +1074,8 @@ function MaterialLedgerTab({ role, userId, showToast }: {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [stockRes, receiptRes, usageRes] = await Promise.all([
-      supabase.from("v_material_stock").select("*").order("category").order("material_name"),
+    const [stockRes, receiptRes, usageRes, cumulativeUsageRes, cumulativeDisposalRes] = await Promise.all([
+      supabase.from("materials").select("id,name,category,unit,safety_stock").order("category").order("name"),
       supabase.from("material_receipts")
         .select("id,received_date,material_id,quantity,unit,expiry_date,supplier,note,material:materials(name)")
         .eq("received_date", filterDate)
@@ -1083,16 +1083,65 @@ function MaterialLedgerTab({ role, userId, showToast }: {
       supabase.from("material_usage_logs")
         .select("material_id, quantity")
         .eq("used_date", filterDate),
+      supabase.from("material_usage_logs")
+        .select("material_id, quantity")
+        .lte("used_date", filterDate),
+      supabase.from("material_disposal_logs")
+        .select("material_id, quantity")
+        .lte("created_at", `${filterDate}T23:59:59+09:00`),
     ]);
+
+    // 당일 사용량
     const dailyUsageMap: Record<string, number> = {};
     (usageRes.data ?? []).forEach((u: any) => {
       if (!dailyUsageMap[u.material_id]) dailyUsageMap[u.material_id] = 0;
       dailyUsageMap[u.material_id] += u.quantity;
     });
-    const stocksWithDaily = (stockRes.data ?? []).map((s: any) => ({
-      ...s,
-      daily_used: dailyUsageMap[s.material_id] ?? 0,
-    }));
+
+    // filterDate까지 누적 사용량
+    const cumulativeUsageMap: Record<string, number> = {};
+    (cumulativeUsageRes.data ?? []).forEach((u: any) => {
+      if (!cumulativeUsageMap[u.material_id]) cumulativeUsageMap[u.material_id] = 0;
+      cumulativeUsageMap[u.material_id] += u.quantity;
+    });
+
+    // filterDate까지 누적 폐기량
+    const cumulativeDisposalMap: Record<string, number> = {};
+    (cumulativeDisposalRes.data ?? []).forEach((d: any) => {
+      if (!cumulativeDisposalMap[d.material_id]) cumulativeDisposalMap[d.material_id] = 0;
+      cumulativeDisposalMap[d.material_id] += d.quantity;
+    });
+
+    // filterDate까지 누적 입고량
+    const { data: cumulativeReceiptData } = await supabase
+      .from("material_receipts")
+      .select("material_id, quantity")
+      .lte("received_date", filterDate);
+    const cumulativeReceiptMap: Record<string, number> = {};
+    (cumulativeReceiptData ?? []).forEach((r: any) => {
+      if (!cumulativeReceiptMap[r.material_id]) cumulativeReceiptMap[r.material_id] = 0;
+      cumulativeReceiptMap[r.material_id] += r.quantity;
+    });
+
+    const stocksWithDaily = (stockRes.data ?? []).map((s: any) => {
+      const totalReceived = cumulativeReceiptMap[s.id] ?? 0;
+      const totalUsed = cumulativeUsageMap[s.id] ?? 0;
+      const totalDisposed = cumulativeDisposalMap[s.id] ?? 0;
+      const currentStock = totalReceived - totalUsed - totalDisposed;
+      return {
+        material_id: s.id,
+        material_name: s.name,
+        category: s.category,
+        unit: s.unit,
+        safety_stock: s.safety_stock,
+        total_received: totalReceived,
+        total_used: totalUsed,
+        total_disposed: totalDisposed,
+        current_stock: currentStock,
+        is_below_safety_stock: s.safety_stock != null && currentStock < s.safety_stock,
+        daily_used: dailyUsageMap[s.id] ?? 0,
+      };
+    });
     setStocks(stocksWithDaily as MaterialStock[]);
     setReceipts((receiptRes.data ?? []) as unknown as MaterialReceipt[]);
     setLoading(false);
