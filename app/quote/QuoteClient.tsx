@@ -1477,18 +1477,20 @@ async function loadSignageList() {
 
     {/* 합계 미리보기 */}
     {sheetItems.some(x => x.calcResult) && (() => {
-      const calced = sheetItems.filter(x => x.calcResult);
-      const grandTotal = calced.reduce((s, x) => s + x.calcResult!.total, 0);
-      const iceboxCost = useIcebox ? iceboxPrice : 0;
-      const finalTotal = grandTotal + deliveryPrice + iceboxCost;
-      return (
-        <div className="mb-4 grid grid-cols-2 gap-2">
-          <div className="rounded-2xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-center">
-            <div className="text-xs text-blue-600 font-semibold">공급가 (부가세 별도)</div>
-            <div className="text-2xl font-black text-blue-700 tabular-nums">{fmt(finalTotal)}원</div>
-            {deliveryPrice > 0 && <div className="text-xs text-slate-500 mt-0.5">택배비 {fmt(deliveryPrice)}원 포함</div>}
-            {iceboxCost > 0 && <div className="text-xs text-slate-500 mt-0.5">아이스박스 {fmt(iceboxCost)}원 포함</div>}
-          </div>
+     const calced = sheetItems.filter(x => x.calcResult);
+     const grandTotal = calced.reduce((s, x) => s + x.calcResult!.total, 0);
+     const iceboxCostTotal = useIcebox ? iceboxPrice * iceboxQty : 0;
+     const iceboxSupply = Math.round(iceboxCostTotal / 1.1);
+     const deliverySupply = Math.round(deliveryPrice * deliveryQty / 1.1);
+     const finalTotal = grandTotal + deliverySupply + iceboxSupply;
+     return (
+       <div className="mb-4 grid grid-cols-2 gap-2">
+         <div className="rounded-2xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-center">
+           <div className="text-xs text-blue-600 font-semibold">공급가 (부가세 별도)</div>
+           <div className="text-2xl font-black text-blue-700 tabular-nums">{fmt(finalTotal)}원</div>
+           {deliverySupply > 0 && <div className="text-xs text-slate-500 mt-0.5">택배비 {fmt(deliverySupply)}원 포함</div>}
+           {iceboxSupply > 0 && <div className="text-xs text-slate-500 mt-0.5">아이스박스 {fmt(iceboxSupply)}원 포함</div>}
+         </div>
           <div className="rounded-2xl border-2 border-slate-300 bg-slate-50 px-4 py-3 text-center">
             <div className="text-xs text-slate-600 font-semibold">부가세 포함</div>
             <div className="text-2xl font-black text-slate-700 tabular-nums">{fmt(Math.round(finalTotal * 1.1))}원</div>
