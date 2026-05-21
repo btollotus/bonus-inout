@@ -800,7 +800,7 @@ export default function ManualClient() {
                     {isAdmin&&showManage&&<span style={{color:"#ccc",fontSize:12,cursor:"grab",marginRight:2}}>⠿</span>}
                     <button onClick={()=>selectItem(item.id)}
                       style={{padding:"4px 12px",borderRadius:20,border:selectedItem===item.id?`2px solid ${blue}`:"1px solid #ddd",background:selectedItem===item.id?blue:"#f8f9fb",color:selectedItem===item.id?white:"#444",cursor:"pointer",fontSize:13,fontWeight:selectedItem===item.id?600:400,display:"flex",alignItems:"center",gap:5,position:"relative"}}>
-                      {item.name}
+                      <span style={{fontSize:11,opacity:0.6,marginRight:1}}>{itemIdx+1}.</span>{item.name}
                       {contents[item.id]
                         ?<span style={{fontSize:10,opacity:0.7}}>✓</span>
                         :<span style={{fontSize:10,color:selectedItem===item.id?"rgba(255,255,255,0.7)":"#f87171",fontWeight:700}}>●</span>
