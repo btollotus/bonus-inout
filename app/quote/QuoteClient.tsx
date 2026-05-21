@@ -903,18 +903,14 @@ async function loadSignageList() {
                      
                       )} {/* preset 조건부 끝 */}
 
-                     {/* 장당 인쇄 수 — 롤리팝레이즈-별도 전용 */}
-                     {item.productType === "롤리팝레이즈-별도" && item.itemCategory !== "preset" && (
-                        <div className="mt-2 flex items-center gap-2">
-                          <div className="text-xs font-semibold text-slate-600 whitespace-nowrap">장당 인쇄 수</div>
-                          <input
-                            className={`${inp} w-24`}
-                            type="number"
-                            placeholder="예: 12"
-                            value={item.sheetPerPage}
-                            onChange={e => updateItem(item.id, { sheetPerPage: e.target.value, calcResult: null })}
-                          />
-                          <span className="text-xs text-slate-400">개/장</span>
+                   {/* 장당 인쇄 수 — 롤리팝레이즈-별도: 가로 입력 시 자동 계산 표시 */}
+                   {item.productType === "롤리팝레이즈-별도" && item.itemCategory !== "preset" && item.widthMm && (
+                        <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                          <span>장당 인쇄 수:</span>
+                          <span className="font-semibold text-slate-700">
+                            {Math.floor(430 / (parseFloat(item.widthMm) + 5))}개/장
+                          </span>
+                          <span className="text-slate-400">(430mm ÷ ({item.widthMm}+5)mm)</span>
                         </div>
                       )}
 
@@ -977,7 +973,6 @@ async function loadSignageList() {
                             onClick={async () => {
                               if (!item.widthMm || !item.heightMm) return setMsg("가로/세로를 입력하세요.");
                               if (!item.quantity) return setMsg("수량을 입력하세요.");
-                              if (item.productType === "롤리팝레이즈-별도" && !item.sheetPerPage) return setMsg("장당 인쇄 수를 입력하세요.");
                               updateItem(item.id, { calcLoading: true, calcResult: null });
                               try {
                                 const res = await fetch("/api/quote/calculate", {
@@ -993,9 +988,6 @@ async function loadSignageList() {
                                     useStockMold: item.useStockMold,
                                     reuseExistingMold: item.reuseExistingMold,
                                     moldQty: 1,
-                                    ...(item.productType === "롤리팝레이즈-별도" && item.sheetPerPage
-                                      ? { sheetPerPage: parseInt(item.sheetPerPage) }
-                                      : {}),
                                   }),
                                 });
                                 const data = await res.json();
