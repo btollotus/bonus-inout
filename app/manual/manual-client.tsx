@@ -104,6 +104,8 @@ function renderBody(body: string): string {
       .replace(/_(.+?)_/g,"<em>$1</em>")
       .replace(/`(.+?)`/g,"<code style='background:#f0f4ff;color:#2d5be3;border-radius:3px;padding:1px 5px;font-size:13px'>$1</code>")
       .replace(/&lt;u&gt;(.+?)&lt;\/u&gt;/g,"<u>$1</u>")
+      // 이미지
+      .replace(/!\[\]\((.+?)\)/g,"<img src='$1' style='max-width:100%;border-radius:6px;margin:6px 0;display:block'/>")
       // 앞 공백 보존
       .replace(/^ +/, m => "&nbsp;".repeat(m.length));
     // 구분선
@@ -1060,9 +1062,21 @@ export default function ManualClient() {
                     {editImages.length>0&&(
                       <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:10}}>
                         {editImages.map((url,i)=>(
-                          <div key={i} style={{position:"relative"}}>
-                            <img src={url} onClick={()=>setLightbox(url)} style={{width:110,height:82,objectFit:"cover",borderRadius:6,border:"1px solid #e0e0e0",cursor:"pointer"}}/>
-                            <button onClick={()=>removeImage(url)} style={{position:"absolute",top:-6,right:-6,background:"#e53e3e",color:white,border:"none",borderRadius:"50%",width:20,height:20,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                          <div key={i} style={{position:"relative",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                            <div style={{position:"relative"}}>
+                              <img src={url} onClick={()=>setLightbox(url)} style={{width:110,height:82,objectFit:"cover",borderRadius:6,border:"1px solid #e0e0e0",cursor:"pointer"}}/>
+                              <button onClick={()=>removeImage(url)} style={{position:"absolute",top:-6,right:-6,background:"#e53e3e",color:white,border:"none",borderRadius:"50%",width:20,height:20,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                            </div>
+                            <button onClick={()=>{
+                              const ta=textareaRef.current; if(!ta) return;
+                              const pos=ta.selectionStart;
+                              const ins=`![](${url})\n`;
+                              const newVal=ta.value.slice(0,pos)+ins+ta.value.slice(pos);
+                              setEditBody(newVal);
+                              setTimeout(()=>{ ta.focus(); ta.selectionStart=ta.selectionEnd=pos+ins.length; });
+                            }} style={{padding:"2px 8px",fontSize:11,border:`1px solid ${blue}`,borderRadius:10,background:blueLt,color:blue,cursor:"pointer",whiteSpace:"nowrap"}}>
+                              본문 삽입
+                            </button>
                           </div>
                         ))}
                       </div>
