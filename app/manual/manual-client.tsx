@@ -568,8 +568,8 @@ export default function ManualClient() {
              emps={employees}
              onSelect={(name)=>{ setPinSelectedName(name); setPinError(""); }}
              onCancel={()=>{
-                if(viewLocked) { window.location.href="/"; return; }
-                setShowPin(false); setPinInput(""); setPinError(""); setPinSelectedName("");
+              if(viewLocked) { window.location.href="/"; return; }
+              setShowPin(false); setPinDigits([]); setPinError(""); setPinSelectedName("");
               }}
            />
           ) : (
