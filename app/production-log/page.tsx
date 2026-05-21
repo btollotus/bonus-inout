@@ -1112,7 +1112,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
       cumulativeDisposalMap[d.material_id] += d.quantity;
     });
 
-    // filterDate까지 누적 입고량
+    // filterDate까지 누적 입고량 (현재고 계산용)
     const { data: cumulativeReceiptData } = await supabase
       .from("material_receipts")
       .select("material_id, quantity")
@@ -1121,6 +1121,13 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     (cumulativeReceiptData ?? []).forEach((r: any) => {
       if (!cumulativeReceiptMap[r.material_id]) cumulativeReceiptMap[r.material_id] = 0;
       cumulativeReceiptMap[r.material_id] += r.quantity;
+    });
+
+    // 당일 입고량 (화면 표시용)
+    const dailyReceiptMap: Record<string, number> = {};
+    (receiptRes.data ?? []).forEach((r: any) => {
+      if (!dailyReceiptMap[r.material_id]) dailyReceiptMap[r.material_id] = 0;
+      dailyReceiptMap[r.material_id] += r.quantity;
     });
 
     const stocksWithDaily = (stockRes.data ?? []).map((s: any) => {
@@ -1134,7 +1141,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
         category: s.category,
         unit: s.unit,
         safety_stock: s.safety_stock,
-        total_received: totalReceived,
+        total_received: dailyReceiptMap[s.id] ?? 0,
         total_used: totalUsed,
         total_disposed: totalDisposed,
         current_stock: currentStock,
