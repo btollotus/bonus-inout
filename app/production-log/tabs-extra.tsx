@@ -425,36 +425,63 @@ setSlotWoMap(slotMap);
   const slotAssigneesRef = React.useRef<Record<string, string[]>>({});
 const woAssigneeMapRef = React.useRef<Record<string, string>>({});
 
-  async function handlePrint() {
-    const activeSlotIds = [...activeSlotsToday];
-    if (activeSlotIds.length === 0) {
-      // 데이터 없어도 인쇄는 진행
-    }
-  
-    const woNosPerSlot: Record<string, string[]> = {};
-    for (const slotId of activeSlotIds) {
-      const wNos = [...new Set([
-        ...slotEvents.filter(e => e.slot_id === slotId).map(e => e.work_order_no).filter(Boolean) as string[],
-        ...woEvents.filter(e => e.slot_id === slotId).map(e => e.work_order_no),
-      ])];
-      woNosPerSlot[slotId] = wNos;
-    }
-  
-    const allWoNos = [...new Set(Object.values(woNosPerSlot).flat())];
-    const assigneeMap: Record<string, string> = {};
-  
-    if (allWoNos.length > 0) {
-      const { data } = await supabase
+async function handlePrint() {
+  const activeSlotIds = [...activeSlotsToday];
+  if (activeSlotIds.length === 0) {
+    // 데이터 없어도 인쇄는 진행
+  }
+
+  const woNosPerSlot: Record<string, string[]> = {};
+  for (const slotId of activeSlotIds) {
+    const wNos = [...new Set([
+      ...slotEvents.filter(e => e.slot_id === slotId).map(e => e.work_order_no).filter(Boolean) as string[],
+      ...woEvents.filter(e => e.slot_id === slotId).map(e => e.work_order_no),
+    ])];
+    woNosPerSlot[slotId] = wNos;
+  }
+
+  const allWoNos = [...new Set(Object.values(woNosPerSlot).flat())];
+  const assigneeMap: Record<string, string> = {};
+
+  if (allWoNos.length > 0) {
+    // 1단계: assignee_production 조회
+    const { data } = await supabase
       .from("work_orders")
       .select("work_order_no, assignee_production")
       .in("work_order_no", allWoNos)
       .not("assignee_production", "is", null);
-      for (const row of data ?? []) {
-        if (row.assignee_production) assigneeMap[row.work_order_no] = row.assignee_production;
+    for (const row of data ?? []) {
+      if (row.assignee_production) assigneeMap[row.work_order_no] = row.assignee_production;
+    }
+
+    // 2단계: assignee_production NULL인 WO → ccp_wo_events.created_by → users.name fallback
+    const nullWoNos = allWoNos.filter(no => !assigneeMap[no]);
+    if (nullWoNos.length > 0) {
+      const { data: woEvData } = await supabase
+        .from("ccp_wo_events")
+        .select("work_order_no, created_by")
+        .in("work_order_no", nullWoNos)
+        .not("created_by", "is", null);
+      const userIds = [...new Set((woEvData ?? []).map((e: any) => e.created_by).filter(Boolean))] as string[];
+      const userNameMap: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from("users")
+          .select("id, name")
+          .in("id", userIds);
+        for (const u of usersData ?? []) {
+          if (u.name) userNameMap[u.id] = u.name;
+        }
+      }
+      for (const ev of woEvData ?? []) {
+        if (ev.created_by && userNameMap[ev.created_by] && !assigneeMap[ev.work_order_no]) {
+          assigneeMap[ev.work_order_no] = userNameMap[ev.created_by];
+        }
       }
     }
-  
-    const newSlotAssignees: Record<string, string[]> = {};
+  }
+
+  const newSlotAssignees: Record<string, string[]> = {};
     for (const slotId of activeSlotIds) {
       const assignees: string[] = [];
       for (const wNo of woNosPerSlot[slotId] ?? []) {
