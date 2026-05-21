@@ -460,6 +460,7 @@ function selectWo(wo: WorkOrderItem) {
     if (!formData || !selectedWoId) return;
     if (!formData.start_time) return showToast("시작시간을 입력하세요.", "error");
     if (!formData.b_end_time || formData.b_end_time.length < 5) return showToast("종료시간을 입력하세요.", "error");
+    if (formData.b_pass_qty === null || formData.b_pass_qty === undefined) return showToast("통과수량을 입력하세요. (0개면 0을 입력)", "error");
 
     const wo = woList.find((w: any) => w.id === selectedWoId);
     if (wo && formData.start_time) {
