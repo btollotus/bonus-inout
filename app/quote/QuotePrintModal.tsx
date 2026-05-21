@@ -155,32 +155,37 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
         : item.thickness ? `두께 ${item.thickness}` : ""
     );
     const productName = sizeStr ? `${colorLabel}(${sizeStr})` : colorLabel;
-    const unitPrice = inputMode === "manual" ? item.manualV : item.V;
-    if (!unitPrice || !item.quantity) continue;
+   // 롤리팝레이즈-별도: 인쇄제판 단가에 합산 (plateCost / quantity, 10원 단위 올림)
+   const isRollipopRaize = item.productType === "롤리팝레이즈-별도";
+   const platePerUnit = (isRollipopRaize && item.plateCost > 0 && item.quantity > 0)
+     ? Math.ceil(item.plateCost / item.quantity / 10) * 10
+     : 0;
+   const unitPrice = (inputMode === "manual" ? item.manualV : item.V) + platePerUnit;
+   if (!unitPrice || !item.quantity) continue;
 
-    const supply = unitPrice * item.quantity;
-    const vat = Math.round(supply * 0.1);
-    lineItems.push({ name: productName, qty: fmt(item.quantity), unit: unitPrice, supply, vat, total: supply + vat });
+   const supply = unitPrice * item.quantity;
+   const vat = Math.round(supply * 0.1);
+   lineItems.push({ name: productName, qty: fmt(item.quantity), unit: unitPrice, supply, vat, total: supply + vat });
 
-    // 성형틀 (moldCost > 0)
-    if (item.moldCost > 0) {
-      lineItems.push({
-        name: "성형틀 (최초 1회)", qty: "1",
-        unit: item.moldCost, supply: item.moldCost,
-        vat: Math.round(item.moldCost * 0.1),
-        total: item.moldCost + Math.round(item.moldCost * 0.1),
-      });
-    }
+   // 성형틀 (moldCost > 0)
+   if (item.moldCost > 0) {
+     lineItems.push({
+       name: "성형틀 (최초 1회)", qty: "1",
+       unit: item.moldCost, supply: item.moldCost,
+       vat: Math.round(item.moldCost * 0.1),
+       total: item.moldCost + Math.round(item.moldCost * 0.1),
+     });
+   }
 
-    // 인쇄제판 (레이즈 아닌 경우만, plateCost > 0)
-    if (item.plateCost > 0 && !item.isRaise) {
-      lineItems.push({
-        name: "인쇄제판 (최초 1회)", qty: "1",
-        unit: item.plateCost, supply: item.plateCost,
-        vat: Math.round(item.plateCost * 0.1),
-        total: item.plateCost + Math.round(item.plateCost * 0.1),
-      });
-    }
+   // 인쇄제판 — 롤리팝레이즈-별도는 단가에 합산했으므로 제외, 그 외 기존 방식 유지
+   if (item.plateCost > 0 && !item.isRaise && !isRollipopRaize) {
+     lineItems.push({
+       name: "인쇄제판 (최초 1회)", qty: "1",
+       unit: item.plateCost, supply: item.plateCost,
+       vat: Math.round(item.plateCost * 0.1),
+       total: item.plateCost + Math.round(item.plateCost * 0.1),
+     });
+   }
   }
 
   // 아이스박스
