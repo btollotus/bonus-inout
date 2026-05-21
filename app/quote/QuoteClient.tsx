@@ -526,6 +526,7 @@ async function loadSignageList() {
       designChanged: r.design_changed,
       useStockMold: r.use_stock_mold,
       reuseExistingMold: r.reuse_existing_mold,
+      sheetPerPage: "",
       calcResult: q ? {
         unitPrice: q.unit_price ?? 0,
         moldCost: q.mold_cost ?? 0,
