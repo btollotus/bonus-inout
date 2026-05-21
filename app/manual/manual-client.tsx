@@ -67,23 +67,110 @@ function applyFormat(textarea: HTMLTextAreaElement, prefix: string, suffix: stri
   return before+prefix+sel+suffix+after;
 }
 function RteToolbar({onFormat}:{onFormat:(fn:(v:string,ta:HTMLTextAreaElement)=>string)=>void}) {
+  const [showDivider,  setShowDivider]  = useState(false);
+  const [showSymbol,   setShowSymbol]   = useState(false);
+
+  const DIVIDERS = [
+    { label:"─────", val:"---" },
+    { label:"═════", val:"===" },
+    { label:"·····", val:"···" },
+    { label:"━━━━━", val:"***" },
+    { label:"- - -", val:"- - -" },
+  ];
+
+  const SYMBOLS = [
+    "→","←","↑","↓","↔","↕",
+    "●","○","■","□","▲","△",
+    "★","☆","♦","◆","♥","♡",
+    "✓","✗","✔","✘","※","☞",
+    "①","②","③","④","⑤","⑥",
+    "⑦","⑧","⑨","⑩","㉠","㉡",
+    "°","±","×","÷","≠","≒",
+    "㎝","㎞","㎏","㎎","㎖","㎡",
+    "α","β","γ","δ","π","Σ",
+  ];
+
   const btn=(label:string,fn:(v:string,ta:HTMLTextAreaElement)=>string,title?:string)=>(
     <button type="button" title={title||label} onClick={()=>onFormat(fn)}
       style={{padding:"3px 8px",border:"1px solid #ddd",borderRadius:5,background:"#f8f9fb",cursor:"pointer",fontSize:12,fontWeight:600,color:"#444"}}>
       {label}
     </button>
   );
+
   return(
-    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
-      {btn("굵게",(v,ta)=>applyFormat(ta,"**","**"),"굵게 (Ctrl+B)")}
-      {btn("기울임",(v,ta)=>applyFormat(ta,"_","_"))}
-      {btn("밑줄",(v,ta)=>applyFormat(ta,"<u>","</u>"))}
-      {btn("H2",(v,ta)=>applyFormat(ta,"\n## ",""))}
-      {btn("H3",(v,ta)=>applyFormat(ta,"\n### ",""))}
-      {btn("• 목록",(v,ta)=>applyFormat(ta,"\n- ",""))}
-      {btn("번호",(v,ta)=>applyFormat(ta,"\n1. ",""))}
-      {btn("구분선",(v,ta)=>{ const s=ta.selectionStart; const b=v.slice(0,s), a=v.slice(s); return b+"\n---\n"+a; })}
-      {btn("코드",(v,ta)=>applyFormat(ta,"`","`"))}
+    <div style={{marginBottom:6}}>
+      <div style={{display:"flex",gap:5,flexWrap:"wrap",position:"relative"}}>
+        {btn("굵게",(v,ta)=>applyFormat(ta,"**","**"))}
+        {btn("기울임",(v,ta)=>applyFormat(ta,"_","_"))}
+        {btn("밑줄",(v,ta)=>applyFormat(ta,"<u>","</u>"))}
+        {btn("H2",(v,ta)=>applyFormat(ta,"\n## ",""))}
+        {btn("H3",(v,ta)=>applyFormat(ta,"\n### ",""))}
+        {btn("하이픈",(v,ta)=>applyFormat(ta,"\n- ",""))}
+
+        {/* 번호 — 숫자만 연달아 */}
+        {btn("번호",(v,ta)=>{
+          const s=ta.selectionStart;
+          const ins="\n1\n2\n3\n4\n5\n";
+          return v.slice(0,s)+ins+v.slice(s);
+        })}
+
+        {/* 구분선 드롭다운 */}
+        <div style={{position:"relative"}}>
+          <button type="button"
+            onClick={()=>{setShowDivider(v=>!v);setShowSymbol(false);}}
+            style={{padding:"3px 8px",border:"1px solid #ddd",borderRadius:5,background:showDivider?"#e8edf8":"#f8f9fb",cursor:"pointer",fontSize:12,fontWeight:600,color:"#444"}}>
+            구분선 ▾
+          </button>
+          {showDivider&&(
+            <div style={{position:"absolute",top:"100%",left:0,zIndex:200,background:"#fff",border:"1px solid #ddd",borderRadius:6,boxShadow:"0 4px 12px rgba(0,0,0,0.12)",padding:"4px 0",minWidth:120,marginTop:2}}>
+              {DIVIDERS.map(d=>(
+                <button key={d.val} type="button"
+                  onClick={()=>{
+                    onFormat((v,ta)=>{
+                      const s=ta.selectionStart;
+                      return v.slice(0,s)+"\n"+d.val+"\n"+v.slice(s);
+                    });
+                    setShowDivider(false);
+                  }}
+                  style={{display:"block",width:"100%",padding:"5px 14px",background:"none",border:"none",cursor:"pointer",fontSize:13,textAlign:"left",letterSpacing:2}}
+                  onMouseEnter={e=>(e.currentTarget.style.background="#f0f4ff")}
+                  onMouseLeave={e=>(e.currentTarget.style.background="none")}>
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 특수기호 팔레트 */}
+        <div style={{position:"relative"}}>
+          <button type="button"
+            onClick={()=>{setShowSymbol(v=>!v);setShowDivider(false);}}
+            style={{padding:"3px 8px",border:"1px solid #ddd",borderRadius:5,background:showSymbol?"#e8edf8":"#f8f9fb",cursor:"pointer",fontSize:12,fontWeight:600,color:"#444"}}>
+            특수기호 ▾
+          </button>
+          {showSymbol&&(
+            <div style={{position:"absolute",top:"100%",left:0,zIndex:200,background:"#fff",border:"1px solid #ddd",borderRadius:6,boxShadow:"0 4px 12px rgba(0,0,0,0.12)",padding:8,marginTop:2,width:220}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:3}}>
+                {SYMBOLS.map(sym=>(
+                  <button key={sym} type="button"
+                    onClick={()=>{
+                      onFormat((v,ta)=>{
+                        const s=ta.selectionStart;
+                        return v.slice(0,s)+sym+v.slice(s);
+                      });
+                    }}
+                    style={{padding:"5px 0",background:"none",border:"1px solid #eee",borderRadius:4,cursor:"pointer",fontSize:14,textAlign:"center"}}
+                    onMouseEnter={e=>(e.currentTarget.style.background="#f0f4ff")}
+                    onMouseLeave={e=>(e.currentTarget.style.background="none")}>
+                    {sym}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -110,7 +197,23 @@ function renderBody(body: string): string {
       .replace(/^ +/, m => "&nbsp;".repeat(m.length));
     // 구분선
     if(raw.trim()==="---"){
-      out.push("<hr style='border:none;border-top:1.5px solid #e2e5ea;margin:16px 0;width:100%'>");
+      out.push("<hr style='border:none;border-top:1.5px solid #e2e5ea;margin:16px 0;display:block;width:100%'>");
+      i++; continue;
+    }
+    if(raw.trim()==="==="){
+      out.push("<hr style='border:none;border-top:3px double #c0c8d8;margin:16px 0;display:block;width:100%'>");
+      i++; continue;
+    }
+    if(raw.trim()==="···"){
+      out.push("<div style='text-align:center;color:#bbb;letter-spacing:6px;margin:16px 0;font-size:16px'>···········</div>");
+      i++; continue;
+    }
+    if(raw.trim()==="***"){
+      out.push("<hr style='border:none;border-top:3px solid #333;margin:16px 0;display:block;width:100%'>");
+      i++; continue;
+    }
+    if(raw.trim()==="- - -"){
+      out.push("<hr style='border:none;border-top:2px dashed #c0c8d8;margin:16px 0;display:block;width:100%'>");
       i++; continue;
     }
     // h2
