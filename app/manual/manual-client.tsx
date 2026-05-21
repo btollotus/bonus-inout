@@ -178,7 +178,7 @@ export default function ManualClient() {
   // ── admin ──
   const [isAdmin,    setIsAdmin]    = useState(false);
   const [showPin,    setShowPin]    = useState(false);
-  const [pinInput,   setPinInput]   = useState("");
+  const [pinDigits,  setPinDigits]  = useState<string[]>([]);
   const [pinError,   setPinError]   = useState("");
   const [showManage, setShowManage] = useState(false);
   const [adminName,       setAdminName]       = useState("");
@@ -319,24 +319,26 @@ export default function ManualClient() {
   const totalSubItems=(subId:number)=>menuItems.filter(m=>m.subcategory_id===subId).length;
 
   // ── PIN 검증 (이름 선택 후 PIN 매칭) ──
-  const handlePin=async()=>{
-    const pin=pinInput.trim();
-    if(!pin){setPinError("PIN을 입력하세요.");return;}
+  const handlePin=useCallback((digits: string[])=>{
+    const pin=digits.join("");
+    if(pin.length<4){setPinError("PIN 4자리를 입력하세요.");return;}
     const found=employees.find(e=>e.name===pinSelectedName&&e.pin===pin);
-    if(!found){setPinError("PIN이 올바르지 않습니다.");return;}
-    // 열람 잠금 해제
+    if(!found){setPinError("PIN이 올바르지 않습니다.");setPinDigits([]);return;}
     setViewLocked(false);
     setViewerName(pinSelectedName);
-    // 관리자 권한은 별도 (기존 유지)
     if(!viewLocked){
       setIsAdmin(true);
       setAdminName(pinSelectedName);
     }
     setShowPin(false);
-    setPinInput("");
+    setPinDigits([]);
     setPinError("");
     setPinSelectedName("");
-  };
+  },[employees,pinSelectedName,viewLocked]);
+
+  useEffect(()=>{
+    if(pinDigits.length===4) handlePin(pinDigits);
+  },[pinDigits,handlePin]);
 
   // 열람 기록 로드
   const loadViewLogs=async()=>{
@@ -570,19 +572,40 @@ export default function ManualClient() {
                 setShowPin(false); setPinInput(""); setPinError(""); setPinSelectedName("");
               }}
            />
-            ) : (
-              /* PIN 입력 단계 */
-              <div>
-                <div style={{marginBottom:12,fontWeight:600,fontSize:14,color:blue}}>👤 {pinSelectedName}</div>
-                <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)}
-                  onKeyDown={e=>e.key==="Enter"&&handlePin()} autoFocus
-                  placeholder="PIN 입력" style={{...inp,marginBottom:6}}/>
-                {pinError&&<div style={{color:"#e53e3e",fontSize:12,marginBottom:8}}>{pinError}</div>}
-                <div style={{display:"flex",gap:8,marginTop:8}}>
-                  <button onClick={handlePin} style={{flex:1,padding:"9px 0",background:blue,color:white,border:"none",borderRadius:6,cursor:"pointer",fontWeight:600}}>확인</button>
-                  <button onClick={()=>{ setPinSelectedName(""); setPinInput(""); setPinError(""); }} style={{padding:"9px 14px",background:"#f0f0f0",border:"none",borderRadius:6,cursor:"pointer"}}>취소</button>
-                </div>
+          ) : (
+            /* PIN 입력 단계 — 숫자패드 */
+            <div>
+              <div style={{fontWeight:600,fontSize:14,color:blue,marginBottom:16,textAlign:"center"}}>👤 {pinSelectedName}</div>
+              {/* 입력 표시 */}
+              <div style={{display:"flex",justifyContent:"center",gap:12,marginBottom:20}}>
+                {[0,1,2,3].map(i=>(
+                  <div key={i} style={{width:14,height:14,borderRadius:"50%",border:`1.5px solid ${pinDigits[i]?"#2d5be3":"#ccc"}`,background:pinDigits[i]?"#2d5be3":"transparent",transition:"background 0.1s"}}/>
+                ))}
               </div>
+              {/* 숫자패드 */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
+                {["1","2","3","4","5","6","7","8","9"].map(n=>(
+                  <button key={n} onClick={()=>{ if(pinDigits.length<4) setPinDigits(p=>[...p,n]); }}
+                    style={{padding:"14px 0",fontSize:18,fontWeight:600,border:"1px solid #e2e5ea",borderRadius:8,background:"#f8f9fb",cursor:"pointer",color:"#333"}}>
+                    {n}
+                  </button>
+                ))}
+                <div/>
+                <button onClick={()=>{ if(pinDigits.length<4) setPinDigits(p=>[...p,"0"]); }}
+                  style={{padding:"14px 0",fontSize:18,fontWeight:600,border:"1px solid #e2e5ea",borderRadius:8,background:"#f8f9fb",cursor:"pointer",color:"#333"}}>
+                  0
+                </button>
+                <button onClick={()=>setPinDigits(p=>p.slice(0,-1))}
+                  style={{padding:"14px 0",fontSize:18,border:"1px solid #e2e5ea",borderRadius:8,background:"#f8f9fb",cursor:"pointer",color:"#888",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  ⌫
+                </button>
+              </div>
+              {pinError&&<div style={{color:"#e53e3e",fontSize:12,marginBottom:8,textAlign:"center"}}>{pinError}</div>}
+              <button onClick={()=>{ setPinSelectedName(""); setPinDigits([]); setPinError(""); }}
+                style={{width:"100%",padding:"9px 0",background:"#f0f0f0",border:"none",borderRadius:6,cursor:"pointer",fontSize:13}}>
+                ← 다시 선택
+              </button>
+            </div>
             )}
           </div>
         </div>
