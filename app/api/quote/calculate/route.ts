@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
       useStockMold      = false,
       reuseExistingMold = false,
       moldQty           = 1,
+      sheetPerPage,
     } = body;
 
     if (!productKey) {
@@ -76,6 +77,7 @@ export async function POST(req: NextRequest) {
       useStockMold,
       reuseExistingMold,
       moldQty: Number(moldQty) || 1,
+      ...(sheetPerPage ? { sheetPerPage: Number(sheetPerPage) } : {}),
     });
 
     return NextResponse.json(result);

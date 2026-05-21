@@ -835,14 +835,14 @@ async function loadSignageList() {
                           <div>
                             <div className="mb-1 text-[10px] font-semibold text-slate-500">제품</div>
                             <select className={inp} value={item.productType}
-                              onChange={e => {
-                                const pt = e.target.value;
-                                updateItem(item.id, {
-                                  productType: pt,
-                                  colorType: pt.startsWith("레이즈") ? "white" : item.colorType,
-                                  calcResult: null,
-                                });
-                              }}>
+                                 onChange={e => {
+                                  const pt = e.target.value;
+                                  updateItem(item.id, {
+                                    productType: pt,
+                                    colorType: (pt.startsWith("레이즈") || pt === "롤리팝레이즈-별도") ? "white" : item.colorType,
+                                    calcResult: null,
+                                  });
+                                }}>
                               {PRODUCT_TYPES.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
                             </select>
                           </div>
@@ -851,7 +851,7 @@ async function loadSignageList() {
                           <div>
                             <div className="mb-1 text-[10px] font-semibold text-slate-500">색상</div>
                             <select className={inp} value={item.colorType}
-                              disabled={isRaiseItem}
+                              disabled={isRaiseItem || item.productType === "롤리팝레이즈-별도"}
                               onChange={e => updateItem(item.id, { colorType: e.target.value as "dark"|"white", calcResult: null })}>
                               <option value="dark">다크</option>
                               <option value="white">화이트</option>
