@@ -150,6 +150,27 @@ function renderBody(body: string): string {
 }
 
 
+// ─── 섹션 분리 (접기/펼치기용) ──────────────────────────────────────────────
+interface BodySection { key: string; heading: string|null; headingHtml: string|null; bodyHtml: string; }
+function splitSections(body: string): BodySection[] {
+  const lines = body.split("\n");
+  const sections: BodySection[] = [];
+  let cur: { heading:string|null; headingHtml:string|null; lines:string[] } = {heading:null,headingHtml:null,lines:[]};
+  const flush=()=>{
+    if(cur.lines.length>0||cur.heading!==null){
+      const partial=cur.lines.join("\n");
+      sections.push({key:cur.heading??`__top__${sections.length}`,heading:cur.heading,headingHtml:cur.headingHtml,bodyHtml:renderBody(partial)});
+    }
+  };
+  for(const line of lines){
+    const h2=line.match(/^## (.+)$/);
+    if(h2){ flush(); cur={heading:h2[1],headingHtml:`<strong>${h2[1]}</strong>`,lines:[]}; continue; }
+    cur.lines.push(line);
+  }
+  flush();
+  return sections;
+}
+
 // ─── 드래그 순서 변경 훅 ─────────────────────────────────────────────────────
 // ─── 직원 선택 그리드 (PIN 모달용) ──────────────────────────────────────────
 function EmployeeGrid({emps,onSelect,onCancel}:{
@@ -253,6 +274,28 @@ export default function ManualClient() {
   const [newSubName,  setNewSubName]  = useState("");
   const [newItemName, setNewItemName] = useState("");
 
+  // ── 이름 수정 ──
+  const [editingCatId,  setEditingCatId]  = useState<number|null>(null);
+  const [editingSubId,  setEditingSubId]  = useState<number|null>(null);
+  const [editingItemId, setEditingItemId] = useState<number|null>(null);
+  const [editingName,   setEditingName]   = useState("");
+
+  const saveCatName=async(id:number)=>{
+    if(!editingName.trim()) return;
+    await supabase.from("manual_categories").update({name:editingName.trim()}).eq("id",id);
+    setEditingCatId(null); setEditingName(""); await loadAll();
+  };
+  const saveSubName=async(id:number)=>{
+    if(!editingName.trim()) return;
+    await supabase.from("manual_subcategories").update({name:editingName.trim()}).eq("id",id);
+    setEditingSubId(null); setEditingName(""); await loadAll();
+  };
+  const saveItemName=async(id:number)=>{
+    if(!editingName.trim()) return;
+    await supabase.from("manual_menu_items").update({name:editingName.trim()}).eq("id",id);
+    setEditingItemId(null); setEditingName(""); await loadAll();
+  };
+
   // ── search ──
   const [searchRaw,     setSearchRaw]     = useState("");
   const [searchQuery,   setSearchQuery]   = useState("");  // debounced
@@ -277,6 +320,13 @@ export default function ManualClient() {
 
   // ── mobile sidebar ──
   const [showSidebar, setShowSidebar] = useState(false);
+
+  // ── 섹션 접기/펼치기 ──
+  const [collapsedSections, setCollapsedSections] = useState<Record<string,boolean>>({});
+  const toggleSection=(key:string)=>setCollapsedSections(prev=>({...prev,[key]:!prev[key]}));
+
+  // ── 에디터 미리보기 ──
+  const [showPreview, setShowPreview] = useState(false);
 
   // ─── load all ──────────────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
@@ -531,15 +581,26 @@ export default function ManualClient() {
           <div key={cat.id} {...(isAdmin&&showManage?catDrag(catIdx):{})}>
             <div onClick={()=>{ setSelectedCat(isSel?null:cat.id); setSelectedSub(null); setSelectedItem(null); }}
               style={{padding:"10px 16px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",background:isSel?blueLt:"transparent",borderLeft:`3px solid ${isSel?blue:"transparent"}`,userSelect:"none"}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
                 {isAdmin&&showManage&&<span style={{color:"#ccc",fontSize:13,cursor:"grab"}}>⠿</span>}
-                <span style={{fontWeight:isSel?700:500,color:isSel?blue:"#333",fontSize:13}}>{cat.name}</span>
+                {isAdmin&&showManage&&editingCatId===cat.id?(
+                  <input autoFocus value={editingName} onChange={e=>setEditingName(e.target.value)}
+                    onClick={e=>e.stopPropagation()}
+                    onKeyDown={e=>{ e.stopPropagation(); if(e.key==="Enter") saveCatName(cat.id); if(e.key==="Escape"){setEditingCatId(null);setEditingName("");} }}
+                    style={{fontSize:12,padding:"2px 6px",border:"1px solid #6b8ef5",borderRadius:4,width:"100%"}}/>
+                ):(
+                  <span style={{fontWeight:isSel?700:500,color:isSel?blue:"#333",fontSize:13}}>{cat.name}</span>
+                )}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
-                {/* 전체 항목 수 */}
                 <span style={{fontSize:11,background:"#e8edf8",color:blue,borderRadius:10,padding:"1px 7px",fontWeight:600}}>{total}</span>
-                {/* 미작성 뱃지 */}
                 {missing>0&&<span style={{fontSize:11,background:"#fee2e2",color:"#dc2626",borderRadius:10,padding:"1px 6px",fontWeight:600}}>미{missing}</span>}
+                {isAdmin&&showManage&&editingCatId!==cat.id&&(
+                  <button onClick={e=>{e.stopPropagation();setEditingCatId(cat.id);setEditingName(cat.name);}} style={{background:"none",border:"none",color:"#bbb",cursor:"pointer",fontSize:11,padding:0}}>✏</button>
+                )}
+                {isAdmin&&showManage&&editingCatId===cat.id&&(
+                  <button onClick={e=>{e.stopPropagation();saveCatName(cat.id);}} style={{background:"none",border:"none",color:blue,cursor:"pointer",fontSize:11,padding:0,fontWeight:700}}>저장</button>
+                )}
                 {isAdmin&&showManage&&<button onClick={e=>{e.stopPropagation();delCategory(cat.id);}} style={{background:"none",border:"none",color:"#ccc",cursor:"pointer",fontSize:14,padding:0}}>×</button>}
               </div>
             </div>
@@ -559,13 +620,26 @@ export default function ManualClient() {
                     <div key={sub.id} {...(isAdmin&&showManage?subDrag(subIdx):{})}>
                       <div onClick={()=>{ setSelectedSub(isSubSel?null:sub.id); setSelectedItem(null); }}
                         style={{padding:"8px 14px 8px 28px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",background:isSubSel?blueMd:"transparent",borderLeft:`3px solid ${isSubSel?"#6b8ef5":"transparent"}`}}>
-                        <div style={{display:"flex",alignItems:"center",gap:5}}>
+                        <div style={{display:"flex",alignItems:"center",gap:5,flex:1,minWidth:0}}>
                           {isAdmin&&showManage&&<span style={{color:"#ccc",fontSize:12,cursor:"grab"}}>⠿</span>}
-                          <span style={{fontSize:12,color:isSubSel?blue:"#555",fontWeight:isSubSel?600:400}}>└ {sub.name}</span>
+                          {isAdmin&&showManage&&editingSubId===sub.id?(
+                            <input autoFocus value={editingName} onChange={e=>setEditingName(e.target.value)}
+                              onClick={e=>e.stopPropagation()}
+                              onKeyDown={e=>{ e.stopPropagation(); if(e.key==="Enter") saveSubName(sub.id); if(e.key==="Escape"){setEditingSubId(null);setEditingName("");} }}
+                              style={{fontSize:11,padding:"2px 6px",border:"1px solid #6b8ef5",borderRadius:4,width:"100%"}}/>
+                          ):(
+                            <span style={{fontSize:12,color:isSubSel?blue:"#555",fontWeight:isSubSel?600:400}}>└ {sub.name}</span>
+                          )}
                         </div>
                         <div style={{display:"flex",gap:4,alignItems:"center"}}>
                           <span style={{fontSize:10,background:blueMd,color:"#4a6fd4",borderRadius:8,padding:"1px 6px"}}>{tSub}</span>
                           {mSub>0&&<span style={{fontSize:10,background:"#fee2e2",color:"#dc2626",borderRadius:8,padding:"1px 5px",fontWeight:600}}>미{mSub}</span>}
+                          {isAdmin&&showManage&&editingSubId!==sub.id&&(
+                            <button onClick={e=>{e.stopPropagation();setEditingSubId(sub.id);setEditingName(sub.name);}} style={{background:"none",border:"none",color:"#bbb",cursor:"pointer",fontSize:11,padding:0}}>✏</button>
+                          )}
+                          {isAdmin&&showManage&&editingSubId===sub.id&&(
+                            <button onClick={e=>{e.stopPropagation();saveSubName(sub.id);}} style={{background:"none",border:"none",color:blue,cursor:"pointer",fontSize:11,padding:0,fontWeight:700}}>저장</button>
+                          )}
                           {isAdmin&&showManage&&<button onClick={e=>{e.stopPropagation();delSub(sub.id);}} style={{background:"none",border:"none",color:"#ccc",cursor:"pointer",fontSize:13,padding:0}}>×</button>}
                         </div>
                       </div>
@@ -836,15 +910,30 @@ export default function ManualClient() {
                 {filteredItems.map((item,itemIdx)=>(
                   <div key={item.id} {...(isAdmin&&showManage?itemDrag(itemIdx):{})} style={{display:"flex",alignItems:"center"}}>
                     {isAdmin&&showManage&&<span style={{color:"#ccc",fontSize:12,cursor:"grab",marginRight:2}}>⠿</span>}
-                    <button onClick={()=>selectItem(item.id)}
-                      style={{padding:"4px 12px",borderRadius:20,border:selectedItem===item.id?`2px solid ${blue}`:"1px solid #ddd",background:selectedItem===item.id?blue:"#f8f9fb",color:selectedItem===item.id?white:"#444",cursor:"pointer",fontSize:13,fontWeight:selectedItem===item.id?600:400,display:"flex",alignItems:"center",gap:5,position:"relative"}}>
-                    <span style={{fontSize:11,marginRight:1,color:selectedItem===item.id?"rgba(255,255,255,0.8)":"#333"}}>{itemIdx+1}.</span>{item.name}
-                      {contents[item.id]
-                        ?<span style={{fontSize:10,opacity:0.7}}>✓</span>
-                        :<span style={{fontSize:10,color:selectedItem===item.id?"rgba(255,255,255,0.7)":"#f87171",fontWeight:700}}>●</span>
-                      }
-                      {isAdmin&&showManage&&<span onClick={e=>{e.stopPropagation();delItem(item.id);}} style={{fontSize:12,color:selectedItem===item.id?"rgba(255,255,255,0.6)":"#ccc",marginLeft:1,cursor:"pointer"}}>×</span>}
-                    </button>
+                    {isAdmin&&showManage&&editingItemId===item.id?(
+                      <div style={{display:"flex",alignItems:"center",gap:4}}>
+                        <input autoFocus value={editingName} onChange={e=>setEditingName(e.target.value)}
+                          onKeyDown={e=>{ if(e.key==="Enter") saveItemName(item.id); if(e.key==="Escape"){setEditingItemId(null);setEditingName("");} }}
+                          style={{fontSize:12,padding:"3px 8px",border:`1px solid ${blue}`,borderRadius:16,width:100}}/>
+                        <button onClick={()=>saveItemName(item.id)} style={{padding:"3px 8px",background:blue,color:white,border:"none",borderRadius:16,cursor:"pointer",fontSize:11}}>저장</button>
+                        <button onClick={()=>{setEditingItemId(null);setEditingName("");}} style={{padding:"3px 6px",background:"#f0f0f0",border:"none",borderRadius:16,cursor:"pointer",fontSize:11}}>취소</button>
+                      </div>
+                    ):(
+                      <button onClick={()=>selectItem(item.id)}
+                        style={{padding:"4px 12px",borderRadius:20,border:selectedItem===item.id?`2px solid ${blue}`:"1px solid #ddd",background:selectedItem===item.id?blue:"#f8f9fb",color:selectedItem===item.id?white:"#444",cursor:"pointer",fontSize:13,fontWeight:selectedItem===item.id?600:400,display:"flex",alignItems:"center",gap:5,position:"relative"}}>
+                        <span style={{fontSize:11,marginRight:1,color:selectedItem===item.id?"rgba(255,255,255,0.8)":"#333"}}>{itemIdx+1}.</span>{item.name}
+                        {contents[item.id]
+                          ?<span style={{fontSize:10,opacity:0.7}}>✓</span>
+                          :<span style={{fontSize:10,color:selectedItem===item.id?"rgba(255,255,255,0.7)":"#f87171",fontWeight:700}}>●</span>
+                        }
+                        {isAdmin&&showManage&&(
+                          <>
+                            <span onClick={e=>{e.stopPropagation();setEditingItemId(item.id);setEditingName(item.name);}} style={{fontSize:11,color:selectedItem===item.id?"rgba(255,255,255,0.6)":"#bbb",marginLeft:1,cursor:"pointer"}}>✏</span>
+                            <span onClick={e=>{e.stopPropagation();delItem(item.id);}} style={{fontSize:12,color:selectedItem===item.id?"rgba(255,255,255,0.6)":"#ccc",marginLeft:1,cursor:"pointer"}}>×</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 ))}
                 {isAdmin&&showManage&&(
@@ -895,8 +984,8 @@ export default function ManualClient() {
                 </div>
               )}
 
-              {/* ── 편집 모드 ── */}
-              {editing?(
+             {/* ── 편집 모드 ── */}
+             {editing?(
                 <div>
                   <div style={{marginBottom:10}}>
                     <label style={{fontSize:12,color:"#666",display:"block",marginBottom:4}}>제목</label>
@@ -904,10 +993,17 @@ export default function ManualClient() {
                       style={{...inp,fontSize:15,fontWeight:600,padding:"8px 12px"}}/>
                   </div>
                   <div style={{marginBottom:10}}>
-                    <label style={{fontSize:12,color:"#666",display:"block",marginBottom:4}}>내용</label>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                      <label style={{fontSize:12,color:"#666"}}>내용</label>
+                      <button type="button" onClick={()=>setShowPreview(v=>!v)}
+                        style={{padding:"2px 10px",fontSize:11,border:`1px solid ${border}`,borderRadius:5,background:showPreview?blue:white,color:showPreview?white:"#555",cursor:"pointer"}}>
+                        {showPreview?"편집만":"미리보기"}
+                      </button>
+                    </div>
                     <RteToolbar onFormat={handleFormat}/>
+                    <div style={{display:"flex",gap:10}}>
                     <textarea ref={textareaRef} value={editBody} onChange={e=>setEditBody(e.target.value)} rows={14}
-                      style={{...inp,padding:"10px 12px",fontSize:13,resize:"vertical",lineHeight:1.75,fontFamily:"inherit"}}
+                      style={{...inp,padding:"10px 12px",fontSize:13,resize:"vertical",lineHeight:1.75,fontFamily:"inherit",flex:1}}
                       onKeyDown={e=>{
                         if(e.key!=="Enter") return;
                         const ta=e.currentTarget;
@@ -952,6 +1048,11 @@ export default function ManualClient() {
                         }
                       }}
                     />
+                     {showPreview&&(
+                      <div style={{flex:1,border:`1px solid ${border}`,borderRadius:6,padding:"10px 12px",fontSize:13,lineHeight:1.75,overflowY:"auto",background:"#fafbff",minHeight:200}}
+                        dangerouslySetInnerHTML={{__html:renderBody(editBody)}}/>
+                    )}
+                    </div>
                     <div style={{fontSize:11,color:"#bbb",marginTop:4}}>**굵게** / _기울임_ / ## 제목 / - 목록 / `코드` / --- 구분선</div>
                   </div>
                   <div style={{marginBottom:14}}>
@@ -986,9 +1087,26 @@ export default function ManualClient() {
                   <h2 style={{fontSize:21,fontWeight:700,color:"#1a1a2e",marginBottom:14,borderBottom:`2px solid ${blueLt}`,paddingBottom:12}}>
                     {currentContent.title||menuItems.find(m=>m.id===selectedItem)?.name}
                   </h2>
-                  {/* 마크다운 렌더링 */}
-                  <div style={{fontSize:14,lineHeight:1.8,color:"#444",marginBottom:currentContent.image_urls?.length?22:0}}
-                    dangerouslySetInnerHTML={{__html:renderBody(currentContent.body)}}/>
+                {/* 마크다운 렌더링 — 섹션별 접기/펼치기 */}
+                <div style={{fontSize:14,lineHeight:1.8,color:"#444",marginBottom:currentContent.image_urls?.length?22:0}}>
+                    {splitSections(currentContent.body).map((sec)=>{
+                      const isCollapsed=!!collapsedSections[sec.key];
+                      return(
+                        <div key={sec.key}>
+                          {sec.heading&&(
+                            <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none",margin:"20px 0 8px"}}
+                              onClick={()=>toggleSection(sec.key)}>
+                              <h2 style={{fontSize:18,fontWeight:700,color:"#1a1a2e",margin:0,flex:1}}>{sec.heading}</h2>
+                              <span style={{fontSize:13,color:"#aaa",flexShrink:0}}>{isCollapsed?"▶":"▼"}</span>
+                            </div>
+                          )}
+                          {!isCollapsed&&(
+                            <div dangerouslySetInnerHTML={{__html:sec.bodyHtml}}/>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                   {/* 이미지 */}
                   {currentContent.image_urls?.length>0&&(
                     <div>
