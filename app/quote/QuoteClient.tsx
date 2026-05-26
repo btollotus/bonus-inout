@@ -1090,7 +1090,7 @@ async function loadSignageList() {
                       if (inputMode === "auto") {
                         const calcItems = items.filter(x =>
                           x.itemCategory === "preset"
-                            ? (!!x.presetName.trim() && !!x.manualV)
+                          ? (!!x.presetName.trim() && (!!x.manualV || !!x.presetTotal))
                             : !!x.calcResult
                         );
                         if (calcItems.length === 0) return;
