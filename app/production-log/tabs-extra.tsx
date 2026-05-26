@@ -153,10 +153,12 @@ export function Ccp1bTab({ role, userId, showToast }: {
       supabase.from("ccp_wo_events")
         .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
         .order("measured_at", { ascending: true }),
-      supabase.from("work_orders")
+        supabase.from("work_orders")
         .select("work_order_no, client_name, sub_name, product_name, ccp_slot_id")
         .not("ccp_slot_id", "is", null)
-        .eq("status", "완료"),
+        .in("status", ["생산중", "완료"])
+        .gte("production_done_at", `${filterDate}T00:00:00+09:00`)
+        .lte("production_done_at", `${filterDate}T23:59:59+09:00`),
     ]);
 
     setSlotEvents((slotRes.data ?? []) as any[]);
