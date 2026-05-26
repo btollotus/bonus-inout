@@ -145,7 +145,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
   const loadData = useCallback(async () => {
     setLoading(true);
 
-    const [slotRes, woRes, woSlotRes] = await Promise.all([
+    const [slotRes, woRes] = await Promise.all([
       supabase.from("ccp_slot_events")
       .select("id, slot_id, event_date, event_type, measured_at, work_order_no, action_note, temperature, is_ok, material_type")
         .eq("event_date", filterDate)
@@ -153,10 +153,6 @@ export function Ccp1bTab({ role, userId, showToast }: {
       supabase.from("ccp_wo_events")
         .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
         .order("measured_at", { ascending: true }),
-        supabase.from("work_orders")
-        .select("work_order_no, client_name, sub_name, product_name, ccp_slot_id")
-        .not("ccp_slot_id", "is", null)
-        .in("status", ["생산중", "완료"]),
     ]);
 
     setSlotEvents((slotRes.data ?? []) as any[]);
@@ -167,8 +163,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
 // work_order_no → 표시 레이블 맵 생성
 const allWoNos = [...new Set([
   ...(slotRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
-  ...(woRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
-  ...(woSlotRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
+  ...filtered.map((e: any) => e.work_order_no).filter(Boolean),
 ])] as string[];
 
 
@@ -193,18 +188,14 @@ if (allWoNos.length > 0) {
   setWoLabelMap(map);
 }  // ← if (allWoNos.length > 0) 닫는 괄호
 
-// slotWoMap은 if 블록 밖에서 항상 실행
+// ccp_wo_events(당일 온도기록)에 slot_id + work_order_no가 이미 함께 기록됨
+// work_orders.ccp_slot_id는 변경될 수 있어 신뢰 불가 → 사용하지 않음
 const slotMap: Record<string, string[]> = {};
-// woEvents(당일 온도기록)에서 work_order_no 추출 → 해당 날짜에 실제 기록된 것만
-const woNosFromEvents = [...new Set([
-  ...(slotRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
-  ...filtered.map((e: any) => e.work_order_no).filter(Boolean),
-])] as string[];
-for (const wo of woSlotRes.data ?? []) {
-  if (!wo.ccp_slot_id) continue;
-  if (!woNosFromEvents.includes(wo.work_order_no)) continue; // 당일 기록 없는 것 제외
-  if (!slotMap[wo.ccp_slot_id]) slotMap[wo.ccp_slot_id] = [];
-  slotMap[wo.ccp_slot_id].push(wo.work_order_no);
+for (const e of filtered) {
+  if (!e.slot_id || !e.work_order_no) continue;
+  if (!slotMap[e.slot_id]) slotMap[e.slot_id] = [];
+  if (!slotMap[e.slot_id].includes(e.work_order_no))
+    slotMap[e.slot_id].push(e.work_order_no);
 }
 setSlotWoMap(slotMap);
     setLoading(false);
