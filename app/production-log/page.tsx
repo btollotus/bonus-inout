@@ -1075,7 +1075,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
   const loadData = useCallback(async () => {
     setLoading(true);
     const [stockRes, receiptRes, usageRes, cumulativeUsageRes, cumulativeDisposalRes] = await Promise.all([
-      supabase.from("materials").select("id,name,category,unit,safety_stock").order("category").order("name"),
+      supabase.from("materials").select("id,name,category,unit,safety_stock").eq("is_active", true).order("category").order("name"),
       supabase.from("material_receipts")
         .select("id,received_date,material_id,quantity,unit,expiry_date,supplier,note,material:materials(name)")
         .eq("received_date", filterDate)
