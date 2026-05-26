@@ -1443,7 +1443,7 @@ if (copyPartnerId) {
       try {
         const { data: wo } = await supabase
           .from("work_orders")
-          .select("id,sub_name,logo_spec,thickness,packaging_type,mold_per_sheet,mold_cols,mold_rows,note,reference_note,work_order_items(id,sub_items,images,barcode_no,unit_weight)")
+          .select("id,sub_name,logo_spec,thickness,packaging_type,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,work_order_items(id,sub_items,images,barcode_no,unit_weight)")
           .eq("linked_order_id", r.rawId)
           .limit(1)
           .maybeSingle();
@@ -1565,7 +1565,7 @@ if (editPartnerId) {
       setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("");
       setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoImagePreviewUrls([]);
       setEWoExistingImages([]); setEWoExistingSignedLoading(false); setEWoExistingSignedUrls([]);
-      const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,mold_per_sheet,mold_cols,mold_rows,note,reference_note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no)").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
+      const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no)").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
       // 품목별 이미지 초기화
       setEItemImageFiles({}); setEItemImagePreviewUrls({}); setEItemExistingImageUrls({}); setEWoItemIds([]);
       if (wo) {
