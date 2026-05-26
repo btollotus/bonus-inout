@@ -1303,7 +1303,7 @@ async function loadSignageList() {
                           if (!q) return "—";
                           // quote_items가 있는 다품목 견적: quote_items 합산
                           if (r.quote_items && r.quote_items.length > 0) {
-                            const itemsSupply = r.quote_items.reduce((s, qi) => s + (qi.total ?? 0), 0);
+                            const itemsSupply = r.quote_items.reduce((s, qi) => s + (qi.final_price ?? 0) * (qi.quantity ?? 0), 0);
                             const totalInclVat = Math.round(itemsSupply * 1.1) + (q.delivery_cost ?? 0) + (q.icebox_cost ?? 0);
                             return fmt(totalInclVat) + "원";
                           }
