@@ -1119,18 +1119,18 @@ async function loadSignageList() {
                         }).select("id").single();
                         if (reqErr) { setMsg("⚠️ 저장 오류: " + reqErr.message); }
                         else if (req?.id) {
-                          // quotes 1건 (첫 품목 기준)
-                          await supabase.from("quotes").insert({
-                            request_id: req.id,
-                            unit_price: firstCr.unitPrice ?? 0,
-                            mold_cost: firstCr.moldCost ?? 0,
-                            plate_cost: firstCr.plateCost ?? 0,
-                            total: firstCr.totalActual ?? 0,
-                            final_price: firstV,
-                            final_price_stock: firstCr.V_stock ?? null,
-                            icebox_cost: useIcebox ? iceboxPrice : 0,
-                            delivery_cost: deliveryPrice,
-                          });
+                         // quotes 1건 (첫 품목 기준)
+                         await supabase.from("quotes").insert({
+                          request_id: req.id,
+                          unit_price: firstCr?.unitPrice ?? 0,
+                          mold_cost: firstCr?.moldCost ?? 0,
+                          plate_cost: firstCr?.plateCost ?? 0,
+                          total: firstCr?.totalActual ?? 0,
+                          final_price: firstV,
+                          final_price_stock: firstCr?.V_stock ?? null,
+                          icebox_cost: useIcebox ? iceboxPrice : 0,
+                          delivery_cost: deliveryPrice,
+                        });
                           // quote_items — 전체 품목 저장
                           const itemRows = calcItems.map((fi, idx) => {
                             const isPreset = fi.itemCategory === "preset";
