@@ -156,9 +156,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
         supabase.from("work_orders")
         .select("work_order_no, client_name, sub_name, product_name, ccp_slot_id")
         .not("ccp_slot_id", "is", null)
-        .in("status", ["생산중", "완료"])
-        .gte("production_done_at", `${filterDate}T00:00:00+09:00`)
-        .lte("production_done_at", `${filterDate}T23:59:59+09:00`),
+        .in("status", ["생산중", "완료"]),
     ]);
 
     setSlotEvents((slotRes.data ?? []) as any[]);
@@ -197,8 +195,14 @@ if (allWoNos.length > 0) {
 
 // slotWoMap은 if 블록 밖에서 항상 실행
 const slotMap: Record<string, string[]> = {};
+// woEvents(당일 온도기록)에서 work_order_no 추출 → 해당 날짜에 실제 기록된 것만
+const woNosFromEvents = [...new Set([
+  ...(slotRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
+  ...(woRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
+])] as string[];
 for (const wo of woSlotRes.data ?? []) {
   if (!wo.ccp_slot_id) continue;
+  if (!woNosFromEvents.includes(wo.work_order_no)) continue; // 당일 기록 없는 것 제외
   if (!slotMap[wo.ccp_slot_id]) slotMap[wo.ccp_slot_id] = [];
   slotMap[wo.ccp_slot_id].push(wo.work_order_no);
 }
