@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/browser";
 import { Ccp1bTab, OtherHeatingTab, CompressorTab, PetLedgerTab } from "./tabs-extra";
 import { Ccp1pTab } from "./Ccp1pTab";
 import { ExpiryMgmtTab, WarmerCleaningTab, PestTab, ForeignMatterTab, HygieneCheckTab, TempHumidityTab, StorageTempTab } from "./tabs-hygiene";
+import { NewProductionLogTab } from "./NewProductionLogTab";
 import { todayKST } from "@/lib/utils/date";
 
 const supabase = createClient();
@@ -193,7 +194,7 @@ export default function ProductionLogPage() {
 <div className="flex-1 min-w-0">
 {/* 탭 컨텐츠 */}
 {activeTab === "production" && (
-  <WorkLogTab role={role} userId={userId} showToast={showToast} />
+  <NewProductionLogTab role={role} userId={userId} showToast={showToast} />
 )}
         {activeTab === "material" && (
           <MaterialLedgerTab role={role} userId={userId} showToast={showToast} />
@@ -1555,14 +1556,7 @@ function WorkLogTab({ role, userId, showToast }: {
               onChange={(e) => setFilterDate(e.target.value)} />
           </div>
           <button className={btn} onClick={loadLogs}>🔄 조회</button>
-          {isAdminOrSubadmin && (
-            <button
-              className={showForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
-              onClick={() => setShowForm((v) => !v)}
-            >
-              {showForm ? "✕ 닫기" : "✚ 근무일지 등록"}
-            </button>
-          )}
+          
         <div className="flex items-center gap-1.5">
             <input type="date" className="rounded-lg border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
               value={printFrom} onChange={(e) => setPrintFrom(e.target.value)} />
@@ -1574,61 +1568,7 @@ function WorkLogTab({ role, userId, showToast }: {
         </div>
       </div>
 
-      {/* 등록 폼 */}
-      {showForm && isAdminOrSubadmin && (
-        <div className={`${card} p-4`}>
-          <div className="mb-3 font-semibold text-sm text-blue-700">✚ 근무일지 신규 등록</div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div>
-              <div className="mb-1 text-xs text-slate-500">날짜 *</div>
-              <input type="date" className={inp} value={fDate} onChange={(e) => setFDate(e.target.value)} />
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">담당자 *</div>
-              <select className={inp} value={fWorkerName} onChange={(e) => setFWorkerName(e.target.value)}>
-                <option value="">— 담당자 선택 —</option>
-                {employees.map((e) => e.name ? (
-                  <option key={e.id} value={e.name}>{e.name}</option>
-                ) : null)}
-              </select>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">출근</div>
-              <input type="time" className={inp} value={fClockIn} onChange={(e) => setFClockIn(e.target.value)} />
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">퇴근</div>
-              <input type="time" className={inp} value={fClockOut} onChange={(e) => setFClockOut(e.target.value)} />
-            </div>
-            <div className="md:col-span-2">
-              <div className="mb-1 text-xs text-slate-500">지시사항</div>
-              <input className={inp} value={fInstruction} onChange={(e) => setFInstruction(e.target.value)}
-                placeholder="당일 지시사항" />
-            </div>
-            <div className="md:col-span-2">
-              <div className="mb-1 text-xs text-slate-500">기타작업기록</div>
-              <input className={inp} value={fExtraWork} onChange={(e) => setFExtraWork(e.target.value)}
-                placeholder="청소, 재고정리 등" />
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">비고</div>
-              <input className={inp} value={fNote} onChange={(e) => setFNote(e.target.value)} />
-            </div>
-          </div>
-          <div className="mt-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-600">
-            💡 생산목록은 해당 날짜의 생산일지에서 자동으로 불러옵니다.
-          </div>
-          <div className="mt-4 flex gap-2">
-            <button
-              className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
-              disabled={saving} onClick={saveLog}
-            >
-              {saving ? "저장 중..." : "💾 등록"}
-            </button>
-            <button className={btn} onClick={() => setShowForm(false)}>취소</button>
-          </div>
-        </div>
-      )}
+     
 
       {/* 목록 */}
       <div className={`${card} p-4`}>
@@ -1694,8 +1634,7 @@ function WorkLogTab({ role, userId, showToast }: {
         )}
    </div>
 
-{/* 색소/구아검/분사/코팅 배합 섹션 */}
-<BlendSection userId={userId} showToast={showToast} />
+
 
 {/* 인쇄 전용 숨김 영역 */}
 <div id="work-log-print-inner" style={{ display: "none" }}>

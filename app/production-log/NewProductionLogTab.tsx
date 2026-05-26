@@ -1,0 +1,453 @@
+"use client";
+
+import React, { useCallback, useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/browser";
+import { todayKST } from "@/lib/utils/date";
+
+const supabase = createClient();
+
+const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
+const btn  = "rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50 active:bg-slate-100";
+const btnSm = "rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50";
+
+type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
+
+// ─────────────────────── Types ───────────────────────
+type WorkOrder = {
+  id: string;
+  work_order_no: string;
+  client_name: string;
+  product_name: string;
+  assignee_production: string | null;
+  assignee_input: string | null;
+  skip_production_check: boolean;
+  production_done_at: string | null;
+  input_done_at: string | null;
+  status_input: boolean;
+};
+
+type BlendLog = {
+  id: string;
+  happened_at: string;
+  log_date: string;
+  employee_name: string;
+  recipe_name: string;
+  multiplier: number;
+  note: string | null;
+  items: { material_name: string; quantity_g: number }[];
+};
+
+// ─────────────────────── 날짜 유틸 ───────────────────────
+function formatDateLabel(dateStr: string) {
+  const d = new Date(dateStr + "T00:00:00+09:00");
+  const days = ["일","월","화","수","목","금","토"];
+  return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+}
+
+function toKstTime(utcStr: string) {
+  return new Date(utcStr).toLocaleTimeString("ko-KR", {
+    timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+}
+
+// ─────────────────────── Main Tab ───────────────────────
+export function NewProductionLogTab({ role, userId, showToast }: {
+  role: UserRole;
+  userId: string | null;
+  showToast: (msg: string, type?: "success" | "error") => void;
+}) {
+  const [selectedDate, setSelectedDate] = useState(todayKST());
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [blendLogs, setBlendLogs] = useState<BlendLog[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // 기간별 인쇄
+  const [rangePanelOpen, setRangePanelOpen] = useState(false);
+  const [rangeFrom, setRangeFrom] = useState(todayKST());
+  const [rangeTo, setRangeTo]   = useState(todayKST());
+  const [rangeLoading, setRangeLoading] = useState(false);
+  const [rangeData, setRangeData] = useState<{
+    date: string;
+    workOrders: WorkOrder[];
+    blendLogs: BlendLog[];
+  }[]>([]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [woRes, blendRes] = await Promise.all([
+      supabase
+        .from("work_orders")
+        .select("id,work_order_no,client_name,product_name,assignee_production,assignee_input,skip_production_check,production_done_at,input_done_at,status_input")
+        .gte("production_done_at", `${selectedDate}T00:00:00+09:00`)
+        .lt("production_done_at",  `${selectedDate}T23:59:59+09:00`)
+        .eq("status_production", true)
+        .or("status_input.eq.true,skip_production_check.eq.true")
+        .order("production_done_at", { ascending: true }),
+      supabase
+        .from("blend_logs")
+        .select(`id,happened_at,log_date,employee_name,recipe_name,multiplier,note,
+          items:blend_log_items(material_name,quantity_g)`)
+        .eq("log_date", selectedDate)
+        .order("happened_at", { ascending: true }),
+    ]);
+    setWorkOrders((woRes.data ?? []) as WorkOrder[]);
+    setBlendLogs((blendRes.data ?? []) as any);
+    setLoading(false);
+  }, [selectedDate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // 작업자별 그룹화
+  const woByWorker = workOrders.reduce<Record<string, WorkOrder[]>>((acc, wo) => {
+    const name = wo.assignee_production ?? "미지정";
+    if (!acc[name]) acc[name] = [];
+    acc[name].push(wo);
+    return acc;
+  }, {});
+
+  // 기간 조회
+  async function loadRange() {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return;
+    setRangeLoading(true);
+    const dates: string[] = [];
+    const cur = new Date(rangeFrom + "T00:00:00+09:00");
+    const end = new Date(rangeTo   + "T00:00:00+09:00");
+    while (cur <= end) {
+      dates.push(new Date(cur.getTime() + 9*60*60*1000).toISOString().slice(0,10));
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    const results = await Promise.all(dates.map(async (date) => {
+      const [woRes, blendRes] = await Promise.all([
+        supabase
+          .from("work_orders")
+          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_input,skip_production_check,production_done_at,input_done_at,status_input")
+          .gte("production_done_at", `${date}T00:00:00+09:00`)
+          .lt("production_done_at",  `${date}T23:59:59+09:00`)
+          .eq("status_production", true)
+          .or("status_input.eq.true,skip_production_check.eq.true")
+          .order("production_done_at", { ascending: true }),
+        supabase
+          .from("blend_logs")
+          .select(`id,happened_at,log_date,employee_name,recipe_name,multiplier,note,
+            items:blend_log_items(material_name,quantity_g)`)
+          .eq("log_date", date)
+          .order("happened_at", { ascending: true }),
+      ]);
+      return {
+        date,
+        workOrders: (woRes.data ?? []) as WorkOrder[],
+        blendLogs: (blendRes.data ?? []) as any,
+      };
+    }));
+    setRangeData(results);
+    setRangeLoading(false);
+  }
+
+  // 인쇄 공통 함수
+  function buildPrintHtml(items: { date: string; workOrders: WorkOrder[]; blendLogs: BlendLog[] }[]) {
+    const pages = items.map(({ date, workOrders: wos, blendLogs: bls }, idx) => {
+      const woByWorkerPrint = wos.reduce<Record<string, WorkOrder[]>>((acc, wo) => {
+        const name = wo.assignee_production ?? "미지정";
+        if (!acc[name]) acc[name] = [];
+        acc[name].push(wo);
+        return acc;
+      }, {});
+
+      const woHtml = Object.entries(woByWorkerPrint).map(([worker, orders]) => `
+        <div style="margin-bottom:8px;">
+          <div style="font-size:8pt;font-weight:bold;color:#333;margin-bottom:3px;padding-bottom:2px;border-bottom:0.5px solid #eee;">
+            👤 ${worker}
+          </div>
+          ${orders.map(wo => `
+            <div style="display:flex;align-items:center;gap:8px;font-size:8pt;padding:2px 0;border-bottom:0.5px solid #f5f5f5;">
+              <span style="flex:1;">${wo.client_name} — ${wo.product_name}</span>
+              <span style="font-size:7pt;color:#888;">${wo.production_done_at ? toKstTime(wo.production_done_at) : ""}</span>
+              ${wo.skip_production_check
+                ? `<span style="font-size:7pt;background:#f0fdf4;border:0.5px solid #86efac;color:#166534;padding:1px 5px;border-radius:4px;">생산완료</span>`
+                : `<span style="font-size:7pt;background:#eff6ff;border:0.5px solid #93c5fd;color:#1e40af;padding:1px 5px;border-radius:4px;">금속검출완료</span>`
+              }
+            </div>
+          `).join("")}
+        </div>
+      `).join("");
+
+      const blendHtml = bls.length > 0 ? `
+        <div style="margin-top:10px;">
+          <div style="font-size:8.5pt;font-weight:bold;margin-bottom:5px;color:#333;">🧪 배합 기록</div>
+          ${bls.map(bl => `
+            <div style="margin-bottom:5px;padding:5px 8px;border:0.5px solid #e2e8f0;border-radius:4px;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                <span style="font-size:8pt;font-weight:bold;">${bl.recipe_name}</span>
+                <span style="font-size:7.5pt;background:#eff6ff;border:0.5px solid #93c5fd;color:#1e40af;padding:1px 5px;border-radius:4px;">${bl.multiplier}배합</span>
+                <span style="font-size:7.5pt;color:#666;">${bl.employee_name}</span>
+                <span style="font-size:7pt;color:#aaa;margin-left:auto;">${toKstTime(bl.happened_at)}</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px;">
+                ${(bl.items ?? []).map(i => `
+                  <span style="font-size:7pt;background:#f8fafc;border:0.5px solid #e2e8f0;padding:1px 5px;border-radius:3px;">${i.material_name} ${i.quantity_g}g</span>
+                `).join("")}
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      ` : "";
+
+      const isEmpty = wos.length === 0 && bls.length === 0;
+      const pageBreak = idx < items.length - 1 ? `style="page-break-after:always;"` : "";
+
+      return `
+        <div ${pageBreak}>
+          <div style="font-size:13pt;font-weight:bold;margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid #222;">
+            생산일지 — ${formatDateLabel(date)}
+          </div>
+          ${isEmpty
+            ? `<div style="color:#aaa;font-size:9pt;text-align:center;padding:20px;">해당 날짜 생산기록이 없습니다.</div>`
+            : `
+              ${wos.length > 0 ? `
+                <div style="margin-bottom:8px;">
+                  <div style="font-size:8.5pt;font-weight:bold;margin-bottom:5px;color:#333;">✅ 완료된 작업지시서 (${wos.length}건)</div>
+                  ${woHtml}
+                </div>
+              ` : ""}
+              ${blendHtml}
+            `
+          }
+        </div>
+      `;
+    });
+    return pages.join("");
+  }
+
+  function printDay() {
+    const html = buildPrintHtml([{ date: selectedDate, workOrders, blendLogs }]);
+    openPrint(html, `생산일지_${selectedDate}`);
+  }
+
+  function printRange() {
+    if (rangeData.length === 0) return showToast("먼저 조회하세요.", "error");
+    const html = buildPrintHtml(rangeData);
+    openPrint(html, `생산일지_${rangeFrom}_${rangeTo}`);
+  }
+
+  function openPrint(html: string, title: string) {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <title>${title}</title>
+      <style>
+        @page { size: A4 portrait; margin: 15mm 20mm; }
+        body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 9pt; color: #000; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      </style>
+    </head><body>${html}</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
+  }
+
+  return (
+    <div className="space-y-4">
+
+      {/* 기간별 인쇄 패널 */}
+      <div className={`${card} overflow-hidden`}>
+        <button
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          onClick={() => setRangePanelOpen(v => !v)}
+        >
+          <span>📅 기간별 인쇄</span>
+          <span className="text-slate-400 text-xs">{rangePanelOpen ? "▲ 닫기" : "▼ 열기"}</span>
+        </button>
+        {rangePanelOpen && (
+          <div className="border-t border-slate-100 px-4 py-4 space-y-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <div className="mb-1 text-xs text-slate-500">시작일</div>
+                <input type="date" value={rangeFrom} max={rangeTo}
+                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+                  onChange={e => { setRangeFrom(e.target.value); setRangeData([]); }} />
+              </div>
+              <div className="text-slate-400 pb-1.5">~</div>
+              <div>
+                <div className="mb-1 text-xs text-slate-500">종료일</div>
+                <input type="date" value={rangeTo} max={todayKST()}
+                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+                  onChange={e => { setRangeTo(e.target.value); setRangeData([]); }} />
+              </div>
+              <button
+                className={`rounded-xl px-4 py-1.5 text-sm font-semibold text-white ${rangeLoading ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"}`}
+                disabled={rangeLoading || !rangeFrom || !rangeTo || rangeFrom > rangeTo}
+                onClick={loadRange}
+              >
+                {rangeLoading ? "조회 중..." : "🔍 조회"}
+              </button>
+              {rangeData.length > 0 && !rangeLoading && (
+                <button
+                  className="rounded-xl border border-slate-300 bg-slate-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-slate-800"
+                  onClick={printRange}
+                >
+                  🖨️ 인쇄
+                </button>
+              )}
+            </div>
+            {rangeData.length > 0 && !rangeLoading && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                {rangeData.map(d => (
+                  <span key={d.date} className="mr-3">
+                    <span className="font-semibold">{d.date}</span>
+                    <span className="text-slate-400 ml-1">
+                      작업지시서 {d.workOrders.length}건 · 배합 {d.blendLogs.length}건
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 날짜 선택 바 */}
+      <div className={`${card} p-3 flex flex-wrap items-center gap-3`}>
+        <span className="text-sm font-semibold text-slate-600">조회 날짜</span>
+        <input
+          type="date"
+          className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+          value={selectedDate}
+          max={todayKST()}
+          onChange={e => setSelectedDate(e.target.value)}
+        />
+        <button className={btn} onClick={load}>🔄 새로고침</button>
+        <button className={btnSm} onClick={printDay}>🖨️ 인쇄</button>
+        {selectedDate !== todayKST() && (
+          <>
+            <button
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium hover:bg-slate-100"
+              onClick={() => setSelectedDate(todayKST())}
+            >
+              오늘로 돌아가기
+            </button>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+              과거 기록 조회 중
+            </span>
+          </>
+        )}
+      </div>
+
+      {loading ? (
+        <div className={`${card} p-10 text-center text-sm text-slate-400`}>불러오는 중...</div>
+      ) : (
+        <>
+          {/* 작업지시서 목록 */}
+          <div className={`${card} p-4`}>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="font-semibold text-sm">
+                ✅ 완료된 작업지시서
+                <span className="ml-1 text-xs font-normal text-slate-400">
+                  ({selectedDate} KST)
+                </span>
+              </div>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                {workOrders.length}건
+              </span>
+            </div>
+
+            {workOrders.length === 0 ? (
+              <div className="py-8 text-center text-sm text-slate-400">
+                해당 날짜 완료된 작업지시서가 없습니다.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {Object.entries(woByWorker).map(([worker, orders]) => (
+                  <div key={worker}>
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-500">👤 {worker}</span>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-400">
+                        {orders.length}건
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {orders.map(wo => (
+                        <div key={wo.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-slate-700">{wo.client_name}</span>
+                            <span className="mx-1.5 text-slate-300">—</span>
+                            <span className="text-sm text-slate-600">{wo.product_name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {wo.production_done_at && (
+                              <span className="text-xs text-slate-400 tabular-nums">
+                                {toKstTime(wo.production_done_at)}
+                              </span>
+                            )}
+                            {wo.skip_production_check ? (
+                              <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                                생산완료
+                              </span>
+                            ) : (
+                              <span className="rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                                금속검출완료
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 배합 기록 */}
+          <div className={`${card} p-4`}>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="font-semibold text-sm">
+                🧪 배합 기록
+                <span className="ml-1 text-xs font-normal text-slate-400">
+                  ({selectedDate} KST)
+                </span>
+              </div>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                {blendLogs.length}건
+              </span>
+            </div>
+
+            {blendLogs.length === 0 ? (
+              <div className="py-8 text-center text-sm text-slate-400">
+                해당 날짜 배합 기록이 없습니다.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {blendLogs.map(bl => (
+                  <div key={bl.id} className="rounded-xl border border-slate-200 p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-semibold text-sm">{bl.recipe_name}</span>
+                      <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700">
+                        {bl.multiplier}배합
+                      </span>
+                      <span className="text-xs text-slate-500">{bl.employee_name}</span>
+                      <span className="ml-auto text-xs text-slate-400 tabular-nums">
+                        {toKstTime(bl.happened_at)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(bl.items ?? []).map((item, idx) => (
+                        <span key={idx} className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">
+                          {item.material_name} <span className="font-semibold tabular-nums">{item.quantity_g}g</span>
+                        </span>
+                      ))}
+                    </div>
+                    {bl.note && (
+                      <div className="mt-1.5 text-xs text-slate-400">비고: {bl.note}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
