@@ -1299,10 +1299,19 @@ async function loadSignageList() {
                           {q?.final_price ? fmt(q.final_price)+"원" : "—"}
                         </td>
                         <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-700">
-                        {q?.final_price && r.quantity
-                            ? fmt(Math.round(((q.final_price * r.quantity) + (q.mold_cost ?? 0) + (q.plate_cost ?? 0) + (q.transfer_cost ?? 0) + (q.work_fee ?? 0)) * 1.1) + (q.delivery_cost ?? 0) + (q.icebox_cost ?? 0)) + "원"
-                            : "—"}
-                        </td> 
+                        {(() => {
+                          if (!q) return "—";
+                          // quote_items가 있는 다품목 견적: quote_items 합산
+                          if (r.quote_items && r.quote_items.length > 0) {
+                            const itemsSupply = r.quote_items.reduce((s, qi) => s + (qi.total ?? 0), 0);
+                            const totalInclVat = Math.round(itemsSupply * 1.1) + (q.delivery_cost ?? 0) + (q.icebox_cost ?? 0);
+                            return fmt(totalInclVat) + "원";
+                          }
+                          // 단일 품목: 기존 방식
+                          if (!q.final_price || !r.quantity) return "—";
+                          return fmt(Math.round(((q.final_price * r.quantity) + (q.mold_cost ?? 0) + (q.plate_cost ?? 0) + (q.transfer_cost ?? 0) + (q.work_fee ?? 0)) * 1.1) + (q.delivery_cost ?? 0) + (q.icebox_cost ?? 0)) + "원";
+                        })()}
+                        </td>
                         <td className="px-3 py-2 text-center">
                           <span style={{ padding: "2px 8px", borderRadius: 8, fontSize: 11, fontWeight: "bold",
                             background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
