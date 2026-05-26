@@ -1303,8 +1303,14 @@ async function loadSignageList() {
                           if (!q) return "—";
                           // quote_items가 있는 다품목 견적: quote_items 합산
                           if (r.quote_items && r.quote_items.length > 0) {
-                            const itemsSupply = r.quote_items.reduce((s, qi) =>
-                              s + (qi.final_price ?? 0) * (qi.quantity ?? 0) + (qi.mold_cost ?? 0), 0);
+                            const itemsSupply = r.quote_items.reduce((s, qi) => {
+                              const pt = qi.product_type ?? "";
+                              const isRaise = pt.startsWith("레이즈");
+                              const isRollipopRaize = pt === "롤리팝레이즈-별도";
+                              const plateCost = (qi.plate_cost ?? 0) > 0 && !isRaise && !isRollipopRaize
+                                ? (qi.plate_cost ?? 0) : 0;
+                              return s + (qi.final_price ?? 0) * (qi.quantity ?? 0) + (qi.mold_cost ?? 0) + plateCost;
+                            }, 0);
                             const totalInclVat = Math.round(itemsSupply * 1.1) + (q.delivery_cost ?? 0) + (q.icebox_cost ?? 0);
                             return fmt(totalInclVat) + "원";
                           }
