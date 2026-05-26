@@ -198,7 +198,7 @@ const slotMap: Record<string, string[]> = {};
 // woEvents(당일 온도기록)에서 work_order_no 추출 → 해당 날짜에 실제 기록된 것만
 const woNosFromEvents = [...new Set([
   ...(slotRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
-  ...(woRes.data ?? []).map((e: any) => e.work_order_no).filter(Boolean),
+  ...filtered.map((e: any) => e.work_order_no).filter(Boolean),
 ])] as string[];
 for (const wo of woSlotRes.data ?? []) {
   if (!wo.ccp_slot_id) continue;
