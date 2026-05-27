@@ -1667,7 +1667,16 @@ async function loadSignageList() {
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-right font-semibold tabular-nums text-blue-700">
-                                {q?.total ? fmt(q.total)+"원" : "—"}
+                                {(() => {
+                                  if (!q) return "—";
+                                  if (r.quote_items && r.quote_items.length > 0) {
+                                    const itemsSupply = r.quote_items.reduce((s, qi) => s + (qi.total ?? 0), 0);
+                                    const iceboxSupply = Math.round((q.icebox_cost ?? 0) / 1.1);
+                                    const deliverySupply = Math.round((q.delivery_cost ?? 0) / 1.1);
+                                    return fmt(Math.round((itemsSupply + iceboxSupply + deliverySupply) * 1.1)) + "원";
+                                  }
+                                  return q.total ? fmt(q.total) + "원" : "—";
+                                })()}
                               </td>
                               <td className="px-3 py-2 text-center">
                                 <span style={{ padding: "2px 8px", borderRadius: 8, fontSize: 11, fontWeight: "bold",
