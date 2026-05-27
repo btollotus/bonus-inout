@@ -25,6 +25,7 @@ type WorkOrder = {
   input_done_at: string | null;
   status_input: boolean;
   usages?: { name: string; quantity: number; unit: string }[];
+  items?: { name: string; actual_qty: number; unit_weight: number }[];
 };
 
 type BlendLog = {
@@ -86,7 +87,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     const [woRes, blendRes, usageRes] = await Promise.all([
       supabase
         .from("work_orders")
-        .select("id,work_order_no,client_name,product_name,assignee_production,assignee_input,skip_production_check,production_done_at,input_done_at,status_input")
+        .select("id,work_order_no,client_name,product_name,assignee_production,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight)")
         .gte("production_done_at", `${selectedDate}T00:00:00+09:00`)
         .lt("production_done_at",  `${selectedDate}T23:59:59+09:00`)
         .eq("status_production", true)
@@ -98,7 +99,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
           items:blend_log_items(material_name,quantity_g)`)
         .eq("log_date", selectedDate)
         .order("happened_at", { ascending: true }),
-        supabase
+      supabase
         .from("material_usage_logs")
         .select("quantity, unit, note, material:materials(name)")
         .eq("used_date", selectedDate)
@@ -128,11 +129,16 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         .map(([material_name, v]) => ({ material_name, ...v }))
         .sort((a, b) => a.material_name.localeCompare(b.material_name))
     );
-    // 작업지시서에 원료 사용량 주입
-    setWorkOrders((woRes.data ?? []).map((wo: any) => ({
-      ...wo,
-      usages: woUsageMap[wo.work_order_no] ?? [],
-    })) as WorkOrder[]);
+   // 작업지시서에 원료 사용량 + items 주입
+   setWorkOrders((woRes.data ?? []).map((wo: any) => ({
+    ...wo,
+    usages: woUsageMap[wo.work_order_no] ?? [],
+    items: (wo.work_order_items ?? []).map((woi: any) => ({
+      name: (woi.sub_items?.[0]?.name ?? ""),
+      actual_qty: woi.actual_qty ?? 0,
+      unit_weight: woi.unit_weight ?? 0,
+    })),
+  })) as WorkOrder[]);
 
     setLoading(false);
   }, [selectedDate]);
@@ -163,7 +169,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
       const [woRes, blendRes, usageRes] = await Promise.all([
         supabase
           .from("work_orders")
-          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_input,skip_production_check,production_done_at,input_done_at,status_input")
+          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight)")
           .gte("production_done_at", `${date}T00:00:00+09:00`)
           .lt("production_done_at",  `${date}T23:59:59+09:00`)
           .eq("status_production", true)
@@ -175,7 +181,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
             items:blend_log_items(material_name,quantity_g)`)
           .eq("log_date", date)
           .order("happened_at", { ascending: true }),
-          supabase
+        supabase
           .from("material_usage_logs")
           .select("quantity, unit, note, material:materials(name)")
           .eq("used_date", date)
@@ -191,12 +197,20 @@ export function NewProductionLogTab({ role, userId, showToast }: {
       const materialUsages = Object.entries(usageMap)
         .map(([material_name, v]) => ({ material_name, ...v }))
         .sort((a, b) => a.material_name.localeCompare(b.material_name));
-      return {
-        date,
-        workOrders: (woRes.data ?? []) as WorkOrder[],
-        blendLogs: (blendRes.data ?? []) as any,
-        materialUsages,
-      };
+        return {
+          date,
+          workOrders: (woRes.data ?? []).map((wo: any) => ({
+            ...wo,
+            usages: [],
+            items: (wo.work_order_items ?? []).map((woi: any) => ({
+              name: (woi.sub_items?.[0]?.name ?? ""),
+              actual_qty: woi.actual_qty ?? 0,
+              unit_weight: woi.unit_weight ?? 0,
+            })),
+          })) as WorkOrder[],
+          blendLogs: (blendRes.data ?? []) as any,
+          materialUsages,
+        };
     }));
     setRangeData(results);
     setRangeLoading(false);
@@ -217,18 +231,34 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         return acc;
       }, {});
 
-      const woRows = Object.entries(woByWorkerPrint).flatMap(([worker, orders]) =>
-        orders.map((wo, i) => `
-          <tr>
-            ${i === 0 ? `<td style="${td}text-align:center;" rowspan="${orders.length}">${worker}</td>` : ""}
-            <td style="${td}">${wo.client_name}</td>
-            <td style="${td}">${wo.product_name}</td>
-            <td style="${tdC}">${wo.production_done_at ? toKstTime(wo.production_done_at) : "—"}</td>
-            <td style="${tdC}">${wo.skip_production_check ? "생산완료" : "금속검출완료"}</td>
-            <td style="${td}">${(wo.usages ?? []).map(u => `${u.name} ${u.quantity.toLocaleString()}${u.unit}`).join(", ") || "—"}</td>
-          </tr>
-        `)
-      ).join("");
+      const woRows = Object.entries(woByWorkerPrint).flatMap(([worker, orders]) => {
+        // 작업자별 전체 행 수 계산 (rowspan용)
+        const workerTotalRows = orders.reduce((sum, wo) => {
+          const woItems = (wo.items ?? []).filter(it => it.name);
+          return sum + Math.max(woItems.length, 1);
+        }, 0);
+        let workerRendered = false;
+        return orders.flatMap((wo) => {
+          const woItems = (wo.items ?? []).filter(it => it.name);
+          const rows = woItems.length > 0 ? woItems : [{ name: wo.product_name, actual_qty: 0, unit_weight: 0 }];
+          const usageStr = (wo.usages ?? []).map(u => `${u.name} ${u.quantity.toLocaleString()}${u.unit}`).join(", ") || "—";
+          return rows.map((item, idx) => {
+            const showWorker = !workerRendered && idx === 0;
+            if (showWorker) workerRendered = true;
+            const showUsage = idx === 0;
+            return `
+              <tr>
+                ${showWorker ? `<td style="${td}text-align:center;" rowspan="${workerTotalRows}">${worker}</td>` : ""}
+                <td style="${td}">${wo.client_name}</td>
+                <td style="${td}">${item.name}</td>
+                ${idx === 0 ? `<td style="${tdC}" rowspan="${rows.length}">${wo.production_done_at ? toKstTime(wo.production_done_at) : "—"}</td>` : ""}
+                ${idx === 0 ? `<td style="${tdC}" rowspan="${rows.length}">${wo.skip_production_check ? "생산완료" : "금속검출완료"}</td>` : ""}
+                ${showUsage ? `<td style="${td}" rowspan="${rows.length}">${usageStr}</td>` : ""}
+              </tr>
+            `;
+          });
+        });
+      }).join("");
 
       const woTable = wos.length > 0 ? `
         <div style="${secTitle}">생산 완료 내역</div>
@@ -454,42 +484,48 @@ export function NewProductionLogTab({ role, userId, showToast }: {
                       </span>
                     </div>
                     <div className="space-y-1.5">
-                      {orders.map(wo => (
-                      <div key={wo.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm font-medium text-slate-700">{wo.client_name}</span>
-                          <span className="mx-1.5 text-slate-300">—</span>
-                          <span className="text-sm text-slate-600">{wo.product_name}</span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {wo.production_done_at && (
-                            <span className="text-xs text-slate-400 tabular-nums">
-                              {toKstTime(wo.production_done_at)}
-                            </span>
-                          )}
-                          {wo.skip_production_check ? (
-                            <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
-                              생산완료
-                            </span>
-                          ) : (
-                            <span className="rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                              금속검출완료
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {(wo.usages ?? []).length > 0 && (
-                        <div className="mt-1.5 flex flex-wrap gap-1.5">
-                          {(wo.usages ?? []).map((u, idx) => (
-                            <span key={idx} className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500">
-                              {u.name} <span className="font-semibold tabular-nums text-slate-700">{u.quantity.toLocaleString()}{u.unit}</span>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>  
-                      ))}
+                      {orders.map(wo => {
+                        const woItems = (wo.items ?? []).filter(it => it.name);
+                        const rows = woItems.length > 0 ? woItems : [{ name: wo.product_name, actual_qty: 0, unit_weight: 0 }];
+                        return (
+                          <div key={wo.id} className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                            {/* 작업지시서 헤더 */}
+                            <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 bg-white">
+                              <span className="text-xs font-semibold text-slate-500">{wo.client_name}</span>
+                              {wo.production_done_at && (
+                                <span className="text-xs text-slate-400 tabular-nums ml-auto">
+                                  {toKstTime(wo.production_done_at)}
+                                </span>
+                              )}
+                              {wo.skip_production_check ? (
+                                <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">생산완료</span>
+                              ) : (
+                                <span className="rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">금속검출완료</span>
+                              )}
+                            </div>
+                            {/* 제품별 행 */}
+                            {rows.map((item, idx) => (
+                              <div key={idx} className="flex items-center gap-3 px-3 py-2 border-b border-slate-100 last:border-b-0">
+                                <span className="flex-1 text-sm text-slate-700">{item.name}</span>
+                                {item.actual_qty > 0 && (
+                                  <span className="text-xs text-slate-400 tabular-nums">
+                                    {item.actual_qty.toLocaleString()}개
+                                  </span>
+                                )}
+                                {(wo.usages ?? []).length > 0 && idx === 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {(wo.usages ?? []).map((u, ui) => (
+                                      <span key={ui} className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500">
+                                        {u.name} <span className="font-semibold tabular-nums text-slate-700">{u.quantity.toLocaleString()}{u.unit}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
