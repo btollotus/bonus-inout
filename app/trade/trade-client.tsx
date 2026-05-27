@@ -82,7 +82,7 @@ type UnifiedRow = {
   outAmt: number; balance: number; rawId: string; businessNo?: string;
   ledger_partner_id?: string | null; ship_method?: string; order_title?: string | null;
   orderer_name?: string | null;
-  order_lines?: Array<{ food_type?: string; name: string; weight_g?: number; qty: number; unit: number; total_amount?: number; unit_type?: "EA" | "BOX" | string; pack_ea?: number; actual_ea?: number }>;
+  order_lines?: Array<{ food_type?: string; name: string; weight_g?: number; qty: number; unit: number; total_amount?: number; unit_type?: "EA" | "BOX" | string; pack_ea?: number; actual_ea?: number; is_sample?: boolean | null }>;
   order_shipments?: ShipmentSnap[];
   ledger_category?: string | null; ledger_method?: string | null;
   ledger_memo?: string | null; ledger_amount?: number;
