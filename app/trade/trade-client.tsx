@@ -1055,7 +1055,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     if (!orderId) return setMsg("주문 생성 후 ID를 가져오지 못했습니다.");
 
     const { error: lErr } = await supabase.from("order_lines").insert(
-      cleanLines.map((l, idx) => ({ order_id: orderId, line_no: idx + 1, food_type: l.food_type || null, name: l.name, weight_g: l.weight_g || null, qty: l.qty, unit: l.unit, unit_type: l.unit_type, pack_ea: l.pack_ea, actual_ea: l.actual_ea, supply_amount: l.supply_amount, vat_amount: l.vat_amount, total_amount: l.total_amount }))
+      cleanLines.map((l, idx) => ({ order_id: orderId, line_no: idx + 1, food_type: l.food_type || null, name: l.name, weight_g: l.weight_g || null, qty: l.qty, unit: l.unit, unit_type: l.unit_type, pack_ea: l.pack_ea, actual_ea: l.actual_ea, supply_amount: l.supply_amount, vat_amount: l.vat_amount, total_amount: l.total_amount, is_sample: l.is_sample || null }))
     );
     if (lErr) return setMsg(lErr.message);
 
@@ -1685,7 +1685,7 @@ if (woSubNameVal) {
       const { error } = await supabase.from("orders").update({ ship_date: eShipDate, ship_method: eShipMethod, memo: JSON.stringify({ title: eOrderTitle.trim() || null, orderer_name: eOrdererName.trim() || null }), supply_amount: editOrderTotals.supply, vat_amount: editOrderTotals.vat, total_amount: editOrderTotals.total }).eq("id", editRow.rawId);
       if (error) return setMsg(error.message);
       await supabase.from("order_lines").delete().eq("order_id", editRow.rawId);
-      const { error: iErr } = await supabase.from("order_lines").insert(cleanLines.map((l, idx) => ({ order_id: editRow.rawId, line_no: idx + 1, food_type: l.food_type || null, name: l.name, weight_g: l.weight_g || null, qty: l.qty, unit: l.unit, unit_type: l.unit_type, pack_ea: l.pack_ea, actual_ea: l.actual_ea, supply_amount: l.supply_amount, vat_amount: l.vat_amount, total_amount: l.total_amount })));
+      const { error: iErr } = await supabase.from("order_lines").insert(cleanLines.map((l, idx) => ({ order_id: editRow.rawId, line_no: idx + 1, food_type: l.food_type || null, name: l.name, weight_g: l.weight_g || null, qty: l.qty, unit: l.unit, unit_type: l.unit_type, pack_ea: l.pack_ea, actual_ea: l.actual_ea, supply_amount: l.supply_amount, vat_amount: l.vat_amount, total_amount: l.total_amount, is_sample: l.is_sample || null })));
       if (iErr) return setMsg(iErr.message);
       await supabase.from("order_shipments").delete().eq("order_id", editRow.rawId);
       const { error: siErr } = await supabase.from("order_shipments").insert(buildShipPayloads(editRow.rawId, eShip1, eShip2, eTwoShip));
