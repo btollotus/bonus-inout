@@ -98,9 +98,9 @@ export function NewProductionLogTab({ role, userId, showToast }: {
           items:blend_log_items(material_name,quantity_g)`)
         .eq("log_date", selectedDate)
         .order("happened_at", { ascending: true }),
-      supabase
+        supabase
         .from("material_usage_logs")
-        .select("quantity, unit, material:materials(name)")
+        .select("quantity, unit, note, material:materials(name)")
         .eq("used_date", selectedDate)
         .eq("work_type", "product"),
     ]);
@@ -175,9 +175,9 @@ export function NewProductionLogTab({ role, userId, showToast }: {
             items:blend_log_items(material_name,quantity_g)`)
           .eq("log_date", date)
           .order("happened_at", { ascending: true }),
-        supabase
+          supabase
           .from("material_usage_logs")
-          .select("quantity, unit, material:materials(name)")
+          .select("quantity, unit, note, material:materials(name)")
           .eq("used_date", date)
           .eq("work_type", "product"),
       ]);
