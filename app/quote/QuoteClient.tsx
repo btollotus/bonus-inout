@@ -233,6 +233,7 @@ export default function QuoteClient() {
     isNew: boolean;
     calcResult: { plateCost: number; sheetCost: number; total: number } | null;
     manualTotal: string;
+    manualUnitPrice: string;
   };
   
   const newSheetItem = (): SheetItem => ({
@@ -241,6 +242,7 @@ export default function QuoteClient() {
     isNew: true,
     calcResult: null,
     manualTotal: "",
+    manualUnitPrice: "",
   });
   
   const [sheetItems, setSheetItems] = useState<SheetItem[]>([newSheetItem()]);
@@ -363,6 +365,17 @@ async function loadSignageList() {
     updateSheetItem(item.id, { calcResult: { plateCost, sheetCost, total } });
   }
 
+  // ─── 전사지 수동 계산 ───
+  function calcSheetItemManual(item: SheetItem) {
+    const sheets = parseInt(item.quantity) || 0;
+    const unitPrice = parseInt(item.manualUnitPrice) || 0;
+    if (sheets < 1 || unitPrice < 1) return;
+    const plateCost = item.isNew ? 95000 : 0;
+    const sheetCost = sheets * unitPrice;
+    const total = plateCost + sheetCost;
+    updateSheetItem(item.id, { calcResult: { plateCost, sheetCost, total }, manualTotal: "" });
+  }
+
   // ─── 견적 저장 (다품목 — 첫 품목 기준으로 저장) ───
   async function handleSave() {
     if (!activeCustomerName) return setMsg("업체명을 입력하거나 거래처를 선택하세요.");
@@ -414,49 +427,54 @@ async function loadSignageList() {
   async function handleSheetSave() {
     if (!activeCustomerName) return setMsg("업체명을 입력하거나 거래처를 선택하세요.");
 
-    // ── 수동 입력 모드 ──
-    if (sheetInputMode === "manual") {
-      const manualItems = sheetItems.filter(x => x.manualTotal);
-      if (manualItems.length === 0) return setMsg("총액을 입력하세요.");
-      const iceboxCost = useIcebox ? iceboxPrice : 0;
-      const grandTotalInclVat = manualItems.reduce((s, x) => s + (parseInt(x.manualTotal) || 0), 0);
-      const grandSupply = Math.round(grandTotalInclVat / 1.1);
-      const finalTotal = grandSupply + Math.round(deliveryPrice / 1.1) + Math.round(iceboxCost / 1.1);
-      const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
-        customer_id:   activeCustomerId,
-        customer_name: activeCustomerName,
-        request_type:  "sheet",
-        quantity:      0,
-        is_new:        true,
-        memo:          memo || null,
-        status:        "견적완료",
-        updated_at:    new Date().toISOString(),
-      }).select("id").single();
-      if (reqErr) return setMsg(reqErr.message);
-      const { error: quoteErr } = await supabase.from("quotes").insert({
-        request_id:    req.id,
-        icebox_cost:   iceboxCost,
-        delivery_cost: deliveryPrice,
-        total:         finalTotal,
-      });
-      if (quoteErr) return setMsg(quoteErr.message);
-      const itemRows = manualItems.map((x, idx) => ({
-        request_id:    req.id,
-        product_type:  "전사지",
-        quantity:      0,
-        is_new:        true,
-        plate_cost:    0,
-        transfer_cost: 0,
-        total:         Math.round((parseInt(x.manualTotal) || 0) / 1.1),
-        sort_order:    idx,
-      }));
-      const { error: itemErr } = await supabase.from("quote_items").insert(itemRows);
-      if (itemErr) return setMsg(itemErr.message);
-      setMsg("✅ 전사지 견적이 저장됐어요!");
-      setLastQuoteRequestId(req.id);
-      loadSheetList();
-      return;
-    }
+   // ── 수동 입력 모드 — calcResult 기반 (자동 모드와 동일 구조) ──
+   if (sheetInputMode === "manual") {
+    const calcedItems = sheetItems.filter(x => x.calcResult);
+    if (calcedItems.length === 0) return setMsg("먼저 계산을 실행하세요.");
+    const totalPlateCost = calcedItems.reduce((s, x) => s + x.calcResult!.plateCost, 0);
+    const totalSheetCost = calcedItems.reduce((s, x) => s + x.calcResult!.sheetCost, 0);
+    const totalSheets    = calcedItems.reduce((s, x) => s + (parseInt(x.quantity) || 0), 0);
+    const grandTotal     = calcedItems.reduce((s, x) => s + x.calcResult!.total, 0);
+    const iceboxCost = useIcebox ? iceboxPrice : 0;
+    const finalTotal = grandTotal + deliveryPrice + iceboxCost;
+    const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
+      customer_id:   activeCustomerId,
+      customer_name: activeCustomerName,
+      request_type:  "sheet",
+      quantity:      totalSheets,
+      is_new:        calcedItems.some(x => x.isNew),
+      memo:          memo || null,
+      status:        "견적완료",
+      updated_at:    new Date().toISOString(),
+    }).select("id").single();
+    if (reqErr) return setMsg(reqErr.message);
+    const { error: quoteErr } = await supabase.from("quotes").insert({
+      request_id:      req.id,
+      plate_cost:      totalPlateCost,
+      transfer_sheets: totalSheets,
+      transfer_cost:   totalSheetCost,
+      icebox_cost:     iceboxCost,
+      delivery_cost:   deliveryPrice,
+      total:           finalTotal,
+    });
+    if (quoteErr) return setMsg(quoteErr.message);
+    const itemRows = calcedItems.map((x, idx) => ({
+      request_id:    req.id,
+      product_type:  "전사지",
+      quantity:      parseInt(x.quantity) || 0,
+      is_new:        x.isNew,
+      plate_cost:    x.calcResult!.plateCost,
+      transfer_cost: x.calcResult!.sheetCost,
+      total:         x.calcResult!.total,
+      sort_order:    idx,
+    }));
+    const { error: itemErr } = await supabase.from("quote_items").insert(itemRows);
+    if (itemErr) return setMsg(itemErr.message);
+    setMsg("✅ 전사지 견적이 저장됐어요!");
+    setLastQuoteRequestId(req.id);
+    loadSheetList();
+    return;
+  }
 
     // ── 자동 계산 모드 ──
     const calcedItems = sheetItems.filter(x => x.calcResult);
@@ -528,7 +546,8 @@ async function loadSignageList() {
         total: qi.total ?? 0,
       },
       manualTotal: "",
-    }))
+            manualUnitPrice: "",
+          }))
       : [newSheetItem()];
     setSheetItems(loaded);
     setMsg("✅ 전사지 견적을 불러왔어요. 수정 후 출력하세요.");
@@ -1561,26 +1580,54 @@ async function loadSignageList() {
                   </div>
                 )}
               </>
-            ) : (
-              <>
-                <div>
-                  <div className="mb-1 text-xs font-semibold text-orange-600">총액(부가세 포함) ✏️</div>
-                  <input className={`${inp} w-36 border-orange-300 bg-orange-50`} type="number" placeholder="예: 110000"
-                    value={item.manualTotal}
-                    onChange={e => updateSheetItem(item.id, { manualTotal: e.target.value, calcResult: null })} />
+           ) : (
+            <>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-slate-600">전사지 장수</div>
+                <input className={`${inp} w-28`} inputMode="numeric" placeholder="예: 10"
+                  value={item.quantity}
+                  onChange={e => updateSheetItem(item.id, {
+                    quantity: e.target.value.replace(/[^\d]/g, ""),
+                    calcResult: null,
+                  })} />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-orange-600">단가(원) ✏️</div>
+                <input className={`${inp} w-28 border-orange-300 bg-orange-50`} type="number" placeholder="예: 3000"
+                  value={item.manualUnitPrice}
+                  onChange={e => updateSheetItem(item.id, { manualUnitPrice: e.target.value, calcResult: null })} />
+              </div>
+              <button type="button"
+                className={`rounded-lg border px-4 py-2 text-sm font-bold transition-all ${
+                  item.isNew
+                    ? "border-blue-300 bg-blue-50 text-blue-700"
+                    : "border-amber-300 bg-amber-50 text-amber-700"
+                }`}
+                onClick={() => updateSheetItem(item.id, { isNew: !item.isNew, calcResult: null })}>
+                {item.isNew ? "신규" : "재주문"}
+              </button>
+              <button
+                className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-100"
+                onClick={() => calcSheetItemManual(item)}>
+                🔢 계산
+              </button>
+              {item.calcResult && (
+                <div className="flex gap-2 text-xs text-slate-600 flex-wrap">
+                  {item.calcResult.plateCost > 0 && (
+                    <span className="rounded-lg border border-slate-200 bg-white px-2 py-1">
+                      인쇄판비 {fmt(item.calcResult.plateCost)}원
+                    </span>
+                  )}
+                  <span className="rounded-lg border border-slate-200 bg-white px-2 py-1">
+                    전사지 {fmt(item.calcResult.sheetCost)}원
+                  </span>
+                  <span className="rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 font-semibold text-orange-700">
+                    소계 {fmt(item.calcResult.total)}원
+                  </span>
                 </div>
-                {item.manualTotal && (
-                  <div className="flex gap-2 text-xs text-slate-600 flex-wrap">
-                    <span className="rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 font-semibold text-orange-700">
-                      공급가 {fmt(Math.round(parseInt(item.manualTotal) / 1.1))}원
-                    </span>
-                    <span className="rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 font-semibold text-orange-700">
-                      부가세 포함 {fmt(parseInt(item.manualTotal))}원
-                    </span>
-                  </div>
-                )}
-              </>
-            )}
+              )}
+            </>
+          )}
           </div>
         </div>
       ))}
@@ -1593,13 +1640,12 @@ async function loadSignageList() {
     </button>
 
    {/* 합계 미리보기 */}
-   {(sheetItems.some(x => x.calcResult) || sheetItems.some(x => x.manualTotal)) && (() => {
+   {sheetItems.some(x => x.calcResult) && (() => {
+     const calced = sheetItems.filter(x => x.calcResult);
+     const grandTotal = calced.reduce((s, x) => s + x.calcResult!.total, 0);
      const iceboxCostTotal = useIcebox ? iceboxPrice * iceboxQty : 0;
      const iceboxSupply = Math.round(iceboxCostTotal / 1.1);
      const deliverySupply = Math.round(deliveryPrice * deliveryQty / 1.1);
-     const grandTotal = sheetInputMode === "manual"
-       ? sheetItems.filter(x => x.manualTotal).reduce((s, x) => s + Math.round((parseInt(x.manualTotal) || 0) / 1.1), 0)
-       : sheetItems.filter(x => x.calcResult).reduce((s, x) => s + x.calcResult!.total, 0);
      const finalTotal = grandTotal + deliverySupply + iceboxSupply;
      return (
        <div className="mb-4 grid grid-cols-2 gap-2">
@@ -1680,7 +1726,7 @@ async function loadSignageList() {
    <div className="flex gap-2">
       <button
         className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-white ${sheetInputMode === "manual" ? "border border-orange-300 bg-orange-500 hover:bg-orange-600" : btnOn}`}
-        disabled={sheetInputMode === "auto" ? !sheetItems.some(x => x.calcResult) : !sheetItems.some(x => x.manualTotal)}
+        disabled={!sheetItems.some(x => x.calcResult)}
         onClick={async () => { await handleSheetSave(); setPrintOpen(true); }}>
         🖨️ 견적서 출력
       </button>
@@ -2008,33 +2054,32 @@ async function loadSignageList() {
         );
       })()}
 {/* 견적서 인쇄 모달 — 전사지 탭 */}
-{printOpen && !selectedQuoteRow && tab === "sheet" && (sheetItems.some(x => x.calcResult) || sheetItems.some(x => x.manualTotal)) && (() => {
-  const isManual = sheetInputMode === "manual";
-  const calced = isManual ? sheetItems.filter(x => x.manualTotal) : sheetItems.filter(x => x.calcResult);
+{printOpen && !selectedQuoteRow && tab === "sheet" && sheetItems.some(x => x.calcResult) && (() => {
+  const calced = sheetItems.filter(x => x.calcResult);
   return (
     <QuotePrintModal
       onClose={() => { setPrintOpen(false); setSheetItems([newSheetItem()]); }}
       quoteData={{
         customerName: activeCustomerName,
         quoteDate: todayKST(),
-        inputMode: isManual ? "manual" as const : "auto" as const,
+        inputMode: "auto" as const,
         items: calced.map(x => ({
-          productType: isManual ? "전사지(수동)" : "전사지",
+          productType: "전사지",
           colorType: "dark" as const,
           isRaise: false,
           widthMm: null,
           heightMm: null,
           thickness: "",
-          quantity: isManual ? 1 : (parseInt(x.quantity) || 0),
+          quantity: parseInt(x.quantity) || 0,
           isNew: x.isNew,
           designChanged: false,
           useStockMold: false,
           moldCost: 0,
-          plateCost: isManual ? 0 : x.calcResult!.plateCost,
-          sheetCost: isManual ? 0 : x.calcResult!.sheetCost,
+          plateCost: x.calcResult!.plateCost,
+          sheetCost: x.calcResult!.sheetCost,
           workFee: 0,
-          V: isManual ? Math.round((parseInt(x.manualTotal) || 0) / 1.1) : x.calcResult!.total,
-          manualV: isManual ? Math.round((parseInt(x.manualTotal) || 0) / 1.1) : 0,
+          V: x.calcResult!.total,
+          manualV: 0,
         })),
         memo: memo || null,
         iceboxPrice: useIcebox ? iceboxPrice * iceboxQty : 0,
