@@ -351,8 +351,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
       }).join("");
 
       const woTable = wos.length > 0 ? `
-        <div style="${secTitle}">생산 완료 내역</div>
-        <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+         <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
          <colgroup>
             <col style="width:48px"><col style="width:80px"><col><col style="width:38px">
             <col style="width:75px"><col style="width:75px"><col style="width:110px">
