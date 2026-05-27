@@ -259,11 +259,18 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         }
       });
       const usageMap: Record<string, { total_qty: number; unit: string }> = {};
+      const woUsageMapR: Record<string, { name: string; quantity: number; unit: string }[]> = {};
       (usageRes.data ?? []).forEach((u: any) => {
         const name = u.material?.name;
         if (!name) return;
         if (!usageMap[name]) usageMap[name] = { total_qty: 0, unit: u.unit ?? "g" };
         usageMap[name].total_qty += Number(u.quantity);
+        const match = (u.note ?? "").match(/WO-[\w-]+/);
+        if (match) {
+          const woNo = match[0];
+          if (!woUsageMapR[woNo]) woUsageMapR[woNo] = [];
+          woUsageMapR[woNo].push({ name, quantity: Number(u.quantity), unit: u.unit ?? "g" });
+        }
       });
       const materialUsages = Object.entries(usageMap)
         .map(([material_name, v]) => ({ material_name, ...v }))
@@ -272,7 +279,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
           date,
           workOrders: (woRes.data ?? []).map((wo: any) => ({
             ...wo,
-            usages: [],
+            usages: woUsageMapR[wo.work_order_no] ?? [],
             prod_start: prodStartMapR[wo.work_order_no] ?? null,
             prod_end: prodEndMapR[wo.work_order_no] ?? null,
             metal_start: metalMapR[wo.id]?.start ?? null,
