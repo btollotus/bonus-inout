@@ -37,6 +37,12 @@ type BlendLog = {
   items: { material_name: string; quantity_g: number }[];
 };
 
+type MaterialUsage = {
+  material_name: string;
+  total_qty: number;
+  unit: string;
+};
+
 // ─────────────────────── 날짜 유틸 ───────────────────────
 function formatDateLabel(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00+09:00");
@@ -59,6 +65,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
   const [selectedDate, setSelectedDate] = useState(todayKST());
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [blendLogs, setBlendLogs] = useState<BlendLog[]>([]);
+  const [materialUsages, setMaterialUsages] = useState<MaterialUsage[]>([]);
   const [loading, setLoading] = useState(false);
 
   // 기간별 인쇄
@@ -70,11 +77,12 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     date: string;
     workOrders: WorkOrder[];
     blendLogs: BlendLog[];
+    materialUsages: MaterialUsage[];
   }[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [woRes, blendRes] = await Promise.all([
+    const [woRes, blendRes, usageRes] = await Promise.all([
       supabase
         .from("work_orders")
         .select("id,work_order_no,client_name,product_name,assignee_production,assignee_input,skip_production_check,production_done_at,input_done_at,status_input")
@@ -89,9 +97,29 @@ export function NewProductionLogTab({ role, userId, showToast }: {
           items:blend_log_items(material_name,quantity_g)`)
         .eq("log_date", selectedDate)
         .order("happened_at", { ascending: true }),
+      supabase
+        .from("material_usage_logs")
+        .select("quantity, unit, material:materials(name)")
+        .eq("used_date", selectedDate)
+        .eq("work_type", "product"),
     ]);
     setWorkOrders((woRes.data ?? []) as WorkOrder[]);
     setBlendLogs((blendRes.data ?? []) as any);
+
+    // 원료별 합계 집계
+    const usageMap: Record<string, { total_qty: number; unit: string }> = {};
+    (usageRes.data ?? []).forEach((u: any) => {
+      const name = u.material?.name;
+      if (!name) return;
+      if (!usageMap[name]) usageMap[name] = { total_qty: 0, unit: u.unit ?? "g" };
+      usageMap[name].total_qty += Number(u.quantity);
+    });
+    setMaterialUsages(
+      Object.entries(usageMap)
+        .map(([material_name, v]) => ({ material_name, ...v }))
+        .sort((a, b) => a.material_name.localeCompare(b.material_name))
+    );
+
     setLoading(false);
   }, [selectedDate]);
 
@@ -118,7 +146,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     }
 
     const results = await Promise.all(dates.map(async (date) => {
-      const [woRes, blendRes] = await Promise.all([
+      const [woRes, blendRes, usageRes] = await Promise.all([
         supabase
           .from("work_orders")
           .select("id,work_order_no,client_name,product_name,assignee_production,assignee_input,skip_production_check,production_done_at,input_done_at,status_input")
@@ -133,11 +161,27 @@ export function NewProductionLogTab({ role, userId, showToast }: {
             items:blend_log_items(material_name,quantity_g)`)
           .eq("log_date", date)
           .order("happened_at", { ascending: true }),
+        supabase
+          .from("material_usage_logs")
+          .select("quantity, unit, material:materials(name)")
+          .eq("used_date", date)
+          .eq("work_type", "product"),
       ]);
+      const usageMap: Record<string, { total_qty: number; unit: string }> = {};
+      (usageRes.data ?? []).forEach((u: any) => {
+        const name = u.material?.name;
+        if (!name) return;
+        if (!usageMap[name]) usageMap[name] = { total_qty: 0, unit: u.unit ?? "g" };
+        usageMap[name].total_qty += Number(u.quantity);
+      });
+      const materialUsages = Object.entries(usageMap)
+        .map(([material_name, v]) => ({ material_name, ...v }))
+        .sort((a, b) => a.material_name.localeCompare(b.material_name));
       return {
         date,
         workOrders: (woRes.data ?? []) as WorkOrder[],
         blendLogs: (blendRes.data ?? []) as any,
+        materialUsages,
       };
     }));
     setRangeData(results);
@@ -145,8 +189,8 @@ export function NewProductionLogTab({ role, userId, showToast }: {
   }
 
   // 인쇄 공통 함수
-  function buildPrintHtml(items: { date: string; workOrders: WorkOrder[]; blendLogs: BlendLog[] }[]) {
-    const pages = items.map(({ date, workOrders: wos, blendLogs: bls }, idx) => {
+  function buildPrintHtml(items: { date: string; workOrders: WorkOrder[]; blendLogs: BlendLog[]; materialUsages?: MaterialUsage[] }[]) {
+    const pages = items.map(({ date, workOrders: wos, blendLogs: bls, materialUsages: mus = [] }, idx) => {
       const woByWorkerPrint = wos.reduce<Record<string, WorkOrder[]>>((acc, wo) => {
         const name = wo.assignee_production ?? "미지정";
         if (!acc[name]) acc[name] = [];
@@ -193,7 +237,20 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         </div>
       ` : "";
 
-      const isEmpty = wos.length === 0 && bls.length === 0;
+      const materialHtml = mus.length > 0 ? `
+        <div style="margin-top:10px;">
+          <div style="font-size:8.5pt;font-weight:bold;margin-bottom:5px;color:#333;">📦 원료 사용량</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            ${mus.map(m => `
+              <span style="font-size:8pt;background:#f8fafc;border:0.5px solid #e2e8f0;padding:2px 8px;border-radius:4px;">
+                ${m.material_name} <b>${m.total_qty.toLocaleString()}${m.unit}</b>
+              </span>
+            `).join("")}
+          </div>
+        </div>
+      ` : "";
+
+      const isEmpty = wos.length === 0 && bls.length === 0 && mus.length === 0;
       const pageBreak = idx < items.length - 1 ? `style="page-break-after:always;"` : "";
 
       return `
@@ -210,6 +267,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
                   ${woHtml}
                 </div>
               ` : ""}
+              ${materialHtml}
               ${blendHtml}
             `
           }
@@ -220,7 +278,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
   }
 
   function printDay() {
-    const html = buildPrintHtml([{ date: selectedDate, workOrders, blendLogs }]);
+    const html = buildPrintHtml([{ date: selectedDate, workOrders, blendLogs, materialUsages }]);
     openPrint(html, `생산일지_${selectedDate}`);
   }
 
@@ -393,6 +451,33 @@ export function NewProductionLogTab({ role, userId, showToast }: {
                         </div>
                       ))}
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 원료 사용량 */}
+          <div className={`${card} p-4`}>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="font-semibold text-sm">
+                📦 원료 사용량
+                <span className="ml-1 text-xs font-normal text-slate-400">({selectedDate} KST)</span>
+              </div>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                {materialUsages.length}종
+              </span>
+            </div>
+            {materialUsages.length === 0 ? (
+              <div className="py-6 text-center text-sm text-slate-400">해당 날짜 원료 사용 내역이 없습니다.</div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {materialUsages.map((m) => (
+                  <div key={m.material_name} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <span className="text-slate-600">{m.material_name}</span>
+                    <span className="ml-2 font-semibold tabular-nums text-slate-800">
+                      {m.total_qty.toLocaleString()}{m.unit}
+                    </span>
                   </div>
                 ))}
               </div>
