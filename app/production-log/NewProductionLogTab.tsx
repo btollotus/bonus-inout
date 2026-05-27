@@ -331,9 +331,8 @@ export function NewProductionLogTab({ role, userId, showToast }: {
                 ${showWorker ? `<td style="${td}text-align:center;" rowspan="${workerTotalRows}">${worker}</td>` : ""}
                 <td style="${td}">${wo.client_name}</td>
                 <td style="${td}">${item.name}</td>
-                ${idx === 0 ? `<td style="${tdC}" rowspan="${rows.length}" style="font-size:7pt;">${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}</td>` : ""}
-                ${idx === 0 ? `<td style="${tdC}" rowspan="${rows.length}" style="font-size:7pt;">${wo.metal_start ? wo.metal_start.slice(0,5) : "—"}~${wo.metal_end ? wo.metal_end.slice(0,5) : "—"}</td>` : ""}
-                ${idx === 0 ? `<td style="${tdC}" rowspan="${rows.length}">${wo.skip_production_check ? "생산완료" : "금속검출완료"}</td>` : ""}
+                ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}</td>` : ""}
+                ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${wo.metal_start ? wo.metal_start.slice(0,5) : "—"}~${wo.metal_end ? wo.metal_end.slice(0,5) : "—"}</td>` : ""}
                 ${showUsage ? `<td style="${td}" rowspan="${rows.length}">${usageStr}</td>` : ""}
               </tr>
             `;
@@ -346,25 +345,19 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
          <colgroup>
             <col style="width:48px"><col style="width:80px"><col>
-            <col style="width:55px"><col style="width:55px"><col style="width:55px"><col style="width:110px">
+            <col style="width:75px"><col style="width:75px"><col style="width:110px">
           </colgroup>
           <thead>
             <tr>
-           <th style="${th}">작업자</th><th style="${th}">업체명</th><th style="${th}">제품명</th>
-              <th style="${th}">생산시간</th><th style="${th}">금속검출</th><th style="${th}">상태</th><th style="${th}">원료 사용량</th>
+          <th style="${th}">작업자</th><th style="${th}">업체명</th><th style="${th}">제품명</th>
+              <th style="${th}">생산시간</th><th style="${th}">금속검출</th><th style="${th}">원료 사용량</th>
             </tr>
           </thead>
           <tbody>${woRows}</tbody>
         </table>
       ` : "";
 
-      const musTable = mus.length > 0 ? `
-        <div style="${secTitle}">원료 사용량 합계</div>
-        <table style="border-collapse:collapse;">
-          <thead><tr>${mus.map(m => `<th style="${th}">${m.material_name}</th>`).join("")}</tr></thead>
-          <tbody><tr>${mus.map(m => `<td style="${tdC}">${m.total_qty.toLocaleString()}${m.unit}</td>`).join("")}</tr></tbody>
-        </table>
-      ` : "";
+      const musTable = "";
 
       const blendRows = bls.map(bl => `
         <tr>
