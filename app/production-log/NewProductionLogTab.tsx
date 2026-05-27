@@ -570,7 +570,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
                     <div className="space-y-1.5">
                       {orders.map(wo => {
                         const woItems = (wo.items ?? []).filter(it => it.name);
-                        const rows = woItems.length > 0 ? woItems : [{ name: wo.product_name, actual_qty: 0, unit_weight: 0 }];
+                        const rows = woItems.length > 0 ? woItems : [{ name: wo.product_name, order_qty: 0, actual_qty: 0, unit_weight: 0 }];
                         return (
                           <div key={wo.id} className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
                             {/* 작업지시서 헤더 */}
