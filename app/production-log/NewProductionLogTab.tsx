@@ -329,7 +329,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         let workerRendered = false;
         return orders.flatMap((wo) => {
           const woItems = (wo.items ?? []).filter(it => it.name);
-          const rows = woItems.length > 0 ? woItems : [{ name: wo.product_name, actual_qty: 0, unit_weight: 0 }];
+          const rows = woItems.length > 0 ? woItems : [{ name: wo.product_name, order_qty: 0, actual_qty: 0, unit_weight: 0 }];
           const usageStr = (wo.usages ?? []).map(u => `${u.name} ${u.quantity.toLocaleString()}${u.unit}`).join(", ") || "—";
           return rows.map((item, idx) => {
             const showWorker = !workerRendered && idx === 0;
