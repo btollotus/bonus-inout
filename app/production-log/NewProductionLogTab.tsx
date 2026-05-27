@@ -133,11 +133,16 @@ export function NewProductionLogTab({ role, userId, showToast }: {
    setWorkOrders((woRes.data ?? []).map((wo: any) => ({
     ...wo,
     usages: woUsageMap[wo.work_order_no] ?? [],
-    items: (wo.work_order_items ?? []).map((woi: any) => ({
-      name: (woi.sub_items?.[0]?.name ?? ""),
-      actual_qty: woi.actual_qty ?? 0,
-      unit_weight: woi.unit_weight ?? 0,
-    })),
+    items: (wo.work_order_items ?? [])
+      .map((woi: any) => ({
+        name: (woi.sub_items?.[0]?.name ?? ""),
+        actual_qty: woi.actual_qty ?? 0,
+        unit_weight: woi.unit_weight ?? 0,
+      }))
+      .filter((it: any) => {
+        const n = it.name;
+        return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+      }),
   })) as WorkOrder[]);
 
     setLoading(false);
@@ -202,11 +207,16 @@ export function NewProductionLogTab({ role, userId, showToast }: {
           workOrders: (woRes.data ?? []).map((wo: any) => ({
             ...wo,
             usages: [],
-            items: (wo.work_order_items ?? []).map((woi: any) => ({
+            items: (wo.work_order_items ?? [])
+            .map((woi: any) => ({
               name: (woi.sub_items?.[0]?.name ?? ""),
               actual_qty: woi.actual_qty ?? 0,
               unit_weight: woi.unit_weight ?? 0,
-            })),
+            }))
+            .filter((it: any) => {
+              const n = it.name;
+              return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+            }),
           })) as WorkOrder[],
           blendLogs: (blendRes.data ?? []) as any,
           materialUsages,
