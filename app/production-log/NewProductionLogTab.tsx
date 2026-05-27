@@ -24,6 +24,7 @@ type WorkOrder = {
   production_done_at: string | null;
   input_done_at: string | null;
   status_input: boolean;
+  usages?: { name: string; quantity: number; unit: string }[];
 };
 
 type BlendLog = {
@@ -103,22 +104,35 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         .eq("used_date", selectedDate)
         .eq("work_type", "product"),
     ]);
-    setWorkOrders((woRes.data ?? []) as WorkOrder[]);
     setBlendLogs((blendRes.data ?? []) as any);
 
-    // 원료별 합계 집계
+    // 원료별 합계 집계 + 작업지시서별 매핑
     const usageMap: Record<string, { total_qty: number; unit: string }> = {};
+    const woUsageMap: Record<string, { name: string; quantity: number; unit: string }[]> = {};
     (usageRes.data ?? []).forEach((u: any) => {
       const name = u.material?.name;
       if (!name) return;
+      // 전체 합계
       if (!usageMap[name]) usageMap[name] = { total_qty: 0, unit: u.unit ?? "g" };
       usageMap[name].total_qty += Number(u.quantity);
+      // 작업지시서별 매핑 — note에서 WO 번호 추출
+      const match = (u.note ?? "").match(/WO-[\w-]+/);
+      if (match) {
+        const woNo = match[0];
+        if (!woUsageMap[woNo]) woUsageMap[woNo] = [];
+        woUsageMap[woNo].push({ name, quantity: Number(u.quantity), unit: u.unit ?? "g" });
+      }
     });
     setMaterialUsages(
       Object.entries(usageMap)
         .map(([material_name, v]) => ({ material_name, ...v }))
         .sort((a, b) => a.material_name.localeCompare(b.material_name))
     );
+    // 작업지시서에 원료 사용량 주입
+    setWorkOrders((woRes.data ?? []).map((wo: any) => ({
+      ...wo,
+      usages: woUsageMap[wo.work_order_no] ?? [],
+    })) as WorkOrder[]);
 
     setLoading(false);
   }, [selectedDate]);
@@ -426,29 +440,40 @@ export function NewProductionLogTab({ role, userId, showToast }: {
                     </div>
                     <div className="space-y-1.5">
                       {orders.map(wo => (
-                        <div key={wo.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                          <div className="flex-1 min-w-0">
-                            <span className="text-sm font-medium text-slate-700">{wo.client_name}</span>
-                            <span className="mx-1.5 text-slate-300">—</span>
-                            <span className="text-sm text-slate-600">{wo.product_name}</span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {wo.production_done_at && (
-                              <span className="text-xs text-slate-400 tabular-nums">
-                                {toKstTime(wo.production_done_at)}
-                              </span>
-                            )}
-                            {wo.skip_production_check ? (
-                              <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
-                                생산완료
-                              </span>
-                            ) : (
-                              <span className="rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                                금속검출완료
-                              </span>
-                            )}
-                          </div>
+                      <div key={wo.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium text-slate-700">{wo.client_name}</span>
+                          <span className="mx-1.5 text-slate-300">—</span>
+                          <span className="text-sm text-slate-600">{wo.product_name}</span>
                         </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {wo.production_done_at && (
+                            <span className="text-xs text-slate-400 tabular-nums">
+                              {toKstTime(wo.production_done_at)}
+                            </span>
+                          )}
+                          {wo.skip_production_check ? (
+                            <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                              생산완료
+                            </span>
+                          ) : (
+                            <span className="rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                              금속검출완료
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {(wo.usages ?? []).length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {(wo.usages ?? []).map((u, idx) => (
+                            <span key={idx} className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500">
+                              {u.name} <span className="font-semibold tabular-nums text-slate-700">{u.quantity.toLocaleString()}{u.unit}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>  
                       ))}
                     </div>
                   </div>
