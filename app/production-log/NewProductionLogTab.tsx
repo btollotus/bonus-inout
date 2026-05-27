@@ -25,7 +25,7 @@ type WorkOrder = {
   input_done_at: string | null;
   status_input: boolean;
   usages?: { name: string; quantity: number; unit: string }[];
-  items?: { name: string; actual_qty: number; unit_weight: number }[];
+  items?: { name: string; order_qty: number; actual_qty: number; unit_weight: number }[];
   prod_start?: string | null;   // ccp_wo_events start measured_at
   prod_end?: string | null;     // ccp_wo_events end measured_at
   metal_start?: string | null;  // ccp_metal_logs start_time
@@ -176,6 +176,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     items: (wo.work_order_items ?? [])
       .map((woi: any) => ({
         name: (woi.sub_items?.[0]?.name ?? ""),
+        order_qty: woi.sub_items?.[0]?.qty ?? woi.order_qty ?? 0,
         actual_qty: woi.actual_qty ?? 0,
         unit_weight: woi.unit_weight ?? 0,
       }))
@@ -287,6 +288,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
             items: (wo.work_order_items ?? [])
             .map((woi: any) => ({
               name: (woi.sub_items?.[0]?.name ?? ""),
+              order_qty: woi.sub_items?.[0]?.qty ?? woi.order_qty ?? 0,
               actual_qty: woi.actual_qty ?? 0,
               unit_weight: woi.unit_weight ?? 0,
             }))
@@ -336,8 +338,9 @@ export function NewProductionLogTab({ role, userId, showToast }: {
             return `
               <tr>
                 ${showWorker ? `<td style="${td}text-align:center;" rowspan="${workerTotalRows}">${worker}</td>` : ""}
-                <td style="${td}">${wo.client_name}</td>
+               <td style="${td}">${wo.client_name}</td>
                 <td style="${td}">${item.name}</td>
+                <td style="${tdC}">${item.order_qty > 0 ? item.order_qty.toLocaleString() : "—"}</td>
                 ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}</td>` : ""}
                 ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${wo.metal_start ? wo.metal_start.slice(0,5) : "—"}~${wo.metal_end ? wo.metal_end.slice(0,5) : "—"}</td>` : ""}
                 ${showUsage ? `<td style="${td}" rowspan="${rows.length}">${usageStr}</td>` : ""}
@@ -351,12 +354,12 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         <div style="${secTitle}">생산 완료 내역</div>
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
          <colgroup>
-            <col style="width:48px"><col style="width:80px"><col>
+            <col style="width:48px"><col style="width:80px"><col><col style="width:38px">
             <col style="width:75px"><col style="width:75px"><col style="width:110px">
           </colgroup>
           <thead>
             <tr>
-          <th style="${th}">작업자</th><th style="${th}">업체명</th><th style="${th}">제품명</th>
+              <th style="${th}">작업자</th><th style="${th}">업체명</th><th style="${th}">제품명</th><th style="${th}">수량</th>
               <th style="${th}">생산시간</th><th style="${th}">금속검출</th><th style="${th}">원료 사용량</th>
             </tr>
           </thead>
@@ -595,9 +598,9 @@ export function NewProductionLogTab({ role, userId, showToast }: {
                             {rows.map((item, idx) => (
                               <div key={idx} className="flex items-center gap-3 px-3 py-2 border-b border-slate-100 last:border-b-0">
                                 <span className="flex-1 text-sm text-slate-700">{item.name}</span>
-                                {item.actual_qty > 0 && (
+                                {item.order_qty > 0 && (
                                   <span className="text-xs text-slate-400 tabular-nums">
-                                    {item.actual_qty.toLocaleString()}개
+                                    {item.order_qty.toLocaleString()}개
                                   </span>
                                 )}
                                 {(wo.usages ?? []).length > 0 && idx === 0 && (
