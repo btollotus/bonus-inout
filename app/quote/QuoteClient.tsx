@@ -516,18 +516,19 @@ async function loadSignageList() {
     setCustomerName(r.customer_name);
     setMemo(r.memo ?? "");
     const loaded = r.quote_items && r.quote_items.length > 0
-      ? r.quote_items
-          .sort((a, b) => a.sort_order - b.sort_order)
-          .map(qi => ({
-            id: crypto.randomUUID(),
-            quantity: String(qi.quantity ?? ""),
-            isNew: qi.is_new,
-            calcResult: {
-              plateCost: qi.plate_cost ?? 0,
-              sheetCost: qi.transfer_cost ?? 0,
-              total: qi.total ?? 0,
-            },
-          }))
+    ? r.quote_items
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map(qi => ({
+      id: crypto.randomUUID(),
+      quantity: String(qi.quantity ?? ""),
+      isNew: qi.is_new,
+      calcResult: {
+        plateCost: qi.plate_cost ?? 0,
+        sheetCost: qi.transfer_cost ?? 0,
+        total: qi.total ?? 0,
+      },
+      manualTotal: "",
+    }))
       : [newSheetItem()];
     setSheetItems(loaded);
     setMsg("✅ 전사지 견적을 불러왔어요. 수정 후 출력하세요.");
