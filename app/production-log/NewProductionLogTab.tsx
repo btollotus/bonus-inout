@@ -26,7 +26,10 @@ type WorkOrder = {
   status_input: boolean;
   usages?: { name: string; quantity: number; unit: string }[];
   items?: { name: string; actual_qty: number; unit_weight: number }[];
-  start_at?: string | null;
+  prod_start?: string | null;   // ccp_wo_events start measured_at
+  prod_end?: string | null;     // ccp_wo_events end measured_at
+  metal_start?: string | null;  // ccp_metal_logs start_time
+  metal_end?: string | null;    // ccp_metal_logs b_end_time
 };
 
 type BlendLog = {
@@ -85,7 +88,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [woRes, blendRes, usageRes, ccpEvRes] = await Promise.all([
+    const [woRes, blendRes, usageRes, ccpEvRes, metalRes] = await Promise.all([
       supabase
         .from("work_orders")
         .select("id,work_order_no,client_name,product_name,assignee_production,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight)")
@@ -105,19 +108,37 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         .select("quantity, unit, note, material:materials(name)")
         .eq("used_date", selectedDate)
         .eq("work_type", "product"),
-      supabase
+        supabase
         .from("ccp_wo_events")
         .select("work_order_no, event_type, measured_at")
         .gte("measured_at", `${selectedDate}T00:00:00+09:00`)
         .lt("measured_at",  `${selectedDate}T23:59:59+09:00`)
         .order("measured_at", { ascending: true }),
+      supabase
+        .from("ccp_metal_logs")
+        .select("work_order_id, start_time, b_end_time")
+        .eq("log_date", selectedDate),
     ]);
 
-    // work_order_no별 시작시각 맵
-    const ccpStartMap: Record<string, string> = {};
+    // work_order_no별 생산시간 맵
+    const prodStartMap: Record<string, string> = {};
+    const prodEndMap: Record<string, string> = {};
     (ccpEvRes.data ?? []).forEach((ev: any) => {
-      if (ev.event_type === "start" && !ccpStartMap[ev.work_order_no]) {
-        ccpStartMap[ev.work_order_no] = ev.measured_at;
+      if (ev.event_type === "start" && !prodStartMap[ev.work_order_no]) {
+        prodStartMap[ev.work_order_no] = ev.measured_at;
+      }
+      if (ev.event_type === "end") {
+        prodEndMap[ev.work_order_no] = ev.measured_at;
+      }
+    });
+    // work_order_id별 금속검출 시간 맵
+    const metalMap: Record<string, { start: string; end: string }> = {};
+    (metalRes.data ?? []).forEach((ml: any) => {
+      if (ml.work_order_id) {
+        metalMap[ml.work_order_id] = {
+          start: ml.start_time ?? "",
+          end: ml.b_end_time ?? "",
+        };
       }
     });
     setBlendLogs((blendRes.data ?? []) as any);
@@ -144,11 +165,14 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         .map(([material_name, v]) => ({ material_name, ...v }))
         .sort((a, b) => a.material_name.localeCompare(b.material_name))
     );
-   // 작업지시서에 원료 사용량 + items + 시작시각 주입
+   // 작업지시서에 원료 사용량 + items + 시간 주입
    setWorkOrders((woRes.data ?? []).map((wo: any) => ({
     ...wo,
     usages: woUsageMap[wo.work_order_no] ?? [],
-    start_at: ccpStartMap[wo.work_order_no] ?? null,
+    prod_start: prodStartMap[wo.work_order_no] ?? null,
+    prod_end: prodEndMap[wo.work_order_no] ?? null,
+    metal_start: metalMap[wo.id]?.start ?? null,
+    metal_end: metalMap[wo.id]?.end ?? null,
     items: (wo.work_order_items ?? [])
       .map((woi: any) => ({
         name: (woi.sub_items?.[0]?.name ?? ""),
@@ -187,7 +211,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     }
 
     const results = await Promise.all(dates.map(async (date) => {
-      const [woRes, blendRes, usageRes, ccpEvRes2] = await Promise.all([
+      const [woRes, blendRes, usageRes, ccpEvRes2, metalRes2] = await Promise.all([
         supabase
           .from("work_orders")
           .select("id,work_order_no,client_name,product_name,assignee_production,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight)")
@@ -207,17 +231,31 @@ export function NewProductionLogTab({ role, userId, showToast }: {
           .select("quantity, unit, note, material:materials(name)")
           .eq("used_date", date)
           .eq("work_type", "product"),
-        supabase
+          supabase
           .from("ccp_wo_events")
           .select("work_order_no, event_type, measured_at")
           .gte("measured_at", `${date}T00:00:00+09:00`)
           .lt("measured_at",  `${date}T23:59:59+09:00`)
           .order("measured_at", { ascending: true }),
+        supabase
+          .from("ccp_metal_logs")
+          .select("work_order_id, start_time, b_end_time")
+          .eq("log_date", date),
       ]);
-      const ccpStartMapRange: Record<string, string> = {};
+      const prodStartMapR: Record<string, string> = {};
+      const prodEndMapR: Record<string, string> = {};
       (ccpEvRes2.data ?? []).forEach((ev: any) => {
-        if (ev.event_type === "start" && !ccpStartMapRange[ev.work_order_no]) {
-          ccpStartMapRange[ev.work_order_no] = ev.measured_at;
+        if (ev.event_type === "start" && !prodStartMapR[ev.work_order_no]) {
+          prodStartMapR[ev.work_order_no] = ev.measured_at;
+        }
+        if (ev.event_type === "end") {
+          prodEndMapR[ev.work_order_no] = ev.measured_at;
+        }
+      });
+      const metalMapR: Record<string, { start: string; end: string }> = {};
+      (metalRes2.data ?? []).forEach((ml: any) => {
+        if (ml.work_order_id) {
+          metalMapR[ml.work_order_id] = { start: ml.start_time ?? "", end: ml.b_end_time ?? "" };
         }
       });
       const usageMap: Record<string, { total_qty: number; unit: string }> = {};
@@ -235,7 +273,10 @@ export function NewProductionLogTab({ role, userId, showToast }: {
           workOrders: (woRes.data ?? []).map((wo: any) => ({
             ...wo,
             usages: [],
-            start_at: ccpStartMapRange[wo.work_order_no] ?? null,
+            prod_start: prodStartMapR[wo.work_order_no] ?? null,
+            prod_end: prodEndMapR[wo.work_order_no] ?? null,
+            metal_start: metalMapR[wo.id]?.start ?? null,
+            metal_end: metalMapR[wo.id]?.end ?? null,
             items: (wo.work_order_items ?? [])
             .map((woi: any) => ({
               name: (woi.sub_items?.[0]?.name ?? ""),
@@ -290,7 +331,8 @@ export function NewProductionLogTab({ role, userId, showToast }: {
                 ${showWorker ? `<td style="${td}text-align:center;" rowspan="${workerTotalRows}">${worker}</td>` : ""}
                 <td style="${td}">${wo.client_name}</td>
                 <td style="${td}">${item.name}</td>
-                ${idx === 0 ? `<td style="${tdC}" rowspan="${rows.length}">${wo.start_at ? toKstTime(wo.start_at) : "—"} ~ ${wo.input_done_at ? toKstTime(wo.input_done_at) : wo.production_done_at ? toKstTime(wo.production_done_at) : "—"}</td>` : ""}
+                ${idx === 0 ? `<td style="${tdC}" rowspan="${rows.length}" style="font-size:7pt;">${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}</td>` : ""}
+                ${idx === 0 ? `<td style="${tdC}" rowspan="${rows.length}" style="font-size:7pt;">${wo.metal_start ? wo.metal_start.slice(0,5) : "—"}~${wo.metal_end ? wo.metal_end.slice(0,5) : "—"}</td>` : ""}
                 ${idx === 0 ? `<td style="${tdC}" rowspan="${rows.length}">${wo.skip_production_check ? "생산완료" : "금속검출완료"}</td>` : ""}
                 ${showUsage ? `<td style="${td}" rowspan="${rows.length}">${usageStr}</td>` : ""}
               </tr>
@@ -302,14 +344,14 @@ export function NewProductionLogTab({ role, userId, showToast }: {
       const woTable = wos.length > 0 ? `
         <div style="${secTitle}">생산 완료 내역</div>
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
-          <colgroup>
-            <col style="width:50px"><col style="width:90px"><col>
-            <col style="width:45px"><col style="width:65px"><col style="width:130px">
+         <colgroup>
+            <col style="width:48px"><col style="width:80px"><col>
+            <col style="width:55px"><col style="width:55px"><col style="width:55px"><col style="width:110px">
           </colgroup>
           <thead>
             <tr>
-            <th style="${th}">작업자</th><th style="${th}">업체명</th><th style="${th}">제품명</th>
-              <th style="${th}">작업시간</th><th style="${th}">상태</th><th style="${th}">원료 사용량</th> 
+           <th style="${th}">작업자</th><th style="${th}">업체명</th><th style="${th}">제품명</th>
+              <th style="${th}">생산시간</th><th style="${th}">금속검출</th><th style="${th}">상태</th><th style="${th}">원료 사용량</th>
             </tr>
           </thead>
           <tbody>${woRows}</tbody>
@@ -531,11 +573,18 @@ export function NewProductionLogTab({ role, userId, showToast }: {
                             {/* 작업지시서 헤더 */}
                             <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 bg-white">
                               <span className="text-xs font-semibold text-slate-500">{wo.client_name}</span>
-                              <span className="text-xs text-slate-400 tabular-nums ml-auto">
-                                {wo.start_at ? toKstTime(wo.start_at) : "—"}
-                                {" ~ "}
-                                {wo.input_done_at ? toKstTime(wo.input_done_at) : wo.production_done_at ? toKstTime(wo.production_done_at) : "—"}
-                              </span>
+                              <div className="ml-auto flex flex-col items-end gap-0.5">
+                                {(wo.prod_start || wo.prod_end) && (
+                                  <span className="text-[11px] text-slate-400 tabular-nums">
+                                    생산 {wo.prod_start ? toKstTime(wo.prod_start) : "—"} ~ {wo.prod_end ? toKstTime(wo.prod_end) : "—"}
+                                  </span>
+                                )}
+                                {(wo.metal_start || wo.metal_end) && (
+                                  <span className="text-[11px] text-slate-400 tabular-nums">
+                                    금속검출 {wo.metal_start ? wo.metal_start.slice(0,5) : "—"} ~ {wo.metal_end ? wo.metal_end.slice(0,5) : "—"}
+                                  </span>
+                                )}
+                              </div>
                               {wo.skip_production_check ? (
                                 <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">생산완료</span>
                               ) : (
