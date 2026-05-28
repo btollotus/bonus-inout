@@ -1522,6 +1522,17 @@ const totalOrder = items
                     <div className="font-semibold text-sm">기본정보</div>
                     <div className="text-xs text-slate-400">{isEditMode ? "수정 모드" : "수정 버튼으로 편집"}</div>
                   </div>
+                  {signedImageUrls.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {signedImageUrls.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                          className="block rounded-lg border border-slate-200 bg-white overflow-hidden hover:border-blue-300 hover:shadow-md transition-all">
+                          <img src={url} alt={`이미지 ${i + 1}`}
+                            className="h-24 w-auto max-w-[160px] object-contain" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
                   {isAdminOrSubadmin ? (
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                       <div><div className="mb-1 text-xs text-slate-500">제품명 *</div><input className={inp} value={eProductName} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEProductName(e.target.value)} /></div>
