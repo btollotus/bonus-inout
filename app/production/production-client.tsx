@@ -447,7 +447,12 @@ export default function ProductionClient() {
       const { data: wo, error: woErr } = await supabase.from("work_orders").insert({ work_order_no: workOrderNo, barcode_no: kiseongSelected.barcode, client_id: null, client_name: "재고생산", sub_name: kSubName.trim() || null, order_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, food_type: kFoodType.trim() || null, product_name: kiseongSelected.product_name, logo_spec: kLogoSpec.trim() || null, thickness: kThickness || null, delivery_method: null, packaging_type: kPackagingType || null, tray_slot: null, package_unit: kPackageUnit || null, mold_per_sheet: kMoldPerSheetNum > 0 ? kMoldPerSheetNum : null, mold_cols: kMoldColsNum > 0 ? kMoldColsNum : null, mold_rows: kMoldRowsNum > 0 ? kMoldRowsNum : null, note: kNote.trim() || null, reference_note: kReferenceNote.trim() || null, status: "생산중", variant_id: kiseongSelected.variant_id, order_type: "재고" }).select("id").single();
       if (woErr) throw woErr;
       const { error: itemErr } = await supabase.from("work_order_items").insert({ work_order_id: wo.id, delivery_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, sub_items: [{ name: kiseongSelected.product_name, qty: toInt(kActualQty) }], order_qty: toInt(kActualQty), barcode_no: kiseongSelected.barcode, actual_qty: toInt(kActualQty), unit_weight: kUnitWeight ? toNum(kUnitWeight) : (kiseongSelected.weight_g ?? null), expiry_date: null });
-      if (itemErr) throw itemErr;
+      if (itemErr) {
+        console.error("[saveKiseongOrder] work_order_items insert 실패:", itemErr.message, itemErr);
+        // WO 롤백
+        await supabase.from("work_orders").delete().eq("id", wo.id);
+        throw new Error("생산항목 저장 실패 (WO 롤백됨): " + itemErr.message);
+      }
       showToast("재고 작업지시서가 등록되었습니다!"); resetKiseongForm(); await loadWoList();
     } catch (e: any) { setMsg("저장 오류: " + (e?.message ?? e)); } finally { setKiseongSaving(false); }
   };
