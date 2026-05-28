@@ -62,7 +62,7 @@ export async function GET() {
       .eq("id", 1)
       .single();
 
-    const since = stateRow?.last_changed_at
+      const since = stateRow?.last_changed_at && new Date(stateRow.last_changed_at).getTime() > Date.now() - 60 * 60_000
       ? new Date(stateRow.last_changed_at).toISOString().replace("T", " ").substring(0, 19)
       : new Date(Date.now() - 5 * 60_000).toISOString().replace("T", " ").substring(0, 19);
 
