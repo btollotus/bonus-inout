@@ -1545,6 +1545,13 @@ const totalOrder = items
                       {([["식품유형", selectedWo.food_type], ["규격", selectedWo.logo_spec], ["두께", selectedWo.thickness], ["납품방법", selectedWo.delivery_method], ["포장방법", selectedWo.packaging_type], ["포장단위", selectedWo.package_unit], ["성형틀/장", selectedWo.mold_per_sheet ? `${selectedWo.mold_per_sheet}개` : null], ["비고", selectedWo.note], ["참고사항", selectedWo.reference_note]] as [string, string | null][]).map(([label, value]) => value ? <div key={label}><div className="text-slate-400">{label}</div><div className="font-medium text-slate-800">{value}</div></div> : null)}
                     </div>
                   )}
+                  {(() => {
+                    const allItemImages = (selectedWo.work_order_items ?? [])
+                      .filter(item => { const n = (item.sub_items ?? [])[0]?.name ?? ""; return !n.startsWith("성형틀") && !n.startsWith("인쇄제판"); })
+                      .flatMap(item => (item as any).images ?? []) as string[];
+                    if (allItemImages.length === 0) return null;
+                    return <ItemImageThumbnails images={allItemImages} logoSpec={selectedWo.logo_spec} />;
+                  })()}
                 </div>
               )}
 
@@ -1875,6 +1882,56 @@ const totalOrder = items
 
       {printOpen && selectedWo ? <WoPrintModal wo={selectedWo} onClose={() => setPrintOpen(false)} /> : null}
     </div>
+  );
+}
+
+// ─────────────────────── ItemImageThumbnails ───────────────────────
+function ItemImageThumbnails({ images, logoSpec }: { images: string[]; logoSpec: string | null }) {
+  const [signedUrls, setSignedUrls] = useState<string[]>([]);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (images.length === 0) return;
+    (async () => {
+      const paths = images.map(v => {
+        if (v.startsWith("http")) { const m = v.match(/work-order-images\/(.+?)(\?|$)/); return m ? m[1] : null; }
+        return v;
+      }).filter(Boolean) as string[];
+      if (paths.length === 0) { setSignedUrls(images); return; }
+      const { data, error } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
+      if (!error && data) setSignedUrls(data.map(d => d.signedUrl));
+      else setSignedUrls(images);
+    })();
+  }, [images.join(",")]); // eslint-disable-line
+
+  if (signedUrls.length === 0) return null;
+
+  return (
+    <>
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 p-4" onClick={() => setLightboxUrl(null)}>
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <img src={lightboxUrl} alt="디자인 이미지" className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl" />
+            <button className="absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700 shadow-lg hover:bg-slate-100 text-sm font-bold" onClick={() => setLightboxUrl(null)}>✕</button>
+            {logoSpec && <div className="mt-2 text-center text-xs text-white/80">{logoSpec}</div>}
+          </div>
+        </div>
+      )}
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="mb-1.5 text-xs font-semibold text-slate-500">인쇄 디자인 이미지</div>
+        <div className="flex flex-wrap gap-2">
+          {signedUrls.map((url, i) => (
+            <button key={i} type="button" className="group relative rounded-lg border border-slate-200 bg-white p-1 hover:border-blue-300 hover:shadow-md transition-all" onClick={() => setLightboxUrl(url)} title="클릭하면 크게 보기">
+              <img src={url} alt={`디자인 ${i + 1}`} className="h-16 w-16 rounded-md object-cover" />
+              <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/0 group-hover:bg-black/10 transition-all">
+                <span className="text-white text-lg opacity-0 group-hover:opacity-100 drop-shadow">🔍</span>
+              </div>
+              {logoSpec && <div className="mt-0.5 text-center text-[10px] text-slate-400 truncate max-w-[64px]">{logoSpec}</div>}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
   );
 }
 
