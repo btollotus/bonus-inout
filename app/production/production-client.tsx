@@ -321,7 +321,7 @@ export default function ProductionClient() {
 
   const [woChecks, setWoChecks] = useState<WoChecks | null>(null);
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
-  const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string }>>({}); 
+  const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[] }>>({});
   const [printOpen, setPrintOpen] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null; pin: string | null }[]>([]);
 
@@ -610,7 +610,7 @@ export default function ProductionClient() {
     setLoading(true); setMsg(null);
     try {
       const LIMIT = filterStatus === "완료" ? 20 : 200;
-      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,skip_production_check,work_order_items(id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
+      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,skip_production_check,work_order_items(id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
       if (filterStatus !== "전체") q = q.eq("status", filterStatus);
       if (filterDateFrom) q = q.gte("order_date", filterDateFrom);
       if (filterDateTo) q = q.lte("order_date", filterDateTo);
@@ -698,8 +698,18 @@ export default function ProductionClient() {
       const { data, error } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
       if (!error && data) setSignedImageUrls(data.map((d) => d.signedUrl)); else setSignedImageUrls(rawPaths);
     })();
-    const inputs: Record<string, { actual_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string }> = {};
-    for (const item of wo.work_order_items ?? []) { inputs[item.id] = { actual_qty: item.actual_qty != null ? String(item.actual_qty) : "", unit_weight: item.unit_weight != null ? String(item.unit_weight) : "", expiry_date: item.expiry_date ?? "", transfer_lot_id: item.transfer_lot_id ?? "", transfer_qty: item.transfer_qty != null ? String(item.transfer_qty) : "" }; }
+    const inputs: Record<string, { actual_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[] }> = {};
+    for (const item of wo.work_order_items ?? []) {
+      const savedLots = (item as any).transfer_lots as { lot_id: string; qty: number }[] | null;
+      inputs[item.id] = {
+        actual_qty: item.actual_qty != null ? String(item.actual_qty) : "",
+        unit_weight: item.unit_weight != null ? String(item.unit_weight) : "",
+        expiry_date: item.expiry_date ?? "",
+        transfer_lot_id: item.transfer_lot_id ?? "",
+        transfer_qty: item.transfer_qty != null ? String(item.transfer_qty) : "",
+        transfer_lots: savedLots ? savedLots.map((l) => ({ lot_id: l.lot_id, qty: String(l.qty) })) : [],
+      };
+    }
     setProdInputs(inputs);
     (async () => {
       const items = wo.work_order_items ?? [];
@@ -728,7 +738,7 @@ export default function ProductionClient() {
       for (const item of woItems) {
         const name = (item.sub_items ?? [])[0]?.name ?? "";
         if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
-        if (item.transfer_lot_id) continue;
+        if ((item as any).transfer_lots?.length > 0 || item.transfer_lot_id) continue;
         const itemKeyword = extractKeyword(name);
         const keywords = clientKeyword
   ? [clientKeyword]
@@ -798,32 +808,39 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
           expiry_date: pi.expiry_date || null,
         }).eq("id", item.id);
       }
-      // 도눔(은박) 재고 차감
-      const stockErrors: string[] = [];
-      for (const item of items) {
-        const pi = prodInputs[item.id];
-        if (!pi?.transfer_lot_id || !pi?.transfer_qty) continue;
-        const transferQty = toInt(pi.transfer_qty);
-        if (transferQty <= 0) continue;
-        const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", pi.transfer_lot_id);
-        const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
-        if (transferQty > remaining) {
-          setMsg(`도눔(은박) 차감 실패: 차감 수량(${transferQty})이 잔량(${remaining})을 초과합니다.`);
-          setIsCompleting(false);
-          return;
-        }
-        const { error: transferErr } = await supabase.from("movements").insert({
-          lot_id: pi.transfer_lot_id, type: "OUT", qty: transferQty,
-          happened_at: `${new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10)}T00:00:00+09:00`,
-          note: `도눔 포장완료 - ${selectedWo.work_order_no}`,
-          created_by: userId,
-        });
-        if (transferErr) stockErrors.push("차감 실패: " + transferErr.message);
-        await supabase.from("work_order_items").update({
-          transfer_lot_id: pi.transfer_lot_id,
-          transfer_qty: transferQty,
-        }).eq("id", item.id);
-      }
+     // 도눔(은박) 재고 차감
+     const stockErrors: string[] = [];
+     for (const item of items) {
+       const pi = prodInputs[item.id];
+       const transferLots = pi?.transfer_lots ?? [];
+       if (transferLots.length === 0) continue;
+       const today = `${new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10)}T00:00:00+09:00`;
+       for (const tl of transferLots) {
+         const transferQty = toInt(tl.qty);
+         if (!tl.lot_id || transferQty <= 0) continue;
+         const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", tl.lot_id);
+         const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
+         if (transferQty > remaining) {
+           setMsg(`도눔(은박) 차감 실패: 차감 수량(${transferQty})이 잔량(${remaining})을 초과합니다.`);
+           setIsCompleting(false);
+           return;
+         }
+         const { error: transferErr } = await supabase.from("movements").insert({
+           lot_id: tl.lot_id, type: "OUT", qty: transferQty,
+           happened_at: today,
+           note: `도눔 포장완료 - ${selectedWo.work_order_no}`,
+           created_by: userId,
+         });
+         if (transferErr) stockErrors.push("차감 실패: " + transferErr.message);
+       }
+       const lotsForDb = transferLots.map((l) => ({ lot_id: l.lot_id, qty: toInt(l.qty) }));
+       const totalQty = lotsForDb.reduce((s, l) => s + l.qty, 0);
+       await supabase.from("work_order_items").update({
+         transfer_lot_id: lotsForDb[0]?.lot_id ?? null,
+         transfer_qty: totalQty > 0 ? totalQty : null,
+         transfer_lots: lotsForDb,
+       }).eq("id", item.id);
+     }
       // 상태 완료
       const { error: statusErr } = await supabase.from("work_orders").update({
         status: "완료",
@@ -1091,15 +1108,24 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
         const stockErrors: string[] = [];
         for (const item of items) {
           const pi = prodInputs[item.id];
-          if (!pi?.transfer_lot_id || !pi?.transfer_qty) continue;
-          const transferQty = toInt(pi.transfer_qty);
-          if (transferQty <= 0) continue;
-          const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", pi.transfer_lot_id);
-          const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
-          if (transferQty > remaining) { setMsg(`전사지 차감 실패: 차감 수량(${transferQty})이 잔량(${remaining})을 초과합니다. (납기일: ${item.delivery_date})`); setIsCompleting(false); return; }
-          const { error: transferErr } = await supabase.from("movements").insert({ lot_id: pi.transfer_lot_id, type: "OUT", qty: transferQty, happened_at: new Date().toISOString(), note: `전사지 차감 - ${selectedWo.work_order_no} - ${item.delivery_date}`, created_by: userId });
-          if (transferErr) stockErrors.push("전사지 차감 실패: " + transferErr.message);
-          await supabase.from("work_order_items").update({ transfer_lot_id: pi.transfer_lot_id, transfer_qty: transferQty }).eq("id", item.id);
+          const transferLots = pi?.transfer_lots ?? [];
+          if (transferLots.length === 0) continue;
+          for (const tl of transferLots) {
+            const transferQty = toInt(tl.qty);
+            if (!tl.lot_id || transferQty <= 0) continue;
+            const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", tl.lot_id);
+            const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
+            if (transferQty > remaining) { setMsg(`전사지 차감 실패: 차감 수량(${transferQty})이 잔량(${remaining})을 초과합니다. (납기일: ${item.delivery_date})`); setIsCompleting(false); return; }
+            const { error: transferErr } = await supabase.from("movements").insert({ lot_id: tl.lot_id, type: "OUT", qty: transferQty, happened_at: new Date().toISOString(), note: `전사지 차감 - ${selectedWo.work_order_no} - ${item.delivery_date}`, created_by: userId });
+            if (transferErr) stockErrors.push("전사지 차감 실패: " + transferErr.message);
+          }
+          const lotsForDb = transferLots.map((l) => ({ lot_id: l.lot_id, qty: toInt(l.qty) }));
+          const totalQty = lotsForDb.reduce((s, l) => s + l.qty, 0);
+          await supabase.from("work_order_items").update({
+            transfer_lot_id: lotsForDb[0]?.lot_id ?? null,
+            transfer_qty: totalQty > 0 ? totalQty : null,
+            transfer_lots: lotsForDb,
+          }).eq("id", item.id);
         }
         // ── 컴파운드 자동 차감 (다크/화이트/딸기) ──
         {
@@ -1697,53 +1723,85 @@ const totalOrder = items
                           </div>
                           {(item.images ?? []).length > 0 ? <ItemImages images={item.images ?? []} logoSpec={selectedWo.logo_spec} /> : null}
 
-                          {/* 재고 차감 — 중간재 제외 */}
-                          {getFoodCategory(selectedWo.food_type) !== "중간재" && (
+                         {/* 재고 차감 — 중간재 제외 */}
+                         {getFoodCategory(selectedWo.food_type) !== "중간재" && (
                             <div className="mt-2 rounded-lg border border-violet-100 bg-violet-50 p-2.5">
-                              <div className="mb-1.5 text-xs font-semibold text-violet-700">재고 차감 선택</div>
-                              {!prodInputs[item.id]?.transfer_lot_id && (
+                              <div className="mb-1.5 flex items-center justify-between">
+                                <span className="text-xs font-semibold text-violet-700">재고 차감 선택</span>
+                                {(prodInputs[item.id]?.transfer_lots ?? []).length > 0 && !(selectedWo?.status === "완료" && !isEditMode) && (
+                                  <span className="text-[11px] text-violet-500">총 차감: <b>{(prodInputs[item.id]?.transfer_lots ?? []).reduce((s, l) => s + toInt(l.qty), 0).toLocaleString()} EA</b></span>
+                                )}
+                              </div>
+
+                              {/* 선택된 로트 목록 */}
+                              {(prodInputs[item.id]?.transfer_lots ?? []).length > 0 && (
+                                <div className="space-y-1.5 mb-2">
+                                  {(prodInputs[item.id].transfer_lots).map((tl, tlIdx) => {
+                                    const allLots = Object.values(transferLotOptions).flat();
+                                    const lotInfo = allLots.find((l) => l.lot_id === tl.lot_id) ?? (transferLotOptions[item.id] ?? []).find((l) => l.lot_id === tl.lot_id);
+                                    const usedQtyByOthers = (prodInputs[item.id].transfer_lots).filter((_, i) => i !== tlIdx).reduce((s, l) => l.lot_id === tl.lot_id ? s + toInt(l.qty) : s, 0);
+                                    const effectiveRemaining = (lotInfo?.remaining_qty ?? 0) - usedQtyByOthers;
+                                    return (
+                                      <div key={tlIdx} className="rounded-lg border border-violet-200 bg-white px-2.5 py-1.5">
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex-1 min-w-0">
+                                            <div className="text-xs font-semibold text-violet-700 truncate">{lotInfo?.variant_name ?? tl.lot_id}</div>
+                                            <div className="text-[11px] text-slate-500">소비기한: {lotInfo?.expiry_date ?? "—"}{lotInfo && <span className="ml-2">잔량: <b className="text-violet-700">{effectiveRemaining.toLocaleString()} EA</b></span>}</div>
+                                          </div>
+                                          {!(selectedWo?.status === "완료" && !isEditMode) && (
+                                            <button type="button" className="text-xs text-slate-400 hover:text-red-500 shrink-0"
+                                              onClick={() => setProdInputs((prev) => ({ ...prev, [item.id]: { ...prev[item.id], transfer_lots: prev[item.id].transfer_lots.filter((_, i) => i !== tlIdx) } }))}>✕</button>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <div className="flex-1">
+                                            <input className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-right tabular-nums focus:border-violet-400 focus:outline-none" inputMode="numeric" placeholder="차감 수량"
+                                              value={tl.qty} disabled={selectedWo?.status === "완료" && !isEditMode}
+                                              onChange={(e) => setProdInputs((prev) => {
+                                                const newLots = [...prev[item.id].transfer_lots];
+                                                newLots[tlIdx] = { ...newLots[tlIdx], qty: e.target.value.replace(/[^\d]/g, "") };
+                                                return { ...prev, [item.id]: { ...prev[item.id], transfer_lots: newLots } };
+                                              })} />
+                                          </div>
+                                          {lotInfo && tl.qty && (
+                                            <div className="text-[11px] text-slate-500 shrink-0">차감 후: <b className={effectiveRemaining - toInt(tl.qty) < 0 ? "text-red-600" : "text-violet-700"}>{(effectiveRemaining - toInt(tl.qty)).toLocaleString()} EA</b></div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {/* 로트 추가 목록 */}
+                              {!(selectedWo?.status === "완료" && !isEditMode) && (
                                 <div>
                                   {transferLotSearching[item.id] ? (
                                     <div className="text-xs text-slate-400 py-1">불러오는 중...</div>
-                                  ) : (transferLotOptions[item.id] ?? []).length > 0 ? (
-                                    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden max-h-44 overflow-y-auto">
-                                      {transferLotOptions[item.id].map((lot) => (
-                                        <button key={lot.lot_id} type="button" className="w-full text-left px-2.5 py-2 text-xs border-b border-slate-100 last:border-0 hover:bg-violet-50"
-                                          onClick={() => setProdInputs((prev) => ({ ...prev, [item.id]: { ...prev[item.id], transfer_lot_id: lot.lot_id, transfer_qty: "" } }))}>
-                                          <div className="font-medium text-slate-800">{lot.variant_name}</div>
-                                          <div className="flex gap-2 mt-0.5 text-[11px] text-slate-500"><span>소비기한: {lot.expiry_date}</span><span>·</span><span>잔량: <b className="text-violet-700">{lot.remaining_qty.toLocaleString()} EA</b></span></div>
-                                        </button>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <div className="text-xs text-slate-400">관련 재고 없음</div>
-                                  )}
+                                  ) : (() => {
+                                    const selectedLotIds = new Set((prodInputs[item.id]?.transfer_lots ?? []).map((l) => l.lot_id));
+                                    const availableLots = (transferLotOptions[item.id] ?? []).filter((l) => !selectedLotIds.has(l.lot_id));
+                                    if (availableLots.length === 0) return <div className="text-xs text-slate-400">{selectedLotIds.size > 0 ? "추가할 재고 없음" : "관련 재고 없음"}</div>;
+                                    return (
+                                      <div className="rounded-lg border border-slate-200 bg-white overflow-hidden max-h-44 overflow-y-auto">
+                                        {availableLots.map((lot) => (
+                                          <button key={lot.lot_id} type="button" className="w-full text-left px-2.5 py-2 text-xs border-b border-slate-100 last:border-0 hover:bg-violet-50"
+                                            onClick={() => setProdInputs((prev) => ({
+                                              ...prev,
+                                              [item.id]: {
+                                                ...prev[item.id],
+                                                transfer_lots: [...(prev[item.id]?.transfer_lots ?? []), { lot_id: lot.lot_id, qty: "" }],
+                                              }
+                                            }))}>
+                                            <div className="font-medium text-slate-800">+ {lot.variant_name}</div>
+                                            <div className="flex gap-2 mt-0.5 text-[11px] text-slate-500"><span>소비기한: {lot.expiry_date}</span><span>·</span><span>잔량: <b className="text-violet-700">{lot.remaining_qty.toLocaleString()} EA</b></span></div>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               )}
-                              {prodInputs[item.id]?.transfer_lot_id && (() => {
-                                const allLots = Object.values(transferLotOptions).flat();
-                                const selectedLotId = prodInputs[item.id].transfer_lot_id;
-                                const lotInfo = allLots.find((l) => l.lot_id === selectedLotId) ?? (transferLotOptions[item.id] ?? []).find((l) => l.lot_id === selectedLotId);
-                                return (
-                                  <div className="space-y-1.5">
-                                    <div className="flex items-center gap-2 rounded-lg border border-violet-200 bg-white px-2.5 py-1.5">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="text-xs font-semibold text-violet-700 truncate">{lotInfo?.variant_name ?? "로딩 중..."}</div>
-                                        <div className="text-[11px] text-slate-500">소비기한: {lotInfo?.expiry_date ?? "—"}{lotInfo && <span className="ml-2">잔량: <b className="text-violet-700">{lotInfo.remaining_qty.toLocaleString()} EA</b></span>}</div>
-                                      </div>
-                                      {!(selectedWo?.status === "완료" && !isEditMode) && (
-                                        <button type="button" className="text-xs text-slate-400 hover:text-red-500 shrink-0" onClick={() => setProdInputs((prev) => ({ ...prev, [item.id]: { ...prev[item.id], transfer_lot_id: "", transfer_qty: "" } }))}>✕</button>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <div className="flex-1"><div className="mb-1 text-xs text-slate-500">차감 수량 (EA)</div><input className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-right tabular-nums focus:border-violet-400 focus:outline-none" inputMode="numeric" placeholder="차감 수량" value={prodInputs[item.id]?.transfer_qty ?? ""} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...prev[item.id], transfer_qty: e.target.value.replace(/[^\d]/g, "") } }))} /></div>
-                                      {lotInfo && prodInputs[item.id]?.transfer_qty && (
-                                        <div className="text-[11px] text-slate-500 shrink-0 pt-4">차감 후: <b className={lotInfo.remaining_qty - toInt(prodInputs[item.id].transfer_qty) < 0 ? "text-red-600" : "text-violet-700"}>{(lotInfo.remaining_qty - toInt(prodInputs[item.id].transfer_qty)).toLocaleString()} EA</b></div>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })()}
                             </div>
                           )}
                         </div>
