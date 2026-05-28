@@ -22,11 +22,11 @@ export async function GET() {
       .eq("id", 1)
       .single();
 
-    const lastChangedFrom = toNaverDate(
-      stateRow?.last_changed_at
-        ? new Date(stateRow.last_changed_at)
-        : new Date(Date.now() - 5 * 60_000)
-    );
+      const lastChangedFrom = toNaverDate(
+        stateRow?.last_changed_at && new Date(stateRow.last_changed_at).getTime() > Date.now() - 60 * 60_000
+          ? new Date(stateRow.last_changed_at)
+          : new Date(Date.now() - 5 * 60_000)
+      );
     const now = toNaverDate(new Date());
 
     // 2. 프록시 서버에서 주문 조회

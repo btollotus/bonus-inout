@@ -22,11 +22,11 @@ export async function GET() {
       .eq("id", 1)
       .single();
 
-    const createdAtFrom = toProxyDate(
-      stateRow?.last_changed_at
-        ? new Date(stateRow.last_changed_at)
-        : new Date(Date.now() - 5 * 60_000)
-    );
+      const createdAtFrom = toProxyDate(
+        stateRow?.last_changed_at && new Date(stateRow.last_changed_at).getTime() > Date.now() - 60 * 60_000
+          ? new Date(stateRow.last_changed_at)
+          : new Date(Date.now() - 5 * 60_000)
+      );
     const createdAtTo = toProxyDate(new Date());
 
     const params = new URLSearchParams({ createdAtFrom, createdAtTo });
