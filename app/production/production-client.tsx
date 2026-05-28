@@ -828,6 +828,7 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
       const { error: statusErr } = await supabase.from("work_orders").update({
         status: "완료",
         status_production: true,
+        ccp_slot_id: null,
         assignee_production: productionAssignee,
         production_done_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -945,6 +946,7 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
       const { error: statusErr } = await supabase.from("work_orders").update({
         status:              "완료",
         status_production:   true,
+        ccp_slot_id:         null,
         assignee_production: productionAssignee,
         production_done_at:  new Date().toISOString(),
         updated_at:          new Date().toISOString(),
@@ -1080,7 +1082,7 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
           const { error: movErr } = await supabase.from("movements").insert({ lot_id: lotId, type: "IN", qty: actual_qty, happened_at: `${todayKSTDate}T00:00:00+09:00`, note: "작업지시서 생산완료 - " + selectedWo.work_order_no, created_by: userId });
           if (movErr) stockErrors.push("입고 기록 실패: " + movErr.message);
         }
-        const { error: statusErr } = await supabase.from("work_orders").update({ status: "완료", status_production: true, production_done_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+        const { error: statusErr } = await supabase.from("work_orders").update({ status: "완료", status_production: true, ccp_slot_id: null, production_done_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
         if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
         if (stockErrors.length > 0) showToast("저장됐으나 재고 연동 오류: " + stockErrors.join(" / "), "error");
         else showToast("생산완료 처리 완료!");
@@ -1144,7 +1146,7 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
           }
         }
 
-        const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, production_done_at: new Date().toISOString(), updated_at: ccpEndedAt ?? new Date().toISOString() }).eq("id", selectedWo.id);
+        const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, ccp_slot_id: null, production_done_at: new Date().toISOString(), updated_at: ccpEndedAt ?? new Date().toISOString() }).eq("id", selectedWo.id);
         if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
         if (stockErrors.length > 0) showToast("저장됐으나 전사지 차감 오류: " + stockErrors.join(" / "), "error");
         else showToast("생산완료 처리 완료!");

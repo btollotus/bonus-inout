@@ -123,15 +123,12 @@ export function useCcpState(
       .order("measured_at", { ascending: true });
   
       if (slotId) {
+        const today = todayKST();
         query = query
           .eq("slot_id", slotId)
-          .eq("work_order_no", workOrderNo);
-        if (status !== "완료") {
-          const today = todayKST();
-          query = query
-            .gte("measured_at", `${today}T00:00:00+09:00`)
-            .lte("measured_at", `${today}T23:59:59+09:00`);
-        }
+          .eq("work_order_no", workOrderNo)
+          .gte("measured_at", `${today}T00:00:00+09:00`)
+          .lte("measured_at", `${today}T23:59:59+09:00`);
       } else {
         query = query.eq("work_order_no", workOrderNo);
       }
@@ -1235,6 +1232,39 @@ export function WoCcpCard({
                 }`}
                 onClick={async () => {
                   if (eCcpSlotId === s.id) return;
+
+                  // 같은 슬롯에 오늘 end 기록 없는 다른 WO 체크
+                  const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+                  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+
+                  const { data: sameSlotWos } = await supabaseClient
+                    .from("work_orders")
+                    .select("work_order_no, client_name, product_name")
+                    .eq("ccp_slot_id", s.id)
+                    .eq("status", "생산중")
+                    .neq("id", selectedWo.id);
+
+                  if (sameSlotWos && sameSlotWos.length > 0) {
+                    const { data: endEvents } = await supabaseClient
+                      .from("ccp_wo_events")
+                      .select("work_order_no")
+                      .in("work_order_no", sameSlotWos.map((w: any) => w.work_order_no))
+                      .eq("event_type", "end")
+                      .gte("measured_at", `${todayStr}T00:00:00+09:00`)
+                      .lte("measured_at", `${todayStr}T23:59:59+09:00`);
+
+                    const endedWoNos = new Set((endEvents ?? []).map((e: any) => e.work_order_no));
+                    const notEnded = sameSlotWos.filter((w: any) => !endedWoNos.has(w.work_order_no));
+
+                    if (notEnded.length > 0) {
+                      const list = notEnded.map((w: any) =>
+                        `• ${w.work_order_no}\n  ${w.client_name} · ${w.product_name}`
+                      ).join("\n\n");
+                      alert(`[${s.slot_name}] 슬롯에 종료되지 않은 작업이 있습니다.\n\n${list}\n\n해당 작업의 온도 기록을 종료한 후 이 슬롯을 선택해주세요.`);
+                      return;
+                    }
+                  }
+
                   setECcpSlotId(s.id);
                   await supabaseClient.from("work_orders")
                     .update({ ccp_slot_id: s.id, updated_at: new Date().toISOString() })
@@ -1242,9 +1272,6 @@ export function WoCcpCard({
                   onSlotSaved?.(s.id);
                 
                   // 슬롯 지정 시 오늘 기존 기록 소급 복사
-                  const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
-                  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
-                
                   const { data: existingEvents } = await supabaseClient
                     .from("ccp_wo_events")
                     .select("*")
@@ -1315,6 +1342,39 @@ export function WoCcpCard({
       }`}
       onClick={async () => {
         if (eCcpSlotId === s.id) return;
+
+        // 같은 슬롯에 오늘 end 기록 없는 다른 WO 체크
+        const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+
+        const { data: sameSlotWos } = await supabaseClient
+          .from("work_orders")
+          .select("work_order_no, client_name, product_name")
+          .eq("ccp_slot_id", s.id)
+          .eq("status", "생산중")
+          .neq("id", selectedWo.id);
+
+        if (sameSlotWos && sameSlotWos.length > 0) {
+          const { data: endEvents } = await supabaseClient
+            .from("ccp_wo_events")
+            .select("work_order_no")
+            .in("work_order_no", sameSlotWos.map((w: any) => w.work_order_no))
+            .eq("event_type", "end")
+            .gte("measured_at", `${todayStr}T00:00:00+09:00`)
+            .lte("measured_at", `${todayStr}T23:59:59+09:00`);
+
+          const endedWoNos = new Set((endEvents ?? []).map((e: any) => e.work_order_no));
+          const notEnded = sameSlotWos.filter((w: any) => !endedWoNos.has(w.work_order_no));
+
+          if (notEnded.length > 0) {
+            const list = notEnded.map((w: any) =>
+              `• ${w.work_order_no}\n  ${w.client_name} · ${w.product_name}`
+            ).join("\n\n");
+            alert(`[${s.slot_name}] 슬롯에 종료되지 않은 작업이 있습니다.\n\n${list}\n\n해당 작업의 온도 기록을 종료한 후 이 슬롯을 선택해주세요.`);
+            return;
+          }
+        }
+
         setECcpSlotId(s.id);
         await supabaseClient.from("work_orders")
           .update({ ccp_slot_id: s.id, updated_at: new Date().toISOString() })
@@ -1322,9 +1382,6 @@ export function WoCcpCard({
         onSlotSaved?.(s.id);
 
         // 슬롯 지정 시 오늘 기존 기록 소급 복사
-        const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
-        const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
-
         const { data: existingEvents } = await supabaseClient
           .from("ccp_wo_events")
           .select("*")
