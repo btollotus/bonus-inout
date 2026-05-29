@@ -123,18 +123,22 @@ export function WoPrintModal({
       if (!isChocBase && mold > 0 && qty > 0) {
         const cols =
           (wo as any).mold_cols ?? Math.round(Math.sqrt(mold));
+        const rows = (wo as any).mold_rows ?? Math.round(mold / Math.max(cols, 1));
         const fullSheets = Math.floor(qty / mold);
         const remainder = qty % mold;
         let extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
-        let total = fullSheets * mold + extraRows * cols;
+        let totalSheets = fullSheets + Math.floor(extraRows / rows);
+        extraRows = extraRows % rows;
+        let total = totalSheets * mold + extraRows * cols;
         while (total - qty < 16) {
           extraRows += 1;
-          total += cols;
+          if (extraRows >= rows) { extraRows = 0; totalSheets += 1; }
+          total = totalSheets * mold + extraRows * cols;
         }
         init[item.id] =
           extraRows > 0
-            ? `전사지: ${fullSheets}장 ${extraRows}줄 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`
-            : `전사지: ${fullSheets}장 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`;
+            ? `전사지: ${totalSheets}장 ${extraRows}줄 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`
+            : `전사지: ${totalSheets}장 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`;
         const needsLabel = (wo.packaging_type ?? "").includes("벌크");
         if (needsLabel) {
           const labelQty = Math.ceil((qty + 20) / (6 * mold));

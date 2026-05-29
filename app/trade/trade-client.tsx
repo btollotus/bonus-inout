@@ -1216,7 +1216,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
         setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
         setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
-        setOrderSkipProductionCheck(false);
+        setOrderSkipProductionCheck(false); setWo_packageUnit("");
         setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
         await loadTrades(); return;
       }
@@ -1227,7 +1227,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
     setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
     setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
-    setOrderSkipProductionCheck(false);
+    setOrderSkipProductionCheck(false); setWo_packageUnit("");
     setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
     await loadTrades();
   }
@@ -1472,6 +1472,7 @@ if (copyPartnerId) {
           setOrderWoMoldCount((wo as any).mold_count ? String((wo as any).mold_count) : "");
           setOrderTitle((wo as any).reference_note ?? "");
           setOrderWoNote((wo as any).note ?? "");
+          setWo_packageUnit((wo as any).package_unit ?? "");
 
           // 품목별 기존 바코드 저장 (재주문 시 재사용) - 품목명을 key로 사용
           const woItemsAll: any[] = (wo as any).work_order_items ?? [];
@@ -2198,13 +2199,21 @@ if (woSubNameVal) {
                 </div>
               </div>
             ) : null}
-<input className={`${inp} mb-3`} lang="ko" placeholder="목록 필터(이름/사업자번호)" value={partnerFilter}
+<div className="relative mb-3">
+  <input className={inp} lang="ko" placeholder="목록 필터(이름/사업자번호)" value={partnerFilter}
               onChange={(e) => {
                 const decomposed = [...e.target.value].map(ch =>
                   ch === '\u3140' ? '\u3139\u314e' : ch
                 ).join('');
                 setTradeSearch(""); setPartnerFilter(decomposed);
               }} />
+  {partnerFilter && (
+    <button
+      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold leading-none"
+      onClick={() => setPartnerFilter("")}
+    >✕</button>
+  )}
+</div>
             <div className="mb-2 text-xs text-slate-600">선택된 거래처: {selectedPartner ? `${selectedPartner.name}${selectedPartner.business_no ? ` · ${selectedPartner.business_no}` : ""}` : "없음"}</div>
             <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
               {partnersToShow.length === 0 ? (
@@ -2221,7 +2230,7 @@ if (woSubNameVal) {
   setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
   setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
   setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
-  setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin);
+  setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin); setWo_packageUnit("");
   setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({});
   setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
 }}>
@@ -2247,7 +2256,7 @@ if (woSubNameVal) {
   setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
   setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
   setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
-  setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin);
+  setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin); setWo_packageUnit("");
   setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({});
   setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
   setManualCounterpartyName(""); setManualBusinessNo("");
@@ -2371,9 +2380,14 @@ if (woSubNameVal) {
                           {["2mm", "3mm", "5mm", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                         </select>
                       </div>
-                      <div><div className="mb-1 text-xs text-slate-600">포장방법</div>
+                     <div><div className="mb-1 text-xs text-slate-600">포장방법</div>
                         <select className={inp} value={orderWoPackagingType} onChange={(e) => setOrderWoPackagingType(e.target.value)}>
                           {["", "트레이-정사각20구", "트레이-직사각20구", "트레이-35구", "벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
+                        </select>
+                      </div>
+                      <div><div className="mb-1 text-xs text-slate-600">포장단위</div>
+                        <select className={inp} value={wo_packageUnit} onChange={(e) => setWo_packageUnit(e.target.value)}>
+                          {["", "100ea", "200ea", "300ea", "기타"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
                         </select>
                       </div>
                       <div>
