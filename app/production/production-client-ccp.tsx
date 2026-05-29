@@ -220,7 +220,33 @@ if (!lastEvent || lastEvent.event_type === "end") {
           (e) => e.event_type === "material_out" && e.measured_at >= lastIn.measured_at
         );
         if (hasOutAfter) { map[slotId] = null; continue; }
-        const materialDate = lastIn.measured_at.slice(0, 10);
+
+        // 슬롯이동으로 들어온 경우 출발 슬롯의 원래 투입일 역추적
+        let materialDate = lastIn.measured_at.slice(0, 10);
+        const isMoveIn = typeof (lastIn as any).action_note === "string" &&
+          (lastIn as any).action_note.includes("→");
+        if (isMoveIn) {
+          const moveMatch = ((lastIn as any).action_note as string).match(/^(.+?)\s*→/);
+          if (moveMatch) {
+            const fromSlotName = moveMatch[1].trim();
+            const fromSlot = warmerSlots.find((s) => s.slot_name === fromSlotName);
+            if (fromSlot) {
+              const { data: fromInEvent } = await supabase
+                .from("ccp_slot_events")
+                .select("measured_at")
+                .eq("slot_id", fromSlot.id)
+                .eq("event_type", "material_in")
+                .lt("measured_at", lastIn.measured_at)
+                .order("measured_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (fromInEvent) {
+                materialDate = fromInEvent.measured_at.slice(0, 10);
+              }
+            }
+          }
+        }
+
         const diffMs = new Date(today).getTime() - new Date(materialDate).getTime();
         const daysAgo = Math.floor(diffMs / (1000 * 60 * 60 * 24));
         map[slotId] = { date: materialDate, daysAgo, materialType: (lastIn as any).material_type ?? null };
