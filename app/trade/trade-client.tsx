@@ -1085,6 +1085,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
           food_type: foodType, product_name: productName,
           logo_spec: orderWoLogoSpec.trim() || null, thickness: orderWoThickness || null,
           delivery_method: shipMethod, packaging_type: orderWoPackagingType || null,
+          package_unit: wo_packageUnit || null,
           mold_per_sheet: (toInt(orderWoMoldCols) * toInt(orderWoMoldRows)) > 0 ? toInt(orderWoMoldCols) * toInt(orderWoMoldRows) : null,
           mold_cols: toInt(orderWoMoldCols) > 0 ? toInt(orderWoMoldCols) : null,
           mold_rows: toInt(orderWoMoldRows) > 0 ? toInt(orderWoMoldRows) : null,
