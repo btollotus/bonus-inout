@@ -93,6 +93,16 @@ type UnifiedRow = {
   payment_completed?: boolean | null;
 };
 type EmployeeRow = { id: string; name: string | null };
+type DeletedOrderRow = {
+  deleted_at: string; original_id: string; customer_name: string;
+  ship_date: string; ship_method: string | null; memo: string | null;
+  total_amount: number | null;
+};
+type DeletedLedgerRow = {
+  deleted_at: string; original_id: string; entry_date: string;
+  direction: string; amount: number; category: string | null;
+  method: string | null; counterparty_name: string | null; memo: string | null;
+};
 
 const CHOSUNG = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"].map(ch => ch.normalize("NFC"));
 const JAMO_TO_CHOSUNG: Record<string, string> = {
@@ -559,6 +569,11 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [wo_linkedOrderSummary, setWo_linkedOrderSummary] = useState<string>("");
   const [wo_modalOpen, setWo_modalOpen] = useState(false);
   const [wo_printTarget, setWo_printTarget] = useState<WorkOrderRow | null>(null);
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [trashLoading, setTrashLoading] = useState(false);
+  const [deletedOrders, setDeletedOrders] = useState<DeletedOrderRow[]>([]);
+  const [deletedLedgers, setDeletedLedgers] = useState<DeletedLedgerRow[]>([]);
+  const [restoring, setRestoring] = useState<string | null>(null);
 
   const [eShipDate, setEShipDate] = useState(todayYMD());
   const [eOrdererName, setEOrdererName] = useState("");
@@ -1782,6 +1797,89 @@ if (woSubNameVal) {
     }
     await loadTrades();
   }
+  async function loadTrash() {
+    setTrashLoading(true);
+    try {
+      const { data: od } = await supabase
+        .from("deleted_orders")
+        .select("deleted_at,original_id,customer_name,ship_date,ship_method,memo,total_amount")
+        .order("deleted_at", { ascending: false }).limit(100);
+      setDeletedOrders((od ?? []) as DeletedOrderRow[]);
+      const { data: ld } = await supabase
+        .from("deleted_ledger_entries")
+        .select("deleted_at,original_id,entry_date,direction,amount,category,method,counterparty_name,memo")
+        .order("deleted_at", { ascending: false }).limit(100);
+      setDeletedLedgers((ld ?? []) as DeletedLedgerRow[]);
+    } finally { setTrashLoading(false); }
+  }
+
+  async function restoreOrder(originalId: string) {
+    if (!window.confirm("이 주문/출고를 복원하시겠습니까?")) return;
+    setRestoring(originalId);
+    try {
+      const { data: dOrder } = await supabase.from("deleted_orders").select("*").eq("original_id", originalId).single();
+      if (!dOrder) return setMsg("복원할 데이터를 찾을 수 없습니다.");
+      const { data: dLines } = await supabase.from("deleted_order_lines").select("*").eq("order_id", originalId);
+      const { data: dShipments } = await supabase.from("deleted_order_shipments").select("*").eq("order_id", originalId);
+      const { error: oErr } = await supabase.from("orders").insert({
+        id: dOrder.original_id, customer_id: dOrder.customer_id, customer_name: dOrder.customer_name,
+        ship_date: dOrder.ship_date, ship_method: dOrder.ship_method, status: dOrder.status,
+        memo: dOrder.memo, supply_amount: dOrder.supply_amount, vat_amount: dOrder.vat_amount,
+        total_amount: dOrder.total_amount, tax_invoice_issued: dOrder.tax_invoice_issued,
+      });
+      if (oErr) return setMsg("복원 실패: " + oErr.message);
+      if (dLines && dLines.length > 0) {
+        await supabase.from("order_lines").insert(
+          dLines.map((l: any) => ({
+            id: l.original_id, order_id: l.order_id, line_no: l.line_no,
+            food_type: l.food_type, name: l.name, weight_g: l.weight_g,
+            qty: l.qty, unit: l.unit, unit_type: l.unit_type, pack_ea: l.pack_ea,
+            actual_ea: l.actual_ea, supply_amount: l.supply_amount,
+            vat_amount: l.vat_amount, total_amount: l.total_amount, is_sample: l.is_sample,
+          }))
+        );
+      }
+      if (dShipments && dShipments.length > 0) {
+        await supabase.from("order_shipments").insert(
+          dShipments.map((s: any) => ({
+            id: s.original_id, order_id: s.order_id, seq: s.seq,
+            ship_to_name: s.ship_to_name, ship_to_address1: s.ship_to_address1,
+            ship_to_address2: s.ship_to_address2, ship_to_mobile: s.ship_to_mobile,
+            ship_to_phone: s.ship_to_phone, ship_zipcode: s.ship_zipcode,
+            delivery_message: s.delivery_message,
+          }))
+        );
+      }
+      await supabase.from("deleted_order_lines").delete().eq("order_id", originalId);
+      await supabase.from("deleted_order_shipments").delete().eq("order_id", originalId);
+      await supabase.from("deleted_orders").delete().eq("original_id", originalId);
+      setMsg("✅ 주문/출고 복원 완료!");
+      await loadTrash(); await loadTrades();
+    } finally { setRestoring(null); }
+  }
+
+  async function restoreLedger(originalId: string) {
+    if (!window.confirm("이 금전출납을 복원하시겠습니까?")) return;
+    setRestoring(originalId);
+    try {
+      const { data: dLedger } = await supabase.from("deleted_ledger_entries").select("*").eq("original_id", originalId).single();
+      if (!dLedger) return setMsg("복원할 데이터를 찾을 수 없습니다.");
+      const { error: lErr } = await supabase.from("ledger_entries").insert({
+        id: dLedger.original_id, entry_date: dLedger.entry_date, entry_ts: dLedger.entry_ts,
+        direction: dLedger.direction, amount: dLedger.amount,
+        supply_amount: dLedger.supply_amount, vat_amount: dLedger.vat_amount, total_amount: dLedger.total_amount,
+        category: dLedger.category, method: dLedger.method, counterparty_name: dLedger.counterparty_name,
+        business_no: dLedger.business_no, memo: dLedger.memo, status: dLedger.status,
+        partner_id: dLedger.partner_id, tax_invoice_received: dLedger.tax_invoice_received,
+        payment_completed: dLedger.payment_completed,
+      });
+      if (lErr) return setMsg("복원 실패: " + lErr.message);
+      await supabase.from("deleted_ledger_entries").delete().eq("original_id", originalId);
+      setMsg("✅ 금전출납 복원 완료!");
+      await loadTrash(); await loadTrades();
+    } finally { setRestoring(null); }
+  }
+
   async function toggleTaxInvoiceReceived(r: UnifiedRow) {
     if (r.kind !== "LEDGER") return;
     const next = !(r.tax_invoice_received ?? false);
@@ -1861,6 +1959,130 @@ if (woSubNameVal) {
               <div className="px-5 py-4">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 whitespace-pre-wrap break-words">{alertText}</div>
                 <div className="mt-4 flex justify-end"><button className={btnOn} onClick={() => setAlertOpen(false)}>확인</button></div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* 휴지통 모달 — ADMIN 전용 */}
+        {trashOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+            <div className="w-full max-w-[1100px] max-h-[88vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div>
+                  <div className="text-base font-semibold">🗑️ 삭제된 거래내역 복원 (최근 100건)</div>
+                  <div className="mt-1 text-xs text-slate-500">복원 버튼을 누르면 원래 ID 그대로 되살아납니다.</div>
+                </div>
+                <div className="flex gap-2">
+                  <button className={btn} onClick={loadTrash}>새로고침</button>
+                  <button className={btn} onClick={() => setTrashOpen(false)}>닫기</button>
+                </div>
+              </div>
+              <div className="overflow-y-auto px-5 py-4 space-y-5">
+                {trashLoading ? (
+                  <div className="py-8 text-center text-sm text-slate-500">불러오는 중...</div>
+                ) : (
+                  <>
+                    <div>
+                      <div className="mb-2 text-sm font-semibold text-slate-700">주문/출고 ({deletedOrders.length}건)</div>
+                      {deletedOrders.length === 0 ? (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">없음</div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full table-fixed text-sm">
+                            <colgroup>
+                              <col style={{ width: "160px" }} /><col style={{ width: "160px" }} />
+                              <col style={{ width: "100px" }} /><col style={{ width: "120px" }} />
+                              <col style={{ width: "auto" }} /><col style={{ width: "80px" }} />
+                            </colgroup>
+                            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                              <tr>
+                                <th className="px-3 py-2 text-left">삭제일시(KST)</th>
+                                <th className="px-3 py-2 text-left">거래처</th>
+                                <th className="px-3 py-2 text-left">출고일</th>
+                                <th className="px-3 py-2 text-right">금액</th>
+                                <th className="px-3 py-2 text-left">적요</th>
+                                <th className="px-3 py-2 text-center">복원</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {deletedOrders.map((d) => {
+                                const memoTitle = (() => { try { const p = JSON.parse(d.memo ?? ""); return p?.title ?? ""; } catch { return d.memo ?? ""; } })();
+                                return (
+                                  <tr key={d.original_id} className="border-t border-slate-200">
+                                    <td className="px-3 py-2 tabular-nums text-xs text-slate-500">{fmtKST(d.deleted_at)}</td>
+                                    <td className="px-3 py-2 font-semibold">{d.customer_name}</td>
+                                    <td className="px-3 py-2 tabular-nums">{d.ship_date}</td>
+                                    <td className="px-3 py-2 tabular-nums text-right text-red-600 font-semibold">{fmt(d.total_amount ?? 0)}</td>
+                                    <td className="px-3 py-2 text-slate-600 truncate">{memoTitle}</td>
+                                    <td className="px-3 py-2 text-center">
+                                      <button
+                                        className="rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-40"
+                                        disabled={restoring === d.original_id}
+                                        onClick={() => restoreOrder(d.original_id)}
+                                      >{restoring === d.original_id ? "복원중..." : "복원"}</button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="mb-2 text-sm font-semibold text-slate-700">금전출납 ({deletedLedgers.length}건)</div>
+                      {deletedLedgers.length === 0 ? (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">없음</div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full table-fixed text-sm">
+                            <colgroup>
+                              <col style={{ width: "160px" }} /><col style={{ width: "160px" }} />
+                              <col style={{ width: "100px" }} /><col style={{ width: "70px" }} />
+                              <col style={{ width: "120px" }} /><col style={{ width: "auto" }} />
+                              <col style={{ width: "80px" }} />
+                            </colgroup>
+                            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                              <tr>
+                                <th className="px-3 py-2 text-left">삭제일시(KST)</th>
+                                <th className="px-3 py-2 text-left">거래처</th>
+                                <th className="px-3 py-2 text-left">일자</th>
+                                <th className="px-3 py-2 text-left">구분</th>
+                                <th className="px-3 py-2 text-right">금액</th>
+                                <th className="px-3 py-2 text-left">메모</th>
+                                <th className="px-3 py-2 text-center">복원</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {deletedLedgers.map((d) => (
+                                <tr key={d.original_id} className="border-t border-slate-200">
+                                  <td className="px-3 py-2 tabular-nums text-xs text-slate-500">{fmtKST(d.deleted_at)}</td>
+                                  <td className="px-3 py-2 font-semibold">{d.counterparty_name}</td>
+                                  <td className="px-3 py-2 tabular-nums">{d.entry_date}</td>
+                                  <td className="px-3 py-2">
+                                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${d.direction === "IN" ? "bg-blue-50 text-blue-700" : "bg-red-50 text-red-700"}`}>
+                                      {d.direction === "IN" ? "입금" : "출금"}
+                                    </span>
+                                  </td>
+                                  <td className={`px-3 py-2 tabular-nums text-right font-semibold ${d.direction === "IN" ? "text-blue-700" : "text-red-600"}`}>{fmt(d.amount)}</td>
+                                  <td className="px-3 py-2 text-slate-600 truncate">{d.memo ?? ""}</td>
+                                  <td className="px-3 py-2 text-center">
+                                    <button
+                                      className="rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-40"
+                                      disabled={restoring === d.original_id}
+                                      onClick={() => restoreLedger(d.original_id)}
+                                    >{restoring === d.original_id ? "복원중..." : "복원"}</button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -2590,9 +2812,11 @@ if (woSubNameVal) {
                 <div className="flex flex-wrap gap-2">
                   <button className={btn} onClick={() => { setFromYMD("2025-12-01"); setToYMD(todayYMD()); setToTouched(false); }}>기간 초기화</button>
                   <button className={btnOn} onClick={loadTrades}>조회</button>
-                  {/* ── 새로고침 버튼 추가 ── */}
-                  <button className={btn} onClick={loadTrades}>🔄 새로고침</button>
-             
+                 {/* ── 새로고침 버튼 추가 ── */}
+                 <button className={btn} onClick={loadTrades}>🔄 새로고침</button>
+                  {!isSubAdmin ? (
+                    <button className={btn} onClick={() => { setTrashOpen(true); loadTrash(); }}>🗑️ 삭제복원</button>
+                  ) : null}
                 </div>
               </div>
               <div className="mb-3"><input className={inp} lang="ko" value={tradeSearch} onChange={(e) => {
