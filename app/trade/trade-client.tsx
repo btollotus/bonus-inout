@@ -448,6 +448,10 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [includeOpening, setIncludeOpening] = useState(true);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [tradeSearch, setTradeSearch] = useState("");
+  const [tradeSearchDebounced, setTradeSearchDebounced] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState<UnifiedRow[] | null>(null);
+  const toTouched_search = useRef(false);
   const [toTouched, setToTouched] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertText, setAlertText] = useState("");
@@ -960,6 +964,120 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     }
     setOpeningBalance(opening);
   }
+
+  // ── 검색어 디바운스 300ms ──
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setTradeSearchDebounced(tradeSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [tradeSearch]);
+
+  // ── 서버 사이드 검색 ──
+  useEffect(() => {
+    const q = tradeSearchDebounced.trim();
+    if (!q) { setSearchResults(null); setSearchLoading(false); return; }
+    let cancelled = false;
+    (async () => {
+      setSearchLoading(true);
+      try {
+        const selectedPartnerId = selectedPartner?.id ?? null;
+        const selectedBusinessNo = selectedPartner?.business_no ?? null;
+        const likeQ = `%${q}%`;
+
+        // orders 검색
+        let oq = supabase.from("orders")
+          .select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,tax_invoice_issued,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,is_sample,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)")
+          .or(`customer_name.ilike.${likeQ},memo.ilike.${likeQ},ship_method.ilike.${likeQ}`)
+          .order("ship_date", { ascending: false })
+          .limit(200);
+        if (selectedPartnerId) {
+          oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+        }
+        const { data: oData } = await oq;
+
+        // ledger 검색
+        let lq = supabase.from("ledger_entries")
+          .select("id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,status,partner_id,created_at,supply_amount,vat_amount,total_amount,tax_invoice_received,payment_completed")
+          .or(`counterparty_name.ilike.${likeQ},memo.ilike.${likeQ},category.ilike.${likeQ},method.ilike.${likeQ},business_no.ilike.${likeQ}`)
+          .order("entry_date", { ascending: false })
+          .limit(200);
+        if (selectedPartnerId || selectedBusinessNo) {
+          const ors: string[] = [];
+          if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
+          if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
+          if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
+          lq = lq.or(ors.join(","));
+        }
+        const { data: lData } = await lq;
+
+        if (cancelled) return;
+
+        // unifiedRows 형태로 변환
+        const items: Array<Omit<UnifiedRow, "balance"> & { signed: number; tsMs: number; dateMs: number }> = [];
+        const normalizeIso = (s: string | null | undefined) => {
+          let v = String(s ?? "").trim();
+          if (!v) return "";
+          if (v.includes(" ") && !v.includes("T")) v = v.replace(" ", "T");
+          if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(v)) v = `${v}Z`;
+          return v;
+        };
+        const safeParseMs = (iso: string) => { const ms = Date.parse(iso); return Number.isFinite(ms) ? ms : 0; };
+        const ymdToMs = (ymd: string) => { const v = String(ymd ?? "").trim(); if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return 0; const ms = Date.parse(`${v}T00:00:00.000Z`); return Number.isFinite(ms) ? ms : 0; };
+
+        for (const o of (oData ?? []) as OrderRow[]) {
+          const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(o.memo);
+          const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
+          const total = Number(o.total_amount ?? 0);
+          const orderer = (memo?.orderer_name ?? null) as string | null;
+          const oIso = normalizeIso(o.created_at);
+          const tsKey = oIso || (date ? `${date}T12:00:00.000Z` : "");
+          const tsMs = oIso ? safeParseMs(oIso) : (date ? safeParseMs(`${date}T12:00:00.000Z`) : 0);
+          const dateMs = ymdToMs(date) || (tsMs ? ymdToMs(new Date(tsMs).toISOString().slice(0, 10)) : 0);
+          items.push({
+            kind: "ORDER", date, tsKey, tsMs, dateMs, partnerName: o.customer_name ?? "", businessNo: "",
+            ordererName: orderer ?? "", category: "주문/출고", method: o.ship_method ?? "",
+            inAmt: 0, outAmt: total, signed: -total, rawId: o.id, ship_method: o.ship_method ?? "택배",
+            order_title: memo?.title ?? null, orderer_name: orderer,
+            tax_invoice_issued: o.tax_invoice_issued ?? false,
+            order_lines: (o.order_lines ?? []).map((l) => ({ food_type: l.food_type ?? "", name: l.name ?? "", weight_g: Number(l.weight_g ?? 0), qty: Number(l.qty ?? 0), unit: Number(l.unit ?? 0), total_amount: Number(l.total_amount ?? 0), unit_type: (l.unit_type ?? "EA") as any, pack_ea: Number(l.pack_ea ?? 1), actual_ea: Number(l.actual_ea ?? 0), is_sample: !!(l.is_sample) })),
+            order_shipments: (o.order_shipments ?? []).map((s) => ({ seq: Number(s.seq ?? 1), ship_to_name: String(s.ship_to_name ?? ""), ship_to_address1: String(s.ship_to_address1 ?? ""), ship_to_address2: s.ship_to_address2 ?? null, ship_to_mobile: s.ship_to_mobile ?? null, ship_to_phone: s.ship_to_phone ?? null, ship_zipcode: s.ship_zipcode ?? null, delivery_message: s.delivery_message ?? null, tax_invoice_issued: o.tax_invoice_issued ?? false })),
+          });
+        }
+        for (const l of (lData ?? []) as LedgerRow[]) {
+          const sign = String(l.direction) === "OUT" ? -1 : 1;
+          const amt = Number(l.amount ?? 0);
+          const lIso = normalizeIso(l.entry_ts) || normalizeIso(l.created_at);
+          const tsKey = lIso || (l.entry_date ? `${l.entry_date}T12:00:00.000Z` : "");
+          const tsMs = lIso ? safeParseMs(lIso) : (l.entry_date ? safeParseMs(`${l.entry_date}T12:00:00.000Z`) : 0);
+          const dateMs = ymdToMs(l.entry_date) || (tsMs ? ymdToMs(new Date(tsMs).toISOString().slice(0, 10)) : 0);
+          items.push({
+            kind: "LEDGER", date: l.entry_date, tsKey, tsMs, dateMs, partnerName: l.counterparty_name ?? "", businessNo: l.business_no ?? "",
+            ledger_partner_id: l.partner_id ?? null, ordererName: "", category: l.category ?? "금전출납",
+            method: l.method ?? "", inAmt: sign > 0 ? amt : 0, outAmt: sign < 0 ? amt : 0, signed: sign * amt, rawId: l.id,
+            ledger_category: l.category ?? null, ledger_method: l.method ?? null, ledger_memo: l.memo ?? null, ledger_amount: amt,
+            ledger_supply_amount: (l.supply_amount ?? null) as any, ledger_vat_amount: (l.vat_amount ?? null) as any, ledger_total_amount: (l.total_amount ?? null) as any,
+            tax_invoice_received: (l as any).tax_invoice_received ?? false,
+            payment_completed: (l as any).payment_completed ?? false,
+          });
+        }
+
+        items.sort((a, b) => (b.dateMs - a.dateMs) || (b.tsMs - a.tsMs));
+        let running = 0;
+        const withBal: UnifiedRow[] = items.map((x) => { running += x.signed; const { signed, tsMs, dateMs, ...rest } = x; return { ...rest, balance: running }; });
+        // 클라이언트 초성 검색으로 추가 필터링
+        const filtered = withBal.filter((x) => {
+          const orderLineText = x.kind === "ORDER" ? (x.order_lines ?? []).map((l) => `${l.name ?? ""} ${l.food_type ?? ""}`).join(" ") : "";
+          const summaryText = buildOrderSummaryText(x);
+          return matchesSearch([x.partnerName, x.businessNo ?? "", x.ordererName, summaryText, x.category, x.method, x.order_title ?? "", x.ledger_memo ?? "", orderLineText].filter(Boolean).join(" "), q);
+        });
+        setSearchResults(filtered);
+      } finally {
+        if (!cancelled) setSearchLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tradeSearchDebounced, selectedPartner?.id]); // eslint-disable-line
 
   useEffect(() => { setRecentPartnerIds(loadRecentFromLS()); loadPartners(); loadFoodTypes(); loadPresetProducts(); loadMasterProducts(); loadEmployees(); /* eslint-disable-next-line */ }, []);
   
@@ -2819,12 +2937,23 @@ if (woSubNameVal) {
                   ) : null}
                 </div>
               </div>
-              <div className="mb-3"><input className={inp} lang="ko" value={tradeSearch} onChange={(e) => {
-  const decomposed = [...e.target.value].map(ch =>
-    ch === '\u3140' ? '\u3139\u314e' : ch
-  ).join('');
-  setTradeSearch(decomposed);
-}} placeholder="검색: 매입처/사업자번호/메모/제품명/카테고리/방법" /></div>
+              <div className="relative mb-3">
+                <input className={inp} lang="ko" value={tradeSearch} onChange={(e) => {
+                  const decomposed = [...e.target.value].map(ch =>
+                    ch === '\u3140' ? '\u3139\u314e' : ch
+                  ).join('');
+                  setTradeSearch(decomposed);
+                }} placeholder="검색: 매입처/사업자번호/메모/제품명/카테고리/방법 (기간 무관 전체 검색)" />
+                {tradeSearch && (
+                  <button
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold leading-none"
+                    onClick={() => { setTradeSearch(""); setTradeSearchDebounced(""); setSearchResults(null); }}
+                  >✕</button>
+                )}
+                {searchLoading && (
+                  <div className="absolute right-8 top-1/2 -translate-y-1/2 text-xs text-blue-500">검색중...</div>
+                )}
+              </div>
 
               <div className="rounded-2xl border border-slate-200">
                 <div ref={tradeTopScrollRef} className="overflow-x-auto"
@@ -2854,17 +2983,11 @@ if (woSubNameVal) {
   </tr>
                     </thead>
                     <tbody>
-                    {unifiedRows.filter((x) => {
+                    {(searchResults ?? unifiedRows).filter((x) => {
                         if (isSubAdmin && x.kind === "LEDGER") return false; // SUBADMIN: LEDGER 행 숨김
                         if (mode === "ORDERS") return x.kind === "ORDER";
                         if (mode === "LEDGER") return x.kind === "LEDGER";
                         return true;
-                      }).filter((x) => {
-                        const q = tradeSearch.trim();
-                        if (!q) return true;
-                        const orderLineText = x.kind === "ORDER" ? (x.order_lines ?? []).map((l) => `${l.name ?? ""} ${l.food_type ?? ""}`).join(" ") : "";
-                        const summaryText = buildOrderSummaryText(x);
-                        return matchesSearch([x.partnerName, x.businessNo ?? "", x.ordererName, summaryText, x.category, x.method, x.order_title ?? "", x.ledger_memo ?? "", orderLineText].filter(Boolean).join(" "), q);
                       }).map((x) => (
                         <tr key={`${x.kind}-${x.rawId}`} className="border-t border-slate-200 bg-white">
                           <td className="px-3 py-1 font-semibold tabular-nums leading-tight">{x.date}</td>
