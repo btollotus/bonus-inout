@@ -123,12 +123,9 @@ export function useCcpState(
       .order("measured_at", { ascending: true });
   
       if (slotId) {
-        const today = todayKST();
         query = query
           .eq("slot_id", slotId)
-          .eq("work_order_no", workOrderNo)
-          .gte("measured_at", `${today}T00:00:00+09:00`)
-          .lte("measured_at", `${today}T23:59:59+09:00`);
+          .eq("work_order_no", workOrderNo);
       } else {
         query = query.eq("work_order_no", workOrderNo);
       }
