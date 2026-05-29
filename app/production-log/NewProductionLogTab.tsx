@@ -340,7 +340,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
                 ${showWorker ? `<td style="${td}text-align:center;" rowspan="${workerTotalRows}">${worker}</td>` : ""}
                <td style="${td}">${wo.client_name}</td>
                 <td style="${td}">${item.name}</td>
-                <td style="${tdC}">${item.order_qty > 0 ? item.order_qty.toLocaleString() : "—"}</td>
+                <td style="${tdC}">${item.actual_qty > 0 ? item.actual_qty.toLocaleString() : "—"}</td>
                 ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}</td>` : ""}
                 ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${wo.metal_start ? wo.metal_start.slice(0,5) : "—"}~${wo.metal_end ? wo.metal_end.slice(0,5) : "—"}</td>` : ""}
                 ${showUsage ? `<td style="${td}" rowspan="${rows.length}">${usageStr}</td>` : ""}
@@ -597,9 +597,9 @@ export function NewProductionLogTab({ role, userId, showToast }: {
                             {rows.map((item, idx) => (
                               <div key={idx} className="flex items-center gap-3 px-3 py-2 border-b border-slate-100 last:border-b-0">
                                 <span className="flex-1 text-sm text-slate-700">{item.name}</span>
-                                {item.order_qty > 0 && (
+                                {item.actual_qty > 0 && (
                                   <span className="text-xs text-slate-400 tabular-nums">
-                                    {item.order_qty.toLocaleString()}개
+                                    {item.actual_qty.toLocaleString()}개
                                   </span>
                                 )}
                                 {(wo.usages ?? []).length > 0 && idx === 0 && (
