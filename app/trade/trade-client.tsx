@@ -579,6 +579,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [eWoMoldCols, setEWoMoldCols] = useState("");
   const [eWoMoldRows, setEWoMoldRows] = useState(""); 
   const [eWoMoldCount, setEWoMoldCount] = useState("");
+  const [eWoPackageUnit, setEWoPackageUnit] = useState("");
   const [eWoNote, setEWoNote] = useState("");
 
   useEffect(() => {
@@ -1580,7 +1581,7 @@ if (editPartnerId) {
       setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("");
       setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoImagePreviewUrls([]);
       setEWoExistingImages([]); setEWoExistingSignedLoading(false); setEWoExistingSignedUrls([]);
-      const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no)").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
+      const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no)").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
       // 품목별 이미지 초기화
       setEItemImageFiles({}); setEItemImagePreviewUrls({}); setEItemExistingImageUrls({}); setEWoItemIds([]);
       if (wo) {
@@ -1609,6 +1610,7 @@ if (woSubNameVal) {
         setEWoMoldCols((wo as any).mold_cols ? String((wo as any).mold_cols) : "");
         setEWoMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : "");
         setEWoMoldCount((wo as any).mold_count ? String((wo as any).mold_count) : "");
+        setEWoPackageUnit((wo as any).package_unit ?? "");
         setEOrderTitle((wo as any).reference_note ?? "");
         setEWoNote((wo as any).note ?? "");
         const rawImages: string[] = (wo as any).images ?? [];
@@ -1702,7 +1704,7 @@ if (woSubNameVal) {
             if (!upErr) uploadedUrls.push(path);
           }
         }
-        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, mold_count: toInt(eWoMoldCount) > 0 ? toInt(eWoMoldCount) : null, note: eWoNote.trim() || null, reference_note: eOrderTitle.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString()}).eq("id", eWoId);
+        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, package_unit: eWoPackageUnit || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, mold_count: toInt(eWoMoldCount) > 0 ? toInt(eWoMoldCount) : null, note: eWoNote.trim() || null, reference_note: eOrderTitle.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString()}).eq("id", eWoId);
         await supabase.from("work_order_items").update({ delivery_date: eShipDate }).eq("work_order_id", eWoId);
 
       
@@ -2035,6 +2037,11 @@ if (woSubNameVal) {
                           <div><div className="mb-1 text-xs text-slate-600">포장방법</div>
                             <select className={inp} value={eWoPackagingType} onChange={(e) => setEWoPackagingType(e.target.value)}>
                               {["", "트레이-정사각20구", "트레이-직사각20구", "트레이-35구", "벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
+                            </select>
+                          </div>
+                          <div><div className="mb-1 text-xs text-slate-600">포장단위</div>
+                            <select className={inp} value={eWoPackageUnit} onChange={(e) => setEWoPackageUnit(e.target.value)}>
+                              {["", "100ea", "200ea", "300ea", "기타"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
                             </select>
                           </div>
                           <div><div className="mb-1 text-xs text-slate-600">납품방법</div>
