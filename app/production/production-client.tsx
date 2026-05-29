@@ -282,6 +282,7 @@ export default function ProductionClient() {
 
   // 분사/코팅 배합 횟수
   const [blendCount, setBlendCount] = useState(1);
+  const [titaniumDioxideG, setTitaniumDioxideG] = useState<string>("");
 
   const [eSubName, setESubName] = useState("");
   const [eProductName, setEProductName] = useState("");
@@ -670,6 +671,7 @@ export default function ProductionClient() {
   async function applySelection(wo: WorkOrderRow, resetEdit = true) {
     setIsKiseongForm(false); setIsEditMode(false);
     setBlendCount(1); // 배합 횟수 초기화
+    setTitaniumDioxideG(""); // 이산화티타늄 사용량 초기화
     if (!wo.work_order_items || wo.work_order_items.every((i) => i.sub_items == null)) {
       const { data: items } = await supabase.from("work_order_items").select("id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images").eq("work_order_id", wo.id).order("delivery_date", { ascending: true });
       wo = { ...wo, work_order_items: (items ?? []) as WoItemRow[] };
@@ -1017,6 +1019,16 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
 
     const foodCat = getFoodCategory(selectedWo.food_type);
     const isChuganJae = foodCat === "중간재";
+
+    // 이산화티타늄 사용량 필수 입력 검사 (식품유형에 "리얼" 포함 시)
+    if ((selectedWo.food_type ?? "").includes("리얼")) {
+      if (!titaniumDioxideG || Number(titaniumDioxideG) <= 0) {
+        alert("이산화티타늄 사용량(g)을 입력하세요.");
+        setIsCompleting(false);
+        return;
+      }
+    }
+
     let ccpEndedAt: string | null = null;
     if (woChecks && !selectedWo.skip_production_check) {
       const missing = [!woChecks.assignee_transfer && "전사인쇄", !woChecks.assignee_print_check && "인쇄검수"].filter(Boolean) as string[];
@@ -1727,6 +1739,34 @@ const totalOrder = items
                     if (slotId && selectedWo) { ccp.loadWoEvents(selectedWo.work_order_no, slotId, selectedWo.status); }
                   }}
                 />
+              )}
+
+              {/* 이산화티타늄 사용량 입력 — 식품유형에 "리얼" 포함 시 */}
+              {(selectedWo.food_type ?? "").includes("리얼") && (
+                <div className={`${card} p-3 border-amber-300 bg-amber-50`}>
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-sm font-semibold text-amber-800">⚠️ 이산화티타늄 사용량</span>
+                    <span className="text-xs text-amber-600">생산완료 전 필수 입력</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-44">
+                      <div className="mb-1 text-xs text-slate-500">사용량 (g) *</div>
+                      <input
+                        className={inpR}
+                        inputMode="decimal"
+                        placeholder="예: 100"
+                        value={titaniumDioxideG}
+                        disabled={selectedWo.status === "완료" && !isEditMode}
+                        onChange={(e) => setTitaniumDioxideG(e.target.value.replace(/[^\d.]/g, ""))}
+                      />
+                    </div>
+                    {titaniumDioxideG && Number(titaniumDioxideG) > 0 && (
+                      <div className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-amber-700">
+                        이산화티타늄 <span className="font-bold">{Number(titaniumDioxideG).toLocaleString()}g</span> 사용
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
 
               {/* 납기일별 생산 입력 */}
