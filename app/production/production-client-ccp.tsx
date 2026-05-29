@@ -166,7 +166,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
   
     const { data: todayEvents } = await supabase
       .from("ccp_slot_events")
-      .select("slot_id, event_type, measured_at, material_type")
+      .select("slot_id, event_type, measured_at, material_type, action_note")
       .eq("event_date", today)
       .in("slot_id", slotIds)
       .order("measured_at", { ascending: true });
@@ -188,7 +188,35 @@ if (!lastEvent || lastEvent.event_type === "end") {
       } else {
         const materialIn = events.filter((e) => e.event_type === "material_in").slice(-1)[0];
         if (materialIn) {
-          map[slot.id] = { date: today, daysAgo: 0, materialType: (materialIn as any).material_type ?? null };
+          // 슬롯이동으로 들어온 경우 출발 슬롯의 원래 투입일 역추적
+          let materialDate = today;
+          let daysAgo = 0;
+          const isMoveIn = typeof (materialIn as any).action_note === "string" &&
+            (materialIn as any).action_note.includes("→");
+          if (isMoveIn) {
+            const moveMatch = ((materialIn as any).action_note as string).match(/^(.+?)\s*→/);
+            if (moveMatch) {
+              const fromSlotName = moveMatch[1].trim();
+              const fromSlot = warmerSlots.find((s) => s.slot_name === fromSlotName);
+              if (fromSlot) {
+                const { data: fromInEvent } = await supabase
+                  .from("ccp_slot_events")
+                  .select("measured_at")
+                  .eq("slot_id", fromSlot.id)
+                  .eq("event_type", "material_in")
+                  .lt("measured_at", (materialIn as any).measured_at)
+                  .order("measured_at", { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                if (fromInEvent) {
+                  materialDate = fromInEvent.measured_at.slice(0, 10);
+                  const diffMs = new Date(today).getTime() - new Date(materialDate).getTime();
+                  daysAgo = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                }
+              }
+            }
+          }
+          map[slot.id] = { date: materialDate, daysAgo, materialType: (materialIn as any).material_type ?? null };
         } else {
           needsHistorySlotIds.push(slot.id);
         }
