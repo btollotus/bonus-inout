@@ -1192,6 +1192,34 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
           }
         }
 
+        // ── 이산화티타늄 자동 차감 ("리얼" 식품유형) ──
+        if ((selectedWo.food_type ?? "").includes("리얼") && titaniumDioxideG && Number(titaniumDioxideG) > 0) {
+          const tiNote = `이산화티타늄 차감 - ${selectedWo.work_order_no}`;
+          const { data: tiDupCheck } = await supabase.from("material_usage_logs")
+            .select("id").eq("note", tiNote).limit(1);
+          if (!tiDupCheck || tiDupCheck.length === 0) {
+            const { data: tiMatData } = await supabase.from("materials")
+              .select("id").eq("name", "이산화티타늄").maybeSingle();
+            if (tiMatData?.id) {
+              const todayKSTDate = new Date(
+                new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
+              ).toISOString().slice(0, 10);
+              const { error: tiErr } = await supabase.from("material_usage_logs").insert({
+                material_id: tiMatData.id,
+                used_date: todayKSTDate,
+                quantity: Number(titaniumDioxideG),
+                unit: "g",
+                work_type: "product",
+                note: tiNote,
+                created_by: userId,
+              });
+              if (tiErr) stockErrors.push(`이산화티타늄 차감 실패: ${tiErr.message}`);
+            } else {
+              stockErrors.push("원료 '이산화티타늄'을 찾을 수 없습니다.");
+            }
+          }
+        }
+
         const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, ccp_slot_id: null, production_done_at: new Date().toISOString(), updated_at: ccpEndedAt ?? new Date().toISOString() }).eq("id", selectedWo.id);
         if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
         if (stockErrors.length > 0) showToast("저장됐으나 전사지 차감 오류: " + stockErrors.join(" / "), "error");
