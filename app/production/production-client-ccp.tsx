@@ -198,7 +198,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
     if (needsHistorySlotIds.length > 0) {
       const { data: historyEvents } = await supabase
         .from("ccp_slot_events")
-        .select("slot_id, event_type, measured_at, material_type")
+        .select("slot_id, event_type, measured_at, material_type, action_note")
         .in("slot_id", needsHistorySlotIds)
         .order("measured_at", { ascending: false });
   
