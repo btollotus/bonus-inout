@@ -534,6 +534,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [wo_packagingType, setWo_packagingType] = useState("트레이");
   const [wo_traySlot, setWo_traySlot] = useState("정사각20구");
   const [wo_packageUnit, setWo_packageUnit] = useState("100ea");
+  const [wo_packageUnitCustom, setWo_packageUnitCustom] = useState("");
   const [wo_moldPerSheet, setWo_moldPerSheet] = useState("");
   const [wo_moldCols, setWo_moldCols] = useState("");
   const [wo_moldRows, setWo_moldRows] = useState("");
@@ -580,6 +581,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [eWoMoldRows, setEWoMoldRows] = useState(""); 
   const [eWoMoldCount, setEWoMoldCount] = useState("");
   const [eWoPackageUnit, setEWoPackageUnit] = useState("");
+  const [eWoPackageUnitCustom, setEWoPackageUnitCustom] = useState("");
   const [eWoNote, setEWoNote] = useState("");
 
   useEffect(() => {
@@ -1086,7 +1088,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
           food_type: foodType, product_name: productName,
           logo_spec: orderWoLogoSpec.trim() || null, thickness: orderWoThickness || null,
           delivery_method: shipMethod, packaging_type: orderWoPackagingType || null,
-          package_unit: wo_packageUnit || null,
+          package_unit: wo_packageUnit === "기타" ? (wo_packageUnitCustom.trim() ? wo_packageUnitCustom.trim() + "ea" : null) : wo_packageUnit || null,
           mold_per_sheet: (toInt(orderWoMoldCols) * toInt(orderWoMoldRows)) > 0 ? toInt(orderWoMoldCols) * toInt(orderWoMoldRows) : null,
           mold_cols: toInt(orderWoMoldCols) > 0 ? toInt(orderWoMoldCols) : null,
           mold_rows: toInt(orderWoMoldRows) > 0 ? toInt(orderWoMoldRows) : null,
@@ -1218,7 +1220,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
         setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
         setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
-        setOrderSkipProductionCheck(false); setWo_packageUnit("");
+        setOrderSkipProductionCheck(false); setWo_packageUnit(""); setWo_packageUnitCustom("");
         setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
         await loadTrades(); return;
       }
@@ -1229,7 +1231,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
     setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
     setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
     setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
-    setOrderSkipProductionCheck(false); setWo_packageUnit("");
+    setOrderSkipProductionCheck(false); setWo_packageUnit(""); setWo_packageUnitCustom("");
     setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
     await loadTrades();
   }
@@ -1474,7 +1476,13 @@ if (copyPartnerId) {
           setOrderWoMoldCount((wo as any).mold_count ? String((wo as any).mold_count) : "");
           setOrderTitle((wo as any).reference_note ?? "");
           setOrderWoNote((wo as any).note ?? "");
-          setWo_packageUnit((wo as any).package_unit ?? "");
+          const _pu = (wo as any).package_unit ?? "";
+          if (_pu === "" || _pu === "100ea" || _pu === "200ea") {
+            setWo_packageUnit(_pu); setWo_packageUnitCustom("");
+          } else {
+            setWo_packageUnit("기타");
+            setWo_packageUnitCustom(_pu.replace(/ea$/i, ""));
+          }
 
           // 품목별 기존 바코드 저장 (재주문 시 재사용) - 품목명을 key로 사용
           const woItemsAll: any[] = (wo as any).work_order_items ?? [];
@@ -1610,7 +1618,13 @@ if (woSubNameVal) {
         setEWoMoldCols((wo as any).mold_cols ? String((wo as any).mold_cols) : "");
         setEWoMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : "");
         setEWoMoldCount((wo as any).mold_count ? String((wo as any).mold_count) : "");
-        setEWoPackageUnit((wo as any).package_unit ?? "");
+        const _epu = (wo as any).package_unit ?? "";
+        if (_epu === "" || _epu === "100ea" || _epu === "200ea") {
+          setEWoPackageUnit(_epu); setEWoPackageUnitCustom("");
+        } else {
+          setEWoPackageUnit("기타");
+          setEWoPackageUnitCustom(_epu.replace(/ea$/i, ""));
+        }
         setEOrderTitle((wo as any).reference_note ?? "");
         setEWoNote((wo as any).note ?? "");
         const rawImages: string[] = (wo as any).images ?? [];
@@ -1704,7 +1718,7 @@ if (woSubNameVal) {
             if (!upErr) uploadedUrls.push(path);
           }
         }
-        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, package_unit: eWoPackageUnit || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, mold_count: toInt(eWoMoldCount) > 0 ? toInt(eWoMoldCount) : null, note: eWoNote.trim() || null, reference_note: eOrderTitle.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString()}).eq("id", eWoId);
+        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, package_unit: eWoPackageUnit === "기타" ? (eWoPackageUnitCustom.trim() ? eWoPackageUnitCustom.trim() + "ea" : null) : eWoPackageUnit || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, mold_count: toInt(eWoMoldCount) > 0 ? toInt(eWoMoldCount) : null, note: eWoNote.trim() || null, reference_note: eOrderTitle.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString()}).eq("id", eWoId);
         await supabase.from("work_order_items").update({ delivery_date: eShipDate }).eq("work_order_id", eWoId);
 
       
@@ -2035,14 +2049,24 @@ if (woSubNameVal) {
                             </select>
                           </div>
                           <div><div className="mb-1 text-xs text-slate-600">포장방법</div>
-                            <select className={inp} value={eWoPackagingType} onChange={(e) => setEWoPackagingType(e.target.value)}>
+                            <select className={inp} value={eWoPackagingType} onChange={(e) => {
+                              setEWoPackagingType(e.target.value);
+                              if (e.target.value === "벌크") setEWoPackageUnit("기타");
+                            }}>
                               {["", "트레이-정사각20구", "트레이-직사각20구", "트레이-35구", "벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
                             </select>
                           </div>
-                          <div><div className="mb-1 text-xs text-slate-600">포장단위</div>
+                          <div>
+                            <div className="mb-1 text-xs text-slate-600">포장단위</div>
                             <select className={inp} value={eWoPackageUnit} onChange={(e) => setEWoPackageUnit(e.target.value)}>
-                              {["", "100ea", "200ea", "300ea", "기타"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
+                              {["", "100ea", "200ea", "기타"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
                             </select>
+                            {eWoPackageUnit === "기타" && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <input className={inpR} inputMode="numeric" placeholder="수량 입력" value={eWoPackageUnitCustom} onChange={(e) => setEWoPackageUnitCustom(e.target.value.replace(/[^\d]/g, ""))} />
+                                <span className="shrink-0 text-sm text-slate-500">ea</span>
+                              </div>
+                            )}
                           </div>
                           <div><div className="mb-1 text-xs text-slate-600">납품방법</div>
                             <select className={inp} value={eWoDeliveryMethod} onChange={(e) => setEWoDeliveryMethod(e.target.value)}>
@@ -2238,7 +2262,7 @@ if (woSubNameVal) {
   setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
   setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
   setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
-  setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin); setWo_packageUnit("");
+  setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin); setWo_packageUnit(""); setWo_packageUnitCustom("");
   setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({});
   setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
 }}>
@@ -2264,7 +2288,7 @@ if (woSubNameVal) {
   setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
   setOrderWoSubName(""); setOrderWoLogoSpec(""); setOrderWoThickness("2mm");
   setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
-  setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin); setWo_packageUnit("");
+  setOrderIsReorder(false); setOrderWoEnabled(!isSubAdmin); setWo_packageUnit(""); setWo_packageUnitCustom("");
   setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({});
   setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
   setManualCounterpartyName(""); setManualBusinessNo("");
@@ -2388,15 +2412,25 @@ if (woSubNameVal) {
                           {["2mm", "3mm", "5mm", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                         </select>
                       </div>
-                     <div><div className="mb-1 text-xs text-slate-600">포장방법</div>
-                        <select className={inp} value={orderWoPackagingType} onChange={(e) => setOrderWoPackagingType(e.target.value)}>
+                      <div><div className="mb-1 text-xs text-slate-600">포장방법</div>
+                        <select className={inp} value={orderWoPackagingType} onChange={(e) => {
+                          setOrderWoPackagingType(e.target.value);
+                          if (e.target.value === "벌크") setWo_packageUnit("기타");
+                        }}>
                           {["", "트레이-정사각20구", "트레이-직사각20구", "트레이-35구", "벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
                         </select>
                       </div>
-                      <div><div className="mb-1 text-xs text-slate-600">포장단위</div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-600">포장단위</div>
                         <select className={inp} value={wo_packageUnit} onChange={(e) => setWo_packageUnit(e.target.value)}>
-                          {["", "100ea", "200ea", "300ea", "기타"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
+                          {["", "100ea", "200ea", "기타"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}
                         </select>
+                        {wo_packageUnit === "기타" && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <input className={inpR} inputMode="numeric" placeholder="수량 입력" value={wo_packageUnitCustom} onChange={(e) => setWo_packageUnitCustom(e.target.value.replace(/[^\d]/g, ""))} />
+                            <span className="shrink-0 text-sm text-slate-500">ea</span>
+                          </div>
+                        )}
                       </div>
                       <div>
                             <div className="mb-1 text-xs text-slate-600">

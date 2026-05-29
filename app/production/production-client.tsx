@@ -292,6 +292,7 @@ export default function ProductionClient() {
   const [ePackagingType, setEPackagingType] = useState("트레이");
   const [eTraySlot, setETraySlot] = useState("정사각20구");
   const [ePackageUnit, setEPackageUnit] = useState("100ea");
+  const [ePackageUnitCustom, setEPackageUnitCustom] = useState("");
   const [eMoldPerSheet, setEMoldPerSheet] = useState("");
   const [eMoldCols, setEMoldCols] = useState("");
   const [eMoldRows, setEMoldRows] = useState("");
@@ -368,6 +369,7 @@ export default function ProductionClient() {
   const [kThickness, setKThickness] = useState("3mm");
   const [kPackagingType, setKPackagingType] = useState("트레이-정사각20구");
   const [kPackageUnit, setKPackageUnit] = useState("100ea");
+  const [kPackageUnitCustom, setKPackageUnitCustom] = useState("");
   const [kMoldCols, setKMoldCols] = useState("");
   const [kMoldRows, setKMoldRows] = useState("");
   const [kUnitWeight, setKUnitWeight] = useState("");
@@ -412,7 +414,10 @@ export default function ProductionClient() {
     setKFoodType(variant.food_type ?? "");
     const { data, error } = await supabase.from("work_orders").select("sub_name, food_type, logo_spec, thickness, packaging_type, tray_slot, package_unit, mold_per_sheet, mold_cols, mold_rows, note, reference_note, work_order_items(unit_weight)").eq("variant_id", variant.variant_id).eq("order_type", "재고").order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (!error && data) {
-      setKSubName(data.sub_name ?? ""); setKFoodType(data.food_type ?? variant.food_type ?? ""); setKLogoSpec(data.logo_spec ?? ""); setKThickness(data.thickness ?? "3mm"); setKPackagingType(data.packaging_type ?? "트레이-정사각20구"); setKPackageUnit(data.package_unit ?? "100ea"); setKMoldCols(data.mold_cols ? String(data.mold_cols) : ""); setKMoldRows(data.mold_rows ? String(data.mold_rows) : ""); const prevUnitWeight = (data as any).work_order_items?.[0]?.unit_weight;
+      setKSubName(data.sub_name ?? ""); setKFoodType(data.food_type ?? variant.food_type ?? ""); setKLogoSpec(data.logo_spec ?? ""); setKThickness(data.thickness ?? "3mm"); setKPackagingType(data.packaging_type ?? "트레이-정사각20구");
+      const _kpu = data.package_unit ?? "100ea";
+      if (_kpu === "100ea" || _kpu === "200ea") { setKPackageUnit(_kpu); setKPackageUnitCustom(""); }
+      else { setKPackageUnit("기타"); setKPackageUnitCustom(_kpu.replace(/ea$/i, "")); } setKMoldCols(data.mold_cols ? String(data.mold_cols) : ""); setKMoldRows(data.mold_rows ? String(data.mold_rows) : ""); const prevUnitWeight = (data as any).work_order_items?.[0]?.unit_weight;
       setKUnitWeight(prevUnitWeight ? String(prevUnitWeight) : ""); setKNote(""); setKReferenceNote(data.reference_note ?? "");
     } else { setKSubName(""); setKLogoSpec(""); setKThickness("3mm"); setKPackagingType("트레이-정사각20구"); setKPackageUnit("100ea"); setKMoldCols(""); setKMoldRows(""); setKUnitWeight(""); setKNote(""); setKReferenceNote(""); }
     setKActualQty("");
@@ -444,7 +449,7 @@ export default function ProductionClient() {
       const { data: newWoNo3, error: woNoErr3 } = await supabase.rpc("generate_work_order_no", { date_str: dateStr });
       if (woNoErr3 || !newWoNo3) throw new Error("작업지시서 번호 생성 실패: " + (woNoErr3?.message ?? ""));
       const workOrderNo = newWoNo3;
-      const { data: wo, error: woErr } = await supabase.from("work_orders").insert({ work_order_no: workOrderNo, barcode_no: kiseongSelected.barcode, client_id: null, client_name: "재고생산", sub_name: kSubName.trim() || null, order_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, food_type: kFoodType.trim() || null, product_name: kiseongSelected.product_name, logo_spec: kLogoSpec.trim() || null, thickness: kThickness || null, delivery_method: null, packaging_type: kPackagingType || null, tray_slot: null, package_unit: kPackageUnit || null, mold_per_sheet: kMoldPerSheetNum > 0 ? kMoldPerSheetNum : null, mold_cols: kMoldColsNum > 0 ? kMoldColsNum : null, mold_rows: kMoldRowsNum > 0 ? kMoldRowsNum : null, note: kNote.trim() || null, reference_note: kReferenceNote.trim() || null, status: "생산중", variant_id: kiseongSelected.variant_id, order_type: "재고" }).select("id").single();
+      const { data: wo, error: woErr } = await supabase.from("work_orders").insert({ work_order_no: workOrderNo, barcode_no: kiseongSelected.barcode, client_id: null, client_name: "재고생산", sub_name: kSubName.trim() || null, order_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, food_type: kFoodType.trim() || null, product_name: kiseongSelected.product_name, logo_spec: kLogoSpec.trim() || null, thickness: kThickness || null, delivery_method: null, packaging_type: kPackagingType || null, tray_slot: null, package_unit: kPackageUnit === "기타" ? (kPackageUnitCustom.trim() ? kPackageUnitCustom.trim() + "ea" : null) : kPackageUnit || null, mold_per_sheet: kMoldPerSheetNum > 0 ? kMoldPerSheetNum : null, mold_cols: kMoldColsNum > 0 ? kMoldColsNum : null, mold_rows: kMoldRowsNum > 0 ? kMoldRowsNum : null, note: kNote.trim() || null, reference_note: kReferenceNote.trim() || null, status: "생산중", variant_id: kiseongSelected.variant_id, order_type: "재고" }).select("id").single();
       if (woErr) throw woErr;
       const { error: itemErr } = await supabase.from("work_order_items").insert({ work_order_id: wo.id, delivery_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, sub_items: [{ name: kiseongSelected.product_name, qty: toInt(kActualQty) }], order_qty: toInt(kActualQty), barcode_no: kiseongSelected.barcode, actual_qty: toInt(kActualQty), unit_weight: kUnitWeight ? toNum(kUnitWeight) : (kiseongSelected.weight_g ?? null), expiry_date: null });
       if (itemErr) {
@@ -678,7 +683,10 @@ export default function ProductionClient() {
       const count = visibleItems.length;
       setEProductName(count > 1 ? `${firstName} 외 ${count - 1}건` : firstName);
     }
-    setEFoodType(wo.food_type ?? ""); setELogoSpec(wo.logo_spec ?? ""); setEThickness(wo.thickness ?? "2mm"); setEDeliveryMethod(wo.delivery_method ?? "택배"); setEPackagingType(wo.packaging_type ?? ""); setETraySlot(wo.tray_slot ?? "정사각20구"); setEPackageUnit(wo.package_unit ?? "100ea"); setEMoldPerSheet(wo.mold_per_sheet ? String(wo.mold_per_sheet) : "");
+    setEFoodType(wo.food_type ?? ""); setELogoSpec(wo.logo_spec ?? ""); setEThickness(wo.thickness ?? "2mm"); setEDeliveryMethod(wo.delivery_method ?? "택배"); setEPackagingType(wo.packaging_type ?? ""); setETraySlot(wo.tray_slot ?? "정사각20구");
+    const _apu = wo.package_unit ?? "100ea";
+    if (_apu === "100ea" || _apu === "200ea") { setEPackageUnit(_apu); setEPackageUnitCustom(""); }
+    else { setEPackageUnit("기타"); setEPackageUnitCustom(_apu.replace(/ea$/i, "")); } setEMoldPerSheet(wo.mold_per_sheet ? String(wo.mold_per_sheet) : "");
     setEMoldCols((wo as any).mold_cols ? String((wo as any).mold_cols) : "");
     setEMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : "");
     setEMoldCount((wo as any).mold_count ? String((wo as any).mold_count) : "");
@@ -1059,7 +1067,7 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
     setMsg("저장 중...");
     try {
       if (isAdminOrSubadmin) {
-        const { error: basicErr } = await supabase.from("work_orders").update({ sub_name: eSubName.trim() || null, product_name: eProductName.trim(), food_type: eFoodType.trim() || null, logo_spec: eLogoSpec.trim() || null, thickness: eThickness || null, delivery_method: eDeliveryMethod || null, packaging_type: ePackagingType === "트레이" ? `트레이-${eTraySlot}` : ePackagingType || null, tray_slot: null, package_unit: ePackageUnit || null, mold_per_sheet: (toInt(eMoldCols) * toInt(eMoldRows)) > 0 ? toInt(eMoldCols) * toInt(eMoldRows) : null, mold_cols: toInt(eMoldCols) > 0 ? toInt(eMoldCols) : null, mold_rows: toInt(eMoldRows) > 0 ? toInt(eMoldRows) : null, mold_count: toInt(eMoldCount) > 0 ? toInt(eMoldCount) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+        const { error: basicErr } = await supabase.from("work_orders").update({ sub_name: eSubName.trim() || null, product_name: eProductName.trim(), food_type: eFoodType.trim() || null, logo_spec: eLogoSpec.trim() || null, thickness: eThickness || null, delivery_method: eDeliveryMethod || null, packaging_type: ePackagingType === "트레이" ? `트레이-${eTraySlot}` : ePackagingType || null, tray_slot: null, package_unit: ePackageUnit === "기타" ? (ePackageUnitCustom.trim() ? ePackageUnitCustom.trim() + "ea" : null) : ePackageUnit || null, mold_per_sheet: (toInt(eMoldCols) * toInt(eMoldRows)) > 0 ? toInt(eMoldCols) * toInt(eMoldRows) : null, mold_cols: toInt(eMoldCols) > 0 ? toInt(eMoldCols) : null, mold_rows: toInt(eMoldRows) > 0 ? toInt(eMoldRows) : null, mold_count: toInt(eMoldCount) > 0 ? toInt(eMoldCount) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
         if (basicErr) { setMsg("기본정보 저장 실패: " + basicErr.message); setIsCompleting(false); return; }
       }
       if (woChecks) {
@@ -1472,8 +1480,17 @@ const totalOrder = items
                       <div><div className="mb-1 text-xs text-slate-500">식품유형 *</div><input className={inp} value={kFoodType} onChange={(e) => setKFoodType(e.target.value)} /></div>
                       <div><div className="mb-1 text-xs text-slate-500">규격</div><input className={inp} value={kLogoSpec} onChange={(e) => setKLogoSpec(e.target.value)} /></div>
                       <div><div className="mb-1 text-xs text-slate-500">두께</div><select className={inp} value={kThickness} onChange={(e) => setKThickness(e.target.value)}>{["2mm","3mm","5mm","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
-                      <div><div className="mb-1 text-xs text-slate-500">포장방법</div><select className={inp} value={kPackagingType} onChange={(e) => setKPackagingType(e.target.value)}>{["트레이-정사각20구","트레이-직사각20구","트레이-35구","벌크"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
-                      <div><div className="mb-1 text-xs text-slate-500">포장단위</div><select className={inp} value={kPackageUnit} onChange={(e) => setKPackageUnit(e.target.value)}>{["100ea","200ea","300ea","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
+                      <div><div className="mb-1 text-xs text-slate-500">포장방법</div><select className={inp} value={kPackagingType} onChange={(e) => { setKPackagingType(e.target.value); if (e.target.value === "벌크") setKPackageUnit("기타"); }}>{["트레이-정사각20구","트레이-직사각20구","트레이-35구","벌크"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">포장단위</div>
+                        <select className={inp} value={kPackageUnit} onChange={(e) => setKPackageUnit(e.target.value)}>{["100ea","200ea","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select>
+                        {kPackageUnit === "기타" && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <input className={inpR} inputMode="numeric" placeholder="수량 입력" value={kPackageUnitCustom} onChange={(e) => setKPackageUnitCustom(e.target.value.replace(/[^\d]/g, ""))} />
+                            <span className="shrink-0 text-xs text-slate-500">ea</span>
+                          </div>
+                        )}
+                      </div>
                       <div>
                         <div className="mb-1 text-xs text-slate-500">성형틀 열수 (가로 × 세로){kMoldCols && kMoldRows && toInt(kMoldCols) > 0 && toInt(kMoldRows) > 0 && <span className="ml-1 font-semibold text-blue-600">= {toInt(kMoldCols) * toInt(kMoldRows)}개</span>}</div>
                         <div className="flex items-center gap-1"><input className={inpR} inputMode="numeric" placeholder="가로" value={kMoldCols} onChange={(e) => setKMoldCols(e.target.value.replace(/[^\d]/g, ""))} /><span className="shrink-0 font-bold text-slate-400">×</span><input className={inpR} inputMode="numeric" placeholder="세로" value={kMoldRows} onChange={(e) => setKMoldRows(e.target.value.replace(/[^\d]/g, ""))} /></div>
@@ -1530,8 +1547,17 @@ const totalOrder = items
                       <div><div className="mb-1 text-xs text-slate-500">규격</div><input className={inp} value={eLogoSpec} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setELogoSpec(e.target.value)} /></div>
                       <div><div className="mb-1 text-xs text-slate-500">두께</div><select className={inp} value={eThickness} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEThickness(e.target.value)}>{["2mm","3mm","5mm","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
                       <div><div className="mb-1 text-xs text-slate-500">납품방법</div><select className={inp} value={eDeliveryMethod} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEDeliveryMethod(e.target.value)}>{["택배","퀵-신용","퀵-착불","방문","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
-                      <div><div className="mb-1 text-xs text-slate-500">포장방법</div><select className={inp} value={ePackagingType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEPackagingType(e.target.value)}>{["","트레이-정사각20구","트레이-직사각20구","트레이-35구","벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}</select></div>
-                      <div><div className="mb-1 text-xs text-slate-500">포장단위</div><select className={inp} value={ePackageUnit} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEPackageUnit(e.target.value)}>{["100ea","200ea","300ea","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
+                      <div><div className="mb-1 text-xs text-slate-500">포장방법</div><select className={inp} value={ePackagingType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => { setEPackagingType(e.target.value); if (e.target.value === "벌크") setEPackageUnit("기타"); }}>{["","트레이-정사각20구","트레이-직사각20구","트레이-35구","벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}</select></div>
+                      <div>
+                        <div className="mb-1 text-xs text-slate-500">포장단위</div>
+                        <select className={inp} value={ePackageUnit} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEPackageUnit(e.target.value)}>{["100ea","200ea","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select>
+                        {ePackageUnit === "기타" && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <input className={inpR} inputMode="numeric" placeholder="수량 입력" disabled={selectedWo?.status === "완료" && !isEditMode} value={ePackageUnitCustom} onChange={(e) => setEPackageUnitCustom(e.target.value.replace(/[^\d]/g, ""))} />
+                            <span className="shrink-0 text-xs text-slate-500">ea</span>
+                          </div>
+                        )}
+                      </div>
                       <div>
                         <div className="mb-1 text-xs text-slate-500">성형틀 (가로×세로){eMoldCols && eMoldRows && toInt(eMoldCols) > 0 && toInt(eMoldRows) > 0 && <span className="ml-1 font-semibold text-blue-600">= {toInt(eMoldCols) * toInt(eMoldRows)}개</span>}</div>
                         <div className="flex items-center gap-1"><input className={inpR} inputMode="numeric" placeholder="가로" value={eMoldCols} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldCols(e.target.value.replace(/[^\d]/g, ""))} /><span className="shrink-0 font-bold text-slate-400">×</span><input className={inpR} inputMode="numeric" placeholder="세로" value={eMoldRows} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldRows(e.target.value.replace(/[^\d]/g, ""))} /></div>
