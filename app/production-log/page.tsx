@@ -1345,10 +1345,21 @@ function MaterialLedgerTab({ role, userId, showToast }: {
           </div>
           <div class="doc-title">원 료 수 불 부</div>
           <div class="doc-sub">${y}년 ${m}월</div>
-          <div class="sign-row">
-            <div class="sign-box"><div class="sign-label">담당</div><div class="sign-space"></div></div>
-            <div class="sign-box"><div class="sign-label">확인</div><div class="sign-space"></div></div>
-            <div class="sign-box"><div class="sign-label">승인</div><div class="sign-space"></div></div>
+         <div class="sign-row">
+            <div class="sign-box">
+              <div class="sign-label">확인</div>
+              <div class="sign-space" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 0;">
+                <img src="/sign-kimyg.png" style="height:26px;object-fit:contain;" alt="김영각" />
+                <div style="font-size:7pt;margin-top:1px;">김영각</div>
+              </div>
+            </div>
+            <div class="sign-box">
+              <div class="sign-label">승인</div>
+              <div class="sign-space" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 0;">
+                <img src="/sign-chods.png" style="height:26px;object-fit:contain;" alt="조대성" />
+                <div style="font-size:7pt;margin-top:1px;">조대성</div>
+              </div>
+            </div>
           </div>
           <div class="info-row">
             <div class="info-cell"><span class="info-label">원료명</span>${mat.name}</div>
