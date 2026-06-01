@@ -175,6 +175,7 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
+  const isAdmin = role === "ADMIN";
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
   const today = todayKST();
   const currentYM = wcYearMonthOf(today);
@@ -443,8 +444,8 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
                 {dates.map((d) => {
                   const isToday = d === today;
                   const isActive = dayActive[d] ?? false;
-                  const canActivate = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
-                  const canEdit = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                  const canActivate = isAdmin || (inspector !== null && (isAdminOrSubadmin || (isCurrentMonth && d === today)));
+                  const canEdit = isAdmin || (inspector !== null && (isAdminOrSubadmin || (isCurrentMonth && d === today)));
                   const inspName = dayInspectors[d] ?? "조대성";
                   const signSrc = WC_SIGN_MAP[inspName] ?? null;
                   const isPast = d <= today;
@@ -755,6 +756,7 @@ export function ForeignMatterTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
+  const isAdmin = role === "ADMIN";
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
   const today = todayKST();
   const currentYM = fmYearMonthOf(today);
@@ -1014,7 +1016,7 @@ export function ForeignMatterTab({ role, userId, showToast }: {
                   {dates.map((d) => {
                     const isToday = d === today;
                     const isActive = dayActive[d] ?? false;
-                    const canActivate = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                    const canActivate = isAdmin || (inspector !== null && (isAdminOrSubadmin || (isCurrentMonth && d === today)));
                     return (
                       <th key={d}
                         onClick={() => {
@@ -1066,7 +1068,7 @@ export function ForeignMatterTab({ role, userId, showToast }: {
                   {dates.map((d) => {
                     const inspName = dayInspectors[d] ?? "조대성";
                     const isPast = d <= today;
-                    const canEdit = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                    const canEdit = isAdmin || (inspector !== null && (isAdminOrSubadmin || (isCurrentMonth && d === today)));
                     return (
                       <th key={d} style={{ background:"#f1f5f9", border:"0.5px solid #e2e8f0", padding:"1px" }}>
                         {isPast && canEdit ? (
@@ -1413,6 +1415,7 @@ export function HygieneCheckTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
 }) {
+  const isAdmin = role === "ADMIN";
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
   const today = todayKST();
   const currentYM = hygieneYearMonthOf(today);
@@ -1710,7 +1713,7 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                     {dates.map((d) => {
                       const isToday = d === today;
                       const isActive = dayActive[d] ?? false;
-                      const canActivate = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                      const canActivate = isAdmin || (inspector !== null && (isAdminOrSubadmin || (isCurrentMonth && d === today)));
                       return (
                         <th key={d}
                           onClick={() => {
@@ -1763,7 +1766,7 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                     {dates.map((d) => {
                       const inspName = dayInspectors[d] ?? "조대성";
                       const isPast = d <= today;
-                      const canEdit = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                      const canEdit = isAdmin || (inspector !== null && (isAdminOrSubadmin || (isCurrentMonth && d === today)));
                       return (
                         <th key={d} style={{
                           background:"#f1f5f9", border:"0.5px solid #e2e8f0", padding:"1px",
