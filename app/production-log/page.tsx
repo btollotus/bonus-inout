@@ -1063,6 +1063,30 @@ function MaterialLedgerTab({ role, userId, showToast }: {
   const [rNote, setRNote] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // ── 재고 조정 ──
+  const [showAdjustForm, setShowAdjustForm] = useState(false);
+  const [adjMaterialId, setAdjMaterialId] = useState("");
+  const [adjMode, setAdjMode] = useState<"actual" | "delta">("actual");
+  const [adjActualQty, setAdjActualQty] = useState("");
+  const [adjDeltaQty, setAdjDeltaQty] = useState("");
+  const [adjReason, setAdjReason] = useState("");
+  const [adjSaving, setAdjSaving] = useState(false);
+  const [adjustments, setAdjustments] = useState<{
+    id: string; adjust_date: string; material_id: string;
+    actual_qty: number | null; adjust_qty: number; reason: string | null;
+    material?: { name: string } | null;
+  }[]>([]);
+
+  const selectedStock = stocks.find((s) => s.material_id === adjMaterialId);
+  const currentStockForAdj = selectedStock?.current_stock ?? 0;
+  const computedDelta = adjMode === "actual" && adjActualQty !== ""
+    ? parseFloat(adjActualQty) - currentStockForAdj
+    : null;
+  const deltaValue = adjMode === "delta" && adjDeltaQty !== ""
+    ? parseFloat(adjDeltaQty)
+    : null;
+  const finalDelta = adjMode === "actual" ? computedDelta : deltaValue;
+
   const categories = useMemo(() => {
     const cats = [...new Set(stocks.map((s) => s.category))].sort();
     return ["전체", ...cats];
@@ -1075,7 +1099,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [stockRes, receiptRes, usageRes, cumulativeUsageRes, cumulativeDisposalRes] = await Promise.all([
+    const [stockRes, receiptRes, usageRes, cumulativeUsageRes, cumulativeDisposalRes, adjRes] = await Promise.all([
       supabase.from("materials").select("id,name,category,unit,safety_stock").eq("is_active", true).order("category").order("name"),
       supabase.from("material_receipts")
         .select("id,received_date,material_id,quantity,unit,expiry_date,supplier,note,material:materials(name)")
@@ -1090,6 +1114,10 @@ function MaterialLedgerTab({ role, userId, showToast }: {
       supabase.from("material_disposal_logs")
         .select("material_id, quantity")
         .lte("created_at", `${filterDate}T23:59:59+09:00`),
+      supabase.from("material_adjustments")
+        .select("id,adjust_date,material_id,actual_qty,adjust_qty,reason,material:materials(name)")
+        .lte("adjust_date", filterDate)
+        .order("adjust_date", { ascending: false }),
     ]);
 
     // 당일 사용량
@@ -1131,11 +1159,19 @@ function MaterialLedgerTab({ role, userId, showToast }: {
       dailyReceiptMap[r.material_id] += r.quantity;
     });
 
+    // filterDate까지 누적 조정량
+    const cumulativeAdjMap: Record<string, number> = {};
+    (adjRes.data ?? []).forEach((a: any) => {
+      if (!cumulativeAdjMap[a.material_id]) cumulativeAdjMap[a.material_id] = 0;
+      cumulativeAdjMap[a.material_id] += a.adjust_qty;
+    });
+
     const stocksWithDaily = (stockRes.data ?? []).map((s: any) => {
       const totalReceived = cumulativeReceiptMap[s.id] ?? 0;
       const totalUsed = cumulativeUsageMap[s.id] ?? 0;
       const totalDisposed = cumulativeDisposalMap[s.id] ?? 0;
-      const currentStock = totalReceived - totalUsed - totalDisposed;
+      const totalAdj = cumulativeAdjMap[s.id] ?? 0;
+      const currentStock = totalReceived - totalUsed - totalDisposed + totalAdj;
       return {
         material_id: s.id,
         material_name: s.name,
@@ -1152,6 +1188,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     });
     setStocks(stocksWithDaily as MaterialStock[]);
     setReceipts((receiptRes.data ?? []) as unknown as MaterialReceipt[]);
+    setAdjustments((adjRes.data ?? []) as any);
     setLoading(false);
   }, [filterDate]);
 
@@ -1160,6 +1197,37 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     supabase.from("materials").select("id,name,category").order("name")
       .then(({ data }) => setMaterials(data ?? []));
   }, []);
+
+  async function saveAdjustment() {
+    if (!adjMaterialId) return showToast("원료를 선택하세요.", "error");
+    if (finalDelta === null || isNaN(finalDelta)) return showToast("수량을 입력하세요.", "error");
+    if (finalDelta === 0) return showToast("조정량이 0입니다. 현재고와 동일하거나 0을 입력했습니다.", "error");
+    if (!adjReason.trim()) return showToast("조정 사유를 입력하세요.", "error");
+    setAdjSaving(true);
+    const { error } = await supabase.from("material_adjustments").insert({
+      material_id: adjMaterialId,
+      adjust_date: filterDate,
+      actual_qty: adjMode === "actual" ? parseFloat(adjActualQty) : null,
+      adjust_qty: finalDelta,
+      reason: adjReason.trim(),
+      created_by: userId,
+    });
+    setAdjSaving(false);
+    if (error) return showToast("조정 실패: " + error.message, "error");
+    const mat = materials.find((m) => m.id === adjMaterialId);
+    showToast(`✅ ${mat?.name ?? "원료"} 재고 ${finalDelta > 0 ? "+" : ""}${finalDelta}g 조정 완료`);
+    setShowAdjustForm(false);
+    setAdjMaterialId(""); setAdjActualQty(""); setAdjDeltaQty(""); setAdjReason("");
+    loadData();
+  }
+
+  async function deleteAdjustment(adjId: string) {
+    if (!confirm("이 조정 내역을 삭제하시겠습니까? 현재고가 다시 변경됩니다.")) return;
+    const { error } = await supabase.from("material_adjustments").delete().eq("id", adjId);
+    if (error) return showToast("삭제 실패: " + error.message, "error");
+    showToast("🗑️ 조정 내역 삭제 완료");
+    loadData();
+  }
 
   async function saveReceipt() {
     if (!rMaterialId || !rQty) return showToast("원료와 수량을 입력하세요.", "error");
@@ -1201,12 +1269,22 @@ function MaterialLedgerTab({ role, userId, showToast }: {
           </div>
           <button className={btn} onClick={loadData}>🔄 조회</button>
           {isAdminOrSubadmin && (
-            <button
-              className={showReceiptForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
-              onClick={() => setShowReceiptForm((v) => !v)}
-            >
-              {showReceiptForm ? "✕ 닫기" : "✚ 입고 등록"}
-            </button>
+            <>
+              <button
+                className={showReceiptForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
+                onClick={() => { setShowReceiptForm((v) => !v); setShowAdjustForm(false); }}
+              >
+                {showReceiptForm ? "✕ 닫기" : "✚ 입고 등록"}
+              </button>
+              <button
+                className={showAdjustForm
+                  ? "rounded-xl border border-amber-500 bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700"
+                  : "rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"}
+                onClick={() => { setShowAdjustForm((v) => !v); setShowReceiptForm(false); }}
+              >
+                {showAdjustForm ? "✕ 닫기" : "⚖️ 재고 조정"}
+              </button>
+            </>
           )}
           <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
         </div>
@@ -1260,6 +1338,95 @@ function MaterialLedgerTab({ role, userId, showToast }: {
         </div>
       )}
 
+     {/* ── 재고 조정 폼 ── */}
+     {showAdjustForm && isAdminOrSubadmin && (
+        <div className={`${card} p-4`} style={{ borderColor: "#fcd34d" }}>
+          <div className="mb-3 font-semibold text-sm text-amber-700">⚖️ 재고 조정 — {filterDate}</div>
+          <div className="mb-4 flex gap-2">
+            <button
+              className={`flex-1 rounded-xl border-2 py-2 text-sm font-semibold transition-all
+                ${adjMode === "actual" ? "border-amber-500 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
+              onClick={() => { setAdjMode("actual"); setAdjActualQty(""); setAdjDeltaQty(""); }}>
+              📦 실제재고 입력<br/>
+              <span className="text-xs font-normal opacity-70">실사 후 실제 수량 입력 → 차이 자동 계산</span>
+            </button>
+            <button
+              className={`flex-1 rounded-xl border-2 py-2 text-sm font-semibold transition-all
+                ${adjMode === "delta" ? "border-amber-500 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
+              onClick={() => { setAdjMode("delta"); setAdjActualQty(""); setAdjDeltaQty(""); }}>
+              ± 조정량 직접 입력<br/>
+              <span className="text-xs font-normal opacity-70">증가(+) / 감소(-) 값 직접 입력</span>
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <div className="mb-1 text-xs text-slate-500">원료 *</div>
+              <select className={inp} value={adjMaterialId}
+                onChange={(e) => { setAdjMaterialId(e.target.value); setAdjActualQty(""); setAdjDeltaQty(""); }}>
+                <option value="">— 원료 선택 —</option>
+                {materials.map((m) => (
+                  <option key={m.id} value={m.id}>[{m.category}] {m.name}</option>
+                ))}
+              </select>
+              {adjMaterialId && selectedStock && (
+                <div className="mt-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+                  현재 DB 재고: <span className="font-bold tabular-nums">{currentStockForAdj.toLocaleString()}{selectedStock.unit}</span>
+                </div>
+              )}
+            </div>
+            <div>
+              {adjMode === "actual" ? (
+                <>
+                  <div className="mb-1 text-xs text-slate-500">실제 재고량 (실사값) *</div>
+                  <input className={inpR} inputMode="decimal" value={adjActualQty}
+                    onChange={(e) => setAdjActualQty(e.target.value)}
+                    placeholder={selectedStock ? `현재 ${currentStockForAdj.toLocaleString()}${selectedStock.unit}` : "g 입력"} />
+                  {computedDelta !== null && !isNaN(computedDelta) && adjMaterialId && (
+                    <div className={`mt-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold
+                      ${computedDelta > 0 ? "border-green-200 bg-green-50 text-green-700"
+                        : computedDelta < 0 ? "border-red-200 bg-red-50 text-red-600"
+                        : "border-slate-200 bg-slate-50 text-slate-500"}`}>
+                      조정량: {computedDelta > 0 ? "+" : ""}{computedDelta.toLocaleString()}{selectedStock?.unit}
+                      {computedDelta === 0 && " (변동 없음)"}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="mb-1 text-xs text-slate-500">조정량 * <span className="text-slate-400">(증가: 양수, 감소: 음수)</span></div>
+                  <input className={inpR} inputMode="decimal" value={adjDeltaQty}
+                    onChange={(e) => setAdjDeltaQty(e.target.value)}
+                    placeholder="예: 5000 또는 -3000" />
+                  {deltaValue !== null && !isNaN(deltaValue) && adjMaterialId && (
+                    <div className={`mt-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold
+                      ${deltaValue > 0 ? "border-green-200 bg-green-50 text-green-700"
+                        : deltaValue < 0 ? "border-red-200 bg-red-50 text-red-600"
+                        : "border-slate-200 bg-slate-50 text-slate-500"}`}>
+                      조정 후 재고: {(currentStockForAdj + deltaValue).toLocaleString()}{selectedStock?.unit}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="md:col-span-2">
+              <div className="mb-1 text-xs text-slate-500">조정 사유 * <span className="text-slate-400">(예: 실사, 손실 반영 등)</span></div>
+              <input className={inp} value={adjReason}
+                onChange={(e) => setAdjReason(e.target.value)}
+                placeholder="조정 사유를 입력하세요" />
+            </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button
+              className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-60"
+              disabled={adjSaving || !adjMaterialId || finalDelta === null || !adjReason.trim()}
+              onClick={saveAdjustment}>
+              {adjSaving ? "저장 중..." : `⚖️ 재고 조정 저장${finalDelta !== null && !isNaN(finalDelta) && adjMaterialId ? ` (${finalDelta > 0 ? "+" : ""}${finalDelta}${selectedStock?.unit ?? "g"})` : ""}`}
+            </button>
+            <button className={btn} onClick={() => { setShowAdjustForm(false); setAdjMaterialId(""); setAdjActualQty(""); setAdjDeltaQty(""); setAdjReason(""); }}>취소</button>
+          </div>
+        </div>
+      )}
+
       {/* 현재고 현황 */}
       <div className={`${card} p-4`}>
         <div className="mb-3 font-semibold text-sm">🧪 원료별 현재고</div>
@@ -1280,10 +1447,17 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                 </tr>
               </thead>
               <tbody>
-                {filteredStocks.map((s) => (
+              {filteredStocks.map((s) => {
+                  const hasAdj = adjustments.some((a) => a.material_id === s.material_id);
+                  return (
                   <tr key={s.material_id} className={`border-b border-slate-100 hover:bg-slate-50 ${s.is_below_safety_stock ? "bg-red-50" : ""}`}>
                     <td className="py-2 px-3 text-xs text-slate-500">{s.category}</td>
-                    <td className="py-2 px-3 font-medium">{s.material_name}</td>
+                    <td className="py-2 px-3 font-medium">
+                      {s.material_name}
+                      {hasAdj && (
+                        <span className="ml-1.5 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-600">조정있음</span>
+                      )}
+                    </td>
                     <td className="py-2 px-3 text-right tabular-nums text-green-700">{s.total_received.toLocaleString()}{s.unit}</td>
                     <td className="py-2 px-3 text-right tabular-nums text-blue-700">{s.daily_used > 0 ? s.daily_used.toLocaleString() : "0"}{s.unit}</td>
                     <td className="py-2 px-3 text-right tabular-nums text-slate-500">{s.total_disposed.toLocaleString()}{s.unit}</td>
@@ -1297,8 +1471,9 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                         <span className="rounded-full border border-green-200 bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">정상</span>
                       )}
                     </td>
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1328,8 +1503,38 @@ function MaterialLedgerTab({ role, userId, showToast }: {
           </div>
         )}
      </div>
+
+{/* 당일 조정 내역 */}
+{adjustments.filter((a) => a.adjust_date === filterDate).length > 0 && (
+  <div className={`${card} p-4`}>
+    <div className="mb-3 font-semibold text-sm text-amber-700">⚖️ 재고 조정 내역 — {filterDate}</div>
+    <div className="space-y-2">
+      {adjustments.filter((a) => a.adjust_date === filterDate).map((a) => (
+        <div key={a.id} className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm">{(a.material as any)?.name ?? "—"}</div>
+            <div className="text-xs text-slate-600">
+              조정량: <b className={a.adjust_qty > 0 ? "text-green-700" : "text-red-600"}>
+                {a.adjust_qty > 0 ? "+" : ""}{a.adjust_qty.toLocaleString()}g
+              </b>
+              {a.actual_qty != null && ` · 실사값: ${a.actual_qty.toLocaleString()}g`}
+              {a.reason && ` · ${a.reason}`}
+            </div>
+          </div>
+          {isAdminOrSubadmin && (
+            <button
+              className="shrink-0 rounded-lg border border-red-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-red-500 hover:bg-red-50"
+              onClick={() => deleteAdjustment(a.id)}>
+              삭제
+            </button>
+          )}
+        </div>
+      ))}
     </div>
-  );
+  </div>
+)}
+</div>
+);
 }
 
 // ═══════════════════════════════════════════════════════════
