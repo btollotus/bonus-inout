@@ -1022,7 +1022,16 @@ export function ForeignMatterTab({ role, userId, showToast }: {
                             { log_date: d, inspector_name: dayInspectors[d] ?? "조대성", is_active: newActive },
                             { onConflict: "log_date" }
                           ).then(({ error }) => {
-                            if (error) showToast("저장 실패: " + error.message, "error");
+                            if (error) { showToast("저장 실패: " + error.message, "error"); return; }
+                            if (newActive) {
+                              const defaultUpserts = items.map((item) => ({
+                                log_date: d, item_id: item.id, result: true,
+                                inspector_name: dayInspectors[d] ?? "조대성",
+                              }));
+                              supabase.from("foreign_matter_check_results")
+                                .upsert(defaultUpserts, { onConflict: "log_date,item_id" })
+                                .then(({ error: e }) => { if (e) showToast("기록 저장 실패: " + e.message, "error"); else loadData(); });
+                            }
                           });
                         }}
                         style={{
@@ -1710,7 +1719,16 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                               { log_date: d, inspector_name: dayInspectors[d] ?? "조대성", is_active: newActive },
                               { onConflict: "log_date" }
                             ).then(({ error }) => {
-                              if (error) showToast("저장 실패: " + error.message, "error");
+                              if (error) { showToast("저장 실패: " + error.message, "error"); return; }
+                              if (newActive) {
+                                const defaultUpserts = items.map((item) => ({
+                                  log_date: d, item_id: item.id, result: true,
+                                  inspector_name: dayInspectors[d] ?? "조대성",
+                                }));
+                                supabase.from("hygiene_check_results")
+                                  .upsert(defaultUpserts, { onConflict: "log_date,item_id" })
+                                  .then(({ error: e }) => { if (e) showToast("기록 저장 실패: " + e.message, "error"); else loadData(); });
+                              }
                             });
                           }}
                           style={{
