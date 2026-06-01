@@ -1199,6 +1199,194 @@ function MaterialLedgerTab({ role, userId, showToast }: {
       .then(({ data }) => setMaterials(data ?? []));
   }, []);
 
+  // ── 월별 수불부 인쇄 ──
+  const [printYear, setPrintYear] = useState(() => new Date().getFullYear());
+  const [printMonth, setPrintMonth] = useState(() => new Date().getMonth() + 1);
+  const [showPrintForm, setShowPrintForm] = useState(false);
+  const [printLoading, setPrintLoading] = useState(false);
+
+  async function printMonthlyLedger() {
+    setPrintLoading(true);
+    const y = printYear;
+    const m = printMonth;
+    const monthStart = `${y}-${String(m).padStart(2, "0")}-01`;
+    const lastDay = new Date(y, m, 0).getDate();
+    const monthEnd = `${y}-${String(m).padStart(2, "0")}-${lastDay}`;
+    // 전월 말일 (전월이월 계산용)
+    const prevEnd = new Date(y, m - 1, 0);
+    const prevEndStr = `${prevEnd.getFullYear()}-${String(prevEnd.getMonth() + 1).padStart(2, "0")}-${String(prevEnd.getDate()).padStart(2, "0")}`;
+
+    // 해당 월 변동 원료 ID 수집
+    const [recRes, useRes, adjRes] = await Promise.all([
+      supabase.from("material_receipts").select("material_id,received_date,quantity").gte("received_date", monthStart).lte("received_date", monthEnd),
+      supabase.from("material_usage_logs").select("material_id,used_date,quantity").gte("used_date", monthStart).lte("used_date", monthEnd),
+      supabase.from("material_adjustments").select("material_id,adjust_date,adjust_qty,reason").gte("adjust_date", monthStart).lte("adjust_date", monthEnd),
+    ]);
+    const changedIds = [...new Set([
+      ...(recRes.data ?? []).map((r: any) => r.material_id),
+      ...(useRes.data ?? []).map((u: any) => u.material_id),
+      ...(adjRes.data ?? []).map((a: any) => a.material_id),
+    ])];
+    if (changedIds.length === 0) { setPrintLoading(false); return alert("해당 월에 변동 내역이 없습니다."); }
+
+    // 원료 정보
+    const { data: matsData } = await supabase.from("materials").select("id,name,category,unit").in("id", changedIds).order("category").order("name");
+    const mats = matsData ?? [];
+
+    // 전월이월 재고 계산 (각 원료별)
+    const [prevRecRes, prevUseRes, prevAdjRes] = await Promise.all([
+      supabase.from("material_receipts").select("material_id,quantity").lte("received_date", prevEndStr),
+      supabase.from("material_usage_logs").select("material_id,quantity").lte("used_date", prevEndStr),
+      supabase.from("material_adjustments").select("material_id,adjust_qty").lte("adjust_date", prevEndStr),
+    ]);
+    const prevStockMap: Record<string, number> = {};
+    (prevRecRes.data ?? []).forEach((r: any) => { prevStockMap[r.material_id] = (prevStockMap[r.material_id] ?? 0) + r.quantity; });
+    (prevUseRes.data ?? []).forEach((u: any) => { prevStockMap[u.material_id] = (prevStockMap[u.material_id] ?? 0) - u.quantity; });
+    (prevAdjRes.data ?? []).forEach((a: any) => { prevStockMap[a.material_id] = (prevStockMap[a.material_id] ?? 0) + a.adjust_qty; });
+
+    // 날짜별 집계 맵 구성
+    type DayEntry = { in: number; use: number; adj: number; adjNote: string };
+    const dayMap: Record<string, Record<string, DayEntry>> = {};
+    (recRes.data ?? []).forEach((r: any) => {
+      if (!dayMap[r.material_id]) dayMap[r.material_id] = {};
+      if (!dayMap[r.material_id][r.received_date]) dayMap[r.material_id][r.received_date] = { in: 0, use: 0, adj: 0, adjNote: "" };
+      dayMap[r.material_id][r.received_date].in += r.quantity;
+    });
+    (useRes.data ?? []).forEach((u: any) => {
+      if (!dayMap[u.material_id]) dayMap[u.material_id] = {};
+      if (!dayMap[u.material_id][u.used_date]) dayMap[u.material_id][u.used_date] = { in: 0, use: 0, adj: 0, adjNote: "" };
+      dayMap[u.material_id][u.used_date].use += u.quantity;
+    });
+    (adjRes.data ?? []).forEach((a: any) => {
+      if (!dayMap[a.material_id]) dayMap[a.material_id] = {};
+      if (!dayMap[a.material_id][a.adjust_date]) dayMap[a.material_id][a.adjust_date] = { in: 0, use: 0, adj: 0, adjNote: "" };
+      dayMap[a.material_id][a.adjust_date].adj += a.adjust_qty;
+      if (a.reason) dayMap[a.material_id][a.adjust_date].adjNote = a.reason;
+    });
+
+    // HTML 생성
+    const days = ["일","월","화","수","목","금","토"];
+    let html = `
+      <style>
+        @page { size: A4 portrait; margin: 15mm 18mm; }
+        body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 9pt; color: #000; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        .page { page-break-after: always; }
+        .page:last-child { page-break-after: avoid; }
+        .header-top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 4px; }
+        .company { font-size: 8pt; color: #555; }
+        .doc-title { font-size: 15pt; font-weight: bold; text-align: center; letter-spacing: 2px; margin-bottom: 2px; }
+        .doc-sub { font-size: 8.5pt; text-align: center; color: #333; margin-bottom: 10px; }
+        .info-row { display: flex; gap: 0; margin-bottom: 8px; border: 1px solid #333; }
+        .info-cell { flex: 1; padding: 4px 8px; font-size: 8.5pt; border-right: 1px solid #ccc; }
+        .info-cell:last-child { border-right: none; }
+        .info-label { font-weight: bold; margin-right: 6px; }
+        table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+        th { background: #f0f0f0; border: 1px solid #999; padding: 5px 4px; text-align: center; font-weight: bold; font-size: 8pt; }
+        td { border: 1px solid #bbb; padding: 4px 6px; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        td.center { text-align: center; }
+        tr:nth-child(even) { background: #fafafa; }
+        tr.carry { background: #f5f5f5; font-weight: bold; }
+        .footer { margin-top: 10px; font-size: 7.5pt; color: #555; display: flex; justify-content: space-between; }
+        .sign-row { display: flex; justify-content: flex-end; gap: 0; margin-bottom: 8px; }
+        .sign-box { border: 1px solid #999; width: 60px; text-align: center; }
+        .sign-label { background: #f0f0f0; border-bottom: 1px solid #bbb; padding: 3px 0; font-size: 7.5pt; font-weight: bold; }
+        .sign-space { height: 28px; }
+      </style>`;
+
+    mats.forEach((mat: any, idx: number) => {
+      const matDays = dayMap[mat.id] ?? {};
+      const sortedDates = Object.keys(matDays).sort();
+      const prevStock = prevStockMap[mat.id] ?? 0;
+      let runningStock = prevStock;
+      let rowNo = 1;
+
+      let rows = `
+        <tr class="carry">
+          <td class="center">-</td>
+          <td class="center">전월이월</td>
+          <td class="num">-</td>
+          <td class="num">-</td>
+          <td class="num">-</td>
+          <td class="num">${prevStock.toLocaleString()}</td>
+          <td class="center"></td>
+          <td class="center"></td>
+          <td></td>
+        </tr>`;
+
+      sortedDates.forEach((date) => {
+        const d = new Date(date + "T00:00:00+09:00");
+        const dayLabel = `${d.getMonth() + 1}/${d.getDate()}(${days[d.getDay()]})`;
+        const entry = matDays[date];
+        runningStock = runningStock + entry.in - entry.use + entry.adj;
+        const adjCell = entry.adj !== 0 ? `${entry.adj > 0 ? "+" : ""}${entry.adj.toLocaleString()}` : "-";
+        const noteCell = entry.adjNote || "";
+        rows += `
+          <tr>
+            <td class="center">${rowNo++}</td>
+            <td class="center">${dayLabel}</td>
+            <td class="num">${entry.in > 0 ? entry.in.toLocaleString() : "-"}</td>
+            <td class="num">${entry.use > 0 ? entry.use.toLocaleString() : "-"}</td>
+            <td class="num ${entry.adj !== 0 ? (entry.adj > 0 ? "color: #1a7a1a;" : "color: #cc0000;") : ""}">${adjCell}</td>
+            <td class="num">${runningStock.toLocaleString()}</td>
+            <td class="center"></td>
+            <td class="center"></td>
+            <td>${noteCell}</td>
+          </tr>`;
+      });
+
+      const isLast = idx === mats.length - 1;
+      html += `
+        <div class="${isLast ? "" : "page"}">
+          <div class="header-top">
+            <div class="company">BONUSMATE</div>
+            <div style="font-size:7.5pt;color:#555;">${y}년 ${m}월 원료수불부</div>
+          </div>
+          <div class="doc-title">원 료 수 불 부</div>
+          <div class="doc-sub">${y}년 ${m}월</div>
+          <div class="sign-row">
+            <div class="sign-box"><div class="sign-label">담당</div><div class="sign-space"></div></div>
+            <div class="sign-box"><div class="sign-label">확인</div><div class="sign-space"></div></div>
+            <div class="sign-box"><div class="sign-label">승인</div><div class="sign-space"></div></div>
+          </div>
+          <div class="info-row">
+            <div class="info-cell"><span class="info-label">원료명</span>${mat.name}</div>
+            <div class="info-cell"><span class="info-label">분류</span>${mat.category}</div>
+            <div class="info-cell"><span class="info-label">단위</span>${mat.unit}</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:32px">No</th>
+                <th style="width:72px">일자</th>
+                <th style="width:80px">입고량</th>
+                <th style="width:80px">사용량</th>
+                <th style="width:70px">조정량</th>
+                <th style="width:90px">당일재고</th>
+                <th style="width:52px">담당자</th>
+                <th style="width:48px">확인</th>
+                <th>비고</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="footer">
+            <span>* 본 문서는 BONUSMATE ERP에서 자동 생성되었습니다.</span>
+            <span>출력일시: ${new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</span>
+          </div>
+        </div>`;
+    });
+
+    setPrintLoading(false);
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>원료수불부_${y}년_${m}월</title></head><body>${html}</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 500);
+  }
+
   async function saveAdjustment() {
     if (!adjMaterialId) return showToast("원료를 선택하세요.", "error");
     if (finalDelta === null || isNaN(finalDelta)) return showToast("수량을 입력하세요.", "error");
@@ -1287,9 +1475,52 @@ function MaterialLedgerTab({ role, userId, showToast }: {
               </button>
             </>
           )}
-          <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+         <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+          <button
+            className={showPrintForm
+              ? "rounded-xl border border-violet-500 bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-700"
+              : "rounded-xl border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm font-semibold text-violet-700 hover:bg-violet-100"}
+            onClick={() => setShowPrintForm((v) => !v)}>
+            {showPrintForm ? "✕ 닫기" : "📄 월별 수불부"}
+          </button>
         </div>
       </div>
+
+      {/* 월별 수불부 인쇄 폼 */}
+      {showPrintForm && (
+        <div className={`${card} p-4`}>
+          <div className="mb-3 font-semibold text-sm text-violet-700">📄 월별 원료수불부 인쇄</div>
+          <div className="flex flex-wrap gap-3 items-end">
+            <div>
+              <div className="mb-1 text-xs text-slate-500">연도</div>
+              <select className={inp} style={{ width: 100 }} value={printYear}
+                onChange={(e) => setPrintYear(Number(e.target.value))}>
+                {[2024, 2025, 2026, 2027].map((y) => (
+                  <option key={y} value={y}>{y}년</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-500">월</div>
+              <select className={inp} style={{ width: 90 }} value={printMonth}
+                onChange={(e) => setPrintMonth(Number(e.target.value))}>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                  <option key={m} value={m}>{m}월</option>
+                ))}
+              </select>
+            </div>
+            <button
+              className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+              disabled={printLoading}
+              onClick={printMonthlyLedger}>
+              {printLoading ? "데이터 조회 중..." : "🖨️ 인쇄 미리보기"}
+            </button>
+          </div>
+          <div className="mt-2 text-xs text-slate-400">
+            해당 월에 입고·사용·조정 내역이 있는 원료만 출력됩니다.
+          </div>
+        </div>
+      )} 
 
       {/* 입고 등록 폼 */}
       {showReceiptForm && isAdminOrSubadmin && (
