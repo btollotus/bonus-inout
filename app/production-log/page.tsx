@@ -1195,7 +1195,9 @@ function MaterialLedgerTab({ role, userId, showToast }: {
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => {
-    supabase.from("materials").select("id,name,category").eq("is_active", true).order("category").order("name")
+    supabase.from("materials").select("id,name,category").eq("is_active", true)
+      .not("category", "eq", "부자재")
+      .order("category").order("name")
       .then(({ data }) => setMaterials(data ?? []));
   }, []);
 
