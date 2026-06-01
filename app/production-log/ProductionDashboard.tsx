@@ -317,7 +317,7 @@ export function ProductionDashboard({
 
     // ── 8. 온습도: 하루 2회 ──
     try {
-      const { data } = await supabase.from("temp_humidity_logs")
+        const { data } = await supabase.from("humidity_temp_logs")
         .select("id, check_time").eq("log_date", today);
       const count = (data ?? []).length;
       newCards.push({
@@ -337,7 +337,7 @@ export function ProductionDashboard({
 
     // ── 9. 냉장·냉동·온장고: 하루 2회 ──
     try {
-      const { data } = await supabase.from("storage_temp_logs")
+        const { data } = await supabase.from("fridge_monitoring_logs")
         .select("id, check_time").eq("log_date", today);
       const count = (data ?? []).length;
       newCards.push({
