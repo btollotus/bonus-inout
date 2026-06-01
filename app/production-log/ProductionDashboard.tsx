@@ -107,20 +107,25 @@ export function ProductionDashboard({
       const outIds = new Set((outData ?? []).map((a: any) => a.employee_id));
       const noOut = clockedIn.filter((e) => !outIds.has(e.id));
 
-      const issues: string[] = [];
-      if (missing.length > 0) issues.push(`일지 미작성: ${missing.map((e) => e.name).join(", ")}`);
-      if (noOut.length > 0) issues.push(`퇴근 미기록: ${noOut.map((e) => e.name).join(", ")}`);
+      const details: string[] = [];
+      if (missing.length > 0) details.push(`일지 미작성: ${missing.map((e) => e.name).join(", ")}`);
+      if (noOut.length > 0) details.push(`퇴근 미기록: ${noOut.map((e) => e.name).join(", ")}`);
+
+      const hasIssue = missing.length > 0 || noOut.length > 0;
+      const msgParts: string[] = [];
+      if (missing.length > 0) msgParts.push(`미작성 ${missing.length}명`);
+      if (noOut.length > 0) msgParts.push(`퇴근누락 ${noOut.length}명`);
 
       newCards.push({
         key: "work",
         label: "근무일지",
         icon: "👷",
         tab: "work",
-        status: issues.length > 0 ? "error" : clockedIn.length === 0 ? "warn" : "ok",
-        message: issues.length > 0
-          ? `${issues.length}건 누락`
+        status: hasIssue ? "error" : clockedIn.length === 0 ? "warn" : "ok",
+        message: hasIssue
+          ? msgParts.join(" · ")
           : clockedIn.length === 0 ? "오늘 출근 기록 없음" : `${clockedIn.length}명 정상`,
-        detail: issues,
+        detail: details,
       });
     } catch {
       newCards.push({ key: "work", label: "근무일지", icon: "👷", tab: "work", status: "warn", message: "조회 오류" });
