@@ -54,26 +54,12 @@ export function ProductionDashboard({
   // ── 방충방서 기준일 계산 (금요일, 휴일이면 목요일) ──
   // 단순화: 이번 주 금요일. 오늘이 금요일이면 오늘, 아니면 가장 최근 금요일
   function getPestCheckDate(): string {
+    // 오늘 기준 가장 최근 금요일을 역산 (오늘이 금요일이면 오늘)
     const d = new Date(today + "T00:00:00+09:00");
-    const dow = d.getDay(); // 0=일 ~ 6=토
-    // 이번 주 금요일 (5)
-    const diff = 5 - dow;
-    const friday = new Date(d);
-    friday.setDate(d.getDate() + (diff <= 0 ? diff + 7 : diff) - 7);
-    // 오늘이 금요일이면 오늘
-    if (dow === 5) return today;
-    // 오늘이 금요일 이후(토,일)면 이번 주 금요일
-    if (dow === 6) {
-      const fri = new Date(d); fri.setDate(d.getDate() - 1);
-      return fri.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+    while (d.getDay() !== 5) {
+      d.setDate(d.getDate() - 1);
     }
-    // 월~목: 지난 주 금요일
-    const lastFri = new Date(d); lastFri.setDate(d.getDate() - ((dow + 2) % 7) - (dow === 0 ? 1 : 0));
-    // 이번 주 월요일부터 오늘 사이의 금요일 기준: 월~목은 "이번 주 금요일"이 아직 안 옴
-    // → 지난 주 금요일이 체크 기준
-    const prevFri = new Date(d);
-    prevFri.setDate(d.getDate() - ((dow + 2) % 7 === 0 ? 7 : (dow + 2) % 7));
-    return prevFri.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+    return d.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
   }
 
   const loadDashboard = useCallback(async () => {
@@ -101,22 +87,28 @@ export function ProductionDashboard({
             .eq("log_date", today),
           // 재직 중인 전체 직원
           supabase.from("employees")
-            .select("id, name")
+            .select("id, name, auth_user_id")
             .is("resign_date", null),
-          // 오늘 휴가 (ANNUAL, HALF_AM, SPECIAL, REMOTE 제외 대상)
+          // 오늘 휴가 (HALF_PM 제외 — 나머지는 출근 체크 제외)
           supabase.from("leave_requests")
-            .select("employee_id, leave_type")
+            .select("employee_id, user_id, leave_type")
             .eq("leave_date", today)
-            .eq("status", "approved")
-            .in("leave_type", ["ANNUAL", "HALF_AM", "SPECIAL", "REMOTE"]),
+            .in("leave_type", ["ANNUAL", "HALF_AM", "SICK", "FRIDAY_OFF", "SPECIAL", "REMOTE"]),
         ]);
   
-        const allEmployees = (empData ?? []) as { id: string; name: string }[];
+        const allEmployees = (empData ?? []) as { id: string; name: string; auth_user_id?: string }[];
         const clockedInIds = new Set((attInData ?? []).map((a: any) => a.employee_id));
         const clockedOutIds = new Set((attOutData ?? []).map((a: any) => a.employee_id));
         const writtenIds = new Set((logData ?? []).map((l: any) => l.employee_id));
-        // 출근 체크 제외 직원 (ANNUAL, HALF_AM, SPECIAL, REMOTE)
-        const excusedIds = new Set((leaveData ?? []).map((l: any) => l.employee_id));
+        // user_id → employee_id 매핑 (leave_requests에 employee_id가 null인 경우 대비)
+        const userToEmpMap: Record<string, string> = {};
+        allEmployees.forEach((e) => { if (e.auth_user_id) userToEmpMap[e.auth_user_id] = e.id; });
+        // 출근 체크 제외 직원 (HALF_PM 제외한 모든 휴가)
+        const excusedIds = new Set(
+          (leaveData ?? [])
+            .map((l: any) => l.employee_id ?? userToEmpMap[l.user_id])
+            .filter(Boolean)
+        );
   
         // 출근 체크 대상 = 전체 직원 - 제외 직원
         const checkTargets = allEmployees.filter((e) => !excusedIds.has(e.id));
@@ -143,10 +135,10 @@ export function ProductionDashboard({
         const { data: todayLeaveData } = await supabase.from("leave_requests")
           .select("employee_name, leave_type")
           .eq("leave_date", today)
-          .eq("status", "approved")
           .not("leave_type", "eq", "REMOTE");
         const leaveLabels: Record<string, string> = {
-          ANNUAL: "연차", HALF_AM: "오전반차", HALF_PM: "오후반차", SPECIAL: "특별휴가",
+          ANNUAL: "연차", HALF_AM: "오전반차", HALF_PM: "오후반차",
+          SICK: "병가", FRIDAY_OFF: "금요휴무", SPECIAL: "특별휴가",
         };
         const leaveNames = (todayLeaveData ?? []).map((l: any) =>
           `${l.employee_name}(${leaveLabels[l.leave_type] ?? l.leave_type})`
