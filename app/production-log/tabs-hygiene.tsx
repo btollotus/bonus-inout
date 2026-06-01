@@ -456,7 +456,7 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
                       {/* 날짜 헤더 — 클릭으로 활성화 */}
                       <td
                         onClick={() => {
-                          if (!canActivate) return;
+                          if (!canActivate) { setShowPin(true); return; }
                           const newActive = !isActive;
                           setDayActive((prev) => ({ ...prev, [d]: newActive }));
                           if (!newActive) {
@@ -1020,7 +1020,7 @@ export function ForeignMatterTab({ role, userId, showToast }: {
                     return (
                       <th key={d}
                         onClick={() => {
-                          if (!canActivate) return;
+                          if (!canActivate) { setShowPin(true); return; }
                           const newActive = !isActive;
                           setDayActive((prev) => ({ ...prev, [d]: newActive }));
                           if (!newActive) {
@@ -1717,7 +1717,7 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                       return (
                         <th key={d}
                           onClick={() => {
-                            if (!canActivate) return;
+                            if (!canActivate) { setShowPin(true); return; }
                             const newActive = !isActive;
                             setDayActive((prev) => ({ ...prev, [d]: newActive }));
                             // 비활성화 시 해당 날짜 pending 제거
