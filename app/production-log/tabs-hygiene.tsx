@@ -468,7 +468,17 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
                           supabase.from("warmer_cleaning_daily").upsert(
                             { log_date: d, inspector_name: inspName, is_active: newActive },
                             { onConflict: "log_date" }
-                          ).then(({ error }) => { if (error) showToast("저장 실패: " + error.message, "error"); });
+                          ).then(({ error }) => {
+                            if (error) { showToast("저장 실패: " + error.message, "error"); return; }
+                            if (newActive) {
+                              const defaultUpserts = WARMER_NOS.map((wn) => ({
+                                log_date: d, warmer_no: wn, result: "clean", inspector_name: inspName,
+                              }));
+                              supabase.from("warmer_cleaning_results")
+                                .upsert(defaultUpserts, { onConflict: "log_date,warmer_no" })
+                                .then(({ error: e }) => { if (e) showToast("기록 저장 실패: " + e.message, "error"); else loadData(); });
+                            }
+                          });
                         }}
                         style={{
                           border:"0.5px solid #e2e8f0", padding:"3px 6px", textAlign:"center",
