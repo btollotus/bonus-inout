@@ -317,7 +317,10 @@ export function NewProductionLogTab({ role, userId, showToast }: {
 
     const pages = items.map(({ date, workOrders: wos, blendLogs: bls, materialUsages: mus = [] }, idx) => {
       const woByWorkerPrint = wos.reduce<Record<string, WorkOrder[]>>((acc, wo) => {
-        const name = wo.assignee_production ?? "미지정";
+        const isChuganJae = (wo.food_type ?? "").includes("중간재");
+        const name = isChuganJae
+          ? (wo.assignee_transfer ?? wo.assignee_production ?? "미지정")
+          : (wo.assignee_production ?? "미지정");
         if (!acc[name]) acc[name] = [];
         acc[name].push(wo);
         return acc;
