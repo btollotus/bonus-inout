@@ -80,57 +80,93 @@ export function ProductionDashboard({
     setLoading(true);
     const newCards: DashCard[] = [];
 
-    // ── 1. 근무일지: 오늘 출근 직원 중 daily_work_logs 미작성 ──
+    // ── 1. 근무일지: 출근 누락 / 일지 미작성 / 퇴근 누락 ──
     try {
-      const [{ data: attData }, { data: logData }] = await Promise.all([
-        supabase.from("attendance")
-          .select("employee_id, employees(name)")
-          .eq("type", "IN")
-          .gte("happened_at", `${today}T00:00:00+09:00`)
-          .lte("happened_at", `${today}T23:59:59+09:00`),
-        supabase.from("daily_work_logs")
-          .select("employee_id")
-          .eq("log_date", today),
-      ]);
-      const clockedIn = (attData ?? []).map((a: any) => ({
-        id: a.employee_id,
-        name: a.employees?.name ?? a.employee_id,
-      }));
-      const writtenIds = new Set((logData ?? []).map((l: any) => l.employee_id));
-      const missing = clockedIn.filter((e) => !writtenIds.has(e.id));
-      // 출퇴근 누락 (IN은 있는데 OUT이 없는 경우)
-      const { data: outData } = await supabase.from("attendance")
-        .select("employee_id")
-        .eq("type", "OUT")
-        .gte("happened_at", `${today}T00:00:00+09:00`)
-        .lte("happened_at", `${today}T23:59:59+09:00`);
-      const outIds = new Set((outData ?? []).map((a: any) => a.employee_id));
-      const noOut = clockedIn.filter((e) => !outIds.has(e.id));
-
-      const details: string[] = [];
-      if (missing.length > 0) details.push(`일지 미작성: ${missing.map((e) => e.name).join(", ")}`);
-      if (noOut.length > 0) details.push(`퇴근 미기록: ${noOut.map((e) => e.name).join(", ")}`);
-
-      const hasIssue = missing.length > 0 || noOut.length > 0;
-      const msgParts: string[] = [];
-      if (missing.length > 0) msgParts.push(`미작성 ${missing.length}명`);
-      if (noOut.length > 0) msgParts.push(`퇴근누락 ${noOut.length}명`);
-
-      newCards.push({
-        key: "work",
-        label: "근무일지",
-        icon: "👷",
-        tab: "work",
-        status: hasIssue ? "error" : clockedIn.length === 0 ? "warn" : "ok",
-        message: hasIssue
-          ? msgParts.join(" · ")
-          : clockedIn.length === 0 ? "오늘 출근 기록 없음" : `${clockedIn.length}명 정상`,
-        detail: details,
-      });
-    } catch {
-      newCards.push({ key: "work", label: "근무일지", icon: "👷", tab: "work", status: "warn", message: "조회 오류" });
-    }
-
+        const [{ data: attInData }, { data: attOutData }, { data: logData }, { data: empData }, { data: leaveData }] = await Promise.all([
+          // 오늘 출근(IN) 기록
+          supabase.from("attendance")
+            .select("employee_id, employees(name)")
+            .eq("type", "IN")
+            .gte("happened_at", `${today}T00:00:00+09:00`)
+            .lte("happened_at", `${today}T23:59:59+09:00`),
+          // 오늘 퇴근(OUT) 기록
+          supabase.from("attendance")
+            .select("employee_id")
+            .eq("type", "OUT")
+            .gte("happened_at", `${today}T00:00:00+09:00`)
+            .lte("happened_at", `${today}T23:59:59+09:00`),
+          // 오늘 일지 작성 여부
+          supabase.from("daily_work_logs")
+            .select("employee_id")
+            .eq("log_date", today),
+          // 재직 중인 전체 직원
+          supabase.from("employees")
+            .select("id, name")
+            .is("resign_date", null),
+          // 오늘 휴가 (ANNUAL, HALF_AM, SPECIAL, REMOTE 제외 대상)
+          supabase.from("leave_requests")
+            .select("employee_id, leave_type")
+            .eq("leave_date", today)
+            .eq("status", "approved")
+            .in("leave_type", ["ANNUAL", "HALF_AM", "SPECIAL", "REMOTE"]),
+        ]);
+  
+        const allEmployees = (empData ?? []) as { id: string; name: string }[];
+        const clockedInIds = new Set((attInData ?? []).map((a: any) => a.employee_id));
+        const clockedOutIds = new Set((attOutData ?? []).map((a: any) => a.employee_id));
+        const writtenIds = new Set((logData ?? []).map((l: any) => l.employee_id));
+        // 출근 체크 제외 직원 (ANNUAL, HALF_AM, SPECIAL, REMOTE)
+        const excusedIds = new Set((leaveData ?? []).map((l: any) => l.employee_id));
+  
+        // 출근 체크 대상 = 전체 직원 - 제외 직원
+        const checkTargets = allEmployees.filter((e) => !excusedIds.has(e.id));
+  
+        // 출근 기록 없는 직원
+        const noIn = checkTargets.filter((e) => !clockedInIds.has(e.id));
+        // 출근했는데 일지 미작성
+        const noLog = checkTargets.filter((e) => clockedInIds.has(e.id) && !writtenIds.has(e.id));
+        // 출근했는데 퇴근 미기록 (HALF_PM 포함 — 오전 출근해야 함)
+        const noOut = checkTargets.filter((e) => clockedInIds.has(e.id) && !clockedOutIds.has(e.id));
+  
+        const details: string[] = [];
+        if (noIn.length > 0) details.push(`출근 미기록: ${noIn.map((e) => e.name).join(", ")}`);
+        if (noLog.length > 0) details.push(`일지 미작성: ${noLog.map((e) => e.name).join(", ")}`);
+        if (noOut.length > 0) details.push(`퇴근 미기록: ${noOut.map((e) => e.name).join(", ")}`);
+  
+        const hasIssue = noIn.length > 0 || noLog.length > 0 || noOut.length > 0;
+        const msgParts: string[] = [];
+        if (noIn.length > 0) msgParts.push(`출근누락 ${noIn.length}명`);
+        if (noLog.length > 0) msgParts.push(`미작성 ${noLog.length}명`);
+        if (noOut.length > 0) msgParts.push(`퇴근누락 ${noOut.length}명`);
+  
+        // 오늘 휴가자 표시 (REMOTE 제외)
+        const { data: todayLeaveData } = await supabase.from("leave_requests")
+          .select("employee_name, leave_type")
+          .eq("leave_date", today)
+          .eq("status", "approved")
+          .not("leave_type", "eq", "REMOTE");
+        const leaveLabels: Record<string, string> = {
+          ANNUAL: "연차", HALF_AM: "오전반차", HALF_PM: "오후반차", SPECIAL: "특별휴가",
+        };
+        const leaveNames = (todayLeaveData ?? []).map((l: any) =>
+          `${l.employee_name}(${leaveLabels[l.leave_type] ?? l.leave_type})`
+        );
+  
+        newCards.push({
+          key: "work",
+          label: "근무일지",
+          icon: "👷",
+          tab: "work",
+          status: hasIssue ? "error" : "ok",
+          message: hasIssue ? msgParts.join(" · ") : `${checkTargets.length - noIn.length}명 출근`,
+          detail: [
+            ...details,
+            ...(leaveNames.length > 0 ? [`휴가: ${leaveNames.join(", ")}`] : []),
+          ],
+        });
+      } catch {
+        newCards.push({ key: "work", label: "근무일지", icon: "👷", tab: "work", status: "warn", message: "조회 오류" });
+      }
     // ── 2. CCP-1P: 생산완료 중 금속검출 미기록 ──
     try {
       const [{ data: woData }, { data: ccpData }] = await Promise.all([
