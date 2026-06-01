@@ -18,7 +18,9 @@ type WorkOrder = {
   work_order_no: string;
   client_name: string;
   product_name: string;
+  food_type: string | null;
   assignee_production: string | null;
+  assignee_transfer: string | null;
   assignee_input: string | null;
   skip_production_check: boolean;
   production_done_at: string | null;
@@ -91,7 +93,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     const [woRes, blendRes, usageRes, ccpEvRes, metalRes] = await Promise.all([
       supabase
         .from("work_orders")
-        .select("id,work_order_no,client_name,product_name,assignee_production,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight)")
+        .select("id,work_order_no,client_name,product_name,food_type,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight)")
         .gte("production_done_at", `${selectedDate}T00:00:00+09:00`)
         .lt("production_done_at",  `${selectedDate}T23:59:59+09:00`)
         .eq("status_production", true)
@@ -193,7 +195,10 @@ export function NewProductionLogTab({ role, userId, showToast }: {
 
   // 작업자별 그룹화
   const woByWorker = workOrders.reduce<Record<string, WorkOrder[]>>((acc, wo) => {
-    const name = wo.assignee_production ?? "미지정";
+    const isChuganJae = (wo.product_name ?? "").includes("중간재") || (wo.food_type ?? "").includes("중간재");
+    const name = isChuganJae
+      ? (wo.assignee_transfer ?? wo.assignee_production ?? "미지정")
+      : (wo.assignee_production ?? "미지정");
     if (!acc[name]) acc[name] = [];
     acc[name].push(wo);
     return acc;
@@ -215,7 +220,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
       const [woRes, blendRes, usageRes, ccpEvRes2, metalRes2] = await Promise.all([
         supabase
           .from("work_orders")
-          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight)")
+          .select("id,work_order_no,client_name,product_name,food_type,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight)")
           .gte("production_done_at", `${date}T00:00:00+09:00`)
           .lt("production_done_at",  `${date}T23:59:59+09:00`)
           .eq("status_production", true)
