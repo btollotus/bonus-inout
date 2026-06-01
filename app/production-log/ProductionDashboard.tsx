@@ -85,10 +85,11 @@ export function ProductionDashboard({
           supabase.from("daily_work_logs")
             .select("employee_id")
             .eq("log_date", today),
-          // 재직 중인 전체 직원
-          supabase.from("employees")
-            .select("id, name, auth_user_id")
-            .is("resign_date", null),
+                    // 재직 중인 전체 직원 (출근 체크 제외 대상 포함)
+                    supabase.from("employees")
+                    .select("id, name, auth_user_id, skip_attendance_check")
+                    .is("resign_date", null),
+        
           // 오늘 휴가 (HALF_PM 제외 — 나머지는 출근 체크 제외)
           supabase.from("leave_requests")
             .select("employee_id, user_id, leave_type")
@@ -96,7 +97,7 @@ export function ProductionDashboard({
             .in("leave_type", ["ANNUAL", "HALF_AM", "SICK", "FRIDAY_OFF", "SPECIAL", "REMOTE"]),
         ]);
   
-        const allEmployees = (empData ?? []) as { id: string; name: string; auth_user_id?: string }[];
+        const allEmployees = (empData ?? []) as { id: string; name: string; auth_user_id?: string; skip_attendance_check?: boolean }[];
         const clockedInIds = new Set((attInData ?? []).map((a: any) => a.employee_id));
         const clockedOutIds = new Set((attOutData ?? []).map((a: any) => a.employee_id));
         const writtenIds = new Set((logData ?? []).map((l: any) => l.employee_id));
@@ -110,8 +111,8 @@ export function ProductionDashboard({
             .filter(Boolean)
         );
   
-        // 출근 체크 대상 = 전체 직원 - 제외 직원
-        const checkTargets = allEmployees.filter((e) => !excusedIds.has(e.id));
+      // 출근 체크 대상 = 전체 직원 - 휴가자 - skip_attendance_check 직원
+      const checkTargets = allEmployees.filter((e) => !excusedIds.has(e.id) && !e.skip_attendance_check);
   
         // 출근 기록 없는 직원
         const noIn = checkTargets.filter((e) => !clockedInIds.has(e.id));
