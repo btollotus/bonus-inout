@@ -177,7 +177,7 @@ export default function ProductionLogPage() {
             { key: "other_heating", label: "🔥 가열공정" },
             { key: "compressor",    label: "💨 압축공기" },
             { key: "pet",           label: "📦 PET수불부" },
-            { key: "expiry",       label: "📅 소비기한" },
+  
 { key: "warmer_clean", label: "🧹 온장고세척" },
 { key: "pest",         label: "🪲 방충방서" },
 { key: "foreign",      label: "🔍 이물관리" },
