@@ -255,7 +255,7 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
 
   // ── 셀 토글: null/default → clean → unused → null(pending 제거) ──
   function toggleCell(date: string, warmerNo: string) {
-    const canEdit = isAdminOrSubadmin || (isCurrentMonth && date === today && inspector !== null);
+    const canEdit = isAdmin || (inspector !== null && (isAdminOrSubadmin || (isCurrentMonth && date === today)));
     if (!canEdit) return;
     const key = `${date}__${warmerNo}`;
     const cur = getResult(date, warmerNo);
@@ -1115,7 +1115,7 @@ export function ForeignMatterTab({ role, userId, showToast }: {
                         const isToday = d === today;
                         const key = `${d}__${item.id}`;
                         const isPending = key in pending;
-                        const canEdit = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                        const canEdit = isAdmin || (inspector !== null && (isAdminOrSubadmin || (isCurrentMonth && d === today)));
                         return (
                           <td key={d} onClick={() => toggleCell(d, item.id)} style={{
                             border:"0.5px solid #e2e8f0", textAlign:"center",
@@ -1820,7 +1820,7 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                         const isToday = d === today;
                         const key = `${d}__${item.id}`;
                         const isPending = key in pending;
-                        const canEdit = isAdminOrSubadmin || (isCurrentMonth && d === today && inspector !== null);
+                        const canEdit = isAdmin || (inspector !== null && (isAdminOrSubadmin || (isCurrentMonth && d === today)));
                         return (
                           <td key={d} onClick={() => toggleCell(d, item.id)} style={{
                             border:"0.5px solid #e2e8f0", textAlign:"center",
