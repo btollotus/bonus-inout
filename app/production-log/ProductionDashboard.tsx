@@ -203,41 +203,48 @@ export function ProductionDashboard({
       newCards.push({ key: "warmer_clean", label: "온장고세척", icon: "🧹", tab: "warmer_clean", status: "warn", message: "조회 오류" });
     }
 
-    // ── 5. 방충방서: 이번 주 기준일 기록 확인 ──
+    // ── 5. 방충방서: 이번 주(월~금) 기록 확인 ──
     try {
-      const pestDate = getPestCheckDate();
-      const pestDateObj = new Date(pestDate + "T00:00:00+09:00");
-      const weekStart = new Date(pestDateObj);
-      weekStart.setDate(pestDateObj.getDate() - 6);
-      const weekStartStr = weekStart.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-
-      const [{ data: flyData }, { data: walkData }] = await Promise.all([
-        supabase.from("pest_flying_records")
-          .select("id")
-          .gte("happened_at", `${weekStartStr}T00:00:00+09:00`)
-          .lte("happened_at", `${pestDate}T23:59:59+09:00`),
-        supabase.from("pest_walking_records")
-          .select("id")
-          .gte("happened_at", `${weekStartStr}T00:00:00+09:00`)
-          .lte("happened_at", `${pestDate}T23:59:59+09:00`),
-      ]);
-      const hasRecord = (flyData ?? []).length > 0 || (walkData ?? []).length > 0;
-      // 오늘이 금요일(또는 목요일 대체)인 경우에만 error, 아니면 warn
-      const todayDow = new Date(today + "T00:00:00+09:00").getDay();
-      const isCheckDay = todayDow === 5 || todayDow === 4;
-      newCards.push({
-        key: "pest",
-        label: "방충방서",
-        icon: "🪲",
-        tab: "pest",
-        status: hasRecord ? "ok" : isCheckDay ? "error" : "warn",
-        message: hasRecord
-          ? "이번 주 기록 완료"
-          : isCheckDay ? "오늘 기록 필요" : `기준일(${pestDate}) 기록 없음`,
-      });
-    } catch {
-      newCards.push({ key: "pest", label: "방충방서", icon: "🪲", tab: "pest", status: "warn", message: "조회 오류" });
-    }
+        // 이번 주 월요일 계산
+        const todayD = new Date(today + "T00:00:00+09:00");
+        const todayDow = todayD.getDay(); // 0=일, 1=월 ... 6=토
+        // 월요일 기준 이번 주 시작 (일요일이면 전 주 월요일)
+        const daysFromMon = todayDow === 0 ? 6 : todayDow - 1;
+        const thisMonday = new Date(todayD);
+        thisMonday.setDate(todayD.getDate() - daysFromMon);
+        const thisMondayStr = thisMonday.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+  
+        // 이번 주 금요일
+        const thisFriday = new Date(thisMonday);
+        thisFriday.setDate(thisMonday.getDate() + 4);
+        const thisFridayStr = thisFriday.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+  
+        const [{ data: flyData }, { data: walkData }] = await Promise.all([
+          supabase.from("pest_flying_records")
+            .select("id")
+            .gte("happened_at", `${thisMondayStr}T00:00:00+09:00`)
+            .lte("happened_at", `${thisFridayStr}T23:59:59+09:00`),
+          supabase.from("pest_walking_records")
+            .select("id")
+            .gte("happened_at", `${thisMondayStr}T00:00:00+09:00`)
+            .lte("happened_at", `${thisFridayStr}T23:59:59+09:00`),
+        ]);
+        const hasRecord = (flyData ?? []).length > 0 || (walkData ?? []).length > 0;
+        const isCheckDay = todayDow === 5 || todayDow === 4; // 금 또는 목(대체)
+        newCards.push({
+          key: "pest",
+          label: "방충방서",
+          icon: "🪲",
+          tab: "pest",
+          status: hasRecord ? "ok" : isCheckDay ? "error" : "warn",
+          message: hasRecord
+            ? `이번 주 기록 완료`
+            : isCheckDay ? "오늘 기록 필요"
+            : `이번 주 미기록 (기준일: ${thisFridayStr})`,
+        });
+      } catch {
+        newCards.push({ key: "pest", label: "방충방서", icon: "🪲", tab: "pest", status: "warn", message: "조회 오류" });
+      }
 
     // ── 6. 이물관리 ──
     try {
