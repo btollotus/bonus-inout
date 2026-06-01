@@ -45,11 +45,12 @@ export function ProductionDashboard({
   userId: string | null;
   onTabChange: (tab: string) => void;
 }) {
-  const [cards, setCards] = useState<DashCard[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<string>("");
-
-  const today = todayKST();
+    const [cards, setCards] = useState<DashCard[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<string>("");
+    const [selectedDate, setSelectedDate] = useState<string>(todayKST());
+  
+    const today = selectedDate;
 
   // ── 방충방서 기준일 계산 (금요일, 휴일이면 목요일) ──
   // 단순화: 이번 주 금요일. 오늘이 금요일이면 오늘, 아니면 가장 최근 금요일
@@ -433,9 +434,26 @@ export function ProductionDashboard({
       {/* 헤더 */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <div className="font-bold text-base text-slate-800">📊 오늘의 현황</div>
-            <div className="text-xs text-slate-400 mt-0.5">{today} · 마지막 업데이트 {lastUpdated}</div>
+        <div className="flex flex-wrap items-center gap-3">
+            <div>
+              <div className="font-bold text-base text-slate-800">📊 오늘의 현황</div>
+              <div className="text-xs text-slate-400 mt-0.5">{today} · 마지막 업데이트 {lastUpdated}</div>
+            </div>
+            <input
+              type="date"
+              className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+              value={selectedDate}
+              max={todayKST()}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+            {selectedDate !== todayKST() && (
+              <button
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium hover:bg-slate-100"
+                onClick={() => setSelectedDate(todayKST())}
+              >
+                오늘로 돌아가기
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {errorCount > 0 && (
