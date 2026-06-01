@@ -206,11 +206,10 @@ export default function QuoteClient() {
     { label: "3,300원", value: 3300 },
     { label: "4,000원", value: 4000 },
   ];
-  const [useIcebox, setUseIcebox] = useState(false);
-  const [iceboxPrice, setIceboxPrice] = useState(4620);
-  const [iceboxQty, setIceboxQty] = useState(1);
-  const [deliveryPrice, setDeliveryPrice] = useState(0);
-  const [deliveryQty, setDeliveryQty] = useState(1);
+  const [iceboxQtys, setIceboxQtys] = useState<Record<number, number>>({ 4620: 0, 6930: 0, 9230: 0 });
+  const [deliveryQtys, setDeliveryQtys] = useState<Record<number, number>>({ 3300: 0, 4000: 0 });
+  const totalIceboxPrice = Object.entries(iceboxQtys).reduce((s, [p, q]) => s + Number(p) * q, 0);
+  const totalDeliveryPrice = Object.entries(deliveryQtys).reduce((s, [p, q]) => s + Number(p) * q, 0);
 
   // 전사지 탭용 레거시
   const [quantity, setQuantity] = useState("");
@@ -435,8 +434,8 @@ async function loadSignageList() {
     const totalSheetCost = calcedItems.reduce((s, x) => s + x.calcResult!.sheetCost, 0);
     const totalSheets    = calcedItems.reduce((s, x) => s + (parseInt(x.quantity) || 0), 0);
     const grandTotal     = calcedItems.reduce((s, x) => s + x.calcResult!.total, 0);
-    const iceboxCost = useIcebox ? iceboxPrice : 0;
-    const finalTotal = grandTotal + deliveryPrice + iceboxCost;
+    const iceboxCost = totalIceboxPrice;
+    const finalTotal = grandTotal + totalDeliveryPrice + iceboxCost;
     const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
       customer_id:   activeCustomerId,
       customer_name: activeCustomerName,
@@ -454,7 +453,7 @@ async function loadSignageList() {
       transfer_sheets: totalSheets,
       transfer_cost:   totalSheetCost,
       icebox_cost:     iceboxCost,
-      delivery_cost:   deliveryPrice,
+      delivery_cost:   totalDeliveryPrice,
       total:           finalTotal,
     });
     if (quoteErr) return setMsg(quoteErr.message);
@@ -621,8 +620,8 @@ async function loadSignageList() {
 
   function resetForm() {
     setItems([newItem()]); setMemo("");
-    setUseIcebox(false); setIceboxPrice(4620); setIceboxQty(1);
-    setDeliveryPrice(0); setDeliveryQty(1);
+    setIceboxQtys({ 4620: 0, 6930: 0, 9230: 0 });
+    setDeliveryQtys({ 3300: 0, 4000: 0 });
   }
 
   const filteredList = quoteList.filter(r => {
@@ -1096,49 +1095,40 @@ async function loadSignageList() {
                   <div className="mb-2 text-sm font-semibold text-slate-600">추가 옵션</div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div>
-                      <label className="flex cursor-pointer items-center gap-2 text-sm mb-2">
-                        <input type="checkbox" checked={useIcebox} onChange={e => setUseIcebox(e.target.checked)} />
-                        <span className="font-semibold text-blue-700">🧊 아이스박스 (5~10월)</span>
-                      </label>
-                      {useIcebox && (
-                        <div className="flex gap-2 flex-wrap items-center">
-                          {ICEBOX_OPTIONS.map(o => (
-                            <button key={o.value} type="button"
-                              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${iceboxPrice === o.value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
-                              onClick={() => setIceboxPrice(o.value)}>
-                              {o.label}
-                            </button>
-                          ))}
-                          <div className="flex items-center gap-1 ml-1">
-                            <span className="text-xs text-slate-500">수량</span>
-                            <input type="number" min={1}
+                      <div className="mb-2 text-sm font-semibold text-blue-700">🧊 아이스박스 (5~10월)</div>
+                      <div className="space-y-1">
+                        {ICEBOX_OPTIONS.map(o => (
+                          <div key={o.value} className="flex items-center gap-2">
+                            <span className="w-36 text-xs text-slate-600">{o.label}</span>
+                            <input type="number" min={0}
                               className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-center"
-                              value={iceboxQty}
-                              onChange={e => setIceboxQty(Math.max(1, parseInt(e.target.value) || 1))} />
+                              value={iceboxQtys[o.value] ?? 0}
+                              onChange={e => setIceboxQtys(prev => ({ ...prev, [o.value]: Math.max(0, parseInt(e.target.value) || 0) }))} />
+                            <span className="text-xs text-slate-400">개</span>
                           </div>
-                        </div>
+                        ))}
+                      </div>
+                      {totalIceboxPrice > 0 && (
+                        <div className="mt-1 text-xs font-semibold text-blue-700">합계: {fmt(totalIceboxPrice)}원</div>
                       )}
                     </div>
                     <div>
                       <div className="mb-2 text-sm font-semibold text-slate-700">🚚 택배비</div>
-                      <div className="flex gap-2 flex-wrap items-center">
-                        {DELIVERY_OPTIONS.map(o => (
-                          <button key={o.value} type="button"
-                            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${deliveryPrice === o.value ? "border-green-300 bg-green-50 text-green-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
-                            onClick={() => setDeliveryPrice(o.value)}>
-                            {o.label}
-                          </button>
-                        ))}
-                        {deliveryPrice > 0 && (
-                          <div className="flex items-center gap-1 ml-1">
-                            <span className="text-xs text-slate-500">수량</span>
-                            <input type="number" min={1}
+                      <div className="space-y-1">
+                        {DELIVERY_OPTIONS.filter(o => o.value > 0).map(o => (
+                          <div key={o.value} className="flex items-center gap-2">
+                            <span className="w-20 text-xs text-slate-600">{o.label}</span>
+                            <input type="number" min={0}
                               className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-center"
-                              value={deliveryQty}
-                              onChange={e => setDeliveryQty(Math.max(1, parseInt(e.target.value) || 1))} />
+                              value={deliveryQtys[o.value] ?? 0}
+                              onChange={e => setDeliveryQtys(prev => ({ ...prev, [o.value]: Math.max(0, parseInt(e.target.value) || 0) }))} />
+                            <span className="text-xs text-slate-400">개</span>
                           </div>
-                        )}
+                        ))}
                       </div>
+                      {totalDeliveryPrice > 0 && (
+                        <div className="mt-1 text-xs font-semibold text-green-700">합계: {fmt(totalDeliveryPrice)}원</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1196,8 +1186,8 @@ async function loadSignageList() {
                           total: firstCr?.totalActual ?? 0,
                           final_price: firstV,
                           final_price_stock: firstCr?.V_stock ?? null,
-                          icebox_cost: useIcebox ? iceboxPrice : 0,
-                          delivery_cost: deliveryPrice,
+                          icebox_cost: totalIceboxPrice,
+                          delivery_cost: totalDeliveryPrice,
                         });
                           // quote_items — 전체 품목 저장
                           const itemRows = calcItems.map((fi, idx) => {
@@ -1268,8 +1258,8 @@ async function loadSignageList() {
                             const { error: quoteErr } = await supabase.from("quotes").insert({
                               request_id: req.id,
                               final_price: parseInt(firstManualItem.manualV) || 0,
-                              icebox_cost: useIcebox ? iceboxPrice * iceboxQty : 0,
-                              delivery_cost: deliveryPrice * deliveryQty,
+                              icebox_cost: totalIceboxPrice,
+                              delivery_cost: totalDeliveryPrice,
                             });
                             if (quoteErr) setMsg("⚠️ 견적 상세 저장 오류: " + quoteErr.message);
                             setLastQuoteRequestId(req.id);
@@ -1643,9 +1633,9 @@ async function loadSignageList() {
    {sheetItems.some(x => x.calcResult) && (() => {
      const calced = sheetItems.filter(x => x.calcResult);
      const grandTotal = calced.reduce((s, x) => s + x.calcResult!.total, 0);
-     const iceboxCostTotal = useIcebox ? iceboxPrice * iceboxQty : 0;
+     const iceboxCostTotal = totalIceboxPrice;
      const iceboxSupply = Math.round(iceboxCostTotal / 1.1);
-     const deliverySupply = Math.round(deliveryPrice * deliveryQty / 1.1);
+     const deliverySupply = Math.round(totalDeliveryPrice / 1.1);
      const finalTotal = grandTotal + deliverySupply + iceboxSupply;
      return (
        <div className="mb-4 grid grid-cols-2 gap-2">
@@ -1668,49 +1658,40 @@ async function loadSignageList() {
       <div className="mb-2 text-sm font-semibold text-slate-600">추가 옵션</div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div>
-          <label className="flex cursor-pointer items-center gap-2 text-sm mb-2">
-            <input type="checkbox" checked={useIcebox} onChange={e => setUseIcebox(e.target.checked)} />
-            <span className="font-semibold text-blue-700">🧊 아이스박스 (5~10월)</span>
-          </label>
-          {useIcebox && (
-            <div className="flex gap-2 flex-wrap items-center">
-              {ICEBOX_OPTIONS.map(o => (
-                <button key={o.value} type="button"
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${iceboxPrice === o.value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
-                  onClick={() => setIceboxPrice(o.value)}>
-                  {o.label}
-                </button>
-              ))}
-              <div className="flex items-center gap-1 ml-1">
-                <span className="text-xs text-slate-500">수량</span>
-                <input type="number" min={1}
+          <div className="mb-2 text-sm font-semibold text-blue-700">🧊 아이스박스 (5~10월)</div>
+          <div className="space-y-1">
+            {ICEBOX_OPTIONS.map(o => (
+              <div key={o.value} className="flex items-center gap-2">
+                <span className="w-36 text-xs text-slate-600">{o.label}</span>
+                <input type="number" min={0}
                   className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-center"
-                  value={iceboxQty}
-                  onChange={e => setIceboxQty(Math.max(1, parseInt(e.target.value) || 1))} />
+                  value={iceboxQtys[o.value] ?? 0}
+                  onChange={e => setIceboxQtys(prev => ({ ...prev, [o.value]: Math.max(0, parseInt(e.target.value) || 0) }))} />
+                <span className="text-xs text-slate-400">개</span>
               </div>
-            </div>
+            ))}
+          </div>
+          {totalIceboxPrice > 0 && (
+            <div className="mt-1 text-xs font-semibold text-blue-700">합계: {fmt(totalIceboxPrice)}원</div>
           )}
         </div>
         <div>
           <div className="mb-2 text-sm font-semibold text-slate-700">🚚 택배비</div>
-          <div className="flex gap-2 flex-wrap items-center">
-            {DELIVERY_OPTIONS.map(o => (
-              <button key={o.value} type="button"
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${deliveryPrice === o.value ? "border-green-300 bg-green-50 text-green-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
-                onClick={() => setDeliveryPrice(o.value)}>
-                {o.label}
-              </button>
-            ))}
-            {deliveryPrice > 0 && (
-              <div className="flex items-center gap-1 ml-1">
-                <span className="text-xs text-slate-500">수량</span>
-                <input type="number" min={1}
+          <div className="space-y-1">
+            {DELIVERY_OPTIONS.filter(o => o.value > 0).map(o => (
+              <div key={o.value} className="flex items-center gap-2">
+                <span className="w-20 text-xs text-slate-600">{o.label}</span>
+                <input type="number" min={0}
                   className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-center"
-                  value={deliveryQty}
-                  onChange={e => setDeliveryQty(Math.max(1, parseInt(e.target.value) || 1))} />
+                  value={deliveryQtys[o.value] ?? 0}
+                  onChange={e => setDeliveryQtys(prev => ({ ...prev, [o.value]: Math.max(0, parseInt(e.target.value) || 0) }))} />
+                <span className="text-xs text-slate-400">개</span>
               </div>
-            )}
+            ))}
           </div>
+          {totalDeliveryPrice > 0 && (
+            <div className="mt-1 text-xs font-semibold text-green-700">합계: {fmt(totalDeliveryPrice)}원</div>
+          )}
         </div>
       </div>
     </div>
@@ -2082,10 +2063,10 @@ async function loadSignageList() {
           manualV: 0,
         })),
         memo: memo || null,
-        iceboxPrice: useIcebox ? iceboxPrice * iceboxQty : 0,
-        iceboxQty: useIcebox ? iceboxQty : 1,
-        deliveryPrice: deliveryPrice * deliveryQty,
-        deliveryQty: deliveryPrice > 0 ? deliveryQty : 1,
+        iceboxPrice: totalIceboxPrice,
+        iceboxQty: 1,
+        deliveryPrice: totalDeliveryPrice,
+        deliveryQty: 1,
         quoteRequestId: lastQuoteRequestId,
       }}
     />
@@ -2150,10 +2131,10 @@ async function loadSignageList() {
               };
             }),
             memo: memo || null,
-            iceboxPrice: useIcebox ? iceboxPrice * iceboxQty : 0,
-            iceboxQty: useIcebox ? iceboxQty : 1,
-            deliveryPrice: deliveryPrice * deliveryQty,
-            deliveryQty: deliveryPrice > 0 ? deliveryQty : 1,
+            iceboxPrice: totalIceboxPrice,
+            iceboxQty: 1,
+            deliveryPrice: totalDeliveryPrice,
+            deliveryQty: 1,
             quoteRequestId: lastQuoteRequestId,
           }}
         />
