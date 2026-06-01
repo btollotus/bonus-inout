@@ -2067,6 +2067,8 @@ async function loadSignageList() {
         iceboxQty: 1,
         deliveryPrice: totalDeliveryPrice,
         deliveryQty: 1,
+        iceboxItems: ICEBOX_OPTIONS.filter(o => (iceboxQtys[o.value] ?? 0) > 0).map(o => ({ label: o.label, price: o.value, qty: iceboxQtys[o.value] })),
+        deliveryItems: DELIVERY_OPTIONS.filter(o => o.value > 0 && (deliveryQtys[o.value] ?? 0) > 0).map(o => ({ label: o.label, price: o.value, qty: deliveryQtys[o.value] })),
         quoteRequestId: lastQuoteRequestId,
       }}
     />
@@ -2135,6 +2137,8 @@ async function loadSignageList() {
             iceboxQty: 1,
             deliveryPrice: totalDeliveryPrice,
             deliveryQty: 1,
+            iceboxItems: ICEBOX_OPTIONS.filter(o => (iceboxQtys[o.value] ?? 0) > 0).map(o => ({ label: o.label, price: o.value, qty: iceboxQtys[o.value] })),
+            deliveryItems: DELIVERY_OPTIONS.filter(o => o.value > 0 && (deliveryQtys[o.value] ?? 0) > 0).map(o => ({ label: o.label, price: o.value, qty: deliveryQtys[o.value] })),
             quoteRequestId: lastQuoteRequestId,
           }}
         />

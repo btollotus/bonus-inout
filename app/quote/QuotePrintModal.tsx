@@ -34,6 +34,8 @@ type QuotePrintProps = {
     iceboxQty?: number;
     deliveryPrice: number;
     deliveryQty?: number;
+    iceboxItems?: { label: string; price: number; qty: number }[];
+    deliveryItems?: { label: string; price: number; qty: number }[];
     quoteRequestId?: string | null;
   };
 };
@@ -95,7 +97,7 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   const [saving, setSaving] = React.useState(false);
   const [saveMsg, setSaveMsg] = React.useState<string | null>(null);
 
-  const { customerName, quoteDate, inputMode, items, memo, iceboxPrice, iceboxQty, deliveryPrice, deliveryQty, quoteRequestId } = quoteData;
+  const { customerName, quoteDate, inputMode, items, memo, iceboxPrice, iceboxQty, deliveryPrice, deliveryQty, iceboxItems, deliveryItems, quoteRequestId } = quoteData;
 
   // ── 식품유형 (첫 품목 기준) ──
   const firstItem = items[0];
@@ -188,8 +190,16 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
    }
   }
 
-  // 아이스박스
-  if (iceboxPrice > 0) {
+  // 아이스박스 — iceboxItems가 있으면 종류별 개별 행, 없으면 기존 단일 행 (목록 불러오기 호환)
+  if (iceboxItems && iceboxItems.length > 0) {
+    for (const ic of iceboxItems) {
+      if (ic.qty <= 0) continue;
+      const total = ic.price * ic.qty;
+      const supply = Math.round(total / 1.1);
+      const vat = total - supply;
+      lineItems.push({ name: `아이스박스/택배포장(5~10월) - ${ic.label}`, qty: String(ic.qty), unit: ic.price, supply, vat, total });
+    }
+  } else if (iceboxPrice > 0) {
     const qty = iceboxQty ?? 1;
     const supply = Math.round(iceboxPrice / 1.1);
     const vat = iceboxPrice - supply;
@@ -197,8 +207,16 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
     lineItems.push({ name: "아이스박스/택배포장(5~10월)", qty: String(qty), unit: unitPrice, supply, vat, total: iceboxPrice });
   }
 
-  // 택배비
-  if (deliveryPrice > 0) {
+  // 택배비 — deliveryItems가 있으면 종류별 개별 행, 없으면 기존 단일 행 (목록 불러오기 호환)
+  if (deliveryItems && deliveryItems.length > 0) {
+    for (const dv of deliveryItems) {
+      if (dv.qty <= 0) continue;
+      const total = dv.price * dv.qty;
+      const supply = Math.round(total / 1.1);
+      const vat = total - supply;
+      lineItems.push({ name: `택배비 (${dv.label})`, qty: String(dv.qty), unit: dv.price, supply, vat, total });
+    }
+  } else if (deliveryPrice > 0) {
     const qty = deliveryQty ?? 1;
     const supply = Math.round(deliveryPrice / 1.1);
     const vat = deliveryPrice - supply;
