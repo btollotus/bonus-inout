@@ -183,7 +183,7 @@ export function ProductionDashboard({
         icon: "🔍",
         tab: "ccp1p",
         status: missing.length > 0 ? "error" : "ok",
-        message: missing.length > 0 ? `${missing.length}건 미기록` : `전체 기록 완료`,
+        message: missing.length > 0 ? `${missing.length}건 미기록` : (woData ?? []).length === 0 ? `해당 작업 없음` : `전체 기록 완료`,
         detail: missing.map((w: any) => `${w.client_name} — ${w.product_name}`),
       });
     } catch {
