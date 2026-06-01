@@ -226,7 +226,7 @@ export function ProductionDashboard({
 
     // ── 4. 온장고세척 ──
     try {
-      const { data } = await supabase.from("warmer_cleaning_logs")
+        const { data } = await supabase.from("warmer_cleaning_results")
         .select("id").eq("log_date", today);
       newCards.push({
         key: "warmer_clean",
@@ -301,7 +301,7 @@ export function ProductionDashboard({
 
     // ── 7. 위생관리 ──
     try {
-        const { data } = await supabase.from("hygiene_check_logs")
+        const { data } = await supabase.from("hygiene_check_results")
         .select("id").eq("log_date", today);
       newCards.push({
         key: "hygiene",
