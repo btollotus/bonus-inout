@@ -219,7 +219,6 @@ export function NewProductionLogTab({ role, userId, showToast }: {
           .gte("production_done_at", `${date}T00:00:00+09:00`)
           .lt("production_done_at",  `${date}T23:59:59+09:00`)
           .eq("status_production", true)
-          .or("status_input.eq.true,skip_production_check.eq.true")
           .order("production_done_at", { ascending: true }),
         supabase
           .from("blend_logs")
