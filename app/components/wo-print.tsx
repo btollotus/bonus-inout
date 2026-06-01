@@ -54,7 +54,8 @@ export function isSpecialItem(itemName: string): boolean {
     n.startsWith("성형틀") ||
     n.startsWith("인쇄제판") ||
     n.startsWith("아이스박스") ||
-    n.startsWith("택배비")
+    n.startsWith("택배비") ||
+    n.startsWith("퀵")
   );
 }
 
@@ -228,7 +229,7 @@ export function WoPrintModal({
       _orderDate.slice(2, 4) +
       _orderDate.slice(5, 7) +
       _orderDate.slice(8, 10);
-    const EXCLUDE_PREFIXES = ["성형틀", "인쇄제판", "아이스박스"];
+      const EXCLUDE_PREFIXES = ["성형틀", "인쇄제판", "아이스박스", "퀵"];
     const _visItems = (wo.work_order_items ?? []).filter((i: any) => {
       const n = (i.sub_items ?? [])[0]?.name ?? "";
       return !EXCLUDE_PREFIXES.some((p) => n.startsWith(p));
