@@ -6,6 +6,7 @@ import { Ccp1bTab, OtherHeatingTab, CompressorTab, PetLedgerTab } from "./tabs-e
 import { Ccp1pTab } from "./Ccp1pTab";
 import { ExpiryMgmtTab, WarmerCleaningTab, PestTab, ForeignMatterTab, HygieneCheckTab, TempHumidityTab, StorageTempTab } from "./tabs-hygiene";
 import { NewProductionLogTab } from "./NewProductionLogTab";
+import { ProductionDashboard } from "./ProductionDashboard";
 import { todayKST } from "@/lib/utils/date";
 
 const supabase = createClient();
@@ -20,7 +21,7 @@ const btnSm = "rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs f
 
 type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
 
-type Tab = "production" | "material" | "work" | "ccp1b" | "ccp1p" | "other_heating" | "compressor" | "pet"
+type Tab = "dashboard" | "production" | "material" | "work" | "ccp1b" | "ccp1p" | "other_heating" | "compressor" | "pet"
   | "expiry" | "warmer_clean" | "pest" | "foreign" | "hygiene" | "temp_humidity" | "storage_temp";
 
 // ─────────────────────── 생산일지 Types ───────────────────────
@@ -110,7 +111,7 @@ export default function ProductionLogPage() {
   const [role, setRole] = useState<UserRole>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<Tab>("production");
+  const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [initialWoId, setInitialWoId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -167,6 +168,7 @@ export default function ProductionLogPage() {
         {/* 왼쪽 사이드바 탭 */}
         <div className="flex flex-col gap-1 w-36 shrink-0">
         {([
+            { key: "dashboard",     label: "📊 통합관리" },
             { key: "production",    label: "📝 생산일지" },
             { key: "material",      label: "🧪 원료수불부" },
             { key: "work",          label: "👷 근무일지" },
@@ -193,6 +195,9 @@ export default function ProductionLogPage() {
 {/* 오른쪽 컨텐츠 */}
 <div className="flex-1 min-w-0">
 {/* 탭 컨텐츠 */}
+{activeTab === "dashboard" && (
+  <ProductionDashboard role={role} userId={userId} onTabChange={(tab) => setActiveTab(tab as Tab)} />
+)}
 {activeTab === "production" && (
   <NewProductionLogTab role={role} userId={userId} showToast={showToast} />
 )}
