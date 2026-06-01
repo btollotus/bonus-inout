@@ -483,8 +483,8 @@ async function loadSignageList() {
     const totalSheetCost = calcedItems.reduce((s, x) => s + x.calcResult!.sheetCost, 0);
     const totalSheets    = calcedItems.reduce((s, x) => s + (parseInt(x.quantity) || 0), 0);
     const grandTotal     = calcedItems.reduce((s, x) => s + x.calcResult!.total, 0);
-    const iceboxCost = useIcebox ? iceboxPrice : 0;
-    const finalTotal = grandTotal + deliveryPrice + iceboxCost;
+    const iceboxCost = totalIceboxPrice;
+    const finalTotal = grandTotal + totalDeliveryPrice + iceboxCost;
   
     const { data: req, error: reqErr } = await supabase.from("quote_requests").insert({
       customer_id:   activeCustomerId,
