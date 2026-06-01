@@ -1271,7 +1271,7 @@ async function loadSignageList() {
                     }}>
                     🖨️ 견적서 출력
                   </button>
-                  <button className={btn} onClick={() => { setItems([newItem()]); setMemo(""); setUseIcebox(false); setIceboxPrice(4620); setIceboxQty(1); setDeliveryPrice(0); setDeliveryQty(1); }}>
+                  <button className={btn} onClick={resetForm}>
                     초기화
                   </button>
                 </div>
