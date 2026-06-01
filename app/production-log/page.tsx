@@ -1069,6 +1069,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
   const [adjMode, setAdjMode] = useState<"actual" | "delta">("actual");
   const [adjActualQty, setAdjActualQty] = useState("");
   const [adjDeltaQty, setAdjDeltaQty] = useState("");
+  const [adjDate, setAdjDate] = useState(filterDate);
   const [adjReason, setAdjReason] = useState("");
   const [adjSaving, setAdjSaving] = useState(false);
   const [adjustments, setAdjustments] = useState<{
@@ -1194,7 +1195,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => {
-    supabase.from("materials").select("id,name,category").order("name")
+    supabase.from("materials").select("id,name,category").eq("is_active", true).order("category").order("name")
       .then(({ data }) => setMaterials(data ?? []));
   }, []);
 
@@ -1206,7 +1207,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     setAdjSaving(true);
     const { error } = await supabase.from("material_adjustments").insert({
       material_id: adjMaterialId,
-      adjust_date: filterDate,
+      adjust_date: adjDate,
       actual_qty: adjMode === "actual" ? parseFloat(adjActualQty) : null,
       adjust_qty: finalDelta,
       reason: adjReason.trim(),
@@ -1280,7 +1281,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                 className={showAdjustForm
                   ? "rounded-xl border border-amber-500 bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700"
                   : "rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"}
-                onClick={() => { setShowAdjustForm((v) => !v); setShowReceiptForm(false); }}
+                  onClick={() => { setShowAdjustForm((v) => { if (!v) setAdjDate(filterDate); return !v; }); setShowReceiptForm(false); }}
               >
                 {showAdjustForm ? "✕ 닫기" : "⚖️ 재고 조정"}
               </button>
@@ -1341,7 +1342,15 @@ function MaterialLedgerTab({ role, userId, showToast }: {
      {/* ── 재고 조정 폼 ── */}
      {showAdjustForm && isAdminOrSubadmin && (
         <div className={`${card} p-4`} style={{ borderColor: "#fcd34d" }}>
-          <div className="mb-3 font-semibold text-sm text-amber-700">⚖️ 재고 조정 — {filterDate}</div>
+          <div className="mb-3 flex items-center justify-between">
+            <div className="font-semibold text-sm text-amber-700">⚖️ 재고 조정</div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">조정일</span>
+              <input type="date" className="rounded-lg border border-amber-300 bg-white px-2 py-1 text-sm focus:outline-none focus:border-amber-500"
+                value={adjDate}
+                onChange={(e) => setAdjDate(e.target.value)} />
+            </div>
+          </div>
           <div className="mb-4 flex gap-2">
             <button
               className={`flex-1 rounded-xl border-2 py-2 text-sm font-semibold transition-all
@@ -1422,7 +1431,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
               onClick={saveAdjustment}>
               {adjSaving ? "저장 중..." : `⚖️ 재고 조정 저장${finalDelta !== null && !isNaN(finalDelta) && adjMaterialId ? ` (${finalDelta > 0 ? "+" : ""}${finalDelta}${selectedStock?.unit ?? "g"})` : ""}`}
             </button>
-            <button className={btn} onClick={() => { setShowAdjustForm(false); setAdjMaterialId(""); setAdjActualQty(""); setAdjDeltaQty(""); setAdjReason(""); }}>취소</button>
+            <button className={btn} onClick={() => { setShowAdjustForm(false); setAdjMaterialId(""); setAdjActualQty(""); setAdjDeltaQty(""); setAdjReason(""); setAdjDate(filterDate); }}>취소</button>
           </div>
         </div>
       )}
