@@ -285,7 +285,7 @@ export function ProductionDashboard({
 
     // ── 6. 이물관리 ──
     try {
-      const { data } = await supabase.from("foreign_matter_logs")
+        const { data } = await supabase.from("foreign_matter_check_results")
         .select("id").eq("log_date", today);
       newCards.push({
         key: "foreign",
@@ -301,7 +301,7 @@ export function ProductionDashboard({
 
     // ── 7. 위생관리 ──
     try {
-      const { data } = await supabase.from("hygiene_check_logs")
+        const { data } = await supabase.from("hygiene_check_logs")
         .select("id").eq("log_date", today);
       newCards.push({
         key: "hygiene",
