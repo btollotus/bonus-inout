@@ -296,7 +296,7 @@ export default function TaxClient() {
         .gte("ship_date", START)
         .lte("ship_date", asOf)
         .order("ship_date", { ascending: true })
-        .limit(20000);
+        .limit(50000);
 
       if (oErr) return setMsg(oErr.message);
 
