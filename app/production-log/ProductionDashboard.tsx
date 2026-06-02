@@ -317,9 +317,10 @@ export function ProductionDashboard({
 
     // ── 8. 온습도: 하루 2회 ──
     try {
-        const { data } = await supabase.from("humidity_temp_logs")
-        .select("id, check_time").eq("log_date", today);
-      const count = (data ?? []).length;
+      const { data } = await supabase.from("humidity_temp_logs")
+      .select("id, period").eq("log_date", today);
+    const recordedPeriods = new Set((data ?? []).map((d: any) => d.period));
+    const count = recordedPeriods.size;
       newCards.push({
         key: "temp_humidity",
         label: "온습도",
@@ -328,7 +329,7 @@ export function ProductionDashboard({
         status: count === 0 ? "error" : count < 2 ? "warn" : "ok",
         message: count === 0 ? "오늘 기록 없음" : count < 2 ? `${count}회 기록 (2회 필요)` : "2회 기록 완료",
         detail: count > 0 && count < 2
-          ? [(data ?? []).map((d: any) => d.check_time).join(", ") + " 기록됨"]
+          ? [["AM", "PM"].filter((p) => !recordedPeriods.has(p)).map((p) => p === "AM" ? "오전" : "오후").join(", ") + " 기록 필요"]
           : [],
       });
     } catch {
@@ -337,9 +338,10 @@ export function ProductionDashboard({
 
     // ── 9. 냉장·냉동·온장고: 하루 2회 ──
     try {
-        const { data } = await supabase.from("fridge_monitoring_logs")
-        .select("id, check_time").eq("log_date", today);
-      const count = (data ?? []).length;
+      const { data } = await supabase.from("fridge_monitoring_logs")
+      .select("id, period").eq("log_date", today);
+    const recordedPeriods = new Set((data ?? []).map((d: any) => d.period));
+    const count = recordedPeriods.size;
       newCards.push({
         key: "storage_temp",
         label: "냉장·냉동·온장고",
@@ -348,7 +350,7 @@ export function ProductionDashboard({
         status: count === 0 ? "error" : count < 2 ? "warn" : "ok",
         message: count === 0 ? "오늘 기록 없음" : count < 2 ? `${count}회 기록 (2회 필요)` : "2회 기록 완료",
         detail: count > 0 && count < 2
-          ? [(data ?? []).map((d: any) => d.check_time).join(", ") + " 기록됨"]
+          ? [["AM", "PM"].filter((p) => !recordedPeriods.has(p)).map((p) => p === "AM" ? "오전" : "오후").join(", ") + " 기록 필요"]
           : [],
       });
     } catch {
