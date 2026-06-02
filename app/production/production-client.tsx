@@ -283,6 +283,9 @@ export default function ProductionClient() {
   // 분사/코팅 배합 횟수
   const [blendCount, setBlendCount] = useState(1);
   const [titaniumDioxideG, setTitaniumDioxideG] = useState<string>("");
+  // 분사 생산용/판매용 수량
+  const [sprayProdQty, setSprayProdQty] = useState<string>("");
+  const [spraySaleQty, setSpraySaleQty] = useState<string>("");
 
   const [eSubName, setESubName] = useState("");
   const [eProductName, setEProductName] = useState("");
@@ -560,11 +563,13 @@ export default function ProductionClient() {
     }
   }
 
-  async function searchTransferLots(itemId: string, keyword: string, skipProductionCheck = false) {
+  async function searchTransferLots(itemId: string, keyword: string, skipProductionCheck = false, coatingOnly = false) {
     setTransferLotSearch((prev) => ({ ...prev, [itemId]: keyword }));
     setTransferLotSearching((prev) => ({ ...prev, [itemId]: true }));
     const { data: variants } = await supabase.from("product_variants").select("id, variant_name, barcode, products(food_type)").ilike("variant_name", keyword.trim() ? `%${keyword}%` : "%").limit(100);
-    const filtered = skipProductionCheck
+    const filtered = coatingOnly
+      ? (variants ?? []).filter((v: any) => v.variant_name === "코팅-레이즈")
+      : skipProductionCheck
       ? (variants ?? []).filter((v: any) => v.variant_name === "도눔(은박)")
       : (variants ?? []).filter((v: any) => (v.products?.food_type ?? "").includes("초콜릿중간재"));
     if (filtered.length === 0) { setTransferLotOptions((prev) => ({ ...prev, [itemId]: [] })); setTransferLotSearching((prev) => ({ ...prev, [itemId]: false })); return; }
@@ -672,6 +677,8 @@ export default function ProductionClient() {
     setIsKiseongForm(false); setIsEditMode(false);
     setBlendCount(1); // 배합 횟수 초기화
     setTitaniumDioxideG(""); // 이산화티타늄 사용량 초기화
+    setSprayProdQty(""); // 분사 생산용 수량 초기화
+    setSpraySaleQty(""); // 분사 판매용 수량 초기화
     if (!wo.work_order_items || wo.work_order_items.every((i) => i.sub_items == null)) {
       const { data: items } = await supabase.from("work_order_items").select("id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images").eq("work_order_id", wo.id).order("delivery_date", { ascending: true });
       wo = { ...wo, work_order_items: (items ?? []) as WoItemRow[] };
@@ -740,6 +747,16 @@ export default function ProductionClient() {
       });
     })();
     ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id, wo.status);
+    // 분사 작업지시서: 코팅-레이즈 lot 자동 검색
+    if (getWoSubType(wo.product_name) === "분사") {
+      for (const item of (wo.work_order_items ?? [])) {
+        const name = (item.sub_items ?? [])[0]?.name ?? "";
+        if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
+        if ((item as any).transfer_lots?.length > 0 || item.transfer_lot_id) continue;
+        searchTransferLots(item.id, "코팅-레이즈", false, true);
+      }
+    }
+
     if (getFoodCategory(wo.food_type) !== "중간재") {
       const woItems = wo.work_order_items ?? [];
       const extractKeyword = (raw: string) => raw.replace(/^(주식회사|유한회사|합자회사|협동조합|\(주\)|\(유\))\s*/g, "").replace(/\(.*?\)/g, "").trim().split(/[\s\-_]/)[0] ?? raw.trim();
@@ -949,7 +966,74 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
         }
       }
 
-      // 3. 중간재 재고 입고
+      // 3. pet_stock_logs 기록
+      if (isSpray) {
+        // 분사: 코팅-레이즈 lot 차감
+        for (const item of items) {
+          const pi = prodInputs[item.id];
+          const transferLots = pi?.transfer_lots ?? [];
+          for (const tl of transferLots) {
+            const transferQty = toInt(tl.qty);
+            if (!tl.lot_id || transferQty <= 0) continue;
+            const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", tl.lot_id);
+            const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
+            if (transferQty > remaining) {
+              setMsg(`코팅-레이즈 차감 실패: 차감 수량(${transferQty})이 잔량(${remaining})을 초과합니다.`);
+              setIsCompleting(false);
+              return;
+            }
+            const { error: transferErr } = await supabase.from("movements").insert({
+              lot_id: tl.lot_id, type: "OUT", qty: transferQty,
+              happened_at: `${today}T00:00:00+09:00`,
+              note: `분사-레이즈 생산완료 - ${selectedWo.work_order_no}`,
+              created_by: userId,
+            });
+            if (transferErr) {
+              setMsg("코팅-레이즈 차감 실패: " + transferErr.message);
+              setIsCompleting(false);
+              return;
+            }
+          }
+        }
+        // 분사: pet_stock_logs — 생산용/판매용 각각 insert
+        const sprayProdQtyNum = toInt(sprayProdQty);
+        const spraySaleQtyNum = toInt(spraySaleQty);
+        if (sprayProdQtyNum > 0) {
+          const { error: petProdErr } = await supabase.from("pet_stock_logs").insert({
+            log_date: today, log_type: "spray_done_prod",
+            quantity: sprayProdQtyNum, defect_qty: 0,
+            note: `분사-레이즈 생산완료 - ${selectedWo.work_order_no}`,
+            created_by: userId,
+          });
+          if (petProdErr) { setMsg("PET 수불 기록 실패(생산용): " + petProdErr.message); setIsCompleting(false); return; }
+        }
+        if (spraySaleQtyNum > 0) {
+          const { error: petSaleErr } = await supabase.from("pet_stock_logs").insert({
+            log_date: today, log_type: "spray_done_sale",
+            quantity: spraySaleQtyNum, defect_qty: 0,
+            note: `분사-레이즈 생산완료 - ${selectedWo.work_order_no}`,
+            created_by: userId,
+          });
+          if (petSaleErr) { setMsg("PET 수불 기록 실패(판매용): " + petSaleErr.message); setIsCompleting(false); return; }
+        }
+      } else {
+        // 코팅: pet_stock_logs — coating_done insert
+        const totalCoatingQty = items.reduce((sum, item) => {
+          const pi = prodInputs[item.id];
+          return sum + (pi?.actual_qty ? toInt(pi.actual_qty) : 0);
+        }, 0);
+        if (totalCoatingQty > 0) {
+          const { error: petCoatingErr } = await supabase.from("pet_stock_logs").insert({
+            log_date: today, log_type: "coating_done",
+            quantity: totalCoatingQty, defect_qty: 0,
+            note: `코팅-레이즈 생산완료 - ${selectedWo.work_order_no}`,
+            created_by: userId,
+          });
+          if (petCoatingErr) { setMsg("PET 수불 기록 실패(코팅): " + petCoatingErr.message); setIsCompleting(false); return; }
+        }
+      }
+
+      // 4. 중간재 재고 입고
       for (const item of items) {
         const pi = prodInputs[item.id];
         if (!pi || !pi.actual_qty || !pi.expiry_date) continue;
@@ -1824,8 +1908,109 @@ const totalOrder = items
                           </div>
                           {(item.images ?? []).length > 0 ? <ItemImages images={item.images ?? []} logoSpec={selectedWo.logo_spec} /> : null}
 
-                         {/* 재고 차감 — 중간재 제외 */}
-                         {getFoodCategory(selectedWo.food_type) !== "중간재" && (
+{/* 분사 작업지시서 전용 — 코팅-레이즈 차감 + 생산용/판매용 수량 */}
+{getWoSubType(selectedWo.product_name) === "분사" && (
+   <div className="mt-2 space-y-2">
+     {/* 생산용/판매용 수량 입력 */}
+     <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-2.5">
+       <div className="mb-1.5 text-xs font-semibold text-emerald-700">분사완료 수량 입력</div>
+       <div className="grid grid-cols-2 gap-2">
+         <div>
+           <div className="mb-1 text-xs text-slate-500">생산용 (ea)</div>
+           <input className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-right tabular-nums focus:border-emerald-400 focus:outline-none"
+             inputMode="numeric" placeholder="0"
+             value={sprayProdQty}
+             disabled={selectedWo?.status === "완료" && !isEditMode}
+             onChange={(e) => setSprayProdQty(e.target.value.replace(/[^\d]/g, ""))} />
+         </div>
+         <div>
+           <div className="mb-1 text-xs text-slate-500">판매용 (ea)</div>
+           <input className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-right tabular-nums focus:border-emerald-400 focus:outline-none"
+             inputMode="numeric" placeholder="0"
+             value={spraySaleQty}
+             disabled={selectedWo?.status === "완료" && !isEditMode}
+             onChange={(e) => setSpraySaleQty(e.target.value.replace(/[^\d]/g, ""))} />
+         </div>
+       </div>
+     </div>
+     {/* 코팅-레이즈 lot 차감 */}
+     <div className="rounded-lg border border-blue-100 bg-blue-50 p-2.5">
+       <div className="mb-1.5 flex items-center justify-between">
+         <span className="text-xs font-semibold text-blue-700">코팅-레이즈 차감</span>
+         {(prodInputs[item.id]?.transfer_lots ?? []).length > 0 && (
+           <span className="text-[11px] text-blue-500">총 차감: <b>{(prodInputs[item.id]?.transfer_lots ?? []).reduce((s, l) => s + toInt(l.qty), 0).toLocaleString()} EA</b></span>
+         )}
+       </div>
+       {/* 선택된 lot 목록 */}
+       {(prodInputs[item.id]?.transfer_lots ?? []).length > 0 && (
+         <div className="space-y-1.5 mb-2">
+           {prodInputs[item.id].transfer_lots.map((tl, tlIdx) => {
+             const lotInfo = (transferLotOptions[item.id] ?? []).find((l) => l.lot_id === tl.lot_id);
+             const usedByOthers = prodInputs[item.id].transfer_lots.filter((_, i) => i !== tlIdx).reduce((s, l) => l.lot_id === tl.lot_id ? s + toInt(l.qty) : s, 0);
+             const effectiveRemaining = (lotInfo?.remaining_qty ?? 0) - usedByOthers;
+             return (
+               <div key={tlIdx} className="rounded-lg border border-blue-200 bg-white px-2.5 py-1.5">
+                 <div className="flex items-center gap-2">
+                   <div className="flex-1 min-w-0">
+                     <div className="text-xs font-semibold text-blue-700 truncate">{lotInfo?.variant_name ?? tl.lot_id}</div>
+                     <div className="text-[11px] text-slate-500">소비기한: {lotInfo?.expiry_date ?? "—"}{lotInfo && <span className="ml-2">잔량: <b className="text-blue-700">{effectiveRemaining.toLocaleString()} EA</b></span>}</div>
+                   </div>
+                   {!(selectedWo?.status === "완료" && !isEditMode) && (
+                     <button type="button" className="text-xs text-slate-400 hover:text-red-500 shrink-0"
+                       onClick={() => setProdInputs((prev) => ({ ...prev, [item.id]: { ...prev[item.id], transfer_lots: prev[item.id].transfer_lots.filter((_, i) => i !== tlIdx) } }))}>✕</button>
+                   )}
+                 </div>
+                 <div className="flex items-center gap-2 mt-1">
+                   <input className="flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-right tabular-nums focus:border-blue-400 focus:outline-none"
+                     inputMode="numeric" placeholder="차감 수량"
+                     value={tl.qty}
+                     disabled={selectedWo?.status === "완료" && !isEditMode}
+                     onChange={(e) => setProdInputs((prev) => {
+                       const newLots = [...prev[item.id].transfer_lots];
+                       newLots[tlIdx] = { ...newLots[tlIdx], qty: e.target.value.replace(/[^\d]/g, "") };
+                       return { ...prev, [item.id]: { ...prev[item.id], transfer_lots: newLots } };
+                     })} />
+                   {lotInfo && tl.qty && (
+                     <div className="text-[11px] text-slate-500 shrink-0">차감 후: <b className={effectiveRemaining - toInt(tl.qty) < 0 ? "text-red-600" : "text-blue-700"}>{(effectiveRemaining - toInt(tl.qty)).toLocaleString()} EA</b></div>
+                   )}
+                 </div>
+               </div>
+             );
+           })}
+         </div>
+       )}
+       {/* lot 추가 목록 */}
+       {!(selectedWo?.status === "완료" && !isEditMode) && (
+         <div>
+           {transferLotSearching[item.id] ? (
+             <div className="text-xs text-slate-400 py-1">불러오는 중...</div>
+           ) : (() => {
+             const selectedLotIds = new Set((prodInputs[item.id]?.transfer_lots ?? []).map((l) => l.lot_id));
+             const availableLots = (transferLotOptions[item.id] ?? []).filter((l) => !selectedLotIds.has(l.lot_id));
+             if (availableLots.length === 0) return <div className="text-xs text-slate-400">{selectedLotIds.size > 0 ? "추가할 재고 없음" : "관련 재고 없음"}</div>;
+             return (
+               <div className="rounded-lg border border-slate-200 bg-white overflow-hidden max-h-44 overflow-y-auto">
+                 {availableLots.map((lot) => (
+                   <button key={lot.lot_id} type="button" className="w-full text-left px-2.5 py-2 text-xs border-b border-slate-100 last:border-0 hover:bg-blue-50"
+                     onClick={() => setProdInputs((prev) => ({
+                       ...prev,
+                       [item.id]: { ...prev[item.id], transfer_lots: [...(prev[item.id]?.transfer_lots ?? []), { lot_id: lot.lot_id, qty: "" }] }
+                     }))}>
+                     <div className="font-medium text-slate-800">+ {lot.variant_name}</div>
+                     <div className="flex gap-2 mt-0.5 text-[11px] text-slate-500"><span>소비기한: {lot.expiry_date}</span><span>·</span><span>잔량: <b className="text-blue-700">{lot.remaining_qty.toLocaleString()} EA</b></span></div>
+                   </button>
+                 ))}
+               </div>
+             );
+           })()}
+         </div>
+       )}
+     </div>
+   </div>
+ )}
+
+{/* 재고 차감 — 중간재 제외 */}
+{getFoodCategory(selectedWo.food_type) !== "중간재" && (
                             <div className="mt-2 rounded-lg border border-violet-100 bg-violet-50 p-2.5">
                               <div className="mb-1.5 flex items-center justify-between">
                                 <span className="text-xs font-semibold text-violet-700">재고 차감 선택</span>
