@@ -243,10 +243,13 @@ if (!lastEvent || lastEvent.event_type === "end") {
             if (a.event_type !== "material_out" && b.event_type === "material_out") return 1;
             return 0;
           });
-          const lastEvent = slotHistory[0];
-        if (!lastEvent || lastEvent.event_type === "material_out") {
-          map[slotId] = null; continue;
-        }
+          // end/start/mid_check는 온도 기록이므로 제외하고 슬롯 원료 상태만 판단
+          const lastSlotEvent = slotHistory.find(
+            (e) => e.event_type === "material_in" || e.event_type === "material_out"
+          );
+          if (!lastSlotEvent || lastSlotEvent.event_type === "material_out") {
+            map[slotId] = null; continue;
+          }
         const lastIn = slotHistory.find((e) => e.event_type === "material_in");
         if (!lastIn) { map[slotId] = null; continue; }
         const hasOutAfter = slotHistory.some(
