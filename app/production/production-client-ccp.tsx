@@ -681,8 +681,11 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
   }
 
   // ── 검증 1: 도착 슬롯에 원료가 이미 있음 ──
-  const toLastEvent = toEvents[0];
-  const toHasMaterial = toLastEvent && toLastEvent.event_type !== "material_out";
+  // end/start/mid_check는 온도 기록 — 슬롯 원료 상태와 무관하므로 제외
+  const toLastSlotEvent = toEvents.find(
+    (e) => e.event_type === "material_in" || e.event_type === "material_out"
+  );
+  const toHasMaterial = toLastSlotEvent && toLastSlotEvent.event_type !== "material_out";
   if (toHasMaterial) {
     return showToast(`⚠ [${toSlotName}]에 이미 원료가 있습니다. 소진 처리 후 이동해주세요.`, "error");
   }
