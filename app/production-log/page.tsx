@@ -1083,6 +1083,31 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     material?: { name: string } | null;
   }[]>([]);
 
+  // ── 폐기 등록 ──
+  const [showDisposalForm, setShowDisposalForm] = useState(false);
+  const [dispReceiptId, setDispReceiptId] = useState("");
+  const [dispQty, setDispQty] = useState("");
+  const [dispReason, setDispReason] = useState("");
+  const [dispNote, setDispNote] = useState("");
+  const [dispDate, setDispDate] = useState(filterDate);
+  const [dispSaving, setDispSaving] = useState(false);
+  const [disposalLogs, setDisposalLogs] = useState<{
+    id: string; disposal_date: string; material_id: string; quantity: number;
+    unit: string; reason: string; note: string | null;
+    receipt_id: string | null;
+    material?: { name: string } | null;
+    receipt?: { received_date: string; expiry_date: string | null } | null;
+  }[]>([]);
+
+  // ── 로트별 현황 ──
+  const [lotStocks, setLotStocks] = useState<{
+    receipt_id: string; material_id: string; material_name: string;
+    category: string; unit: string; received_date: string;
+    expiry_date: string | null; supplier: string | null;
+    received_qty: number; disposed_qty: number; remaining_qty: number;
+    expiry_status: "normal" | "expiring_soon" | "expired";
+  }[]>([]);
+
   const selectedStock = stocks.find((s) => s.material_id === adjMaterialId);
   const currentStockForAdj = selectedStock?.current_stock ?? 0;
   const computedDelta = adjMode === "actual" && adjActualQty !== ""
@@ -1195,6 +1220,22 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     setStocks(stocksWithDaily as MaterialStock[]);
     setReceipts((receiptRes.data ?? []) as unknown as MaterialReceipt[]);
     setAdjustments((adjRes.data ?? []) as any);
+
+    // 로트별 현황 (뷰 조회)
+    const { data: lotData } = await supabase
+      .from("material_lot_stock")
+      .select("*")
+      .gt("remaining_qty", 0);
+    setLotStocks((lotData ?? []) as any);
+
+    // 당일 폐기 내역
+    const { data: dispData } = await supabase
+      .from("material_disposal_logs")
+      .select("id,disposal_date,material_id,quantity,unit,reason,note,receipt_id,material:materials(name),receipt:material_receipts(received_date,expiry_date)")
+      .eq("disposal_date", filterDate)
+      .order("created_at", { ascending: false });
+    setDisposalLogs((dispData ?? []) as any);
+
     setLoading(false);
   }, [filterDate]);
 
@@ -1477,7 +1518,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
             <>
               <button
                 className={showReceiptForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
-                onClick={() => { setShowReceiptForm((v) => !v); setShowAdjustForm(false); }}
+                onClick={() => { setShowReceiptForm((v) => !v); setShowAdjustForm(false); setShowDisposalForm(false); }}
               >
                 {showReceiptForm ? "✕ 닫기" : "✚ 입고 등록"}
               </button>
@@ -1485,9 +1526,17 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                 className={showAdjustForm
                   ? "rounded-xl border border-amber-500 bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700"
                   : "rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"}
-                  onClick={() => { setShowAdjustForm((v) => { if (!v) setAdjDate(filterDate); return !v; }); setShowReceiptForm(false); }}
+                  onClick={() => { setShowAdjustForm((v) => { if (!v) setAdjDate(filterDate); return !v; }); setShowReceiptForm(false); setShowDisposalForm(false); }}
               >
                 {showAdjustForm ? "✕ 닫기" : "⚖️ 재고 조정"}
+              </button>
+              <button
+                className={showDisposalForm
+                  ? "rounded-xl border border-red-500 bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700"
+                  : "rounded-xl border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-100"}
+                onClick={() => { setShowDisposalForm((v) => { if (!v) setDispDate(filterDate); return !v; }); setShowReceiptForm(false); setShowAdjustForm(false); }}
+              >
+                {showDisposalForm ? "✕ 닫기" : "🗑️ 폐기 등록"}
               </button>
             </>
           )}
@@ -1781,6 +1830,209 @@ function MaterialLedgerTab({ role, userId, showToast }: {
             <button
               className="shrink-0 rounded-lg border border-red-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-red-500 hover:bg-red-50"
               onClick={() => deleteAdjustment(a.id)}>
+              삭제
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+{/* ── 폐기 등록 폼 ── */}
+{showDisposalForm && isAdminOrSubadmin && (
+  <div className={`${card} p-4`} style={{ borderColor: "#fca5a5" }}>
+    <div className="mb-3 flex items-center justify-between">
+      <div className="font-semibold text-sm text-red-700">🗑️ 원료 폐기 등록</div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-slate-500">폐기일</span>
+        <input type="date" className="rounded-lg border border-red-300 bg-white px-2 py-1 text-sm focus:outline-none focus:border-red-500"
+          value={dispDate}
+          onChange={(e) => setDispDate(e.target.value)} />
+      </div>
+    </div>
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="md:col-span-2">
+        <div className="mb-1 text-xs text-slate-500">폐기할 로트 선택 * <span className="text-slate-400">(원료명 · 입고일 · 소비기한 · 잔여수량)</span></div>
+        <select className={inp} value={dispReceiptId}
+          onChange={(e) => setDispReceiptId(e.target.value)}>
+          <option value="">— 로트 선택 —</option>
+          {lotStocks.map((lot) => (
+            <option key={lot.receipt_id} value={lot.receipt_id}>
+              [{lot.category}] {lot.material_name}
+              {" · 입고 "}{lot.received_date}
+              {lot.expiry_date ? ` · 소비기한 ${lot.expiry_date}` : " · 소비기한 없음"}
+              {" · 잔여 "}{lot.remaining_qty.toLocaleString()}{lot.unit}
+              {lot.expiry_status === "expired" ? " ⚠️만료" : lot.expiry_status === "expiring_soon" ? " ⚡임박" : ""}
+            </option>
+          ))}
+        </select>
+        {dispReceiptId && (() => {
+          const lot = lotStocks.find((l) => l.receipt_id === dispReceiptId);
+          if (!lot) return null;
+          return (
+            <div className={`mt-1.5 rounded-lg border px-3 py-1.5 text-xs
+              ${lot.expiry_status === "expired" ? "border-red-200 bg-red-50 text-red-700"
+              : lot.expiry_status === "expiring_soon" ? "border-orange-200 bg-orange-50 text-orange-700"
+              : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+              {lot.material_name} · 입고일 {lot.received_date}
+              {lot.expiry_date && ` · 소비기한 ${lot.expiry_date}`}
+              {lot.expiry_status === "expired" && " 🚨 소비기한 만료"}
+              {lot.expiry_status === "expiring_soon" && " ⚡ 소비기한 임박 (30일 이내)"}
+              {" · 잔여 "}<span className="font-bold">{lot.remaining_qty.toLocaleString()}{lot.unit}</span>
+            </div>
+          );
+        })()}
+      </div>
+      <div>
+        <div className="mb-1 text-xs text-slate-500">폐기 수량 ({(() => { const lot = lotStocks.find((l) => l.receipt_id === dispReceiptId); return lot?.unit ?? "g"; })()} ) *</div>
+        <input className={inpR} inputMode="decimal" value={dispQty}
+          onChange={(e) => setDispQty(e.target.value)}
+          placeholder="폐기 수량 입력" />
+        {dispReceiptId && dispQty && (() => {
+          const lot = lotStocks.find((l) => l.receipt_id === dispReceiptId);
+          if (!lot) return null;
+          const qty = parseFloat(dispQty);
+          if (isNaN(qty)) return null;
+          if (qty > lot.remaining_qty) return (
+            <div className="mt-1 text-xs text-red-600 font-semibold">⚠️ 잔여수량({lot.remaining_qty.toLocaleString()}{lot.unit}) 초과</div>
+          );
+          return (
+            <div className="mt-1 text-xs text-slate-500">폐기 후 잔여: {(lot.remaining_qty - qty).toLocaleString()}{lot.unit}</div>
+          );
+        })()}
+      </div>
+      <div>
+        <div className="mb-1 text-xs text-slate-500">폐기 사유 *</div>
+        <select className={inp} value={dispReason}
+          onChange={(e) => setDispReason(e.target.value)}>
+          <option value="">— 선택 —</option>
+          <option value="소비기한 만료">소비기한 만료</option>
+          <option value="변질">변질</option>
+          <option value="오염">오염</option>
+          <option value="품질 불량">품질 불량</option>
+          <option value="기타">기타</option>
+        </select>
+      </div>
+      <div className="md:col-span-2">
+        <div className="mb-1 text-xs text-slate-500">비고</div>
+        <input className={inp} value={dispNote}
+          onChange={(e) => setDispNote(e.target.value)}
+          placeholder="선택 입력" />
+      </div>
+    </div>
+    <div className="mt-4 flex gap-2">
+      <button
+        className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60"
+        disabled={dispSaving || !dispReceiptId || !dispQty || !dispReason}
+        onClick={async () => {
+          const lot = lotStocks.find((l) => l.receipt_id === dispReceiptId);
+          if (!lot) return;
+          const qty = parseFloat(dispQty);
+          if (isNaN(qty) || qty <= 0) return showToast("수량을 확인하세요.", "error");
+          if (qty > lot.remaining_qty) return showToast(`잔여수량(${lot.remaining_qty.toLocaleString()}${lot.unit}) 초과입니다.`, "error");
+          setDispSaving(true);
+          const { error } = await supabase.from("material_disposal_logs").insert({
+            material_id: lot.material_id,
+            disposal_date: dispDate,
+            quantity: qty,
+            unit: lot.unit,
+            reason: dispReason,
+            note: dispNote.trim() || null,
+            receipt_id: dispReceiptId,
+            created_by: userId,
+          });
+          setDispSaving(false);
+          if (error) return showToast("폐기 등록 실패: " + error.message, "error");
+          showToast(`✅ ${lot.material_name} ${qty.toLocaleString()}${lot.unit} 폐기 등록 완료`);
+          setShowDisposalForm(false);
+          setDispReceiptId(""); setDispQty(""); setDispReason(""); setDispNote("");
+          loadData();
+        }}>
+        {dispSaving ? "저장 중..." : "🗑️ 폐기 등록"}
+      </button>
+      <button className={btn} onClick={() => { setShowDisposalForm(false); setDispReceiptId(""); setDispQty(""); setDispReason(""); setDispNote(""); }}>취소</button>
+    </div>
+  </div>
+)}
+
+{/* ── 로트별 현황 ── */}
+{lotStocks.length > 0 && (
+  <div className={`${card} p-4`}>
+    <div className="mb-3 font-semibold text-sm">📋 로트별 소비기한 현황</div>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="border-b border-slate-200">
+            <th className="text-left py-2 px-3 text-xs text-slate-500 font-semibold">분류</th>
+            <th className="text-left py-2 px-3 text-xs text-slate-500 font-semibold">원료명</th>
+            <th className="text-center py-2 px-3 text-xs text-slate-500 font-semibold">입고일</th>
+            <th className="text-center py-2 px-3 text-xs text-slate-500 font-semibold">소비기한</th>
+            <th className="text-right py-2 px-3 text-xs text-slate-500 font-semibold">입고수량</th>
+            <th className="text-right py-2 px-3 text-xs text-slate-500 font-semibold">폐기수량</th>
+            <th className="text-right py-2 px-3 text-xs text-slate-500 font-semibold">잔여수량</th>
+            <th className="text-center py-2 px-3 text-xs text-slate-500 font-semibold">상태</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lotStocks.map((lot) => (
+            <tr key={lot.receipt_id} className={`border-b border-slate-100 hover:bg-slate-50
+              ${lot.expiry_status === "expired" ? "bg-red-50" : lot.expiry_status === "expiring_soon" ? "bg-orange-50" : ""}`}>
+              <td className="py-2 px-3 text-xs text-slate-500">{lot.category}</td>
+              <td className="py-2 px-3 font-medium text-sm">{lot.material_name}</td>
+              <td className="py-2 px-3 text-center text-xs text-slate-600">{lot.received_date}</td>
+              <td className="py-2 px-3 text-center text-xs">
+                {lot.expiry_date ?? <span className="text-slate-400">없음</span>}
+              </td>
+              <td className="py-2 px-3 text-right tabular-nums text-xs">{lot.received_qty.toLocaleString()}{lot.unit}</td>
+              <td className="py-2 px-3 text-right tabular-nums text-xs text-red-600">
+                {lot.disposed_qty > 0 ? lot.disposed_qty.toLocaleString() + lot.unit : "—"}
+              </td>
+              <td className="py-2 px-3 text-right tabular-nums text-sm font-bold">{lot.remaining_qty.toLocaleString()}{lot.unit}</td>
+              <td className="py-2 px-3 text-center">
+                {lot.expiry_status === "expired" ? (
+                  <span className="rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">🚨 만료</span>
+                ) : lot.expiry_status === "expiring_soon" ? (
+                  <span className="rounded-full border border-orange-300 bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">⚡ 임박</span>
+                ) : (
+                  <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">정상</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
+
+{/* ── 당일 폐기 내역 ── */}
+{disposalLogs.length > 0 && (
+  <div className={`${card} p-4`}>
+    <div className="mb-3 font-semibold text-sm text-red-700">🗑️ 폐기 내역 — {filterDate}</div>
+    <div className="space-y-2">
+      {disposalLogs.map((d) => (
+        <div key={d.id} className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5">
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm">{(d.material as any)?.name ?? "—"}</div>
+            <div className="text-xs text-slate-600">
+              폐기량: <b className="text-red-700">{d.quantity.toLocaleString()}{d.unit}</b>
+              {" · 사유: "}{d.reason}
+              {(d.receipt as any)?.received_date && ` · 입고일 ${(d.receipt as any).received_date}`}
+              {(d.receipt as any)?.expiry_date && ` · 소비기한 ${(d.receipt as any).expiry_date}`}
+              {d.note && ` · ${d.note}`}
+            </div>
+          </div>
+          {isAdminOrSubadmin && (
+            <button
+              className="shrink-0 rounded-lg border border-red-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-red-500 hover:bg-red-100"
+              onClick={async () => {
+                if (!confirm("폐기 내역을 삭제하면 해당 수량이 복구됩니다. 삭제하시겠습니까?")) return;
+                const { error } = await supabase.from("material_disposal_logs").delete().eq("id", d.id);
+                if (error) return showToast("삭제 실패: " + error.message, "error");
+                showToast("🗑️ 폐기 내역 삭제 완료");
+                loadData();
+              }}>
               삭제
             </button>
           )}
