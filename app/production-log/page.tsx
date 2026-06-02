@@ -1635,6 +1635,123 @@ function MaterialLedgerTab({ role, userId, showToast }: {
         </div>
       )}
 
+      {/* ── 폐기 등록 폼 ── */}
+      {showDisposalForm && isAdminOrSubadmin && (
+        <div className={`${card} p-4`} style={{ borderColor: "#fca5a5" }}>
+          <div className="mb-3 flex items-center justify-between">
+            <div className="font-semibold text-sm text-red-700">🗑️ 원료 폐기 등록</div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">폐기일</span>
+              <input type="date" className="rounded-lg border border-red-300 bg-white px-2 py-1 text-sm focus:outline-none focus:border-red-500"
+                value={dispDate}
+                onChange={(e) => setDispDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <div className="mb-1 text-xs text-slate-500">폐기할 로트 선택 * <span className="text-slate-400">(원료명 · 입고일 · 소비기한 · 잔여수량)</span></div>
+              <select className={inp} value={dispReceiptId}
+                onChange={(e) => setDispReceiptId(e.target.value)}>
+                <option value="">— 로트 선택 —</option>
+                {lotStocks.map((lot) => (
+                  <option key={lot.receipt_id} value={lot.receipt_id}>
+                    [{lot.category}] {lot.material_name}
+                    {" · 입고 "}{lot.received_date}
+                    {lot.expiry_date ? ` · 소비기한 ${lot.expiry_date}` : " · 소비기한 없음"}
+                    {" · 잔여 "}{lot.remaining_qty.toLocaleString()}{lot.unit}
+                    {lot.expiry_status === "expired" ? " ⚠️만료" : lot.expiry_status === "expiring_soon" ? " ⚡임박" : ""}
+                  </option>
+                ))}
+              </select>
+              {dispReceiptId && (() => {
+                const lot = lotStocks.find((l) => l.receipt_id === dispReceiptId);
+                if (!lot) return null;
+                return (
+                  <div className={`mt-1.5 rounded-lg border px-3 py-1.5 text-xs
+                    ${lot.expiry_status === "expired" ? "border-red-200 bg-red-50 text-red-700"
+                    : lot.expiry_status === "expiring_soon" ? "border-orange-200 bg-orange-50 text-orange-700"
+                    : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                    {lot.material_name} · 입고일 {lot.received_date}
+                    {lot.expiry_date && ` · 소비기한 ${lot.expiry_date}`}
+                    {lot.expiry_status === "expired" && " 🚨 소비기한 만료"}
+                    {lot.expiry_status === "expiring_soon" && " ⚡ 소비기한 임박 (30일 이내)"}
+                    {" · 잔여 "}<span className="font-bold">{lot.remaining_qty.toLocaleString()}{lot.unit}</span>
+                  </div>
+                );
+              })()}
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-500">폐기 수량 ({(() => { const lot = lotStocks.find((l) => l.receipt_id === dispReceiptId); return lot?.unit ?? "g"; })()} ) *</div>
+              <input className={inpR} inputMode="decimal" value={dispQty}
+                onChange={(e) => setDispQty(e.target.value)}
+                placeholder="폐기 수량 입력" />
+              {dispReceiptId && dispQty && (() => {
+                const lot = lotStocks.find((l) => l.receipt_id === dispReceiptId);
+                if (!lot) return null;
+                const qty = parseFloat(dispQty);
+                if (isNaN(qty)) return null;
+                if (qty > lot.remaining_qty) return (
+                  <div className="mt-1 text-xs text-red-600 font-semibold">⚠️ 잔여수량({lot.remaining_qty.toLocaleString()}{lot.unit}) 초과</div>
+                );
+                return (
+                  <div className="mt-1 text-xs text-slate-500">폐기 후 잔여: {(lot.remaining_qty - qty).toLocaleString()}{lot.unit}</div>
+                );
+              })()}
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-500">폐기 사유 *</div>
+              <select className={inp} value={dispReason}
+                onChange={(e) => setDispReason(e.target.value)}>
+                <option value="">— 선택 —</option>
+                <option value="소비기한 만료">소비기한 만료</option>
+                <option value="변질">변질</option>
+                <option value="오염">오염</option>
+                <option value="품질 불량">품질 불량</option>
+                <option value="기타">기타</option>
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <div className="mb-1 text-xs text-slate-500">비고</div>
+              <input className={inp} value={dispNote}
+                onChange={(e) => setDispNote(e.target.value)}
+                placeholder="선택 입력" />
+            </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button
+              className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60"
+              disabled={dispSaving || !dispReceiptId || !dispQty || !dispReason}
+              onClick={async () => {
+                const lot = lotStocks.find((l) => l.receipt_id === dispReceiptId);
+                if (!lot) return;
+                const qty = parseFloat(dispQty);
+                if (isNaN(qty) || qty <= 0) return showToast("수량을 확인하세요.", "error");
+                if (qty > lot.remaining_qty) return showToast(`잔여수량(${lot.remaining_qty.toLocaleString()}${lot.unit}) 초과입니다.`, "error");
+                setDispSaving(true);
+                const { error } = await supabase.from("material_disposal_logs").insert({
+                  material_id: lot.material_id,
+                  disposal_date: dispDate,
+                  quantity: qty,
+                  unit: lot.unit,
+                  reason: dispReason,
+                  note: dispNote.trim() || null,
+                  receipt_id: dispReceiptId,
+                  created_by: userId,
+                });
+                setDispSaving(false);
+                if (error) return showToast("폐기 등록 실패: " + error.message, "error");
+                showToast(`✅ ${lot.material_name} ${qty.toLocaleString()}${lot.unit} 폐기 등록 완료`);
+                setShowDisposalForm(false);
+                setDispReceiptId(""); setDispQty(""); setDispReason(""); setDispNote("");
+                loadData();
+              }}>
+              {dispSaving ? "저장 중..." : "🗑️ 폐기 등록"}
+            </button>
+            <button className={btn} onClick={() => { setShowDisposalForm(false); setDispReceiptId(""); setDispQty(""); setDispReason(""); setDispNote(""); }}>취소</button>
+          </div>
+        </div>
+      )}
+
      {/* ── 재고 조정 폼 ── */}
      {showAdjustForm && isAdminOrSubadmin && (
         <div className={`${card} p-4`} style={{ borderColor: "#fcd34d" }}>
@@ -1839,122 +1956,6 @@ function MaterialLedgerTab({ role, userId, showToast }: {
   </div>
 )}
 
-{/* ── 폐기 등록 폼 ── */}
-{showDisposalForm && isAdminOrSubadmin && (
-  <div className={`${card} p-4`} style={{ borderColor: "#fca5a5" }}>
-    <div className="mb-3 flex items-center justify-between">
-      <div className="font-semibold text-sm text-red-700">🗑️ 원료 폐기 등록</div>
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-slate-500">폐기일</span>
-        <input type="date" className="rounded-lg border border-red-300 bg-white px-2 py-1 text-sm focus:outline-none focus:border-red-500"
-          value={dispDate}
-          onChange={(e) => setDispDate(e.target.value)} />
-      </div>
-    </div>
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-      <div className="md:col-span-2">
-        <div className="mb-1 text-xs text-slate-500">폐기할 로트 선택 * <span className="text-slate-400">(원료명 · 입고일 · 소비기한 · 잔여수량)</span></div>
-        <select className={inp} value={dispReceiptId}
-          onChange={(e) => setDispReceiptId(e.target.value)}>
-          <option value="">— 로트 선택 —</option>
-          {lotStocks.map((lot) => (
-            <option key={lot.receipt_id} value={lot.receipt_id}>
-              [{lot.category}] {lot.material_name}
-              {" · 입고 "}{lot.received_date}
-              {lot.expiry_date ? ` · 소비기한 ${lot.expiry_date}` : " · 소비기한 없음"}
-              {" · 잔여 "}{lot.remaining_qty.toLocaleString()}{lot.unit}
-              {lot.expiry_status === "expired" ? " ⚠️만료" : lot.expiry_status === "expiring_soon" ? " ⚡임박" : ""}
-            </option>
-          ))}
-        </select>
-        {dispReceiptId && (() => {
-          const lot = lotStocks.find((l) => l.receipt_id === dispReceiptId);
-          if (!lot) return null;
-          return (
-            <div className={`mt-1.5 rounded-lg border px-3 py-1.5 text-xs
-              ${lot.expiry_status === "expired" ? "border-red-200 bg-red-50 text-red-700"
-              : lot.expiry_status === "expiring_soon" ? "border-orange-200 bg-orange-50 text-orange-700"
-              : "border-slate-200 bg-slate-50 text-slate-600"}`}>
-              {lot.material_name} · 입고일 {lot.received_date}
-              {lot.expiry_date && ` · 소비기한 ${lot.expiry_date}`}
-              {lot.expiry_status === "expired" && " 🚨 소비기한 만료"}
-              {lot.expiry_status === "expiring_soon" && " ⚡ 소비기한 임박 (30일 이내)"}
-              {" · 잔여 "}<span className="font-bold">{lot.remaining_qty.toLocaleString()}{lot.unit}</span>
-            </div>
-          );
-        })()}
-      </div>
-      <div>
-        <div className="mb-1 text-xs text-slate-500">폐기 수량 ({(() => { const lot = lotStocks.find((l) => l.receipt_id === dispReceiptId); return lot?.unit ?? "g"; })()} ) *</div>
-        <input className={inpR} inputMode="decimal" value={dispQty}
-          onChange={(e) => setDispQty(e.target.value)}
-          placeholder="폐기 수량 입력" />
-        {dispReceiptId && dispQty && (() => {
-          const lot = lotStocks.find((l) => l.receipt_id === dispReceiptId);
-          if (!lot) return null;
-          const qty = parseFloat(dispQty);
-          if (isNaN(qty)) return null;
-          if (qty > lot.remaining_qty) return (
-            <div className="mt-1 text-xs text-red-600 font-semibold">⚠️ 잔여수량({lot.remaining_qty.toLocaleString()}{lot.unit}) 초과</div>
-          );
-          return (
-            <div className="mt-1 text-xs text-slate-500">폐기 후 잔여: {(lot.remaining_qty - qty).toLocaleString()}{lot.unit}</div>
-          );
-        })()}
-      </div>
-      <div>
-        <div className="mb-1 text-xs text-slate-500">폐기 사유 *</div>
-        <select className={inp} value={dispReason}
-          onChange={(e) => setDispReason(e.target.value)}>
-          <option value="">— 선택 —</option>
-          <option value="소비기한 만료">소비기한 만료</option>
-          <option value="변질">변질</option>
-          <option value="오염">오염</option>
-          <option value="품질 불량">품질 불량</option>
-          <option value="기타">기타</option>
-        </select>
-      </div>
-      <div className="md:col-span-2">
-        <div className="mb-1 text-xs text-slate-500">비고</div>
-        <input className={inp} value={dispNote}
-          onChange={(e) => setDispNote(e.target.value)}
-          placeholder="선택 입력" />
-      </div>
-    </div>
-    <div className="mt-4 flex gap-2">
-      <button
-        className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60"
-        disabled={dispSaving || !dispReceiptId || !dispQty || !dispReason}
-        onClick={async () => {
-          const lot = lotStocks.find((l) => l.receipt_id === dispReceiptId);
-          if (!lot) return;
-          const qty = parseFloat(dispQty);
-          if (isNaN(qty) || qty <= 0) return showToast("수량을 확인하세요.", "error");
-          if (qty > lot.remaining_qty) return showToast(`잔여수량(${lot.remaining_qty.toLocaleString()}${lot.unit}) 초과입니다.`, "error");
-          setDispSaving(true);
-          const { error } = await supabase.from("material_disposal_logs").insert({
-            material_id: lot.material_id,
-            disposal_date: dispDate,
-            quantity: qty,
-            unit: lot.unit,
-            reason: dispReason,
-            note: dispNote.trim() || null,
-            receipt_id: dispReceiptId,
-            created_by: userId,
-          });
-          setDispSaving(false);
-          if (error) return showToast("폐기 등록 실패: " + error.message, "error");
-          showToast(`✅ ${lot.material_name} ${qty.toLocaleString()}${lot.unit} 폐기 등록 완료`);
-          setShowDisposalForm(false);
-          setDispReceiptId(""); setDispQty(""); setDispReason(""); setDispNote("");
-          loadData();
-        }}>
-        {dispSaving ? "저장 중..." : "🗑️ 폐기 등록"}
-      </button>
-      <button className={btn} onClick={() => { setShowDisposalForm(false); setDispReceiptId(""); setDispQty(""); setDispReason(""); setDispNote(""); }}>취소</button>
-    </div>
-  </div>
-)}
 
 {/* ── 로트별 현황 ── */}
 {lotStocks.length > 0 && (
