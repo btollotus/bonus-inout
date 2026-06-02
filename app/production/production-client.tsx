@@ -280,12 +280,16 @@ export default function ProductionClient() {
   const [filterDateTo, setFilterDateTo] = useState("");
   const [selectedWo, setSelectedWo] = useState<WorkOrderRow | null>(null);
 
-  // 분사/코팅 배합 횟수
-  const [blendCount, setBlendCount] = useState(1);
-  const [titaniumDioxideG, setTitaniumDioxideG] = useState<string>("");
-  // 분사 생산용/판매용 수량
-  const [sprayProdQty, setSprayProdQty] = useState<string>("");
-  const [spraySaleQty, setSpraySaleQty] = useState<string>("");
+ // 분사/코팅 배합 횟수
+ const [blendCount, setBlendCount] = useState(1);
+ const [titaniumDioxideG, setTitaniumDioxideG] = useState<string>("");
+ // 분사 생산용/판매용 수량
+ const [sprayProdQty, setSprayProdQty] = useState<string>("");
+ const [spraySaleQty, setSpraySaleQty] = useState<string>("");
+ // 네오컬러 분사-레이즈 사용 lot
+ const [neoColorSprayLots, setNeoColorSprayLots] = useState<{ lot_id: string; qty: string }[]>([]);
+ const [neoColorSprayLotOptions, setNeoColorSprayLotOptions] = useState<{ lot_id: string; expiry_date: string; remaining_qty: number; variant_name: string }[]>([]);
+ const [neoColorSprayLotLoading, setNeoColorSprayLotLoading] = useState(false);
 
   const [eSubName, setESubName] = useState("");
   const [eProductName, setEProductName] = useState("");
@@ -679,6 +683,40 @@ export default function ProductionClient() {
     setTitaniumDioxideG(""); // 이산화티타늄 사용량 초기화
     setSprayProdQty(""); // 분사 생산용 수량 초기화
     setSpraySaleQty(""); // 분사 판매용 수량 초기화
+    setNeoColorSprayLots([]); // 네오컬러 분사-레이즈 lot 초기화
+    setNeoColorSprayLotOptions([]); // 네오컬러 분사-레이즈 lot 옵션 초기화
+    // 네오컬러화이트/리얼화이트: 분사-레이즈 lot 자동 검색
+    const isNeoColorWo = (wo.food_type ?? "").includes("네오컬러화이트") || (wo.food_type ?? "").includes("네오컬러리얼화이트");
+    if (isNeoColorWo) {
+      setNeoColorSprayLotLoading(true);
+      const { data: sprayVariants } = await supabase.from("product_variants").select("id, variant_name").eq("variant_name", "분사-레이즈");
+      const sprayVariantIds = (sprayVariants ?? []).map((v: any) => v.id);
+      if (sprayVariantIds.length > 0) {
+        const { data: sprayLots } = await supabase.from("lots").select("id, variant_id, expiry_date").in("variant_id", sprayVariantIds).order("expiry_date", { ascending: true });
+        const sprayLotIds = (sprayLots ?? []).map((l: any) => l.id);
+        const sprayRemainingMap: Record<string, number> = {};
+        if (sprayLotIds.length > 0) {
+          const { data: sprayMovements } = await supabase.from("movements").select("lot_id, type, qty").in("lot_id", sprayLotIds);
+          for (const m of sprayMovements ?? []) {
+            if (!sprayRemainingMap[m.lot_id]) sprayRemainingMap[m.lot_id] = 0;
+            if (m.type === "IN") sprayRemainingMap[m.lot_id] += m.qty;
+            else sprayRemainingMap[m.lot_id] -= m.qty;
+          }
+        }
+        const sprayVariantMap: Record<string, any> = {};
+        for (const v of sprayVariants ?? []) sprayVariantMap[(v as any).id] = v;
+        const sprayResult = (sprayLots ?? [])
+          .filter((l: any) => (sprayRemainingMap[l.id] ?? 0) > 0)
+          .map((l: any) => ({
+            lot_id: l.id,
+            expiry_date: l.expiry_date,
+            remaining_qty: sprayRemainingMap[l.id] ?? 0,
+            variant_name: sprayVariantMap[l.variant_id]?.variant_name ?? "",
+          }));
+        setNeoColorSprayLotOptions(sprayResult);
+      }
+      setNeoColorSprayLotLoading(false);
+    }
     if (!wo.work_order_items || wo.work_order_items.every((i) => i.sub_items == null)) {
       const { data: items } = await supabase.from("work_order_items").select("id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images").eq("work_order_id", wo.id).order("delivery_date", { ascending: true });
       wo = { ...wo, work_order_items: (items ?? []) as WoItemRow[] };
@@ -1112,6 +1150,14 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
         return;
       }
     }
+    // 분사-레이즈 사용량 필수 입력 검사 (네오컬러화이트/리얼화이트)
+    if ((selectedWo.food_type ?? "").includes("네오컬러화이트") || (selectedWo.food_type ?? "").includes("네오컬러리얼화이트")) {
+      if (neoColorSprayLots.length === 0 || neoColorSprayLots.every((l) => !l.qty || toInt(l.qty) <= 0)) {
+        alert("분사-레이즈 사용량을 입력하세요.");
+        setIsCompleting(false);
+        return;
+      }
+    }
 
     let ccpEndedAt: string | null = null;
     if (woChecks && !selectedWo.skip_production_check) {
@@ -1231,6 +1277,41 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
             transfer_lots: lotsForDb,
           }).eq("id", item.id);
         }
+        // ── 네오컬러화이트/리얼화이트 분사-레이즈 차감 ──
+        const isNeoColor = (selectedWo.food_type ?? "").includes("네오컬러화이트") || (selectedWo.food_type ?? "").includes("네오컬러리얼화이트");
+        if (isNeoColor && neoColorSprayLots.length > 0) {
+          const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+          let totalSprayQty = 0;
+          for (const tl of neoColorSprayLots) {
+            const sprayQty = toInt(tl.qty);
+            if (!tl.lot_id || sprayQty <= 0) continue;
+            totalSprayQty += sprayQty;
+            const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", tl.lot_id);
+            const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
+            if (sprayQty > remaining) {
+              setMsg(`분사-레이즈 차감 실패: 차감 수량(${sprayQty})이 잔량(${remaining})을 초과합니다.`);
+              setIsCompleting(false);
+              return;
+            }
+            const { error: sprayErr } = await supabase.from("movements").insert({
+              lot_id: tl.lot_id, type: "OUT", qty: sprayQty,
+              happened_at: `${todayKSTDate}T00:00:00+09:00`,
+              note: `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`,
+              created_by: userId,
+            });
+            if (sprayErr) stockErrors.push("분사-레이즈 차감 실패: " + sprayErr.message);
+          }
+          if (totalSprayQty > 0) {
+            const { error: petPrintErr } = await supabase.from("pet_stock_logs").insert({
+              log_date: todayKSTDate, log_type: "print_used",
+              quantity: totalSprayQty, defect_qty: 0,
+              note: `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`,
+              created_by: userId,
+            });
+            if (petPrintErr) stockErrors.push("PET 수불 기록 실패: " + petPrintErr.message);
+          }
+        }
+
         // ── 컴파운드 자동 차감 (다크/화이트/딸기) ──
         {
           const ft = selectedWo.food_type ?? "";
@@ -1851,6 +1932,75 @@ const totalOrder = items
                     if (slotId && selectedWo) { ccp.loadWoEvents(selectedWo.work_order_no, slotId, selectedWo.status); }
                   }}
                 />
+              )}
+
+             {/* 분사-레이즈 사용량 — 네오컬러화이트/리얼화이트 전용 */}
+             {((selectedWo.food_type ?? "").includes("네오컬러화이트") || (selectedWo.food_type ?? "").includes("네오컬러리얼화이트")) && (
+                <div className={`${card} p-3 border-violet-300 bg-violet-50`}>
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-sm font-semibold text-violet-800">🎞️ 분사-레이즈 사용량</span>
+                    <span className="text-xs text-red-500 font-semibold">필수</span>
+                  </div>
+                  {/* 선택된 lot 목록 */}
+                  {neoColorSprayLots.length > 0 && (
+                    <div className="space-y-1.5 mb-2">
+                      {neoColorSprayLots.map((tl, tlIdx) => {
+                        const lotInfo = neoColorSprayLotOptions.find((l) => l.lot_id === tl.lot_id);
+                        const usedByOthers = neoColorSprayLots.filter((_, i) => i !== tlIdx).reduce((s, l) => l.lot_id === tl.lot_id ? s + toInt(l.qty) : s, 0);
+                        const effectiveRemaining = (lotInfo?.remaining_qty ?? 0) - usedByOthers;
+                        return (
+                          <div key={tlIdx} className="rounded-lg border border-violet-200 bg-white px-2.5 py-1.5">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-semibold text-violet-700 truncate">{lotInfo?.variant_name ?? tl.lot_id}</div>
+                                <div className="text-[11px] text-slate-500">소비기한: {lotInfo?.expiry_date ?? "—"}{lotInfo && <span className="ml-2">잔량: <b className="text-violet-700">{effectiveRemaining.toLocaleString()} EA</b></span>}</div>
+                              </div>
+                              {!(selectedWo?.status === "완료" && !isEditMode) && (
+                                <button type="button" className="text-xs text-slate-400 hover:text-red-500 shrink-0"
+                                  onClick={() => setNeoColorSprayLots((prev) => prev.filter((_, i) => i !== tlIdx))}>✕</button>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <input className="flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-right tabular-nums focus:border-violet-400 focus:outline-none"
+                                inputMode="numeric" placeholder="사용 수량"
+                                value={tl.qty}
+                                disabled={selectedWo?.status === "완료" && !isEditMode}
+                                onChange={(e) => setNeoColorSprayLots((prev) => {
+                                  const next = [...prev];
+                                  next[tlIdx] = { ...next[tlIdx], qty: e.target.value.replace(/[^\d]/g, "") };
+                                  return next;
+                                })} />
+                              {lotInfo && tl.qty && (
+                                <div className="text-[11px] text-slate-500 shrink-0">차감 후: <b className={effectiveRemaining - toInt(tl.qty) < 0 ? "text-red-600" : "text-violet-700"}>{(effectiveRemaining - toInt(tl.qty)).toLocaleString()} EA</b></div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {/* lot 추가 목록 */}
+                  {!(selectedWo?.status === "완료" && !isEditMode) && (
+                    neoColorSprayLotLoading ? (
+                      <div className="text-xs text-slate-400 py-1">불러오는 중...</div>
+                    ) : (() => {
+                      const selectedLotIds = new Set(neoColorSprayLots.map((l) => l.lot_id));
+                      const availableLots = neoColorSprayLotOptions.filter((l) => !selectedLotIds.has(l.lot_id));
+                      if (availableLots.length === 0) return <div className="text-xs text-slate-400">{selectedLotIds.size > 0 ? "추가할 재고 없음" : "관련 재고 없음"}</div>;
+                      return (
+                        <div className="rounded-lg border border-slate-200 bg-white overflow-hidden max-h-44 overflow-y-auto">
+                          {availableLots.map((lot) => (
+                            <button key={lot.lot_id} type="button" className="w-full text-left px-2.5 py-2 text-xs border-b border-slate-100 last:border-0 hover:bg-violet-50"
+                              onClick={() => setNeoColorSprayLots((prev) => [...prev, { lot_id: lot.lot_id, qty: "" }])}>
+                              <div className="font-medium text-slate-800">+ {lot.variant_name}</div>
+                              <div className="flex gap-2 mt-0.5 text-[11px] text-slate-500"><span>소비기한: {lot.expiry_date}</span><span>·</span><span>잔량: <b className="text-violet-700">{lot.remaining_qty.toLocaleString()} EA</b></span></div>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()
+                  )}
+                </div>
               )}
 
               {/* 이산화티타늄 사용량 입력 — 식품유형에 "리얼" 포함 시 */}
