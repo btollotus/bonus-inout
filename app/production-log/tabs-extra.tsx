@@ -53,7 +53,7 @@ type PetStockLog = {
   id: string; log_date: string; log_type: string; quantity: number; defect_qty: number;
   note: string | null; created_by: string | null; approved_by: string | null;
 };
-type PetStock = { stock_raw: number; stock_coated: number; stock_sprayed_prod: number; stock_sprayed_sale: number };
+type PetStock = { stock_raw: number; stock_coated: number; stock_sprayed_prod: number; stock_sprayed_sale: number; total_print_used_prod: number; total_print_used_sale: number };
 
 const SIGN_MAP: Record<string, string> = {
   "조은미": "/sign-choem.png",
@@ -67,7 +67,9 @@ const SIGN_MAP: Record<string, string> = {
 
 const PET_LOG_TYPE_LABELS: Record<string, string> = {
   incoming: "입고", coating_done: "코팅완료", spray_done_prod: "분사완료(생산용)",
-  spray_done_sale: "분사완료(판매용)", print_used: "인쇄사용", sale_cut: "재단판매",
+  spray_done_sale: "분사완료(판매용)", print_used: "인쇄사용",
+  print_used_prod: "인쇄사용(생산용)", print_used_sale: "인쇄사용(판매용)",
+  sale_cut: "재단판매",
 };
 const CCP_EVENT_LABELS: Record<string, string> = {
   start: "시작", mid_check: "중간점검", end: "종료",
@@ -2862,12 +2864,18 @@ export function PetLedgerTab({ role, userId, showToast }: {
         <div className={`${card} p-4`}>
           <div className="mb-3 font-semibold text-sm">📦 PET 공정별 현재고</div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[{ label: "원상태", value: stock.stock_raw, color: "text-slate-800" }, { label: "코팅완료", value: stock.stock_coated, color: "text-blue-700" }, { label: "분사완료(생산용)", value: stock.stock_sprayed_prod, color: "text-green-700" }, { label: "분사완료(판매용)", value: stock.stock_sprayed_sale, color: "text-purple-700" }]
-              .map(({ label, value, color }) => (
+            {([
+              { label: "원상태", value: stock.stock_raw, color: "text-slate-800", sub: null },
+              { label: "코팅완료", value: stock.stock_coated, color: "text-blue-700", sub: null },
+              { label: "분사완료(생산용)", value: stock.stock_sprayed_prod, color: "text-green-700", sub: stock.total_print_used_prod > 0 ? `인쇄사용 ${stock.total_print_used_prod.toLocaleString()}ea` : null },
+              { label: "분사완료(판매용)", value: stock.stock_sprayed_sale, color: "text-purple-700", sub: stock.total_print_used_sale > 0 ? `인쇄사용 ${stock.total_print_used_sale.toLocaleString()}ea` : null },
+            ] as { label: string; value: number; color: string; sub: string | null }[])
+              .map(({ label, value, color, sub }) => (
                 <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-center">
                   <div className="text-xs text-slate-500 mb-1">{label}</div>
                   <div className={`text-xl font-bold tabular-nums ${color}`}>{value.toLocaleString()}</div>
                   <div className="text-xs text-slate-400">ea</div>
+                  {sub && <div className="text-[11px] text-slate-400 mt-1">{sub}</div>}
                 </div>
               ))}
           </div>
