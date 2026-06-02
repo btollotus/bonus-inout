@@ -1068,6 +1068,17 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
             created_by: userId,
           });
           if (petCoatingErr) { setMsg("PET 수불 기록 실패(코팅): " + petCoatingErr.message); setIsCompleting(false); return; }
+          // 원료수불부 PET 차감
+          const { error: petUsageErr } = await supabase.from("material_usage_logs").insert({
+            material_id: "00000000-0007-0000-0000-000000000001",
+            used_date: today,
+            quantity: totalCoatingQty,
+            unit: "ea",
+            work_type: "coating",
+            note: `코팅-레이즈 생산완료 - ${selectedWo.work_order_no}`,
+            created_by: userId,
+          });
+          if (petUsageErr) { setMsg("원료수불부 PET 차감 실패: " + petUsageErr.message); setIsCompleting(false); return; }
         }
       }
 
