@@ -166,7 +166,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
   
     const { data: todayEvents } = await supabase
       .from("ccp_slot_events")
-      .select("slot_id, event_type, measured_at, material_type, action_note")
+      .select("slot_id, event_type, measured_at, material_type, action_note, original_material_date")
       .eq("event_date", today)
       .in("slot_id", slotIds)
       .order("measured_at", { ascending: true });
@@ -231,7 +231,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
     if (needsHistorySlotIds.length > 0) {
       const { data: historyEvents } = await supabase
         .from("ccp_slot_events")
-        .select("slot_id, event_type, measured_at, material_type, action_note")
+        .select("slot_id, event_type, measured_at, material_type, action_note, original_material_date")
         .in("slot_id", needsHistorySlotIds)
         .order("measured_at", { ascending: false });
   
