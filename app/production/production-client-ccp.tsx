@@ -188,34 +188,39 @@ if (!lastEvent || lastEvent.event_type === "end") {
       } else {
         const materialIn = events.filter((e) => e.event_type === "material_in").slice(-1)[0];
         if (materialIn) {
-          // 슬롯이동으로 들어온 경우 출발 슬롯의 원래 투입일 역추적
-          let materialDate = today;
-          let daysAgo = 0;
-          const isMoveIn = typeof (materialIn as any).action_note === "string" &&
-            (materialIn as any).action_note.includes("→");
-          if (isMoveIn) {
-            const moveMatch = ((materialIn as any).action_note as string).match(/^(.+?)\s*→/);
-            if (moveMatch) {
-              const fromSlotName = moveMatch[1].trim();
-              const fromSlot = warmerSlots.find((s) => s.slot_name === fromSlotName);
-              if (fromSlot) {
-                const { data: fromInEvent } = await supabase
-                  .from("ccp_slot_events")
-                  .select("measured_at")
-                  .eq("slot_id", fromSlot.id)
-                  .eq("event_type", "material_in")
-                  .lt("measured_at", (materialIn as any).measured_at)
-                  .order("measured_at", { ascending: false })
-                  .limit(1)
-                  .maybeSingle();
-                if (fromInEvent) {
-                  materialDate = fromInEvent.measured_at.slice(0, 10);
-                  const diffMs = new Date(today).getTime() - new Date(materialDate).getTime();
-                  daysAgo = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+          // original_material_date가 있으면 역추적 없이 바로 사용
+          let materialDate: string;
+          if ((materialIn as any).original_material_date) {
+            materialDate = (materialIn as any).original_material_date;
+          } else {
+            // 슬롯이동으로 들어온 경우 출발 슬롯의 원래 투입일 역추적 (레거시 대응)
+            materialDate = today;
+            const isMoveIn = typeof (materialIn as any).action_note === "string" &&
+              (materialIn as any).action_note.includes("→");
+            if (isMoveIn) {
+              const moveMatch = ((materialIn as any).action_note as string).match(/^(.+?)\s*→/);
+              if (moveMatch) {
+                const fromSlotName = moveMatch[1].trim();
+                const fromSlot = warmerSlots.find((s) => s.slot_name === fromSlotName);
+                if (fromSlot) {
+                  const { data: fromInEvent } = await supabase
+                    .from("ccp_slot_events")
+                    .select("measured_at")
+                    .eq("slot_id", fromSlot.id)
+                    .eq("event_type", "material_in")
+                    .lt("measured_at", (materialIn as any).measured_at)
+                    .order("measured_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                  if (fromInEvent) {
+                    materialDate = fromInEvent.measured_at.slice(0, 10);
+                  }
                 }
               }
             }
           }
+          const diffMs = new Date(today).getTime() - new Date(materialDate).getTime();
+          const daysAgo = Math.floor(diffMs / (1000 * 60 * 60 * 24));
           map[slot.id] = { date: materialDate, daysAgo, materialType: (materialIn as any).material_type ?? null };
         } else {
           needsHistorySlotIds.push(slot.id);
@@ -249,27 +254,30 @@ if (!lastEvent || lastEvent.event_type === "end") {
         );
         if (hasOutAfter) { map[slotId] = null; continue; }
 
-        // 슬롯이동으로 들어온 경우 출발 슬롯의 원래 투입일 역추적
-        let materialDate = lastIn.measured_at.slice(0, 10);
-        const isMoveIn = typeof (lastIn as any).action_note === "string" &&
-          (lastIn as any).action_note.includes("→");
-        if (isMoveIn) {
-          const moveMatch = ((lastIn as any).action_note as string).match(/^(.+?)\s*→/);
-          if (moveMatch) {
-            const fromSlotName = moveMatch[1].trim();
-            const fromSlot = warmerSlots.find((s) => s.slot_name === fromSlotName);
-            if (fromSlot) {
-              const { data: fromInEvent } = await supabase
-                .from("ccp_slot_events")
-                .select("measured_at")
-                .eq("slot_id", fromSlot.id)
-                .eq("event_type", "material_in")
-                .lt("measured_at", lastIn.measured_at)
-                .order("measured_at", { ascending: false })
-                .limit(1)
-                .maybeSingle();
-              if (fromInEvent) {
-                materialDate = fromInEvent.measured_at.slice(0, 10);
+        // original_material_date가 있으면 역추적 없이 바로 사용 (레거시 대응으로 역추적도 유지)
+        let materialDate = (lastIn as any).original_material_date
+          ?? lastIn.measured_at.slice(0, 10);
+        if (!(lastIn as any).original_material_date) {
+          const isMoveIn = typeof (lastIn as any).action_note === "string" &&
+            (lastIn as any).action_note.includes("→");
+          if (isMoveIn) {
+            const moveMatch = ((lastIn as any).action_note as string).match(/^(.+?)\s*→/);
+            if (moveMatch) {
+              const fromSlotName = moveMatch[1].trim();
+              const fromSlot = warmerSlots.find((s) => s.slot_name === fromSlotName);
+              if (fromSlot) {
+                const { data: fromInEvent } = await supabase
+                  .from("ccp_slot_events")
+                  .select("measured_at")
+                  .eq("slot_id", fromSlot.id)
+                  .eq("event_type", "material_in")
+                  .lt("measured_at", lastIn.measured_at)
+                  .order("measured_at", { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                if (fromInEvent) {
+                  materialDate = fromInEvent.measured_at.slice(0, 10);
+                }
               }
             }
           }
@@ -729,15 +737,20 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
 
   if (!confirm(`[${fromSlotName}] → [${toSlotName}] 슬롯이동을 기록합니다. 맞습니까?`)) return;
 
-  // ── material_type 조회 ──
+  // ── material_type + original_material_date 조회 ──
   const { data: lastInEvent } = await supabase
     .from("ccp_slot_events")
-    .select("material_type")
+    .select("material_type, original_material_date, measured_at")
     .eq("slot_id", fromSlotId)
     .eq("event_type", "material_in")
     .order("measured_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // 최초 투입일: original_material_date가 있으면 그대로 전달, 없으면 lastInEvent의 날짜 사용
+  const originalMaterialDate: string | null =
+    (lastInEvent as any)?.original_material_date
+    ?? (lastInEvent?.measured_at ? lastInEvent.measured_at.slice(0, 10) : null);
   const fromSlot = warmerSlots.find((s) => s.id === fromSlotId);
   const movedMaterialType = lastInEvent?.material_type
     ?? (fromSlot?.purpose === "화이트컴파운드" ? "화이트"
@@ -770,15 +783,16 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
     .lte("measured_at", moveInMeasuredAt);
 
     const { error: toErr } = await supabase.from("ccp_slot_events").insert({
-      slot_id:       toSlotId,
-      event_date:    slotActionDate,
-      event_type:    "material_in",
-      measured_at:   moveInMeasuredAt,
-      work_order_no: workOrderNo ?? null,
-      action_note:   `${fromSlotName} → ${toSlotName}`,
-      material_type: movedMaterialType,
-      action_by:     actionBy ?? null,
-      created_by:    currentUserIdRef.current,
+      slot_id:               toSlotId,
+      event_date:            slotActionDate,
+      event_type:            "material_in",
+      measured_at:           moveInMeasuredAt,
+      work_order_no:         workOrderNo ?? null,
+      action_note:           `${fromSlotName} → ${toSlotName}`,
+      material_type:         movedMaterialType,
+      original_material_date: originalMaterialDate,
+      action_by:             actionBy ?? null,
+      created_by:            currentUserIdRef.current,
     });
     if (toErr) {
       // fromSlot insert는 성공했으나 toSlot 실패 → fromSlot 롤백
