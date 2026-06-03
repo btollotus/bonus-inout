@@ -2937,7 +2937,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
           <td style="${tdR}">${cumCoating.toLocaleString()}</td>
           <td style="${tdR}">${cumSprayProd.toLocaleString()}</td>
           <td style="${tdR}">${cumSpraySale.toLocaleString()}</td>
-          <td style="${tdS}">${log.note ?? ""}</td>
+          <td style="${tdS}">${(log.note && !log.note.startsWith("작업지시서")) ? log.note : ""}</td>
         </tr>`;
     }
 
