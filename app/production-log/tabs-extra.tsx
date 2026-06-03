@@ -3058,7 +3058,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
                                   <button
                                     className="rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
                                     disabled={editSaleCutSaving}
-                                    onClick={() => editSaleCut(editingSaleCut.logId, editingSaleCut.qty)}
+                                    onClick={() => editSaleCut(editingSaleCut!.logId, editingSaleCut!.qty)}
                                   >{editSaleCutSaving ? "..." : "저장"}</button>
                                   <button
                                     className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-slate-50"
