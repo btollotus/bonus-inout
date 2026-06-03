@@ -94,7 +94,19 @@ export async function GET() {
     if (!ordersRes.ok) throw new Error(JSON.stringify(ordersData));
 
     const orders = ordersData.orders ?? [];
-    if (orders.length === 0) return NextResponse.json({ newCount: 0 });
+    if (orders.length === 0) {
+      const { count } = await supabase
+        .from("cafe24_orders")
+        .select("*", { count: "exact", head: true })
+        .eq("confirmed", false);
+      const { data: recentOrders } = await supabase
+        .from("cafe24_orders")
+        .select("*")
+        .eq("confirmed", false)
+        .order("ordered_at", { ascending: false })
+        .limit(20);
+      return NextResponse.json({ newCount: count ?? 0, orders: recentOrders ?? [] });
+    }
 
     const rows = await Promise.all(orders.map(async (o: any) => {
       let product_name = "";
