@@ -2862,7 +2862,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
     if (!fQty) return showToast("수량을 입력하세요.", "error");
     setSaving(true);
     const { error } = await supabase.from("pet_stock_logs").insert({
-      log_date: filterDate, log_type: fLogType, quantity: Number(fQty),
+      log_date: (() => { const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(), log_type: fLogType, quantity: Number(fQty),
       defect_qty: fDefectQty ? Number(fDefectQty) : 0, note: fNote.trim() || null, created_by: userId,
     });
     setSaving(false);
