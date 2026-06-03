@@ -2920,24 +2920,10 @@ export function PetLedgerTab({ role, userId, showToast }: {
   }
 
   // 날짜별 누적 재고 계산
-  const dateRows = (() => {
-    const dateMap: Record<string, { incoming: number; transfer: number; coating: number; spray_prod: number; spray_sale: number; sale_cut: number; print_prod: number; print_sale: number }> = {};
-    for (const log of allLogs) {
-      if (!dateMap[log.log_date]) dateMap[log.log_date] = { incoming: 0, transfer: 0, coating: 0, spray_prod: 0, spray_sale: 0, sale_cut: 0, print_prod: 0, print_sale: 0 };
-      const r = dateMap[log.log_date];
-      if (log.log_type === "incoming") r.incoming += log.quantity;
-      else if (log.log_type === "transfer_used") r.transfer += log.quantity;
-      else if (log.log_type === "coating_done") r.coating += log.quantity;
-      else if (log.log_type === "spray_done_prod") r.spray_prod += log.quantity;
-      else if (log.log_type === "spray_done_sale") r.spray_sale += log.quantity;
-      else if (log.log_type === "sale_cut") r.sale_cut += log.quantity;
-      else if (log.log_type === "print_used_prod") r.print_prod += log.quantity;
-      else if (log.log_type === "print_used_sale") r.print_sale += log.quantity;
-    }
-    const dates = Object.keys(dateMap).sort();
-    let cumRaw = 0, cumCoating = 0, cumSprayProd = 0, cumSpraySale = 0;
-    // 해당 월 이전 누적값 계산
+  const logRows = (() => {
+    // 해당 월 이전 누적값 먼저 계산
     const monthFrom = `${filterYearMonth}-01`;
+    let cumRaw = 0, cumCoating = 0, cumSprayProd = 0, cumSpraySale = 0;
     for (const log of allLogs.filter(l => l.log_date < monthFrom)) {
       if (log.log_type === "incoming") cumRaw += log.quantity;
       else if (log.log_type === "coating_done") { cumRaw -= log.quantity; cumCoating += log.quantity; }
@@ -2946,14 +2932,23 @@ export function PetLedgerTab({ role, userId, showToast }: {
       else if (log.log_type === "sale_cut") cumSpraySale -= log.quantity;
       else if (log.log_type === "print_used_prod") cumSprayProd -= log.quantity;
       else if (log.log_type === "print_used_sale") cumSpraySale -= log.quantity;
+      else if (log.log_type === "transfer_used") cumRaw -= log.quantity;
     }
-    return dates.map(date => {
-      const r = dateMap[date];
-      cumRaw += r.incoming - r.coating;
-      cumCoating += r.coating - r.spray_prod - r.spray_sale;
-      cumSprayProd += r.spray_prod - r.print_prod;
-      cumSpraySale += r.spray_sale - r.sale_cut - r.print_sale;
-      return { date, ...r, cumRaw, cumCoating, cumSprayProd, cumSpraySale };
+    // 해당 월 로그 각 건별로 누적 계산
+    const monthLogs = allLogs.filter(l => l.log_date >= monthFrom);
+    return monthLogs.map(log => {
+      if (log.log_type === "incoming") cumRaw += log.quantity;
+      else if (log.log_type === "coating_done") { cumRaw -= log.quantity; cumCoating += log.quantity; }
+      else if (log.log_type === "spray_done_prod") { cumCoating -= log.quantity; cumSprayProd += log.quantity; }
+      else if (log.log_type === "spray_done_sale") { cumCoating -= log.quantity; cumSpraySale += log.quantity; }
+      else if (log.log_type === "sale_cut") cumSpraySale -= log.quantity;
+      else if (log.log_type === "print_used_prod") cumSprayProd -= log.quantity;
+      else if (log.log_type === "print_used_sale") cumSpraySale -= log.quantity;
+      else if (log.log_type === "transfer_used") cumRaw -= log.quantity;
+      return {
+        log,
+        cumRaw, cumCoating, cumSprayProd, cumSpraySale,
+      };
     });
   })();
 
@@ -3034,7 +3029,75 @@ export function PetLedgerTab({ role, userId, showToast }: {
                   </tr>
                 </thead>
                 <tbody>
-                  {dateRows.map((row, idx) => {
+                  {logRows.map(({ log, cumRaw, cumCoating, cumSprayProd, cumSpraySale }, idx) => {
+                    const d = new Date(log.log_date + "T00:00:00+09:00");
+                    const dateLabel = `${d.getMonth()+1}/${d.getDate()}`;
+                    const isEven = idx % 2 === 0;
+                    const isSaleCut = log.log_type === "sale_cut";
+                    const isEditing = isSaleCut && editingSaleCut?.logId === log.id;
+                    return (
+                      <tr key={log.id} className={isEven ? "bg-white" : "bg-slate-50/50"}>
+                        <td className="border border-slate-200 px-2 py-1.5 text-center text-slate-500 whitespace-nowrap">{dateLabel}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-blue-700 font-semibold">
+                          {log.log_type === "incoming" ? log.quantity.toLocaleString() : ""}
+                        </td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-slate-700">
+                          {log.log_type === "transfer_used" ? log.quantity.toLocaleString() : ""}
+                        </td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600">
+                          {log.log_type === "coating_done" ? log.quantity.toLocaleString() : ""}
+                        </td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600">
+                          {log.log_type === "spray_done_prod" ? log.quantity.toLocaleString() : ""}
+                        </td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600">
+                          {log.log_type === "spray_done_sale" ? log.quantity.toLocaleString() : ""}
+                        </td>
+                        {/* 재단 셀 */}
+                        {isSaleCut && isEditing && editingSaleCut ? (
+                          <td className="border border-slate-200 px-1 py-1">
+                            <div className="flex items-center gap-1">
+                              <input
+                                className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-xs text-right tabular-nums focus:border-purple-400 focus:outline-none"
+                                inputMode="numeric"
+                                value={editingSaleCut.qty}
+                                onChange={(e) => setEditingSaleCut({ ...editingSaleCut, qty: e.target.value.replace(/[^\d]/g, "") })}
+                              />
+                              <button className="rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
+                                disabled={editSaleCutSaving}
+                                onClick={() => editSaleCut(editingSaleCut.logId, editingSaleCut.qty)}
+                              >{editSaleCutSaving ? "..." : "저장"}</button>
+                              <button className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-slate-50"
+                                onClick={() => setEditingSaleCut(null)}>취소</button>
+                            </div>
+                          </td>
+                        ) : isSaleCut ? (
+                          <td className="border border-slate-200 px-2 py-1.5">
+                            <div className="flex items-center justify-end gap-1">
+                              <span className="text-xs text-red-600 tabular-nums">{log.quantity.toLocaleString()}</span>
+                              <button className="text-[9px] text-slate-300 hover:text-blue-400" title="수정"
+                                onClick={() => setEditingSaleCut({ logId: log.id, qty: String(log.quantity) })}>✎</button>
+                              <button className="text-[9px] text-slate-300 hover:text-red-500" title="삭제"
+                                onClick={async () => {
+                                  if (!confirm("이 재단 기록을 삭제하시겠습니까?")) return;
+                                  const { error } = await supabase.from("pet_stock_logs").delete().eq("id", log.id);
+                                  if (error) return showToast("삭제 실패: " + error.message, "error");
+                                  showToast("🗑️ 삭제 완료!");
+                                  loadData();
+                                }}>✕</button>
+                            </div>
+                          </td>
+                        ) : (
+                          <td className="border border-slate-200 px-2 py-1.5"></td>
+                        )}
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{cumRaw.toLocaleString()}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{cumCoating.toLocaleString()}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{cumSprayProd.toLocaleString()}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{cumSpraySale.toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
                     const d = new Date(row.date + "T00:00:00+09:00");
                     const dateLabel = `${d.getMonth()+1}/${d.getDate()}`;
                     const isEven = idx % 2 === 0;
