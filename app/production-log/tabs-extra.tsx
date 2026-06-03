@@ -2815,6 +2815,18 @@ export function PetLedgerTab({ role, userId, showToast }: {
   const [allLogs, setAllLogs] = useState<PetStockLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [dateRange, setDateRange] = useState<{ from: string; to: string } | null>(null);
+
+  // 인쇄용 state
+  const [printFrom, setPrintFrom] = useState(() => {
+    const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+    d.setDate(1);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  });
+  const [printTo, setPrintTo] = useState(() => {
+    const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  });
+  const [printLoading, setPrintLoading] = useState(false);
  
   const [saleCutDate, setSaleCutDate] = useState(() => {
     const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
@@ -2842,6 +2854,165 @@ export function PetLedgerTab({ role, userId, showToast }: {
   const [fDefectQty, setFDefectQty] = useState("");
   const [fNote, setFNote] = useState("");
   const [saving, setSaving] = useState(false);
+
+  async function printPetLedger() {
+    if (!printFrom || !printTo || printFrom > printTo) return showToast("기간을 확인하세요.", "error");
+    setPrintLoading(true);
+
+    // printFrom 이전까지 누적 재고
+    const prevEndDate = new Date(printFrom + "T00:00:00+09:00");
+    prevEndDate.setDate(prevEndDate.getDate() - 1);
+    const prevEndStr = prevEndDate.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+
+    const [prevRes, rangeRes] = await Promise.all([
+      supabase.from("pet_stock_logs").select("log_type,quantity").lte("log_date", prevEndStr),
+      supabase.from("pet_stock_logs").select("*")
+        .gte("log_date", printFrom).lte("log_date", printTo)
+        .order("log_date", { ascending: true }).order("created_at", { ascending: true }),
+    ]);
+
+    if (!rangeRes.data || rangeRes.data.length === 0) {
+      setPrintLoading(false);
+      return alert("해당 기간에 PET 수불 내역이 없습니다.");
+    }
+
+    let cumRaw = 0, cumCoating = 0, cumSprayProd = 0, cumSpraySale = 0;
+    for (const log of prevRes.data ?? []) {
+      if      (log.log_type === "incoming")        cumRaw       += log.quantity;
+      else if (log.log_type === "coating_done")    { cumRaw -= log.quantity; cumCoating   += log.quantity; }
+      else if (log.log_type === "spray_done_prod") { cumCoating -= log.quantity; cumSprayProd += log.quantity; }
+      else if (log.log_type === "spray_done_sale") { cumCoating -= log.quantity; cumSpraySale += log.quantity; }
+      else if (log.log_type === "sale_cut")        cumSpraySale -= log.quantity;
+      else if (log.log_type === "print_used_prod") cumSprayProd -= log.quantity;
+      else if (log.log_type === "print_used_sale") cumSpraySale -= log.quantity;
+      else if (log.log_type === "transfer_used")   cumRaw       -= log.quantity;
+    }
+
+    const days = ["일","월","화","수","목","금","토"];
+    const fmt = (v: number) => v !== 0 ? v.toLocaleString() : "—";
+    const tdS = `border:1px solid #bbb;padding:3px 5px;font-size:8pt;vertical-align:middle;`;
+    const tdR = `${tdS}text-align:right;font-variant-numeric:tabular-nums;`;
+    const tdC = `${tdS}text-align:center;`;
+    const thS = `border:1px solid #999;padding:4px 5px;font-size:7.5pt;font-weight:bold;background:#f0f0f0;text-align:center;white-space:nowrap;`;
+
+    let rows = `
+      <tr style="background:#f5f5f5;font-weight:bold;">
+        <td style="${tdC}">—</td>
+        <td style="${tdC}">전기이월</td>
+        <td style="${tdR}">—</td><td style="${tdR}">—</td><td style="${tdR}">—</td>
+        <td style="${tdR}">—</td><td style="${tdR}">—</td><td style="${tdR}">—</td>
+        <td style="${tdR}">${cumRaw.toLocaleString()}</td>
+        <td style="${tdR}">${cumCoating.toLocaleString()}</td>
+        <td style="${tdR}">${cumSprayProd.toLocaleString()}</td>
+        <td style="${tdR}">${cumSpraySale.toLocaleString()}</td>
+        <td style="${tdS}"></td>
+      </tr>`;
+
+    let rowNo = 1;
+    for (const log of rangeRes.data as PetStockLog[]) {
+      if      (log.log_type === "incoming")        cumRaw       += log.quantity;
+      else if (log.log_type === "coating_done")    { cumRaw -= log.quantity; cumCoating   += log.quantity; }
+      else if (log.log_type === "spray_done_prod") { cumCoating -= log.quantity; cumSprayProd += log.quantity; }
+      else if (log.log_type === "spray_done_sale") { cumCoating -= log.quantity; cumSpraySale += log.quantity; }
+      else if (log.log_type === "sale_cut")        cumSpraySale -= log.quantity;
+      else if (log.log_type === "print_used_prod") cumSprayProd -= log.quantity;
+      else if (log.log_type === "print_used_sale") cumSpraySale -= log.quantity;
+      else if (log.log_type === "transfer_used")   cumRaw       -= log.quantity;
+
+      const d = new Date(log.log_date + "T00:00:00+09:00");
+      const dateLabel = `${d.getMonth()+1}/${d.getDate()}(${days[d.getDay()]})`;
+      const typeLabel = PET_LOG_TYPE_LABELS[log.log_type] ?? log.log_type;
+
+      rows += `
+        <tr>
+          <td style="${tdC}">${rowNo++}</td>
+          <td style="${tdC}">${dateLabel}</td>
+          <td style="${tdR}">${log.log_type === "incoming"        ? fmt(log.quantity) : "—"}</td>
+          <td style="${tdR}">${log.log_type === "transfer_used"   ? fmt(log.quantity) : "—"}</td>
+          <td style="${tdR}">${log.log_type === "coating_done"    ? fmt(log.quantity) : "—"}</td>
+          <td style="${tdR}">${log.log_type === "spray_done_prod" ? fmt(log.quantity) : "—"}</td>
+          <td style="${tdR}">${log.log_type === "spray_done_sale" ? fmt(log.quantity) : "—"}</td>
+          <td style="${tdR}">${log.log_type === "sale_cut"        ? fmt(log.quantity) : "—"}</td>
+          <td style="${tdR}">${cumRaw.toLocaleString()}</td>
+          <td style="${tdR}">${cumCoating.toLocaleString()}</td>
+          <td style="${tdR}">${cumSprayProd.toLocaleString()}</td>
+          <td style="${tdR}">${cumSpraySale.toLocaleString()}</td>
+          <td style="${tdS}">${log.note ?? ""}</td>
+        </tr>`;
+    }
+
+    const fromD = new Date(printFrom + "T00:00:00+09:00");
+    const toD   = new Date(printTo   + "T00:00:00+09:00");
+    const periodLabel = `${fromD.getFullYear()}년 ${fromD.getMonth()+1}월 ${fromD.getDate()}일 ~ ${toD.getFullYear()}년 ${toD.getMonth()+1}월 ${toD.getDate()}일`;
+
+    const html = `
+      <style>
+        @page { size: A4 landscape; margin: 12mm 15mm; }
+        body { margin:0; font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:9pt; color:#000; }
+        * { box-sizing:border-box; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+        table { border-collapse:collapse; width:100%; }
+        tr:nth-child(even) { background:#fafafa; }
+        tr:nth-child(even) td { background:#fafafa; }
+      </style>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:3px;">
+        <div style="font-size:8pt;color:#555;">BONUSMATE</div>
+        <div style="font-size:8pt;color:#555;">${periodLabel}</div>
+      </div>
+      <div style="font-size:15pt;font-weight:bold;text-align:center;letter-spacing:2px;margin-bottom:2px;">부 자 재 수 불 부</div>
+      <div style="font-size:8.5pt;text-align:center;color:#333;margin-bottom:8px;">[ 원료명 : PET / 단위 EA ]</div>
+      <div style="display:flex;justify-content:flex-end;gap:0;margin-bottom:8px;">
+        <div style="border:1px solid #999;width:60px;text-align:center;">
+          <div style="background:#f0f0f0;border-bottom:1px solid #bbb;padding:3px 0;font-size:7.5pt;font-weight:bold;">확인</div>
+          <div style="height:32px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 0;">
+            <img src="/sign-kimyg.png" style="height:24px;object-fit:contain;" alt="김영각"/>
+            <div style="font-size:7pt;margin-top:1px;">김영각</div>
+          </div>
+        </div>
+        <div style="border:1px solid #999;border-left:none;width:60px;text-align:center;">
+          <div style="background:#f0f0f0;border-bottom:1px solid #bbb;padding:3px 0;font-size:7.5pt;font-weight:bold;">승인</div>
+          <div style="height:32px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 0;">
+            <img src="/sign-chods.png" style="height:24px;object-fit:contain;" alt="조대성"/>
+            <div style="font-size:7pt;margin-top:1px;">조대성</div>
+          </div>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="${thS}" rowspan="2">No</th>
+            <th style="${thS}" rowspan="2">일자</th>
+            <th style="${thS}" colspan="6">사용량</th>
+            <th style="${thS}" colspan="4">당일재고량</th>
+            <th style="${thS}" rowspan="2">비고</th>
+          </tr>
+          <tr>
+            <th style="${thS}">입고</th>
+            <th style="${thS}">전사</th>
+            <th style="${thS}">코팅</th>
+            <th style="${thS}">분사(생산)</th>
+            <th style="${thS}">분사(판매)</th>
+            <th style="${thS}">재단</th>
+            <th style="${thS}">PET</th>
+            <th style="${thS}">코팅완료</th>
+            <th style="${thS}">분사완료(생산)</th>
+            <th style="${thS}">분사완료(판매)</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:8px;font-size:7.5pt;color:#555;display:flex;justify-content:space-between;">
+        <span>* 본 문서는 BONUSMATE ERP에서 자동 생성되었습니다.</span>
+        <span>출력일시: ${new Date().toLocaleString("ko-KR",{timeZone:"Asia/Seoul"})}</span>
+      </div>`;
+
+    setPrintLoading(false);
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>PET수불부_${printFrom}_${printTo}</title></head><body>${html}</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 500);
+  }
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -2959,8 +3130,21 @@ export function PetLedgerTab({ role, userId, showToast }: {
       <div className={`${card} p-4`}>
         <div className="flex flex-wrap gap-3 items-end">
         <button className={btn} onClick={loadData}>🔄 조회</button>
-         
-          <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
+        <div className="flex items-center gap-1.5">
+          <input type="date"
+            className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:border-violet-400"
+            value={printFrom} onChange={(e) => setPrintFrom(e.target.value)} />
+          <span className="text-xs text-slate-400">~</span>
+          <input type="date"
+            className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:border-violet-400"
+            value={printTo} onChange={(e) => setPrintTo(e.target.value)} />
+          <button
+            className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-60"
+            disabled={printLoading}
+            onClick={printPetLedger}>
+            {printLoading ? "조회 중..." : "🖨️ 인쇄"}
+          </button>
+        </div>
         </div>
       </div>
      
