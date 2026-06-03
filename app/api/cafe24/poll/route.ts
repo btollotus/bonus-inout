@@ -62,9 +62,13 @@ export async function GET() {
       .eq("id", 1)
       .single();
 
-      const since = new Date(Date.now() - 7 * 24 * 60 * 60_000).toISOString().replace("T", " ").substring(0, 19);
+      const toKSTString = (date: Date) => {
+        const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+        return kst.toISOString().replace("T", " ").substring(0, 19);
+      };
+      const since = toKSTString(new Date(Date.now() - 7 * 24 * 60 * 60_000));
 
-    const now = new Date().toISOString().replace("T", " ").substring(0, 19);
+      const now = toKSTString(new Date());
 
     const url = `https://${mallId}.cafe24api.com/api/v2/admin/orders?start_date=${encodeURIComponent(since)}&end_date=${encodeURIComponent(now)}&order_status=N40&limit=50`;
     console.log("[cafe24/poll] request url:", url);
