@@ -3009,7 +3009,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       <div className={`${card} p-4`}>
         <div className="mb-3 font-semibold text-sm">📋 PET 수불부 — {filterYearMonth}</div>
         {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
-          : dateRows.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
+         : logRows.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
           : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-xs" style={{ minWidth: 680 }}>
@@ -3097,77 +3097,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
                       </tr>
                     );
                   })}
-                </tbody>
-                    const d = new Date(row.date + "T00:00:00+09:00");
-                    const dateLabel = `${d.getMonth()+1}/${d.getDate()}`;
-                    const isEven = idx % 2 === 0;
-                    const td = (val: number | null, opts?: { blue?: boolean; red?: boolean }) => (
-                      <td className={`border border-slate-200 px-2 py-1.5 text-right tabular-nums ${opts?.blue ? "text-blue-700 font-semibold" : opts?.red ? "text-red-600" : "text-slate-700"}`}>
-                        {val ? val.toLocaleString() : ""}
-                      </td>
-                    );
-                    return (
-                      <tr key={row.date} className={isEven ? "bg-white" : "bg-slate-50/50"}>
-                        <td className="border border-slate-200 px-2 py-1.5 text-center text-slate-500 whitespace-nowrap">{dateLabel}</td>
-                        {td(row.incoming || null, { blue: true })}
-                        {td(row.transfer || null)}
-                        {td(row.coating || null, { red: true })}
-                        {td(row.spray_prod || null, { red: true })}
-                        {td(row.spray_sale || null, { red: true })}
-                        {(() => {
-                          const saleCutLogs = allLogs.filter(l => l.log_date === row.date && l.log_type === "sale_cut");
-                          if (saleCutLogs.length === 0) {
-                            return <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600"></td>;
-                          }
-                          return (
-                            <td className="border border-slate-200 px-1 py-1">
-                              <div className="space-y-1">
-                                {saleCutLogs.map((log) => {
-                                  const isEditing = editingSaleCut?.logId === log.id;
-                                  if (isEditing && editingSaleCut) {
-                                    const editing = editingSaleCut;
-                                    return (
-                                      <div key={log.id} className="flex items-center gap-1">
-                                        <input
-                                          className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-xs text-right tabular-nums focus:border-purple-400 focus:outline-none"
-                                          inputMode="numeric"
-                                          value={editing.qty}
-                                          onChange={(e) => setEditingSaleCut({ ...editing, qty: e.target.value.replace(/[^\d]/g, "") })}
-                                        />
-                                        <button
-                                          className="rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
-                                          disabled={editSaleCutSaving}
-                                          onClick={() => editSaleCut(editing.logId, editing.qty)}
-                                        >{editSaleCutSaving ? "..." : "저장"}</button>
-                                        <button
-                                          className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-slate-50"
-                                          onClick={() => setEditingSaleCut(null)}
-                                        >취소</button>
-                                      </div>
-                                    );
-                                  }
-                                  return (
-                                    <div key={log.id} className="flex items-center justify-end gap-1 cursor-pointer hover:bg-purple-50 rounded px-1"
-                                      onClick={() => setEditingSaleCut({ logId: log.id, qty: String(log.quantity) })}
-                                      title="클릭하여 수정"
-                                    >
-                                      <span className="text-xs text-red-600 tabular-nums">{log.quantity.toLocaleString()}</span>
-                                      <span className="text-[9px] text-slate-300">✎</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </td>
-                          );
-                        })()}
-                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{row.cumRaw.toLocaleString()}</td>
-                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{row.cumCoating.toLocaleString()}</td>
-                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{row.cumSprayProd.toLocaleString()}</td>
-                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{row.cumSpraySale.toLocaleString()}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
+              </tbody>
               </table>
             </div>
           )}
