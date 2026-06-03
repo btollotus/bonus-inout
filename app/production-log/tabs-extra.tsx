@@ -3045,20 +3045,21 @@ export function PetLedgerTab({ role, userId, showToast }: {
                         {(() => {
                           const saleCutLog = allLogs.find(l => l.log_date === row.date && l.log_type === "sale_cut");
                           const isEditing = editingSaleCut?.logId === saleCutLog?.id;
-                          if (isEditing) {
+                          if (isEditing && editingSaleCut) {
+                            const editing = editingSaleCut;
                             return (
                               <td className="border border-slate-200 px-1 py-1">
                                 <div className="flex items-center gap-1">
                                   <input
                                     className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-xs text-right tabular-nums focus:border-purple-400 focus:outline-none"
                                     inputMode="numeric"
-                                    value={editingSaleCut!.qty}
-                                    onChange={(e) => setEditingSaleCut({ ...editingSaleCut!, qty: e.target.value.replace(/[^\d]/g, "") })}
+                                    value={editing.qty}
+                                    onChange={(e) => setEditingSaleCut({ ...editing, qty: e.target.value.replace(/[^\d]/g, "") })}
                                   />
                                   <button
                                     className="rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
                                     disabled={editSaleCutSaving}
-                                    onClick={() => editSaleCut(editingSaleCut!.logId, editingSaleCut!.qty)}
+                                    onClick={() => editSaleCut(editing.logId, editing.qty)}
                                   >{editSaleCutSaving ? "..." : "저장"}</button>
                                   <button
                                     className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-slate-50"
