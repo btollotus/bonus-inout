@@ -2868,7 +2868,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
     setSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
     showToast("✅ PET 수불 기록 완료!");
-    setShowForm(false); setFQty(""); setFDefectQty(""); setFNote("");
+    setFQty(""); setFDefectQty(""); setFNote("");
     loadData();
   }
 
