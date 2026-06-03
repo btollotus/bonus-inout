@@ -118,6 +118,7 @@ export async function GET() {
           }
         );
         const detailData = await detailRes.json();
+        console.log("[cafe24/poll] detailData:", o.order_id, JSON.stringify(detailData).substring(0, 500));
         const items = detailData.order?.items ?? [];
         product_name = items.map((item: any) => item.product_name).filter(Boolean).join(", ");
       } catch {}
