@@ -136,7 +136,7 @@ export async function GET() {
 
     await supabase
     .from("cafe24_orders")
-    .upsert(rows, { onConflict: "id", ignoreDuplicates: true });
+    .upsert(rows, { onConflict: "id", ignoreDuplicates: false });
 
   const { count } = await supabase
     .from("cafe24_orders")
