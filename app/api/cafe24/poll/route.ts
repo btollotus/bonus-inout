@@ -70,7 +70,7 @@ export async function GET() {
 
       const now = toKSTString(new Date());
 
-    const url = `https://${mallId}.cafe24api.com/api/v2/admin/orders?start_date=${encodeURIComponent(since)}&end_date=${encodeURIComponent(now)}&order_status=N40&limit=50`;
+    const url = `https://${mallId}.cafe24api.com/api/v2/admin/orders?start_date=${encodeURIComponent(since)}&end_date=${encodeURIComponent(now)}&limit=50`;
     console.log("[cafe24/poll] request url:", url);
     const ordersRes = await fetch(
       url,
