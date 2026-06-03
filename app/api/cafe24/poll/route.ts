@@ -108,7 +108,7 @@ export async function GET() {
       let product_name = "";
       try {
         const detailRes = await fetch(
-          `https://${mallId}.cafe24api.com/api/v2/admin/orders/${encodeURIComponent(o.order_id)}?fields=items`,
+          `https://${mallId}.cafe24api.com/api/v2/admin/orders/${encodeURIComponent(o.order_id)}?shop_no=1&fields=items`,
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,
