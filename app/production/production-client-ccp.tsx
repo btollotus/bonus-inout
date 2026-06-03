@@ -953,7 +953,7 @@ function getMaterialOptions(purpose: string): string[] {
       >
         <div className={isOverdue ? "text-red-600 font-bold" : ""}>{s.slot_name}</div>
         <div className={`mt-0.5 text-[10px] text-center ${isOverdue ? "text-red-600 font-bold" : "font-normal"}`}>
-          {isEmpty ? "비어있음" : dateStr}
+        {isEmpty ? "비어있음" : s.purpose === "전사용도" ? null : dateStr}
         </div>
       </button>
     );
