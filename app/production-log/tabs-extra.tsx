@@ -2814,7 +2814,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
   });
   const [allLogs, setAllLogs] = useState<PetStockLog[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showForm, setShowForm] = useState(false);
+ 
   const [saleCutQty, setSaleCutQty] = useState("");
   const [saleCutSaving, setSaleCutSaving] = useState(false);
   const [fLogType, setFLogType] = useState("incoming");
@@ -2925,67 +2925,12 @@ export function PetLedgerTab({ role, userId, showToast }: {
             <input type="month" className={inp} style={{ width: 160 }} value={filterYearMonth} onChange={(e) => setFilterYearMonth(e.target.value)} />
           </div>
           <button className={btn} onClick={loadData}>🔄 조회</button>
-          {isAdminOrSubadmin && <button className={showForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"} onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ 닫기" : "✚ 수불 기록"}</button>}
+         
           <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
         </div>
       </div>
-      {stock && (
-        <div className={`${card} p-4`}>
-          <div className="mb-3 font-semibold text-sm">📦 PET 공정별 현재고</div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {([
-              { label: "원상태", value: stock.stock_raw, color: "text-slate-800", sub: null },
-              { label: "코팅완료", value: stock.stock_coated, color: "text-blue-700", sub: null },
-              { label: "분사완료(생산용)", value: stock.stock_sprayed_prod, color: "text-green-700", sub: stock.total_print_used_prod > 0 ? `인쇄사용 ${stock.total_print_used_prod.toLocaleString()}ea` : null },
-              { label: "분사완료(판매용)", value: stock.stock_sprayed_sale, color: "text-purple-700", sub: stock.total_print_used_sale > 0 ? `인쇄사용 ${stock.total_print_used_sale.toLocaleString()}ea` : null, isSale: true },
-            ] as { label: string; value: number; color: string; sub: string | null }[])
-            .map(({ label, value, color, sub, isSale }: any) => (
-              <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-center">
-                <div className="text-xs text-slate-500 mb-1">{label}</div>
-                <div className={`text-xl font-bold tabular-nums ${color}`}>{value.toLocaleString()}</div>
-                <div className="text-xs text-slate-400">ea</div>
-                {sub && <div className="text-[11px] text-slate-400 mt-1">{sub}</div>}
-                {isSale && (
-                  <div className="mt-2 pt-2 border-t border-slate-200">
-                    <div className="text-[11px] text-slate-500 mb-1">재단 기록</div>
-                    <div className="flex items-center gap-1">
-                      <input
-                        className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-right tabular-nums focus:border-purple-400 focus:outline-none"
-                        inputMode="numeric" placeholder="수량"
-                        value={saleCutQty}
-                        onChange={(e) => setSaleCutQty(e.target.value.replace(/[^\d]/g, ""))}
-                      />
-                      <span className="text-[11px] text-slate-400">ea</span>
-                    </div>
-                    <button
-                      className="mt-1 w-full rounded-lg border border-purple-300 bg-purple-50 py-1 text-[11px] font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
-                      disabled={saleCutSaving || !saleCutQty}
-                      onClick={saveSaleCut}
-                    >{saleCutSaving ? "저장 중..." : "기록"}</button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {showForm && isAdminOrSubadmin && (
-        <div className={`${card} p-4`}>
-          <div className="mb-3 font-semibold text-sm text-blue-700">✚ PET 수불 기록</div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div><div className="mb-1 text-xs text-slate-500">구분 *</div>
-              <select className={inp} value={fLogType} onChange={(e) => setFLogType(e.target.value)}>
-                {Object.entries(PET_LOG_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select></div>
-            <div><div className="mb-1 text-xs text-slate-500">수량 (ea) *</div><input className={inpR} inputMode="numeric" value={fQty} onChange={(e) => setFQty(e.target.value.replace(/[^\d]/g, ""))} /></div>
-            <div><div className="mb-1 text-xs text-slate-500">불량수량 (ea)</div><input className={inpR} inputMode="numeric" value={fDefectQty} onChange={(e) => setFDefectQty(e.target.value.replace(/[^\d]/g, ""))} /></div>
-            <div><div className="mb-1 text-xs text-slate-500">비고</div><input className={inp} value={fNote} onChange={(e) => setFNote(e.target.value)} /></div>
-          </div>
-          <div className="mt-4 flex gap-2">
-            <button className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60" disabled={saving} onClick={saveLog}>{saving ? "저장 중..." : "💾 기록"}</button>
-            </div>
-        </div>
-      )}   
+     
+      
      <div className={`${card} p-4`}>
         <div className="mb-3 font-semibold text-sm">📋 PET 수불부 — {filterYearMonth}</div>
         {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
