@@ -66,11 +66,7 @@ export async function GET() {
         const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
         return kst.toISOString().replace("T", " ").substring(0, 19);
       };
-      const since = toKSTString(
-        stateRow?.last_changed_at && new Date(stateRow.last_changed_at).getTime() > Date.now() - 60 * 60_000
-          ? new Date(stateRow.last_changed_at)
-          : new Date(Date.now() - 5 * 60_000)
-      );
+      const since = toKSTString(new Date(Date.now() - 7 * 24 * 60 * 60_000));
 
       const now = toKSTString(new Date());
 
