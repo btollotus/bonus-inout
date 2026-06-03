@@ -93,18 +93,16 @@ export async function GET() {
     const orders = ordersData.orders ?? [];
     if (orders.length === 0) return NextResponse.json({ newCount: 0 });
 
-    const rows = orders.flatMap((o: any) =>
-      (o.items ?? []).map((item: any) => ({
-        id: `${o.order_id}_${item.order_item_code}`,
-        order_id: o.order_id,
-        product_name: item.product_name,
-        quantity: item.quantity,
-        price: parseInt(o.actual_price ?? "0"),
-        buyer_name: o.billing_name ?? "",
-        status: o.shipping_status ?? "unknown",
-        ordered_at: o.order_date,
-      }))
-    );
+    const rows = orders.map((o: any) => ({
+      id: o.order_id,
+      order_id: o.order_id,
+      product_name: "",
+      quantity: 1,
+      price: parseInt(o.actual_order_amount?.payment_amount ?? o.payment_amount ?? "0"),
+      buyer_name: o.billing_name ?? "",
+      status: o.shipping_status ?? "unknown",
+      ordered_at: o.order_date,
+    }));
 
     const existingIds = rows.map((r: any) => r.id);
     const { data: existing } = await supabase
