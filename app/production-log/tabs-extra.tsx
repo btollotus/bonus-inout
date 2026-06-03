@@ -2808,9 +2808,15 @@ export function PetLedgerTab({ role, userId, showToast }: {
   const isAdmin = role === "ADMIN";
   const [logs, setLogs] = useState<PetStockLog[]>([]);
   const [stock, setStock] = useState<PetStock | null>(null);
-  const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
+  const [filterYearMonth, setFilterYearMonth] = useState(() => {
+    const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+  });
+  const [allLogs, setAllLogs] = useState<PetStockLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [saleCutQty, setSaleCutQty] = useState("");
+  const [saleCutSaving, setSaleCutSaving] = useState(false);
   const [fLogType, setFLogType] = useState("incoming");
   const [fQty, setFQty] = useState("");
   const [fDefectQty, setFDefectQty] = useState("");
@@ -2819,16 +2825,38 @@ export function PetLedgerTab({ role, userId, showToast }: {
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    const from = `${filterYearMonth}-01`;
+    const toDate = new Date(filterYearMonth + "-01T00:00:00+09:00");
+    toDate.setMonth(toDate.getMonth() + 1);
+    toDate.setDate(toDate.getDate() - 1);
+    const to = toDate.toISOString().slice(0, 10);
     const [logRes, stockRes] = await Promise.all([
-      supabase.from("pet_stock_logs").select("*").eq("log_date", filterDate).order("created_at", { ascending: false }),
+      supabase.from("pet_stock_logs").select("*").lte("log_date", to).order("log_date", { ascending: true }),
       supabase.from("v_pet_stock").select("*").single(),
     ]);
+    setAllLogs((logRes.data ?? []) as PetStockLog[]);
     setLogs((logRes.data ?? []) as PetStockLog[]);
     setStock(stockRes.data as PetStock ?? null);
     setLoading(false);
-  }, [filterDate]);
+  }, [filterYearMonth]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  async function saveSaleCut() {
+    if (!saleCutQty || Number(saleCutQty) <= 0) return showToast("재단 수량을 입력하세요.", "error");
+    const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+    setSaleCutSaving(true);
+    const { error } = await supabase.from("pet_stock_logs").insert({
+      log_date: todayStr, log_type: "sale_cut", quantity: Number(saleCutQty),
+      defect_qty: 0, note: "재단판매", created_by: userId,
+    });
+    setSaleCutSaving(false);
+    if (error) return showToast("저장 실패: " + error.message, "error");
+    showToast("✅ 재단 기록 완료!");
+    setSaleCutQty("");
+    loadData();
+  }
 
   async function saveLog() {
     if (!fQty) return showToast("수량을 입력하세요.", "error");
@@ -2850,11 +2878,52 @@ export function PetLedgerTab({ role, userId, showToast }: {
     showToast("✅ 승인 완료!"); loadData();
   }
 
+  // 날짜별 누적 재고 계산
+  const dateRows = (() => {
+    const dateMap: Record<string, { incoming: number; transfer: number; coating: number; spray_prod: number; spray_sale: number; sale_cut: number; print_prod: number; print_sale: number }> = {};
+    for (const log of allLogs) {
+      if (!dateMap[log.log_date]) dateMap[log.log_date] = { incoming: 0, transfer: 0, coating: 0, spray_prod: 0, spray_sale: 0, sale_cut: 0, print_prod: 0, print_sale: 0 };
+      const r = dateMap[log.log_date];
+      if (log.log_type === "incoming") r.incoming += log.quantity;
+      else if (log.log_type === "transfer_used") r.transfer += log.quantity;
+      else if (log.log_type === "coating_done") r.coating += log.quantity;
+      else if (log.log_type === "spray_done_prod") r.spray_prod += log.quantity;
+      else if (log.log_type === "spray_done_sale") r.spray_sale += log.quantity;
+      else if (log.log_type === "sale_cut") r.sale_cut += log.quantity;
+      else if (log.log_type === "print_used_prod") r.print_prod += log.quantity;
+      else if (log.log_type === "print_used_sale") r.print_sale += log.quantity;
+    }
+    const dates = Object.keys(dateMap).sort();
+    let cumRaw = 0, cumCoating = 0, cumSprayProd = 0, cumSpraySale = 0;
+    // 해당 월 이전 누적값 계산
+    const monthFrom = `${filterYearMonth}-01`;
+    for (const log of allLogs.filter(l => l.log_date < monthFrom)) {
+      if (log.log_type === "incoming") cumRaw += log.quantity;
+      else if (log.log_type === "coating_done") { cumRaw -= log.quantity; cumCoating += log.quantity; }
+      else if (log.log_type === "spray_done_prod") { cumCoating -= log.quantity; cumSprayProd += log.quantity; }
+      else if (log.log_type === "spray_done_sale") { cumCoating -= log.quantity; cumSpraySale += log.quantity; }
+      else if (log.log_type === "sale_cut") cumSpraySale -= log.quantity;
+      else if (log.log_type === "print_used_prod") cumSprayProd -= log.quantity;
+      else if (log.log_type === "print_used_sale") cumSpraySale -= log.quantity;
+    }
+    return dates.map(date => {
+      const r = dateMap[date];
+      cumRaw += r.incoming - r.coating;
+      cumCoating += r.coating - r.spray_prod - r.spray_sale;
+      cumSprayProd += r.spray_prod - r.print_prod;
+      cumSpraySale += r.spray_sale - r.sale_cut - r.print_sale;
+      return { date, ...r, cumRaw, cumCoating, cumSprayProd, cumSpraySale };
+    });
+  })();
+
   return (
     <div className="space-y-4">
       <div className={`${card} p-4`}>
         <div className="flex flex-wrap gap-3 items-end">
-          <div><div className="mb-1 text-xs text-slate-500">날짜</div><input type="date" className={inp} style={{ width: 160 }} value={filterDate} onChange={(e) => setFilterDate(e.target.value)} /></div>
+          <div>
+            <div className="mb-1 text-xs text-slate-500">조회 월</div>
+            <input type="month" className={inp} style={{ width: 160 }} value={filterYearMonth} onChange={(e) => setFilterYearMonth(e.target.value)} />
+          </div>
           <button className={btn} onClick={loadData}>🔄 조회</button>
           {isAdminOrSubadmin && <button className={showForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"} onClick={() => setShowForm((v) => !v)}>{showForm ? "✕ 닫기" : "✚ 수불 기록"}</button>}
           <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
@@ -2868,16 +2937,35 @@ export function PetLedgerTab({ role, userId, showToast }: {
               { label: "원상태", value: stock.stock_raw, color: "text-slate-800", sub: null },
               { label: "코팅완료", value: stock.stock_coated, color: "text-blue-700", sub: null },
               { label: "분사완료(생산용)", value: stock.stock_sprayed_prod, color: "text-green-700", sub: stock.total_print_used_prod > 0 ? `인쇄사용 ${stock.total_print_used_prod.toLocaleString()}ea` : null },
-              { label: "분사완료(판매용)", value: stock.stock_sprayed_sale, color: "text-purple-700", sub: stock.total_print_used_sale > 0 ? `인쇄사용 ${stock.total_print_used_sale.toLocaleString()}ea` : null },
+              { label: "분사완료(판매용)", value: stock.stock_sprayed_sale, color: "text-purple-700", sub: stock.total_print_used_sale > 0 ? `인쇄사용 ${stock.total_print_used_sale.toLocaleString()}ea` : null, isSale: true },
             ] as { label: string; value: number; color: string; sub: string | null }[])
-              .map(({ label, value, color, sub }) => (
-                <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-center">
-                  <div className="text-xs text-slate-500 mb-1">{label}</div>
-                  <div className={`text-xl font-bold tabular-nums ${color}`}>{value.toLocaleString()}</div>
-                  <div className="text-xs text-slate-400">ea</div>
-                  {sub && <div className="text-[11px] text-slate-400 mt-1">{sub}</div>}
-                </div>
-              ))}
+            .map(({ label, value, color, sub, isSale }: any) => (
+              <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-center">
+                <div className="text-xs text-slate-500 mb-1">{label}</div>
+                <div className={`text-xl font-bold tabular-nums ${color}`}>{value.toLocaleString()}</div>
+                <div className="text-xs text-slate-400">ea</div>
+                {sub && <div className="text-[11px] text-slate-400 mt-1">{sub}</div>}
+                {isSale && (
+                  <div className="mt-2 pt-2 border-t border-slate-200">
+                    <div className="text-[11px] text-slate-500 mb-1">재단 기록</div>
+                    <div className="flex items-center gap-1">
+                      <input
+                        className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-right tabular-nums focus:border-purple-400 focus:outline-none"
+                        inputMode="numeric" placeholder="수량"
+                        value={saleCutQty}
+                        onChange={(e) => setSaleCutQty(e.target.value.replace(/[^\d]/g, ""))}
+                      />
+                      <span className="text-[11px] text-slate-400">ea</span>
+                    </div>
+                    <button
+                      className="mt-1 w-full rounded-lg border border-purple-300 bg-purple-50 py-1 text-[11px] font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
+                      disabled={saleCutSaving || !saleCutQty}
+                      onClick={saveSaleCut}
+                    >{saleCutSaving ? "저장 중..." : "기록"}</button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -2898,30 +2986,56 @@ export function PetLedgerTab({ role, userId, showToast }: {
             </div>
         </div>
       )}   
-      <div className={`${card} p-4`}>
-        <div className="mb-3 font-semibold text-sm">📋 PET 수불 내역 — {filterDate}</div>
+     <div className={`${card} p-4`}>
+        <div className="mb-3 font-semibold text-sm">📋 PET 수불부 — {filterYearMonth}</div>
         {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
-          : logs.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
+          : dateRows.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
           : (
-            <div className="space-y-2">
-              {logs.map((log) => (
-                <div key={log.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-sm">{PET_LOG_TYPE_LABELS[log.log_type] ?? log.log_type}</span>
-                        <span className="text-sm font-bold tabular-nums text-blue-700">{log.quantity.toLocaleString()} ea</span>
-                        {log.defect_qty > 0 && <span className="text-xs text-red-600">불량: {log.defect_qty}ea</span>}
-                      </div>
-                      {log.note && <div className="mt-0.5 text-xs text-slate-400">비고: {log.note}</div>}
-                    </div>
-                    <div className="shrink-0">
-                      {!log.approved_by && isAdmin && <button className="rounded-lg border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700 hover:bg-green-100" onClick={() => approveLog(log.id)}>✅ 승인</button>}
-                      {log.approved_by && <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">승인완료</span>}
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-xs" style={{ minWidth: 680 }}>
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-center text-[11px] font-semibold text-slate-500 align-middle whitespace-nowrap">일자</th>
+                    <th colSpan={6} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500">사용량</th>
+                    <th colSpan={4} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500">당일재고량</th>
+                  </tr>
+                  <tr className="bg-slate-50">
+                    {["입고","전사","코팅","분사(생산)","분사(판매)","재단"].map(h => (
+                      <th key={h} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500 whitespace-nowrap">{h}</th>
+                    ))}
+                    {["PET","코팅완료","분사완료(생산)","분사완료(판매)"].map(h => (
+                      <th key={h} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {dateRows.map((row, idx) => {
+                    const d = new Date(row.date + "T00:00:00+09:00");
+                    const dateLabel = `${d.getMonth()+1}/${d.getDate()}`;
+                    const isEven = idx % 2 === 0;
+                    const td = (val: number | null, opts?: { blue?: boolean; red?: boolean }) => (
+                      <td className={`border border-slate-200 px-2 py-1.5 text-right tabular-nums ${opts?.blue ? "text-blue-700 font-semibold" : opts?.red ? "text-red-600" : "text-slate-700"}`}>
+                        {val ? val.toLocaleString() : ""}
+                      </td>
+                    );
+                    return (
+                      <tr key={row.date} className={isEven ? "bg-white" : "bg-slate-50/50"}>
+                        <td className="border border-slate-200 px-2 py-1.5 text-center text-slate-500 whitespace-nowrap">{dateLabel}</td>
+                        {td(row.incoming || null, { blue: true })}
+                        {td(row.transfer || null)}
+                        {td(row.coating || null, { red: true })}
+                        {td(row.spray_prod || null, { red: true })}
+                        {td(row.spray_sale || null, { red: true })}
+                        {td(row.sale_cut || null, { red: true })}
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{row.cumRaw.toLocaleString()}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{row.cumCoating.toLocaleString()}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{row.cumSprayProd.toLocaleString()}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{row.cumSpraySale.toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
       </div>
