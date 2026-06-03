@@ -104,26 +104,23 @@ export async function GET() {
       ordered_at: o.order_date,
     }));
 
-    const existingIds = rows.map((r: any) => r.id);
-    const { data: existing } = await supabase
-      .from("cafe24_orders")
-      .select("id")
-      .in("id", existingIds);
+    await supabase
+    .from("cafe24_orders")
+    .upsert(rows, { onConflict: "id", ignoreDuplicates: true });
 
-    const existingSet = new Set((existing ?? []).map((r: any) => r.id));
-    const newRows = rows.filter((r: any) => !existingSet.has(r.id));
+  const { count } = await supabase
+    .from("cafe24_orders")
+    .select("*", { count: "exact", head: true })
+    .eq("confirmed", false);
 
-    if (newRows.length > 0) {
-      await supabase
-        .from("cafe24_orders")
-        .upsert(rows, { onConflict: "id", ignoreDuplicates: true });
-    }
+  const { data: recentOrders } = await supabase
+    .from("cafe24_orders")
+    .select("*")
+    .eq("confirmed", false)
+    .order("ordered_at", { ascending: false })
+    .limit(20);
 
-    const { count } = await supabase
-      .from("cafe24_orders")
-      .select("*", { count: "exact", head: true });
-
-    return NextResponse.json({ newCount: newRows.length, orders: newRows.length > 0 ? rows : [] });
+  return NextResponse.json({ newCount: count ?? 0, orders: recentOrders ?? [] });
   } catch (e: any) {
     console.error("[cafe24/poll] 예외:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
