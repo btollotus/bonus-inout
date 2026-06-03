@@ -104,34 +104,15 @@ export async function GET() {
       return NextResponse.json({ newCount: count ?? 0, orders: recentOrders ?? [] });
     }
 
-    const rows = await Promise.all(orders.map(async (o: any) => {
-      let product_name = "";
-      try {
-        const detailRes = await fetch(
-          `https://${mallId}.cafe24api.com/api/v2/admin/orders/${encodeURIComponent(o.order_id)}?shop_no=1&fields=items`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-              "X-Cafe24-Api-Version": "2026-03-01",
-            },
-          }
-        );
-        const detailData = await detailRes.json();
-        console.log("[cafe24/poll] detailData:", o.order_id, JSON.stringify(detailData).substring(0, 500));
-        const items = detailData.order?.items ?? [];
-        product_name = items.map((item: any) => item.product_name).filter(Boolean).join(", ");
-      } catch {}
-      return {
-        id: o.order_id,
-        order_id: o.order_id,
-        product_name,
-        quantity: 1,
-        price: parseInt(o.actual_order_amount?.payment_amount ?? o.payment_amount ?? "0"),
-        buyer_name: o.billing_name ?? "",
-        status: o.shipping_status ?? "unknown",
-        ordered_at: o.order_date,
-      };
+    const rows = orders.map((o: any) => ({
+      id: o.order_id,
+      order_id: o.order_id,
+      product_name: o.order_id,
+      quantity: 1,
+      price: parseInt(o.actual_order_amount?.payment_amount ?? o.payment_amount ?? "0"),
+      buyer_name: o.billing_name ?? "",
+      status: o.shipping_status ?? "unknown",
+      ordered_at: o.order_date,
     }));
 
     await supabase
