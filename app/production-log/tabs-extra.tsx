@@ -2889,7 +2889,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
     }
 
     const days = ["일","월","화","수","목","금","토"];
-    const fmt = (v: number) => v !== 0 ? v.toLocaleString() : "—";
+    const fmt = (v: number) => v !== 0 ? v.toLocaleString() : "";
     const tdS = `border:1px solid #bbb;padding:3px 5px;font-size:8pt;vertical-align:middle;`;
     const tdR = `${tdS}text-align:right;font-variant-numeric:tabular-nums;`;
     const tdC = `${tdS}text-align:center;`;
@@ -2899,8 +2899,8 @@ export function PetLedgerTab({ role, userId, showToast }: {
       <tr style="background:#f5f5f5;font-weight:bold;">
         <td style="${tdC}">—</td>
         <td style="${tdC}">전기이월</td>
-        <td style="${tdR}">—</td><td style="${tdR}">—</td><td style="${tdR}">—</td>
-        <td style="${tdR}">—</td><td style="${tdR}">—</td><td style="${tdR}">—</td>
+        <td style="${tdR}"></td><td style="${tdR}"></td><td style="${tdR}"></td>
+        <td style="${tdR}"></td><td style="${tdR}"></td><td style="${tdR}"></td>
         <td style="${tdR}">${cumRaw.toLocaleString()}</td>
         <td style="${tdR}">${cumCoating.toLocaleString()}</td>
         <td style="${tdR}">${cumSprayProd.toLocaleString()}</td>
