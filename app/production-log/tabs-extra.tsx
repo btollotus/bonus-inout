@@ -2817,6 +2817,21 @@ export function PetLedgerTab({ role, userId, showToast }: {
  
   const [saleCutQty, setSaleCutQty] = useState("");
   const [saleCutSaving, setSaleCutSaving] = useState(false);
+  const [editingSaleCut, setEditingSaleCut] = useState<{ logId: string; qty: string } | null>(null);
+  const [editSaleCutSaving, setEditSaleCutSaving] = useState(false);
+  const [employees, setEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinPendingAction, setPinPendingAction] = useState<((name: string) => void) | null>(null);
+
+  useEffect(() => {
+    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+      .then(({ data }) => setEmployees((data ?? []) as any));
+  }, []);
+
+  function requirePin(action: (name: string) => void) {
+    setPinPendingAction(() => (name: string) => action(name));
+    setShowPinModal(true);
+  }
   const [fLogType, setFLogType] = useState("incoming");
   const [fQty, setFQty] = useState("");
   const [fDefectQty, setFDefectQty] = useState("");
@@ -2842,20 +2857,43 @@ export function PetLedgerTab({ role, userId, showToast }: {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  async function saveSaleCut() {
+  async function doSaveSaleCut(actionBy: string) {
     if (!saleCutQty || Number(saleCutQty) <= 0) return showToast("재단 수량을 입력하세요.", "error");
     const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
     const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
     setSaleCutSaving(true);
     const { error } = await supabase.from("pet_stock_logs").insert({
       log_date: todayStr, log_type: "sale_cut", quantity: Number(saleCutQty),
-      defect_qty: 0, note: "재단판매", created_by: userId,
+      defect_qty: 0, note: `재단판매 — ${actionBy}`, created_by: userId,
     });
     setSaleCutSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
     showToast("✅ 재단 기록 완료!");
     setSaleCutQty("");
     loadData();
+  }
+
+  function saveSaleCut() {
+    if (!saleCutQty || Number(saleCutQty) <= 0) return showToast("재단 수량을 입력하세요.", "error");
+    requirePin((name) => doSaveSaleCut(name));
+  }
+
+  async function doEditSaleCut(logId: string, qty: string, actionBy: string) {
+    if (!qty || Number(qty) <= 0) return showToast("수량을 입력하세요.", "error");
+    setEditSaleCutSaving(true);
+    const { error } = await supabase.from("pet_stock_logs").update({
+      quantity: Number(qty),
+      note: `재단판매 — ${actionBy}`,
+    }).eq("id", logId);
+    setEditSaleCutSaving(false);
+    if (error) return showToast("수정 실패: " + error.message, "error");
+    showToast("✅ 재단 수정 완료!");
+    setEditingSaleCut(null);
+    loadData();
+  }
+
+  function editSaleCut(logId: string, qty: string) {
+    requirePin((name) => doEditSaleCut(logId, qty, name));
   }
 
   async function saveLog() {
@@ -2931,6 +2969,18 @@ export function PetLedgerTab({ role, userId, showToast }: {
       </div>
      
       
+      {showPinModal && (
+        <PinModal
+          employees={employees.filter((e) => e.name !== null) as any}
+          title="본인 확인"
+          onSuccess={(empId, empName) => {
+            setShowPinModal(false);
+            if (pinPendingAction) { pinPendingAction(empName); setPinPendingAction(null); }
+          }}
+          onCancel={() => { setShowPinModal(false); setPinPendingAction(null); }}
+        />
+      )}
+
       <div className={`${card} p-4`}>
         <div className="flex items-center justify-between mb-3">
           <div className="font-semibold text-sm">✂️ 재단 기록</div>
@@ -2992,7 +3042,43 @@ export function PetLedgerTab({ role, userId, showToast }: {
                         {td(row.coating || null, { red: true })}
                         {td(row.spray_prod || null, { red: true })}
                         {td(row.spray_sale || null, { red: true })}
-                        {td(row.sale_cut || null, { red: true })}
+                        {(() => {
+                          const saleCutLog = allLogs.find(l => l.log_date === row.date && l.log_type === "sale_cut");
+                          const isEditing = editingSaleCut?.logId === saleCutLog?.id;
+                          if (isEditing) {
+                            return (
+                              <td className="border border-slate-200 px-1 py-1">
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-xs text-right tabular-nums focus:border-purple-400 focus:outline-none"
+                                    inputMode="numeric"
+                                    value={editingSaleCut.qty}
+                                    onChange={(e) => setEditingSaleCut({ ...editingSaleCut, qty: e.target.value.replace(/[^\d]/g, "") })}
+                                  />
+                                  <button
+                                    className="rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
+                                    disabled={editSaleCutSaving}
+                                    onClick={() => editSaleCut(editingSaleCut.logId, editingSaleCut.qty)}
+                                  >{editSaleCutSaving ? "..." : "저장"}</button>
+                                  <button
+                                    className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-slate-50"
+                                    onClick={() => setEditingSaleCut(null)}
+                                  >취소</button>
+                                </div>
+                              </td>
+                            );
+                          }
+                          return (
+                            <td
+                              className={`border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600 ${saleCutLog ? "cursor-pointer hover:bg-purple-50" : ""}`}
+                              onClick={() => saleCutLog && setEditingSaleCut({ logId: saleCutLog.id, qty: String(saleCutLog.quantity) })}
+                              title={saleCutLog ? "클릭하여 수정" : ""}
+                            >
+                              {row.sale_cut ? row.sale_cut.toLocaleString() : ""}
+                              {saleCutLog && <span className="ml-1 text-[9px] text-slate-300">✎</span>}
+                            </td>
+                          );
+                        })()}
                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{row.cumRaw.toLocaleString()}</td>
                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{row.cumCoating.toLocaleString()}</td>
                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{row.cumSprayProd.toLocaleString()}</td>
