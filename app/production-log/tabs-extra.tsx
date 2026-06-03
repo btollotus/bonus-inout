@@ -2808,12 +2808,13 @@ export function PetLedgerTab({ role, userId, showToast }: {
   const isAdmin = role === "ADMIN";
   const [logs, setLogs] = useState<PetStockLog[]>([]);
   const [stock, setStock] = useState<PetStock | null>(null);
-  const [filterYearMonth, setFilterYearMonth] = useState(() => {
+  const filterYearMonth = (() => {
     const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-  });
+  })();
   const [allLogs, setAllLogs] = useState<PetStockLog[]>([]);
   const [loading, setLoading] = useState(false);
+  const [dateRange, setDateRange] = useState<{ from: string; to: string } | null>(null);
  
   const [saleCutDate, setSaleCutDate] = useState(() => {
     const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
@@ -2844,20 +2845,21 @@ export function PetLedgerTab({ role, userId, showToast }: {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const from = `${filterYearMonth}-01`;
-    const toDate = new Date(filterYearMonth + "-01T00:00:00+09:00");
-    toDate.setMonth(toDate.getMonth() + 1);
-    toDate.setDate(toDate.getDate() - 1);
-    const to = toDate.toISOString().slice(0, 10);
+    const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+    const to = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+    const fromDate = new Date(today);
+    fromDate.setMonth(fromDate.getMonth() - 2);
+    const from = `${fromDate.getFullYear()}-${String(fromDate.getMonth()+1).padStart(2,"0")}-${String(fromDate.getDate()).padStart(2,"0")}`;
     const [logRes, stockRes] = await Promise.all([
       supabase.from("pet_stock_logs").select("*").lte("log_date", to).order("log_date", { ascending: true }),
       supabase.from("v_pet_stock").select("*").single(),
     ]);
+    setDateRange({ from, to });
     setAllLogs((logRes.data ?? []) as PetStockLog[]);
     setLogs((logRes.data ?? []) as PetStockLog[]);
     setStock(stockRes.data as PetStock ?? null);
     setLoading(false);
-  }, [filterYearMonth]);
+  }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -2922,7 +2924,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
   // 날짜별 누적 재고 계산
   const logRows = (() => {
     // 해당 월 이전 누적값 먼저 계산
-    const monthFrom = `${filterYearMonth}-01`;
+    const monthFrom = dateRange?.from ?? `${filterYearMonth}-01`;
     let cumRaw = 0, cumCoating = 0, cumSprayProd = 0, cumSpraySale = 0;
     for (const log of allLogs.filter(l => l.log_date < monthFrom)) {
       if (log.log_type === "incoming") cumRaw += log.quantity;
@@ -2935,7 +2937,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       else if (log.log_type === "transfer_used") cumRaw -= log.quantity;
     }
     // 해당 월 로그 각 건별로 누적 계산
-    const monthLogs = allLogs.filter(l => l.log_date >= monthFrom);
+    const monthLogs = allLogs.filter(l => l.log_date >= monthFrom && l.log_date <= (dateRange?.to ?? "9999-99-99"));
     return monthLogs.map(log => {
       if (log.log_type === "incoming") cumRaw += log.quantity;
       else if (log.log_type === "coating_done") { cumRaw -= log.quantity; cumCoating += log.quantity; }
@@ -2956,11 +2958,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
     <div className="space-y-4">
       <div className={`${card} p-4`}>
         <div className="flex flex-wrap gap-3 items-end">
-          <div>
-            <div className="mb-1 text-xs text-slate-500">조회 월</div>
-            <input type="month" className={inp} style={{ width: 160 }} value={filterYearMonth} onChange={(e) => setFilterYearMonth(e.target.value)} />
-          </div>
-          <button className={btn} onClick={loadData}>🔄 조회</button>
+        <button className={btn} onClick={loadData}>🔄 조회</button>
          
           <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
         </div>
@@ -3007,7 +3005,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       </div>
 
       <div className={`${card} p-4`}>
-        <div className="mb-3 font-semibold text-sm">📋 PET 수불부 — {filterYearMonth}</div>
+      <div className="mb-3 font-semibold text-sm">📋 PET 수불부 — {dateRange ? `${dateRange.from} ~ ${dateRange.to}` : ""}</div>
         {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
          : logRows.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
           : (
@@ -3078,12 +3076,14 @@ export function PetLedgerTab({ role, userId, showToast }: {
                               <button className="text-[9px] text-slate-300 hover:text-blue-400" title="수정"
                                 onClick={() => setEditingSaleCut({ logId: log.id, qty: String(log.quantity) })}>✎</button>
                               <button className="text-[9px] text-slate-300 hover:text-red-500" title="삭제"
-                                onClick={async () => {
+                                onClick={() => {
                                   if (!confirm("이 재단 기록을 삭제하시겠습니까?")) return;
-                                  const { error } = await supabase.from("pet_stock_logs").delete().eq("id", log.id);
-                                  if (error) return showToast("삭제 실패: " + error.message, "error");
-                                  showToast("🗑️ 삭제 완료!");
-                                  loadData();
+                                  requirePin(async () => {
+                                    const { error } = await supabase.from("pet_stock_logs").delete().eq("id", log.id);
+                                    if (error) return showToast("삭제 실패: " + error.message, "error");
+                                    showToast("🗑️ 삭제 완료!");
+                                    loadData();
+                                  });
                                 }}>✕</button>
                             </div>
                           </td>
