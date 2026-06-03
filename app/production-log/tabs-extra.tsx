@@ -2815,6 +2815,10 @@ export function PetLedgerTab({ role, userId, showToast }: {
   const [allLogs, setAllLogs] = useState<PetStockLog[]>([]);
   const [loading, setLoading] = useState(false);
  
+  const [saleCutDate, setSaleCutDate] = useState(() => {
+    const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  });
   const [saleCutQty, setSaleCutQty] = useState("");
   const [saleCutSaving, setSaleCutSaving] = useState(false);
   const [editingSaleCut, setEditingSaleCut] = useState<{ logId: string; qty: string } | null>(null);
@@ -2859,11 +2863,10 @@ export function PetLedgerTab({ role, userId, showToast }: {
 
   async function doSaveSaleCut(actionBy: string) {
     if (!saleCutQty || Number(saleCutQty) <= 0) return showToast("재단 수량을 입력하세요.", "error");
-    const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+    if (!saleCutDate) return showToast("날짜를 선택하세요.", "error");
     setSaleCutSaving(true);
     const { error } = await supabase.from("pet_stock_logs").insert({
-      log_date: todayStr, log_type: "sale_cut", quantity: Number(saleCutQty),
+      log_date: saleCutDate, log_type: "sale_cut", quantity: Number(saleCutQty),
       defect_qty: 0, note: `재단판매 — ${actionBy}`, created_by: userId,
     });
     setSaleCutSaving(false);
@@ -2981,12 +2984,18 @@ export function PetLedgerTab({ role, userId, showToast }: {
         />
       )}
 
-      <div className={`${card} p-4`}>
+<div className={`${card} p-4`}>
         <div className="flex items-center justify-between mb-3">
           <div className="font-semibold text-sm">✂️ 재단 기록</div>
           <div className="text-xs text-slate-400">분사완료(판매)에서 차감</div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="date"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-purple-400 focus:outline-none"
+            value={saleCutDate}
+            onChange={(e) => setSaleCutDate(e.target.value)}
+          />
           <input
             className="w-32 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-right tabular-nums focus:border-purple-400 focus:outline-none"
             inputMode="numeric" placeholder="수량 (ea)"
@@ -3043,40 +3052,48 @@ export function PetLedgerTab({ role, userId, showToast }: {
                         {td(row.spray_prod || null, { red: true })}
                         {td(row.spray_sale || null, { red: true })}
                         {(() => {
-                          const saleCutLog = allLogs.find(l => l.log_date === row.date && l.log_type === "sale_cut");
-                          const isEditing = editingSaleCut?.logId === saleCutLog?.id;
-                          if (isEditing && editingSaleCut) {
-                            const editing = editingSaleCut;
-                            return (
-                              <td className="border border-slate-200 px-1 py-1">
-                                <div className="flex items-center gap-1">
-                                  <input
-                                    className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-xs text-right tabular-nums focus:border-purple-400 focus:outline-none"
-                                    inputMode="numeric"
-                                    value={editing.qty}
-                                    onChange={(e) => setEditingSaleCut({ ...editing, qty: e.target.value.replace(/[^\d]/g, "") })}
-                                  />
-                                  <button
-                                    className="rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
-                                    disabled={editSaleCutSaving}
-                                    onClick={() => editSaleCut(editing.logId, editing.qty)}
-                                  >{editSaleCutSaving ? "..." : "저장"}</button>
-                                  <button
-                                    className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-slate-50"
-                                    onClick={() => setEditingSaleCut(null)}
-                                  >취소</button>
-                                </div>
-                              </td>
-                            );
+                          const saleCutLogs = allLogs.filter(l => l.log_date === row.date && l.log_type === "sale_cut");
+                          if (saleCutLogs.length === 0) {
+                            return <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600"></td>;
                           }
                           return (
-                            <td
-                              className={`border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600 ${saleCutLog ? "cursor-pointer hover:bg-purple-50" : ""}`}
-                              onClick={() => saleCutLog && setEditingSaleCut({ logId: saleCutLog.id, qty: String(saleCutLog.quantity) })}
-                              title={saleCutLog ? "클릭하여 수정" : ""}
-                            >
-                              {row.sale_cut ? row.sale_cut.toLocaleString() : ""}
-                              {saleCutLog && <span className="ml-1 text-[9px] text-slate-300">✎</span>}
+                            <td className="border border-slate-200 px-1 py-1">
+                              <div className="space-y-1">
+                                {saleCutLogs.map((log) => {
+                                  const isEditing = editingSaleCut?.logId === log.id;
+                                  if (isEditing && editingSaleCut) {
+                                    const editing = editingSaleCut;
+                                    return (
+                                      <div key={log.id} className="flex items-center gap-1">
+                                        <input
+                                          className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-xs text-right tabular-nums focus:border-purple-400 focus:outline-none"
+                                          inputMode="numeric"
+                                          value={editing.qty}
+                                          onChange={(e) => setEditingSaleCut({ ...editing, qty: e.target.value.replace(/[^\d]/g, "") })}
+                                        />
+                                        <button
+                                          className="rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
+                                          disabled={editSaleCutSaving}
+                                          onClick={() => editSaleCut(editing.logId, editing.qty)}
+                                        >{editSaleCutSaving ? "..." : "저장"}</button>
+                                        <button
+                                          className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-slate-50"
+                                          onClick={() => setEditingSaleCut(null)}
+                                        >취소</button>
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <div key={log.id} className="flex items-center justify-end gap-1 cursor-pointer hover:bg-purple-50 rounded px-1"
+                                      onClick={() => setEditingSaleCut({ logId: log.id, qty: String(log.quantity) })}
+                                      title="클릭하여 수정"
+                                    >
+                                      <span className="text-xs text-red-600 tabular-nums">{log.quantity.toLocaleString()}</span>
+                                      <span className="text-[9px] text-slate-300">✎</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </td>
                           );
                         })()}
