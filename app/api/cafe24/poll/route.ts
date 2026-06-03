@@ -82,6 +82,7 @@ export async function GET() {
     );
 
     const ordersData = await ordersRes.json();
+    console.log("[cafe24/poll] ordersData:", JSON.stringify(ordersData));
 
     await supabase.from("cafe24_poll_state").update({ last_changed_at: new Date().toISOString() }).eq("id", 1);
 
