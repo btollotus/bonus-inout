@@ -910,7 +910,7 @@ function getMaterialOptions(purpose: string): string[] {
     const daysAgo = st?.daysAgo ?? 0;
     const dateStr = st?.date ? st.date.slice(5) : null;
     const materialType = st?.materialType ?? null;
-    const isOverdue = !isEmpty && daysAgo >= 15;
+    const isOverdue = !isEmpty && daysAgo >= 15 && s.purpose !== "전사용도";
     const isActive = activeSlotId === s.id;
     const isMoveTarget = slotMoveTargetId === s.id;
 
@@ -953,7 +953,7 @@ function getMaterialOptions(purpose: string): string[] {
       >
         <div className={isOverdue ? "text-red-600 font-bold" : ""}>{s.slot_name}</div>
         <div className={`mt-0.5 text-[10px] text-center ${isOverdue ? "text-red-600 font-bold" : "font-normal"}`}>
-        {isEmpty ? "비어있음" : s.purpose === "전사용도" ? null : dateStr}
+        {isEmpty ? "비어있음" : s.purpose === "전사용도" ? <span className="invisible">비어있음</span> : dateStr}
         </div>
       </button>
     );
