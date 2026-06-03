@@ -2931,7 +2931,28 @@ export function PetLedgerTab({ role, userId, showToast }: {
       </div>
      
       
-     <div className={`${card} p-4`}>
+      <div className={`${card} p-4`}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-semibold text-sm">✂️ 재단 기록</div>
+          <div className="text-xs text-slate-400">분사완료(판매)에서 차감</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            className="w-32 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-right tabular-nums focus:border-purple-400 focus:outline-none"
+            inputMode="numeric" placeholder="수량 (ea)"
+            value={saleCutQty}
+            onChange={(e) => setSaleCutQty(e.target.value.replace(/[^\d]/g, ""))}
+          />
+          <span className="text-xs text-slate-400">ea</span>
+          <button
+            className="rounded-xl border border-purple-300 bg-purple-50 px-4 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
+            disabled={saleCutSaving || !saleCutQty}
+            onClick={saveSaleCut}
+          >{saleCutSaving ? "저장 중..." : "기록"}</button>
+        </div>
+      </div>
+
+      <div className={`${card} p-4`}>
         <div className="mb-3 font-semibold text-sm">📋 PET 수불부 — {filterYearMonth}</div>
         {loading ? <div className="py-4 text-center text-sm text-slate-400">불러오는 중...</div>
           : dateRows.length === 0 ? <div className="py-4 text-center text-sm text-slate-400">기록이 없습니다.</div>
