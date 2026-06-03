@@ -66,7 +66,11 @@ export async function GET() {
         const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
         return kst.toISOString().replace("T", " ").substring(0, 19);
       };
-      const since = toKSTString(new Date(Date.now() - 7 * 24 * 60 * 60_000));
+      const since = toKSTString(
+        stateRow?.last_changed_at && new Date(stateRow.last_changed_at).getTime() > Date.now() - 60 * 60_000
+          ? new Date(stateRow.last_changed_at)
+          : new Date(Date.now() - 5 * 60_000)
+      );
 
       const now = toKSTString(new Date());
 
@@ -84,7 +88,6 @@ export async function GET() {
     );
 
     const ordersData = await ordersRes.json();
-    console.log("[cafe24/poll] ordersData:", JSON.stringify(ordersData));
 
     await supabase.from("cafe24_poll_state").update({ last_changed_at: new Date().toISOString() }).eq("id", 1);
 
@@ -93,15 +96,33 @@ export async function GET() {
     const orders = ordersData.orders ?? [];
     if (orders.length === 0) return NextResponse.json({ newCount: 0 });
 
-    const rows = orders.map((o: any) => ({
-      id: o.order_id,
-      order_id: o.order_id,
-      product_name: "",
-      quantity: 1,
-      price: parseInt(o.actual_order_amount?.payment_amount ?? o.payment_amount ?? "0"),
-      buyer_name: o.billing_name ?? "",
-      status: o.shipping_status ?? "unknown",
-      ordered_at: o.order_date,
+    const rows = await Promise.all(orders.map(async (o: any) => {
+      let product_name = "";
+      try {
+        const detailRes = await fetch(
+          `https://${mallId}.cafe24api.com/api/v2/admin/orders/${o.order_id}?fields=items`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+              "X-Cafe24-Api-Version": "2026-03-01",
+            },
+          }
+        );
+        const detailData = await detailRes.json();
+        const items = detailData.order?.items ?? [];
+        product_name = items.map((item: any) => item.product_name).filter(Boolean).join(", ");
+      } catch {}
+      return {
+        id: o.order_id,
+        order_id: o.order_id,
+        product_name,
+        quantity: 1,
+        price: parseInt(o.actual_order_amount?.payment_amount ?? o.payment_amount ?? "0"),
+        buyer_name: o.billing_name ?? "",
+        status: o.shipping_status ?? "unknown",
+        ordered_at: o.order_date,
+      };
     }));
 
     await supabase
