@@ -101,21 +101,31 @@ export async function GET() {
         quantity: item.quantity,
         price: parseInt(o.actual_price ?? "0"),
         buyer_name: o.billing_name ?? "",
-        status: o.order_status,
+        status: o.shipping_status ?? "unknown",
         ordered_at: o.order_date,
       }))
     );
 
-    await supabase
+    const existingIds = rows.map((r: any) => r.id);
+    const { data: existing } = await supabase
       .from("cafe24_orders")
-      .upsert(rows, { onConflict: "id", ignoreDuplicates: true });
+      .select("id")
+      .in("id", existingIds);
+
+    const existingSet = new Set((existing ?? []).map((r: any) => r.id));
+    const newRows = rows.filter((r: any) => !existingSet.has(r.id));
+
+    if (newRows.length > 0) {
+      await supabase
+        .from("cafe24_orders")
+        .upsert(rows, { onConflict: "id", ignoreDuplicates: true });
+    }
 
     const { count } = await supabase
       .from("cafe24_orders")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "N40");
+      .select("*", { count: "exact", head: true });
 
-    return NextResponse.json({ newCount: count ?? rows.length, orders: rows });
+    return NextResponse.json({ newCount: newRows.length, orders: newRows.length > 0 ? rows : [] });
   } catch (e: any) {
     console.error("[cafe24/poll] 예외:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
