@@ -3052,8 +3052,8 @@ export function PetLedgerTab({ role, userId, showToast }: {
                                   <input
                                     className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-xs text-right tabular-nums focus:border-purple-400 focus:outline-none"
                                     inputMode="numeric"
-                                    value={editingSaleCut.qty}
-                                    onChange={(e) => setEditingSaleCut({ ...editingSaleCut, qty: e.target.value.replace(/[^\d]/g, "") })}
+                                    value={editingSaleCut!.qty}
+                                    onChange={(e) => setEditingSaleCut({ ...editingSaleCut!, qty: e.target.value.replace(/[^\d]/g, "") })}
                                   />
                                   <button
                                     className="rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
