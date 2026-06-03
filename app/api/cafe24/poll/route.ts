@@ -68,7 +68,7 @@ export async function GET() {
 
     const now = new Date().toISOString().replace("T", " ").substring(0, 19);
 
-    const url = `https://${mallId}.cafe24api.com/api/v2/admin/orders?start_date=${encodeURIComponent(since)}&end_date=${encodeURIComponent(now)}&order_status=N20&limit=50`;
+    const url = `https://${mallId}.cafe24api.com/api/v2/admin/orders?start_date=${encodeURIComponent(since)}&end_date=${encodeURIComponent(now)}&order_status=N40&limit=50`;
     console.log("[cafe24/poll] request url:", url);
     const ordersRes = await fetch(
       url,
@@ -110,7 +110,7 @@ export async function GET() {
     const { count } = await supabase
       .from("cafe24_orders")
       .select("*", { count: "exact", head: true })
-      .eq("status", "N20");
+      .eq("status", "N40");
 
     return NextResponse.json({ newCount: count ?? rows.length, orders: rows });
   } catch (e: any) {
