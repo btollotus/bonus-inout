@@ -2927,12 +2927,12 @@ export function PetLedgerTab({ role, userId, showToast }: {
         <tr>
           <td style="${tdC}">${rowNo++}</td>
           <td style="${tdC}">${dateLabel}</td>
-          <td style="${tdR}">${log.log_type === "incoming"        ? fmt(log.quantity) : "—"}</td>
-          <td style="${tdR}">${log.log_type === "transfer_used"   ? fmt(log.quantity) : "—"}</td>
-          <td style="${tdR}">${log.log_type === "coating_done"    ? fmt(log.quantity) : "—"}</td>
-          <td style="${tdR}">${log.log_type === "spray_done_prod" ? fmt(log.quantity) : "—"}</td>
-          <td style="${tdR}">${log.log_type === "spray_done_sale" ? fmt(log.quantity) : "—"}</td>
-          <td style="${tdR}">${log.log_type === "sale_cut"        ? fmt(log.quantity) : "—"}</td>
+          <td style="${tdR}">${log.log_type === "incoming"        ? fmt(log.quantity) : ""}</td>
+          <td style="${tdR}">${log.log_type === "transfer_used"   ? fmt(log.quantity) : ""}</td>
+          <td style="${tdR}">${log.log_type === "coating_done"    ? fmt(log.quantity) : ""}</td>
+          <td style="${tdR}">${log.log_type === "spray_done_prod" ? fmt(log.quantity) : ""}</td>
+          <td style="${tdR}">${log.log_type === "spray_done_sale" ? fmt(log.quantity) : ""}</td>
+          <td style="${tdR}">${log.log_type === "sale_cut"        ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${cumRaw.toLocaleString()}</td>
           <td style="${tdR}">${cumCoating.toLocaleString()}</td>
           <td style="${tdR}">${cumSprayProd.toLocaleString()}</td>
