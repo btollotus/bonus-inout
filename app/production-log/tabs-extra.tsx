@@ -2899,13 +2899,13 @@ export function PetLedgerTab({ role, userId, showToast }: {
     <tr style="background:#f5f5f5;font-weight:bold;">
       <td style="${tdC}">—</td>
       <td style="${tdC}">전기이월</td>
-      <td style="${tdR}"></td><td style="${tdR}"></td><td style="${tdR}"></td>
-      <td style="${tdR}"></td><td style="${tdR}"></td>
-      <td style="${tdR}">${cumRaw.toLocaleString()}</td>
-      <td style="${tdR}">${cumCoating.toLocaleString()}</td>
-      <td style="${tdR}">${(cumSprayProd + cumSpraySale).toLocaleString()}</td>
-      <td style="${tdS}"></td>
-    </tr>`;
+       <td style="${tdR}"></td><td style="${tdR}"></td><td style="${tdR}"></td>
+        <td style="${tdR}"></td><td style="${tdR}"></td><td style="${tdR}"></td>
+        <td style="${tdR}">${cumRaw.toLocaleString()}</td>
+        <td style="${tdR}">${cumCoating.toLocaleString()}</td>
+        <td style="${tdR}">${(cumSprayProd + cumSpraySale).toLocaleString()}</td>
+        <td style="${tdS}"></td>
+      </tr>`;
 
     let rowNo = 1;
     for (const log of rangeRes.data as PetStockLog[]) {
@@ -2929,8 +2929,9 @@ export function PetLedgerTab({ role, userId, showToast }: {
           <td style="${tdR}">${log.log_type === "incoming"        ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${log.log_type === "transfer_used"   ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${log.log_type === "coating_done"    ? fmt(log.quantity) : ""}</td>
-         <td style="${tdR}">${(log.log_type === "spray_done_prod" || log.log_type === "spray_done_sale") ? fmt(log.quantity) : ""}</td>
+        <td style="${tdR}">${(log.log_type === "spray_done_prod" || log.log_type === "spray_done_sale") ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${log.log_type === "sale_cut"        ? fmt(log.quantity) : ""}</td>
+          <td style="${tdR}">${(log.log_type === "print_used_prod" || log.log_type === "print_used_sale") ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${cumRaw.toLocaleString()}</td>
           <td style="${tdR}">${cumCoating.toLocaleString()}</td>
           <td style="${tdR}">${(cumSprayProd + cumSpraySale).toLocaleString()}</td>
@@ -2978,16 +2979,16 @@ export function PetLedgerTab({ role, userId, showToast }: {
           <tr>
             <th style="${thS}" rowspan="2">No</th>
             <th style="${thS}" rowspan="2">일자</th>
-              <th style="${thS}" colspan="5">사용량</th>
+          <th style="${thS}" colspan="6">사용량</th>
             <th style="${thS}" colspan="3">당일재고량</th>
-            <th style="${thS}" rowspan="2">비고</th>
           </tr>
           <tr>
             <th style="${thS}">입고</th>
             <th style="${thS}">전사</th>
             <th style="${thS}">코팅</th>
-             <th style="${thS}">분사</th>
+            <th style="${thS}">분사</th>
             <th style="${thS}">재단</th>
+            <th style="${thS}">인쇄</th>
             <th style="${thS}">PET</th>
             <th style="${thS}">코팅완료</th>
             <th style="${thS}">분사완료</th>
@@ -3193,11 +3194,11 @@ export function PetLedgerTab({ role, userId, showToast }: {
                 <thead>
                   <tr className="bg-slate-50">
                     <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-center text-[11px] font-semibold text-slate-500 align-middle whitespace-nowrap">일자</th>
-                    <th colSpan={5} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500">사용량</th>
+                    <th colSpan={6} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500">사용량</th>
                     <th colSpan={3} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500">당일재고량</th>
                   </tr>
                   <tr className="bg-slate-50">
-                  {["입고","전사","코팅","분사","재단"].map(h => (
+                  {["입고","전사","코팅","분사","재단","인쇄"].map(h => (
                       <th key={h} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500 whitespace-nowrap">{h}</th>
                     ))}
                     {["PET","코팅완료","분사완료"].map(h => (
@@ -3226,6 +3227,10 @@ export function PetLedgerTab({ role, userId, showToast }: {
                         </td>
                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600">
                           {(log.log_type === "spray_done_prod" || log.log_type === "spray_done_sale") ? log.quantity.toLocaleString() : ""}
+                        </td>
+                         {/* 인쇄 셀 */}
+                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600">
+                          {(log.log_type === "print_used_prod" || log.log_type === "print_used_sale") ? log.quantity.toLocaleString() : ""}
                         </td>
                         {/* 재단 셀 */}
                         {isSaleCut && isEditing && editingSaleCut ? (
