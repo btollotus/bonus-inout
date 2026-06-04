@@ -285,7 +285,6 @@ export default function ProductionClient() {
  const [titaniumDioxideG, setTitaniumDioxideG] = useState<string>("");
  // 분사 생산용/판매용 수량
  const [sprayProdQty, setSprayProdQty] = useState<string>("");
- const [spraySaleQty, setSpraySaleQty] = useState<string>("");
  // 네오컬러 분사-레이즈 사용 lot (생산용/판매용 구분)
  const [neoColorSprayLots, setNeoColorSprayLots] = useState<{ lot_id: string; qty: string; use_type: "prod" | "sale" }[]>([]);
  const [neoColorSprayLotOptions, setNeoColorSprayLotOptions] = useState<{ lot_id: string; expiry_date: string; remaining_qty: number; variant_name: string }[]>([]);
@@ -681,8 +680,7 @@ export default function ProductionClient() {
     setIsKiseongForm(false); setIsEditMode(false);
     setBlendCount(1); // 배합 횟수 초기화
     setTitaniumDioxideG(""); // 이산화티타늄 사용량 초기화
-    setSprayProdQty(""); // 분사 생산용 수량 초기화
-    setSpraySaleQty(""); // 분사 판매용 수량 초기화
+    setSprayProdQty(""); // 분사 수량 초기화
     setNeoColorSprayLots([]); // 네오컬러 분사-레이즈 lot 초기화
     setNeoColorSprayLotOptions([]); // 네오컬러 분사-레이즈 lot 옵션 초기화
     // 네오컬러화이트/리얼화이트: 분사-레이즈 lot 자동 검색
@@ -1033,9 +1031,8 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
             }
           }
         }
-        // 분사: pet_stock_logs — 생산용/판매용 각각 insert
+        // 분사: pet_stock_logs — 단일 insert
         const sprayProdQtyNum = toInt(sprayProdQty);
-        const spraySaleQtyNum = toInt(spraySaleQty);
         if (sprayProdQtyNum > 0) {
           const { error: petProdErr } = await supabase.from("pet_stock_logs").insert({
             log_date: today, log_type: "spray_done_prod",
@@ -1043,16 +1040,7 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
             note: `분사-레이즈 생산완료 - ${selectedWo.work_order_no}`,
             created_by: userId,
           });
-          if (petProdErr) { setMsg("PET 수불 기록 실패(생산용): " + petProdErr.message); setIsCompleting(false); return; }
-        }
-        if (spraySaleQtyNum > 0) {
-          const { error: petSaleErr } = await supabase.from("pet_stock_logs").insert({
-            log_date: today, log_type: "spray_done_sale",
-            quantity: spraySaleQtyNum, defect_qty: 0,
-            note: `분사-레이즈 생산완료 - ${selectedWo.work_order_no}`,
-            created_by: userId,
-          });
-          if (petSaleErr) { setMsg("PET 수불 기록 실패(판매용): " + petSaleErr.message); setIsCompleting(false); return; }
+          if (petProdErr) { setMsg("PET 수불 기록 실패: " + petProdErr.message); setIsCompleting(false); return; }
         }
       } else {
         // 코팅: pet_stock_logs — coating_done insert
@@ -2137,23 +2125,13 @@ const totalOrder = items
      {/* 생산용/판매용 수량 입력 */}
      <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-2.5">
        <div className="mb-1.5 text-xs font-semibold text-emerald-700">분사완료 수량 입력</div>
-       <div className="grid grid-cols-2 gap-2">
-         <div>
-           <div className="mb-1 text-xs text-slate-500">생산용 (ea)</div>
-           <input className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-right tabular-nums focus:border-emerald-400 focus:outline-none"
-             inputMode="numeric" placeholder="0"
-             value={sprayProdQty}
-             disabled={selectedWo?.status === "완료" && !isEditMode}
-             onChange={(e) => setSprayProdQty(e.target.value.replace(/[^\d]/g, ""))} />
-         </div>
-         <div>
-           <div className="mb-1 text-xs text-slate-500">판매용 (ea)</div>
-           <input className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-right tabular-nums focus:border-emerald-400 focus:outline-none"
-             inputMode="numeric" placeholder="0"
-             value={spraySaleQty}
-             disabled={selectedWo?.status === "완료" && !isEditMode}
-             onChange={(e) => setSpraySaleQty(e.target.value.replace(/[^\d]/g, ""))} />
-         </div>
+       <div>
+         <div className="mb-1 text-xs text-slate-500">분사완료 (ea)</div>
+         <input className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-right tabular-nums focus:border-emerald-400 focus:outline-none"
+           inputMode="numeric" placeholder="0"
+           value={sprayProdQty}
+           disabled={selectedWo?.status === "완료" && !isEditMode}
+           onChange={(e) => setSprayProdQty(e.target.value.replace(/[^\d]/g, ""))} />
        </div>
      </div>
      {/* 코팅-레이즈 lot 차감 */}
