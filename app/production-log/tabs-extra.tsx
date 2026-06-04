@@ -2896,17 +2896,16 @@ export function PetLedgerTab({ role, userId, showToast }: {
     const thS = `border:1px solid #999;padding:4px 5px;font-size:7.5pt;font-weight:bold;background:#f0f0f0;text-align:center;white-space:nowrap;`;
 
     let rows = `
-      <tr style="background:#f5f5f5;font-weight:bold;">
-        <td style="${tdC}">—</td>
-        <td style="${tdC}">전기이월</td>
-        <td style="${tdR}"></td><td style="${tdR}"></td><td style="${tdR}"></td>
-        <td style="${tdR}"></td><td style="${tdR}"></td><td style="${tdR}"></td>
-        <td style="${tdR}">${cumRaw.toLocaleString()}</td>
-        <td style="${tdR}">${cumCoating.toLocaleString()}</td>
-        <td style="${tdR}">${cumSprayProd.toLocaleString()}</td>
-        <td style="${tdR}">${cumSpraySale.toLocaleString()}</td>
-        <td style="${tdS}"></td>
-      </tr>`;
+    <tr style="background:#f5f5f5;font-weight:bold;">
+      <td style="${tdC}">—</td>
+      <td style="${tdC}">전기이월</td>
+      <td style="${tdR}"></td><td style="${tdR}"></td><td style="${tdR}"></td>
+      <td style="${tdR}"></td><td style="${tdR}"></td>
+      <td style="${tdR}">${cumRaw.toLocaleString()}</td>
+      <td style="${tdR}">${cumCoating.toLocaleString()}</td>
+      <td style="${tdR}">${(cumSprayProd + cumSpraySale).toLocaleString()}</td>
+      <td style="${tdS}"></td>
+    </tr>`;
 
     let rowNo = 1;
     for (const log of rangeRes.data as PetStockLog[]) {
@@ -2979,7 +2978,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
           <tr>
             <th style="${thS}" rowspan="2">No</th>
             <th style="${thS}" rowspan="2">일자</th>
-             <th style="${thS}" colspan="5">사용량</th>
+              <th style="${thS}" colspan="5">사용량</th>
             <th style="${thS}" colspan="3">당일재고량</th>
             <th style="${thS}" rowspan="2">비고</th>
           </tr>
@@ -3194,8 +3193,8 @@ export function PetLedgerTab({ role, userId, showToast }: {
                 <thead>
                   <tr className="bg-slate-50">
                     <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-center text-[11px] font-semibold text-slate-500 align-middle whitespace-nowrap">일자</th>
-                    <th colSpan={6} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500">사용량</th>
-                    <th colSpan={4} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500">당일재고량</th>
+                    <th colSpan={5} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500">사용량</th>
+                    <th colSpan={3} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500">당일재고량</th>
                   </tr>
                   <tr className="bg-slate-50">
                   {["입고","전사","코팅","분사","재단"].map(h => (
