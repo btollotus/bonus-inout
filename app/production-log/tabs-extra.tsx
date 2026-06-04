@@ -2929,9 +2929,9 @@ export function PetLedgerTab({ role, userId, showToast }: {
           <td style="${tdR}">${log.log_type === "incoming"        ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${log.log_type === "transfer_used"   ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${log.log_type === "coating_done"    ? fmt(log.quantity) : ""}</td>
-        <td style="${tdR}">${(log.log_type === "spray_done_prod" || log.log_type === "spray_done_sale") ? fmt(log.quantity) : ""}</td>
-          <td style="${tdR}">${log.log_type === "sale_cut"        ? fmt(log.quantity) : ""}</td>
+       <td style="${tdR}">${(log.log_type === "spray_done_prod" || log.log_type === "spray_done_sale") ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${(log.log_type === "print_used_prod" || log.log_type === "print_used_sale") ? fmt(log.quantity) : ""}</td>
+          <td style="${tdR}">${log.log_type === "sale_cut"        ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${cumRaw.toLocaleString()}</td>
           <td style="${tdR}">${cumCoating.toLocaleString()}</td>
           <td style="${tdR}">${(cumSprayProd + cumSpraySale).toLocaleString()}</td>
@@ -2986,9 +2986,9 @@ export function PetLedgerTab({ role, userId, showToast }: {
             <th style="${thS}">입고</th>
             <th style="${thS}">전사</th>
             <th style="${thS}">코팅</th>
-            <th style="${thS}">분사</th>
-            <th style="${thS}">재단</th>
+           <th style="${thS}">분사</th>
             <th style="${thS}">인쇄</th>
+            <th style="${thS}">재단</th>
             <th style="${thS}">PET</th>
             <th style="${thS}">코팅완료</th>
             <th style="${thS}">분사완료</th>
