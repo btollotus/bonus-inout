@@ -1227,7 +1227,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
           mold_rows: toInt(orderWoMoldRows) > 0 ? toInt(orderWoMoldRows) : null,
           mold_count: toInt(orderWoMoldCount) > 0 ? toInt(orderWoMoldCount) : null,
           note: (() => {
-            const realMemo = "화이트초콜릿(이산화티타늄첨가)\n이산화티타늄 혼합. 흰색으로 만들것.\n배합비 2kg + 100g";
+            const realMemo = "화이트초콜릿(이산화티타늄첨가)\n이산화티타늄 혼합. 흰색으로 만들것.\n배합비 10kg + 1kg";
             const hasReal = (foodType ?? "").includes("리얼");
             const base = orderWoNote.trim();
             if (hasReal && base) return `${realMemo}\n\n${base}`;
