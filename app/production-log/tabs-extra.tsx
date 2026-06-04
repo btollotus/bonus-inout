@@ -2958,7 +2958,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       </div>
       <div style="font-size:15pt;font-weight:bold;text-align:center;letter-spacing:2px;margin-bottom:2px;">부 자 재 수 불 부</div>
       <div style="font-size:8.5pt;text-align:center;color:#333;margin-bottom:8px;">[ 원료명 : PET / 단위 EA ]</div>
-       <table style="border-collapse:collapse;margin-left:auto;margin-bottom:8px;">
+      <table style="border-collapse:collapse;width:auto;margin-left:auto;margin-bottom:8px;">
         <tbody>
           <tr>
             <td style="border:1px solid #999;padding:2px 6px;font-size:7.5pt;font-weight:bold;text-align:center;background:#f0f0f0;width:60px;">확인</td>
