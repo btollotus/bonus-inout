@@ -3014,9 +3014,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
     setLoading(true);
     const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
     const to = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
-    const fromDate = new Date(today);
-    fromDate.setMonth(fromDate.getMonth() - 2);
-    const from = `${fromDate.getFullYear()}-${String(fromDate.getMonth()+1).padStart(2,"0")}-${String(fromDate.getDate()).padStart(2,"0")}`;
+    const from = "2026-05-19";
     const [logRes, stockRes] = await Promise.all([
       supabase.from("pet_stock_logs").select("*").lte("log_date", to).order("log_date", { ascending: true }),
       supabase.from("v_pet_stock").select("*").single(),
