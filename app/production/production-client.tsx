@@ -280,26 +280,10 @@ export default function ProductionClient() {
   const [filterDateTo, setFilterDateTo] = useState("");
   const [selectedWo, setSelectedWo] = useState<WorkOrderRow | null>(null);
 
- // 분사/코팅 배합 횟수
- const [blendCount, setBlendCount] = useState(1);
- const titaniumDioxideG = useMemo(() => {
-  if (!selectedWo || !(selectedWo.food_type ?? "").includes("리얼")) return "";
-  const items = (selectedWo.work_order_items ?? []).filter((item) => {
-    const name = (item.sub_items ?? [])[0]?.name ?? "";
-    return !name.startsWith("성형틀") && !name.startsWith("인쇄제판")
-      && !name.startsWith("아이스박스") && !name.startsWith("택배비");
-  });
-  const totalWeight = items.reduce((sum, item) => {
-    const pi = prodInputs[item.id];
-    const aqty = toInt(pi?.actual_qty);
-    const uw = toNum(pi?.unit_weight);
-    return sum + (aqty > 0 && uw > 0 ? aqty * uw : 0);
-  }, 0);
-  if (totalWeight <= 0) return "";
-  return String(Math.round(totalWeight / 10));
-}, [selectedWo, prodInputs]);
- // 분사 생산용/판매용 수량
- const [sprayProdQty, setSprayProdQty] = useState<string>("");
+  // 분사/코팅 배합 횟수
+  const [blendCount, setBlendCount] = useState(1);
+  // 분사 수량
+  const [sprayProdQty, setSprayProdQty] = useState<string>("");
  // 네오컬러 분사-레이즈 사용 lot (생산용/판매용 구분)
  const [neoColorSprayLots, setNeoColorSprayLots] = useState<{ lot_id: string; qty: string; use_type: "prod" | "sale" }[]>([]);
  const [neoColorSprayLotOptions, setNeoColorSprayLotOptions] = useState<{ lot_id: string; expiry_date: string; remaining_qty: number; variant_name: string }[]>([]);
@@ -345,6 +329,22 @@ export default function ProductionClient() {
   const [woChecks, setWoChecks] = useState<WoChecks | null>(null);
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
   const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[] }>>({});
+  const titaniumDioxideG = useMemo(() => {
+    if (!selectedWo || !(selectedWo.food_type ?? "").includes("리얼")) return "";
+    const items = (selectedWo.work_order_items ?? []).filter((item) => {
+      const name = (item.sub_items ?? [])[0]?.name ?? "";
+      return !name.startsWith("성형틀") && !name.startsWith("인쇄제판")
+        && !name.startsWith("아이스박스") && !name.startsWith("택배비");
+    });
+    const totalWeight = items.reduce((sum, item) => {
+      const pi = prodInputs[item.id];
+      const aqty = toInt(pi?.actual_qty);
+      const uw = toNum(pi?.unit_weight);
+      return sum + (aqty > 0 && uw > 0 ? aqty * uw : 0);
+    }, 0);
+    if (totalWeight <= 0) return "";
+    return String(Math.round(totalWeight / 10));
+  }, [selectedWo, prodInputs]);
   const [printOpen, setPrintOpen] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null; pin: string | null }[]>([]);
 
