@@ -2876,7 +2876,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       return alert("해당 기간에 PET 수불 내역이 없습니다.");
     }
 
-    let cumRaw = 0, cumCoating = 0, cumSprayProd = 0, cumSpraySale = 0;
+    let cumRaw = 10724, cumCoating = 519, cumSprayProd = 3343, cumSpraySale = 0;
     for (const log of prevRes.data ?? []) {
       if      (log.log_type === "incoming")        cumRaw       += log.quantity;
       else if (log.log_type === "coating_done")    { cumRaw -= log.quantity; cumCoating   += log.quantity; }
@@ -2979,7 +2979,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
           <tr>
             <th style="${thS}" rowspan="2">No</th>
             <th style="${thS}" rowspan="2">일자</th>
-          <th style="${thS}" colspan="6">사용량</th>
+          <th style="${thS}" colspan="7">사용량</th>
             <th style="${thS}" colspan="3">당일재고량</th>
           </tr>
           <tr>
