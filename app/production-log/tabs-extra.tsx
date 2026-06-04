@@ -3090,7 +3090,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
   const logRows = (() => {
     // 해당 월 이전 누적값 먼저 계산
     const monthFrom = dateRange?.from ?? `${filterYearMonth}-01`;
-    let cumRaw = 18274, cumCoating = 519, cumSprayProd = 3343, cumSpraySale = 0;
+    let cumRaw = 10724, cumCoating = 519, cumSprayProd = 3343, cumSpraySale = 0;
     for (const log of allLogs.filter(l => l.log_date < monthFrom)) {
       if (log.log_type === "incoming") cumRaw += log.quantity;
       else if (log.log_type === "coating_done") { cumRaw -= log.quantity; cumCoating += log.quantity; }
