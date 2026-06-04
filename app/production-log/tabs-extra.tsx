@@ -2958,25 +2958,22 @@ export function PetLedgerTab({ role, userId, showToast }: {
       </div>
       <div style="font-size:15pt;font-weight:bold;text-align:center;letter-spacing:2px;margin-bottom:2px;">부 자 재 수 불 부</div>
       <div style="font-size:8.5pt;text-align:center;color:#333;margin-bottom:8px;">[ 원료명 : PET / 단위 EA ]</div>
-     <table style="border-collapse:collapse;width:auto;float:right;margin-bottom:8px;">
-        <tbody>
-          <tr>
-            <td style="border:1px solid #999;padding:2px 6px;font-size:7.5pt;font-weight:bold;text-align:center;background:#f0f0f0;width:60px;">확인</td>
-            <td style="border:1px solid #999;border-left:none;padding:2px 6px;font-size:7.5pt;font-weight:bold;text-align:center;background:#f0f0f0;width:60px;">승인</td>
-          </tr>
-          <tr>
-            <td style="border:1px solid #999;border-top:none;padding:3px;text-align:center;height:36px;">
-              <img src="/sign-kimyg.png" style="height:22px;object-fit:contain;display:block;margin:0 auto;" alt="김영각"/>
-              <div style="font-size:7pt;margin-top:1px;">김영각</div>
-            </td>
-            <td style="border:1px solid #999;border-left:none;border-top:none;padding:3px;text-align:center;height:36px;">
-              <img src="/sign-chods.png" style="height:22px;object-fit:contain;display:block;margin:0 auto;" alt="조대성"/>
-              <div style="font-size:7pt;margin-top:1px;">조대성</div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-     <div style="clear:both;"></div>
+     <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <div style="border:1px solid #999;width:60px;text-align:center;">
+          <div style="background:#f0f0f0;border-bottom:1px solid #bbb;padding:3px 0;font-size:7.5pt;font-weight:bold;">확인</div>
+          <div style="height:36px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <img src="/sign-kimyg.png" style="height:22px;object-fit:contain;" alt="김영각"/>
+            <div style="font-size:7pt;margin-top:1px;">김영각</div>
+          </div>
+        </div>
+        <div style="border:1px solid #999;border-left:none;width:60px;text-align:center;">
+          <div style="background:#f0f0f0;border-bottom:1px solid #bbb;padding:3px 0;font-size:7.5pt;font-weight:bold;">승인</div>
+          <div style="height:36px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <img src="/sign-chods.png" style="height:22px;object-fit:contain;" alt="조대성"/>
+            <div style="font-size:7pt;margin-top:1px;">조대성</div>
+          </div>
+        </div>
+      </div>
       <table>
         <thead>
           <tr>
