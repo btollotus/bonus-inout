@@ -2895,17 +2895,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
     const tdC = `${tdS}text-align:center;`;
     const thS = `border:1px solid #999;padding:4px 5px;font-size:7.5pt;font-weight:bold;background:#f0f0f0;text-align:center;white-space:nowrap;`;
 
-    let rows = `
-    <tr style="background:#f5f5f5;font-weight:bold;">
-      <td style="${tdC}">—</td>
-      <td style="${tdC}">전기이월</td>
-       <td style="${tdR}"></td><td style="${tdR}"></td><td style="${tdR}"></td>
-        <td style="${tdR}"></td><td style="${tdR}"></td><td style="${tdR}"></td>
-        <td style="${tdR}">${cumRaw.toLocaleString()}</td>
-        <td style="${tdR}">${cumCoating.toLocaleString()}</td>
-        <td style="${tdR}">${(cumSprayProd + cumSpraySale).toLocaleString()}</td>
-        <td style="${tdS}"></td>
-      </tr>`;
+    let rows = ``;
 
     let rowNo = 1;
     for (const log of rangeRes.data as PetStockLog[]) {
@@ -2935,7 +2925,6 @@ export function PetLedgerTab({ role, userId, showToast }: {
           <td style="${tdR}">${cumRaw.toLocaleString()}</td>
           <td style="${tdR}">${cumCoating.toLocaleString()}</td>
           <td style="${tdR}">${(cumSprayProd + cumSpraySale).toLocaleString()}</td>
-          <td style="${tdS}">${(log.note && !log.note.startsWith("작업지시서")) ? log.note : ""}</td>
         </tr>`;
     }
 
@@ -2979,7 +2968,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
           <tr>
             <th style="${thS}" rowspan="2">No</th>
             <th style="${thS}" rowspan="2">일자</th>
-          <th style="${thS}" colspan="7">사용량</th>
+         <th style="${thS}" colspan="6">사용량</th>
             <th style="${thS}" colspan="3">당일재고량</th>
           </tr>
           <tr>
@@ -2989,7 +2978,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
           <th style="${thS}">분사</th>
             <th style="${thS}">재단</th>
             <th style="${thS}">인쇄</th>
-            <th style="${thS}">PET</th>
+           <th style="${thS}">PET</th>
             <th style="${thS}">코팅완료</th>
             <th style="${thS}">분사완료</th>
           </tr>
