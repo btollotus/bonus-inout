@@ -3226,10 +3226,6 @@ export function PetLedgerTab({ role, userId, showToast }: {
                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600">
                           {(log.log_type === "spray_done_prod" || log.log_type === "spray_done_sale") ? log.quantity.toLocaleString() : ""}
                         </td>
-                         {/* 인쇄 셀 */}
-                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600">
-                          {(log.log_type === "print_used_prod" || log.log_type === "print_used_sale") ? log.quantity.toLocaleString() : ""}
-                        </td>
                         {/* 재단 셀 */}
                         {isSaleCut && isEditing && editingSaleCut ? (
                           <td className="border border-slate-200 px-1 py-1">
@@ -3266,10 +3262,14 @@ export function PetLedgerTab({ role, userId, showToast }: {
                                 }}>✕</button>
                             </div>
                           </td>
-                        ) : (
-                          <td className="border border-slate-200 px-2 py-1.5"></td>
-                        )}
-                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{cumRaw.toLocaleString()}</td>
+                       ) : (
+                        <td className="border border-slate-200 px-2 py-1.5"></td>
+                      )}
+                      {/* 인쇄 셀 */}
+                      <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600">
+                        {(log.log_type === "print_used_prod" || log.log_type === "print_used_sale") ? log.quantity.toLocaleString() : ""}
+                      </td>
+                       <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{cumRaw.toLocaleString()}</td>
                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{cumCoating.toLocaleString()}</td>
                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{(cumSprayProd + cumSpraySale).toLocaleString()}</td>
                       </tr>
