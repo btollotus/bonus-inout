@@ -1131,6 +1131,13 @@ function MaterialLedgerTab({ role, userId, showToast }: {
 }) {
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
 
+  // ── PIN 인증 ──
+  const [employees, setEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
+  const [pinTarget, setPinTarget] = useState<"receipt" | "adjust" | "disposal" | null>(null);
+  const [pinEmp, setPinEmp] = useState<{ id: string; name: string; pin: string | null } | null>(null);
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState("");
+
   const [stocks, setStocks] = useState<MaterialStock[]>([]);
   const [receipts, setReceipts] = useState<MaterialReceipt[]>([]);
   const [filterDate, setFilterDate] = useState(todayKST());
@@ -1323,6 +1330,8 @@ function MaterialLedgerTab({ role, userId, showToast }: {
   useEffect(() => {
     supabase.from("materials").select("id,name,category").eq("is_active", true).order("order_no", { nullsFirst: false })
       .then(({ data }) => setMaterials(data ?? []));
+    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+      .then(({ data }) => setEmployees((data ?? []) as any));
   }, []);
 
   // ── 월별 수불부 인쇄 ──
@@ -1598,7 +1607,11 @@ function MaterialLedgerTab({ role, userId, showToast }: {
             <>
               <button
                 className={showReceiptForm ? btnOn : "rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"}
-                onClick={() => { setShowReceiptForm((v) => !v); setShowAdjustForm(false); setShowDisposalForm(false); }}
+                onClick={() => {
+                  if (showReceiptForm) { setShowReceiptForm(false); return; }
+                  setShowAdjustForm(false); setShowDisposalForm(false);
+                  setPinTarget("receipt"); setPinEmp(null); setPinInput(""); setPinError("");
+                }}
               >
                 {showReceiptForm ? "✕ 닫기" : "✚ 입고 등록"}
               </button>
@@ -1606,7 +1619,11 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                 className={showAdjustForm
                   ? "rounded-xl border border-amber-500 bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700"
                   : "rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"}
-                  onClick={() => { setShowAdjustForm((v) => { if (!v) setAdjDate(filterDate); return !v; }); setShowReceiptForm(false); setShowDisposalForm(false); }}
+                onClick={() => {
+                  if (showAdjustForm) { setShowAdjustForm(false); return; }
+                  setShowReceiptForm(false); setShowDisposalForm(false);
+                  setPinTarget("adjust"); setPinEmp(null); setPinInput(""); setPinError("");
+                }}
               >
                 {showAdjustForm ? "✕ 닫기" : "⚖️ 재고 조정"}
               </button>
@@ -1614,7 +1631,11 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                 className={showDisposalForm
                   ? "rounded-xl border border-red-500 bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700"
                   : "rounded-xl border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-100"}
-                onClick={() => { setShowDisposalForm((v) => { if (!v) setDispDate(filterDate); return !v; }); setShowReceiptForm(false); setShowAdjustForm(false); }}
+                onClick={() => {
+                  if (showDisposalForm) { setShowDisposalForm(false); return; }
+                  setShowReceiptForm(false); setShowAdjustForm(false);
+                  setPinTarget("disposal"); setPinEmp(null); setPinInput(""); setPinError("");
+                }}
               >
                 {showDisposalForm ? "✕ 닫기" : "🗑️ 폐기 등록"}
               </button>
@@ -1629,6 +1650,88 @@ function MaterialLedgerTab({ role, userId, showToast }: {
           </button>
         </div>
       </div>
+
+      {/* ── PIN 인증 모달 ── */}
+      {pinTarget && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-sm mx-4 rounded-2xl bg-white shadow-2xl p-6">
+            {!pinEmp ? (
+              <>
+                <div className="mb-4 font-bold text-base text-slate-700 text-center">
+                  {pinTarget === "receipt" ? "✚ 입고 등록" : pinTarget === "adjust" ? "⚖️ 재고 조정" : "🗑️ 폐기 등록"} — 작업자 선택
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {employees.map((emp) => (
+                    <button key={emp.id}
+                      className="rounded-xl border-2 border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 active:scale-95 transition-all text-center"
+                      onClick={() => { setPinEmp(emp); setPinInput(""); setPinError(""); }}>
+                      {emp.name}
+                      <div className="text-[10px] font-normal text-slate-400 mt-0.5">{emp.pin ? "PIN 설정됨" : "PIN 미설정"}</div>
+                    </button>
+                  ))}
+                </div>
+                <button className="mt-4 w-full text-xs text-slate-400 hover:text-slate-600"
+                  onClick={() => { setPinTarget(null); setPinEmp(null); }}>취소</button>
+              </>
+            ) : (
+              <>
+                <button className="mb-4 text-xs text-slate-400 hover:text-slate-600"
+                  onClick={() => { setPinEmp(null); setPinInput(""); setPinError(""); }}>
+                  ← 작업자 선택으로
+                </button>
+                <div className="mb-1 font-semibold text-base text-slate-700 text-center">{pinEmp.name}</div>
+                <div className="mb-4 text-sm text-slate-500 text-center">PIN 4자리를 입력하세요</div>
+                <div className="flex justify-center gap-3 mb-4">
+                  {[0,1,2,3].map((i) => (
+                    <div key={i} className={`w-10 h-10 rounded-xl border-2 flex items-center justify-center text-lg font-bold transition-all
+                      ${pinInput.length > i ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-300"}`}>
+                      {pinInput.length > i ? "●" : "○"}
+                    </div>
+                  ))}
+                </div>
+                {pinError && <div className="mb-3 text-center text-xs text-red-500">{pinError}</div>}
+                <div className="grid grid-cols-3 gap-2">
+                  {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
+                    <button key={i}
+                      className={`rounded-xl border py-3 text-lg font-semibold transition-all
+                        ${d === "" ? "invisible" : "border-slate-200 bg-white hover:bg-slate-50 active:bg-slate-100 active:scale-95"}`}
+                      onClick={() => {
+                        if (d === "⌫") { setPinInput((p) => p.slice(0, -1)); setPinError(""); return; }
+                        if (d === "") return;
+                        if (pinInput.length >= 4) return;
+                        const next = pinInput + d;
+                        setPinInput(next);
+                        if (next.length === 4) {
+                          setTimeout(() => {
+                            if (!pinEmp.pin) {
+                              setPinError("PIN이 설정되지 않았습니다.");
+                              setPinInput(""); return;
+                            }
+                            if (pinEmp.pin !== next) {
+                              setPinError("PIN이 올바르지 않습니다.");
+                              setPinInput(""); return;
+                            }
+                            // 인증 성공 — target을 로컬 변수에 먼저 저장 후 상태 초기화
+                            const target = pinTarget;
+                            setPinTarget(null);
+                            setPinEmp(null);
+                            setPinInput("");
+                            setPinError("");
+                            if (target === "receipt")  { setShowReceiptForm(true);  setRDate(filterDate); }
+                            if (target === "adjust")   { setShowAdjustForm(true);   setAdjDate(filterDate); }
+                            if (target === "disposal") { setShowDisposalForm(true); setDispDate(filterDate); }
+                          }, 100);
+                        }
+                      }}>
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 월별 수불부 인쇄 폼 */}
       {showPrintForm && (
