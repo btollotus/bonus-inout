@@ -1273,6 +1273,47 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
           const { error: movErr } = await supabase.from("movements").insert({ lot_id: lotId, type: "IN", qty: actual_qty, happened_at: `${todayKSTDate}T00:00:00+09:00`, note: "작업지시서 생산완료 - " + selectedWo.work_order_no, created_by: userId });
           if (movErr) stockErrors.push("입고 기록 실패: " + movErr.message);
         }
+        // ── 전사지 자동 차감 (중간재, 네오컬러 제외) ──
+        {
+          const ft = selectedWo.food_type ?? "";
+          const isNeoColorWo = ft.startsWith("네오컬러");
+          if (!isNeoColorWo) {
+            const noteStr = selectedWo.note ?? "";
+            const match = noteStr.match(/전사지[：:]\s*(\d+)장(?:\s*(\d+)줄)?/);
+            if (match) {
+              const sheets = parseInt(match[1], 10);
+              const hasRows = !!match[2];
+              const totalSheets = hasRows ? sheets + 1 : sheets;
+              if (totalSheets > 0) {
+                const jeonsakNote = `전사지 차감 - ${selectedWo.work_order_no}`;
+                const { data: jsDupCheck } = await supabase.from("material_usage_logs")
+                  .select("id").eq("note", jeonsakNote).limit(1);
+                if (!jsDupCheck || jsDupCheck.length === 0) {
+                  const { data: jsMatData } = await supabase.from("materials")
+                    .select("id").eq("name", "전사지").maybeSingle();
+                  if (jsMatData?.id) {
+                    const todayKSTDate = new Date(
+                      new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
+                    ).toISOString().slice(0, 10);
+                    const { error: jsErr } = await supabase.from("material_usage_logs").insert({
+                      material_id: jsMatData.id,
+                      used_date: todayKSTDate,
+                      quantity: totalSheets,
+                      unit: "ea",
+                      work_type: "product",
+                      note: jeonsakNote,
+                      created_by: userId,
+                    });
+                    if (jsErr) stockErrors.push(`전사지 차감 실패: ${jsErr.message}`);
+                  } else {
+                    stockErrors.push("원료 '전사지'를 찾을 수 없습니다.");
+                  }
+                }
+              }
+            }
+          }
+        }
+
         const { error: statusErr } = await supabase.from("work_orders").update({ status: "완료", status_production: true, ccp_slot_id: null, production_done_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
         if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
         if (stockErrors.length > 0) showToast("저장됐으나 재고 연동 오류: " + stockErrors.join(" / "), "error");
@@ -1410,10 +1451,52 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
           }
         }
 
-        const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, ccp_slot_id: null, production_done_at: new Date().toISOString(), updated_at: ccpEndedAt ?? new Date().toISOString() }).eq("id", selectedWo.id);
-        if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
-        if (stockErrors.length > 0) showToast("저장됐으나 전사지 차감 오류: " + stockErrors.join(" / "), "error");
-        else showToast("생산완료 처리 완료!");
+               // ── 전사지 자동 차감 (네오컬러 제외) ──
+               {
+                const ft = selectedWo.food_type ?? "";
+                const isNeoColorWo = ft.startsWith("네오컬러");
+                if (!isNeoColorWo) {
+              const noteStr = selectedWo.note ?? "";
+              // "전사지: N장" 또는 "전사지: N장 M줄" 파싱
+              const match = noteStr.match(/전사지[：:]\s*(\d+)장(?:\s*(\d+)줄)?/);
+              if (match) {
+                const sheets = parseInt(match[1], 10);
+                const hasRows = !!match[2];
+                const totalSheets = hasRows ? sheets + 1 : sheets;
+                if (totalSheets > 0) {
+                  const jeonsakNote = `전사지 차감 - ${selectedWo.work_order_no}`;
+                  const { data: jsDupCheck } = await supabase.from("material_usage_logs")
+                    .select("id").eq("note", jeonsakNote).limit(1);
+                  if (!jsDupCheck || jsDupCheck.length === 0) {
+                    const { data: jsMatData } = await supabase.from("materials")
+                      .select("id").eq("name", "전사지").maybeSingle();
+                    if (jsMatData?.id) {
+                      const todayKSTDate = new Date(
+                        new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
+                      ).toISOString().slice(0, 10);
+                      const { error: jsErr } = await supabase.from("material_usage_logs").insert({
+                        material_id: jsMatData.id,
+                        used_date: todayKSTDate,
+                        quantity: totalSheets,
+                        unit: "ea",
+                        work_type: "product",
+                        note: jeonsakNote,
+                        created_by: userId,
+                      });
+                      if (jsErr) stockErrors.push(`전사지 차감 실패: ${jsErr.message}`);
+                    } else {
+                      stockErrors.push("원료 '전사지'를 찾을 수 없습니다.");
+                    }
+                  }
+                }
+              }
+            }
+          }
+  
+          const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, ccp_slot_id: null, production_done_at: new Date().toISOString(), updated_at: ccpEndedAt ?? new Date().toISOString() }).eq("id", selectedWo.id);
+          if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
+          if (stockErrors.length > 0) showToast("저장됐으나 전사지 차감 오류: " + stockErrors.join(" / "), "error");
+          else showToast("생산완료 처리 완료!");
       }
       setIsEditMode(false);
       await loadWoList();
