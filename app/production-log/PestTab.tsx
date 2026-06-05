@@ -449,8 +449,8 @@ export function PestTab({ role, userId, showToast }: {
        {/* ══ 비래해충 인쇄 전용 ══ */}
        <div id="pest-flying-print-inner" style={{ display: "none" }}>
         <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
-          {/* 제목 + 결재란 */}
-          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
+         {/* 제목 + 결재란 */}
+         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
             <tbody>
               <tr>
                 <td rowSpan={2} style={{ border: "1px solid #000", padding: "6px 10px", fontSize: "12pt", fontWeight: "bold", textAlign: "center" }}>
@@ -461,26 +461,51 @@ export function PestTab({ role, userId, showToast }: {
                 <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", width: 60 }}>승인</td>
               </tr>
               <tr>
-                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", height: 36 }}></td>
-                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", height: 36 }}></td>
+                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", height: 44 }}>
+                  <img src="/sign-kimyg.png" style={{ height: 26, objectFit: "contain", display: "block", margin: "0 auto" }} alt="김영각" />
+                  <div style={{ fontSize: "7pt", marginTop: 1 }}>김영각</div>
+                </td>
+                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", height: 44 }}>
+                  <img src="/sign-chods.png" style={{ height: 26, objectFit: "contain", display: "block", margin: "0 auto" }} alt="조대성" />
+                  <div style={{ fontSize: "7pt", marginTop: 1 }}>조대성</div>
+                </td>
               </tr>
             </tbody>
           </table>
 
-          {/* 비래해충 데이터 */}
-          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+         {/* 비래해충 데이터 */}
+         <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: "44px" }} />
+              <col style={{ width: "60px" }} />
+              <col style={{ width: "5.5%" }} />
+              <col style={{ width: "5.5%" }} />
+              <col style={{ width: "5.5%" }} />
+              <col style={{ width: "5.5%" }} />
+              <col style={{ width: "5.5%" }} />
+              <col style={{ width: "5.5%" }} />
+              <col style={{ width: "5.5%" }} />
+              <col style={{ width: "28px" }} />
+              <col style={{ width: "28px" }} />
+              <col style={{ width: "4%" }} />
+              <col style={{ width: "4%" }} />
+              <col style={{ width: "4%" }} />
+              <col style={{ width: "4%" }} />
+              <col style={{ width: "4%" }} />
+              <col style={{ width: "4%" }} />
+            </colgroup>
             <thead>
               <tr style={{ background: "#f0f0f0" }}>
-                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 44, fontSize: "8pt" }}>날짜</th>
-                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 60, fontSize: "8pt" }}>위치</th>
+                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>날짜</th>
+                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>위치</th>
                 <th colSpan={7} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>비래해충</th>
-                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 24, fontSize: "8pt" }}>계</th>
-                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 28, fontSize: "8pt" }}>누계</th>
+                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>계</th>
+                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>누계</th>
                 <th colSpan={3} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", background: "#fff8e1" }}>쥐먹이(좌)</th>
                 <th colSpan={3} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", background: "#fff3e0" }}>쥐먹이(우)</th>
               </tr>
               <tr style={{ background: "#f0f0f0" }}>
-                {["파리","모기","링다구","초파리","나방","날파리","기타"].map(h => (
+                {["파리","모기","깔다구","초파리","나방","날파리","기타"].map(h => (
                   <th key={h} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "7.5pt" }}>{h}</th>
                 ))}
                 {["이끼","훼손","쥐"].map(h => (
@@ -579,8 +604,8 @@ export function PestTab({ role, userId, showToast }: {
       {/* ══ 보행해충 인쇄 전용 ══ */}
       <div id="pest-walking-print-inner" style={{ display: "none" }}>
         <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
-          {/* 제목 + 결재란 */}
-          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
+         {/* 제목 + 결재란 */}
+         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
             <tbody>
               <tr>
                 <td rowSpan={2} style={{ border: "1px solid #000", padding: "6px 10px", fontSize: "12pt", fontWeight: "bold", textAlign: "center" }}>
@@ -590,8 +615,14 @@ export function PestTab({ role, userId, showToast }: {
                 <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", width: 60 }}>승인</td>
               </tr>
               <tr>
-                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", height: 36 }}></td>
-                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", height: 36 }}></td>
+                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", height: 44 }}>
+                  <img src="/sign-kimyg.png" style={{ height: 26, objectFit: "contain", display: "block", margin: "0 auto" }} alt="김영각" />
+                  <div style={{ fontSize: "7pt", marginTop: 1 }}>김영각</div>
+                </td>
+                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", height: 44 }}>
+                  <img src="/sign-chods.png" style={{ height: 26, objectFit: "contain", display: "block", margin: "0 auto" }} alt="조대성" />
+                  <div style={{ fontSize: "7pt", marginTop: 1 }}>조대성</div>
+                </td>
               </tr>
             </tbody>
           </table>
