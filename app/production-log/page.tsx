@@ -1625,7 +1625,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
               ? "rounded-xl border border-violet-500 bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-700"
               : "rounded-xl border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm font-semibold text-violet-700 hover:bg-violet-100"}
             onClick={() => setShowPrintForm((v) => !v)}>
-            {showPrintForm ? "✕ 닫기" : "📄 월별 수불부"}
+            {showPrintForm ? "✕ 닫기" : "📄 월별 수불부인쇄"}
           </button>
         </div>
       </div>
