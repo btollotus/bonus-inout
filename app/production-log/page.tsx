@@ -2725,27 +2725,7 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
 // ═══════════════════════════════════════════════════════════
 // 레이즈재단 폼
 // ═══════════════════════════════════════════════════════════
-현재 RaizeCutForm이 단순 수량 입력이라 재설계가 필요합니다. 먼저 데이터 구조를 파악하겠습니다.
 
-확인사항
-스크린샷에서 분사-레이즈 재고가 lot별(소비기한별)로 여러 행이 있습니다.
-현재 neoColorSprayLotOptions와 동일한 방식으로 조회할 수 있습니다:
-
-product_variants → variant_name = "분사-레이즈" 조회
-lots → 해당 variant의 lot 목록
-movements → lot별 잔량 계산
-
-
-새 RaizeCutForm 설계
-1. 마운트 시 분사-레이즈 lot 목록 자동 로드 (잔량 > 0인 것만)
-2. lot 목록 표시 (소비기한, 잔량)
-3. 다중 선택 + 각 lot별 수량 입력
-4. 저장 시:
-   - movements에 OUT 기록 (lot별)
-   - pet_stock_logs에 sale_cut 기록 (총 수량)
-
-str_replace (RaizeCutForm 전체 교체)
-찾을 코드:
 function RaizeCutForm({ employeeName, userId, showToast }: {
   employeeName: string;
   userId: string | null;
