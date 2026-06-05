@@ -419,7 +419,6 @@ export function PestTab({ role, userId, showToast }: {
               </div>
             </>
           )}
-      </>
-    </div>
+      </div>
   );
 }
