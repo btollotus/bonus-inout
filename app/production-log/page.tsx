@@ -308,6 +308,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [woTagMap, setWoTagMap] = useState<Record<string, Record<string, string[]>>>({});
   const [viewRaizeCutMap, setViewRaizeCutMap] = useState<Record<string, number>>({});
   const [todayRaizeCut, setTodayRaizeCut] = useState<number | null>(null);
+  const [pestDoneThisWeek, setPestDoneThisWeek] = useState(false);
 
   const today = todayKST();
 
@@ -402,8 +403,19 @@ function ProductionLogTab({ role, userId, showToast }: {
       .eq("log_date", today)
       .eq("log_type", "sale_cut")
       .ilike("note", `%${empName}%`);
-    const raizeTotal = (raizeData ?? []).reduce((s: number, d: any) => s + d.quantity, 0);
-    setTodayRaizeCut(raizeTotal > 0 ? raizeTotal : null);
+      const raizeTotal = (raizeData ?? []).reduce((s: number, d: any) => s + d.quantity, 0);
+      setTodayRaizeCut(raizeTotal > 0 ? raizeTotal : null);
+  
+      // 이번 주 방충방서 완료 여부 (월요일 기준)
+      const todayDate = new Date(today + "T00:00:00+09:00");
+      const dayOfWeek = todayDate.getDay(); // 0=일, 1=월 ... 6=토
+      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(todayDate);
+      monday.setDate(todayDate.getDate() + diffToMonday);
+      const mondayStr = monday.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+      const { data: pestData } = await supabase.from("pest_flying_records")
+        .select("id").gte("record_date", mondayStr).lte("record_date", today).limit(1);
+      setPestDoneThisWeek((pestData ?? []).length > 0);
 
     // 출퇴근 시간 조회
     const { data: attData } = await supabase.from("attendance")
@@ -984,6 +996,8 @@ function ProductionLogTab({ role, userId, showToast }: {
             const checked = taskChecks[t.id] === true;
             const isPigment = t.id === "7e8ecc06-6f92-49b5-802e-7da0bd868a2c";
             const isGuar = t.id === "3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673";
+            const isPest = t.id === PEST_TASK_ID;
+            const pestWarning = isPest && !pestDoneThisWeek && !checked;
             return (
               <button key={t.id}
                 disabled={isDisabled}
@@ -992,11 +1006,15 @@ function ProductionLogTab({ role, userId, showToast }: {
                     ? (isPigment || isGuar)
                       ? "border-blue-400 bg-blue-50 text-blue-700"
                       : "border-green-400 bg-green-50 text-green-700"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}
+                    : pestWarning
+                      ? "border-amber-400 bg-amber-50 text-amber-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}
                   ${isDisabled ? "opacity-60 cursor-not-allowed" : "active:scale-95"}`}
                 onClick={() => !isDisabled && setTaskChecks((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}>
-                <span className="mr-1.5">{checked ? (isPigment || isGuar ? "🧪" : "✅") : "☐"}</span>
+                <span className="mr-1.5">{checked ? "✅" : pestWarning ? "⚠" : "☐"}</span>
                 {t.name}
+                {pestWarning && <span className="ml-1 text-[10px] font-semibold">이번 주 미완료</span>}
+                {isPest && pestDoneThisWeek && !checked && <span className="ml-1 text-[10px] text-green-600 font-semibold">이번 주 완료</span>}
               </button>
             );
           })}
@@ -1026,6 +1044,16 @@ function ProductionLogTab({ role, userId, showToast }: {
             employeeName={selectedEmployee.name}
             userId={userId}
             showToast={showToast}
+          />
+        )}
+
+        {/* 방충방서 폼 */}
+        {taskChecks[PEST_TASK_ID] && !isDisabled && (
+          <PestInputForm
+            employeeName={selectedEmployee.name}
+            userId={userId}
+            showToast={showToast}
+            onSaved={() => setPestDoneThisWeek(true)}
           />
         )}
       </div>
@@ -2459,6 +2487,7 @@ function WorkLogTab({ role, userId, showToast }: {
 const PIGMENT_TASK_ID = "7e8ecc06-6f92-49b5-802e-7da0bd868a2c";
 const GUAR_TASK_ID    = "3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673";
 const RAIZE_CUT_TASK_ID = "ab0142bd-5f95-48cc-9786-1100186b0502";
+const PEST_TASK_ID = "3d4a86df-e4cb-455e-b672-9f1910c04bc9";
 
 function PigmentBlendForm({ employeeName, userId, showToast }: {
   employeeName: string;
@@ -2964,6 +2993,333 @@ function RaizeCutForm({ employeeName, userId, showToast }: {
         disabled={saving || selected.length === 0}
         onClick={handleSave}>
         {saving ? "저장 중..." : `💾 레이즈재단 기록 저장${totalSelected > 0 ? ` (${totalSelected.toLocaleString()} EA)` : ""}`}
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 방충방서 입력 폼 (체크리스트 연동)
+// ═══════════════════════════════════════════════════════════
+const LOCATIONS_PEST = ["P1-입구","P2-위생전실","P3-생산실","P4-입출고실","P5-원부재료실"];
+const TRAPS_PEST = ["NO-01","NO-02","NO-03","NO-04","NO-05","NO-06","NO-07","NO-08"];
+const TRAP_LABELS_PEST: Record<string,string> = {
+  "NO-01":"NO-01 (원부재료실 우측)","NO-02":"NO-02 (외포장실 좌측)",
+  "NO-03":"NO-03 (외포장실 우측)","NO-04":"NO-04 (원부재료실 좌측)",
+  "NO-05":"NO-05 (위생전실입구 좌측)","NO-06":"NO-06 (위생전실입구 우측)",
+  "NO-07":"NO-07 (생산실입구 좌측)","NO-08":"NO-08 (생산실입구 우측)",
+};
+const ZONE_MAP_PEST: Record<string,"entrance"|"sanitary"|"production"> = {
+  "P1-입구":"entrance","P2-위생전실":"sanitary","P3-생산실":"production",
+  "P4-입출고실":"entrance","P5-원부재료실":"sanitary",
+};
+const THRESHOLDS_PEST = {
+  summer:{ entrance:[19,30], sanitary:[9,15], production:[9,15] },
+  winter:{ entrance:[14,25], sanitary:[9,15], production:[9,15] },
+};
+function getPestSeason(dateStr: string): "summer"|"winter" {
+  const m = new Date(dateStr+"T00:00:00+09:00").getMonth()+1;
+  return m>=5 && m<=10 ? "summer" : "winter";
+}
+function getPestStep(total: number, loc: string, season: "summer"|"winter"): number {
+  const zone = ZONE_MAP_PEST[loc];
+  if (!zone) return 1;
+  const [t1,t2] = THRESHOLDS_PEST[season][zone];
+  if (total<=t1) return 1;
+  if (total<=t2) return 2;
+  return 3;
+}
+type PestFlyingRow = { fly:number; mosquito:number; midges:number; fruit_fly:number; moth:number; housefly:number; other:number; total:number; step:number; action_note:string; };
+type PestWalkingRow = { grima:number; spider:number; centipede:number; mosquito:number; earwig:number; other:number; total:number; };
+
+function initPestFlying(): Record<string,PestFlyingRow> {
+  const m: Record<string,PestFlyingRow> = {};
+  for (const loc of LOCATIONS_PEST)
+    m[loc] = { fly:0,mosquito:0,midges:0,fruit_fly:0,moth:0,housefly:0,other:0,total:0,step:1,action_note:"" };
+  return m;
+}
+function initPestWalking(): Record<string,PestWalkingRow> {
+  const m: Record<string,PestWalkingRow> = {};
+  for (const trap of TRAPS_PEST)
+    m[trap] = { grima:0,spider:0,centipede:0,mosquito:0,earwig:0,other:0,total:0 };
+  return m;
+}
+
+function PestNumCell({ value, onChange }: { value:number; onChange:(v:number)=>void }) {
+  const [focused, setFocused] = useState(false);
+  const displayVal = focused && value===0 ? "" : value!==0 ? value : "";
+  return (
+    <input type="number" min={0} value={displayVal} placeholder=""
+      onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)}
+      onChange={e=>onChange(Math.max(0,parseInt(e.target.value)||0))}
+      className="w-full text-center text-xs py-1 rounded bg-transparent focus:outline-none focus:bg-blue-50 hover:bg-slate-50"
+    />
+  );
+}
+
+function PestInputForm({ employeeName, userId, showToast, onSaved }: {
+  employeeName: string; userId: string | null;
+  showToast: (msg:string, type?:"success"|"error")=>void;
+  onSaved: ()=>void;
+}) {
+  const today = todayKST();
+  const season = getPestSeason(today);
+  const [flying, setFlying] = useState<Record<string,PestFlyingRow>>(()=>initPestFlying());
+  const [walking, setWalking] = useState<Record<string,PestWalkingRow>>(()=>initPestWalking());
+  const [lureLeft,setLureLeft]=useState("X"); const [damageLeft,setDamageLeft]=useState("X"); const [ratLeft,setRatLeft]=useState("X");
+  const [lureRight,setLureRight]=useState("X"); const [damageRight,setDamageRight]=useState("X"); const [ratRight,setRatRight]=useState("X");
+  const [ratActionNote, setRatActionNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedDate, setSavedDate] = useState<string|null>(null);
+
+  useEffect(() => {
+    // 오늘 이미 저장된 기록 있으면 불러오기
+    supabase.from("pest_flying_records").select("*").eq("record_date", today)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return;
+        const fMap = initPestFlying();
+        for (const row of data) {
+          if (fMap[row.location]) {
+            fMap[row.location] = {
+              fly:row.fly??0, mosquito:row.mosquito??0, midges:row.midges??0,
+              fruit_fly:row.fruit_fly??0, moth:row.moth??0, housefly:row.housefly??0,
+              other:row.other??0, total:row.total??0, step:row.step??1,
+              action_note:row.action_note??"",
+            };
+            if (row.location==="P1-입구") {
+              setLureLeft(row.lure_left??"X"); setDamageLeft(row.damage_left??"X"); setRatLeft(row.rat_left??"X");
+              setLureRight(row.lure_right??"X"); setDamageRight(row.damage_right??"X"); setRatRight(row.rat_right??"X");
+              setRatActionNote(row.rat_action_note??"");
+            }
+          }
+        }
+        setFlying(fMap);
+        setSavedDate(today);
+      });
+    supabase.from("pest_walking_records").select("*").eq("record_date", today)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return;
+        const wMap = initPestWalking();
+        for (const row of data) {
+          if (wMap[row.trap_no])
+            wMap[row.trap_no] = { grima:row.grima??0,spider:row.spider??0,centipede:row.centipede??0,mosquito:row.mosquito??0,earwig:row.earwig??0,other:row.other??0,total:row.total??0 };
+        }
+        setWalking(wMap);
+      });
+  }, [today]);
+
+  function updateFlying(loc: string, field: keyof PestFlyingRow, value: number|string) {
+    setFlying(prev => {
+      const rec = { ...prev[loc], [field]: value };
+      if (["fly","mosquito","midges","fruit_fly","moth","housefly","other"].includes(field as string)) {
+        rec.total = rec.fly+rec.mosquito+rec.midges+rec.fruit_fly+rec.moth+rec.housefly+rec.other;
+        rec.step = getPestStep(rec.total, loc, season);
+        if (rec.step===1) rec.action_note="";
+      }
+      return { ...prev, [loc]: rec };
+    });
+  }
+
+  function updateWalking(trap: string, field: keyof PestWalkingRow, value: number) {
+    setWalking(prev => {
+      const rec = { ...prev[trap], [field]: value };
+      rec.total = rec.grima+rec.spider+rec.centipede+rec.mosquito+rec.earwig+rec.other;
+      return { ...prev, [trap]: rec };
+    });
+  }
+
+  const ratFound = ratLeft==="O" || ratRight==="O";
+  const flyFields: (keyof PestFlyingRow)[] = ["fly","mosquito","midges","fruit_fly","moth","housefly","other"];
+  const walkFields: (keyof PestWalkingRow)[] = ["grima","spider","centipede","mosquito","earwig","other"];
+
+  async function handleSave() {
+    const missingAction = LOCATIONS_PEST.filter(loc=>flying[loc].step>=2 && !flying[loc].action_note.trim());
+    if (missingAction.length>0) return showToast("⚠ 기준 초과 항목의 조치사항을 입력해주세요.","error");
+    if (ratFound && !ratActionNote.trim()) return showToast("⚠ 쥐흔적 발견 — 조치사항을 입력해주세요.","error");
+    setSaving(true);
+    try {
+      const happenedAt = `${today}T00:00:00+09:00`;
+      const flyRows = LOCATIONS_PEST.map(loc => ({
+        record_date: today, location: loc, happened_at: happenedAt,
+        inspector_name: employeeName, created_by: userId,
+        fly:flying[loc].fly, mosquito:flying[loc].mosquito, midges:flying[loc].midges,
+        fruit_fly:flying[loc].fruit_fly, moth:flying[loc].moth, housefly:flying[loc].housefly,
+        other:flying[loc].other, total:flying[loc].total, step:flying[loc].step,
+        action_note: flying[loc].action_note.trim()||null,
+        lure_left: loc==="P1-입구" ? lureLeft : null,
+        damage_left: loc==="P1-입구" ? damageLeft : null,
+        rat_left: loc==="P1-입구" ? ratLeft : null,
+        lure_right: loc==="P1-입구" ? lureRight : null,
+        damage_right: loc==="P1-입구" ? damageRight : null,
+        rat_right: loc==="P1-입구" ? ratRight : null,
+        rat_action_note: loc==="P1-입구" ? (ratActionNote.trim()||null) : null,
+      }));
+      const { error: fErr } = await supabase.from("pest_flying_records")
+        .upsert(flyRows, { onConflict:"record_date,location" });
+      if (fErr) throw fErr;
+      const walkRows = TRAPS_PEST.map(trap => ({
+        record_date: today, trap_no: trap, happened_at: happenedAt,
+        inspector_name: employeeName, created_by: userId,
+        grima:walking[trap].grima, spider:walking[trap].spider, centipede:walking[trap].centipede,
+        mosquito:walking[trap].mosquito, earwig:walking[trap].earwig, other:walking[trap].other,
+        total:walking[trap].total,
+      }));
+      const { error: wErr } = await supabase.from("pest_walking_records")
+        .upsert(walkRows, { onConflict:"record_date,trap_no" });
+      if (wErr) throw wErr;
+      showToast("✅ 방충방서 기록 완료!");
+      setSavedDate(today);
+      onSaved();
+    } catch(e:any) {
+      showToast("저장 실패: "+e.message,"error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="font-semibold text-sm text-green-700">🪲 방충방서 점검 기록</div>
+        {savedDate && <span className="rounded-full border border-green-300 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">✅ {savedDate} 저장됨</span>}
+      </div>
+
+      {/* 비래해충 */}
+      <div>
+        <div className="mb-2 text-xs font-semibold text-slate-600">비래해충 — 포충등</div>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-xs" style={{minWidth:520}}>
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="border border-slate-200 py-1.5 px-2 text-slate-500 w-20">위치</th>
+                {["파리","모기","링다구","초파리","나방","날파리","기타"].map(h=>(
+                  <th key={h} className="border border-slate-200 py-1.5 px-1 text-slate-500">{h}</th>
+                ))}
+                <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
+                <th className="border border-slate-200 py-1.5 px-2 w-12">단계</th>
+              </tr>
+            </thead>
+            <tbody>
+              {LOCATIONS_PEST.map(loc=>{
+                const r=flying[loc];
+                const stepCls = r.step===3?"bg-red-50 text-red-700":r.step===2?"bg-amber-50 text-amber-700":"bg-blue-50 text-blue-700";
+                const stepLabel = r.step===3?"3단계":r.step===2?"2단계":"1단계";
+                return (
+                  <React.Fragment key={loc}>
+                    <tr>
+                      <td className="border border-slate-200 py-1 px-2 bg-slate-50 text-[11px] font-medium text-slate-600">{loc}</td>
+                      {flyFields.map(f=>(
+                        <td key={f as string} className="border border-slate-200 p-0.5">
+                          <PestNumCell value={r[f] as number} onChange={v=>updateFlying(loc,f,v)} />
+                        </td>
+                      ))}
+                      <td className={`border border-slate-200 py-1 px-2 text-center font-semibold ${stepCls}`}>{r.total>0?r.total:""}</td>
+                      <td className="border border-slate-200 py-1 px-2 text-center">
+                        <span className={`inline-block rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${r.step===3?"bg-red-50 border-red-300 text-red-700":r.step===2?"bg-amber-50 border-amber-300 text-amber-700":"bg-green-50 border-green-300 text-green-700"}`}>{stepLabel}</span>
+                      </td>
+                    </tr>
+                    {r.step>=2 && (
+                      <tr>
+                        <td colSpan={10} className={`border px-3 py-1.5 ${r.step===3?"border-red-200 bg-red-50":"border-amber-200 bg-amber-50"}`}>
+                          <div className={`text-[11px] font-semibold mb-1 ${r.step===3?"text-red-600":"text-amber-700"}`}>⚠ {r.step===3?"3단계":"2단계"} — 조치사항 입력 필수</div>
+                          <input className={`w-full rounded-lg border px-2 py-1 text-xs focus:outline-none ${r.step===3?"border-red-300":"border-amber-300"}`}
+                            placeholder="조치사항 입력" value={r.action_note}
+                            onChange={e=>updateFlying(loc,"action_note",e.target.value)} />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 쥐먹이 상자 */}
+      <div>
+        <div className="mb-2 text-xs font-semibold text-slate-600">쥐먹이 상자 점검</div>
+        <div className="grid grid-cols-2 gap-3">
+          {([["left","좌측"],["right","우측"]] as const).map(([side,label])=>{
+            const vals = side==="left"
+              ? {lure:lureLeft,damage:damageLeft,rat:ratLeft}
+              : {lure:lureRight,damage:damageRight,rat:ratRight};
+            const setters = side==="left"
+              ? {lure:setLureLeft,damage:setDamageLeft,rat:setRatLeft}
+              : {lure:setLureRight,damage:setDamageRight,rat:setRatRight};
+            return (
+              <div key={side} className="rounded-xl border border-slate-200 bg-white p-3">
+                <div className="text-xs font-semibold text-slate-600 mb-2">{label}</div>
+                {(["lure","damage","rat"] as const).map(field=>{
+                  const fieldLabels={lure:"이끼상태",damage:"훼손여부",rat:"쥐흔적"};
+                  return (
+                    <div key={field} className="mb-2">
+                      <div className="text-[11px] text-slate-500 mb-1">{fieldLabels[field]}</div>
+                      <div className="flex gap-1">
+                        {["O","X"].map(v=>(
+                          <button key={v} type="button"
+                            className={`flex-1 rounded-lg border py-1 text-xs font-bold transition-all
+                              ${vals[field]===v
+                                ? v==="O"?"border-green-400 bg-green-100 text-green-700":"border-red-400 bg-red-100 text-red-700"
+                                : "border-slate-200 bg-white text-slate-400 hover:bg-slate-50"}`}
+                            onClick={()=>setters[field](v)}>{v}</button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+        {ratFound && (
+          <div className="mt-2 rounded-xl border border-red-200 bg-red-50 p-3">
+            <div className="text-[11px] font-semibold text-red-600 mb-1">⚠ 쥐흔적 발견 — 조치사항 입력 필수</div>
+            <input className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none ${!ratActionNote.trim()?"border-red-300 bg-red-50":"border-slate-200 bg-white"}`}
+              placeholder="예: 서식장소 확인, 구서제 추가 설치 및 투여"
+              value={ratActionNote} onChange={e=>setRatActionNote(e.target.value)} />
+          </div>
+        )}
+      </div>
+
+      {/* 보행해충 */}
+      <div>
+        <div className="mb-2 text-xs font-semibold text-slate-600">보행해충 — 트랩</div>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-xs" style={{minWidth:480}}>
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="border border-slate-200 py-1.5 px-2 text-slate-500" style={{minWidth:140}}>트랩</th>
+                {["그리마","거미","노래기","모기","집게벌래","기타"].map(h=>(
+                  <th key={h} className="border border-slate-200 py-1.5 px-1 text-slate-500">{h}</th>
+                ))}
+                <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
+              </tr>
+            </thead>
+            <tbody>
+              {TRAPS_PEST.map(trap=>{
+                const r=walking[trap];
+                return (
+                  <tr key={trap}>
+                    <td className="border border-slate-200 py-1 px-2 bg-slate-50 text-[11px] font-medium text-slate-600">{TRAP_LABELS_PEST[trap]}</td>
+                    {walkFields.map(f=>(
+                      <td key={f as string} className="border border-slate-200 p-0.5">
+                        <PestNumCell value={r[f] as number} onChange={v=>updateWalking(trap,f,v)} />
+                      </td>
+                    ))}
+                    <td className="border border-slate-200 py-1 px-2 text-center font-semibold bg-blue-50 text-blue-700">{r.total>0?r.total:""}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <button
+        className="w-full rounded-xl bg-green-600 py-2.5 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
+        disabled={saving} onClick={handleSave}>
+        {saving ? "저장 중..." : "💾 방충방서 기록 저장"}
       </button>
     </div>
   );
