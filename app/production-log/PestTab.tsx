@@ -541,7 +541,7 @@ export function PestTab({ role, userId, showToast }: {
                           <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.housefly || ""}</td>
                           <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.other || ""}</td>
                           <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontWeight: "bold" }}>{total > 0 ? total : ""}</td>
-                          <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{cumul > 0 ? cumul : ""}</td>
+                          <td style={{ border: "1px solid #000", borderRight: "2px solid #000", padding: "3px", textAlign: "center" }}>{cumul > 0 ? cumul : ""}</td>
                           {li === 0 && (
                             <>
                               <td rowSpan={LOCATIONS.length} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", background: "#fff8e1" }}>{vp1?.lure_left ?? "—"}</td>
@@ -572,7 +572,13 @@ export function PestTab({ role, userId, showToast }: {
                 <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>
                   {Object.values(flyingMonthTotal).reduce((a,b)=>a+b,0) || ""}
                 </td>
-                <td colSpan={6} style={{ border: "1px solid #000", padding: "3px" }} />
+                <td style={{ border: "1px solid #000", borderRight: "2px solid #000", padding: "3px" }} />
+                <td style={{ border: "1px solid #000", padding: "3px" }} />
+                <td style={{ border: "1px solid #000", padding: "3px" }} />
+                <td style={{ border: "1px solid #000", padding: "3px" }} />
+                <td style={{ border: "1px solid #000", padding: "3px" }} />
+                <td style={{ border: "1px solid #000", padding: "3px" }} />
+                <td style={{ border: "1px solid #000", padding: "3px" }} />
               </tr>
             </tbody>
           </table>
