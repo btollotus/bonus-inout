@@ -986,6 +986,15 @@ function ProductionLogTab({ role, userId, showToast }: {
             showToast={showToast}
           />
         )}
+
+        {/* 레이즈재단 폼 */}
+        {taskChecks["ab0142bd-5f95-48cc-9786-1100186b0502"] && !isDisabled && (
+          <RaizeCutForm
+            employeeName={selectedEmployee.name}
+            userId={userId}
+            showToast={showToast}
+          />
+        )}
       </div>
 
       {/* 기타 입력 */}
@@ -2406,6 +2415,7 @@ function WorkLogTab({ role, userId, showToast }: {
 // ═══════════════════════════════════════════════════════════
 const PIGMENT_TASK_ID = "7e8ecc06-6f92-49b5-802e-7da0bd868a2c";
 const GUAR_TASK_ID    = "3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673";
+const RAIZE_CUT_TASK_ID = "ab0142bd-5f95-48cc-9786-1100186b0502";
 
 function PigmentBlendForm({ employeeName, userId, showToast }: {
   employeeName: string;
@@ -2707,6 +2717,81 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
         disabled={saving}
         onClick={handleSave}>
         {saving ? "저장 중..." : "💾 구아검 배합 저장 (재고 차감)"}
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 레이즈재단 폼
+// ═══════════════════════════════════════════════════════════
+function RaizeCutForm({ employeeName, userId, showToast }: {
+  employeeName: string;
+  userId: string | null;
+  showToast: (msg: string, type?: "success" | "error") => void;
+}) {
+  const today = todayKST();
+  const [cutDate, setCutDate] = useState(today);
+  const [cutQty, setCutQty] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedLog, setSavedLog] = useState<{ qty: number; date: string } | null>(null);
+
+  useEffect(() => { loadSavedLog(); }, []);
+
+  async function loadSavedLog() {
+    const { data } = await supabase.from("pet_stock_logs")
+      .select("quantity, log_date")
+      .eq("log_date", today)
+      .eq("log_type", "sale_cut")
+      .ilike("note", `%${employeeName}%`)
+      .maybeSingle();
+    if (data) setSavedLog({ qty: data.quantity, date: data.log_date });
+  }
+
+  async function handleSave() {
+    if (!cutQty || Number(cutQty) <= 0) return showToast("재단 수량을 입력하세요.", "error");
+    setSaving(true);
+    const { error } = await supabase.from("pet_stock_logs").insert({
+      log_date: cutDate,
+      log_type: "sale_cut",
+      quantity: Number(cutQty),
+      defect_qty: 0,
+      note: `재단판매 — ${employeeName}`,
+      created_by: userId,
+    });
+    setSaving(false);
+    if (error) return showToast("저장 실패: " + error.message, "error");
+    showToast("✅ 레이즈재단 기록 완료!");
+    setSavedLog({ qty: Number(cutQty), date: cutDate });
+    setCutQty("");
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4 space-y-3">
+      <div className="font-semibold text-sm text-purple-700">✂️ 레이즈재단 기록</div>
+      {savedLog && (
+        <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+          ✅ {savedLog.date} 재단 {savedLog.qty.toLocaleString()} EA 완료
+        </span>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <div className="mb-1 text-xs text-slate-500">재단일 *</div>
+          <input type="date" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-400 focus:outline-none"
+            value={cutDate} onChange={(e) => setCutDate(e.target.value)} />
+        </div>
+        <div>
+          <div className="mb-1 text-xs text-slate-500">재단 수량 (EA) *</div>
+          <input className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-right tabular-nums focus:border-purple-400 focus:outline-none"
+            inputMode="numeric" placeholder="0"
+            value={cutQty} onChange={(e) => setCutQty(e.target.value.replace(/[^\d]/g, ""))} />
+        </div>
+      </div>
+      <button
+        className="w-full rounded-xl bg-purple-600 py-2.5 text-sm font-bold text-white hover:bg-purple-700 disabled:opacity-60"
+        disabled={saving || !cutQty}
+        onClick={handleSave}>
+        {saving ? "저장 중..." : "💾 레이즈재단 기록 저장"}
       </button>
     </div>
   );
