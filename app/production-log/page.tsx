@@ -306,6 +306,8 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [viewLoading, setViewLoading] = useState(false);
   const [viewClockMap, setViewClockMap] = useState<Record<string, { in: string | null; out: string | null }>>({});
   const [woTagMap, setWoTagMap] = useState<Record<string, Record<string, string[]>>>({});
+  const [viewRaizeCutMap, setViewRaizeCutMap] = useState<Record<string, number>>({});
+  const [todayRaizeCut, setTodayRaizeCut] = useState<number | null>(null);
 
   const today = todayKST();
 
@@ -393,6 +395,15 @@ function ProductionLogTab({ role, userId, showToast }: {
     } else {
       setWoInfoMap({});
     }
+
+    // 레이즈재단 기록 조회
+    const { data: raizeData } = await supabase.from("pet_stock_logs")
+      .select("quantity")
+      .eq("log_date", today)
+      .eq("log_type", "sale_cut")
+      .ilike("note", `%${empName}%`);
+    const raizeTotal = (raizeData ?? []).reduce((s: number, d: any) => s + d.quantity, 0);
+    setTodayRaizeCut(raizeTotal > 0 ? raizeTotal : null);
 
     // 출퇴근 시간 조회
     const { data: attData } = await supabase.from("attendance")
@@ -571,10 +582,25 @@ function ProductionLogTab({ role, userId, showToast }: {
       setWoTagMap((prev) => ({ ...prev, ...tagMap }));
     }
 
-    setViewLoading(false);
-  }
+   // 레이즈재단 기록 조회 (조회 모드용)
+   const empNames = logs.map((l) => l.employee_name);
+   if (empNames.length > 0) {
+     const { data: raizeData } = await supabase.from("pet_stock_logs")
+       .select("quantity, note")
+       .eq("log_date", viewDate)
+       .eq("log_type", "sale_cut");
+     const raizeMap: Record<string, number> = {};
+     (raizeData ?? []).forEach((d: any) => {
+       const match = empNames.find((name) => d.note?.includes(name));
+       if (match) raizeMap[match] = (raizeMap[match] ?? 0) + d.quantity;
+     });
+     setViewRaizeCutMap(raizeMap);
+   }
 
-  const isConfirmed = !!todayLog?.confirmed_at;
+   setViewLoading(false);
+ }
+
+ const isConfirmed = !!todayLog?.confirmed_at;
   const checkedCount = Object.values(taskChecks).filter(Boolean).length;
   // 실질적으로 수정 불가 조건: 열람 모드이거나 이미 확인완료된 경우
   const isDisabled = readOnly || isConfirmed;
@@ -691,6 +717,13 @@ function ProductionLogTab({ role, userId, showToast }: {
                   ))}
                 </div>
               </div>
+              {viewRaizeCutMap[log.employee_name] && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className="rounded-lg border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700">
+                    ✂️ 레이즈재단 {viewRaizeCutMap[log.employee_name].toLocaleString()} EA
+                  </span>
+                </div>
+              )}
               {log.extra_note && (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                   <span className="font-semibold">기타: </span>{log.extra_note}
@@ -996,6 +1029,16 @@ function ProductionLogTab({ role, userId, showToast }: {
           />
         )}
       </div>
+
+     {/* 레이즈재단 완료 표시 (열람 모드) */}
+     {readOnly && todayRaizeCut && (
+        <div className={`${card} p-4`}>
+          <div className="mb-2 font-semibold text-sm text-purple-700">✂️ 레이즈재단 기록</div>
+          <span className="rounded-full border border-purple-200 bg-purple-50 px-3 py-1.5 text-sm font-semibold text-purple-700">
+            ✂️ 레이즈재단 {todayRaizeCut.toLocaleString()} EA 완료
+          </span>
+        </div>
+      )}
 
       {/* 기타 입력 */}
       <div className={`${card} p-4`}>
