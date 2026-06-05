@@ -205,7 +205,30 @@ export function PestTab({ role, userId, showToast }: {
     return `${dt.getMonth()+1}/${dt.getDate()}`;
   }
 
- 
+  function printPest(type: "flying" | "walking") {
+    const id = type === "flying" ? "pest-flying-print-inner" : "pest-walking-print-inner";
+    const content = document.getElementById(id);
+    if (!content) return;
+    const title = type === "flying"
+      ? `방충방서_비래해충_${viewYear}년_${viewMonth}월`
+      : `방충방서_보행해충_${viewYear}년_${viewMonth}월`;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8"><title>${title}</title>
+      <style>
+        @page { size: A4 landscape; margin: 8mm 10mm; }
+        body { margin:0; font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:9pt; color:#000; }
+        * { box-sizing:border-box; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+        table { border-collapse:collapse; width:100%; }
+        th,td { border:1px solid #999; padding:3px 4px; font-size:8pt; }
+        .page-break { page-break-after:always; }
+      </style>
+    </head><body>${content.innerHTML}</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
+  }
 
   return (
     <div className="space-y-4">
@@ -225,6 +248,10 @@ export function PestTab({ role, userId, showToast }: {
                 </select>
               </div>
               <button className={btn} onClick={loadView}>🔄 조회</button>
+              <button className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                onClick={() => printPest("flying")}>🖨️ 비래해충 인쇄</button>
+              <button className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                onClick={() => printPest("walking")}>🖨️ 보행해충 인쇄</button>
               <span className={`rounded-full border px-3 py-1 text-xs font-semibold
                 ${viewSeason === "summer" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-green-300 bg-green-50 text-green-700"}`}>
                 {viewSeason === "summer" ? "하계 기준" : "동계 기준"}
@@ -419,6 +446,225 @@ export function PestTab({ role, userId, showToast }: {
               </div>
             </>
           )}
+       {/* ══ 비래해충 인쇄 전용 ══ */}
+       <div id="pest-flying-print-inner" style={{ display: "none" }}>
+        <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
+          {/* 제목 + 결재란 */}
+          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
+            <tbody>
+              <tr>
+                <td rowSpan={2} style={{ border: "1px solid #000", padding: "6px 10px", fontSize: "12pt", fontWeight: "bold", textAlign: "center" }}>
+                  방충·방서 점검표(매주 1회 작성) — {viewMonth}월<br/>
+                  <span style={{ fontSize: "9pt", fontWeight: "normal" }}>{viewSeason === "summer" ? "하절기" : "동절기"} 기준</span>
+                </td>
+                <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", width: 60 }}>작성</td>
+                <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", width: 60 }}>승인</td>
+              </tr>
+              <tr>
+                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", height: 36 }}></td>
+                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", height: 36 }}></td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* 비래해충 데이터 */}
+          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+            <thead>
+              <tr style={{ background: "#f0f0f0" }}>
+                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 44, fontSize: "8pt" }}>날짜</th>
+                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 60, fontSize: "8pt" }}>위치</th>
+                <th colSpan={7} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>비래해충</th>
+                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 24, fontSize: "8pt" }}>계</th>
+                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 28, fontSize: "8pt" }}>누계</th>
+                <th colSpan={3} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", background: "#fff8e1" }}>쥐먹이(좌)</th>
+                <th colSpan={3} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", background: "#fff3e0" }}>쥐먹이(우)</th>
+              </tr>
+              <tr style={{ background: "#f0f0f0" }}>
+                {["파리","모기","링다구","초파리","나방","날파리","기타"].map(h => (
+                  <th key={h} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "7.5pt" }}>{h}</th>
+                ))}
+                {["이끼","훼손","쥐"].map(h => (
+                  <th key={`l-${h}`} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "7.5pt", background: "#fff8e1" }}>{h}</th>
+                ))}
+                {["이끼","훼손","쥐"].map(h => (
+                  <th key={`r-${h}`} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "7.5pt", background: "#fff3e0" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {viewDates.map(date => (
+                <React.Fragment key={date}>
+                  {LOCATIONS.map((loc, li) => {
+                    const r = flyingByDate[date]?.[loc];
+                    const total = r?.total ?? 0;
+                    const cumul = flyingCumul[date]?.[loc] ?? 0;
+                    const vp1 = flyingByDate[date]?.["P1-입구"];
+                    return (
+                      <React.Fragment key={loc}>
+                        <tr>
+                          {li === 0 && (
+                            <td rowSpan={LOCATIONS.length} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", fontWeight: "bold", verticalAlign: "middle" }}>
+                              {fmtDate(date)}
+                            </td>
+                          )}
+                          <td style={{ border: "1px solid #000", padding: "3px", fontSize: "7.5pt" }}>{loc}</td>
+                          <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.fly || ""}</td>
+                          <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.mosquito || ""}</td>
+                          <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.midges || ""}</td>
+                          <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.fruit_fly || ""}</td>
+                          <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.moth || ""}</td>
+                          <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.housefly || ""}</td>
+                          <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.other || ""}</td>
+                          <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontWeight: "bold" }}>{total > 0 ? total : ""}</td>
+                          <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{cumul > 0 ? cumul : ""}</td>
+                          {li === 0 && (
+                            <>
+                              <td rowSpan={LOCATIONS.length} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", background: "#fff8e1" }}>{vp1?.lure_left ?? "—"}</td>
+                              <td rowSpan={LOCATIONS.length} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", background: "#fff8e1" }}>{vp1?.damage_left ?? "—"}</td>
+                              <td rowSpan={LOCATIONS.length} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", background: "#fff8e1" }}>{vp1?.rat_left ?? "—"}</td>
+                              <td rowSpan={LOCATIONS.length} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", background: "#fff3e0" }}>{vp1?.lure_right ?? "—"}</td>
+                              <td rowSpan={LOCATIONS.length} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", background: "#fff3e0" }}>{vp1?.damage_right ?? "—"}</td>
+                              <td rowSpan={LOCATIONS.length} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", background: "#fff3e0" }}>{vp1?.rat_right ?? "—"}</td>
+                            </>
+                          )}
+                        </tr>
+                        {r && r.step >= 2 && r.action_note && (
+                          <tr>
+                            <td colSpan={15} style={{ border: "1px solid #000", padding: "3px", fontSize: "7.5pt", color: r.step === 3 ? "red" : "#854F0B" }}>
+                              <span style={{ fontWeight: "bold" }}>{r.step === 3 ? "3단계 조치: " : "2단계 조치: "}</span>{r.action_note}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+              {/* 월 합계 행 */}
+              <tr style={{ background: "#f5f5f5", fontWeight: "bold" }}>
+                <td colSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>계</td>
+                <td colSpan={7} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", color: "#999" }}>—</td>
+                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>
+                  {Object.values(flyingMonthTotal).reduce((a,b)=>a+b,0) || ""}
+                </td>
+                <td colSpan={6} style={{ border: "1px solid #000", padding: "3px" }} />
+              </tr>
+            </tbody>
+          </table>
+
+          {/* 이달내용 / 조치자 / 확인자 */}
+          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
+            <tbody>
+              <tr>
+                <td style={{ border: "1px solid #000", padding: "3px 6px", fontWeight: "bold", fontSize: "8pt", width: 60, whiteSpace: "nowrap" }}>이달내용</td>
+                <td style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt" }}>
+                  {viewDates.flatMap(date =>
+                    LOCATIONS.map(loc => {
+                      const r = flyingByDate[date]?.[loc];
+                      if (!r || r.step < 2 || !r.action_note) return null;
+                      return `${fmtDate(date)} ${loc}: ${r.action_note}`;
+                    }).filter(Boolean)
+                  ).join("  /  ") || " "}
+                </td>
+                <td style={{ border: "1px solid #000", padding: "3px 6px", fontWeight: "bold", textAlign: "center", fontSize: "8pt", width: 50 }}>조치자</td>
+                <td style={{ border: "1px solid #000", padding: "3px 6px", width: 60 }}></td>
+                <td style={{ border: "1px solid #000", padding: "3px 6px", fontWeight: "bold", textAlign: "center", fontSize: "8pt", width: 50 }}>확인자</td>
+                <td style={{ border: "1px solid #000", padding: "3px 6px", width: 60 }}></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ══ 보행해충 인쇄 전용 ══ */}
+      <div id="pest-walking-print-inner" style={{ display: "none" }}>
+        <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
+          {/* 제목 + 결재란 */}
+          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
+            <tbody>
+              <tr>
+                <td rowSpan={2} style={{ border: "1px solid #000", padding: "6px 10px", fontSize: "12pt", fontWeight: "bold", textAlign: "center" }}>
+                  방충·방서 점검표-보행해충 모니터링(매주 1회 작성) — {viewMonth}월
+                </td>
+                <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", width: 60 }}>작성</td>
+                <td style={{ border: "1px solid #000", padding: "2px 6px", fontWeight: "bold", textAlign: "center", width: 60 }}>승인</td>
+              </tr>
+              <tr>
+                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", height: 36 }}></td>
+                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", height: 36 }}></td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* 보행해충 데이터 */}
+          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+            <thead>
+              <tr style={{ background: "#f0f0f0" }}>
+                <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 44, fontSize: "8pt" }}>날짜</th>
+                <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>트랩</th>
+                {["그리마","거미","노래기","모기","집게벌래","기타"].map(h => (
+                  <th key={h} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "7.5pt" }}>{h}</th>
+                ))}
+                <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 28, fontSize: "8pt" }}>계</th>
+                <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 28, fontSize: "8pt" }}>누계</th>
+              </tr>
+            </thead>
+            <tbody>
+              {viewDates.map(date => (
+                <React.Fragment key={date}>
+                  {TRAPS.map((trap, ti) => {
+                    const r = walkingByDate[date]?.[trap];
+                    const total = r?.total ?? 0;
+                    const cumul = walkingCumul[date]?.[trap] ?? 0;
+                    return (
+                      <tr key={trap}>
+                        {ti === 0 && (
+                          <td rowSpan={TRAPS.length} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", fontWeight: "bold", verticalAlign: "middle" }}>
+                            {fmtDate(date)}
+                          </td>
+                        )}
+                        <td style={{ border: "1px solid #000", padding: "3px", fontSize: "7.5pt" }}>{TRAP_LABELS[trap]}</td>
+                        <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.grima || ""}</td>
+                        <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.spider || ""}</td>
+                        <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.centipede || ""}</td>
+                        <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.mosquito || ""}</td>
+                        <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.earwig || ""}</td>
+                        <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.other || ""}</td>
+                        <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontWeight: "bold" }}>{total > 0 ? total : ""}</td>
+                        <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{cumul > 0 ? cumul : ""}</td>
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+              {/* 월 합계 행 */}
+              <tr style={{ background: "#f5f5f5", fontWeight: "bold" }}>
+                <td colSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>계</td>
+                <td colSpan={6} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", color: "#999" }}>—</td>
+                <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>
+                  {Object.values(walkingMonthTotal).reduce((a,b)=>a+b,0) || ""}
+                </td>
+                <td style={{ border: "1px solid #000", padding: "3px" }} />
+              </tr>
+            </tbody>
+          </table>
+
+          {/* 이달내용 / 조치자 / 확인자 */}
+          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
+            <tbody>
+              <tr>
+                <td style={{ border: "1px solid #000", padding: "3px 6px", fontWeight: "bold", fontSize: "8pt", width: 60, whiteSpace: "nowrap" }}>이달내용</td>
+                <td style={{ border: "1px solid #000", padding: "3px 6px", fontSize: "8pt" }}> </td>
+                <td style={{ border: "1px solid #000", padding: "3px 6px", fontWeight: "bold", textAlign: "center", fontSize: "8pt", width: 50 }}>조치자</td>
+                <td style={{ border: "1px solid #000", padding: "3px 6px", width: 60 }}></td>
+                <td style={{ border: "1px solid #000", padding: "3px 6px", fontWeight: "bold", textAlign: "center", fontSize: "8pt", width: 50 }}>확인자</td>
+                <td style={{ border: "1px solid #000", padding: "3px 6px", width: 60 }}></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       </div>
   );
 }
