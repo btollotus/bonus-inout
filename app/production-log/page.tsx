@@ -2798,7 +2798,6 @@ function RaizeCutForm({ employeeName, userId, showToast }: {
   );
 }
 
-바꿀 코드:
 function RaizeCutForm({ employeeName, userId, showToast }: {
   employeeName: string;
   userId: string | null;
