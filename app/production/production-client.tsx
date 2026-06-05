@@ -68,6 +68,7 @@ type WorkOrderRow = {
   order_type: string;
   ccp_slot_id?: string | null;
   skip_production_check?: boolean | null;
+  neo_color_spray_lots?: { lot_id: string; qty: string }[] | null;
 };
 
 type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
@@ -286,8 +287,11 @@ export default function ProductionClient() {
   const [sprayProdQty, setSprayProdQty] = useState<string>("");
  // 네오컬러 분사-레이즈 사용 lot 
  const [neoColorSprayLots, setNeoColorSprayLots] = useState<{ lot_id: string; qty: string }[]>([]);
- const [neoColorSprayLotOptions, setNeoColorSprayLotOptions] = useState<{ lot_id: string; expiry_date: string; remaining_qty: number; variant_name: string }[]>([]);
- const [neoColorSprayLotLoading, setNeoColorSprayLotLoading] = useState(false);
+  const [neoColorSprayLotOptions, setNeoColorSprayLotOptions] = useState<{ lot_id: string; expiry_date: string; remaining_qty: number; variant_name: string }[]>([]);
+  const [neoColorSprayLotLoading, setNeoColorSprayLotLoading] = useState(false);
+  const [neoColorSpraySaved, setNeoColorSpraySaved] = useState(false);
+  const [neoColorSprayEditMode, setNeoColorSprayEditMode] = useState(false);
+  const [neoColorSpraySaving, setNeoColorSpraySaving] = useState(false);
 
   const [eSubName, setESubName] = useState("");
   const [eProductName, setEProductName] = useState("");
@@ -698,8 +702,14 @@ export default function ProductionClient() {
     setSprayProdQty(""); // 분사 수량 초기화
     setNeoColorSprayLots([]); // 네오컬러 분사-레이즈 lot 초기화
     setNeoColorSprayLotOptions([]); // 네오컬러 분사-레이즈 lot 옵션 초기화
-    // 네오컬러화이트/리얼화이트: 분사-레이즈 lot 자동 검색
+    setNeoColorSpraySaved(false);
+    setNeoColorSprayEditMode(false);
+    // 네오컬러화이트/리얼화이트: 저장된 값 불러오기 + lot 자동 검색
     const isNeoColorWo = (wo.food_type ?? "").includes("네오컬러화이트") || (wo.food_type ?? "").includes("네오컬러리얼화이트");
+    if (isNeoColorWo && wo.neo_color_spray_lots && wo.neo_color_spray_lots.length > 0) {
+      setNeoColorSprayLots(wo.neo_color_spray_lots);
+      setNeoColorSpraySaved(true);
+    }
     if (isNeoColorWo) {
       setNeoColorSprayLotLoading(true);
       const { data: sprayVariants } = await supabase.from("product_variants").select("id, variant_name").eq("variant_name", "분사-레이즈");
@@ -1166,8 +1176,8 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
     }
     // 분사-레이즈 사용량 필수 입력 검사 (네오컬러화이트/리얼화이트)
     if ((selectedWo.food_type ?? "").includes("네오컬러화이트") || (selectedWo.food_type ?? "").includes("네오컬러리얼화이트")) {
-      if (neoColorSprayLots.length === 0 || neoColorSprayLots.every((l) => !l.qty || toInt(l.qty) <= 0)) {
-        alert("분사-레이즈 사용량을 입력하세요.");
+      if (!neoColorSpraySaved || neoColorSprayLots.length === 0 || neoColorSprayLots.every((l) => !l.qty || toInt(l.qty) <= 0)) {
+        alert("분사-레이즈 사용량을 저장 후 생산완료 처리해주세요.");
         setIsCompleting(false);
         return;
       }
@@ -1910,30 +1920,118 @@ const totalOrder = items
                             })}
                           </div>
                         )}
-                        {!(selectedWo?.status === "완료" && !isEditMode) && (
-                          neoColorSprayLotLoading ? (
-                            <div className="text-xs text-slate-400 py-1">불러오는 중...</div>
-                          ) : (() => {
-                            if (neoColorSprayLotOptions.length === 0) return <div className="text-xs text-slate-400">관련 재고 없음</div>;
-                            const selectedLotIds = new Set(neoColorSprayLots.map((l) => l.lot_id));
-                            const availableLots = neoColorSprayLotOptions.filter((l) => !selectedLotIds.has(l.lot_id));
-                            if (availableLots.length === 0) return <div className="text-xs text-slate-400">추가할 재고 없음</div>;
-                            return (
-                              <div className="rounded-lg border border-slate-200 bg-white overflow-hidden max-h-36 overflow-y-auto">
-                                {availableLots.map((lot) => (
-                                  <button key={lot.lot_id} type="button"
-                                    className="w-full text-left px-2.5 py-2 text-xs border-b border-slate-100 last:border-0 hover:bg-violet-50"
-                                    onClick={() => setNeoColorSprayLots((prev) => [...prev, { lot_id: lot.lot_id, qty: "" }])}>
-                                    <div className="font-medium text-slate-800">+ {lot.variant_name}</div>
-                                    <div className="flex gap-2 mt-0.5 text-[11px] text-slate-500">
-                                      <span>소비기한: {lot.expiry_date}</span><span>·</span>
-                                      <span>잔량: <b className="text-violet-700">{lot.remaining_qty.toLocaleString()} EA</b></span>
-                                    </div>
-                                  </button>
-                                ))}
-                              </div>
-                            );
-                          })()
+                        {/* 저장/수정 버튼 */}
+                        {!neoColorSpraySaved ? (
+                          <>
+                            {neoColorSprayLotLoading ? (
+                              <div className="text-xs text-slate-400 py-1">불러오는 중...</div>
+                            ) : (() => {
+                              if (neoColorSprayLotOptions.length === 0) return <div className="text-xs text-slate-400">관련 재고 없음</div>;
+                              const selectedLotIds = new Set(neoColorSprayLots.map((l) => l.lot_id));
+                              const availableLots = neoColorSprayLotOptions.filter((l) => !selectedLotIds.has(l.lot_id));
+                              if (availableLots.length === 0 && neoColorSprayLots.length === 0) return <div className="text-xs text-slate-400">추가할 재고 없음</div>;
+                              return availableLots.length > 0 ? (
+                                <div className="rounded-lg border border-slate-200 bg-white overflow-hidden max-h-36 overflow-y-auto">
+                                  {availableLots.map((lot) => (
+                                    <button key={lot.lot_id} type="button"
+                                      className="w-full text-left px-2.5 py-2 text-xs border-b border-slate-100 last:border-0 hover:bg-violet-50"
+                                      onClick={() => setNeoColorSprayLots((prev) => [...prev, { lot_id: lot.lot_id, qty: "" }])}>
+                                      <div className="font-medium text-slate-800">+ {lot.variant_name}</div>
+                                      <div className="flex gap-2 mt-0.5 text-[11px] text-slate-500">
+                                        <span>소비기한: {lot.expiry_date}</span><span>·</span>
+                                        <span>잔량: <b className="text-violet-700">{lot.remaining_qty.toLocaleString()} EA</b></span>
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null;
+                            })()}
+                            {neoColorSprayLots.length > 0 && neoColorSprayLots.every((l) => l.lot_id && toInt(l.qty) > 0) && (
+                              <button type="button"
+                                disabled={neoColorSpraySaving}
+                                className="mt-2 w-full rounded-lg border border-violet-500 bg-violet-600 py-2 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                                onClick={async () => {
+                                  if (!selectedWo) return;
+                                  setNeoColorSpraySaving(true);
+                                  const lotsForDb = neoColorSprayLots.map((l) => ({ lot_id: l.lot_id, qty: l.qty }));
+                                  const { error } = await supabase.from("work_orders").update({
+                                    neo_color_spray_lots: lotsForDb,
+                                    updated_at: new Date().toISOString(),
+                                  }).eq("id", selectedWo.id);
+                                  setNeoColorSpraySaving(false);
+                                  if (error) { showToast("저장 실패: " + error.message, "error"); return; }
+                                  setNeoColorSpraySaved(true);
+                                  setNeoColorSprayEditMode(false);
+                                  showToast("분사-레이즈 사용량 저장 완료!");
+                                }}>
+                                {neoColorSpraySaving ? "저장 중..." : "저장"}
+                              </button>
+                            )}
+                          </>
+                        ) : neoColorSprayEditMode ? (
+                          <>
+                            {neoColorSprayLotLoading ? (
+                              <div className="text-xs text-slate-400 py-1">불러오는 중...</div>
+                            ) : (() => {
+                              const selectedLotIds = new Set(neoColorSprayLots.map((l) => l.lot_id));
+                              const availableLots = neoColorSprayLotOptions.filter((l) => !selectedLotIds.has(l.lot_id));
+                              return availableLots.length > 0 ? (
+                                <div className="rounded-lg border border-slate-200 bg-white overflow-hidden max-h-36 overflow-y-auto">
+                                  {availableLots.map((lot) => (
+                                    <button key={lot.lot_id} type="button"
+                                      className="w-full text-left px-2.5 py-2 text-xs border-b border-slate-100 last:border-0 hover:bg-violet-50"
+                                      onClick={() => setNeoColorSprayLots((prev) => [...prev, { lot_id: lot.lot_id, qty: "" }])}>
+                                      <div className="font-medium text-slate-800">+ {lot.variant_name}</div>
+                                      <div className="flex gap-2 mt-0.5 text-[11px] text-slate-500">
+                                        <span>소비기한: {lot.expiry_date}</span><span>·</span>
+                                        <span>잔량: <b className="text-violet-700">{lot.remaining_qty.toLocaleString()} EA</b></span>
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null;
+                            })()}
+                            <div className="mt-2 flex gap-2">
+                              <button type="button"
+                                disabled={neoColorSpraySaving || neoColorSprayLots.length === 0 || !neoColorSprayLots.every((l) => l.lot_id && toInt(l.qty) > 0)}
+                                className="flex-1 rounded-lg border border-violet-500 bg-violet-600 py-2 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                                onClick={async () => {
+                                  if (!selectedWo) return;
+                                  setNeoColorSpraySaving(true);
+                                  const lotsForDb = neoColorSprayLots.map((l) => ({ lot_id: l.lot_id, qty: l.qty }));
+                                  const { error } = await supabase.from("work_orders").update({
+                                    neo_color_spray_lots: lotsForDb,
+                                    updated_at: new Date().toISOString(),
+                                  }).eq("id", selectedWo.id);
+                                  setNeoColorSpraySaving(false);
+                                  if (error) { showToast("저장 실패: " + error.message, "error"); return; }
+                                  setNeoColorSpraySaved(true);
+                                  setNeoColorSprayEditMode(false);
+                                  showToast("분사-레이즈 사용량 수정 완료!");
+                                }}>
+                                {neoColorSpraySaving ? "저장 중..." : "수정 저장"}
+                              </button>
+                              <button type="button"
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                                onClick={() => {
+                                  setNeoColorSprayEditMode(false);
+                                  if (selectedWo?.neo_color_spray_lots) {
+                                    setNeoColorSprayLots(selectedWo.neo_color_spray_lots);
+                                  }
+                                }}>취소</button>
+            </div>
+                          </>
+                        ) : (
+                          <button type="button"
+                            className="mt-2 w-full rounded-lg border border-slate-300 bg-white py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                            onClick={() => {
+                              setPinProgressPending(() => (_name: string) => {
+                                setNeoColorSprayEditMode(true);
+                              });
+                              setShowPinModalForProgress(true);
+                            }}>
+                            수정
+                          </button>
                         )}
                       </>
                     )}
