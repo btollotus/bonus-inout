@@ -214,14 +214,15 @@ export function PestTab({ role, userId, showToast }: {
       : `방충방서_보행해충_${viewYear}년_${viewMonth}월`;
     const win = window.open("", "_blank");
     if (!win) return;
+    const isWalking = type === "walking";
     win.document.write(`<!DOCTYPE html><html><head>
       <meta charset="utf-8"><title>${title}</title>
       <style>
-        @page { size: A4 landscape; margin: 8mm 10mm; }
-        body { margin:0; font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:9pt; color:#000; }
+        @page { size: A4 ${isWalking ? "portrait" : "landscape"}; margin: 6mm 8mm; }
+        body { margin:0; font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:${isWalking ? "7pt" : "9pt"}; color:#000; }
         * { box-sizing:border-box; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
         table { border-collapse:collapse; width:100%; }
-        th,td { border:1px solid #999; padding:3px 4px; font-size:8pt; }
+        th,td { border:1px solid #999; padding:${isWalking ? "1.5px 3px" : "3px 4px"}; font-size:${isWalking ? "7pt" : "8pt"}; }
         .page-break { page-break-after:always; }
       </style>
     </head><body>${content.innerHTML}</body></html>`);
