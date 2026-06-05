@@ -284,8 +284,8 @@ export default function ProductionClient() {
   const [blendCount, setBlendCount] = useState(1);
   // 분사 수량
   const [sprayProdQty, setSprayProdQty] = useState<string>("");
- // 네오컬러 분사-레이즈 사용 lot (생산용/판매용 구분)
- const [neoColorSprayLots, setNeoColorSprayLots] = useState<{ lot_id: string; qty: string; use_type: "prod" | "sale" }[]>([]);
+ // 네오컬러 분사-레이즈 사용 lot 
+ const [neoColorSprayLots, setNeoColorSprayLots] = useState<{ lot_id: string; qty: string }[]>([]);
  const [neoColorSprayLotOptions, setNeoColorSprayLotOptions] = useState<{ lot_id: string; expiry_date: string; remaining_qty: number; variant_name: string }[]>([]);
  const [neoColorSprayLotLoading, setNeoColorSprayLotLoading] = useState(false);
 
@@ -1296,12 +1296,10 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
        if (isNeoColor && neoColorSprayLots.length > 0) {
          const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
          let totalProdQty = 0;
-         let totalSaleQty = 0;
          for (const tl of neoColorSprayLots) {
            const sprayQty = toInt(tl.qty);
            if (!tl.lot_id || sprayQty <= 0) continue;
-           if ((tl as any).use_type === "sale") totalSaleQty += sprayQty;
-           else totalProdQty += sprayQty;
+           totalProdQty += sprayQty;
            const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", tl.lot_id);
            const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
            if (sprayQty > remaining) {
@@ -1312,7 +1310,7 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
            const { error: sprayErr } = await supabase.from("movements").insert({
              lot_id: tl.lot_id, type: "OUT", qty: sprayQty,
              happened_at: `${todayKSTDate}T00:00:00+09:00`,
-             note: `네오컬러 인쇄투입(${(tl as any).use_type === "sale" ? "판매용" : "생산용"}) - ${selectedWo.work_order_no}`,
+             note: `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`,
              created_by: userId,
            });
            if (sprayErr) stockErrors.push("분사-레이즈 차감 실패: " + sprayErr.message);
@@ -1321,20 +1319,12 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
            const { error: petProdErr } = await supabase.from("pet_stock_logs").insert({
              log_date: todayKSTDate, log_type: "print_used_prod",
              quantity: totalProdQty, defect_qty: 0,
-             note: `네오컬러 인쇄투입(생산용) - ${selectedWo.work_order_no}`,
+             note: `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`,
              created_by: userId,
            });
            if (petProdErr) stockErrors.push("PET 수불 기록 실패(생산용): " + petProdErr.message);
          }
-         if (totalSaleQty > 0) {
-           const { error: petSaleErr } = await supabase.from("pet_stock_logs").insert({
-             log_date: todayKSTDate, log_type: "print_used_sale",
-             quantity: totalSaleQty, defect_qty: 0,
-             note: `네오컬러 인쇄투입(판매용) - ${selectedWo.work_order_no}`,
-             created_by: userId,
-           });
-           if (petSaleErr) stockErrors.push("PET 수불 기록 실패(판매용): " + petSaleErr.message);
-         }
+        
        }
 
         // ── 컴파운드 자동 차감 (다크/화이트/딸기) ──
@@ -1933,7 +1923,7 @@ const totalOrder = items
                                 {availableLots.map((lot) => (
                                   <button key={lot.lot_id} type="button"
                                     className="w-full text-left px-2.5 py-2 text-xs border-b border-slate-100 last:border-0 hover:bg-violet-50"
-                                    onClick={() => setNeoColorSprayLots((prev) => [...prev, { lot_id: lot.lot_id, qty: "", use_type: "prod" }])}>
+                                    onClick={() => setNeoColorSprayLots((prev) => [...prev, { lot_id: lot.lot_id, qty: "" }])}>
                                     <div className="font-medium text-slate-800">+ {lot.variant_name}</div>
                                     <div className="flex gap-2 mt-0.5 text-[11px] text-slate-500">
                                       <span>소비기한: {lot.expiry_date}</span><span>·</span>
