@@ -183,12 +183,12 @@ export function NewProductionLogTab({ role, userId, showToast }: {
       }))
       .filter((it: any) => {
         const n = it.name;
-        return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+        return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판") && !n.startsWith("퀵운임");
       }),
-  })) as WorkOrder[]);
+})) as WorkOrder[]);
 
-    setLoading(false);
-  }, [selectedDate]);
+setLoading(false);
+}, [selectedDate]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -297,7 +297,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
             }))
             .filter((it: any) => {
               const n = it.name;
-              return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
+              return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판") && !n.startsWith("퀵운임");
             }),
           })) as WorkOrder[],
           blendLogs: (blendRes.data ?? []) as any,
