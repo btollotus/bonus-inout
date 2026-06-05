@@ -1620,7 +1620,6 @@ function MaterialLedgerTab({ role, userId, showToast }: {
               </button>
             </>
           )}
-         <button className={btnSm} onClick={() => window.print()}>🖨️ 인쇄</button>
           <button
             className={showPrintForm
               ? "rounded-xl border border-violet-500 bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-700"
