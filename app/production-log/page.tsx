@@ -2725,6 +2725,27 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
 // ═══════════════════════════════════════════════════════════
 // 레이즈재단 폼
 // ═══════════════════════════════════════════════════════════
+현재 RaizeCutForm이 단순 수량 입력이라 재설계가 필요합니다. 먼저 데이터 구조를 파악하겠습니다.
+
+확인사항
+스크린샷에서 분사-레이즈 재고가 lot별(소비기한별)로 여러 행이 있습니다.
+현재 neoColorSprayLotOptions와 동일한 방식으로 조회할 수 있습니다:
+
+product_variants → variant_name = "분사-레이즈" 조회
+lots → 해당 variant의 lot 목록
+movements → lot별 잔량 계산
+
+
+새 RaizeCutForm 설계
+1. 마운트 시 분사-레이즈 lot 목록 자동 로드 (잔량 > 0인 것만)
+2. lot 목록 표시 (소비기한, 잔량)
+3. 다중 선택 + 각 lot별 수량 입력
+4. 저장 시:
+   - movements에 OUT 기록 (lot별)
+   - pet_stock_logs에 sale_cut 기록 (총 수량)
+
+str_replace (RaizeCutForm 전체 교체)
+찾을 코드:
 function RaizeCutForm({ employeeName, userId, showToast }: {
   employeeName: string;
   userId: string | null;
@@ -2792,6 +2813,211 @@ function RaizeCutForm({ employeeName, userId, showToast }: {
         disabled={saving || !cutQty}
         onClick={handleSave}>
         {saving ? "저장 중..." : "💾 레이즈재단 기록 저장"}
+      </button>
+    </div>
+  );
+}
+
+바꿀 코드:
+function RaizeCutForm({ employeeName, userId, showToast }: {
+  employeeName: string;
+  userId: string | null;
+  showToast: (msg: string, type?: "success" | "error") => void;
+}) {
+  const today = todayKST();
+  const [cutDate, setCutDate] = useState(today);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [savedLogs, setSavedLogs] = useState<{ lot_id: string; qty: number; expiry_date: string }[]>([]);
+
+  type SprayLot = { lot_id: string; expiry_date: string; remaining_qty: number };
+  const [lotOptions, setLotOptions] = useState<SprayLot[]>([]);
+  const [selected, setSelected] = useState<{ lot_id: string; qty: string }[]>([]);
+
+  useEffect(() => { loadLots(); loadSavedLogs(); }, []);
+
+  async function loadLots() {
+    setLoading(true);
+    const { data: variants } = await supabase.from("product_variants")
+      .select("id").eq("variant_name", "분사-레이즈");
+    const variantIds = (variants ?? []).map((v: any) => v.id);
+    if (variantIds.length === 0) { setLoading(false); return; }
+    const { data: lots } = await supabase.from("lots")
+      .select("id, expiry_date").in("variant_id", variantIds)
+      .order("expiry_date", { ascending: true });
+    const lotIds = (lots ?? []).map((l: any) => l.id);
+    if (lotIds.length === 0) { setLoading(false); return; }
+    const { data: movements } = await supabase.from("movements")
+      .select("lot_id, type, qty").in("lot_id", lotIds);
+    const remainMap: Record<string, number> = {};
+    (movements ?? []).forEach((m: any) => {
+      if (!remainMap[m.lot_id]) remainMap[m.lot_id] = 0;
+      if (m.type === "IN") remainMap[m.lot_id] += m.qty;
+      else remainMap[m.lot_id] -= m.qty;
+    });
+    const result: SprayLot[] = (lots ?? [])
+      .filter((l: any) => (remainMap[l.id] ?? 0) > 0)
+      .map((l: any) => ({ lot_id: l.id, expiry_date: l.expiry_date, remaining_qty: remainMap[l.id] ?? 0 }));
+    setLotOptions(result);
+    setLoading(false);
+  }
+
+  async function loadSavedLogs() {
+    const { data } = await supabase.from("pet_stock_logs")
+      .select("quantity, log_date, note")
+      .eq("log_date", today)
+      .eq("log_type", "sale_cut")
+      .ilike("note", `%${employeeName}%`);
+    if (data && data.length > 0) {
+      setSavedLogs(data.map((d: any) => ({
+        lot_id: "",
+        qty: d.quantity,
+        expiry_date: d.log_date,
+      })));
+    }
+  }
+
+  function toggleLot(lotId: string) {
+    setSelected((prev) => {
+      if (prev.find((s) => s.lot_id === lotId)) {
+        return prev.filter((s) => s.lot_id !== lotId);
+      }
+      return [...prev, { lot_id: lotId, qty: "" }];
+    });
+  }
+
+  function setQty(lotId: string, qty: string) {
+    setSelected((prev) => prev.map((s) => s.lot_id === lotId ? { ...s, qty } : s));
+  }
+
+  async function handleSave() {
+    if (selected.length === 0) return showToast("재단할 lot을 선택하세요.", "error");
+    if (selected.some((s) => !s.qty || Number(s.qty) <= 0)) return showToast("선택한 lot의 수량을 모두 입력하세요.", "error");
+
+    // 잔량 초과 검사
+    for (const s of selected) {
+      const lot = lotOptions.find((l) => l.lot_id === s.lot_id);
+      if (lot && Number(s.qty) > lot.remaining_qty) {
+        return showToast(`소비기한 ${lot.expiry_date} lot 차감 수량(${s.qty})이 잔량(${lot.remaining_qty})을 초과합니다.`, "error");
+      }
+    }
+
+    setSaving(true);
+    try {
+      // 1. movements OUT 기록 (lot별)
+      for (const s of selected) {
+        const { error: movErr } = await supabase.from("movements").insert({
+          lot_id: s.lot_id,
+          type: "OUT",
+          qty: Number(s.qty),
+          happened_at: `${cutDate}T00:00:00+09:00`,
+          note: `레이즈재단 — ${employeeName}`,
+          created_by: userId,
+        });
+        if (movErr) { showToast("재고 차감 실패: " + movErr.message, "error"); setSaving(false); return; }
+      }
+
+      // 2. pet_stock_logs sale_cut 기록 (총 수량)
+      const totalQty = selected.reduce((s, l) => s + Number(l.qty), 0);
+      const { error: petErr } = await supabase.from("pet_stock_logs").insert({
+        log_date: cutDate,
+        log_type: "sale_cut",
+        quantity: totalQty,
+        defect_qty: 0,
+        note: `재단판매 — ${employeeName}`,
+        created_by: userId,
+      });
+      if (petErr) { showToast("수불 기록 실패: " + petErr.message, "error"); setSaving(false); return; }
+
+      showToast(`✅ 레이즈재단 ${totalQty.toLocaleString()} EA 기록 완료!`);
+      setSelected([]);
+      await loadLots();
+      await loadSavedLogs();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const totalSelected = selected.reduce((s, l) => s + (Number(l.qty) || 0), 0);
+
+  return (
+    <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="font-semibold text-sm text-purple-700">✂️ 레이즈재단 기록</div>
+        {totalSelected > 0 && (
+          <span className="text-xs font-semibold text-purple-700">총 {totalSelected.toLocaleString()} EA</span>
+        )}
+      </div>
+
+      {savedLogs.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {savedLogs.map((l, i) => (
+            <span key={i} className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+              ✅ 재단 {l.qty.toLocaleString()} EA 완료
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div>
+        <div className="mb-1 text-xs text-slate-500">재단일 *</div>
+        <input type="date"
+          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-400 focus:outline-none"
+          value={cutDate} onChange={(e) => setCutDate(e.target.value)} />
+      </div>
+
+      <div>
+        <div className="mb-1.5 text-xs font-semibold text-slate-600">분사-레이즈 재고 선택 (다중 선택 가능)</div>
+        {loading ? (
+          <div className="text-xs text-slate-400 py-2">불러오는 중...</div>
+        ) : lotOptions.length === 0 ? (
+          <div className="text-xs text-slate-400 py-2">재고 없음</div>
+        ) : (
+          <div className="space-y-2">
+            {lotOptions.map((lot) => {
+              const sel = selected.find((s) => s.lot_id === lot.lot_id);
+              const isSelected = !!sel;
+              const usedByOthers = selected.filter((s) => s.lot_id !== lot.lot_id).reduce((sum, s) => sum, 0);
+              return (
+                <div key={lot.lot_id}
+                  className={`rounded-xl border p-2.5 transition-all ${isSelected ? "border-purple-400 bg-white" : "border-slate-200 bg-white"}`}>
+                  <div className="flex items-center gap-2">
+                    <button type="button"
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${isSelected ? "border-purple-500 bg-purple-500" : "border-slate-300 bg-white"}`}
+                      onClick={() => toggleLot(lot.lot_id)}>
+                      {isSelected && <span className="text-white text-[10px] font-bold">✓</span>}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-semibold text-slate-700">소비기한: {lot.expiry_date}</div>
+                      <div className="text-[11px] text-slate-500">잔량: <b className="text-purple-700">{lot.remaining_qty.toLocaleString()} EA</b></div>
+                    </div>
+                    {isSelected && (
+                      <input
+                        className="w-24 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-right tabular-nums focus:border-purple-400 focus:outline-none"
+                        inputMode="numeric" placeholder="수량"
+                        value={sel.qty}
+                        onChange={(e) => setQty(lot.lot_id, e.target.value.replace(/[^\d]/g, ""))}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    )}
+                    {isSelected && sel.qty && (
+                      <div className={`text-[11px] shrink-0 ${lot.remaining_qty - Number(sel.qty) < 0 ? "text-red-600 font-semibold" : "text-slate-400"}`}>
+                        차감 후 {(lot.remaining_qty - Number(sel.qty)).toLocaleString()} EA
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <button
+        className="w-full rounded-xl bg-purple-600 py-2.5 text-sm font-bold text-white hover:bg-purple-700 disabled:opacity-60"
+        disabled={saving || selected.length === 0}
+        onClick={handleSave}>
+        {saving ? "저장 중..." : `💾 레이즈재단 기록 저장${totalSelected > 0 ? ` (${totalSelected.toLocaleString()} EA)` : ""}`}
       </button>
     </div>
   );
