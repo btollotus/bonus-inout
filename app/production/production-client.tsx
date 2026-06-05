@@ -1289,8 +1289,9 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
                 const { data: jsDupCheck } = await supabase.from("material_usage_logs")
                   .select("id").eq("note", jeonsakNote).limit(1);
                 if (!jsDupCheck || jsDupCheck.length === 0) {
+                  const jeonsakName30 = "전사지 30*40";
                   const { data: jsMatData } = await supabase.from("materials")
-                    .select("id").eq("name", "전사지").maybeSingle();
+                    .select("id").eq("name", jeonsakName30).maybeSingle();
                   if (jsMatData?.id) {
                     const todayKSTDate = new Date(
                       new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
@@ -1306,7 +1307,7 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
                     });
                     if (jsErr) stockErrors.push(`전사지 차감 실패: ${jsErr.message}`);
                   } else {
-                    stockErrors.push("원료 '전사지'를 찾을 수 없습니다.");
+                    stockErrors.push(`원료 '${jeonsakName30}'을 찾을 수 없습니다.`);
                   }
                 }
               }
@@ -1468,8 +1469,9 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
                   const { data: jsDupCheck } = await supabase.from("material_usage_logs")
                     .select("id").eq("note", jeonsakNote).limit(1);
                   if (!jsDupCheck || jsDupCheck.length === 0) {
+                    const jeonsakName32 = "전사지 32*45";
                     const { data: jsMatData } = await supabase.from("materials")
-                      .select("id").eq("name", "전사지").maybeSingle();
+                      .select("id").eq("name", jeonsakName32).maybeSingle();
                     if (jsMatData?.id) {
                       const todayKSTDate = new Date(
                         new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
@@ -1485,7 +1487,7 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
                       });
                       if (jsErr) stockErrors.push(`전사지 차감 실패: ${jsErr.message}`);
                     } else {
-                      stockErrors.push("원료 '전사지'를 찾을 수 없습니다.");
+                      stockErrors.push(`원료 '${jeonsakName32}'을 찾을 수 없습니다.`);
                     }
                   }
                 }
