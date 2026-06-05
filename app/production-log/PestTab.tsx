@@ -210,8 +210,6 @@ export function PestTab({ role, userId, showToast }: {
   return (
     <div className="space-y-4">
       {/* ══ 월별 조회 ══ */}
-      <>
-      </>
           <div className={`${card} p-4`}>
             <div className="flex flex-wrap items-end gap-3">
               <div>
