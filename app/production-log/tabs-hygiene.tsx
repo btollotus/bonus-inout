@@ -730,21 +730,7 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
             </div>
           );
         })()}
-      </div>
-                  <tbody>
-                    <tr>
-                      <td style={{ ...wcTdP, width:40, fontWeight:"bold", fontSize:"6.5pt", textAlign:"center" }}>비고</td>
-                      <td style={{ ...wcTdP, fontSize:"6.5pt", padding:"3px 6px", lineHeight:1.6 }}>
-                        {notes.map((n, i) => <span key={n.id}>{i > 0 ? " / " : ""}{n.content}</span>)}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              )}
-            </div>
-          );
-        })()}
-      </div>
+     </div>
     </div>
   );
 }
