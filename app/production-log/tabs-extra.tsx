@@ -2631,11 +2631,17 @@ export function CompressorTab({ role, userId, showToast }: {
           <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
             <div style={{ border:"1px solid #999", width:60, textAlign:"center" }}>
               <div style={{ background:"#f0f0f0", borderBottom:"1px solid #bbb", padding:"3px 0", fontSize:"7.5pt", fontWeight:"bold" }}>확인</div>
-              <div style={{ height:36 }}></div>
+              <div style={{ height:36, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"2px 0" }}>
+                <img src="/sign-kimyg.png" style={{ height:22, objectFit:"contain" }} alt="김영각" />
+                <div style={{ fontSize:"7pt", marginTop:1 }}>김영각</div>
+              </div>
             </div>
             <div style={{ border:"1px solid #999", borderLeft:"none", width:60, textAlign:"center" }}>
               <div style={{ background:"#f0f0f0", borderBottom:"1px solid #bbb", padding:"3px 0", fontSize:"7.5pt", fontWeight:"bold" }}>승인</div>
-              <div style={{ height:36 }}></div>
+              <div style={{ height:36, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"2px 0" }}>
+                <img src="/sign-chods.png" style={{ height:22, objectFit:"contain" }} alt="조대성" />
+                <div style={{ fontSize:"7pt", marginTop:1 }}>조대성</div>
+              </div>
             </div>
           </div>
           {/* 헤더 정보 테이블 */}
