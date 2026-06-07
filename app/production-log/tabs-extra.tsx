@@ -2545,7 +2545,7 @@ export function CompressorTab({ role, userId, showToast }: {
           <div><span className="font-semibold text-slate-600">필터명:</span> Airfinn 에어핀 유수분리기 압축공기 콤프레사 필터</div>
           <div><span className="font-semibold text-slate-600">설치위치:</span> 기계실 &nbsp;|&nbsp; <span className="font-semibold text-slate-600">용도:</span> 압송탱크 공급</div>
           <div><span className="font-semibold text-slate-600">기록담당자:</span> 작업자</div>
-          <div><span className="font-semibold text-slate-600">확인담당자:</span> 해섭팀장</div>
+          <div><span className="font-semibold text-slate-600">확인담당자:</span> 생산팀장</div>
         </div>
 
         {loading ? (
