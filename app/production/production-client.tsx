@@ -281,11 +281,18 @@ export default function ProductionClient() {
   const [filterDateTo, setFilterDateTo] = useState("");
   const [selectedWo, setSelectedWo] = useState<WorkOrderRow | null>(null);
 
-  // 분사/코팅 배합 횟수
-  const [blendCount, setBlendCount] = useState(1);
-  // 분사 수량
-  const [sprayProdQty, setSprayProdQty] = useState<string>("");
- // 네오컬러 분사-레이즈 사용 lot 
+ // 분사/코팅 배합 횟수
+ const [blendCount, setBlendCount] = useState(1);
+ // 분사 수량
+ const [sprayProdQty, setSprayProdQty] = useState<string>("");
+ // 압축공기 작업 기록
+ const [compWorkHours, setCompWorkHours] = useState<string>("");
+ const [compDamageOk, setCompDamageOk] = useState(true);
+ const [compNote, setCompNote] = useState<string>("");
+ const [compSaved, setCompSaved] = useState(false);
+ const [compSaving, setCompSaving] = useState(false);
+ const [compLogId, setCompLogId] = useState<string | null>(null);
+// 네오컬러 분사-레이즈 사용 lot
  const [neoColorSprayLots, setNeoColorSprayLots] = useState<{ lot_id: string; qty: string }[]>([]);
   const [neoColorSprayLotOptions, setNeoColorSprayLotOptions] = useState<{ lot_id: string; expiry_date: string; remaining_qty: number; variant_name: string }[]>([]);
   const [neoColorSprayLotLoading, setNeoColorSprayLotLoading] = useState(false);
@@ -698,8 +705,8 @@ export default function ProductionClient() {
   async function applySelection(wo: WorkOrderRow, resetEdit = true) {
     setIsKiseongForm(false); setIsEditMode(false);
     setBlendCount(1); // 배합 횟수 초기화
-   
     setSprayProdQty(""); // 분사 수량 초기화
+    setCompWorkHours(""); setCompDamageOk(true); setCompNote(""); setCompSaved(false); setCompSaving(false); setCompLogId(null);
     setNeoColorSprayLots([]); // 네오컬러 분사-레이즈 lot 초기화
     setNeoColorSprayLotOptions([]); // 네오컬러 분사-레이즈 lot 옵션 초기화
     setNeoColorSpraySaved(false);
@@ -808,6 +815,23 @@ export default function ProductionClient() {
       });
     })();
     ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id, wo.status);
+    // 압축공기 기존 기록 로드 (분사/코팅 작업지시서)
+    if (getWoSubType(wo.product_name)) {
+      (async () => {
+        const { data: compData } = await supabase
+          .from("compressor_logs")
+          .select("id, work_hours, is_damaged, note")
+          .eq("work_order_id", wo.id)
+          .maybeSingle();
+        if (compData) {
+          setCompWorkHours(String(compData.work_hours ?? ""));
+          setCompDamageOk(!compData.is_damaged);
+          setCompNote(compData.note ?? "");
+          setCompSaved(true);
+          setCompLogId(compData.id);
+        }
+      })();
+    }
     // 분사 작업지시서: 코팅-레이즈 lot 자동 검색
     if (getWoSubType(wo.product_name) === "분사") {
       for (const item of (wo.work_order_items ?? [])) {
@@ -950,8 +974,60 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
     }
   }
 
-  // ─── 분사/코팅 생산완료 처리 ───
-  async function doCompleteSprayCoating(productionAssignee: string, subType: "분사" | "코팅") {
+ // ─── 압축공기 기록 저장/수정 ───
+ async function saveCompressorLog(workerName: string) {
+  if (!selectedWo) return;
+  if (!compWorkHours || isNaN(Number(compWorkHours))) {
+    return showToast("작업시간을 입력하세요.", "error");
+  }
+  setCompSaving(true);
+  const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+  const subType = getWoSubType(selectedWo.product_name) ?? "분사";
+  const { data: { user } } = await supabase.auth.getUser();
+  const createdBy = user?.id ?? null;
+  if (compLogId) {
+    // 수정 — 누계는 변경하지 않음
+    const { error } = await supabase.from("compressor_logs").update({
+      work_hours: Number(compWorkHours),
+      is_damaged: !compDamageOk,
+      note: compNote.trim() || null,
+      worker_name: workerName,
+      updated_at: new Date().toISOString(),
+    }).eq("id", compLogId);
+    setCompSaving(false);
+    if (error) return showToast("압축공기 수정 실패: " + error.message, "error");
+  } else {
+    // 신규 — 누계 계산
+    const { data: lastLog } = await supabase
+      .from("compressor_logs")
+      .select("cumulative_hours")
+      .order("worked_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const lastCum = Number(lastLog?.cumulative_hours ?? 0);
+    const newCum = Math.round((lastCum + Number(compWorkHours)) * 10) / 10;
+    const { data: newLog, error } = await supabase.from("compressor_logs").insert({
+      log_date: today,
+      worked_at: `${today}T00:00:00+09:00`,
+      work_type: subType,
+      work_hours: Number(compWorkHours),
+      cumulative_hours: newCum,
+      is_damaged: !compDamageOk,
+      worker_name: workerName,
+      note: compNote.trim() || null,
+      work_order_id: selectedWo.id,
+      created_by: createdBy,
+    }).select("id").single();
+    setCompSaving(false);
+    if (error) return showToast("압축공기 저장 실패: " + error.message, "error");
+    setCompLogId(newLog.id);
+  }
+  setCompSaved(true);
+  showToast("✅ 압축공기 기록 저장!");
+}
+
+// ─── 분사/코팅 생산완료 처리 ───
+async function doCompleteSprayCoating(productionAssignee: string, subType: "분사" | "코팅") {
     if (!selectedWo) return;
     setIsCompleting(true);
     setMsg("저장 중...");
@@ -2168,6 +2244,69 @@ const totalOrder = items
                   </div>
                 );
               })()}
+
+           {/* 압축공기 작업 기록 — 분사/코팅 전용 */}
+           {getWoSubType(selectedWo.product_name) && (
+              <div className={`${card} p-3`} style={{ borderColor: "#bae6fd", background: "#f0f9ff" }}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-semibold" style={{ color: "#0369a1" }}>💨 압축공기 작업 기록</span>
+                  {compSaved && (
+                    <span className="rounded-full border border-green-200 bg-green-100 px-2.5 py-0.5 text-[11px] font-semibold text-green-700">✅ 저장됨</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3 mb-3">
+                  <div>
+                    <div className="mb-1 text-xs text-slate-500">작업시간 (h) *</div>
+                    <input
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-right tabular-nums focus:border-blue-400 focus:outline-none"
+                      inputMode="decimal"
+                      placeholder="예: 6"
+                      value={compWorkHours}
+                      disabled={selectedWo.status === "완료" && !isEditMode}
+                      onChange={(e) => setCompWorkHours(e.target.value.replace(/[^\d.]/g, ""))}
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-500">파손여부</div>
+                    <div className="flex gap-2">
+                      <button type="button"
+                        className={`flex-1 rounded-lg border py-1.5 text-xs font-semibold transition-all ${compDamageOk ? "border-green-400 bg-green-50 text-green-700" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
+                        disabled={selectedWo.status === "완료" && !isEditMode}
+                        onClick={() => setCompDamageOk(true)}>○ 이상없음</button>
+                      <button type="button"
+                        className={`flex-1 rounded-lg border py-1.5 text-xs font-semibold transition-all ${!compDamageOk ? "border-red-400 bg-red-50 text-red-700" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
+                        disabled={selectedWo.status === "완료" && !isEditMode}
+                        onClick={() => setCompDamageOk(false)}>× 파손</button>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-500">특이사항</div>
+                    <input
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+                      value={compNote}
+                      disabled={selectedWo.status === "완료" && !isEditMode}
+                      onChange={(e) => setCompNote(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="w-full rounded-lg border py-2 text-xs font-bold text-white disabled:opacity-60"
+                  style={{ borderColor: "#0284c7", background: compSaving ? "#94a3b8" : "#0284c7" }}
+                  disabled={compSaving || !compWorkHours || (selectedWo.status === "완료" && !isEditMode)}
+                  onClick={() => {
+                    if (isPinValid() && pinSession) {
+                      saveCompressorLog(pinSession.employeeName);
+                    } else {
+                      setPinProgressPending(() => (name: string) => saveCompressorLog(name));
+                      setShowPinModalForProgress(true);
+                    }
+                  }}
+                >
+                  {compSaving ? "저장 중..." : compSaved ? "💾 수정 저장" : "💾 압축공기 기록 저장"}
+                </button>
+              </div>
+            )}
 
             {/* CCP-1B 슬롯 지정 + 온도 기록 */}
             {!selectedWo.skip_production_check && (getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트" || (getFoodCategory(selectedWo.food_type) === "중간재" && !selectedWo.product_name.includes("분사-레이즈"))) && (

@@ -2460,11 +2460,11 @@ export function CompressorTab({ role, userId, showToast }: {
   const loadLogs = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from("compressor_logs")
-      .select("*")
-      .gte("log_date", filterFrom)
-      .lte("log_date", filterTo)
-      .order("worked_at", { ascending: true });
-    setLogs(data ?? []);
+    .select("*, work_order:work_orders(client_name, product_name)")
+    .gte("log_date", filterFrom)
+    .lte("log_date", filterTo)
+    .order("worked_at", { ascending: true });
+  setLogs(data ?? []);
     setLoading(false);
   }, [filterFrom, filterTo]);
 
@@ -2676,6 +2676,7 @@ export function CompressorTab({ role, userId, showToast }: {
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center">파손여부</th>
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center">담당</th>
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center">작업</th>
+                  <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-left">작업지시서</th>
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-left">비고</th>
                   {isAdminOrSubadmin && <th className="py-2 px-3 w-8"></th>}
                 </tr>
@@ -2694,6 +2695,11 @@ export function CompressorTab({ role, userId, showToast }: {
                     </td>
                     <td className="py-2 px-3 text-center text-sm font-medium text-slate-700">{log.worker_name ?? "—"}</td>
                     <td className="py-2 px-3 text-center text-xs font-medium text-slate-700">{log.work_type ?? "—"}</td>
+                    <td className="py-2 px-3 text-xs text-slate-500">
+                      {(log as any).work_order
+                        ? `${(log as any).work_order.client_name} — ${(log as any).work_order.product_name}`
+                        : "—"}
+                    </td>
                     <td className="py-2 px-3 text-xs text-slate-500">{log.note ?? "—"}</td>
                     {isAdminOrSubadmin && (
                       <td className="py-2 px-3 text-center">
@@ -2712,7 +2718,7 @@ export function CompressorTab({ role, userId, showToast }: {
                   <td className="py-2 px-3 text-right tabular-nums text-sm font-bold text-blue-700">
                     {logs.length > 0 ? Number(logs[logs.length - 1].cumulative_hours).toFixed(1) + " h" : "—"}
                   </td>
-                  <td colSpan={isAdminOrSubadmin ? 4 : 3} />
+                  <td colSpan={isAdminOrSubadmin ? 5 : 4} />
                 </tr>
               </tfoot>
             </table>
