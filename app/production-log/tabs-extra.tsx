@@ -2577,9 +2577,9 @@ export function CompressorTab({ role, userId, showToast }: {
                     <td className="py-2 px-3 text-right tabular-nums font-medium">{Number(log.work_hours).toFixed(1)} h</td>
                     <td className="py-2 px-3 text-right tabular-nums text-blue-700 font-semibold">{Number(log.cumulative_hours).toFixed(1)} h</td>
                     <td className="py-2 px-3 text-center">
-                      {log.is_damaged
-                        ? <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">× 파손</span>
-                        : <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">○ 이상없음</span>}
+                    {log.is_damaged
+                        ? <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">○ 파손</span>
+                        : <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">× 이상없음</span>}
                     </td>
                     <td className="py-2 px-3 text-center text-sm font-medium text-slate-700">{log.worker_name ?? "—"}</td>
                     <td className="py-2 px-3 text-center text-xs font-medium text-slate-700">{log.work_type ?? "—"}</td>
@@ -2661,7 +2661,7 @@ export function CompressorTab({ role, userId, showToast }: {
                 <td style={{ border:"1px solid #999", padding:"3px 8px", fontWeight:"bold", background:"#f0f0f0" }}>기록담당자</td>
                 <td style={{ border:"1px solid #999", padding:"3px 8px" }}>작업자</td>
                 <td style={{ border:"1px solid #999", padding:"3px 8px", fontWeight:"bold", background:"#f0f0f0", whiteSpace:"nowrap" }}>확인담당자</td>
-                <td style={{ border:"1px solid #999", padding:"3px 8px" }}>해섭팀장</td>
+                <td style={{ border:"1px solid #999", padding:"3px 8px" }}>생산팀장</td>
               </tr>
             </tbody>
           </table>
@@ -2669,31 +2669,38 @@ export function CompressorTab({ role, userId, showToast }: {
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"8pt" }}>
             <thead>
               <tr>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:28 }}>no</th>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:68 }}>일 시</th>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:56 }}>작업시간</th>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:56 }}>누 계</th>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:64 }}>파손여부(O,×)</th>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:48 }}>담 당</th>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:48 }}>확 인</th>
+              <th style={{ border:"1px solid #999", padding:"4px 4px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:24 }}>no</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:60 }}>일 시</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:50 }}>작업시간</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:50 }}>누 계</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:52 }}>파손여부(O,×)</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:44 }}>담 당</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:52 }}>확 인</th>
                 <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold" }}>비 고</th>
               </tr>
             </thead>
             <tbody>
-              {logs.map((log, idx) => (
-                <tr key={log.id} style={{ background: idx % 2 === 0 ? "#fff" : "#fafafa" }}>
-                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}>{idx + 1}</td>
-                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}>{log.log_date}</td>
-                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"right", fontVariantNumeric:"tabular-nums" }}>{Number(log.work_hours).toFixed(1)} h</td>
-                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"right", fontVariantNumeric:"tabular-nums", fontWeight:"bold" }}>{Number(log.cumulative_hours).toFixed(1)} h</td>
-                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center", color: log.is_damaged ? "red" : "#000" }}>
-                    {log.is_damaged ? "×" : "○"}
-                  </td>
-                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}>{log.worker_name ?? ""}</td>
-                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}></td>
-                  <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}>{log.note ?? ""}</td>
-                </tr>
-              ))}
+            {logs.map((log, idx) => {
+                const signSrc = log.worker_name ? SIGN_MAP[log.worker_name] ?? null : null;
+                return (
+                  <tr key={log.id} style={{ background: idx % 2 === 0 ? "#fff" : "#fafafa" }}>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 4px", textAlign:"center" }}>{idx + 1}</td>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}>{log.log_date}</td>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"right", fontVariantNumeric:"tabular-nums" }}>{Number(log.work_hours).toFixed(1)} h</td>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"right", fontVariantNumeric:"tabular-nums", fontWeight:"bold" }}>{Number(log.cumulative_hours).toFixed(1)} h</td>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center", color: log.is_damaged ? "red" : "#000" }}>
+                      {log.is_damaged ? "○" : "×"}
+                    </td>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}>{log.worker_name ?? ""}</td>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}>
+                      {signSrc
+                        ? <><img src={signSrc} style={{ height:20, objectFit:"contain", display:"block", margin:"0 auto" }} alt={log.worker_name ?? ""} /><div style={{ fontSize:"6pt", marginTop:1 }}>{log.worker_name}</div></>
+                        : log.worker_name ?? ""}
+                    </td>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}>{log.note ?? ""}</td>
+                  </tr>
+                );
+              })}
               {Array.from({ length: Math.max(0, 20 - logs.length) }).map((_, i) => (
                 <tr key={`empty-${i}`} style={{ background: (logs.length + i) % 2 === 0 ? "#fff" : "#fafafa" }}>
                   <td style={{ border:"1px solid #bbb", padding:"4px 6px", textAlign:"center", color:"#ccc" }}>{logs.length + i + 1}</td>
