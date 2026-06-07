@@ -2437,13 +2437,7 @@ export function CompressorTab({ role, userId, showToast }: {
   const [inspector, setInspector] = useState<{ id: string; name: string } | null>(null);
   const [showPin, setShowPin] = useState(false);
 
-  // 입력 폼
-  const [showForm, setShowForm] = useState(true);
-  const [fDate, setFDate] = useState(today);
-  const [fWorkType, setFWorkType] = useState<"분사" | "코팅" | "분사+코팅">("분사");
-  const [fWorkHours, setFWorkHours] = useState("");
-  const [fDamageOk, setFDamageOk] = useState(true);
-  const [fNote, setFNote] = useState("");
+ 
 
   // 조회 필터
   const [filterFrom, setFilterFrom] = useState(() => {
@@ -2479,29 +2473,7 @@ export function CompressorTab({ role, userId, showToast }: {
     return (data?.[0]?.cumulative_hours ?? 0) as number;
   }
 
-  async function saveLog() {
-    if (!inspector) return showToast("PIN을 입력해주세요.", "error");
-    if (!fWorkHours || isNaN(Number(fWorkHours))) return showToast("작업시간을 입력하세요.", "error");
-    setSaving(true);
-    const lastCum = await getLastCumulative();
-    const newCum = Math.round((lastCum + Number(fWorkHours)) * 10) / 10;
-    const { error } = await supabase.from("compressor_logs").insert({
-      log_date: fDate,
-      worked_at: `${fDate}T00:00:00+09:00`,
-      work_type: fWorkType,
-      work_hours: Number(fWorkHours),
-      cumulative_hours: newCum,
-      is_damaged: !fDamageOk,
-      worker_name: inspector.name,
-      note: fNote.trim() || null,
-      created_by: userId,
-    });
-    setSaving(false);
-    if (error) return showToast("저장 실패: " + error.message, "error");
-    showToast("✅ 저장 완료!");
-    setFWorkHours(""); setFNote(""); setFDamageOk(true); setFDate(today); setFWorkType("분사");
-    loadLogs();
-  }
+  
 
   async function deleteLog(id: string) {
     if (!confirm("이 기록을 삭제하시겠습니까?\n삭제 후 누계가 맞지 않을 수 있으니 주의하세요.")) return;
@@ -2548,19 +2520,7 @@ export function CompressorTab({ role, userId, showToast }: {
           <button className={btn} onClick={loadLogs}>🔄 조회</button>
           <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
 
-          {inspector ? (
-            <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
-              <span className="text-green-600 text-sm font-semibold">👤 {inspector.name}</span>
-              <button className="text-xs text-green-400 hover:text-green-600 underline"
-                onClick={() => setInspector(null)}>변경</button>
-            </div>
-          ) : (
-            <button className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
-              onClick={() => setShowPin(true)}>🔑 PIN 입력</button>
-          )}
-
-         
-        </div>
+          </div>
       </div>
 
       {/* PIN 모달 */}
@@ -2576,79 +2536,7 @@ export function CompressorTab({ role, userId, showToast }: {
         />
       )}
 
-      {/* ── 등록 폼 ── */}
-      {showForm && isAdminOrSubadmin && (
-        <div className={`${card} p-4`}>
-          <div className="mb-3 font-semibold text-sm text-blue-700">✚ 압축공기 작업 기록 등록</div>
-
-          {/* 고정 정보 */}
-          <div className="mb-4 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
-            <div><span className="font-semibold">필터명:</span> Airfinn 에어핀 유수분리기 압축공기 콤프레사 필터</div>
-            <div><span className="font-semibold">설치위치:</span> 기계실</div>
-            <div><span className="font-semibold">용도:</span> 압송탱크 공급</div>
-            <div><span className="font-semibold">확인담당자:</span> 해섭팀장</div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div>
-              <div className="mb-1 text-xs text-slate-500">날짜 *</div>
-              <input type="date" className={inp} value={fDate} onChange={(e) => setFDate(e.target.value)} />
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">작업 *</div>
-              <div className="flex gap-2 mt-1">
-                {(["분사", "코팅", "분사+코팅"] as const).map((t) => (
-                  <button key={t} type="button"
-                    className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition-all ${
-                      fWorkType === t
-                        ? "border-blue-400 bg-blue-50 text-blue-700"
-                        : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                    }`}
-                    onClick={() => setFWorkType(t)}>{t}</button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">작업시간 (h) *</div>
-              <input className={inp} inputMode="decimal" placeholder="예: 6" value={fWorkHours}
-                onChange={(e) => setFWorkHours(e.target.value.replace(/[^\d.]/g, ""))} />
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">파손여부</div>
-              <div className="flex gap-2 mt-1">
-                <button
-                  className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition-all ${fDamageOk
-                    ? "border-green-400 bg-green-50 text-green-700"
-                    : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
-                  onClick={() => setFDamageOk(true)}>○ 이상없음</button>
-                <button
-                  className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition-all ${!fDamageOk
-                    ? "border-red-400 bg-red-50 text-red-700"
-                    : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
-                  onClick={() => setFDamageOk(false)}>× 파손</button>
-              </div>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">담당자</div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                {inspector ? `👤 ${inspector.name}` : <span className="text-slate-400">PIN 입력 후 자동 설정</span>}
-              </div>
-            </div>
-            <div className="md:col-span-2">
-              <div className="mb-1 text-xs text-slate-500">특이사항</div>
-              <input className={inp} value={fNote} onChange={(e) => setFNote(e.target.value)}
-                placeholder="" />
-            </div>
-          </div>
-          <div className="mt-4 flex gap-2">
-            <button
-              className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
-              disabled={saving || !inspector} onClick={saveLog}>
-              {saving ? "저장 중..." : "💾 등록"}
-            </button>
-          </div>
-        </div>
-      )}
+      
 
       {/* ── 목록 ── */} 
       <div className={`${card} p-4`}>
