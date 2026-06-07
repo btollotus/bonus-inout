@@ -2669,13 +2669,13 @@ export function CompressorTab({ role, userId, showToast }: {
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"8pt" }}>
             <thead>
               <tr>
-              <th style={{ border:"1px solid #999", padding:"4px 4px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:24 }}>no</th>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:60 }}>일 시</th>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:50 }}>작업시간</th>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:50 }}>누 계</th>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:52 }}>파손여부(O,×)</th>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:44 }}>담 당</th>
-                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:52 }}>확 인</th>
+              <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", whiteSpace:"nowrap", width:24 }}>no</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", whiteSpace:"nowrap", width:72 }}>일 시</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", whiteSpace:"nowrap", width:54 }}>작업시간</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", whiteSpace:"nowrap", width:54 }}>누 계</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", whiteSpace:"nowrap", width:60 }}>파손여부(O,×)</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", whiteSpace:"nowrap", width:44 }}>담 당</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", whiteSpace:"nowrap", width:52 }}>확 인</th>
                 <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold" }}>비 고</th>
               </tr>
             </thead>
@@ -2684,14 +2684,14 @@ export function CompressorTab({ role, userId, showToast }: {
                 const signSrc = log.worker_name ? SIGN_MAP[log.worker_name] ?? null : null;
                 return (
                   <tr key={log.id} style={{ background: idx % 2 === 0 ? "#fff" : "#fafafa" }}>
-                    <td style={{ border:"1px solid #bbb", padding:"3px 4px", textAlign:"center" }}>{idx + 1}</td>
-                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}>{log.log_date}</td>
-                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"right", fontVariantNumeric:"tabular-nums" }}>{Number(log.work_hours).toFixed(1)} h</td>
-                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"right", fontVariantNumeric:"tabular-nums", fontWeight:"bold" }}>{Number(log.cumulative_hours).toFixed(1)} h</td>
-                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center", color: log.is_damaged ? "red" : "#000" }}>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center", whiteSpace:"nowrap" }}>{idx + 1}</td>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center", whiteSpace:"nowrap" }}>{log.log_date}</td>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"right", whiteSpace:"nowrap", fontVariantNumeric:"tabular-nums" }}>{Number(log.work_hours).toFixed(1)} h</td>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"right", whiteSpace:"nowrap", fontVariantNumeric:"tabular-nums", fontWeight:"bold" }}>{Number(log.cumulative_hours).toFixed(1)} h</td>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center", whiteSpace:"nowrap", color: log.is_damaged ? "red" : "#000" }}>
                       {log.is_damaged ? "○" : "×"}
                     </td>
-                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}>{log.worker_name ?? ""}</td>
+                    <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center", whiteSpace:"nowrap" }}>{log.worker_name ?? ""}</td>
                     <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}>
                       {signSrc
                         ? <><img src={signSrc} style={{ height:20, objectFit:"contain", display:"block", margin:"0 auto" }} alt={log.worker_name ?? ""} /><div style={{ fontSize:"6pt", marginTop:1 }}>{log.worker_name}</div></>
@@ -2703,14 +2703,14 @@ export function CompressorTab({ role, userId, showToast }: {
               })}
               {Array.from({ length: Math.max(0, 20 - logs.length) }).map((_, i) => (
                 <tr key={`empty-${i}`} style={{ background: (logs.length + i) % 2 === 0 ? "#fff" : "#fafafa" }}>
-                  <td style={{ border:"1px solid #bbb", padding:"4px 6px", textAlign:"center", color:"#ccc" }}>{logs.length + i + 1}</td>
-                  <td style={{ border:"1px solid #bbb", padding:"4px 6px" }}></td>
-                  <td style={{ border:"1px solid #bbb", padding:"4px 6px", textAlign:"center", color:"#ccc", fontSize:"7pt" }}>h</td>
-                  <td style={{ border:"1px solid #bbb", padding:"4px 6px", textAlign:"center", color:"#ccc", fontSize:"7pt" }}>h</td>
-                  <td style={{ border:"1px solid #bbb", padding:"4px 6px" }}></td>
-                  <td style={{ border:"1px solid #bbb", padding:"4px 6px" }}></td>
-                  <td style={{ border:"1px solid #bbb", padding:"4px 6px" }}></td>
-                  <td style={{ border:"1px solid #bbb", padding:"4px 6px" }}></td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center", whiteSpace:"nowrap" }}>{logs.length + i + 1}</td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}></td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}></td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}></td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}></td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}></td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}></td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}></td>
                 </tr>
               ))}
             </tbody>
