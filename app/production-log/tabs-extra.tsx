@@ -2614,78 +2614,99 @@ export function CompressorTab({ role, userId, showToast }: {
         )}
       </div>
 
-      {/* ── 인쇄 전용 숨김 영역 ── */}
-      <style>{`#compressor-print-inner { display: none; }`}</style>
+     {/* ── 인쇄 전용 숨김 영역 ── */}
+     <style>{`#compressor-print-inner { display: none; }`}</style>
       <div id="compressor-print-inner">
-        <div style={{ fontFamily:"'Malgun Gothic','맑은 고딕',sans-serif", fontSize:"8pt", color:"#000" }}>
-          <div style={{ textAlign:"center", fontSize:"13pt", fontWeight:"bold", marginBottom:8, paddingBottom:4, borderBottom:"1.5px solid #000" }}>
-            압축공기 작업기록
+        <div style={{ fontFamily:"'Malgun Gothic','맑은 고딕',sans-serif", fontSize:"9pt", color:"#000" }}>
+          {/* 상단: 회사명 + 기간 */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:3 }}>
+            <div style={{ fontSize:"8pt", color:"#555" }}>BONUSMATE</div>
+            <div style={{ fontSize:"8pt", color:"#555" }}>{filterFrom} ~ {filterTo}</div>
           </div>
-          {/* 헤더 정보 */}
-          <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:8, fontSize:"7.5pt" }}>
+          {/* 제목 */}
+          <div style={{ fontSize:"15pt", fontWeight:"bold", textAlign:"center", letterSpacing:"2px", marginBottom:2 }}>
+            압 축 공 기 작 업 기 록
+          </div>
+          {/* 결재란 */}
+          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
+            <div style={{ border:"1px solid #999", width:60, textAlign:"center" }}>
+              <div style={{ background:"#f0f0f0", borderBottom:"1px solid #bbb", padding:"3px 0", fontSize:"7.5pt", fontWeight:"bold" }}>확인</div>
+              <div style={{ height:36 }}></div>
+            </div>
+            <div style={{ border:"1px solid #999", borderLeft:"none", width:60, textAlign:"center" }}>
+              <div style={{ background:"#f0f0f0", borderBottom:"1px solid #bbb", padding:"3px 0", fontSize:"7.5pt", fontWeight:"bold" }}>승인</div>
+              <div style={{ height:36 }}></div>
+            </div>
+          </div>
+          {/* 헤더 정보 테이블 */}
+          <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:8, fontSize:"8pt" }}>
             <tbody>
               <tr>
-                <td style={{ border:"0.5px solid #000", padding:"2px 6px", fontWeight:"bold", width:60 }}>필터명</td>
-                <td style={{ border:"0.5px solid #000", padding:"2px 6px" }} colSpan={3}>Airfinn 에어핀 유수분리기 압축공기 콤프레사 필터</td>
+                <td style={{ border:"1px solid #999", padding:"3px 8px", fontWeight:"bold", background:"#f0f0f0", width:72, whiteSpace:"nowrap" }}>필터명</td>
+                <td style={{ border:"1px solid #999", padding:"3px 8px" }} colSpan={3}>Airfinn 에어핀 유수분리기 압축공기 콤프레사 필터</td>
               </tr>
               <tr>
-                <td style={{ border:"0.5px solid #000", padding:"2px 6px", fontWeight:"bold" }}>설치위치</td>
-                <td style={{ border:"0.5px solid #000", padding:"2px 6px" }}>기계실</td>
-                <td style={{ border:"0.5px solid #000", padding:"2px 6px", fontWeight:"bold", width:40 }}>용 도</td>
-                <td style={{ border:"0.5px solid #000", padding:"2px 6px" }}>압송탱크 공급</td>
+                <td style={{ border:"1px solid #999", padding:"3px 8px", fontWeight:"bold", background:"#f0f0f0" }}>설치위치</td>
+                <td style={{ border:"1px solid #999", padding:"3px 8px", width:80 }}>기계실</td>
+                <td style={{ border:"1px solid #999", padding:"3px 8px", fontWeight:"bold", background:"#f0f0f0", width:48, whiteSpace:"nowrap" }}>용 도</td>
+                <td style={{ border:"1px solid #999", padding:"3px 8px" }}>압송탱크 공급</td>
               </tr>
               <tr>
-                <td style={{ border:"0.5px solid #000", padding:"2px 6px", fontWeight:"bold" }}>기록담당자</td>
-                <td style={{ border:"0.5px solid #000", padding:"2px 6px" }}>작업자</td>
-                <td style={{ border:"0.5px solid #000", padding:"2px 6px", fontWeight:"bold" }}>확인담당자</td>
-                <td style={{ border:"0.5px solid #000", padding:"2px 6px" }}>해섭팀장</td>
+                <td style={{ border:"1px solid #999", padding:"3px 8px", fontWeight:"bold", background:"#f0f0f0" }}>기록담당자</td>
+                <td style={{ border:"1px solid #999", padding:"3px 8px" }}>작업자</td>
+                <td style={{ border:"1px solid #999", padding:"3px 8px", fontWeight:"bold", background:"#f0f0f0", whiteSpace:"nowrap" }}>확인담당자</td>
+                <td style={{ border:"1px solid #999", padding:"3px 8px" }}>해섭팀장</td>
               </tr>
             </tbody>
           </table>
           {/* 기록 테이블 */}
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"7.5pt" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"8pt" }}>
             <thead>
-              <tr style={{ background:"#f0f0f0" }}>
-                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:24 }}>no</th>
-                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:60 }}>일 시</th>
-                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:52 }}>작업시간</th>
-                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:52 }}>누 계</th>
-                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:52 }}>파손여부(O,×)</th>
-                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:44 }}>담 당</th>
-                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", width:44 }}>확 인</th>
-                <th style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}>비 고</th>
+              <tr>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:28 }}>no</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:68 }}>일 시</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:56 }}>작업시간</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:56 }}>누 계</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:64 }}>파손여부(O,×)</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:48 }}>담 당</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold", width:48 }}>확 인</th>
+                <th style={{ border:"1px solid #999", padding:"4px 6px", textAlign:"center", background:"#f0f0f0", fontWeight:"bold" }}>비 고</th>
               </tr>
             </thead>
             <tbody>
               {logs.map((log, idx) => (
-                <tr key={log.id}>
-                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}>{idx + 1}</td>
-                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}>{log.log_date}</td>
-                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}>{Number(log.work_hours).toFixed(1)} h</td>
-                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}>{Number(log.cumulative_hours).toFixed(1)} h</td>
-                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", color: log.is_damaged ? "red" : "#000" }}>
+                <tr key={log.id} style={{ background: idx % 2 === 0 ? "#fff" : "#fafafa" }}>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}>{idx + 1}</td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}>{log.log_date}</td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"right", fontVariantNumeric:"tabular-nums" }}>{Number(log.work_hours).toFixed(1)} h</td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"right", fontVariantNumeric:"tabular-nums", fontWeight:"bold" }}>{Number(log.cumulative_hours).toFixed(1)} h</td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center", color: log.is_damaged ? "red" : "#000" }}>
                     {log.is_damaged ? "×" : "○"}
                   </td>
-                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}>{log.worker_name ?? ""}</td>
-                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center" }}></td>
-                  <td style={{ border:"0.5px solid #000", padding:"2px 4px" }}>{log.note ?? ""}</td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}>{log.worker_name ?? ""}</td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center" }}></td>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}>{log.note ?? ""}</td>
                 </tr>
               ))}
-              {/* 빈 행 채우기 (최소 20행) */}
               {Array.from({ length: Math.max(0, 20 - logs.length) }).map((_, i) => (
-                <tr key={`empty-${i}`}>
-                  <td style={{ border:"0.5px solid #000", padding:"2px 4px", textAlign:"center", color:"#ccc" }}>{logs.length + i + 1}</td>
-                  <td style={{ border:"0.5px solid #000", padding:"4px" }}></td>
-                  <td style={{ border:"0.5px solid #000", padding:"4px", textAlign:"center", color:"#ccc", fontSize:"6pt" }}>h</td>
-                  <td style={{ border:"0.5px solid #000", padding:"4px", textAlign:"center", color:"#ccc", fontSize:"6pt" }}>h</td>
-                  <td style={{ border:"0.5px solid #000", padding:"4px" }}></td>
-                  <td style={{ border:"0.5px solid #000", padding:"4px" }}></td>
-                  <td style={{ border:"0.5px solid #000", padding:"4px" }}></td>
-                  <td style={{ border:"0.5px solid #000", padding:"4px" }}></td>
+                <tr key={`empty-${i}`} style={{ background: (logs.length + i) % 2 === 0 ? "#fff" : "#fafafa" }}>
+                  <td style={{ border:"1px solid #bbb", padding:"4px 6px", textAlign:"center", color:"#ccc" }}>{logs.length + i + 1}</td>
+                  <td style={{ border:"1px solid #bbb", padding:"4px 6px" }}></td>
+                  <td style={{ border:"1px solid #bbb", padding:"4px 6px", textAlign:"center", color:"#ccc", fontSize:"7pt" }}>h</td>
+                  <td style={{ border:"1px solid #bbb", padding:"4px 6px", textAlign:"center", color:"#ccc", fontSize:"7pt" }}>h</td>
+                  <td style={{ border:"1px solid #bbb", padding:"4px 6px" }}></td>
+                  <td style={{ border:"1px solid #bbb", padding:"4px 6px" }}></td>
+                  <td style={{ border:"1px solid #bbb", padding:"4px 6px" }}></td>
+                  <td style={{ border:"1px solid #bbb", padding:"4px 6px" }}></td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {/* 하단 출력일시 */}
+          <div style={{ marginTop:8, fontSize:"7.5pt", color:"#555", display:"flex", justifyContent:"space-between" }}>
+            <span>* 본 문서는 BONUSMATE ERP에서 자동 생성되었습니다.</span>
+            <span>출력일시: {new Date().toLocaleString("ko-KR", { timeZone:"Asia/Seoul" })}</span>
+          </div>
         </div>
       </div>
     </div>
