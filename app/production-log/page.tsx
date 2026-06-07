@@ -168,23 +168,22 @@ export default function ProductionLogPage() {
         {/* 왼쪽 사이드바 탭 */}
         <div className="flex flex-col gap-1 w-36 shrink-0">
         {([
-            { key: "dashboard",     label: "📊 통합관리" },
-            { key: "production",    label: "📝 생산일지" },
-            { key: "material",      label: "🧪 원료수불부" },
-            { key: "work",          label: "👷 근무일지" },
-            { key: "ccp1b",         label: "🌡️ CCP-1B" },
-            { key: "ccp1p",         label: "🔍 CCP-1P" },
-            { key: "other_heating", label: "🔥 가열공정" },
-            { key: "compressor",    label: "💨 압축공기" },
-            { key: "pet",           label: "📦 PET수불부" },
-  
-{ key: "warmer_clean", label: "🧹 온장고세척" },
-{ key: "pest",         label: "🪲 방충방서" },
-{ key: "foreign",      label: "🔍 이물관리" },
-{ key: "hygiene",      label: "🧼 위생관리" },
-{ key: "temp_humidity",label: "🌡️ 온습도" },
-{ key: "storage_temp", label: "❄️ 냉장·냉동·온장고" },
-] as { key: Tab; label: string }[]).map((t) => (    
+            { key: "dashboard",     label: "■ 통합관리" },
+            { key: "production",    label: "■ 생산일지" },
+            { key: "material",      label: "■ 원료수불부" },
+            { key: "work",          label: "■ 근무일지" },
+            { key: "ccp1b",         label: "■ CCP-1B" },
+            { key: "ccp1p",         label: "■ CCP-1P" },
+            { key: "other_heating", label: "■ 가열공정" },
+            { key: "compressor",    label: "■ 압축공기" },
+            { key: "pet",           label: "■ PET수불부" },
+            { key: "warmer_clean",  label: "■ 온장고세척" },
+            { key: "pest",          label: "■ 방충방서" },
+            { key: "foreign",       label: "■ 이물관리" },
+            { key: "hygiene",       label: "■ 위생관리" },
+            { key: "temp_humidity", label: "■ 온습도" },
+            { key: "storage_temp",  label: "■ 냉장·냉동·온장고" },
+] as { key: Tab; label: string }[]).map((t) => (
   <button key={t.key}
     className={`w-full text-left ${activeTab === t.key ? btnOn : btn}`}
     onClick={() => setActiveTab(t.key)}
