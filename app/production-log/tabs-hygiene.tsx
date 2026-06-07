@@ -517,25 +517,8 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
                         ) : null}
                       </td>
 
-                      {/* 비고 — 점검자 셀렉트 */}
+                      {/* 비고 */}
                       <td style={{ border:"0.5px solid #e2e8f0", padding:"1px 3px" }}>
-                        {isPast && canEdit ? (
-                          <select
-                            value={inspName}
-                            onChange={async (e) => {
-                              const newName = e.target.value;
-                              setDayInspectors((prev) => ({ ...prev, [d]: newName }));
-                              await supabase.from("warmer_cleaning_daily")
-                                .upsert({ log_date: d, inspector_name: newName }, { onConflict: "log_date" });
-                            }}
-                            style={{ width:"100%", fontSize:9, border:"none", background:"transparent", cursor:"pointer", outline:"none" }}>
-                            {employees.map((emp) => (
-                              <option key={emp.id} value={emp.name ?? ""}>{emp.name}</option>
-                            ))}
-                          </select>
-                        ) : isPast && isActive ? (
-                          <div style={{ fontSize:9, color:"#475569" }}>{inspName}</div>
-                        ) : null}
                       </td>
                     </tr>
                   );
@@ -612,31 +595,60 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
           const dayCount = wcDaysInMonth(yearMonth);
           return (
             <div style={{ fontFamily:"'Malgun Gothic','맑은 고딕',sans-serif", fontSize:"7pt", color:"#000" }}>
-              {/* 제목 */}
-              <div style={{ textAlign:"center", fontSize:"11pt", fontWeight:"bold", marginBottom:4, borderBottom:"1.5px solid #000", paddingBottom:3 }}>
-                온장고세척소독관리일지(1회/일)
+
+              {/* 상단: 회사명 + 기간 */}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:3 }}>
+                <div style={{ fontSize:"8pt", color:"#555" }}>BONUSMATE</div>
+                <div style={{ fontSize:"8pt", color:"#555" }}>{y}년 {m}월</div>
               </div>
+
+              {/* 제목 */}
+              <div style={{ fontSize:"15pt", fontWeight:"bold", textAlign:"center", letterSpacing:"2px", marginBottom:2 }}>
+                온장고 세척소독 관리일지
+              </div>
+              <div style={{ fontSize:"8.5pt", textAlign:"center", color:"#333", marginBottom:6 }}>
+                (1회/일)
+              </div>
+
+              {/* 결재란 */}
+              <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:6 }}>
+                <div style={{ border:"1px solid #999", width:60, textAlign:"center" }}>
+                  <div style={{ background:"#f0f0f0", borderBottom:"1px solid #bbb", padding:"3px 0", fontSize:"7.5pt", fontWeight:"bold" }}>확인</div>
+                  <div style={{ height:36, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"2px 0" }}>
+                    <img src="/sign-kimyg.png" style={{ height:22, objectFit:"contain" }} alt="김영각" />
+                    <div style={{ fontSize:"7pt", marginTop:1 }}>김영각</div>
+                  </div>
+                </div>
+                <div style={{ border:"1px solid #999", borderLeft:"none", width:60, textAlign:"center" }}>
+                  <div style={{ background:"#f0f0f0", borderBottom:"1px solid #bbb", padding:"3px 0", fontSize:"7.5pt", fontWeight:"bold" }}>승인</div>
+                  <div style={{ height:36, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"2px 0" }}>
+                    <img src="/sign-chods.png" style={{ height:22, objectFit:"contain" }} alt="조대성" />
+                    <div style={{ fontSize:"7pt", marginTop:1 }}>조대성</div>
+                  </div>
+                </div>
+              </div>
+
               {/* 안내 + 범례 */}
-              <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:4 }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:6 }}>
                 <tbody>
                   <tr>
-                    <td style={{ ...wcTdP, width:"55%", fontSize:"6.5pt", padding:"3px 6px", lineHeight:1.6 }}>
+                    <td style={{ ...wcTdP, width:"55%", fontSize:"7pt", padding:"4px 8px", lineHeight:1.8 }}>
                       <div style={{ fontWeight:"bold", marginBottom:2 }}>세척소독방법</div>
                       <div>1. 젖은 행주로 이물질을 제거한다.</div>
                       <div>2. 마른 행주로 한번 더 닦아준다.</div>
                       <div>3. 소독액을 뿌려 마무리한다.</div>
                       <div style={{ marginTop:2 }}>※미사용 상태인 온장고는 제외.</div>
                     </td>
-                    <td style={{ ...wcTdP, textAlign:"center", fontSize:"6.5pt", verticalAlign:"middle" }}>
-                      <div style={{ fontWeight:"bold", marginBottom:2 }}>표시기호</div>
+                    <td style={{ ...wcTdP, textAlign:"center", fontSize:"7pt", fontWeight:"bold", verticalAlign:"middle" }}>
+                      표시기호
                     </td>
-                    <td style={{ ...wcTdP, textAlign:"center", fontSize:"6.5pt", verticalAlign:"middle" }}>
+                    <td style={{ ...wcTdP, textAlign:"center", fontSize:"7pt", verticalAlign:"middle" }}>
                       <div style={{ fontWeight:"bold" }}>청소완료</div>
-                      <div style={{ fontSize:"10pt" }}>○</div>
+                      <div style={{ fontSize:"11pt" }}>○</div>
                     </td>
-                    <td style={{ ...wcTdP, textAlign:"center", fontSize:"6.5pt", verticalAlign:"middle" }}>
+                    <td style={{ ...wcTdP, textAlign:"center", fontSize:"7pt", verticalAlign:"middle" }}>
                       <div style={{ fontWeight:"bold" }}>온장고 미사용</div>
-                      <div style={{ fontSize:"10pt" }}>대각선(/)</div>
+                      <div style={{ fontSize:"11pt" }}>/</div>
                     </td>
                   </tr>
                 </tbody>
@@ -647,35 +659,35 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
                 <colgroup>
                   <col style={{ width:"28px" }} />
                   {WARMER_NOS.map((wn) => <col key={wn} />)}
-                  <col style={{ width:"32px" }} />
-                  <col style={{ width:"50px" }} />
+                  <col style={{ width:"36px" }} />
+                  <col style={{ width:"60px" }} />
                 </colgroup>
                 <thead>
                   <tr>
-                    <th style={{ ...wcThP, textAlign:"center", fontSize:"6pt" }}>날짜</th>
+                    <th style={{ ...wcThP, textAlign:"center", fontSize:"7pt" }}>날짜</th>
                     {WARMER_NOS.map((wn) => (
-                      <th key={wn} style={{ ...wcThP, textAlign:"center", fontSize:"5.5pt", padding:"1px" }}>{wn}</th>
+                      <th key={wn} style={{ ...wcThP, textAlign:"center", fontSize:"6.5pt", padding:"2px 1px" }}>{wn}</th>
                     ))}
-                    <th style={{ ...wcThP, textAlign:"center", fontSize:"6pt" }}>확인</th>
-                    <th style={{ ...wcThP, textAlign:"center", fontSize:"6pt" }}>비고</th>
+                    <th style={{ ...wcThP, textAlign:"center", fontSize:"7pt" }}>확인</th>
+                    <th style={{ ...wcThP, textAlign:"center", fontSize:"7pt" }}>비고</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {printDates.map((d) => {
+                  {printDates.map((d, idx) => {
                     const isAct = dayActive[d] ?? false;
                     const inspName = dayInspectors[d] ?? "조대성";
                     const signSrc = WC_SIGN_MAP[inspName] ?? null;
                     const isPast = d <= today;
                     return (
-                      <tr key={d}>
-                        <td style={{ ...wcTdP, textAlign:"center", fontSize:"6.5pt",
+                      <tr key={d} style={{ background: idx % 2 === 0 ? "#fff" : "#fafafa" }}>
+                        <td style={{ ...wcTdP, textAlign:"center", fontSize:"7pt", whiteSpace:"nowrap",
                           background: isAct ? "#dbeafe" : "#f8f8f8", fontWeight: isAct ? 700 : 400 }}>
                           {dayOfDate(d)}
                         </td>
                         {WARMER_NOS.map((wn) => {
                           const r = getResult(d, wn);
                           return (
-                            <td key={wn} style={{ ...wcTdP, textAlign:"center", fontSize:"9pt", fontWeight:"bold", padding:"0px",
+                            <td key={wn} style={{ ...wcTdP, textAlign:"center", fontSize:"10pt", fontWeight:"bold", padding:"1px",
                               color: r === "unused" ? "#888" : (r === "clean" || r === "default") ? "#000" : "#ddd" }}>
                               {r === null ? "·" : r === "unused" ? "/" : "○"}
                             </td>
@@ -683,11 +695,12 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
                         })}
                         <td style={{ ...wcTdP, textAlign:"center", padding:"1px" }}>
                           {isPast && isAct && signSrc
-                            ? <img src={signSrc} style={{ height:14, display:"block", margin:"0 auto" }} alt={inspName} />
-                            : isPast && isAct ? <div style={{ fontSize:"5.5pt" }}>{inspName.slice(0,1)}*</div>
-                            : null}
+                            ? <img src={signSrc} style={{ height:16, display:"block", margin:"0 auto" }} alt={inspName} />
+                            : isPast && isAct
+                              ? <div style={{ fontSize:"6pt", color:"#475569" }}>{inspName}</div>
+                              : null}
                         </td>
-                        <td style={{ ...wcTdP, fontSize:"5.5pt", padding:"1px 2px" }}></td>
+                        <td style={{ ...wcTdP, fontSize:"6.5pt", padding:"2px 4px" }}></td>
                       </tr>
                     );
                   })}
@@ -695,8 +708,29 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
               </table>
 
               {/* 비고 */}
-              {notes.length > 0 && (
-                <table style={{ width:"100%", borderCollapse:"collapse", marginTop:4 }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", marginTop:6 }}>
+                <tbody>
+                  <tr>
+                    <td style={{ ...wcTdP, width:40, fontWeight:"bold", fontSize:"7pt", textAlign:"center", whiteSpace:"nowrap" }}>비고</td>
+                    <td style={{ ...wcTdP, fontSize:"7pt", padding:"4px 8px", lineHeight:1.8 }}>
+                      {notes.length > 0
+                        ? notes.map((n, i) => <span key={n.id}>{i > 0 ? " / " : ""}{n.content}</span>)
+                        : <span style={{ color:"#ccc" }}>없음</span>}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* 하단 출력일시 */}
+              <div style={{ marginTop:8, fontSize:"7.5pt", color:"#555", display:"flex", justifyContent:"space-between" }}>
+                <span>* 본 문서는 BONUSMATE ERP에서 자동 생성되었습니다.</span>
+                <span>출력일시: {new Date().toLocaleString("ko-KR", { timeZone:"Asia/Seoul" })}</span>
+              </div>
+
+            </div>
+          );
+        })()}
+      </div>
                   <tbody>
                     <tr>
                       <td style={{ ...wcTdP, width:40, fontWeight:"bold", fontSize:"6.5pt", textAlign:"center" }}>비고</td>
