@@ -3536,7 +3536,7 @@ function QcSampleForm({ employeeName, userId, showToast }: {
         className="w-full rounded-xl bg-cyan-600 py-2.5 text-sm font-bold text-white hover:bg-cyan-700 disabled:opacity-60"
         disabled={saving || !!savedAt}
         onClick={handleSave}>
-        {saving ? "저장 중..." : savedAt ? "✅ 이미 차감 완료" : "💾 원료 차감 저장"}
+        {saving ? "저장 중..." : savedAt ? "✅ 완료" : "💾 저장"}
       </button>
     </div>
   );
