@@ -491,11 +491,19 @@ function ProductionLogTab({ role, userId, showToast }: {
         .eq("used_date", today)
         .eq("work_type", "qc_sample")
         .eq("note", `자가품질검사 샘플준비 — ${selectedEmployee.name}`);
-      if (error) {
-        showToast("차감 취소 실패: " + error.message, "error");
-      } else {
-        showToast("🗑️ 자가품질검사 원료 차감이 취소되었습니다.");
-      }
+      if (error) showToast("차감 취소 실패: " + error.message, "error");
+      else showToast("🗑️ 자가품질검사 원료 차감이 취소되었습니다.");
+    }
+
+    // 유효성평가검사 체크 해제 시 → 차감 기록 삭제
+    if (taskId === VALIDITY_SAMPLE_TASK_ID && !nextChecked && selectedEmployee) {
+      const { error } = await supabase.from("material_usage_logs")
+        .delete()
+        .eq("used_date", today)
+        .eq("work_type", "validity_sample")
+        .eq("note", `유효성평가검사 샘플준비 — ${selectedEmployee.name}`);
+      if (error) showToast("차감 취소 실패: " + error.message, "error");
+      else showToast("🗑️ 유효성평가검사 원료 차감이 취소되었습니다.");
     }
   }
 
