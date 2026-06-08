@@ -480,6 +480,25 @@ function ProductionLogTab({ role, userId, showToast }: {
     loadTodayData(emp.id, emp.name);
   }
 
+  async function handleTaskCheck(taskId: string, currentChecked: boolean) {
+    const nextChecked = !currentChecked;
+    setTaskChecks((prev) => ({ ...prev, [taskId]: nextChecked }));
+
+    // 자가품질검사 체크 해제 시 → 차감 기록 삭제
+    if (taskId === QC_SAMPLE_TASK_ID && !nextChecked && selectedEmployee) {
+      const { error } = await supabase.from("material_usage_logs")
+        .delete()
+        .eq("used_date", today)
+        .eq("work_type", "qc_sample")
+        .eq("note", `자가품질검사 샘플준비 — ${selectedEmployee.name}`);
+      if (error) {
+        showToast("차감 취소 실패: " + error.message, "error");
+      } else {
+        showToast("🗑️ 자가품질검사 원료 차감이 취소되었습니다.");
+      }
+    }
+  }
+
   async function saveLog() {
     if (!selectedEmployee) return;
     setSaving(true);
@@ -1009,7 +1028,7 @@ function ProductionLogTab({ role, userId, showToast }: {
                       ? "border-amber-400 bg-amber-50 text-amber-700"
                       : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}
                   ${isDisabled ? "opacity-60 cursor-not-allowed" : "active:scale-95"}`}
-                onClick={() => !isDisabled && setTaskChecks((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}>
+                  onClick={() => !isDisabled && handleTaskCheck(t.id, taskChecks[t.id] === true)}>
                 <span className="mr-1.5">{checked ? "✅" : pestWarning ? "⚠" : "☐"}</span>
                 {t.name}
                 {pestWarning && <span className="ml-1 text-[10px] font-semibold">이번 주 미완료</span>}
