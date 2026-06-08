@@ -3474,9 +3474,11 @@ function QcSampleForm({ employeeName, userId, showToast }: {
   const today = todayKST();
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [qtys, setQtys] = useState<Record<string, number>>(
+    () => Object.fromEntries(QC_MATERIALS.map((m) => [m.id, m.qty]))
+  );
 
   useEffect(() => {
-    // 오늘 이미 차감 기록 있는지 확인
     supabase.from("material_usage_logs")
       .select("id")
       .eq("used_date", today)
@@ -3490,11 +3492,13 @@ function QcSampleForm({ employeeName, userId, showToast }: {
 
   async function handleSave() {
     if (savedAt) return showToast("이미 오늘 저장된 기록이 있습니다.", "error");
+    if (QC_MATERIALS.some((m) => !qtys[m.id] || qtys[m.id] <= 0))
+      return showToast("수량을 확인하세요.", "error");
     setSaving(true);
     const usageLogs = QC_MATERIALS.map((m) => ({
       material_id: m.id,
       used_date: today,
-      quantity: m.qty,
+      quantity: qtys[m.id],
       unit: "g",
       work_type: "qc_sample",
       note: `자가품질검사 샘플준비 — ${employeeName}`,
@@ -3506,6 +3510,8 @@ function QcSampleForm({ employeeName, userId, showToast }: {
     showToast("✅ 자가품질검사 샘플준비 원료 차감 완료!");
     setSavedAt(today);
   }
+
+  const total = QC_MATERIALS.reduce((s, m) => s + (qtys[m.id] || 0), 0);
 
   return (
     <div className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50 p-4 space-y-3">
@@ -3519,16 +3525,32 @@ function QcSampleForm({ employeeName, userId, showToast }: {
 
       <div className="rounded-xl border border-slate-200 bg-white p-3">
         <div className="mb-2 text-xs font-semibold text-slate-500">차감 원료 목록</div>
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           {QC_MATERIALS.map((m) => (
-            <div key={m.id} className="flex justify-between text-xs py-0.5 border-b border-slate-100">
-              <span className="text-slate-600">{m.name}</span>
-              <span className="tabular-nums font-semibold">{m.qty}g</span>
+            <div key={m.id} className="flex items-center gap-2 py-0.5 border-b border-slate-100">
+              <span className="flex-1 text-xs text-slate-600">{m.name}</span>
+              {savedAt ? (
+                <span className="tabular-nums text-xs font-semibold text-slate-700">{qtys[m.id]}g</span>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={1}
+                    className="w-20 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-right tabular-nums focus:border-cyan-400 focus:outline-none"
+                    value={qtys[m.id]}
+                    onChange={(e) => setQtys((prev) => ({
+                      ...prev,
+                      [m.id]: Math.max(0, parseInt(e.target.value) || 0),
+                    }))}
+                  />
+                  <span className="text-xs text-slate-400">g</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
         <div className="mt-2 text-right text-xs font-bold text-slate-700">
-          총 {QC_MATERIALS.reduce((s, m) => s + m.qty, 0).toLocaleString()}g
+          총 {total.toLocaleString()}g
         </div>
       </div>
 
