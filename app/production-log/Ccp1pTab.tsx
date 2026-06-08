@@ -556,7 +556,7 @@ function selectWo(wo: WorkOrderItem) {
     try {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("variant_id, work_order_no, food_type, work_order_items(id, actual_qty, unit_weight, expiry_date, barcode_no, sub_items, transfer_lot_id, transfer_qty)")
+        .select("variant_id, work_order_no, client_name, product_name, food_type, logo_spec, work_order_items(id, actual_qty, unit_weight, expiry_date, barcode_no, sub_items, transfer_lot_id, transfer_qty)")
         .eq("id", selectedWoId)
         .single();
 
@@ -627,6 +627,28 @@ function selectWo(wo: WorkOrderItem) {
           showToast("⚠️ CCP-1P 저장됐으나 재고 연동 오류: " + stockErrors.join(" / "), "error");
         } else {
           showToast("✅ CCP-1P 기록 완료! 작업지시서가 완료 처리됐습니다.");
+          // PDF 드라이브 업로드 트리거
+          try {
+            const woNo = (woData as any).work_order_no ?? "";
+            const woDateMatch = woNo.match(/WO-(\d{8})-/);
+            const dateStr = woDateMatch ? woDateMatch[1] : selectedDate.replace(/-/g, "");
+            const sanitize = (s: string) => (s ?? "").replace(/[*×]/g, "x").replace(/[\\/:?"<>|]/g, "").replace(/\s+/g, "_");
+            const fileName = [
+              dateStr,
+              sanitize((woData as any).client_name ?? ""),
+              sanitize((woData as any).product_name ?? ""),
+              sanitize((woData as any).food_type ?? ""),
+              sanitize((woData as any).logo_spec ?? ""),
+              "작업지시서",
+            ].filter(Boolean).join("-");
+            await fetch("/api/trigger-work-order-pdf", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ workOrderId: selectedWoId, fileName }),
+            });
+          } catch (pdfErr) {
+            console.error("PDF 업로드 트리거 오류:", pdfErr);
+          }
         }
       }
     } catch (e: any) {
