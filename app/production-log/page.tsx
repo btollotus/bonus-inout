@@ -1046,13 +1046,22 @@ function ProductionLogTab({ role, userId, showToast }: {
           />
         )}
 
-        {/* 방충방서 폼 */}
-        {taskChecks[PEST_TASK_ID] && !isDisabled && (
+       {/* 방충방서 폼 */}
+       {taskChecks[PEST_TASK_ID] && !isDisabled && (
           <PestInputForm
             employeeName={selectedEmployee.name}
             userId={userId}
             showToast={showToast}
             onSaved={() => setPestDoneThisWeek(true)}
+          />
+        )}
+
+        {/* 자가품질검사 샘플준비 폼 */}
+        {taskChecks[QC_SAMPLE_TASK_ID] && !isDisabled && (
+          <QcSampleForm
+            employeeName={selectedEmployee.name}
+            userId={userId}
+            showToast={showToast}
           />
         )}
       </div>
@@ -2589,6 +2598,7 @@ const PIGMENT_TASK_ID = "7e8ecc06-6f92-49b5-802e-7da0bd868a2c";
 const GUAR_TASK_ID    = "3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673";
 const RAIZE_CUT_TASK_ID = "ab0142bd-5f95-48cc-9786-1100186b0502";
 const PEST_TASK_ID = "3d4a86df-e4cb-455e-b672-9f1910c04bc9";
+const QC_SAMPLE_TASK_ID = "acccc4a9-e51b-4fe4-95e3-172ce81288c5";
 
 function PigmentBlendForm({ employeeName, userId, showToast }: {
   employeeName: string;
@@ -3421,6 +3431,93 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
         className="w-full rounded-xl bg-green-600 py-2.5 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
         disabled={saving} onClick={handleSave}>
         {saving ? "저장 중..." : "💾 방충방서 기록 저장"}
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 자가품질검사 샘플준비 폼
+// ═══════════════════════════════════════════════════════════
+const QC_MATERIALS = [
+  { id: "00000000-0003-0000-0000-000000000002", name: "이산화티타늄", qty: 160 },
+  { id: "00000000-0003-0000-0000-000000000001", name: "팜유",         qty: 180 },
+  { id: "00000000-0003-0000-0000-000000000007", name: "밀납",         qty: 40  },
+  { id: "00000000-0001-0000-0000-000000000001", name: "다크컴파운드", qty: 150 },
+  { id: "00000000-0002-0000-0000-000000000001", name: "화이트컴파운드", qty: 600 },
+];
+
+function QcSampleForm({ employeeName, userId, showToast }: {
+  employeeName: string;
+  userId: string | null;
+  showToast: (msg: string, type?: "success" | "error") => void;
+}) {
+  const today = todayKST();
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 오늘 이미 차감 기록 있는지 확인
+    supabase.from("material_usage_logs")
+      .select("id")
+      .eq("used_date", today)
+      .eq("work_type", "qc_sample")
+      .eq("note", `자가품질검사 샘플준비 — ${employeeName}`)
+      .limit(1)
+      .then(({ data }) => {
+        if (data && data.length > 0) setSavedAt(today);
+      });
+  }, [today, employeeName]);
+
+  async function handleSave() {
+    if (savedAt) return showToast("이미 오늘 저장된 기록이 있습니다.", "error");
+    setSaving(true);
+    const usageLogs = QC_MATERIALS.map((m) => ({
+      material_id: m.id,
+      used_date: today,
+      quantity: m.qty,
+      unit: "g",
+      work_type: "qc_sample",
+      note: `자가품질검사 샘플준비 — ${employeeName}`,
+      created_by: userId,
+    }));
+    const { error } = await supabase.from("material_usage_logs").insert(usageLogs);
+    setSaving(false);
+    if (error) return showToast("재고 차감 실패: " + error.message, "error");
+    showToast("✅ 자가품질검사 샘플준비 원료 차감 완료!");
+    setSavedAt(today);
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50 p-4 space-y-3">
+      <div className="font-semibold text-sm text-cyan-700">🔬 자가품질검사 샘플준비 — 원료 차감</div>
+
+      {savedAt && (
+        <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+          ✅ 오늘 차감 완료
+        </span>
+      )}
+
+      <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="mb-2 text-xs font-semibold text-slate-500">차감 원료 목록</div>
+        <div className="space-y-1">
+          {QC_MATERIALS.map((m) => (
+            <div key={m.id} className="flex justify-between text-xs py-0.5 border-b border-slate-100">
+              <span className="text-slate-600">{m.name}</span>
+              <span className="tabular-nums font-semibold">{m.qty}g</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 text-right text-xs font-bold text-slate-700">
+          총 {QC_MATERIALS.reduce((s, m) => s + m.qty, 0).toLocaleString()}g
+        </div>
+      </div>
+
+      <button
+        className="w-full rounded-xl bg-cyan-600 py-2.5 text-sm font-bold text-white hover:bg-cyan-700 disabled:opacity-60"
+        disabled={saving || !!savedAt}
+        onClick={handleSave}>
+        {saving ? "저장 중..." : savedAt ? "✅ 이미 차감 완료" : "💾 원료 차감 저장"}
       </button>
     </div>
   );
