@@ -712,7 +712,7 @@ export default function ProductionClient() {
     setNeoColorSpraySaved(false);
     setNeoColorSprayEditMode(false);
     // 네오컬러화이트/리얼화이트: 저장된 값 불러오기 + lot 자동 검색
-    const isNeoColorWo = (wo.food_type ?? "").includes("네오컬러화이트") || (wo.food_type ?? "").includes("네오컬러리얼화이트");
+    const isNeoColorWo = ["네오컬러화이트", "네오컬러리얼화이트", "롤리팝컬러리얼화이트", "롤리팝컬러화이트"].some((k) => (wo.food_type ?? "").includes(k));
     if (isNeoColorWo && wo.neo_color_spray_lots && wo.neo_color_spray_lots.length > 0) {
       setNeoColorSprayLots(wo.neo_color_spray_lots);
       setNeoColorSpraySaved(true);
