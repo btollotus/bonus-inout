@@ -2630,6 +2630,38 @@ const totalOrder = items
                               }
                             }
                           }
+                          // ── 컴파운드 사용량 재계산 (완료 후 수정 시) ──
+                          if (selectedWo.status === "완료") {
+                            const foodCatEdit = getFoodCategory(eFoodType || selectedWo.food_type);
+                            if (foodCatEdit === "다크" || foodCatEdit === "화이트") {
+                              const ft = eFoodType || selectedWo.food_type || "";
+                              const compoundNameEdit = ft.includes("딸기") ? "딸기컴파운드"
+                                : getFoodCategory(ft) === "다크" ? "다크컴파운드"
+                                : "화이트컴파운드";
+                              const editItems = items;
+                              let totalCompoundGEdit = 0;
+                              for (const item of editItems) {
+                                const pi = prodInputs[item.id];
+                                const aqty = toInt(pi?.actual_qty);
+                                const uw   = toNum(pi?.unit_weight);
+                                if (aqty > 0 && uw > 0) totalCompoundGEdit += aqty * uw;
+                              }
+                              if (totalCompoundGEdit > 0) {
+                                const dupNote = `작업지시서 생산완료 - ${selectedWo.work_order_no}`;
+                                const { data: existingLog } = await supabase
+                                  .from("material_usage_logs")
+                                  .select("id")
+                                  .eq("note", dupNote)
+                                  .eq("work_type", "product")
+                                  .limit(1);
+                                if (existingLog && existingLog.length > 0) {
+                                  await supabase.from("material_usage_logs")
+                                    .update({ quantity: totalCompoundGEdit })
+                                    .eq("id", existingLog[0].id);
+                                }
+                              }
+                            }
+                          }
                           showToast("수정 완료!"); setIsEditMode(false);
                           if (selectedWo.status === "완료") await triggerPdfUpload(selectedWo, eProductName ?? "품목미상", eFoodType ?? "", eLogoSpec ?? "");
                           await loadWoList();
