@@ -2763,6 +2763,23 @@ export function PetLedgerTab({ role, userId, showToast }: {
   const [saleCutQty, setSaleCutQty] = useState("");
   const [saleCutSaving, setSaleCutSaving] = useState(false);
   const [editingSaleCut, setEditingSaleCut] = useState<{ logId: string; qty: string } | null>(null);
+  const [printUsedPopup, setPrintUsedPopup] = useState<{
+    note: string | null;
+    woInfo: { work_order_no: string; client_name: string; product_name: string; food_type: string | null } | null;
+    loading: boolean;
+  } | null>(null);
+
+  async function openPrintUsedPopup(note: string | null) {
+    setPrintUsedPopup({ note, woInfo: null, loading: true });
+    const match = (note ?? "").match(/WO-[\w-]+/);
+    if (!match) { setPrintUsedPopup({ note, woInfo: null, loading: false }); return; }
+    const woNo = match[0];
+    const { data } = await supabase.from("work_orders")
+      .select("work_order_no, client_name, product_name, food_type")
+      .eq("work_order_no", woNo)
+      .maybeSingle();
+    setPrintUsedPopup({ note, woInfo: data ?? null, loading: false });
+  }
   const [editSaleCutSaving, setEditSaleCutSaving] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
   const [showPinModal, setShowPinModal] = useState(false);
@@ -3038,9 +3055,51 @@ export function PetLedgerTab({ role, userId, showToast }: {
 
   return (
     <div className="space-y-4">
-      <div className={`${card} p-4`}>
-        <div className="flex flex-wrap gap-3 items-end">
-        <button className={btn} onClick={loadData}>🔄 조회</button>
+    {printUsedPopup && (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4"
+        onClick={() => setPrintUsedPopup(null)}>
+        <div className="w-full max-w-[360px] rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+          onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+            <span className="text-sm font-semibold text-slate-700">🎞️ 인쇄 투입 작업지시서</span>
+            <button className="text-slate-400 hover:text-slate-600 text-xs" onClick={() => setPrintUsedPopup(null)}>✕</button>
+          </div>
+          <div className="px-4 py-4">
+            {printUsedPopup.loading ? (
+              <div className="py-4 text-center text-sm text-slate-400">조회 중...</div>
+            ) : printUsedPopup.woInfo ? (
+              <div className="space-y-2">
+                <div className="flex gap-2 text-sm">
+                  <span className="text-slate-400 w-20 shrink-0">거래처</span>
+                  <span className="font-semibold text-slate-800">{printUsedPopup.woInfo.client_name}</span>
+                </div>
+                <div className="flex gap-2 text-sm">
+                  <span className="text-slate-400 w-20 shrink-0">제품명</span>
+                  <span className="text-slate-700">{printUsedPopup.woInfo.product_name}</span>
+                </div>
+                <div className="flex gap-2 text-sm">
+                  <span className="text-slate-400 w-20 shrink-0">식품유형</span>
+                  <span className="text-slate-700">{printUsedPopup.woInfo.food_type ?? "—"}</span>
+                </div>
+                <div className="flex gap-2 text-sm">
+                  <span className="text-slate-400 w-20 shrink-0">작업지시서</span>
+                  <span className="font-mono text-xs text-slate-500">{printUsedPopup.woInfo.work_order_no}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="py-2 text-sm text-slate-400">
+                {printUsedPopup.note
+                  ? <><div className="mb-1">연결된 작업지시서를 찾을 수 없습니다.</div><div className="text-xs text-slate-300">{printUsedPopup.note}</div></>
+                  : "note 정보가 없습니다."}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    <div className={`${card} p-4`}>
+      <div className="flex flex-wrap gap-3 items-end">
+      <button className={btn} onClick={loadData}>🔄 조회</button>
         <div className="flex items-center gap-1.5">
           <input type="date"
             className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:border-violet-400"
@@ -3157,9 +3216,16 @@ export function PetLedgerTab({ role, userId, showToast }: {
                        ) : (
                         <td className="border border-slate-200 px-2 py-1.5"></td>
                       )}
-                      {/* 인쇄 셀 */}
-                      <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600">
-                        {(log.log_type === "print_used_prod" || log.log_type === "print_used_sale") ? log.quantity.toLocaleString() : ""}
+                     {/* 인쇄 셀 */}
+                     <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600">
+                        {(log.log_type === "print_used_prod" || log.log_type === "print_used_sale") ? (
+                          <button
+                            className="underline underline-offset-2 decoration-dotted hover:text-red-800 cursor-pointer"
+                            onClick={() => openPrintUsedPopup(log.note)}
+                          >
+                            {log.quantity.toLocaleString()}
+                          </button>
+                        ) : ""}
                       </td>
                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{cumRaw.toLocaleString()}</td>
                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{cumCoating.toLocaleString()}</td>
