@@ -2662,6 +2662,20 @@ const totalOrder = items
                               }
                             }
                           }
+                          // ── 이산화티타늄 사용량 재계산 (완료 후 수정 시) ──
+                          if (selectedWo.status === "완료" && (eFoodType || selectedWo.food_type || "").includes("리얼") && titaniumDioxideG && Number(titaniumDioxideG) > 0) {
+                            const tiNote = `이산화티타늄 차감 - ${selectedWo.work_order_no}`;
+                            const { data: tiExisting } = await supabase
+                              .from("material_usage_logs")
+                              .select("id")
+                              .eq("note", tiNote)
+                              .limit(1);
+                            if (tiExisting && tiExisting.length > 0) {
+                              await supabase.from("material_usage_logs")
+                                .update({ quantity: Number(titaniumDioxideG) })
+                                .eq("id", tiExisting[0].id);
+                            }
+                          }
                           showToast("수정 완료!"); setIsEditMode(false);
                           if (selectedWo.status === "완료") await triggerPdfUpload(selectedWo, eProductName ?? "품목미상", eFoodType ?? "", eLogoSpec ?? "");
                           await loadWoList();
