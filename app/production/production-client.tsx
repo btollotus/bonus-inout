@@ -1449,14 +1449,19 @@ async function doCompleteSprayCoating(productionAssignee: string, subType: "분�
            if (sprayErr) stockErrors.push("분사-레이즈 차감 실패: " + sprayErr.message);
          }
          if (totalProdQty > 0) {
-           const { error: petProdErr } = await supabase.from("pet_stock_logs").insert({
-             log_date: todayKSTDate, log_type: "print_used_prod",
-             quantity: totalProdQty, defect_qty: 0,
-             note: `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`,
-             created_by: userId,
-           });
-           if (petProdErr) stockErrors.push("PET 수불 기록 실패(생산용): " + petProdErr.message);
-         }
+          const petProdNote = `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`;
+          const { data: petProdDup } = await supabase.from("pet_stock_logs")
+            .select("id").eq("note", petProdNote).limit(1);
+          if (!petProdDup || petProdDup.length === 0) {
+            const { error: petProdErr } = await supabase.from("pet_stock_logs").insert({
+              log_date: todayKSTDate, log_type: "print_used_prod",
+              quantity: totalProdQty, defect_qty: 0,
+              note: petProdNote,
+              created_by: userId,
+            });
+            if (petProdErr) stockErrors.push("PET 수불 기록 실패(생산용): " + petProdErr.message);
+          }
+        }
         
        }
 
