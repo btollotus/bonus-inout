@@ -2775,10 +2775,23 @@ export function PetLedgerTab({ role, userId, showToast }: {
     if (!match) { setPrintUsedPopup({ note, woInfo: null, loading: false }); return; }
     const woNo = match[0];
     const { data } = await supabase.from("work_orders")
-      .select("work_order_no, client_name, product_name, food_type")
+      .select("work_order_no, client_name, product_name, food_type, work_order_items(sub_items)")
       .eq("work_order_no", woNo)
       .maybeSingle();
-    setPrintUsedPopup({ note, woInfo: data ?? null, loading: false });
+    if (data) {
+      const items = ((data as any).work_order_items ?? []) as { sub_items: { name: string; qty: number }[] }[];
+      const filtered = items.filter((item) => {
+        const n = (item.sub_items?.[0]?.name ?? "").trim();
+        return n && !n.startsWith("성형틀") && !n.startsWith("인쇄제판")
+          && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("퀵");
+      });
+      const firstName = filtered[0]?.sub_items?.[0]?.name ?? (data as any).product_name ?? "";
+      const rest = Math.max(0, filtered.length - 1);
+      const displayName = firstName && rest > 0 ? `${firstName} 외 ${rest}건` : firstName;
+      setPrintUsedPopup({ note, woInfo: { ...(data as any), product_name: displayName }, loading: false });
+    } else {
+      setPrintUsedPopup({ note, woInfo: null, loading: false });
+    }
   }
   const [editSaleCutSaving, setEditSaleCutSaving] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
