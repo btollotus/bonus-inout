@@ -2039,7 +2039,7 @@ const totalOrder = items
               )}
 
              {/* 분사-레이즈 사용량 — 네오컬러화이트/리얼화이트 전용 / 진행상태 카드 바로 아래 */}
-             {((selectedWo.food_type ?? "").includes("네오컬러화이트") || (selectedWo.food_type ?? "").includes("네오컬러리얼화이트")) && (() => {
+             {(["네오컬러화이트", "네오컬러리얼화이트", "롤리팝컬러리얼화이트", "롤리팝컬러화이트"].some((k) => (selectedWo.food_type ?? "").includes(k))) && (() => {
                 const transferDone = !!(woChecks?.assignee_transfer && woChecks.assignee_transfer !== "");
                 return (
                   <div className={`${card} p-3 border-violet-300 bg-violet-50`}>
