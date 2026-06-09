@@ -3588,9 +3588,7 @@ function QcSampleForm({ employeeName, userId, showToast }: {
 const VALIDITY_MATERIALS = [
   { id: "00000000-0001-0000-0000-000000000001", name: "다크컴파운드",   qty: 700 },
   { id: "00000000-0002-0000-0000-000000000001", name: "화이트컴파운드", qty: 700 },
-  { id: "00000000-0003-0000-0000-000000000001", name: "팜유",           qty: 94  },
-  { id: "00000000-0003-0000-0000-000000000007", name: "밀납",           qty: 22  },
-  { id: "00000000-0003-0000-0000-000000000002", name: "이산화티타늄",   qty: 380 },
+  { id: "00000000-0003-0000-0000-000000000001", name: "팜유",           qty: 200 },
 ];
 
 function ValiditySampleForm({ employeeName, userId, showToast }: {
