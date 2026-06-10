@@ -2401,7 +2401,7 @@ const totalOrder = items
                       return (
                         <div key={item.id} className={`rounded-lg border p-2.5 ${isDone ? "border-green-200 bg-green-50" : "border-slate-200 bg-slate-50"}`}>
                           <div className="mb-2 flex flex-wrap items-center justify-between gap-1.5">
-                          <div><div className="font-semibold text-xs">납기: <span className="tabular-nums">{item.delivery_date}</span></div>{(item.sub_items ?? [])[0]?.name ? <div className="mt-0.5 text-xs font-medium text-slate-700">{item.sub_items[0].name}{item.barcode_no ? <span className="ml-2 font-mono text-[11px] font-normal text-slate-400">{item.barcode_no}</span> : null}</div> : null}</div>
+                          <div><div className="font-semibold text-xs">납기: <span className="tabular-nums">{item.delivery_date}</span></div>{(item.sub_items ?? [])[0]?.name ? <div className="mt-0.5 text-xs font-medium text-slate-700">{item.sub_items[0].name}{item.barcode_no ? <span className="ml-2 font-mono text-xs font-normal text-slate-400">{item.barcode_no}</span> : null}</div> : null}</div>
                             <div className="flex items-center gap-1.5 text-xs"><span className={pill}>주문 {fmt(item.order_qty)}개</span>{isDone && <span className="rounded-full bg-green-100 border border-green-200 px-2 py-0.5 text-[10px] font-semibold text-green-700">완료</span>}</div>
                           </div>
                           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
