@@ -309,43 +309,86 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [todayRaizeCut, setTodayRaizeCut] = useState<number | null>(null);
   const [pestDoneThisWeek, setPestDoneThisWeek] = useState(false);
 
+  // 작업자 선택 화면용 — 선택 날짜 기준 출퇴근+작성여부 맵
+  const [empStatusMap, setEmpStatusMap] = useState<Record<string, {
+    clockIn: string | null; clockOut: string | null; hasLog: boolean; confirmed: boolean;
+  }>>({});
+
   const today = todayKST();
+  const [workDate, setWorkDate] = useState(today);
 
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
-      .then(({ data }) => setEmployees((data ?? []) as any));
+      .then(({ data }) => {
+        const sorted = (data ?? []).sort((a: any, b: any) => {
+          const LAST = ["강미라", "조대성"];
+          const aLast = LAST.includes(a.name) ? 1 : 0;
+          const bLast = LAST.includes(b.name) ? 1 : 0;
+          if (aLast !== bLast) return aLast - bLast;
+          return (a.name ?? "").localeCompare(b.name ?? "", "ko");
+        });
+        setEmployees(sorted as any);
+      });
     supabase.from("production_task_types").select("id,name,order_no").eq("is_active", true).order("order_no")
       .then(({ data }) => setTaskTypes(data ?? []));
   }, []);
 
-  const loadTodayData = useCallback(async (empId: string, empName: string) => {
+  // 작업자 선택 화면용 상태 로드
+  const loadEmpStatus = useCallback(async (date: string) => {
+    const [attRes, logRes] = await Promise.all([
+      supabase.from("attendance")
+        .select("employee_id, type, happened_at")
+        .gte("happened_at", `${date}T00:00:00+09:00`)
+        .lte("happened_at", `${date}T23:59:59+09:00`),
+      supabase.from("daily_work_logs")
+        .select("employee_id, confirmed_at")
+        .eq("log_date", date),
+    ]);
+    const map: Record<string, { clockIn: string | null; clockOut: string | null; hasLog: boolean; confirmed: boolean }> = {};
+    (attRes.data ?? []).forEach((a: any) => {
+      if (!map[a.employee_id]) map[a.employee_id] = { clockIn: null, clockOut: null, hasLog: false, confirmed: false };
+      const t = new Date(a.happened_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" });
+      if (a.type === "IN") map[a.employee_id].clockIn = t;
+      if (a.type === "OUT") map[a.employee_id].clockOut = t;
+    });
+    (logRes.data ?? []).forEach((l: any) => {
+      if (!map[l.employee_id]) map[l.employee_id] = { clockIn: null, clockOut: null, hasLog: false, confirmed: false };
+      map[l.employee_id].hasLog = true;
+      map[l.employee_id].confirmed = !!l.confirmed_at;
+    });
+    setEmpStatusMap(map);
+  }, []);
+
+  useEffect(() => { loadEmpStatus(workDate); }, [workDate, loadEmpStatus]);
+
+  const loadTodayData = useCallback(async (empId: string, empName: string, date: string) => {
     const [logRes, woRes] = await Promise.all([ 
       supabase.from("daily_work_logs")
-        .select("*").eq("log_date", today).eq("employee_id", empId).maybeSingle(),
+        .select("*").eq("log_date", date).eq("employee_id", empId).maybeSingle(),
         Promise.all([
           supabase.from("work_orders")
           .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
           .eq("assignee_production", empName)
           .eq("status_production", true)
-          .gte("production_done_at", `${today}T00:00:00+09:00`)
+          .gte("production_done_at", `${date}T00:00:00+09:00`)
           .order("production_done_at", { ascending: false }),
         supabase.from("work_orders")
           .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
           .eq("assignee_transfer", empName)
           .eq("status_transfer", true)
-          .gte("transfer_done_at", `${today}T00:00:00+09:00`)
+          .gte("transfer_done_at", `${date}T00:00:00+09:00`)
           .order("transfer_done_at", { ascending: false }),
         supabase.from("work_orders")
           .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
           .eq("assignee_print_check", empName)
           .eq("status_print_check", true)
-          .gte("print_check_done_at", `${today}T00:00:00+09:00`)
+          .gte("print_check_done_at", `${date}T00:00:00+09:00`)
           .order("print_check_done_at", { ascending: false }),
         supabase.from("work_orders")
           .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
           .eq("assignee_input", empName)
           .eq("status_input", true)
-          .gte("input_done_at", `${today}T00:00:00+09:00`)
+          .gte("input_done_at", `${date}T00:00:00+09:00`)
           .order("input_done_at", { ascending: false }),
         ]).then(([prodRes, transferRes, printCheckRes, inputRes]) => {
           const map = new Map<string, WorkOrderRef>();
@@ -399,14 +442,14 @@ function ProductionLogTab({ role, userId, showToast }: {
     // 레이즈재단 기록 조회
     const { data: raizeData } = await supabase.from("pet_stock_logs")
       .select("quantity")
-      .eq("log_date", today)
+      .eq("log_date", date)
       .eq("log_type", "sale_cut")
       .ilike("note", `%${empName}%`);
       const raizeTotal = (raizeData ?? []).reduce((s: number, d: any) => s + d.quantity, 0);
       setTodayRaizeCut(raizeTotal > 0 ? raizeTotal : null);
   
       // 이번 주 방충방서 완료 여부 (월요일 기준)
-      const todayDate = new Date(today + "T00:00:00+09:00");
+      const todayDate = new Date(date + "T00:00:00+09:00");
       const dayOfWeek = todayDate.getDay(); // 0=일, 1=월 ... 6=토
       const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
       const monday = new Date(todayDate);
@@ -420,8 +463,8 @@ function ProductionLogTab({ role, userId, showToast }: {
     const { data: attData } = await supabase.from("attendance")
       .select("type,happened_at")
       .eq("employee_id", empId)
-      .gte("happened_at", `${today}T00:00:00+09:00`)
-      .lte("happened_at", `${today}T23:59:59+09:00`);
+      .gte("happened_at", `${date}T00:00:00+09:00`)
+      .lte("happened_at", `${date}T23:59:59+09:00`);
     const ci = { in: null as string | null, out: null as string | null };
     (attData ?? []).forEach((a: any) => {
       const t = new Date(a.happened_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" });
@@ -438,7 +481,7 @@ function ProductionLogTab({ role, userId, showToast }: {
     setPinStep(false);
     setPinInput("");
     setPinError("");
-    loadTodayData(emp.id, emp.name);
+    loadTodayData(emp.id, emp.name, workDate);
   }
 
   // ── 작성 진입 (PIN 필요) ──
@@ -449,7 +492,7 @@ function ProductionLogTab({ role, userId, showToast }: {
     setPinError("");
     if (isAdmin) {
       setPinStep(false);
-      loadTodayData(emp.id, emp.name);
+      loadTodayData(emp.id, emp.name, workDate);
     } else {
       setPinStep(true);
     }
@@ -477,7 +520,7 @@ function ProductionLogTab({ role, userId, showToast }: {
     }
     setPinError("");
     setPinStep(false);
-    loadTodayData(emp.id, emp.name);
+    loadTodayData(emp.id, emp.name, workDate);
   }
 
   async function handleTaskCheck(taskId: string, currentChecked: boolean) {
@@ -488,7 +531,7 @@ function ProductionLogTab({ role, userId, showToast }: {
     if (taskId === QC_SAMPLE_TASK_ID && !nextChecked && selectedEmployee) {
       const { error } = await supabase.from("material_usage_logs")
         .delete()
-        .eq("used_date", today)
+        .eq("used_date", workDate)
         .eq("work_type", "qc_sample")
         .eq("note", `자가품질검사 샘플준비 — ${selectedEmployee.name}`);
       if (error) showToast("차감 취소 실패: " + error.message, "error");
@@ -499,7 +542,7 @@ function ProductionLogTab({ role, userId, showToast }: {
     if (taskId === VALIDITY_SAMPLE_TASK_ID && !nextChecked && selectedEmployee) {
       const { error } = await supabase.from("material_usage_logs")
         .delete()
-        .eq("used_date", today)
+        .eq("used_date", workDate)
         .eq("work_type", "validity_sample")
         .eq("note", `유효성평가검사 샘플준비 — ${selectedEmployee.name}`);
       if (error) showToast("차감 취소 실패: " + error.message, "error");
@@ -511,7 +554,7 @@ function ProductionLogTab({ role, userId, showToast }: {
     if (!selectedEmployee) return;
     setSaving(true);
     const payload = {
-      log_date: today,
+      log_date: workDate,
       employee_id: selectedEmployee.id,
       employee_name: selectedEmployee.name,
       work_order_nos: workOrders.map((w) => w.work_order_no),
@@ -528,7 +571,7 @@ function ProductionLogTab({ role, userId, showToast }: {
     setSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
     showToast("✅ 저장 완료!");
-    await loadTodayData(selectedEmployee.id, selectedEmployee.name);
+    await loadTodayData(selectedEmployee.id, selectedEmployee.name, workDate);
   }
 
   async function confirmLog() {
@@ -544,7 +587,7 @@ function ProductionLogTab({ role, userId, showToast }: {
       const { data: existing } = await supabase
         .from("daily_work_logs")
         .select("id")
-        .eq("log_date", today)
+        .eq("log_date", workDate)
         .eq("employee_id", selectedEmployee.id)
         .maybeSingle();
       if (existing) {
@@ -553,7 +596,7 @@ function ProductionLogTab({ role, userId, showToast }: {
           .eq("id", existing.id));
       } else {
         ({ error } = await supabase.from("daily_work_logs").insert({
-          log_date: today, employee_id: selectedEmployee.id, employee_name: selectedEmployee.name,
+          log_date: workDate, employee_id: selectedEmployee.id, employee_name: selectedEmployee.name,
           work_order_nos: workOrders.map((w) => w.work_order_no),
           task_checks: taskChecks, extra_note: extraNote.trim() || null,
           confirmed_at: confirmedAt, created_by: userId,
@@ -562,8 +605,8 @@ function ProductionLogTab({ role, userId, showToast }: {
     }
     setConfirming(false);
     if (error) return showToast("확인 실패: " + error.message, "error");
-    showToast("✅ 확인 완료! 오늘 근무일지가 확정되었습니다.");
-    await loadTodayData(selectedEmployee.id, selectedEmployee.name);
+    showToast("✅ 확인 완료! 근무일지가 확정되었습니다.");
+    await loadTodayData(selectedEmployee.id, selectedEmployee.name, workDate);
   }
 
   async function loadViewLogs() {
@@ -839,30 +882,64 @@ function ProductionLogTab({ role, userId, showToast }: {
         {/* 작업자 선택 */}
         {!pinStep && (
           <div className={`${card} p-6`}>
-            <div className="mb-4 font-semibold text-base text-slate-700">👤 오늘 작업자를 선택하세요</div>
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <div className="font-semibold text-base text-slate-700">👤 작업자를 선택하세요</div>
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-xs text-slate-500">날짜</span>
+                <input type="date"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+                  value={workDate}
+                  onChange={(e) => {
+                    setWorkDate(e.target.value);
+                  }} />
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {employees.map((emp) => (
-                <div key={emp.id}
-                  className="rounded-2xl border-2 border-slate-200 bg-white px-4 py-4 text-center transition-all hover:border-slate-300">
-                  <div className="font-bold text-slate-700 text-base mb-1">{emp.name}</div>
-                  <div className="mb-3 text-[10px] font-normal text-slate-400">
-                    {emp.pin ? "PIN 설정됨" : "PIN 미설정"}
+              {employees.map((emp) => {
+                const st = empStatusMap[emp.id];
+                const hasAtt = st?.clockIn || st?.clockOut;
+                return (
+                  <div key={emp.id}
+                    className="rounded-2xl border-2 border-slate-200 bg-white px-4 py-4 text-center transition-all hover:border-slate-300">
+                    <div className="font-bold text-slate-700 text-base mb-0.5">{emp.name}</div>
+                    {/* 출퇴근 시간 */}
+                    <div className="mb-1 text-[11px] text-slate-500 min-h-[16px]">
+                      {hasAtt ? (
+                        <>
+                          {st?.clockIn && <span>출 {st.clockIn}</span>}
+                          {st?.clockIn && st?.clockOut && <span className="mx-1 text-slate-300">·</span>}
+                          {st?.clockOut && <span>퇴 {st.clockOut}</span>}
+                        </>
+                      ) : (
+                        <span className="text-slate-300">출퇴근 기록 없음</span>
+                      )}
+                    </div>
+                    {/* 작성여부 배지 */}
+                    <div className="mb-2 min-h-[18px]">
+                      {st?.confirmed ? (
+                        <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">✅ 확인완료</span>
+                      ) : st?.hasLog ? (
+                        <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">📝 임시저장</span>
+                      ) : (
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-normal text-slate-400">미작성</span>
+                      )}
+                    </div>
+                    {/* 열람 / 작성 버튼 */}
+                    <div className="flex gap-1.5 justify-center">
+                      <button
+                        className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 active:scale-95 transition-all"
+                        onClick={() => handleEmployeeView(emp)}>
+                        👁 열람
+                      </button>
+                      <button
+                        className="flex-1 rounded-lg border border-blue-400 bg-blue-50 px-2 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 active:scale-95 transition-all"
+                        onClick={() => handleEmployeeEdit(emp)}>
+                        ✏️ 작성
+                      </button>
+                    </div>
                   </div>
-                  {/* 열람 / 작성 버튼 분리 */}
-                  <div className="flex gap-1.5 justify-center">
-                    <button
-                      className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 active:scale-95 transition-all"
-                      onClick={() => handleEmployeeView(emp)}>
-                      👁 열람
-                    </button>
-                    <button
-                      className="flex-1 rounded-lg border border-blue-400 bg-blue-50 px-2 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 active:scale-95 transition-all"
-                      onClick={() => handleEmployeeEdit(emp)}>
-                      ✏️ 작성
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -915,7 +992,7 @@ function ProductionLogTab({ role, userId, showToast }: {
               {readOnly ? "👁" : "📝"} {selectedEmployee.name}의 생산일지
             </div>
             <div className="text-xs text-slate-500 mt-0.5">
-              {today}
+              {workDate}
               {(clockInfo.in || clockInfo.out) && (
                 <span className="ml-2">
                   {clockInfo.in && `출근 ${clockInfo.in}`}
@@ -1153,9 +1230,9 @@ function ProductionLogTab({ role, userId, showToast }: {
                   const { error } = await supabase.from("daily_work_logs")
                     .update({ confirmed_at: null, updated_at: new Date().toISOString() })
                     .eq("id", todayLog.id);
-                  if (error) return showToast("수정 실패: " + error.message, "error");
-                  showToast("🔓 확정이 해제되었습니다. 수정 후 다시 확인 완료를 눌러주세요.");
-                  await loadTodayData(selectedEmployee!.id, selectedEmployee!.name);
+                    if (error) return showToast("수정 실패: " + error.message, "error");
+                    showToast("🔓 확정이 해제되었습니다. 수정 후 다시 확인 완료를 눌러주세요.");
+                    await loadTodayData(selectedEmployee!.id, selectedEmployee!.name, workDate);
                 }}>
                 ✏️ 수정하기
               </button>
