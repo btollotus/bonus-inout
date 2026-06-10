@@ -312,7 +312,7 @@ export function PestTab({ role, userId, showToast }: {
                       </tr>
                       <tr className="bg-slate-50 text-[10px]">
                         <th className="border border-slate-200" colSpan={12}></th>
-                        <th className="border border-slate-200 py-1 bg-lime-50 text-lime-600">비고</th>
+                        <th className="border border-slate-200 py-1 bg-lime-50"></th>
                         <th className="border border-slate-200 py-1 bg-amber-50 text-amber-600">이끼</th>
                         <th className="border border-slate-200 py-1 bg-amber-50 text-amber-600">훼손</th>
                         <th className="border border-slate-200 py-1 bg-amber-50 text-amber-600">쥐</th>

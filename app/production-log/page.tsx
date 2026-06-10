@@ -3472,6 +3472,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                 ))}
                 <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
                 <th className="border border-slate-200 py-1.5 px-2 w-12">단계</th>
+                <th className="border border-slate-200 py-1.5 px-2 bg-lime-50 text-lime-700 w-14 text-[10px]">끈끈이교체</th>
               </tr>
             </thead>
             <tbody>
@@ -3492,52 +3493,29 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                       <td className="border border-slate-200 py-1 px-2 text-center">
                         <span className={`inline-block rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${r.step===3?"bg-red-50 border-red-300 text-red-700":r.step===2?"bg-amber-50 border-amber-300 text-amber-700":"bg-green-50 border-green-300 text-green-700"}`}>{stepLabel}</span>
                       </td>
+                      <td className="border border-slate-200 py-1 px-2 text-center bg-lime-50">
+                        <input type="checkbox"
+                          checked={stickyFlying[loc]?.replaced ?? false}
+                          onChange={e => setStickyFlying(prev => ({ ...prev, [loc]: { ...prev[loc], replaced: e.target.checked } }))}
+                          className="w-4 h-4 accent-lime-600"
+                        />
+                      </td>
                     </tr>
                     {r.step>=2 && (
-                      <tr>
-                        <td colSpan={10} className={`border px-3 py-1.5 ${r.step===3?"border-red-200 bg-red-50":"border-amber-200 bg-amber-50"}`}>
-                          <div className={`text-[11px] font-semibold mb-1 ${r.step===3?"text-red-600":"text-amber-700"}`}>⚠ {r.step===3?"3단계":"2단계"} — 조치사항 입력 필수</div>
-                          <input className={`w-full rounded-lg border px-2 py-1 text-xs focus:outline-none ${r.step===3?"border-red-300":"border-amber-300"}`}
-                            placeholder="조치사항 입력" value={r.action_note}
-                            onChange={e=>updateFlying(loc,"action_note",e.target.value)} />
-                        </td>
-                      </tr>
+                     <tr>
+                     <td colSpan={11} className={`border px-3 py-1.5 ${r.step===3?"border-red-200 bg-red-50":"border-amber-200 bg-amber-50"}`}>
+                       <div className={`text-[11px] font-semibold mb-1 ${r.step===3?"text-red-600":"text-amber-700"}`}>⚠ {r.step===3?"3단계":"2단계"} — 조치사항 입력 필수</div>
+                       <input className={`w-full rounded-lg border px-2 py-1 text-xs focus:outline-none ${r.step===3?"border-red-300":"border-amber-300"}`}
+                         placeholder="조치사항 입력" value={r.action_note}
+                         onChange={e=>updateFlying(loc,"action_note",e.target.value)} />
+                     </td>
+                   </tr>
                     )}
                   </React.Fragment>
                 );
               })}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* 끈끈이 교체 — 비래해충 위치별 */}
-      <div>
-        <div className="mb-2 text-xs font-semibold text-slate-600">끈끈이 교체 여부 — 비래해충(포충등)</div>
-        <div className="grid grid-cols-1 gap-1.5">
-          {LOCATIONS_PEST.map(loc => (
-            <div key={loc} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-              <span className="text-xs text-slate-600 w-24 shrink-0">{loc}</span>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="checkbox"
-                  checked={stickyFlying[loc]?.replaced ?? false}
-                  onChange={e => setStickyFlying(prev => ({ ...prev, [loc]: { ...prev[loc], replaced: e.target.checked } }))}
-                  className="w-4 h-4 accent-lime-600"
-                />
-                <span className={`text-xs font-semibold ${stickyFlying[loc]?.replaced ? "text-lime-700" : "text-slate-400"}`}>
-                  {stickyFlying[loc]?.replaced ? "교체함" : "교체 안함"}
-                </span>
-              </label>
-              {stickyFlying[loc]?.replaced && (
-                <input
-                  className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:outline-none focus:border-lime-400"
-                  placeholder="비고 (선택)"
-                  value={stickyFlying[loc]?.note ?? ""}
-                  onChange={e => setStickyFlying(prev => ({ ...prev, [loc]: { ...prev[loc], note: e.target.value } }))}
-                />
-              )}
-            </div>
-          ))}
         </div>
       </div>
 
@@ -3599,6 +3577,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                   <th key={h} className="border border-slate-200 py-1.5 px-1 text-slate-500">{h}</th>
                 ))}
                 <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
+                <th className="border border-slate-200 py-1.5 px-2 bg-lime-50 text-lime-700 w-14 text-[10px]">끈끈이교체</th>
               </tr>
             </thead>
             <tbody>
@@ -3612,42 +3591,19 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                         <PestNumCell value={r[f] as number} onChange={v=>updateWalking(trap,f,v)} />
                       </td>
                     ))}
-                    <td className="border border-slate-200 py-1 px-2 text-center font-semibold bg-blue-50 text-blue-700">{r.total>0?r.total:""}</td>
+                   <td className="border border-slate-200 py-1 px-2 text-center font-semibold bg-blue-50 text-blue-700">{r.total>0?r.total:""}</td>
+                    <td className="border border-slate-200 py-1 px-2 text-center bg-lime-50">
+                      <input type="checkbox"
+                        checked={stickyWalking[trap]?.replaced ?? false}
+                        onChange={e => setStickyWalking(prev => ({ ...prev, [trap]: { ...prev[trap], replaced: e.target.checked } }))}
+                        className="w-4 h-4 accent-lime-600"
+                      />
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* 끈끈이 교체 — 보행해충 트랩별 */}
-      <div>
-        <div className="mb-2 text-xs font-semibold text-slate-600">끈끈이 교체 여부 — 보행해충(트랩)</div>
-        <div className="grid grid-cols-1 gap-1.5">
-          {TRAPS_PEST.map(trap => (
-            <div key={trap} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-              <span className="text-xs text-slate-600 w-44 shrink-0">{TRAP_LABELS_PEST[trap]}</span>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="checkbox"
-                  checked={stickyWalking[trap]?.replaced ?? false}
-                  onChange={e => setStickyWalking(prev => ({ ...prev, [trap]: { ...prev[trap], replaced: e.target.checked } }))}
-                  className="w-4 h-4 accent-lime-600"
-                />
-                <span className={`text-xs font-semibold ${stickyWalking[trap]?.replaced ? "text-lime-700" : "text-slate-400"}`}>
-                  {stickyWalking[trap]?.replaced ? "교체함" : "교체 안함"}
-                </span>
-              </label>
-              {stickyWalking[trap]?.replaced && (
-                <input
-                  className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:outline-none focus:border-lime-400"
-                  placeholder="비고 (선택)"
-                  value={stickyWalking[trap]?.note ?? ""}
-                  onChange={e => setStickyWalking(prev => ({ ...prev, [trap]: { ...prev[trap], note: e.target.value } }))}
-                />
-              )}
-            </div>
-          ))}
         </div>
       </div>
 
