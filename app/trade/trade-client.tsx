@@ -451,6 +451,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [tradeSearchDebounced, setTradeSearchDebounced] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<UnifiedRow[] | null>(null);
+  const [searchRefreshTick, setSearchRefreshTick] = useState(0);
   const toTouched_search = useRef(false);
   const [toTouched, setToTouched] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
@@ -1077,7 +1078,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
       }
     })();
     return () => { cancelled = true; };
-  }, [tradeSearchDebounced, selectedPartner?.id]); // eslint-disable-line
+  }, [tradeSearchDebounced, selectedPartner?.id, searchRefreshTick]); // eslint-disable-line
 
   useEffect(() => { setRecentPartnerIds(loadRecentFromLS()); loadPartners(); loadFoodTypes(); loadPresetProducts(); loadMasterProducts(); loadEmployees(); /* eslint-disable-next-line */ }, []);
   
@@ -2004,6 +2005,7 @@ if (woSubNameVal) {
     const { error } = await supabase.from("ledger_entries").update({ tax_invoice_received: next }).eq("id", r.rawId);
     if (error) return setMsg(error.message);
     await loadTrades();
+    if (tradeSearchDebounced.trim()) setSearchRefreshTick((v) => v + 1);
   }
 
   async function togglePaymentCompleted(r: UnifiedRow) {
@@ -2012,6 +2014,7 @@ if (woSubNameVal) {
     const { error } = await supabase.from("ledger_entries").update({ payment_completed: next }).eq("id", r.rawId);
     if (error) return setMsg(error.message);
     await loadTrades();
+    if (tradeSearchDebounced.trim()) setSearchRefreshTick((v) => v + 1);
   }
 
   async function toggleTaxInvoice(r: UnifiedRow) {
@@ -2023,6 +2026,7 @@ if (woSubNameVal) {
       .eq("id", r.rawId);
     if (error) return setMsg(error.message);
     await loadTrades();
+    if (tradeSearchDebounced.trim()) setSearchRefreshTick((v) => v + 1);
   }
   // Styles
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
