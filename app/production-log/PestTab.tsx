@@ -32,6 +32,16 @@ type FlyingRecord = {
   inspector_name: string | null;
 };
 
+type StickyRecord = {
+  id?: string;
+  record_date: string;
+  target_type: "flying" | "walking";
+  target_key: string;
+  replaced: boolean;
+  note: string | null;
+  inspector_name: string | null;
+};
+
 type WalkingRecord = {
   id?: string;
   record_date: string;
@@ -147,17 +157,26 @@ export function PestTab({ role, userId, showToast }: {
   const [viewFlying,  setViewFlying]  = useState<FlyingRecord[]>([]);
   const [viewWalking, setViewWalking] = useState<WalkingRecord[]>([]);
   const [viewLoading, setViewLoading] = useState(false);
+  const [viewSticky,  setViewSticky]  = useState<StickyRecord[]>([]);
+  const [stickyLoading, setStickyLoading] = useState(false);
 
   async function loadView() {
     setViewLoading(true);
-    const [{ data: fRows }, { data: wRows }] = await Promise.all([
+    const monthStr = String(viewMonth).padStart(2, "0");
+    const dateFrom = `${viewYear}-${monthStr}-01`;
+    const lastDay = new Date(viewYear, viewMonth, 0).getDate();
+    const dateTo = `${viewYear}-${monthStr}-${String(lastDay).padStart(2, "0")}`;
+    const [{ data: fRows }, { data: wRows }, { data: sRows }] = await Promise.all([
       supabase.from("pest_flying_records").select("*")
         .eq("year", viewYear).eq("month", viewMonth).order("record_date").order("location"),
       supabase.from("pest_walking_records").select("*")
         .eq("year", viewYear).eq("month", viewMonth).order("record_date").order("trap_no"),
+      supabase.from("pest_sticky_replacements").select("*")
+        .gte("record_date", dateFrom).lte("record_date", dateTo),
     ]);
     setViewFlying((fRows ?? []) as FlyingRecord[]);
     setViewWalking((wRows ?? []) as WalkingRecord[]);
+    setViewSticky((sRows ?? []) as StickyRecord[]);
     setViewLoading(false);
   }
 
@@ -287,11 +306,13 @@ export function PestTab({ role, userId, showToast }: {
                         <th className="border border-slate-200 py-2 px-2 bg-blue-50 text-blue-700 w-10">계</th>
                         <th className="border border-slate-200 py-2 px-2 bg-green-50 text-green-700 w-10">누계</th>
                         <th className="border border-slate-200 py-2 px-2 w-12">단계</th>
+                        <th className="border border-slate-200 py-2 px-2 bg-lime-50 text-lime-700 text-[10px] w-14">끈끈이교체</th>
                         <th className="border border-slate-200 py-1 px-1 bg-amber-50 text-amber-700 text-[10px]" colSpan={3}>쥐먹이(좌)</th>
                         <th className="border border-slate-200 py-1 px-1 bg-orange-50 text-orange-700 text-[10px]" colSpan={3}>쥐먹이(우)</th>
                       </tr>
                       <tr className="bg-slate-50 text-[10px]">
                         <th className="border border-slate-200" colSpan={12}></th>
+                        <th className="border border-slate-200 py-1 bg-lime-50 text-lime-600">비고</th>
                         <th className="border border-slate-200 py-1 bg-amber-50 text-amber-600">이끼</th>
                         <th className="border border-slate-200 py-1 bg-amber-50 text-amber-600">훼손</th>
                         <th className="border border-slate-200 py-1 bg-amber-50 text-amber-600">쥐</th>
@@ -333,6 +354,18 @@ export function PestTab({ role, userId, showToast }: {
                                     {cumul > 0 ? cumul : ""}
                                   </td>
                                   <td className="border border-slate-200 py-1 px-2 text-center"><StepBadge step={step} /></td>
+                                  <td className="border border-slate-200 py-1 px-2 text-center bg-lime-50">
+                                    {(() => {
+                                      const sr = viewSticky.find(s => s.record_date === date && s.target_type === "flying" && s.target_key === loc);
+                                      if (!sr) return <span className="text-slate-300 text-[10px]">—</span>;
+                                      return (
+                                        <span className={`text-[10px] font-semibold ${sr.replaced ? "text-lime-700" : "text-slate-400"}`}>
+                                          {sr.replaced ? "✓교체" : "미교체"}
+                                          {sr.note && <span className="ml-1 text-slate-500">{sr.note}</span>}
+                                        </span>
+                                      );
+                                    })()}
+                                  </td>
                                   {li === 0 && (
                                     <>
                                       <td rowSpan={LOCATIONS.length} className="border border-slate-200 py-1 px-1 text-center bg-amber-50 text-[11px]">
@@ -400,6 +433,7 @@ export function PestTab({ role, userId, showToast }: {
                         <th className="border border-slate-200 py-2 px-1">기타</th>
                         <th className="border border-slate-200 py-2 px-2 bg-blue-50 text-blue-700 w-10">계</th>
                         <th className="border border-slate-200 py-2 px-2 bg-green-50 text-green-700 w-10">누계</th>
+                        <th className="border border-slate-200 py-2 px-2 bg-lime-50 text-lime-700 text-[10px] w-14">끈끈이교체</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -428,6 +462,18 @@ export function PestTab({ role, userId, showToast }: {
                                 <td className="border border-slate-200 py-1 px-2 text-center font-semibold bg-green-50 text-green-700">
                                   {cumul > 0 ? cumul : ""}
                                 </td>
+                                <td className="border border-slate-200 py-1 px-2 text-center bg-lime-50">
+                                  {(() => {
+                                    const sr = viewSticky.find(s => s.record_date === date && s.target_type === "walking" && s.target_key === trap);
+                                    if (!sr) return <span className="text-slate-300 text-[10px]">—</span>;
+                                    return (
+                                      <span className={`text-[10px] font-semibold ${sr.replaced ? "text-lime-700" : "text-slate-400"}`}>
+                                        {sr.replaced ? "✓교체" : "미교체"}
+                                        {sr.note && <span className="ml-1 text-slate-500">{sr.note}</span>}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
                               </tr>
                             );
                           })}
@@ -439,6 +485,7 @@ export function PestTab({ role, userId, showToast }: {
                         <td className="border border-slate-200 py-2 px-2 text-center text-xs bg-blue-50 text-blue-700">
                           {Object.values(walkingMonthTotal).reduce((a,b)=>a+b,0) || ""}
                         </td>
+                        <td className="border border-slate-200" />
                         <td className="border border-slate-200" />
                       </tr>
                     </tbody>
@@ -488,6 +535,7 @@ export function PestTab({ role, userId, showToast }: {
               <col style={{ width: "5.5%" }} />
               <col style={{ width: "28px" }} />
               <col style={{ width: "28px" }} />
+              <col style={{ width: "5%" }} />
               <col style={{ width: "4%" }} />
               <col style={{ width: "4%" }} />
               <col style={{ width: "4%" }} />
@@ -502,6 +550,7 @@ export function PestTab({ role, userId, showToast }: {
                 <th colSpan={7} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>비래해충</th>
                 <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>계</th>
                 <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>누계</th>
+                <th rowSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", background: "#f0fdf4" }}>끈끈이<br/>교체</th>
                 <th colSpan={3} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", background: "#fff8e1" }}>쥐먹이(좌)</th>
                 <th colSpan={3} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", background: "#fff3e0" }}>쥐먹이(우)</th>
               </tr>
@@ -543,6 +592,13 @@ export function PestTab({ role, userId, showToast }: {
                           <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.other || ""}</td>
                           <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontWeight: "bold" }}>{total > 0 ? total : ""}</td>
                           <td style={{ border: "1px solid #000", borderRight: "2px solid #000", padding: "3px", textAlign: "center" }}>{cumul > 0 ? cumul : ""}</td>
+                          <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", background: "#f0fdf4", fontSize: "7.5pt" }}>
+                            {(() => {
+                              const sr = viewSticky.find(s => s.record_date === date && s.target_type === "flying" && s.target_key === loc);
+                              if (!sr) return "";
+                              return sr.replaced ? "✓교체" : "";
+                            })()}
+                          </td>
                           {li === 0 && (
                             <>
                               <td rowSpan={LOCATIONS.length} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", background: "#fff8e1" }}>{vp1?.lure_left ?? "—"}</td>
@@ -574,6 +630,7 @@ export function PestTab({ role, userId, showToast }: {
                   {Object.values(flyingMonthTotal).reduce((a,b)=>a+b,0) || ""}
                 </td>
                 <td style={{ border: "1px solid #000", borderRight: "2px solid #000", padding: "3px" }} />
+                <td style={{ border: "1px solid #000", padding: "3px" }} />
                 <td style={{ border: "1px solid #000", padding: "3px" }} />
                 <td style={{ border: "1px solid #000", padding: "3px" }} />
                 <td style={{ border: "1px solid #000", padding: "3px" }} />
@@ -645,6 +702,7 @@ export function PestTab({ role, userId, showToast }: {
                 ))}
                 <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 28, fontSize: "8pt" }}>계</th>
                 <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 28, fontSize: "8pt" }}>누계</th>
+                <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 36, fontSize: "8pt", background: "#f0fdf4" }}>끈끈이교체</th>
               </tr>
             </thead>
             <tbody>
@@ -670,6 +728,12 @@ export function PestTab({ role, userId, showToast }: {
                         <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.other || ""}</td>
                         <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontWeight: "bold" }}>{total > 0 ? total : ""}</td>
                         <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{cumul > 0 ? cumul : ""}</td>
+                        <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", background: "#f0fdf4", fontSize: "7.5pt" }}>
+                          {(() => {
+                            const sr = viewSticky.find(s => s.record_date === date && s.target_type === "walking" && s.target_key === trap);
+                            return sr?.replaced ? "✓교체" : "";
+                          })()}
+                        </td>
                       </tr>
                     );
                   })}
@@ -682,6 +746,7 @@ export function PestTab({ role, userId, showToast }: {
                 <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>
                   {Object.values(walkingMonthTotal).reduce((a,b)=>a+b,0) || ""}
                 </td>
+                <td style={{ border: "1px solid #000", padding: "3px" }} />
                 <td style={{ border: "1px solid #000", padding: "3px" }} />
               </tr>
             </tbody>

@@ -3296,6 +3296,16 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
   const [ratActionNote, setRatActionNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedDate, setSavedDate] = useState<string|null>(null);
+  const [stickyFlying, setStickyFlying] = useState<Record<string, { replaced: boolean; note: string }>>(() => {
+    const m: Record<string, { replaced: boolean; note: string }> = {};
+    for (const loc of LOCATIONS_PEST) m[loc] = { replaced: false, note: "" };
+    return m;
+  });
+  const [stickyWalking, setStickyWalking] = useState<Record<string, { replaced: boolean; note: string }>>(() => {
+    const m: Record<string, { replaced: boolean; note: string }> = {};
+    for (const trap of TRAPS_PEST) m[trap] = { replaced: false, note: "" };
+    return m;
+  });
 
   useEffect(() => {
     // 오늘 이미 저장된 기록 있으면 불러오기
@@ -3321,7 +3331,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
         setFlying(fMap);
         setSavedDate(today);
       });
-    supabase.from("pest_walking_records").select("*").eq("record_date", today)
+      supabase.from("pest_walking_records").select("*").eq("record_date", today)
       .then(({ data }) => {
         if (!data || data.length === 0) return;
         const wMap = initPestWalking();
@@ -3330,6 +3340,22 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
             wMap[row.trap_no] = { grima:row.grima??0,spider:row.spider??0,centipede:row.centipede??0,mosquito:row.mosquito??0,earwig:row.earwig??0,other:row.other??0,total:row.total??0 };
         }
         setWalking(wMap);
+      });
+    supabase.from("pest_sticky_replacements").select("*").eq("record_date", today)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return;
+        const fMap: Record<string, { replaced: boolean; note: string }> = {};
+        for (const loc of LOCATIONS_PEST) fMap[loc] = { replaced: false, note: "" };
+        const wMap: Record<string, { replaced: boolean; note: string }> = {};
+        for (const trap of TRAPS_PEST) wMap[trap] = { replaced: false, note: "" };
+        for (const row of data) {
+          if (row.target_type === "flying" && fMap[row.target_key] !== undefined)
+            fMap[row.target_key] = { replaced: row.replaced, note: row.note ?? "" };
+          if (row.target_type === "walking" && wMap[row.target_key] !== undefined)
+            wMap[row.target_key] = { replaced: row.replaced, note: row.note ?? "" };
+        }
+        setStickyFlying(fMap);
+        setStickyWalking(wMap);
       });
   }, [today]);
 
@@ -3390,11 +3416,35 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
         total:walking[trap].total,
       }));
       const { error: wErr } = await supabase.from("pest_walking_records")
-        .upsert(walkRows, { onConflict:"record_date,trap_no" });
-      if (wErr) throw wErr;
-      showToast("✅ 방충방서 기록 완료!");
-      setSavedDate(today);
-      onSaved();
+      .upsert(walkRows, { onConflict:"record_date,trap_no" });
+    if (wErr) throw wErr;
+    // 끈끈이 교체 기록 저장
+    const stickyRows = [
+      ...LOCATIONS_PEST.map(loc => ({
+        record_date: today,
+        target_type: "flying" as const,
+        target_key: loc,
+        replaced: stickyFlying[loc]?.replaced ?? false,
+        note: stickyFlying[loc]?.note?.trim() || null,
+        inspector_name: employeeName,
+        created_by: userId,
+      })),
+      ...TRAPS_PEST.map(trap => ({
+        record_date: today,
+        target_type: "walking" as const,
+        target_key: trap,
+        replaced: stickyWalking[trap]?.replaced ?? false,
+        note: stickyWalking[trap]?.note?.trim() || null,
+        inspector_name: employeeName,
+        created_by: userId,
+      })),
+    ];
+    const { error: sErr } = await supabase.from("pest_sticky_replacements")
+      .upsert(stickyRows, { onConflict: "record_date,target_type,target_key" });
+    if (sErr) throw sErr;
+    showToast("✅ 방충방서 기록 완료!");
+    setSavedDate(today);
+    onSaved();
     } catch(e:any) {
       showToast("저장 실패: "+e.message,"error");
     } finally {
@@ -3458,6 +3508,36 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* 끈끈이 교체 — 비래해충 위치별 */}
+      <div>
+        <div className="mb-2 text-xs font-semibold text-slate-600">끈끈이 교체 여부 — 비래해충(포충등)</div>
+        <div className="grid grid-cols-1 gap-1.5">
+          {LOCATIONS_PEST.map(loc => (
+            <div key={loc} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <span className="text-xs text-slate-600 w-24 shrink-0">{loc}</span>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox"
+                  checked={stickyFlying[loc]?.replaced ?? false}
+                  onChange={e => setStickyFlying(prev => ({ ...prev, [loc]: { ...prev[loc], replaced: e.target.checked } }))}
+                  className="w-4 h-4 accent-lime-600"
+                />
+                <span className={`text-xs font-semibold ${stickyFlying[loc]?.replaced ? "text-lime-700" : "text-slate-400"}`}>
+                  {stickyFlying[loc]?.replaced ? "교체함" : "교체 안함"}
+                </span>
+              </label>
+              {stickyFlying[loc]?.replaced && (
+                <input
+                  className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:outline-none focus:border-lime-400"
+                  placeholder="비고 (선택)"
+                  value={stickyFlying[loc]?.note ?? ""}
+                  onChange={e => setStickyFlying(prev => ({ ...prev, [loc]: { ...prev[loc], note: e.target.value } }))}
+                />
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -3538,6 +3618,36 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* 끈끈이 교체 — 보행해충 트랩별 */}
+      <div>
+        <div className="mb-2 text-xs font-semibold text-slate-600">끈끈이 교체 여부 — 보행해충(트랩)</div>
+        <div className="grid grid-cols-1 gap-1.5">
+          {TRAPS_PEST.map(trap => (
+            <div key={trap} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <span className="text-xs text-slate-600 w-44 shrink-0">{TRAP_LABELS_PEST[trap]}</span>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox"
+                  checked={stickyWalking[trap]?.replaced ?? false}
+                  onChange={e => setStickyWalking(prev => ({ ...prev, [trap]: { ...prev[trap], replaced: e.target.checked } }))}
+                  className="w-4 h-4 accent-lime-600"
+                />
+                <span className={`text-xs font-semibold ${stickyWalking[trap]?.replaced ? "text-lime-700" : "text-slate-400"}`}>
+                  {stickyWalking[trap]?.replaced ? "교체함" : "교체 안함"}
+                </span>
+              </label>
+              {stickyWalking[trap]?.replaced && (
+                <input
+                  className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:outline-none focus:border-lime-400"
+                  placeholder="비고 (선택)"
+                  value={stickyWalking[trap]?.note ?? ""}
+                  onChange={e => setStickyWalking(prev => ({ ...prev, [trap]: { ...prev[trap], note: e.target.value } }))}
+                />
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
