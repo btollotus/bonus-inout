@@ -1439,46 +1439,7 @@ async function doCompleteSprayCoating(productionAssignee: string, subType: "분�
             transfer_lots: lotsForDb,
           }).eq("id", item.id);
         }
-       // ── 네오컬러화이트/리얼화이트 분사-레이즈 차감 ──
-       const isNeoColor = ["네오컬러화이트", "네오컬러리얼화이트", "롤리팝컬러리얼화이트", "롤리팝컬러화이트"].some((k) => (selectedWo.food_type ?? "").includes(k));
-       if (isNeoColor && neoColorSprayLots.length > 0) {
-         const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
-         let totalProdQty = 0;
-         for (const tl of neoColorSprayLots) {
-           const sprayQty = toInt(tl.qty);
-           if (!tl.lot_id || sprayQty <= 0) continue;
-           totalProdQty += sprayQty;
-           const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", tl.lot_id);
-           const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
-           if (sprayQty > remaining) {
-             setMsg(`분사-레이즈 차감 실패: 차감 수량(${sprayQty})이 잔량(${remaining})을 초과합니다.`);
-             setIsCompleting(false);
-             return;
-           }
-           const { error: sprayErr } = await supabase.from("movements").insert({
-             lot_id: tl.lot_id, type: "OUT", qty: sprayQty,
-             happened_at: `${todayKSTDate}T00:00:00+09:00`,
-             note: `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`,
-             created_by: userId,
-           });
-           if (sprayErr) stockErrors.push("분사-레이즈 차감 실패: " + sprayErr.message);
-         }
-         if (totalProdQty > 0) {
-          const petProdNote = `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`;
-          const { data: petProdDup } = await supabase.from("pet_stock_logs")
-            .select("id").eq("note", petProdNote).limit(1);
-          if (!petProdDup || petProdDup.length === 0) {
-            const { error: petProdErr } = await supabase.from("pet_stock_logs").insert({
-              log_date: todayKSTDate, log_type: "print_used_prod",
-              quantity: totalProdQty, defect_qty: 0,
-              note: petProdNote,
-              created_by: userId,
-            });
-            if (petProdErr) stockErrors.push("PET 수불 기록 실패(생산용): " + petProdErr.message);
-          }
-        }
-        
-       }
+       // 네오컬러 분사-레이즈 차감은 "분사-레이즈 사용량 저장" 버튼에서 즉시 처리됨
 
         // ── 컴파운드 자동 차감 (다크/화이트/딸기) ──
         {
@@ -2145,12 +2106,39 @@ const totalOrder = items
                                   if (!selectedWo) return;
                                   setNeoColorSpraySaving(true);
                                   const lotsForDb = neoColorSprayLots.map((l) => ({ lot_id: l.lot_id, qty: l.qty }));
+                                  // 1. work_orders 저장
                                   const { error } = await supabase.from("work_orders").update({
                                     neo_color_spray_lots: lotsForDb,
                                     updated_at: new Date().toISOString(),
                                   }).eq("id", selectedWo.id);
+                                  if (error) { setNeoColorSpraySaving(false); showToast("저장 실패: " + error.message, "error"); return; }
+                                  // 2. movements OUT + pet_stock_logs 즉시 기록
+                                  const { data: { user } } = await supabase.auth.getUser();
+                                  const userId = user?.id ?? null;
+                                  const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+                                  let totalSprayQty = 0;
+                                  for (const tl of neoColorSprayLots) {
+                                    const sprayQty = toInt(tl.qty);
+                                    if (!tl.lot_id || sprayQty <= 0) continue;
+                                    totalSprayQty += sprayQty;
+                                    const { error: movErr } = await supabase.from("movements").insert({
+                                      lot_id: tl.lot_id, type: "OUT", qty: sprayQty,
+                                      happened_at: `${todayKSTDate}T00:00:00+09:00`,
+                                      note: `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`,
+                                      created_by: userId,
+                                    });
+                                    if (movErr) { setNeoColorSpraySaving(false); showToast("재고 차감 실패: " + movErr.message, "error"); return; }
+                                  }
+                                  if (totalSprayQty > 0) {
+                                    const petNote = `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`;
+                                    const { error: petErr } = await supabase.from("pet_stock_logs").insert({
+                                      log_date: todayKSTDate, log_type: "print_used_prod",
+                                      quantity: totalSprayQty, defect_qty: 0,
+                                      note: petNote, created_by: userId,
+                                    });
+                                    if (petErr) { setNeoColorSpraySaving(false); showToast("PET 수불부 기록 실패: " + petErr.message, "error"); return; }
+                                  }
                                   setNeoColorSpraySaving(false);
-                                  if (error) { showToast("저장 실패: " + error.message, "error"); return; }
                                   setNeoColorSpraySaved(true);
                                   setNeoColorSprayEditMode(false);
                                   showToast("분사-레이즈 사용량 저장 완료!");
@@ -2190,12 +2178,47 @@ const totalOrder = items
                                   if (!selectedWo) return;
                                   setNeoColorSpraySaving(true);
                                   const lotsForDb = neoColorSprayLots.map((l) => ({ lot_id: l.lot_id, qty: l.qty }));
+                                  // 1. work_orders 저장
                                   const { error } = await supabase.from("work_orders").update({
                                     neo_color_spray_lots: lotsForDb,
                                     updated_at: new Date().toISOString(),
                                   }).eq("id", selectedWo.id);
+                                  if (error) { setNeoColorSpraySaving(false); showToast("저장 실패: " + error.message, "error"); return; }
+                                  // 2. 기존 movements/pet_stock_logs 삭제 후 재삽입
+                                  const neoNote = `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`;
+                                  // 기존 movements 삭제 (note로 식별)
+                                  const { data: oldMovs } = await supabase.from("movements").select("id").eq("note", neoNote);
+                                  if (oldMovs && oldMovs.length > 0) {
+                                    await supabase.from("movements").delete().eq("note", neoNote);
+                                  }
+                                  // 기존 pet_stock_logs 삭제
+                                  await supabase.from("pet_stock_logs").delete().eq("note", neoNote);
+                                  // 재삽입
+                                  const { data: { user } } = await supabase.auth.getUser();
+                                  const userId = user?.id ?? null;
+                                  const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+                                  let totalSprayQty = 0;
+                                  for (const tl of neoColorSprayLots) {
+                                    const sprayQty = toInt(tl.qty);
+                                    if (!tl.lot_id || sprayQty <= 0) continue;
+                                    totalSprayQty += sprayQty;
+                                    const { error: movErr } = await supabase.from("movements").insert({
+                                      lot_id: tl.lot_id, type: "OUT", qty: sprayQty,
+                                      happened_at: `${todayKSTDate}T00:00:00+09:00`,
+                                      note: neoNote,
+                                      created_by: userId,
+                                    });
+                                    if (movErr) { setNeoColorSpraySaving(false); showToast("재고 차감 실패: " + movErr.message, "error"); return; }
+                                  }
+                                  if (totalSprayQty > 0) {
+                                    const { error: petErr } = await supabase.from("pet_stock_logs").insert({
+                                      log_date: todayKSTDate, log_type: "print_used_prod",
+                                      quantity: totalSprayQty, defect_qty: 0,
+                                      note: neoNote, created_by: userId,
+                                    });
+                                    if (petErr) { setNeoColorSpraySaving(false); showToast("PET 수불부 기록 실패: " + petErr.message, "error"); return; }
+                                  }
                                   setNeoColorSpraySaving(false);
-                                  if (error) { showToast("저장 실패: " + error.message, "error"); return; }
                                   setNeoColorSpraySaved(true);
                                   setNeoColorSprayEditMode(false);
                                   showToast("분사-레이즈 사용량 수정 완료!");
