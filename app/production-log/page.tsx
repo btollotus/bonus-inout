@@ -2966,7 +2966,7 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
     }
 
     setSaving(false);
-    showToast(`✅ 구아검 배합 ${multiplier}번 저장! 구아검 ${items.구아검}g 차감됨`);
+    showToast(`✅ 구아검 배합 ${multiplier}번 저장! 구아검 ${GUAR_PER_BATCH * multiplier}g 차감됨`);
     setSavedLog({ multiplier });
   }
 
