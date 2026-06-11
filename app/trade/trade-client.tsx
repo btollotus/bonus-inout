@@ -1141,10 +1141,39 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
 
   const updateLine = (i: number, patch: Partial<Line>) => setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const addLine = () => setLines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "", is_sample: false }]);
-  const removeLine = (i: number) => setLines((prev) => prev.filter((_, idx) => idx !== i));
+  const removeLine = (i: number) => {
+    setLines((prev) => prev.filter((_, idx) => idx !== i));
+    const rebuildMap = <T,>(prev: Record<number, T>): Record<number, T> => {
+      const next: Record<number, T> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const idx = Number(k);
+        if (idx < i) next[idx] = v;
+        else if (idx > i) next[idx - 1] = v;
+      });
+      return next;
+    };
+    setWo_itemImageFiles(rebuildMap);
+    setWo_itemImagePreviewUrls(rebuildMap);
+    setWo_itemExistingImageUrls(rebuildMap);
+    setWo_itemExistingImagePaths(rebuildMap);
+  };
   const updateEditLine = (i: number, patch: Partial<Line>) => setELines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const addEditLine = () => setELines((prev) => [...prev, { food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
-  const removeEditLine = (i: number) => setELines((prev) => prev.filter((_, idx) => idx !== i));
+  const removeEditLine = (i: number) => {
+    setELines((prev) => prev.filter((_, idx) => idx !== i));
+    const rebuildMap = <T,>(prev: Record<number, T>): Record<number, T> => {
+      const next: Record<number, T> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const idx = Number(k);
+        if (idx < i) next[idx] = v;
+        else if (idx > i) next[idx - 1] = v;
+      });
+      return next;
+    };
+    setEItemImageFiles(rebuildMap);
+    setEItemImagePreviewUrls(rebuildMap);
+    setEItemExistingImageUrls(rebuildMap);
+  };
   function insertShippingFee(totalInclVat: number) { setLines((prev) => [...prev, { food_type: "", name: "택배비", weight_g: 0, qty: 1, unit: "", total_incl_vat: String(totalInclVat) }]); }
   function insertEditShippingFee(totalInclVat: number) { setELines((prev) => [...prev, { food_type: "", name: "택배비", weight_g: 0, qty: 1, unit: "", total_incl_vat: String(totalInclVat) }]); }
 
