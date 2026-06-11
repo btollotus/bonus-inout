@@ -2616,7 +2616,12 @@ const totalOrder = items
                    {isCompleting ? "처리 중..." : selectedWo.skip_production_check ? "포장완료 처리" : "생산완료 처리"}
                   </button>
                 ) : selectedWo.status === "완료" && !isEditMode ? (
-                  <button className="rounded-lg border border-blue-400 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100" onClick={() => setIsEditMode(true)}>수정</button>
+                  <button className="rounded-lg border border-blue-400 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100" onClick={() => {
+                    setPinProgressPending(() => (_name: string) => {
+                      setIsEditMode(true);
+                    });
+                    setShowPinModalForProgress(true);
+                  }}>수정</button>
                 ) : (
                   <>
                     <button className="flex-1 rounded-lg border border-blue-500 bg-blue-600 py-2 text-sm font-bold text-white hover:bg-blue-700"
@@ -2737,6 +2742,15 @@ const totalOrder = items
                                 .update({ quantity: Number(titaniumDioxideG) })
                                 .eq("id", tiExisting[0].id);
                             }
+                          }
+                          // 수정 기록 저장
+                          if (isPinValid() && pinSession) {
+                            await supabase.from("work_order_edit_logs").insert({
+                              work_order_id: selectedWo.id,
+                              work_order_no: selectedWo.work_order_no,
+                              edited_by_name: pinSession.employeeName,
+                              edit_note: `수정 저장 — ${new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
+                            });
                           }
                           showToast("수정 완료!"); setIsEditMode(false);
                           if (selectedWo.status === "완료") await triggerPdfUpload(selectedWo, eProductName ?? "품목미상", eFoodType ?? "", eLogoSpec ?? "");
