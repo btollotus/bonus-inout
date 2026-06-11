@@ -2184,15 +2184,24 @@ const totalOrder = items
                                     updated_at: new Date().toISOString(),
                                   }).eq("id", selectedWo.id);
                                   if (error) { setNeoColorSpraySaving(false); showToast("저장 실패: " + error.message, "error"); return; }
-                                  // 2. 기존 movements/pet_stock_logs 삭제 후 재삽입
-                                  const neoNote = `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`;
-                                  // 기존 movements 삭제 (note로 식별)
-                                  const { data: oldMovs } = await supabase.from("movements").select("id").eq("note", neoNote);
-                                  if (oldMovs && oldMovs.length > 0) {
-                                    await supabase.from("movements").delete().eq("note", neoNote);
-                                  }
-                                  // 기존 pet_stock_logs 삭제
-                                  await supabase.from("pet_stock_logs").delete().eq("note", neoNote);
+                                 // 2. 기존 movements/pet_stock_logs 삭제 후 재삽입
+                                 const neoNote = `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`;
+                                 // 기존 movements 삭제 — ID 목록 조회 후 in()으로 삭제
+                                 const { data: oldMovs, error: oldMovsErr } = await supabase.from("movements").select("id").eq("note", neoNote);
+                                 if (oldMovsErr) { setNeoColorSpraySaving(false); showToast("기존 기록 조회 실패: " + oldMovsErr.message, "error"); return; }
+                                 if (oldMovs && oldMovs.length > 0) {
+                                   const oldMovIds = oldMovs.map((m) => m.id);
+                                   const { error: delMovErr } = await supabase.from("movements").delete().in("id", oldMovIds);
+                                   if (delMovErr) { setNeoColorSpraySaving(false); showToast("기존 재고 기록 삭제 실패: " + delMovErr.message, "error"); return; }
+                                 }
+                                 // 기존 pet_stock_logs 삭제 — ID 목록 조회 후 in()으로 삭제
+                                 const { data: oldPets, error: oldPetsErr } = await supabase.from("pet_stock_logs").select("id").eq("note", neoNote);
+                                 if (oldPetsErr) { setNeoColorSpraySaving(false); showToast("기존 PET 기록 조회 실패: " + oldPetsErr.message, "error"); return; }
+                                 if (oldPets && oldPets.length > 0) {
+                                   const oldPetIds = oldPets.map((p) => p.id);
+                                   const { error: delPetErr } = await supabase.from("pet_stock_logs").delete().in("id", oldPetIds);
+                                   if (delPetErr) { setNeoColorSpraySaving(false); showToast("기존 PET 기록 삭제 실패: " + delPetErr.message, "error"); return; }
+                                 }
                                   // 재삽입
                                   const { data: { user } } = await supabase.auth.getUser();
                                   const userId = user?.id ?? null;
