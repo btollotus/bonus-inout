@@ -832,6 +832,22 @@ export default function ProductionClient() {
         }
       })();
     }
+    // 분사/코팅 완료된 WO: blend_logs에서 저장된 배합 횟수 로드
+    if (getWoSubType(wo.product_name) && wo.status === "완료") {
+      (async () => {
+        const recipeName = getWoSubType(wo.product_name) === "분사" ? "레이즈 분사" : "레이즈 코팅";
+        const { data: blendLogData } = await supabase
+          .from("blend_logs")
+          .select("multiplier")
+          .eq("note", `${wo.work_order_no} 생산완료`)
+          .eq("recipe_name", recipeName)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (blendLogData?.multiplier) setBlendCount(blendLogData.multiplier);
+      })();
+    }
+
     // 분사 작업지시서: 코팅-레이즈 lot 자동 검색
     if (getWoSubType(wo.product_name) === "분사") {
       for (const item of (wo.work_order_items ?? [])) {
@@ -2634,8 +2650,50 @@ const totalOrder = items
                               }
                             }
                           }
-                          // ── 컴파운드 사용량 재계산 (완료 후 수정 시) ──
-                          if (selectedWo.status === "완료") {
+                         // ── 분사/코팅 배합 횟수 변경 시 blend_logs + material_usage_logs 업데이트 ──
+                         if (selectedWo.status === "완료" && getWoSubType(selectedWo.product_name)) {
+                          const subTypeEdit = getWoSubType(selectedWo.product_name)!;
+                          const recipeNameEdit = subTypeEdit === "분사" ? "레이즈 분사" : "레이즈 코팅";
+                          const { data: existingBlendLog } = await supabase
+                            .from("blend_logs")
+                            .select("id, multiplier")
+                            .eq("note", `${selectedWo.work_order_no} 생산완료`)
+                            .eq("recipe_name", recipeNameEdit)
+                            .order("created_at", { ascending: false })
+                            .limit(1)
+                            .maybeSingle();
+                          if (existingBlendLog && existingBlendLog.multiplier !== blendCount) {
+                            await supabase.from("blend_logs")
+                              .update({ multiplier: blendCount })
+                              .eq("id", existingBlendLog.id);
+                            await supabase.from("blend_log_items").delete().eq("blend_log_id", existingBlendLog.id);
+                            const isSprayEdit = subTypeEdit === "분사";
+                            const newLogItems = isSprayEdit ? [
+                              { blend_log_id: existingBlendLog.id, material_name: "유화제",   quantity_g: SPRAY_RECIPE[Math.min(blendCount, 5)].유화제 },
+                              { blend_log_id: existingBlendLog.id, material_name: "감자전분", quantity_g: SPRAY_RECIPE[Math.min(blendCount, 5)].감자전분 },
+                            ] : [
+                              { blend_log_id: existingBlendLog.id, material_name: "팜유",    quantity_g: COATING_BASE.팜유    * blendCount },
+                              { blend_log_id: existingBlendLog.id, material_name: "유청분말", quantity_g: COATING_BASE.유청분말 * blendCount },
+                            ];
+                            await supabase.from("blend_log_items").insert(newLogItems);
+                            const matNamesEdit = newLogItems.map((i) => i.material_name);
+                            const { data: matsEdit } = await supabase.from("materials").select("id,name").in("name", matNamesEdit);
+                            const matMapEdit: Record<string, string> = {};
+                            (matsEdit ?? []).forEach((m: any) => { matMapEdit[m.name] = m.id; });
+                            const oldNote = `${recipeNameEdit} ${existingBlendLog.multiplier}배합 — ${selectedWo.work_order_no}`;
+                            const newNote = `${recipeNameEdit} ${blendCount}배합 — ${selectedWo.work_order_no}`;
+                            for (const logItem of newLogItems) {
+                              if (!matMapEdit[logItem.material_name]) continue;
+                              await supabase.from("material_usage_logs")
+                                .update({ quantity: logItem.quantity_g, note: newNote })
+                                .eq("note", oldNote)
+                                .eq("material_id", matMapEdit[logItem.material_name]);
+                            }
+                          }
+                        }
+
+                        // ── 컴파운드 사용량 재계산 (완료 후 수정 시) ──
+                        if (selectedWo.status === "완료") {
                             const foodCatEdit = getFoodCategory(eFoodType || selectedWo.food_type);
                             if (foodCatEdit === "다크" || foodCatEdit === "화이트") {
                               const ft = eFoodType || selectedWo.food_type || "";
