@@ -2910,13 +2910,8 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
 
   // 구아검 레시피 ID (spray 카테고리, 레이즈 분사)
   // 구아검 배합은 별도 레시피: guar 카테고리로 찾음
-  const GUAR_RECIPE_ITEMS: Record<number, { 구아검: number; 물: number }> = {
-    1: { 구아검: 4,  물: 1000 },
-    2: { 구아검: 8,  물: 2000 },
-    3: { 구아검: 12, 물: 3000 },
-    4: { 구아검: 16, 물: 4000 },
-    5: { 구아검: 20, 물: 5000 },
-  };
+  const GUAR_PER_BATCH = 4;
+  const WATER_PER_BATCH = 1000;
 
   useEffect(() => { loadSavedLog(); }, []);
 
@@ -2951,9 +2946,8 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
 
     if (blendErr || !blendLog) { setSaving(false); return showToast("저장 실패: " + blendErr?.message, "error"); }
 
-    const items = GUAR_RECIPE_ITEMS[multiplier];
     const logItems = [
-      { blend_log_id: blendLog.id, material_name: "구아검", quantity_g: items.구아검 },
+      { blend_log_id: blendLog.id, material_name: "구아검", quantity_g: GUAR_PER_BATCH * multiplier },
     ];
     await supabase.from("blend_log_items").insert(logItems);
 
@@ -2963,7 +2957,7 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
       await supabase.from("material_usage_logs").insert({
         material_id: matsData[0].id,
         used_date: today,
-        quantity: items.구아검,
+        quantity: GUAR_PER_BATCH * multiplier,
         unit: "g",
         work_type: "blend",
         note: `구아검 배합 ${multiplier}번`,
@@ -3005,7 +2999,7 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
           </button>
         </div>
         <div className="mt-2 text-xs text-slate-500">
-          구아검 {GUAR_RECIPE_ITEMS[multiplier].구아검}g · 물 {GUAR_RECIPE_ITEMS[multiplier].물.toLocaleString()}g
+          구아검 {GUAR_PER_BATCH * multiplier}g · 물 {(WATER_PER_BATCH * multiplier).toLocaleString()}g
         </div>
       </div>
 
