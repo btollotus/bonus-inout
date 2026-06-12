@@ -512,11 +512,11 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
                         );
                       })}
 
-                      {/* 확인 (서명) */}
-                      <td style={{ border:"0.5px solid #e2e8f0", textAlign:"center", padding:"1px" }}>
-                        {isPast && isActive && signSrc ? (
+                     {/* 확인 (서명) */}
+                     <td style={{ border:"0.5px solid #e2e8f0", textAlign:"center", padding:"1px" }}>
+                        {isActive && signSrc ? (
                           <img src={signSrc} style={{ height:18, display:"block", margin:"0 auto" }} alt={inspName} />
-                        ) : isPast && isActive ? (
+                        ) : isActive ? (
                           <div style={{ fontSize:8, color:"#475569" }}>{inspName.slice(0,1)}*</div>
                         ) : null}
                       </td>
