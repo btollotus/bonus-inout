@@ -478,6 +478,10 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
                               supabase.from("warmer_cleaning_results")
                                 .upsert(defaultUpserts, { onConflict: "log_date,warmer_no" })
                                 .then(({ error: e }) => { if (e) showToast("기록 저장 실패: " + e.message, "error"); else loadData(); });
+                            } else {
+                              supabase.from("warmer_cleaning_results")
+                                .delete().eq("log_date", d)
+                                .then(({ error: e }) => { if (e) showToast("기록 삭제 실패: " + e.message, "error"); else loadData(); });
                             }
                           });
                         }}
