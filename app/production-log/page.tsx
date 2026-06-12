@@ -121,6 +121,28 @@ export default function ProductionLogPage() {
     if (tab) setActiveTab(tab);
     if (wo) setInitialWoId(wo);
   }, []);
+
+  useEffect(() => {
+    const TAB_TITLES: Record<Tab, string> = {
+      dashboard: "통합관리",
+      production: "생산일지",
+      material: "원료수불부",
+      work: "근무일지",
+      ccp1b: "CCP-1B",
+      ccp1p: "CCP-1P",
+      other_heating: "가열공정",
+      compressor: "압축공기",
+      pet: "PET수불부",
+      expiry: "유효기간관리",
+      warmer_clean: "온장고세척",
+      pest: "방충방서",
+      foreign: "이물관리",
+      hygiene: "위생관리",
+      temp_humidity: "온습도",
+      storage_temp: "냉장·냉동·온장고",
+    };
+    document.title = `${TAB_TITLES[activeTab] ?? "생산관리"} | BONUSMATE`;
+  }, [activeTab]);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   const isAdmin = role === "ADMIN";
