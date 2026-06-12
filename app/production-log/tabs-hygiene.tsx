@@ -1091,25 +1091,13 @@ export function ForeignMatterTab({ role, userId, showToast }: {
                   }}>점검자</th>
                   {dates.map((d) => {
                     const inspName = dayInspectors[d] ?? "조대성";
-                    const isPast = d <= today;
-                    const canEdit = isAdmin || (inspector !== null && (isAdminOrSubadmin || (isCurrentMonth && d === today)));
+                    const isActive = dayActive[d] ?? false;
+                    const signSrc = FM_SIGN_MAP[inspName] ?? null;
                     return (
                       <th key={d} style={{ background:"#f1f5f9", border:"0.5px solid #e2e8f0", padding:"1px" }}>
-                        {isPast && canEdit ? (
-                          <select
-                            value={inspName}
-                            onChange={async (e) => {
-                              const newName = e.target.value;
-                              setDayInspectors((prev) => ({ ...prev, [d]: newName }));
-                              await supabase.from("foreign_matter_daily_inspectors")
-                                .upsert({ log_date: d, inspector_name: newName }, { onConflict: "log_date" });
-                            }}
-                            style={{ width:"100%", fontSize:8, border:"none", background:"transparent", textAlign:"center", cursor:"pointer", outline:"none", color:"#1e293b" }}>
-                            {employees.map((emp) => (
-                              <option key={emp.id} value={emp.name ?? ""}>{emp.name}</option>
-                            ))}
-                          </select>
-                        ) : isPast ? (
+                        {isActive && signSrc ? (
+                          <img src={signSrc} style={{ height:14, display:"block", margin:"0 auto" }} alt={inspName} />
+                        ) : isActive ? (
                           <div style={{ fontSize:8, color:"#475569", textAlign:"center" }}>{inspName.slice(0, 1)}*</div>
                         ) : null}
                       </th>
@@ -1781,38 +1769,23 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                       );
                     })}
                   </tr>
-                  {/* 날짜별 점검자 행 */}
-                  <tr>
+                 {/* 날짜별 점검자 행 */}
+                 <tr>
                     <th colSpan={2} style={{
                       background:"#f1f5f9", border:"0.5px solid #e2e8f0",
                       fontSize:9, textAlign:"center", color:"#64748b", padding:"2px",
                     }}>점검자</th>
                     {dates.map((d) => {
                       const inspName = dayInspectors[d] ?? "조대성";
-                      const isPast = d <= today;
-                      const canEdit = isAdmin || (inspector !== null && (isAdminOrSubadmin || (isCurrentMonth && d === today)));
+                      const isActive = dayActive[d] ?? false;
+                      const signSrc = HYGIENE_SIGN_MAP[inspName] ?? null;
                       return (
                         <th key={d} style={{
                           background:"#f1f5f9", border:"0.5px solid #e2e8f0", padding:"1px",
                         }}>
-                          {isPast && canEdit ? (
-                            <select
-                            value={inspName}
-                            onChange={async (e) => {
-                              const newName = e.target.value;
-                              setDayInspectors((prev) => ({ ...prev, [d]: newName }));
-                              await supabase.from("hygiene_daily_inspectors")
-                                .upsert({ log_date: d, inspector_name: newName }, { onConflict: "log_date" });
-                            }}
-                            style={{
-                              width:"100%", fontSize:8, border:"none", background:"transparent",
-                              textAlign:"center", cursor:"pointer", outline:"none", color:"#1e293b",
-                            }}>
-                              {employees.map((emp) => (
-                                <option key={emp.id} value={emp.name ?? ""}>{emp.name}</option>
-                              ))}
-                            </select>
-                          ) : isPast ? (
+                          {isActive && signSrc ? (
+                            <img src={signSrc} style={{ height:14, display:"block", margin:"0 auto" }} alt={inspName} />
+                          ) : isActive ? (
                             <div style={{ fontSize:8, color:"#475569", textAlign:"center" }}>
                               {inspName.slice(0, 1)}*
                             </div>
