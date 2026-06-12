@@ -622,6 +622,9 @@ async function loadSignageList() {
     setItems([newItem()]); setMemo("");
     setIceboxQtys({ 4620: 0, 6930: 0, 9230: 0 });
     setDeliveryQtys({ 3300: 0, 4000: 0 });
+    setCustomerName("");
+    setSelectedPartner(null);
+    setSheetItems([newSheetItem()]);
   }
 
   const filteredList = quoteList.filter(r => {
@@ -1703,13 +1706,16 @@ async function loadSignageList() {
         value={memo} onChange={e => setMemo(e.target.value)} />
     </div>
 
-   {/* 저장/출력 버튼 */}
-   <div className="flex gap-2">
+  {/* 저장/출력 버튼 */}
+  <div className="flex gap-2">
       <button
         className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-white ${sheetInputMode === "manual" ? "border border-orange-300 bg-orange-500 hover:bg-orange-600" : btnOn}`}
         disabled={!sheetItems.some(x => x.calcResult)}
         onClick={async () => { await handleSheetSave(); setPrintOpen(true); }}>
         🖨️ 견적서 출력
+      </button>
+      <button className={btn} onClick={resetForm}>
+        초기화
       </button>
     </div>
   </div>
