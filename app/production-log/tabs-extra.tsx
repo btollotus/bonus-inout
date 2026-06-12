@@ -3017,6 +3017,34 @@ export function PetLedgerTab({ role, userId, showToast }: {
     requirePin((name) => doEditSaleCut(logId, qty, name));
   }
 
+  async function doEditIncoming(logId: string, qty: string, actionBy: string) {
+    if (!qty || Number(qty) <= 0) return showToast("수량을 입력하세요.", "error");
+    setEditSaleCutSaving(true);
+    const { error } = await supabase.from("pet_stock_logs").update({
+      quantity: Number(qty),
+      note: `입고등록(수정) — ${actionBy}`,
+    }).eq("id", logId);
+    setEditSaleCutSaving(false);
+    if (error) return showToast("수정 실패: " + error.message, "error");
+    showToast("✅ 입고 수정 완료!");
+    setEditingSaleCut(null);
+    loadData();
+  }
+
+  function editIncoming(logId: string, qty: string) {
+    requirePin((name) => doEditIncoming(logId, qty, name));
+  }
+
+  function deleteIncoming(logId: string) {
+    if (!confirm("이 입고 기록을 삭제하시겠습니까?")) return;
+    requirePin(async () => {
+      const { error } = await supabase.from("pet_stock_logs").delete().eq("id", logId);
+      if (error) return showToast("삭제 실패: " + error.message, "error");
+      showToast("🗑️ 삭제 완료!");
+      loadData();
+    });
+  }
+
   async function doSaveLog(actionBy: string) {
     setSaving(true);
     const note = `입고등록 — ${actionBy}`;
@@ -3209,9 +3237,44 @@ export function PetLedgerTab({ role, userId, showToast }: {
                     return (
                       <tr key={log.id} className={isEven ? "bg-white" : "bg-slate-50/50"}>
                         <td className="border border-slate-200 px-2 py-1.5 text-center text-slate-500 whitespace-nowrap">{dateLabel}</td>
-                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-blue-700 font-semibold">
-                          {log.log_type === "incoming" ? log.quantity.toLocaleString() : ""}
-                        </td>
+                        {(() => {
+                          const isIncoming = log.log_type === "incoming";
+                          const isEditingIncoming = isIncoming && editingSaleCut?.logId === log.id;
+                          if (isEditingIncoming && editingSaleCut) {
+                            return (
+                              <td className="border border-slate-200 px-1 py-1">
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-xs text-right tabular-nums focus:border-blue-400 focus:outline-none"
+                                    inputMode="numeric"
+                                    value={editingSaleCut.qty}
+                                    onChange={(e) => setEditingSaleCut({ ...editingSaleCut, qty: e.target.value.replace(/[^\d]/g, "") })}
+                                  />
+                                  <button className="rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+                                    disabled={editSaleCutSaving}
+                                    onClick={() => editIncoming(editingSaleCut.logId, editingSaleCut.qty)}
+                                  >{editSaleCutSaving ? "..." : "저장"}</button>
+                                  <button className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-slate-50"
+                                    onClick={() => setEditingSaleCut(null)}>취소</button>
+                                </div>
+                              </td>
+                            );
+                          }
+                          if (isIncoming) {
+                            return (
+                              <td className="border border-slate-200 px-2 py-1.5">
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="text-xs text-blue-700 font-semibold tabular-nums">{log.quantity.toLocaleString()}</span>
+                                  <button className="text-[9px] text-slate-300 hover:text-blue-400" title="수정"
+                                    onClick={() => setEditingSaleCut({ logId: log.id, qty: String(log.quantity) })}>✎</button>
+                                  <button className="text-[9px] text-slate-300 hover:text-red-500" title="삭제"
+                                    onClick={() => deleteIncoming(log.id)}>✕</button>
+                                </div>
+                              </td>
+                            );
+                          }
+                          return <td className="border border-slate-200 px-2 py-1.5"></td>;
+                        })()}
                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-slate-700">
                           {log.log_type === "transfer_used" ? log.quantity.toLocaleString() : ""}
                         </td>
