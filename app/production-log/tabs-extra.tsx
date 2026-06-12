@@ -2808,6 +2808,10 @@ export function PetLedgerTab({ role, userId, showToast }: {
     setShowPinModal(true);
   }
   const [fLogType, setFLogType] = useState("incoming");
+  const [fLogDate, setFLogDate] = useState(() => {
+    const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  });
   const [fQty, setFQty] = useState("");
   const [fDefectQty, setFDefectQty] = useState("");
   const [fNote, setFNote] = useState("");
@@ -3015,16 +3019,15 @@ export function PetLedgerTab({ role, userId, showToast }: {
 
   async function doSaveLog(actionBy: string) {
     setSaving(true);
-    const baseNote = fNote.trim();
-    const note = `입고등록 — ${actionBy}${baseNote ? ` / ${baseNote}` : ""}`;
+    const note = `입고등록 — ${actionBy}`;
     const { error } = await supabase.from("pet_stock_logs").insert({
-      log_date: (() => { const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(), log_type: fLogType, quantity: Number(fQty),
-      defect_qty: fDefectQty ? Number(fDefectQty) : 0, note, created_by: userId,
+      log_date: fLogDate, log_type: fLogType, quantity: Number(fQty),
+      defect_qty: 0, note, created_by: userId,
     });
     setSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
     showToast("✅ PET 입고 등록 완료!");
-    setFQty(""); setFDefectQty(""); setFNote("");
+    setFQty("");
     loadData();
   }
 
@@ -3150,23 +3153,18 @@ export function PetLedgerTab({ role, userId, showToast }: {
         />
       )}
 
-      <div className={`${card} p-4`}>
+<div className={`${card} p-4`}>
         <div className="mb-3 font-semibold text-sm text-blue-700">📥 PET 입고 등록</div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <div className="mb-1 text-xs text-slate-500">입고일 *</div>
+            <input type="date" className={inp} value={fLogDate}
+              onChange={(e) => setFLogDate(e.target.value)} />
+          </div>
           <div>
             <div className="mb-1 text-xs text-slate-500">입고 수량 (EA) *</div>
             <input className={inpR} inputMode="numeric" value={fQty}
               onChange={(e) => setFQty(e.target.value.replace(/[^\d]/g, ""))} placeholder="예: 1000" />
-          </div>
-          <div>
-            <div className="mb-1 text-xs text-slate-500">불량 수량 (EA)</div>
-            <input className={inpR} inputMode="numeric" value={fDefectQty}
-              onChange={(e) => setFDefectQty(e.target.value.replace(/[^\d]/g, ""))} placeholder="0" />
-          </div>
-          <div>
-            <div className="mb-1 text-xs text-slate-500">비고</div>
-            <input className={inp} value={fNote}
-              onChange={(e) => setFNote(e.target.value)} placeholder="선택 입력" />
           </div>
         </div>
         <div className="mt-3">
