@@ -1339,7 +1339,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
   const loadData = useCallback(async () => {
     setLoading(true);
     const [stockRes, receiptRes, usageRes, cumulativeUsageRes, cumulativeDisposalRes, adjRes] = await Promise.all([
-      supabase.from("materials").select("id,name,category,unit,safety_stock").eq("is_active", true).order("order_no", { nullsFirst: false }),
+      supabase.from("materials").select("id,name,category,unit,safety_stock").eq("is_active", true).neq("id", "00000000-0007-0000-0000-000000000001").order("order_no", { nullsFirst: false }),
       supabase.from("material_receipts")
         .select("id,received_date,material_id,quantity,unit,expiry_date,supplier,note,material:materials(name)")
         .eq("received_date", filterDate)
@@ -1449,7 +1449,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => {
-    supabase.from("materials").select("id,name,category").eq("is_active", true).order("order_no", { nullsFirst: false })
+    supabase.from("materials").select("id,name,category").eq("is_active", true).neq("id", "00000000-0007-0000-0000-000000000001").order("order_no", { nullsFirst: false })
       .then(({ data }) => setMaterials(data ?? []));
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
@@ -1482,7 +1482,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
       ...(recRes.data ?? []).map((r: any) => r.material_id),
       ...(useRes.data ?? []).map((u: any) => u.material_id),
       ...(adjRes.data ?? []).map((a: any) => a.material_id),
-    ])];
+    ])].filter((id) => id !== "00000000-0007-0000-0000-000000000001");
     if (changedIds.length === 0) { setPrintLoading(false); return alert("해당 월에 변동 내역이 없습니다."); }
 
     // 원료 정보
