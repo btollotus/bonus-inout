@@ -697,10 +697,10 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
                             </td>
                           );
                         })}
-                        <td style={{ ...wcTdP, textAlign:"center", padding:"1px" }}>
-                          {isPast && isAct && signSrc
+                       <td style={{ ...wcTdP, textAlign:"center", padding:"1px" }}>
+                          {isAct && signSrc
                             ? <img src={signSrc} style={{ height:16, display:"block", margin:"0 auto" }} alt={inspName} />
-                            : isPast && isAct
+                            : isAct
                               ? <div style={{ fontSize:"6pt", color:"#475569" }}>{inspName}</div>
                               : null}
                         </td>
