@@ -1067,6 +1067,10 @@ export function ForeignMatterTab({ role, userId, showToast }: {
                               supabase.from("foreign_matter_check_results")
                                 .upsert(defaultUpserts, { onConflict: "log_date,item_id" })
                                 .then(({ error: e }) => { if (e) showToast("기록 저장 실패: " + e.message, "error"); else loadData(); });
+                            } else {
+                              supabase.from("foreign_matter_check_results")
+                                .delete().eq("log_date", d)
+                                .then(({ error: e }) => { if (e) showToast("기록 삭제 실패: " + e.message, "error"); else loadData(); });
                             }
                           });
                         }}
@@ -1753,6 +1757,10 @@ const filledCells = items.length * dates.filter((d) => d <= today).length;
                                 supabase.from("hygiene_check_results")
                                   .upsert(defaultUpserts, { onConflict: "log_date,item_id" })
                                   .then(({ error: e }) => { if (e) showToast("기록 저장 실패: " + e.message, "error"); else loadData(); });
+                              } else {
+                                supabase.from("hygiene_check_results")
+                                  .delete().eq("log_date", d)
+                                  .then(({ error: e }) => { if (e) showToast("기록 삭제 실패: " + e.message, "error"); else loadData(); });
                               }
                             });
                           }}
