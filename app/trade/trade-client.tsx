@@ -1495,7 +1495,6 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         await loadTrades(); return;
       }
     }
-
     {
       const { data: { user } } = await supabase.auth.getUser();
       const stockUserId = user?.id ?? null;
@@ -1504,9 +1503,12 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         const { data: linkedWo } = await supabase.from("work_orders").select("work_order_no").eq("linked_order_id", orderId).limit(1).maybeSingle();
         stockWorkOrderNo = (linkedWo as any)?.work_order_no ?? null;
       }
+      console.log("[STOCK_DEBUG] cleanLines:", JSON.stringify(cleanLines.map((l) => ({ name: l.name, stock_out_lots: l.stock_out_lots }))));
       const stockErrors = await applyStockOutLots(supabase, cleanLines, orderId, stockWorkOrderNo, shipDate, stockUserId);
+      console.log("[STOCK_DEBUG] stockErrors:", stockErrors);
       if (stockErrors.length > 0) setMsg("⚠️ 주문은 저장됐으나 재고 차감 오류: " + stockErrors.join(" / "));
     }
+   
 
     setOrderIsReorder(false); setOrderTitle(""); setOrdererName("");
     setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
