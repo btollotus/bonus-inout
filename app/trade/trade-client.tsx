@@ -73,7 +73,7 @@ type Mode = "ORDERS" | "LEDGER" | "UNIFIED";
 type PartnerView = "PINNED" | "RECENT" | "ALL";
 type FoodTypeRow = { id: string; name: string };
 type PresetProductRow = { id: string; product_name: string; food_type: string | null; weight_g: number | string | null; barcode: string | null };
-type MasterProductRow = { product_name: string; food_type: string | null; report_no: string | null; weight_g: number | null; unit_type: "EA" | "BOX" | string | null; pack_ea: number | null; barcode: string | null };
+type MasterProductRow = { product_name: string; food_type: string | null; report_no: string | null; weight_g: number | null; unit_type: "EA" | "BOX" | string | null; pack_ea: number | null; barcode: string | null; variant_id?: string | null; category?: string | null };
 type Line = { food_type: string; name: string; weight_g: number | string; qty: number; unit: number | string; total_incl_vat: number | string; is_sample?: boolean };
 type ShipmentSnap = { seq: number; ship_to_name: string; ship_to_address1: string; ship_to_address2?: string | null; ship_to_mobile?: string | null; ship_to_phone?: string | null; ship_zipcode?: string | null; delivery_message?: string | null };
 type UnifiedRow = {
@@ -824,7 +824,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     if (data) setPresetProducts(data as PresetProductRow[]);
   }
   async function loadMasterProducts() {
-    const { data, error } = await supabase.from("v_tradeclient_products").select("product_name,food_type,weight_g,barcode").order("product_name", { ascending: true }).limit(10000);
+    const { data, error } = await supabase.from("v_tradeclient_products").select("product_name,food_type,category,weight_g,barcode,variant_id").order("product_name", { ascending: true }).limit(10000);
     if (!error && data) setMasterProducts(data as MasterProductRow[]);
   }
   async function loadEmployees() {
