@@ -446,13 +446,14 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
             <div className="mt-1 text-[11px] text-slate-400">재고 조회 중...</div>
           ) : stockLots.length > 0 ? (
             <div className="mt-1 space-y-1">
-              <div className="flex flex-wrap gap-1.5">
+             <div className="flex flex-wrap gap-1.5">
                 {stockLots.map((sl) => {
                   const selected = (l.stock_out_lots ?? []).find((t) => t.lot_id === sl.lot_id);
                   if (selected) return null;
+                  if (sl.stock_qty <= 0) return null;
                   return (
                     <button key={sl.lot_id} type="button"
-                      className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${sl.stock_qty < 0 ? "border-red-300 bg-red-50 text-red-600" : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}
+                      className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100"
                       onClick={() => onUpdate(i, { stock_out_lots: [...(l.stock_out_lots ?? []), { lot_id: sl.lot_id, qty: "" }] })}
                       title="클릭하면 이 LOT에서 재고 차감">
                       + {sl.expiry_date} · {sl.stock_qty.toLocaleString()}EA
@@ -1503,9 +1504,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         const { data: linkedWo } = await supabase.from("work_orders").select("work_order_no").eq("linked_order_id", orderId).limit(1).maybeSingle();
         stockWorkOrderNo = (linkedWo as any)?.work_order_no ?? null;
       }
-      console.log("[STOCK_DEBUG] cleanLines:", JSON.stringify(cleanLines.map((l) => ({ name: l.name, stock_out_lots: l.stock_out_lots }))));
       const stockErrors = await applyStockOutLots(supabase, cleanLines, orderId, stockWorkOrderNo, shipDate, stockUserId);
-      console.log("[STOCK_DEBUG] stockErrors:", stockErrors);
       if (stockErrors.length > 0) setMsg("⚠️ 주문은 저장됐으나 재고 차감 오류: " + stockErrors.join(" / "));
     }
    
