@@ -335,14 +335,32 @@ function ShipmentForm({ label, value, onChange, cls, namePrefix }: {
   );
 }
 
+type StockLotInfo = { lot_id: string; expiry_date: string; pack_unit: number | null; stock_qty: number };
 type LineRowProps = {
   l: Line; i: number; onUpdate: (i: number, p: Partial<Line>) => void; onRemove: (i: number) => void;
   presetByName: Map<string, PresetProductRow>; masterByName: Map<string, MasterProductRow>;
   inputCls: string; inputRightCls: string; btnCls: string; gridCols: string; qtyBadgeCls: string;
+  supabaseClient?: ReturnType<typeof createClient>;
 };
-function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCls, inputRightCls, btnCls, gridCols, qtyBadgeCls }: LineRowProps) {
+function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCls, inputRightCls, btnCls, gridCols, qtyBadgeCls, supabaseClient }: LineRowProps) {
   const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
   const pack = inferPackEaFromName(l.name);
+  const [stockLots, setStockLots] = useState<StockLotInfo[]>([]);
+  const [stockLoading, setStockLoading] = useState(false);
+  const variantId = masterByName.get(l.name)?.variant_id ?? null;
+  useEffect(() => {
+    if (!variantId || !supabaseClient) { setStockLots([]); return; }
+    let cancelled = false;
+    setStockLoading(true);
+    supabaseClient.from("v_stock_by_lot").select("lot_id,expiry_date,pack_unit,stock_qty").eq("variant_id", variantId).order("expiry_date", { ascending: true })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setStockLoading(false);
+        if (!error && data) setStockLots(data as StockLotInfo[]);
+        else setStockLots([]);
+      });
+    return () => { cancelled = true; };
+  }, [variantId, supabaseClient]);
   return (
     <div className={`grid ${gridCols} gap-2`}>
 <input className={inputCls} lang="ko" list="food-types-list" value={l.food_type} onChange={(e) => onUpdate(i, { food_type: e.target.value })} />
@@ -389,6 +407,23 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
         </label>
         <button className={btnCls} onClick={() => onRemove(i)} title="삭제">✕</button>
       </div>
+      {variantId ? (
+        <div className="col-span-full">
+          {stockLoading ? (
+            <div className="mt-1 text-[11px] text-slate-400">재고 조회 중...</div>
+          ) : stockLots.length > 0 ? (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {stockLots.map((sl) => (
+                <span key={sl.lot_id} className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${sl.stock_qty < 0 ? "border-red-300 bg-red-50 text-red-600" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                  {sl.expiry_date} · {sl.stock_qty.toLocaleString()}EA
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-1 text-[11px] text-slate-400">재고 없음</div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2360,9 +2395,9 @@ if (woSubNameVal) {
                     </div>
                     <LineHeader gridCols={lineGridCols} />
                     <div className="mt-2 space-y-1">
-                      {eLines.map((l, i) => (
+                    {eLines.map((l, i) => (
                         <div key={i}>
-                          <LineRow l={l} i={i} onUpdate={updateEditLine} onRemove={removeEditLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} />
+                          <LineRow l={l} i={i} onUpdate={updateEditLine} onRemove={removeEditLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} supabaseClient={supabase} />
                           {eWoId && l.name && !["택배비"].includes(l.name) ? (
                             <div className="ml-1 mb-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                               <div className="mb-1 text-xs text-slate-500">🖼 {l.name} 인쇄 디자인 이미지</div>
@@ -2710,9 +2745,9 @@ if (woSubNameVal) {
                 </div>
                 <LineHeader gridCols={lineGridCols} />
                 <div className="mt-2 space-y-1">
-                  {lines.map((l, i) => (
+                {lines.map((l, i) => (
                     <div key={i}>
-                      <LineRow l={l} i={i} onUpdate={updateLine} onRemove={removeLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} />
+                      <LineRow l={l} i={i} onUpdate={updateLine} onRemove={removeLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} supabaseClient={supabase} />
                       {orderWoEnabled && l.name && !["택배비"].includes(l.name) ? (
                         <div className="ml-1 mb-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                           <div className="mb-1 text-xs text-slate-500">🖼 {l.name} 인쇄 디자인 이미지</div>
