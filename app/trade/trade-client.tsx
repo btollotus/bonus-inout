@@ -1482,7 +1482,9 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           }
         }
       } catch (woCreateErr: any) {
-        setMsg(`⚠️ 주문은 저장됐으나 작업지시서 자동생성 실패: ${woCreateErr?.message ?? woCreateErr}`);
+        const stockErrorsOnWoFail = await applyStockOutLots(supabase, cleanLines, orderId, null, shipDate, (await supabase.auth.getUser()).data.user?.id ?? null);
+        const stockMsgPart = stockErrorsOnWoFail.length > 0 ? ` / 재고 차감 오류: ${stockErrorsOnWoFail.join(" / ")}` : "";
+        setMsg(`⚠️ 주문은 저장됐으나 작업지시서 자동생성 실패: ${woCreateErr?.message ?? woCreateErr}${stockMsgPart}`);
         setOrderIsReorder(false); setOrderTitle(""); setOrdererName("");
         setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
         setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
