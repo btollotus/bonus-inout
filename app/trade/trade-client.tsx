@@ -74,7 +74,7 @@ type PartnerView = "PINNED" | "RECENT" | "ALL";
 type FoodTypeRow = { id: string; name: string };
 type PresetProductRow = { id: string; product_name: string; food_type: string | null; weight_g: number | string | null; barcode: string | null };
 type MasterProductRow = { product_name: string; food_type: string | null; report_no: string | null; weight_g: number | null; unit_type: "EA" | "BOX" | string | null; pack_ea: number | null; barcode: string | null; variant_id?: string | null; category?: string | null };
-type Line = { food_type: string; name: string; weight_g: number | string; qty: number; unit: number | string; total_incl_vat: number | string; is_sample?: boolean };
+type Line = { food_type: string; name: string; weight_g: number | string; qty: number; unit: number | string; total_incl_vat: number | string; is_sample?: boolean; stock_out_lots?: { lot_id: string; qty: string }[] };
 type ShipmentSnap = { seq: number; ship_to_name: string; ship_to_address1: string; ship_to_address2?: string | null; ship_to_mobile?: string | null; ship_to_phone?: string | null; ship_zipcode?: string | null; delivery_message?: string | null };
 type UnifiedRow = {
   kind: "ORDER" | "LEDGER"; date: string; tsKey: string; partnerName: string;
@@ -212,6 +212,39 @@ function addDays(ymd: string, delta: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 const categoryToDirection = (c: Category): "IN" | "OUT" => c === "매출입금" ? "IN" : "OUT";
+
+async function applyStockOutLots(
+  supabaseClient: ReturnType<typeof createClient>,
+  cleanLines: Array<{ name: string; stock_out_lots?: { lot_id: string; qty: string }[] }>,
+  refId: string,
+  workOrderNo: string | null,
+  shipDateYMD: string,
+  userId: string | null
+): Promise<string[]> {
+  const errors: string[] = [];
+  for (const line of cleanLines) {
+    const lots = line.stock_out_lots ?? [];
+    for (const t of lots) {
+      const qty = toInt(t.qty);
+      if (!t.lot_id || qty <= 0) continue;
+      const { data: movData } = await supabaseClient.from("movements").select("type, qty").eq("lot_id", t.lot_id);
+      const remaining = (movData ?? []).reduce((sum: number, m: any) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
+      if (qty > remaining) {
+        errors.push(`"${line.name}" 재고 차감 실패: 차감(${qty}) > 잔량(${remaining})`);
+        continue;
+      }
+      const noteRef = workOrderNo ? workOrderNo : refId;
+      const { error: movErr } = await supabaseClient.from("movements").insert({
+        lot_id: t.lot_id, type: "OUT", qty,
+        happened_at: `${shipDateYMD}T00:00:00+09:00`,
+        note: `거래내역 OUT - ${noteRef} - ${line.name}`,
+        created_by: userId,
+      });
+      if (movErr) errors.push(`"${line.name}" 재고 차감 실패: ${movErr.message}`);
+    }
+  }
+  return errors;
+}
 const methodLabel = (m: any) => ({ BANK: "입금", CASH: "현금", CARD: "카드", ETC: "기타" }[String(m ?? "").trim()] ?? String(m ?? "").trim());
 const normText = (s: any) => { const v = String(s ?? "").trim(); return v === "" ? null : v; };
 const fmtKST = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
@@ -412,12 +445,49 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
           {stockLoading ? (
             <div className="mt-1 text-[11px] text-slate-400">재고 조회 중...</div>
           ) : stockLots.length > 0 ? (
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {stockLots.map((sl) => (
-                <span key={sl.lot_id} className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${sl.stock_qty < 0 ? "border-red-300 bg-red-50 text-red-600" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
-                  {sl.expiry_date} · {sl.stock_qty.toLocaleString()}EA
-                </span>
-              ))}
+            <div className="mt-1 space-y-1">
+              <div className="flex flex-wrap gap-1.5">
+                {stockLots.map((sl) => {
+                  const selected = (l.stock_out_lots ?? []).find((t) => t.lot_id === sl.lot_id);
+                  if (selected) return null;
+                  return (
+                    <button key={sl.lot_id} type="button"
+                      className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${sl.stock_qty < 0 ? "border-red-300 bg-red-50 text-red-600" : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}
+                      onClick={() => onUpdate(i, { stock_out_lots: [...(l.stock_out_lots ?? []), { lot_id: sl.lot_id, qty: "" }] })}
+                      title="클릭하면 이 LOT에서 재고 차감">
+                      + {sl.expiry_date} · {sl.stock_qty.toLocaleString()}EA
+                    </button>
+                  );
+                })}
+              </div>
+              {(l.stock_out_lots ?? []).length > 0 && (
+                <div className="space-y-1">
+                  {(l.stock_out_lots ?? []).map((t, tIdx) => {
+                    const sl = stockLots.find((s) => s.lot_id === t.lot_id);
+                    const usedByOthers = (l.stock_out_lots ?? []).filter((_, idx2) => idx2 !== tIdx).reduce((s, o) => o.lot_id === t.lot_id ? s + toInt(o.qty) : s, 0);
+                    const effectiveRemaining = (sl?.stock_qty ?? 0) - usedByOthers;
+                    const afterDeduct = effectiveRemaining - toInt(t.qty);
+                    return (
+                      <div key={tIdx} className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1">
+                        <span className="text-[11px] font-semibold text-violet-700 shrink-0">{sl?.expiry_date ?? t.lot_id}</span>
+                        <span className="text-[11px] text-slate-500 shrink-0">잔량 {effectiveRemaining.toLocaleString()}EA</span>
+                        <input className="flex-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-right tabular-nums focus:border-violet-400 focus:outline-none"
+                          inputMode="numeric" placeholder="차감 수량" value={t.qty}
+                          onChange={(e) => {
+                            const next = [...(l.stock_out_lots ?? [])];
+                            next[tIdx] = { ...next[tIdx], qty: e.target.value.replace(/[^\d]/g, "") };
+                            onUpdate(i, { stock_out_lots: next });
+                          }} />
+                        {t.qty && (
+                          <span className={`text-[11px] shrink-0 ${afterDeduct < 0 ? "text-red-600 font-semibold" : "text-slate-500"}`}>차감후 {afterDeduct.toLocaleString()}</span>
+                        )}
+                        <button type="button" className="text-[11px] text-slate-400 hover:text-red-500 shrink-0"
+                          onClick={() => onUpdate(i, { stock_out_lots: (l.stock_out_lots ?? []).filter((_, idx2) => idx2 !== tIdx) })}>✕</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ) : (
             <div className="mt-1 text-[11px] text-slate-400">재고 없음</div>
@@ -1235,7 +1305,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
       const name = l.name.trim(), qty = toInt(l.qty), unit = toIntSigned(l.unit), weight_g = toNum(l.weight_g), food_type = (l.food_type || "").trim();
       const pack_ea = inferPackEaFromName(name), unit_type = pack_ea > 1 ? "BOX" : "EA", actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
       const r = calcLineAmounts(qty, unit, l.total_incl_vat);
-      return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total, is_sample: !!l.is_sample };
+      return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total, is_sample: !!l.is_sample, stock_out_lots: l.stock_out_lots };
     }).filter((l) => l.name && l.qty > 0 && (l.is_sample || (l.total_amount ?? 0) !== 0));
     const zeroQtyLine = lines.find((l) => l.name.trim() && toInt(l.qty) <= 0); 
     if (zeroQtyLine) return setMsg(`"${zeroQtyLine.name.trim()}" 품목의 수량을 입력하세요. (0 또는 빈칸 불가)`);
@@ -1422,6 +1492,18 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
         await loadTrades(); return;
       }
+    }
+
+    {
+      const { data: { user } } = await supabase.auth.getUser();
+      const stockUserId = user?.id ?? null;
+      let stockWorkOrderNo: string | null = null;
+      if (orderWoEnabled) {
+        const { data: linkedWo } = await supabase.from("work_orders").select("work_order_no").eq("linked_order_id", orderId).limit(1).maybeSingle();
+        stockWorkOrderNo = (linkedWo as any)?.work_order_no ?? null;
+      }
+      const stockErrors = await applyStockOutLots(supabase, cleanLines, orderId, stockWorkOrderNo, shipDate, stockUserId);
+      if (stockErrors.length > 0) setMsg("⚠️ 주문은 저장됐으나 재고 차감 오류: " + stockErrors.join(" / "));
     }
 
     setOrderIsReorder(false); setOrderTitle(""); setOrdererName("");
@@ -1895,7 +1977,7 @@ if (woSubNameVal) {
         const name = (l.name || "").trim(), qty = toInt(l.qty), unit = toIntSigned(l.unit), weight_g = toNum(l.weight_g), food_type = (l.food_type || "").trim();
         const pack_ea = inferPackEaFromName(name), unit_type = pack_ea > 1 ? "BOX" : "EA", actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
         const r = calcLineAmounts(qty, unit, l.total_incl_vat);
-        return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total, is_sample: !!l.is_sample };
+        return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total, is_sample: !!l.is_sample, stock_out_lots: l.stock_out_lots };
       }).filter((l) => l.name && l.qty > 0 && (l.is_sample || (l.total_amount ?? 0) !== 0));
       if (cleanLines.length === 0) return setMsg("제품명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
       const { error } = await supabase.from("orders").update({ ship_date: eShipDate, ship_method: eShipMethod, memo: JSON.stringify({ title: eOrderTitle.trim() || null, orderer_name: eOrdererName.trim() || null }), supply_amount: editOrderTotals.supply, vat_amount: editOrderTotals.vat, total_amount: editOrderTotals.total }).eq("id", editRow.rawId);
@@ -1939,6 +2021,17 @@ if (woSubNameVal) {
           const finalPaths = [...existingPaths, ...newPaths];
           await supabase.from("work_order_items").update({ images: finalPaths }).eq("id", itemId);
         }
+      }
+      {
+        const { data: { user } } = await supabase.auth.getUser();
+        const stockUserId = user?.id ?? null;
+        let stockWorkOrderNo: string | null = null;
+        if (eWoId) {
+          const { data: woRow } = await supabase.from("work_orders").select("work_order_no").eq("id", eWoId).maybeSingle();
+          stockWorkOrderNo = (woRow as any)?.work_order_no ?? null;
+        }
+        const stockErrors = await applyStockOutLots(supabase, cleanLines, editRow.rawId, stockWorkOrderNo, eShipDate, stockUserId);
+        if (stockErrors.length > 0) setMsg("⚠️ 수정은 저장됐으나 재고 차감 오류: " + stockErrors.join(" / "));
       }
     } else {
       const amount = Number((eAmountStr || "0").replaceAll(",", ""));
