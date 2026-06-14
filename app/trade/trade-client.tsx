@@ -1584,9 +1584,20 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         stockWorkOrderNo = (linkedWo as any)?.work_order_no ?? null;
       }
       const stockErrors = await applyStockOutLots(supabase, cleanLines, orderId, stockWorkOrderNo, shipDate, stockUserId);
+
+      // ── Step4: 재고부족(마켓플레이스 거래처) 라인 → 임시 lot + 임시 작업지시서 자동생성 ──
+      if (SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name)) {
+        for (const cl of cleanLines) {
+          if ((cl.stock_out_lots ?? []).length > 0) continue;
+          const variantId = masterByName.get(cl.name)?.variant_id;
+          if (!variantId) continue;
+          const shortageResult = await createTempLotForShortage(supabase, variantId, cl.qty, cl.name, shipDate, selectedPartner.name, stockUserId);
+          if (shortageResult.error) stockErrors.push(shortageResult.error);
+        }
+      }
+
       if (stockErrors.length > 0) setMsg("⚠️ 주문은 저장됐으나 재고 차감 오류: " + stockErrors.join(" / "));
     }
-   
 
     setOrderIsReorder(false); setOrderTitle(""); setOrdererName("");
     setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
