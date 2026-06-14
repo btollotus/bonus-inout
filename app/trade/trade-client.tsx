@@ -2105,6 +2105,7 @@ if (woSubNameVal) {
 
   async function saveEdit() {
     if (!editRow) return; setMsg(null);
+    let stockWarningMsg: string | null = null;
     if (editRow.kind === "ORDER") {
       const cleanLines = eLines.map((l) => {
         const name = (l.name || "").trim(), qty = toInt(l.qty), unit = toIntSigned(l.unit), weight_g = toNum(l.weight_g), food_type = (l.food_type || "").trim();
@@ -2176,7 +2177,7 @@ if (woSubNameVal) {
           }
         }
 
-        if (stockErrors.length > 0) setMsg("⚠️ 수정은 저장됐으나 재고 차감 오류: " + stockErrors.join(" / "));
+        if (stockErrors.length > 0) stockWarningMsg = "⚠️ 수정은 저장됐으나 재고 차감 오류: " + stockErrors.join(" / ");
       }
     } else {
       const amount = Number((eAmountStr || "0").replaceAll(",", ""));
@@ -2195,6 +2196,7 @@ if (woSubNameVal) {
       }
     }
     setEditOpen(false); setEditRow(null); await loadTrades();
+    if (stockWarningMsg) setMsg(stockWarningMsg);
   }
 
   async function deleteTradeRow(r: UnifiedRow) {
