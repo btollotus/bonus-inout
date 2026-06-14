@@ -246,7 +246,7 @@ async function applyStockOutLots(
   return errors;
 }
 
-// ── Step4: 재고부족(마켓플레이스) 시 임시 lot + 임시 작업지시서 생성 ──
+// ── Step4: 재고부족(마켓플레이스) 시 임시 lot + 임시 작업지시서 생성 (멱등성 처리 포함) ──
 async function createTempLotForShortage(
   supabaseClient: ReturnType<typeof createClient>,
   variantId: string,
@@ -254,8 +254,35 @@ async function createTempLotForShortage(
   lineName: string,
   shipDateYMD: string,
   partnerName: string,
-  userId: string | null
+  userId: string | null,
+  orderId: string
 ): Promise<{ workOrderNo: string | null; error: string | null }> {
+  const noteKey = `재고부족 임시출고 - ${orderId} - ${lineName}`;
+
+  // 0. 기존 임시 lot/작업지시서 존재 여부 확인 (멱등성 — 같은 주문/같은 라인이면 신규생성 대신 수량만 갱신)
+  const { data: existingMov } = await supabaseClient.from("movements")
+    .select("id, lot_id, qty").eq("note", noteKey).limit(1).maybeSingle();
+
+  if (existingMov) {
+    const { error: movUpdErr } = await supabaseClient.from("movements").update({
+      qty, happened_at: `${shipDateYMD}T00:00:00+09:00`,
+    }).eq("id", existingMov.id);
+    if (movUpdErr) return { workOrderNo: null, error: `"${lineName}" 임시 lot 수량 수정 실패: ${movUpdErr.message}` };
+
+    const { data: lotRow } = await supabaseClient.from("lots").select("work_order_id").eq("id", existingMov.lot_id).maybeSingle();
+    const existingWoId = (lotRow as any)?.work_order_id ?? null;
+    let existingWoNo: string | null = null;
+    if (existingWoId) {
+      const { data: woRow } = await supabaseClient.from("work_orders").select("work_order_no").eq("id", existingWoId).maybeSingle();
+      existingWoNo = (woRow as any)?.work_order_no ?? null;
+      const { error: itemUpdErr } = await supabaseClient.from("work_order_items").update({
+        sub_items: [{ name: lineName, qty }], order_qty: qty,
+      }).eq("work_order_id", existingWoId);
+      if (itemUpdErr) return { workOrderNo: existingWoNo, error: `"${lineName}" 임시 작업지시서 수량 수정 실패: ${itemUpdErr.message}` };
+    }
+    return { workOrderNo: existingWoNo, error: null };
+  }
+
   // 1. 임시 lot 생성 (is_temp=true, expiry_date=null)
   const { data: newLot, error: lotErr } = await supabaseClient.from("lots").insert({
     variant_id: variantId, expiry_date: null, is_temp: true,
@@ -266,7 +293,7 @@ async function createTempLotForShortage(
   const { error: movErr } = await supabaseClient.from("movements").insert({
     lot_id: newLot.id, type: "OUT", qty,
     happened_at: `${shipDateYMD}T00:00:00+09:00`,
-    note: `재고부족 임시출고 - ${lineName}`,
+    note: noteKey,
     created_by: userId,
   });
   if (movErr) return { workOrderNo: null, error: `"${lineName}" 임시 lot 재고차감 실패: ${movErr.message}` };
@@ -1571,7 +1598,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
             if ((cl.stock_out_lots ?? []).length > 0) continue;
             const variantId = masterByName.get(cl.name)?.variant_id;
             if (!variantId) continue;
-            const shortageResult = await createTempLotForShortage(supabase, variantId, cl.qty, cl.name, shipDate, selectedPartner.name, woFailUserId);
+            const shortageResult = await createTempLotForShortage(supabase, variantId, cl.qty, cl.name, shipDate, selectedPartner.name, woFailUserId, orderId);
             if (shortageResult.error) stockErrorsOnWoFail.push(shortageResult.error);
           }
         }
@@ -1604,7 +1631,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           if ((cl.stock_out_lots ?? []).length > 0) continue;
           const variantId = masterByName.get(cl.name)?.variant_id;
           if (!variantId) continue;
-          const shortageResult = await createTempLotForShortage(supabase, variantId, cl.qty, cl.name, shipDate, selectedPartner.name, stockUserId);
+          const shortageResult = await createTempLotForShortage(supabase, variantId, cl.qty, cl.name, shipDate, selectedPartner.name, stockUserId, orderId);
           if (shortageResult.error) stockErrors.push(shortageResult.error);
         }
       }
@@ -2137,6 +2164,18 @@ if (woSubNameVal) {
           stockWorkOrderNo = (woRow as any)?.work_order_no ?? null;
         }
         const stockErrors = await applyStockOutLots(supabase, cleanLines, editRow.rawId, stockWorkOrderNo, eShipDate, stockUserId);
+
+        // ── Step4: 재고부족(마켓플레이스 거래처) 라인 → 임시 lot + 임시 작업지시서 자동생성 ──
+        if (selectedPartner && SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name)) {
+          for (const cl of cleanLines) {
+            if ((cl.stock_out_lots ?? []).length > 0) continue;
+            const variantId = masterByName.get(cl.name)?.variant_id;
+            if (!variantId) continue;
+            const shortageResult = await createTempLotForShortage(supabase, variantId, cl.qty, cl.name, eShipDate, selectedPartner.name, stockUserId, editRow.rawId);
+            if (shortageResult.error) stockErrors.push(shortageResult.error);
+          }
+        }
+
         if (stockErrors.length > 0) setMsg("⚠️ 수정은 저장됐으나 재고 차감 오류: " + stockErrors.join(" / "));
       }
     } else {
