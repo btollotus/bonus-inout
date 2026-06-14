@@ -1406,6 +1406,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
   // ── createOrder ──
   async function createOrder() {
     setMsg(null);
+    let stockWarningMsg: string | null = null;
     if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
     if (lines.length === 0) return setMsg("품목을 1개 이상 입력하세요.");
     const cleanLines = lines.map((l) => {
@@ -1604,7 +1605,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         }
 
         const stockMsgPart = stockErrorsOnWoFail.length > 0 ? ` / 재고 차감 오류: ${stockErrorsOnWoFail.join(" / ")}` : "";
-        setMsg(`⚠️ 주문은 저장됐으나 작업지시서 자동생성 실패: ${woCreateErr?.message ?? woCreateErr}${stockMsgPart}`);
+        stockWarningMsg = `⚠️ 주문은 저장됐으나 작업지시서 자동생성 실패: ${woCreateErr?.message ?? woCreateErr}${stockMsgPart}`;
         setOrderIsReorder(false); setOrderTitle(""); setOrdererName("");
         setLines([{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
         setShip1(emptyShip()); setShip2(emptyShip()); setTwoShip(false); setToTouched(false);
@@ -1612,7 +1613,9 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         setOrderWoPackagingType(""); setOrderWoMoldPerSheet(""); setOrderWoMoldCols(""); setOrderWoMoldRows(""); setOrderWoMoldCount(""); setOrderWoNote("");
         setOrderSkipProductionCheck(false); setWo_packageUnit(""); setWo_packageUnitCustom("");
         setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
-        await loadTrades(); return;
+        await loadTrades();
+        if (stockWarningMsg) setMsg(stockWarningMsg);
+        return;
       }
     }
     {
@@ -1636,7 +1639,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         }
       }
 
-      if (stockErrors.length > 0) setMsg("⚠️ 주문은 저장됐으나 재고 차감 오류: " + stockErrors.join(" / "));
+      if (stockErrors.length > 0) stockWarningMsg = "⚠️ 주문은 저장됐으나 재고 차감 오류: " + stockErrors.join(" / ");
     }
 
     setOrderIsReorder(false); setOrderTitle(""); setOrdererName("");
@@ -1647,6 +1650,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
     setOrderSkipProductionCheck(false); setWo_packageUnit(""); setWo_packageUnitCustom("");
     setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
     await loadTrades();
+    if (stockWarningMsg) setMsg(stockWarningMsg);
   }
 
   async function createLedger() {
