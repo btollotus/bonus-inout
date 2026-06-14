@@ -245,6 +245,85 @@ async function applyStockOutLots(
   }
   return errors;
 }
+
+// ── Step4: 재고부족(마켓플레이스) 시 임시 lot + 임시 작업지시서 생성 ──
+async function createTempLotForShortage(
+  supabaseClient: ReturnType<typeof createClient>,
+  variantId: string,
+  qty: number,
+  lineName: string,
+  shipDateYMD: string,
+  partnerName: string,
+  userId: string | null
+): Promise<{ workOrderNo: string | null; error: string | null }> {
+  // 1. 임시 lot 생성 (is_temp=true, expiry_date=null)
+  const { data: newLot, error: lotErr } = await supabaseClient.from("lots").insert({
+    variant_id: variantId, expiry_date: null, is_temp: true,
+  }).select("id").single();
+  if (lotErr || !newLot) return { workOrderNo: null, error: `"${lineName}" 임시 lot 생성 실패: ${lotErr?.message ?? ""}` };
+
+  // 2. movements OUT (음수재고 기록)
+  const { error: movErr } = await supabaseClient.from("movements").insert({
+    lot_id: newLot.id, type: "OUT", qty,
+    happened_at: `${shipDateYMD}T00:00:00+09:00`,
+    note: `재고부족 임시출고 - ${lineName}`,
+    created_by: userId,
+  });
+  if (movErr) return { workOrderNo: null, error: `"${lineName}" 임시 lot 재고차감 실패: ${movErr.message}` };
+
+  // 3. 동일 variant_id 최근 작업지시서 설정 조회 (이전 설정 자동복사)
+  const { data: prevWo } = await supabaseClient.from("work_orders")
+    .select("sub_name, food_type, logo_spec, thickness, packaging_type, delivery_method, package_unit, mold_cols, mold_rows, mold_count, note, product_name")
+    .eq("variant_id", variantId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // 4. 작업지시서 번호/바코드 생성
+  const { data: barcodeData, error: barcodeErr } = await supabaseClient.rpc("generate_work_order_barcode");
+  if (barcodeErr) return { workOrderNo: null, error: `"${lineName}" 바코드 생성 실패: ${barcodeErr.message}` };
+  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; })();
+  const { data: newWoNo, error: woNoErr } = await supabaseClient.rpc("generate_work_order_no", { date_str: todayStr });
+  if (woNoErr || !newWoNo) return { workOrderNo: null, error: `"${lineName}" 작업지시서 번호 생성 실패: ${woNoErr?.message ?? ""}` };
+
+  // 5. 임시 작업지시서 생성 (이전 설정 복사, 없으면 빈 값)
+  const moldCols = prevWo?.mold_cols ?? null;
+  const moldRows = prevWo?.mold_rows ?? null;
+  const { data: createdWo, error: woErr } = await supabaseClient.from("work_orders").insert({
+    work_order_no: newWoNo, barcode_no: barcodeData,
+    client_id: null, client_name: partnerName,
+    sub_name: prevWo?.sub_name ?? null,
+    order_date: todayYMD(),
+    food_type: prevWo?.food_type ?? null,
+    product_name: prevWo?.product_name ?? lineName,
+    logo_spec: prevWo?.logo_spec ?? null,
+    thickness: prevWo?.thickness ?? null,
+    delivery_method: prevWo?.delivery_method ?? null,
+    packaging_type: prevWo?.packaging_type ?? null,
+    package_unit: prevWo?.package_unit ?? null,
+    mold_cols: moldCols, mold_rows: moldRows,
+    mold_per_sheet: (moldCols && moldRows) ? moldCols * moldRows : null,
+    mold_count: prevWo?.mold_count ?? null,
+    note: prevWo?.note ?? null,
+    status: "생산중", variant_id: variantId, images: [],
+  }).select("id").single();
+  if (woErr || !createdWo) return { workOrderNo: null, error: `"${lineName}" 임시 작업지시서 생성 실패: ${woErr?.message ?? ""}` };
+
+  // 6. 부족분 수량으로 작업지시서 항목 생성
+  const { error: itemErr } = await supabaseClient.from("work_order_items").insert({
+    work_order_id: createdWo.id, delivery_date: shipDateYMD,
+    sub_items: [{ name: lineName, qty }], order_qty: qty,
+    barcode_no: barcodeData,
+  });
+  if (itemErr) return { workOrderNo: newWoNo, error: `"${lineName}" 작업지시서 항목 생성 실패: ${itemErr.message}` };
+
+  // 7. 임시 lot ↔ 작업지시서 연결
+  const { error: lotUpdErr } = await supabaseClient.from("lots").update({ work_order_id: createdWo.id }).eq("id", newLot.id);
+  if (lotUpdErr) return { workOrderNo: newWoNo, error: `"${lineName}" 임시 lot 연결 실패: ${lotUpdErr.message}` };
+
+  return { workOrderNo: newWoNo, error: null };
+}
+
 const methodLabel = (m: any) => ({ BANK: "입금", CASH: "현금", CARD: "카드", ETC: "기타" }[String(m ?? "").trim()] ?? String(m ?? "").trim());
 const normText = (s: any) => { const v = String(s ?? "").trim(); return v === "" ? null : v; };
 const fmtKST = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
