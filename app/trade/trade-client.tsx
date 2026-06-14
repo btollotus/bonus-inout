@@ -1562,7 +1562,20 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           }
         }
       } catch (woCreateErr: any) {
-        const stockErrorsOnWoFail = await applyStockOutLots(supabase, cleanLines, orderId, null, shipDate, (await supabase.auth.getUser()).data.user?.id ?? null);
+        const woFailUserId = (await supabase.auth.getUser()).data.user?.id ?? null;
+        const stockErrorsOnWoFail = await applyStockOutLots(supabase, cleanLines, orderId, null, shipDate, woFailUserId);
+
+        // ── Step4: 재고부족(마켓플레이스 거래처) 라인 → 임시 lot + 임시 작업지시서 자동생성 ──
+        if (SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name)) {
+          for (const cl of cleanLines) {
+            if ((cl.stock_out_lots ?? []).length > 0) continue;
+            const variantId = masterByName.get(cl.name)?.variant_id;
+            if (!variantId) continue;
+            const shortageResult = await createTempLotForShortage(supabase, variantId, cl.qty, cl.name, shipDate, selectedPartner.name, woFailUserId);
+            if (shortageResult.error) stockErrorsOnWoFail.push(shortageResult.error);
+          }
+        }
+
         const stockMsgPart = stockErrorsOnWoFail.length > 0 ? ` / 재고 차감 오류: ${stockErrorsOnWoFail.join(" / ")}` : "";
         setMsg(`⚠️ 주문은 저장됐으나 작업지시서 자동생성 실패: ${woCreateErr?.message ?? woCreateErr}${stockMsgPart}`);
         setOrderIsReorder(false); setOrderTitle(""); setOrdererName("");
