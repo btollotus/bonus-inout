@@ -306,6 +306,16 @@ async function createTempLotForShortage(
     .limit(1)
     .maybeSingle();
 
+  // 3-1. 이전 WO의 food_type이 비어있으면 products.food_type을 fallback으로 사용
+  let fallbackFoodType: string | null = null;
+  if (!prevWo?.food_type) {
+    const { data: variantRow } = await supabaseClient.from("product_variants")
+      .select("products(food_type)")
+      .eq("id", variantId)
+      .maybeSingle();
+    fallbackFoodType = (variantRow as any)?.products?.food_type ?? null;
+  }
+
   // 4. 작업지시서 번호/바코드 생성
   const { data: barcodeData, error: barcodeErr } = await supabaseClient.rpc("generate_work_order_barcode");
   if (barcodeErr) return { workOrderNo: null, error: `"${lineName}" 바코드 생성 실패: ${barcodeErr.message}` };
@@ -321,7 +331,7 @@ async function createTempLotForShortage(
     client_id: null, client_name: partnerName,
     sub_name: prevWo?.sub_name ?? null,
     order_date: todayYMD(),
-    food_type: prevWo?.food_type ?? null,
+    food_type: prevWo?.food_type ?? fallbackFoodType,
     product_name: prevWo?.product_name ?? lineName,
     logo_spec: prevWo?.logo_spec ?? null,
     thickness: prevWo?.thickness ?? null,
