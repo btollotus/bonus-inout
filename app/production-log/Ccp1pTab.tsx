@@ -329,7 +329,7 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
     .in("status", ["생산중", "완료"])
     .gte("updated_at", `${selectedDate}T00:00:00+09:00`)
     .lt("updated_at", `${selectedDate}T23:59:59+09:00`)
-    .not("food_type", "ilike", "%중간재%")
+    .or("food_type.is.null,food_type.not.ilike.%중간재%")
     .eq("skip_production_check", false)
     .order("updated_at", { ascending: true });
 
