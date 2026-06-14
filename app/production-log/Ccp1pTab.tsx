@@ -587,17 +587,45 @@ function selectWo(wo: WorkOrderItem) {
           if (!variantId) { stockErrors.push(`variant 없음 (${(item.sub_items ?? [])[0]?.name ?? item.id})`); continue; }
 
           let lotId: string | null = null;
-          const { data: existingLot } = await supabase
+
+          // ── Step5: 임시 lot(is_temp=true, 이 WO에 연결, 동일 variant) → 실제 lot 마이그레이션 ──
+          const { data: tempLot } = await supabase
             .from("lots").select("id")
-            .eq("variant_id", variantId).eq("expiry_date", item.expiry_date).maybeSingle();
-          if (existingLot) {
-            lotId = existingLot.id;
-          } else {
-            const { data: newLot, error: lotErr } = await supabase
-              .from("lots").insert({ variant_id: variantId, expiry_date: item.expiry_date })
-              .select("id").single();
-            if (lotErr) { stockErrors.push("LOT 생성 실패: " + lotErr.message); continue; }
-            lotId = newLot.id;
+            .eq("is_temp", true).eq("work_order_id", selectedWoId).eq("variant_id", variantId)
+            .maybeSingle();
+
+          if (tempLot) {
+            const { data: existingLotForMerge } = await supabase
+              .from("lots").select("id")
+              .eq("variant_id", variantId).eq("expiry_date", item.expiry_date).neq("id", tempLot.id).maybeSingle();
+            if (existingLotForMerge) {
+              const { error: mvUpdErr } = await supabase.from("movements")
+                .update({ lot_id: existingLotForMerge.id }).eq("lot_id", tempLot.id);
+              if (mvUpdErr) { stockErrors.push("임시 lot 병합 실패: " + mvUpdErr.message); continue; }
+              const { error: tempDelErr } = await supabase.from("lots").delete().eq("id", tempLot.id);
+              if (tempDelErr) { stockErrors.push("임시 lot 삭제 실패: " + tempDelErr.message); continue; }
+              lotId = existingLotForMerge.id;
+            } else {
+              const { error: tempUpdErr } = await supabase.from("lots")
+                .update({ expiry_date: item.expiry_date, is_temp: false }).eq("id", tempLot.id);
+              if (tempUpdErr) { stockErrors.push("임시 lot 전환 실패: " + tempUpdErr.message); continue; }
+              lotId = tempLot.id;
+            }
+          }
+
+          if (!lotId) {
+            const { data: existingLot } = await supabase
+              .from("lots").select("id")
+              .eq("variant_id", variantId).eq("expiry_date", item.expiry_date).maybeSingle();
+            if (existingLot) {
+              lotId = existingLot.id;
+            } else {
+              const { data: newLot, error: lotErr } = await supabase
+                .from("lots").insert({ variant_id: variantId, expiry_date: item.expiry_date })
+                .select("id").single();
+              if (lotErr) { stockErrors.push("LOT 생성 실패: " + lotErr.message); continue; }
+              lotId = newLot.id;
+            }
           }
 
           const endTime = (formData.b_end_time ?? "00:00").slice(0, 5);
