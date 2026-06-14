@@ -556,7 +556,7 @@ function selectWo(wo: WorkOrderItem) {
     try {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("variant_id, work_order_no, client_name, product_name, food_type, logo_spec, work_order_items(id, actual_qty, unit_weight, expiry_date, barcode_no, sub_items, transfer_lot_id, transfer_qty)")
+        .select("variant_id, work_order_no, client_name, product_name, food_type, logo_spec, linked_order_id, work_order_items(id, actual_qty, unit_weight, expiry_date, barcode_no, sub_items, transfer_lot_id, transfer_qty)")
         .eq("id", selectedWoId)
         .single();
 
@@ -564,6 +564,14 @@ function selectWo(wo: WorkOrderItem) {
         const { data: { user } } = await supabase.auth.getUser();
         const userId = user?.id ?? null;
         const stockErrors: string[] = [];
+
+        // 업체 주문제작(linked_order_id 있음)인 경우, 연결된 주문의 출고일 조회 (출고일 기준 OUT 기록용)
+        const linkedOrderId = (woData as any).linked_order_id ?? null;
+        let shipDateYMD: string | null = null;
+        if (linkedOrderId) {
+          const { data: linkedOrder } = await supabase.from("orders").select("ship_date").eq("id", linkedOrderId).maybeSingle();
+          shipDateYMD = (linkedOrder as any)?.ship_date ?? null;
+        }
 
         const items = ((woData as any).work_order_items ?? []).filter((item: any) => {
           const name = (item.sub_items ?? [])[0]?.name ?? "";
@@ -638,6 +646,20 @@ function selectWo(wo: WorkOrderItem) {
             created_by: userId,
           });
           if (movErr) stockErrors.push("입고 기록 실패: " + movErr.message);
+
+          // 업체 주문제작 → 연결된 주문의 출고일 기준으로 동일 LOT에 OUT도 기록
+          if (linkedOrderId && shipDateYMD) {
+            const itemName = (item.sub_items ?? [])[0]?.name ?? "";
+            const { error: outErr } = await supabase.from("movements").insert({
+              lot_id: lotId,
+              type: "OUT",
+              qty: actual_qty,
+              happened_at: `${shipDateYMD}T00:00:00+09:00`,
+              note: `거래내역 OUT - ${(woData as any).work_order_no} - ${itemName}`,
+              created_by: userId,
+            });
+            if (outErr) stockErrors.push("출고 기록 실패: " + outErr.message);
+          }
         }
 
         // work_orders: assignee_input = 담당자, status_input = true, status = "완료"
