@@ -20,6 +20,7 @@ type WorkOrderItem = {
   product_name: string;
   client_name: string;
   updated_at: string;
+  input_done_at?: string | null;
   ccp_end_time?: string | null;
 };
 
@@ -324,7 +325,7 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
     setLoading(true);
     const { data, error } = await supabase
     .from("work_orders")
-    .select("id, product_name, client_name, updated_at, work_order_no")
+    .select("id, product_name, client_name, updated_at, input_done_at, work_order_no")
     .eq("status_production", true)
     .in("status", ["생산중", "완료"])
     .gte("updated_at", `${selectedDate}T00:00:00+09:00`)
@@ -353,7 +354,16 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
       ...w,
       ccp_end_time: ccpEndMap[w.work_order_no] ?? null,
     }));
-    setWoList(enriched as WorkOrderItem[]);
+    // input_done_at이 있는 건은 input_done_at 날짜 기준, null인 건은 updated_at 날짜 기준으로 필터
+    const filtered = enriched.filter((w: any) => {
+      if (w.input_done_at) {
+        const doneDateKst = new Date(new Date(w.input_done_at).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+        const doneDate = `${doneDateKst.getFullYear()}-${String(doneDateKst.getMonth()+1).padStart(2,"0")}-${String(doneDateKst.getDate()).padStart(2,"0")}`;
+        return doneDate === selectedDate;
+      }
+      return true; // input_done_at이 null이면 updated_at 기준으로 이미 필터됨
+    });
+    setWoList(filtered as WorkOrderItem[]);
     setLoading(false);
   }, [selectedDate]);
 

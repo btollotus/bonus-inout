@@ -165,8 +165,8 @@ export function ProductionDashboard({
     try {
       const [{ data: woData }, { data: ccpData }] = await Promise.all([
         supabase.from("work_orders")
-          .select("id, client_name, product_name")
-          .eq("status_production", true)
+        .select("id, client_name, product_name, input_done_at")
+        .eq("status_production", true)
           .in("status", ["생산중", "완료"])
           .gte("updated_at", `${today}T00:00:00+09:00`)
           .lte("updated_at", `${today}T23:59:59+09:00`)
@@ -176,15 +176,24 @@ export function ProductionDashboard({
           .select("work_order_id")
           .eq("log_date", today),
       ]);
+      // input_done_at이 있는 건은 input_done_at 날짜 기준으로 재필터
+      const filteredWo = (woData ?? []).filter((w: any) => {
+        if (w.input_done_at) {
+          const d = new Date(new Date(w.input_done_at).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+          const doneDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+          return doneDate === today;
+        }
+        return true;
+      });
       const recordedIds = new Set((ccpData ?? []).map((c: any) => c.work_order_id));
-      const missing = (woData ?? []).filter((w: any) => !recordedIds.has(w.id));
+      const missing = filteredWo.filter((w: any) => !recordedIds.has(w.id));
       newCards.push({
         key: "ccp1p",
         label: "CCP-1P 금속검출",
         icon: "🔍",
         tab: "ccp1p",
         status: missing.length > 0 ? "error" : "ok",
-        message: missing.length > 0 ? `${missing.length}건 미기록` : (woData ?? []).length === 0 ? `해당 작업 없음` : `전체 기록 완료`,
+        message: missing.length > 0 ? `${missing.length}건 미기록` : filteredWo.length === 0 ? `해당 작업 없음` : `전체 기록 완료`,
         detail: missing.map((w: any) => `${w.client_name} — ${w.product_name}`),
       });
     } catch {
