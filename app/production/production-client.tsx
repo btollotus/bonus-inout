@@ -2460,26 +2460,23 @@ const totalOrder = items
                           <div><div className="font-semibold text-xs">납기: <span className="tabular-nums">{item.delivery_date}</span></div>{(item.sub_items ?? [])[0]?.name ? <div className="mt-0.5 text-xs font-medium text-slate-700">{item.sub_items[0].name}{item.barcode_no ? <span className="inline-flex items-center gap-1 ml-2"><span className="font-mono text-xs font-normal text-slate-400">{item.barcode_no}</span><button type="button" className="text-slate-300 hover:text-slate-500 active:text-green-500 transition-colors" title="바코드 복사" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(item.barcode_no!); }}><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></span> : null}</div> : null}</div>
                             <div className="flex items-center gap-1.5 text-xs"><span className={pill}>주문 {fmt(item.order_qty)}개</span>{isDone && <span className="rounded-full bg-green-100 border border-green-200 px-2 py-0.5 text-[10px] font-semibold text-green-700">완료</span>}</div>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                          <div>
+                          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+                            <div>
                               <div className="mb-1 text-xs text-slate-500">출고수량</div>
                               <input className={inpR} inputMode="numeric" value={pi.actual_qty} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, actual_qty: e.target.value.replace(/[^\d]/g, "") } }))} />
-                              <div className="mt-1 flex items-center justify-between gap-1 text-[11px] text-slate-400">
-                                <span>주문 {fmt(item.order_qty)}개</span>
-                                <span className="flex items-center gap-1 shrink-0">
-                                  <span>+추가</span>
-                                  <input className="w-12 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-right tabular-nums focus:border-blue-400 focus:outline-none"
-                                    inputMode="numeric" placeholder="0"
-                                    value={pi.extra_qty}
-                                    disabled={selectedWo?.status === "완료" && !isEditMode}
-                                    onChange={(e) => {
-                                      const extra = e.target.value.replace(/[^\d]/g, "");
-                                      const newActual = String(toInt(item.order_qty) + toInt(extra));
-                                      setProdInputs((prev) => ({ ...prev, [item.id]: { ...prev[item.id], extra_qty: extra, actual_qty: newActual } }));
-                                    }} />
-                                  <span>개</span>
-                                </span>
-                              </div>
+                              <div className="mt-0.5 text-[11px] text-slate-400">주문 {fmt(item.order_qty)}개</div>
+                            </div>
+                            <div>
+                              <div className="mb-1 text-xs text-slate-500">+추가생산</div>
+                              <input className={inpR} inputMode="numeric" placeholder="0"
+                                value={pi.extra_qty}
+                                disabled={selectedWo?.status === "완료" && !isEditMode}
+                                onChange={(e) => {
+                                  const extra = e.target.value.replace(/[^\d]/g, "");
+                                  const newActual = String(toInt(item.order_qty) + toInt(extra));
+                                  setProdInputs((prev) => ({ ...prev, [item.id]: { ...prev[item.id], extra_qty: extra, actual_qty: newActual } }));
+                                }} />
+                              <div className="mt-0.5 text-[11px] text-slate-400">합계 {fmt(toInt(pi.actual_qty))}개</div>
                             </div>
                             <div><div className="mb-1 text-xs text-slate-500">개당 중량 (g)</div><input className={inpR} inputMode="decimal" value={pi.unit_weight} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, unit_weight: e.target.value.replace(/[^\d.]/g, "") } }))} /></div>
                             <div><div className="mb-1 text-xs text-slate-500">총 중량 (자동)</div><div className={`rounded-lg border px-2.5 py-1.5 text-xs text-right tabular-nums font-semibold ${totalWeight ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-100 text-slate-400"}`}>{totalWeight ? fmt(Math.round(totalWeight)) + "g" : "—"}</div></div>
