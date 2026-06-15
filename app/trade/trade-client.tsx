@@ -1519,55 +1519,57 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
 
         await supabase.from("plates").insert({ work_order_id: woId, description: `${selectedPartner.name} / ${productName}`, status: "active" });
 
-        // products 조회/생성
-        const { data: existProduct } = await supabase.from("products").select("id").eq("name", productName).limit(1).maybeSingle();
-        let productId: string;
-        if (existProduct?.id) {
-          productId = existProduct.id;
-        } else {
-          const { data: newProduct, error: pErr } = await supabase.from("products").insert({ name: productName, category: "업체", food_type: foodType || "기타", default_weight_g: 0 }).select("id").single();
-          if (pErr) throw new Error("제품 등록 실패: " + pErr.message);
-          productId = (newProduct as any).id;
-        }
+       // ── 품목별 product/variant 생성 (바코드 중복 방지, 라인별 product_id 분리) ──
+       let firstVariantId: string | null = null;
+       for (const createdItem of (createdWoItems as any[]) ?? []) {
+         const itemBarcodeNo = createdItem.barcode_no as string;
+         const itemName = (createdItem.sub_items as WoSubItem[])?.[0]?.name ?? firstItemName;
+         const itemVariantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${itemName}`;
+         // 해당 품목의 무게: cleanLines에서 이름 매칭으로 찾기
+         const matchedLine = cleanLines.find((l) => l.name === itemName);
+         const itemWeightG = matchedLine?.weight_g && Number(matchedLine.weight_g) > 0 ? Number(matchedLine.weight_g) : null;
+         const itemFoodType = matchedLine?.food_type || foodType || null;
 
-        // ── 품목별 variant 생성 (바코드 중복 방지) ──
-        let firstVariantId: string | null = null;
-        for (const createdItem of (createdWoItems as any[]) ?? []) {
-          const itemBarcodeNo = createdItem.barcode_no as string;
-          const itemName = (createdItem.sub_items as WoSubItem[])?.[0]?.name ?? firstItemName;
-          const itemVariantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${itemName}`;
-          // 해당 품목의 무게: cleanLines에서 이름 매칭으로 찾기
-          const matchedLine = cleanLines.find((l) => l.name === itemName);
-          const itemWeightG = matchedLine?.weight_g && Number(matchedLine.weight_g) > 0 ? Number(matchedLine.weight_g) : null;
-          const { data: existItemVariant } = await supabase
-            .from("product_variants").select("id, barcode").eq("product_id", productId).eq("variant_name", itemVariantName).limit(1).maybeSingle();
-          let itemVariantId: string;
-          if (existItemVariant?.id) {
-            // ── 기존 variant 재사용: 새 바코드 폐기, 기존 바코드 유지 ──
-            itemVariantId = existItemVariant.id;
-            // weight_g 업데이트
-            if (itemWeightG != null) {
-              await supabase.from("product_variants").update({ weight_g: itemWeightG }).eq("id", itemVariantId);
-            }
-            const existingBarcode = existItemVariant.barcode as string | null;
-            if (existingBarcode) {
-              const { data: existPb } = await supabase.from("product_barcodes").select("id").eq("barcode", existingBarcode).maybeSingle();
-              if (!existPb) {
-                await supabase.from("product_barcodes").insert({ variant_id: itemVariantId, barcode: existingBarcode, is_primary: true, is_active: true });
-              }
-            }
-          } else {
-            // ── 신규 variant 생성: 새 바코드 사용 ──
-            const { data: newItemVariant, error: vivErr } = await supabase.from("product_variants").insert({ product_id: productId, variant_name: itemVariantName, barcode: itemBarcodeNo, pack_unit: 1, unit_type: "EA", weight_g: itemWeightG }).select("id").single();
-            if (vivErr) throw new Error("제품 규격 등록 실패: " + vivErr.message);
-            itemVariantId = (newItemVariant as any).id;
-            const { data: existItemBarcode } = await supabase.from("product_barcodes").select("id").eq("barcode", itemBarcodeNo).maybeSingle();
-            if (!existItemBarcode) {
-              await supabase.from("product_barcodes").insert({ variant_id: itemVariantId, barcode: itemBarcodeNo, is_primary: true, is_active: true });
-            }
-          }
-          if (!firstVariantId) firstVariantId = itemVariantId;
-        }
+         // 품목별 products 조회/생성 (라인마다 product_id가 다를 수 있으므로 라인별로 처리)
+         const { data: existItemProduct } = await supabase.from("products").select("id").eq("name", itemVariantName).limit(1).maybeSingle();
+         let itemProductId: string;
+         if (existItemProduct?.id) {
+           itemProductId = existItemProduct.id;
+         } else {
+           const { data: newItemProduct, error: ipErr } = await supabase.from("products").insert({ name: itemVariantName, category: "업체", food_type: itemFoodType || "기타", default_weight_g: 0 }).select("id").single();
+           if (ipErr) throw new Error("제품 등록 실패: " + ipErr.message);
+           itemProductId = (newItemProduct as any).id;
+         }
+
+         const { data: existItemVariant } = await supabase
+           .from("product_variants").select("id, barcode").eq("product_id", itemProductId).eq("variant_name", itemVariantName).limit(1).maybeSingle();
+         let itemVariantId: string;
+         if (existItemVariant?.id) {
+           // ── 기존 variant 재사용: 새 바코드 폐기, 기존 바코드 유지 ──
+           itemVariantId = existItemVariant.id;
+           // weight_g 업데이트
+           if (itemWeightG != null) {
+             await supabase.from("product_variants").update({ weight_g: itemWeightG }).eq("id", itemVariantId);
+           }
+           const existingBarcode = existItemVariant.barcode as string | null;
+           if (existingBarcode) {
+             const { data: existPb } = await supabase.from("product_barcodes").select("id").eq("barcode", existingBarcode).maybeSingle();
+             if (!existPb) {
+               await supabase.from("product_barcodes").insert({ variant_id: itemVariantId, barcode: existingBarcode, is_primary: true, is_active: true });
+             }
+           }
+         } else {
+           // ── 신규 variant 생성: 새 바코드 사용 ──
+           const { data: newItemVariant, error: vivErr } = await supabase.from("product_variants").insert({ product_id: itemProductId, variant_name: itemVariantName, barcode: itemBarcodeNo, pack_unit: 1, unit_type: "EA", weight_g: itemWeightG }).select("id").single();
+           if (vivErr) throw new Error("제품 규격 등록 실패: " + vivErr.message);
+           itemVariantId = (newItemVariant as any).id;
+           const { data: existItemBarcode } = await supabase.from("product_barcodes").select("id").eq("barcode", itemBarcodeNo).maybeSingle();
+           if (!existItemBarcode) {
+             await supabase.from("product_barcodes").insert({ variant_id: itemVariantId, barcode: itemBarcodeNo, is_primary: true, is_active: true });
+           }
+         }
+         if (!firstVariantId) firstVariantId = itemVariantId;
+       }
 
         // work_orders.variant_id = 첫 번째 제품 variant
         if (firstVariantId) {
