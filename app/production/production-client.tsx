@@ -2706,11 +2706,57 @@ const totalOrder = items
                             if (error) { showToast("수정 실패: " + error.message, "error"); return; }
                           }
                           const items = (selectedWo.work_order_items ?? []).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비"); });
+                          const isGeneralCompletedWo = selectedWo.status === "완료" && getFoodCategory(eFoodType || selectedWo.food_type) !== "중간재" && !getWoSubType(selectedWo.product_name) && !selectedWo.skip_production_check;
                           for (const item of items) {
                             const pi = prodInputs[item.id];
                             if (!pi || (!pi.actual_qty && !pi.unit_weight && !pi.expiry_date)) continue;
-                            const { error } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null, transfer_lot_id: pi.transfer_lot_id || null, transfer_qty: pi.transfer_qty ? toInt(pi.transfer_qty) : null }).eq("id", item.id);
+                            const oldDefectQty = item.defect_qty ?? 0;
+                            const newDefectQty = pi.defect_qty ? toInt(pi.defect_qty) : 0;
+                            const { error } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, defect_qty: pi.defect_qty ? toInt(pi.defect_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null, transfer_lot_id: pi.transfer_lot_id || null, transfer_qty: pi.transfer_qty ? toInt(pi.transfer_qty) : null }).eq("id", item.id);
                             if (error) { showToast("수정 실패: " + error.message, "error"); return; }
+
+                            // ── 불량(defect_qty) 변경 시 — 기존 LOT의 IN/DISCARD movements 동기화 ──
+                            if (isGeneralCompletedWo && newDefectQty !== oldDefectQty && item.expiry_date) {
+                              let syncVariantId: string | null = null;
+                              if (item.barcode_no) {
+                                const { data: pbData } = await supabase.from("product_barcodes").select("variant_id").eq("barcode", item.barcode_no).maybeSingle();
+                                syncVariantId = pbData?.variant_id ?? null;
+                              }
+                              if (!syncVariantId) syncVariantId = selectedWo.variant_id;
+                              if (syncVariantId) {
+                                const { data: lotData } = await supabase.from("lots").select("id").eq("variant_id", syncVariantId).eq("expiry_date", item.expiry_date).maybeSingle();
+                                const lotId = lotData?.id ?? null;
+                                if (lotId) {
+                                  const newActualQty = pi.actual_qty ? toInt(pi.actual_qty) : 0;
+                                  const inNote = `작업지시서 생산완료 - ${selectedWo.work_order_no}`;
+                                  const discardNote = `작업지시서 생산완료(불량) - ${selectedWo.work_order_no}`;
+                                  const { data: inMovs } = await supabase.from("movements").select("id").eq("lot_id", lotId).eq("note", inNote).eq("type", "IN");
+                                  if (inMovs && inMovs.length === 1) {
+                                    await supabase.from("movements").update({ qty: newActualQty + newDefectQty }).eq("id", inMovs[0].id);
+                                  } else if (inMovs && inMovs.length > 1) {
+                                    showToast("불량 동기화 보류: IN 기록이 여러 건이라 자동 동기화할 수 없습니다. 재고대장을 직접 확인해주세요.", "error");
+                                  }
+                                  const { data: discardMovs } = await supabase.from("movements").select("id").eq("lot_id", lotId).eq("note", discardNote).eq("type", "DISCARD");
+                                  if (discardMovs && discardMovs.length === 1) {
+                                    if (newDefectQty > 0) {
+                                      await supabase.from("movements").update({ qty: newDefectQty }).eq("id", discardMovs[0].id);
+                                    } else {
+                                      await supabase.from("movements").delete().eq("id", discardMovs[0].id);
+                                    }
+                                  } else if (discardMovs && discardMovs.length === 0 && newDefectQty > 0) {
+                                    const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+                                    await supabase.from("movements").insert({
+                                      lot_id: lotId, type: "DISCARD", qty: newDefectQty,
+                                      happened_at: `${todayKSTDate}T00:00:00+09:00`,
+                                      note: discardNote, created_by: currentUserIdRef.current,
+                                    });
+                                  } else if (discardMovs && discardMovs.length > 1) {
+                                    showToast("불량 동기화 보류: 폐기 기록이 여러 건이라 자동 동기화할 수 없습니다. 재고대장을 직접 확인해주세요.", "error");
+                                  }
+                                }
+                              }
+                            }
+
                             if (pi.transfer_lot_id && pi.transfer_qty && toInt(pi.transfer_qty) > 0) {
                               const existingTransfer = selectedWo.work_order_items?.find((i) => i.id === item.id);
                               if (!existingTransfer?.transfer_lot_id) {
