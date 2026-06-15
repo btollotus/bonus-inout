@@ -1345,7 +1345,7 @@ async function doCompleteSprayCoating(productionAssignee: string, subType: "분�
       for (const item of items) {
         const pi = prodInputs[item.id];
         if (!pi || (!pi.actual_qty && !pi.unit_weight && !pi.expiry_date)) continue;
-        const { error: itemErr } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null }).eq("id", item.id);
+        const { error: itemErr } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, defect_qty: pi.defect_qty ? toInt(pi.defect_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null }).eq("id", item.id);
         if (itemErr) { setMsg("생산입력 저장 실패: " + itemErr.message); setIsCompleting(false); return; }
       }
       const allItems = selectedWo.work_order_items ?? [];
