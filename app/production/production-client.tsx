@@ -339,7 +339,7 @@ export default function ProductionClient() {
 
   const [woChecks, setWoChecks] = useState<WoChecks | null>(null);
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
-  const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[] }>>({});
+  const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; extra_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[] }>>({});
   const titaniumDioxideG = useMemo(() => {
     if (!selectedWo || !(selectedWo.food_type ?? "").includes("리얼")) return "";
     const items = (selectedWo.work_order_items ?? []).filter((item) => {
@@ -783,11 +783,15 @@ export default function ProductionClient() {
       const { data, error } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
       if (!error && data) setSignedImageUrls(data.map((d) => d.signedUrl)); else setSignedImageUrls(rawPaths);
     })();
-    const inputs: Record<string, { actual_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[] }> = {};
+    const inputs: Record<string, { actual_qty: string; extra_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[] }> = {};
     for (const item of wo.work_order_items ?? []) {
       const savedLots = (item as any).transfer_lots as { lot_id: string; qty: number }[] | null;
+      const extraQtyCalc = (item.actual_qty != null && item.actual_qty > item.order_qty)
+        ? String(item.actual_qty - item.order_qty)
+        : "";
       inputs[item.id] = {
         actual_qty: item.actual_qty != null ? String(item.actual_qty) : "",
+        extra_qty: extraQtyCalc,
         unit_weight: item.unit_weight != null ? String(item.unit_weight) : "",
         expiry_date: item.expiry_date ?? "",
         transfer_lot_id: item.transfer_lot_id ?? "",
@@ -2446,7 +2450,7 @@ const totalOrder = items
                 {(selectedWo.work_order_items ?? []).length === 0 ? <div className="py-3 text-center text-xs text-slate-400">납기일별 항목이 없습니다.</div> : (
                   <div className="space-y-2.5">
                     {(selectedWo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date)).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비"); }).map((item) => {
-                      const pi = prodInputs[item.id] ?? { actual_qty: "", unit_weight: "", expiry_date: "" };
+                      const pi = prodInputs[item.id] ?? { actual_qty: "", extra_qty: "", unit_weight: "", expiry_date: "" };
                       const actualQty = toInt(pi.actual_qty); const unitWeight = toNum(pi.unit_weight);
                       const totalWeight = actualQty > 0 && unitWeight > 0 ? actualQty * unitWeight : null;
                       const isDone = !!(pi.actual_qty && pi.unit_weight && pi.expiry_date);
@@ -2457,7 +2461,26 @@ const totalOrder = items
                             <div className="flex items-center gap-1.5 text-xs"><span className={pill}>주문 {fmt(item.order_qty)}개</span>{isDone && <span className="rounded-full bg-green-100 border border-green-200 px-2 py-0.5 text-[10px] font-semibold text-green-700">완료</span>}</div>
                           </div>
                           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                            <div><div className="mb-1 text-xs text-slate-500">출고수량</div><input className={inpR} inputMode="numeric" value={pi.actual_qty} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, actual_qty: e.target.value.replace(/[^\d]/g, "") } }))} /><div className="mt-0.5 text-[11px] text-slate-400">주문 {fmt(item.order_qty)}개</div></div>
+                          <div>
+                              <div className="mb-1 text-xs text-slate-500">출고수량</div>
+                              <input className={inpR} inputMode="numeric" value={pi.actual_qty} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, actual_qty: e.target.value.replace(/[^\d]/g, "") } }))} />
+                              <div className="mt-1 flex items-center justify-between gap-1 text-[11px] text-slate-400">
+                                <span>주문 {fmt(item.order_qty)}개</span>
+                                <span className="flex items-center gap-1 shrink-0">
+                                  <span>+추가</span>
+                                  <input className="w-12 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-right tabular-nums focus:border-blue-400 focus:outline-none"
+                                    inputMode="numeric" placeholder="0"
+                                    value={pi.extra_qty}
+                                    disabled={selectedWo?.status === "완료" && !isEditMode}
+                                    onChange={(e) => {
+                                      const extra = e.target.value.replace(/[^\d]/g, "");
+                                      const newActual = String(toInt(item.order_qty) + toInt(extra));
+                                      setProdInputs((prev) => ({ ...prev, [item.id]: { ...prev[item.id], extra_qty: extra, actual_qty: newActual } }));
+                                    }} />
+                                  <span>개</span>
+                                </span>
+                              </div>
+                            </div>
                             <div><div className="mb-1 text-xs text-slate-500">개당 중량 (g)</div><input className={inpR} inputMode="decimal" value={pi.unit_weight} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, unit_weight: e.target.value.replace(/[^\d.]/g, "") } }))} /></div>
                             <div><div className="mb-1 text-xs text-slate-500">총 중량 (자동)</div><div className={`rounded-lg border px-2.5 py-1.5 text-xs text-right tabular-nums font-semibold ${totalWeight ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-100 text-slate-400"}`}>{totalWeight ? fmt(Math.round(totalWeight)) + "g" : "—"}</div></div>
                             <div>
