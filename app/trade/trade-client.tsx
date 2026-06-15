@@ -1608,6 +1608,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         // ── Step4: 재고부족(마켓플레이스 거래처) 라인 → 임시 lot + 임시 작업지시서 자동생성 ──
         if (SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name)) {
           for (const cl of cleanLines) {
+            if (isSpecialItem(cl.name)) continue;
             if ((cl.stock_out_lots ?? []).length > 0) continue;
             const variantId = masterByName.get(cl.name)?.variant_id;
             if (!variantId) continue;
@@ -1643,6 +1644,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
       // ── Step4: 재고부족(마켓플레이스 거래처) 라인 → 임시 lot + 임시 작업지시서 자동생성 ──
       if (SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name)) {
         for (const cl of cleanLines) {
+          if (isSpecialItem(cl.name)) continue;
           if ((cl.stock_out_lots ?? []).length > 0) continue;
           const variantId = masterByName.get(cl.name)?.variant_id;
           if (!variantId) continue;
@@ -2193,6 +2195,7 @@ if (woSubNameVal) {
         // ── Step4: 재고부족(마켓플레이스 거래처) 라인 → 임시 lot + 임시 작업지시서 자동생성 ──
         if (selectedPartner && SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name)) {
           for (const cl of cleanLines) {
+            if (isSpecialItem(cl.name)) continue;
             if ((cl.stock_out_lots ?? []).length > 0) continue;
             const variantId = masterByName.get(cl.name)?.variant_id;
             if (!variantId) continue;
