@@ -1530,6 +1530,18 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
          const itemWeightG = matchedLine?.weight_g && Number(matchedLine.weight_g) > 0 ? Number(matchedLine.weight_g) : null;
          const itemFoodType = matchedLine?.food_type || foodType || null;
 
+         // ── 바코드 재사용 시: 이미 이 바코드를 가진 variant가 있으면 그대로 사용 ──
+         // (거래처명 변경 등으로 itemVariantName이 과거와 달라져도 barcode_uq 충돌 방지)
+         const { data: existByBarcode } = await supabase.from("product_variants").select("id").eq("barcode", itemBarcodeNo).limit(1).maybeSingle();
+         if (existByBarcode?.id) {
+           const reusedVariantId = existByBarcode.id;
+           if (itemWeightG != null) {
+             await supabase.from("product_variants").update({ weight_g: itemWeightG }).eq("id", reusedVariantId);
+           }
+           if (!firstVariantId) firstVariantId = reusedVariantId;
+           continue;
+         }
+
          // 품목별 products 조회/생성 (라인마다 product_id가 다를 수 있으므로 라인별로 처리)
          const { data: existItemProduct } = await supabase.from("products").select("id").eq("name", itemVariantName).limit(1).maybeSingle();
          let itemProductId: string;
