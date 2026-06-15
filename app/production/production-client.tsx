@@ -2770,6 +2770,15 @@ const totalOrder = items
                               }
                             }
                           }
+                          // ── 불량(defect_qty) 즉시 동기화를 위해 selectedWo 로컬 상태 갱신 ──
+                          setSelectedWo((prev) => prev ? {
+                            ...prev,
+                            work_order_items: (prev.work_order_items ?? []).map((it) => {
+                              const pi2 = prodInputs[it.id];
+                              if (!pi2) return it;
+                              return { ...it, defect_qty: pi2.defect_qty ? toInt(pi2.defect_qty) : null };
+                            }),
+                          } : prev);
                          // ── 분사/코팅 배합 횟수 변경 시 blend_logs + material_usage_logs 업데이트 ──
                          if (selectedWo.status === "완료" && getWoSubType(selectedWo.product_name)) {
                           const subTypeEdit = getWoSubType(selectedWo.product_name)!;
