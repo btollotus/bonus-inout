@@ -556,7 +556,7 @@ function selectWo(wo: WorkOrderItem) {
     try {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("variant_id, work_order_no, client_name, product_name, food_type, logo_spec, linked_order_id, work_order_items(id, actual_qty, unit_weight, expiry_date, barcode_no, sub_items, transfer_lot_id, transfer_qty)")
+        .select("variant_id, work_order_no, client_name, product_name, food_type, logo_spec, linked_order_id, work_order_items(id, actual_qty, defect_qty, unit_weight, expiry_date, barcode_no, sub_items, transfer_lot_id, transfer_qty)")
         .eq("id", selectedWoId)
         .single();
 
@@ -582,8 +582,9 @@ function selectWo(wo: WorkOrderItem) {
         for (const item of items) {
           if (!item.actual_qty || !item.expiry_date) continue;
           const actual_qty = Number(item.actual_qty);
+          const defect_qty = Number((item as any).defect_qty ?? 0);
+          const totalProducedQty = actual_qty + defect_qty;
           if (actual_qty <= 0) continue;
-
           let variantId: string | null = null;
           if (item.barcode_no) {
             const { data: pbData } = await supabase
@@ -640,12 +641,25 @@ function selectWo(wo: WorkOrderItem) {
           const { error: movErr } = await supabase.from("movements").insert({
             lot_id: lotId,
             type: "IN",
-            qty: actual_qty,
+            qty: totalProducedQty,
             happened_at: `${selectedDate}T${endTime}:00+09:00`,
             note: "작업지시서 생산완료 - " + (woData as any).work_order_no,
             created_by: userId,
           });
           if (movErr) stockErrors.push("입고 기록 실패: " + movErr.message);
+
+          // 불량 수량 → 동일 LOT에 폐기(DISCARD) 기록
+          if (defect_qty > 0) {
+            const { error: discardErr } = await supabase.from("movements").insert({
+              lot_id: lotId,
+              type: "DISCARD",
+              qty: defect_qty,
+              happened_at: `${selectedDate}T${endTime}:00+09:00`,
+              note: "작업지시서 생산완료(불량) - " + (woData as any).work_order_no,
+              created_by: userId,
+            });
+            if (discardErr) stockErrors.push("불량 폐기 기록 실패: " + discardErr.message);
+          }
 
           // 업체 주문제작 → 연결된 주문의 출고일 기준으로 동일 LOT에 OUT도 기록
           if (linkedOrderId && shipDateYMD) {
