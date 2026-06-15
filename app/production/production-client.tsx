@@ -19,6 +19,7 @@ type WoItemRow = {
   order_qty: number;
   barcode_no: string | null;
   actual_qty: number | null;
+  defect_qty: number | null;
   unit_weight: number | null;
   total_weight: number | null;
   expiry_date: string | null;
@@ -339,7 +340,7 @@ export default function ProductionClient() {
 
   const [woChecks, setWoChecks] = useState<WoChecks | null>(null);
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
-  const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; extra_qty: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[] }>>({});
+  const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; extra_qty: string; defect_qty?: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[] }>>({});
   const titaniumDioxideG = useMemo(() => {
     if (!selectedWo || !(selectedWo.food_type ?? "").includes("리얼")) return "";
     const items = (selectedWo.work_order_items ?? []).filter((item) => {
@@ -650,7 +651,7 @@ export default function ProductionClient() {
     setLoading(true); setMsg(null);
     try {
       const LIMIT = filterStatus === "완료" ? 20 : 200;
-      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
+      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
       if (filterStatus !== "전체") q = q.eq("status", filterStatus);
       if (filterDateFrom) q = q.gte("order_date", filterDateFrom);
       if (filterDateTo) q = q.lte("order_date", filterDateTo);
@@ -748,7 +749,7 @@ export default function ProductionClient() {
       setNeoColorSprayLotLoading(false);
     }
     if (!wo.work_order_items || wo.work_order_items.every((i) => i.sub_items == null)) {
-      const { data: items } = await supabase.from("work_order_items").select("id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images").eq("work_order_id", wo.id).order("delivery_date", { ascending: true });
+      const { data: items } = await supabase.from("work_order_items").select("id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,defect_qty,unit_weight,total_weight,expiry_date,order_id,note,images").eq("work_order_id", wo.id).order("delivery_date", { ascending: true });
       wo = { ...wo, work_order_items: (items ?? []) as WoItemRow[] };
     }
     setSelectedWo(wo);
