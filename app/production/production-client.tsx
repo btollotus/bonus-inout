@@ -350,7 +350,7 @@ export default function ProductionClient() {
     });
     const totalWeight = items.reduce((sum, item) => {
       const pi = prodInputs[item.id];
-      const aqty = toInt(pi?.actual_qty);
+      const aqty = toInt(pi?.actual_qty) + toInt(pi?.defect_qty);
       const uw = toNum(pi?.unit_weight);
       return sum + (aqty > 0 && uw > 0 ? aqty * uw : 0);
     }, 0);
@@ -1454,13 +1454,13 @@ async function doCompleteSprayCoating(productionAssignee: string, subType: "분�
             : getFoodCategory(ft) === "다크" ? "다크컴파운드"
             : "화이트컴파운드";
 
-          let totalCompoundG = 0;
-          for (const item of items) {
-            const pi = prodInputs[item.id];
-            const aqty = toInt(pi?.actual_qty);
-            const uw   = toNum(pi?.unit_weight);
-            if (aqty > 0 && uw > 0) totalCompoundG += aqty * uw;
-          }
+            let totalCompoundG = 0;
+            for (const item of items) {
+              const pi = prodInputs[item.id];
+              const aqty = toInt(pi?.actual_qty) + toInt(pi?.defect_qty);
+              const uw   = toNum(pi?.unit_weight);
+              if (aqty > 0 && uw > 0) totalCompoundG += aqty * uw;
+            }
 
           if (totalCompoundG > 0) {
             const dupNote = `작업지시서 생산완료 - ${selectedWo.work_order_no}`;
