@@ -2453,8 +2453,8 @@ const totalOrder = items
                   <div className="space-y-2.5">
                     {(selectedWo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date)).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비"); }).map((item) => {
                       const pi = prodInputs[item.id] ?? { actual_qty: "", extra_qty: "", unit_weight: "", expiry_date: "" };
-                      const actualQty = toInt(pi.actual_qty); const unitWeight = toNum(pi.unit_weight);
-                      const totalWeight = actualQty > 0 && unitWeight > 0 ? actualQty * unitWeight : null;
+                      const actualQty = toInt(pi.actual_qty); const defectQty = toInt(pi.defect_qty); const unitWeight = toNum(pi.unit_weight);
+                      const totalWeight = (actualQty + defectQty) > 0 && unitWeight > 0 ? (actualQty + defectQty) * unitWeight : null;
                       const isDone = !!(pi.actual_qty && pi.unit_weight && pi.expiry_date);
                       return (
                         <div key={item.id} className={`rounded-lg border p-2.5 ${isDone ? "border-green-200 bg-green-50" : "border-slate-200 bg-slate-50"}`}>
