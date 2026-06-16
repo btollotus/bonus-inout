@@ -913,11 +913,235 @@ function selectWo(wo: WorkOrderItem) {
         <button
           className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
           onClick={async () => {
-            const logs = await loadRangeLogs();
-            const dates = Object.keys(logs).sort();
+            const grouped = await loadRangeLogs();
+            const dates = Object.keys(grouped).sort();
             if (dates.length === 0) return showToast("조회된 기록이 없습니다.", "error");
-            const content = document.getElementById("ccp1p-range-print-inner");
-            if (!content) return;
+
+            const tdS = `border:1px solid #000;padding:2px 3px;font-size:8pt;vertical-align:middle;`;
+            const thS = `border:1px solid #000;padding:2px 3px;font-size:7.5pt;font-weight:bold;text-align:center;background:#fff;vertical-align:middle;`;
+            const thSubS = `border:1px solid #000;padding:1px 2px;font-size:7pt;text-align:center;background:#fff;vertical-align:middle;`;
+
+            const COLGROUP = `
+              <colgroup>
+                <col style="width:86px"/><col style="width:22px"/><col style="width:22px"/>
+                <col style="width:16px"/><col style="width:18px"/>
+                <col style="width:16px"/><col style="width:16px"/><col style="width:16px"/>
+                <col style="width:16px"/><col style="width:16px"/><col style="width:16px"/>
+                <col style="width:16px"/><col style="width:16px"/><col style="width:16px"/>
+                <col style="width:16px"/><col style="width:16px"/><col style="width:16px"/>
+                <col style="width:16px"/><col style="width:16px"/><col style="width:16px"/>
+                <col style="width:16px"/><col style="width:16px"/><col style="width:16px"/>
+                <col style="width:18px"/><col style="width:18px"/><col style="width:30px"/>
+              </colgroup>`;
+
+            const HEADER_TABLE = `
+              <table style="width:100%;border-collapse:collapse;margin-bottom:0;table-layout:fixed;">
+                ${COLGROUP}
+                <thead>
+                  <tr>
+                    <th rowspan="3" style="${thS}">품명<br/>(업체명)</th>
+                    <th rowspan="3" style="${thS}">시작<br/>시간</th>
+                    <th rowspan="3" style="${thS}">종료<br/>시간</th>
+                    <th rowspan="3" style="${thS}">구역</th>
+                    <th rowspan="3" style="${thS}font-size:5.5pt;">제품<br/>통과<br/>(B행)</th>
+                    <th colspan="18" style="${thS}">A (제품 1개일 경우) / B행: Fe시편·SUS시편</th>
+                    <th rowspan="3" style="${thS}">이탈<br/>유무</th>
+                    <th rowspan="3" style="${thS}">통과<br/>수량</th>
+                    <th rowspan="3" style="${thS}">확 인<br/>(서명)</th>
+                  </tr>
+                  <tr>
+                    <th colspan="3" style="${thSubS}">Fe 시편</th>
+                    <th colspan="3" style="${thSubS}">SUS 시편</th>
+                    <th colspan="3" style="${thSubS}">Fe+제품(상)</th>
+                    <th colspan="3" style="${thSubS}">Fe+제품(하)</th>
+                    <th colspan="3" style="${thSubS}">SUS+제품(상)</th>
+                    <th colspan="3" style="${thSubS}">SUS+제품(하)</th>
+                  </tr>
+                  <tr>
+                    ${"좌중우좌중우좌중우좌중우좌중우좌중우".split("").map(l => `<th style="${thSubS}">${l}</th>`).join("")}
+                  </tr>
+                </thead>
+              </table>`;
+
+            function signImgHtml(workerName: string | null): string {
+              const signMap: Record<string, string> = {
+                "조은미": "/sign-choem.png", "강미라": "/sign-kangml.png",
+                "나현우": "/sign-nahw.png", "나미영": "/sign-namiy.png",
+                "조대성": "/sign-chods.png", "김영각": "/sign-kimyg.png",
+                "고한결": "/sign-gohg.png",
+              };
+              if (!workerName) return "";
+              const src = signMap[workerName];
+              if (src) return `<img src="${src}" style="height:22px;object-fit:contain;display:block;margin:0 auto;" alt="${workerName}"/><div style="font-size:6pt;">${workerName}</div>`;
+              return `<div style="font-size:7pt;">${workerName}</div>`;
+            }
+
+            function getDeviationDescHtml(log: MetalLog): string {
+              const parts: string[] = [];
+              const aKeys: [keyof MetalLog, string][] = [
+                ["a_fe_l","Fe시편(좌)"],["a_fe_m","Fe시편(중)"],["a_fe_r","Fe시편(우)"],
+                ["a_sus_l","SUS시편(좌)"],["a_sus_m","SUS시편(중)"],["a_sus_r","SUS시편(우)"],
+                ["a_product_pass","제품통과"],
+                ["a_fe_up_l","Fe+제품상(좌)"],["a_fe_up_m","Fe+제품상(중)"],["a_fe_up_r","Fe+제품상(우)"],
+                ["a_fe_dn_l","Fe+제품하(좌)"],["a_fe_dn_m","Fe+제품하(중)"],["a_fe_dn_r","Fe+제품하(우)"],
+                ["a_sus_up_l","SUS+제품상(좌)"],["a_sus_up_m","SUS+제품상(중)"],["a_sus_up_r","SUS+제품상(우)"],
+                ["a_sus_dn_l","SUS+제품하(좌)"],["a_sus_dn_m","SUS+제품하(중)"],["a_sus_dn_r","SUS+제품하(우)"],
+              ];
+              for (const [key, label] of aKeys) {
+                const val = log[key] as string | null;
+                const def = key === "a_product_pass" ? "X" : "O";
+                if (val && val !== def) parts.push(`A-${label}`);
+              }
+              if (log.b_deviation === "O") parts.push("B-이탈");
+              return parts.join(", ");
+            }
+
+            function buildLogRow(log: MetalLog): string {
+              const hasDev = getDeviationDescHtml(log) !== "";
+              const bActive = (log.b_pass_qty ?? 0) > 1;
+              const bg = hasDev ? "#fff9f9" : "#fff";
+              const aKeys: (keyof MetalLog)[] = ["a_fe_l","a_fe_m","a_fe_r","a_sus_l","a_sus_m","a_sus_r","a_fe_up_l","a_fe_up_m","a_fe_up_r","a_fe_dn_l","a_fe_dn_m","a_fe_dn_r","a_sus_up_l","a_sus_up_m","a_sus_up_r","a_sus_dn_l","a_sus_dn_m","a_sus_dn_r"];
+              const bKeys: (keyof MetalLog)[] = ["b_fe_l","b_fe_m","b_fe_r","b_sus_l","b_sus_m","b_sus_r"];
+              return `
+                <table style="width:100%;border-collapse:collapse;table-layout:fixed;page-break-inside:avoid;">
+                  ${COLGROUP}
+                  <tbody>
+                    <tr style="background:${bg};">
+                      <td rowspan="2" style="${tdS}text-align:left;font-size:6.5pt;padding-left:3px;white-space:normal;word-break:keep-all;">
+                        ${hasDev ? `<span style="color:#DC2626;">⚠ </span>` : ""}${log.client_name ?? ""} — ${log.product_name ?? ""}
+                      </td>
+                      <td rowspan="2" style="${tdS}text-align:center;font-size:7pt;">${(log.start_time ?? "").slice(0,5)}</td>
+                      <td rowspan="2" style="${tdS}text-align:center;font-size:7pt;">${(log.b_end_time ?? "").slice(0,5)}</td>
+                      <td style="${tdS}text-align:center;font-weight:bold;font-size:7pt;">A</td>
+                      <td style="${tdS}"></td>
+                      ${aKeys.map(k => `<td style="${tdS}text-align:center;font-weight:bold;">${(log[k] as string) ?? "O"}</td>`).join("")}
+                      <td rowspan="2" style="${tdS}text-align:center;font-weight:bold;">${log.b_deviation ?? "X"}</td>
+                      <td rowspan="2" style="${tdS}text-align:center;font-size:7pt;">${log.b_pass_qty ?? ""}</td>
+                      <td rowspan="2" style="${tdS}text-align:center;padding:2px;">${signImgHtml(log.worker_name)}</td>
+                    </tr>
+                    <tr>
+                      <td style="${tdS}text-align:center;font-weight:bold;font-size:7pt;">B</td>
+                      <td style="${tdS}text-align:center;font-weight:bold;">${bActive ? (log.b_product_pass ?? "X") : ""}</td>
+                      ${bKeys.map(k => `<td style="${tdS}text-align:center;font-weight:bold;">${bActive ? ((log[k] as string) ?? "O") : ""}</td>`).join("")}
+                      ${Array.from({length:12}).map(() => `<td style="${tdS}"></td>`).join("")}
+                    </tr>
+                  </tbody>
+                </table>`;
+            }
+
+            function buildEmptyRow(): string {
+              return `
+                <table style="width:100%;border-collapse:collapse;table-layout:fixed;page-break-inside:avoid;">
+                  ${COLGROUP}
+                  <tbody>
+                    <tr style="height:18px;">
+                      <td rowspan="2" style="${tdS}"></td><td rowspan="2" style="${tdS}"></td><td rowspan="2" style="${tdS}"></td>
+                      <td style="${tdS}text-align:center;font-weight:bold;font-size:7pt;">A</td>
+                      <td style="${tdS}"></td>
+                      ${Array.from({length:18}).map(() => `<td style="${tdS}"></td>`).join("")}
+                      <td rowspan="2" style="${tdS}"></td><td rowspan="2" style="${tdS}"></td><td rowspan="2" style="${tdS}"></td>
+                    </tr>
+                    <tr style="height:18px;">
+                      <td style="${tdS}text-align:center;font-weight:bold;font-size:7pt;">B</td>
+                      <td style="${tdS}"></td>
+                      ${Array.from({length:18}).map(() => `<td style="${tdS}"></td>`).join("")}
+                    </tr>
+                  </tbody>
+                </table>`;
+            }
+
+            const dayNames = ["일","월","화","수","목","금","토"];
+            let bodyHtml = "";
+
+            for (let di = 0; di < dates.length; di++) {
+              const date = dates[di];
+              const logs = (grouped[date] ?? []).slice().sort((a, b) => (a.start_time ?? "").localeCompare(b.start_time ?? ""));
+              const d = new Date(date + "T00:00:00+09:00");
+              const dateLabel = `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${dayNames[d.getDay()]})`;
+              const emptyCount = Math.max(3, 3 - logs.length);
+              const isLast = di === dates.length - 1;
+
+              bodyHtml += `<div style="page-break-after:${isLast ? "avoid" : "always"};">`;
+
+              // 제목 + 결재란
+              bodyHtml += `
+                <table style="width:100%;border-collapse:collapse;margin-bottom:4px;">
+                  <tbody>
+                    <tr>
+                      <td rowspan="2" style="${tdS}font-size:13pt;font-weight:bold;text-align:center;padding:6px 8px;">중요관리점(CCP-1P) 점검표 [금속검출공정]</td>
+                      <td rowspan="2" style="${tdS}width:28px;font-weight:bold;text-align:center;font-size:8pt;">결<br/>재<br/>란</td>
+                      <td style="${tdS}width:80px;text-align:center;font-weight:bold;">작성</td>
+                      <td style="${tdS}width:80px;text-align:center;font-weight:bold;">승인</td>
+                    </tr>
+                    <tr>
+                      <td style="${tdS}text-align:center;padding:3px;">
+                        <img src="/sign-kimyg.png" style="height:30px;object-fit:contain;display:block;margin:0 auto;" alt="김영각"/>
+                        <div style="font-size:7pt;margin-top:2px;">김영각</div>
+                      </td>
+                      <td style="${tdS}text-align:center;padding:3px;">
+                        <img src="/sign-chods.png" style="height:30px;object-fit:contain;display:block;margin:0 auto;" alt="조대성"/>
+                        <div style="font-size:7pt;margin-top:2px;">조대성</div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>`;
+
+              // 작성일자 행
+              bodyHtml += `
+                <table style="width:100%;border-collapse:collapse;margin-bottom:4px;">
+                  <tbody>
+                    <tr>
+                      <td style="${tdS}width:60px;font-weight:bold;">작성일자</td>
+                      <td style="${tdS}">${dateLabel}</td>
+                      <td style="${tdS}width:60px;font-weight:bold;">한계기준</td>
+                      <td style="${tdS}">악성 85</td>
+                      <td style="${tdS}width:20px;font-weight:bold;">Fe</td>
+                      <td style="${tdS}">2.5mmφ</td>
+                      <td style="${tdS}width:30px;font-weight:bold;">SUS</td>
+                      <td style="${tdS}">3.0mmφ</td>
+                      <td style="${tdS}width:80px;font-weight:bold;white-space:nowrap;">검교정주기</td>
+                      <td style="${tdS}">연 1회</td>
+                    </tr>
+                  </tbody>
+                </table>`;
+
+              // 점검주기 + 방법
+              bodyHtml += `
+                <table style="width:100%;border-collapse:collapse;margin-bottom:4px;">
+                  <tbody>
+                    <tr>
+                      <td rowspan="2" style="${tdS}width:60px;font-weight:bold;text-align:center;">점검주기</td>
+                      <td style="${tdS}width:80px;font-weight:bold;">감도 모니터링</td>
+                      <td style="${tdS}">금속검출 작업시작 전, 작업중 2시간마다, 작업 종료 후</td>
+                    </tr>
+                    <tr>
+                      <td style="${tdS}font-weight:bold;">공정품 확인</td>
+                      <td style="${tdS}">제품변경 시 &amp; 작업 중 상시</td>
+                    </tr>
+                    <tr>
+                      <td rowspan="3" style="${tdS}font-weight:bold;text-align:center;">방&nbsp;&nbsp;&nbsp;법</td>
+                      <td style="${tdS}font-weight:bold;white-space:nowrap;">감도 모니터링</td>
+                      <td style="${tdS}font-size:7.5pt;">① 표준시편만 통과&nbsp;&nbsp;② 금속이물이 없는 것으로 확인된 공정품 통과&nbsp;&nbsp;③ 표준시편과 공정품을 함께 통과</td>
+                    </tr>
+                    <tr>
+                      <td style="${tdS}font-weight:bold;">공정품 확인</td>
+                      <td style="${tdS}font-size:7.5pt;">제품 금속검출기 통과</td>
+                    </tr>
+                    <tr>
+                      <td colspan="2" style="${tdS}font-size:7.5pt;color:#555;">
+                        제품 1개 → <span style="color:#1D6FB5;font-weight:bold;">A단계</span> 실행 후 종료시간 기록&nbsp;&nbsp;|&nbsp;&nbsp;제품 2개 이상 → <span style="color:#B45309;font-weight:bold;">A단계 + B단계</span> 실행
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>`;
+
+              bodyHtml += HEADER_TABLE;
+              logs.forEach(log => { bodyHtml += buildLogRow(log); });
+              for (let e = 0; e < emptyCount; e++) { bodyHtml += buildEmptyRow(); }
+
+              bodyHtml += `</div>`;
+            }
+
             const printTitle = `CCP-1P_금속검출_${rangeFrom}_${rangeTo}`;
             const win = window.open("", "_blank");
             if (!win) return;
@@ -930,13 +1154,11 @@ function selectWo(wo: WorkOrderItem) {
                 * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                 table { border-collapse: collapse; }
                 img { max-width: none; }
-                .page-block { page-break-after: always; }
-                .page-block:last-child { page-break-after: avoid; }
               </style>
-            </head><body>${content.innerHTML}</body></html>`);
+            </head><body>${bodyHtml}</body></html>`);
             win.document.close();
             win.focus();
-            setTimeout(() => { win.print(); }, 500);
+            setTimeout(() => { win.print(); }, 300);
           }}
         >🖨️ 기간 인쇄</button>
         <button
