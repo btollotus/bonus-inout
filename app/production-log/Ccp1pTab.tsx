@@ -297,14 +297,8 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
  
   const [showWorkerPin, setShowWorkerPin] = useState(false);
   const [confirmedWorker, setConfirmedWorker] = useState<string | null>(null);
-  const [rangeFrom, setRangeFrom] = useState<string>("");
-  const [rangeTo, setRangeTo] = useState<string>("");
-
-  useEffect(() => {
-    const today = todayKST();
-    setRangeFrom(today);
-    setRangeTo(today);
-  }, []);
+  const [rangeFrom, setRangeFrom] = useState<string>(() => todayKST());
+  const [rangeTo, setRangeTo] = useState<string>(() => todayKST());
   const [rangeLogs, setRangeLogs] = useState<Record<string, MetalLog[]>>({});
   const [rangeLoading, setRangeLoading] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
