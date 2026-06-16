@@ -3371,7 +3371,7 @@ if (woSubNameVal) {
                               <button className={miniBtn} onClick={() => onCopyClick(x)}>복사</button>
                               <button className={miniBtn} onClick={() => onMemoClick(x)}>메모</button>
                               <button className={miniBtn} onClick={() => openEdit(x)}>수정</button>
-                              <button className={miniBtn} onClick={() => deleteTradeRow(x)}>삭제</button>
+                              <button className={miniBtn} onClick={() => handleDeleteClick(x)}>삭제</button>
                               {x.kind === "ORDER" ? (
   <>
     <button
