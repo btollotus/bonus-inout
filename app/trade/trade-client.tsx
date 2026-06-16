@@ -1917,7 +1917,7 @@ if (copyPartnerId) {
       try {
         const { data: wo } = await supabase
           .from("work_orders")
-          .select("id,sub_name,logo_spec,thickness,packaging_type,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,work_order_items(id,delivery_date,sub_items,images,barcode_no,unit_weight)")
+          .select("id,sub_name,logo_spec,thickness,packaging_type,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,work_order_items(id,delivery_date,sub_items,images,barcode_no,unit_weight,logo_spec)")
           .eq("linked_order_id", r.rawId)
           .limit(1)
           .maybeSingle();
@@ -1945,12 +1945,14 @@ if (copyPartnerId) {
           const woItemsAll: any[] = (wo as any).work_order_items ?? [];
           const barcodeMap: Record<string, string> = {};
           const weightByIndex: Record<number, number> = {};
+          const logoSpecByIndex: Record<number, string> = {};
           const visibleWoItemsForBarcode = woItemsAll.filter((wi: any) => {
             const n = (wi.sub_items?.[0]?.name ?? "").trim();
             return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
           });
           visibleWoItemsForBarcode.forEach((wi: any, idx: number) => {
             if (wi.unit_weight) weightByIndex[idx] = Number(wi.unit_weight);
+            if (wi.logo_spec) logoSpecByIndex[idx] = String(wi.logo_spec);
             const itemName = wi.sub_items?.[0]?.name ?? "";
             if (wi.barcode_no && itemName) barcodeMap[itemName] = wi.barcode_no;
           });
@@ -1958,10 +1960,11 @@ if (copyPartnerId) {
 
           setWo_itemExistingBarcodes(barcodeMap);
 
-          if (Object.keys(weightByIndex).length > 0) {
+          if (Object.keys(weightByIndex).length > 0 || Object.keys(logoSpecByIndex).length > 0) {
             setLines((prev) => prev.map((l, i) => ({
               ...l,
               weight_g: weightByIndex[i] ?? l.weight_g,
+              logo_spec: logoSpecByIndex[i] ?? l.logo_spec,
             })));
           }
 
@@ -2046,7 +2049,7 @@ if (editPartnerId) {
       setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("");
       setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoImagePreviewUrls([]);
       setEWoExistingImages([]); setEWoExistingSignedLoading(false); setEWoExistingSignedUrls([]);
-      const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no)").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
+      const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no,logo_spec)").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
       // 품목별 이미지 초기화
       setEItemImageFiles({}); setEItemImagePreviewUrls({}); setEItemExistingImageUrls({}); setEWoItemIds([]);
       if (wo) {
@@ -2107,6 +2110,17 @@ if (woSubNameVal) {
           return matched?.id ?? "";
         });
         setEWoItemIds(orderedItemIds);
+
+        const eLogoSpecByIndex: Record<number, string> = {};
+        eLineNames.forEach((lineName: string, idx: number) => {
+          const matched = visibleWoItems.find((wi: any) =>
+            (wi.sub_items?.[0]?.name ?? "") === lineName
+          ) ?? visibleWoItems[idx];
+          if (matched?.logo_spec) eLogoSpecByIndex[idx] = String(matched.logo_spec);
+        });
+        if (Object.keys(eLogoSpecByIndex).length > 0) {
+          setELines((prev) => prev.map((l, i) => ({ ...l, logo_spec: eLogoSpecByIndex[i] ?? l.logo_spec })));
+        }
         const newExistingMap: Record<number, string[]> = {};
         for (let idx = 0; idx < eLineNames.length; idx++) {
           const lineName = eLineNames[idx];
