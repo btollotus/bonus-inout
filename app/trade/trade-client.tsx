@@ -75,7 +75,7 @@ type PartnerView = "PINNED" | "RECENT" | "ALL";
 type FoodTypeRow = { id: string; name: string };
 type PresetProductRow = { id: string; product_name: string; food_type: string | null; weight_g: number | string | null; barcode: string | null };
 type MasterProductRow = { product_name: string; food_type: string | null; report_no: string | null; weight_g: number | null; unit_type: "EA" | "BOX" | string | null; pack_ea: number | null; barcode: string | null; variant_id?: string | null; category?: string | null };
-type Line = { food_type: string; name: string; weight_g: number | string; qty: number; unit: number | string; total_incl_vat: number | string; is_sample?: boolean; stock_out_lots?: { lot_id: string; qty: string }[] };
+type Line = { food_type: string; name: string; weight_g: number | string; qty: number; unit: number | string; total_incl_vat: number | string; is_sample?: boolean; stock_out_lots?: { lot_id: string; qty: string }[]; logo_spec?: string };
 type ShipmentSnap = { seq: number; ship_to_name: string; ship_to_address1: string; ship_to_address2?: string | null; ship_to_mobile?: string | null; ship_to_phone?: string | null; ship_zipcode?: string | null; delivery_message?: string | null };
 type UnifiedRow = {
   kind: "ORDER" | "LEDGER"; date: string; tsKey: string; partnerName: string;
@@ -550,7 +550,7 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
         value={toIntSigned(l.unit) !== 0 ? fmt(r.total) : typeof l.total_incl_vat === "string" ? l.total_incl_vat : l.total_incl_vat !== 0 ? fmt(l.total_incl_vat) : ""}
         onChange={(e) => onUpdate(i, { total_incl_vat: sanitizeSignedIntInput(e.target.value) })}
       />
-     <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1">
         <label className="flex items-center gap-1 shrink-0 cursor-pointer select-none">
           <input type="checkbox" checked={!!l.is_sample}
             onChange={(e) => onUpdate(i, { is_sample: e.target.checked, ...(e.target.checked ? { unit: 0, total_incl_vat: 0 } : {}) })} />
@@ -558,6 +558,14 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
         </label>
         <button className={btnCls} onClick={() => onRemove(i)} title="삭제">✕</button>
       </div>
+      {l.name && !["택배비"].includes(l.name) ? (
+        <div className="col-span-full -mt-1 flex items-center gap-2">
+          <span className="text-[11px] text-slate-500 shrink-0">규격(로고스펙)</span>
+          <input className="w-32 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-blue-300 focus:outline-none"
+            placeholder="예: 35*50mm" value={l.logo_spec ?? ""}
+            onChange={(e) => onUpdate(i, { logo_spec: e.target.value })} />
+        </div>
+      ) : null}
       {variantId ? (
         <div className="col-span-full">
           {stockLoading ? (
