@@ -1161,30 +1161,7 @@ function selectWo(wo: WorkOrderItem) {
             setTimeout(() => { win.print(); }, 300);
           }}
         >🖨️ 기간 인쇄</button>
-        <button
-          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
-          onClick={() => {
-            const content = document.getElementById("ccp1p-print-inner");
-            if (!content) return;
-            const printTitle = `CCP-1P_금속검출_${rangeFrom}_${rangeTo}`;
-            const win = window.open("", "_blank");
-            if (!win) return;
-            win.document.write(`<!DOCTYPE html><html><head>
-              <meta charset="utf-8">
-              <title>${printTitle}</title>
-              <style>
-                @page { size: A4 landscape; margin: 8mm 10mm; }
-                body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 8.5pt; color: #000; }
-                * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                table { border-collapse: collapse; }
-                img { max-width: none; }
-              </style>
-            </head><body>${content.innerHTML}</body></html>`);
-            win.document.close();
-            win.focus();
-            setTimeout(() => { win.print(); }, 500);
-          }}
-          >🖨️ 목록 인쇄</button>
+        
 
         {(rangeFrom !== todayKST() || rangeTo !== todayKST()) && (
           <>
