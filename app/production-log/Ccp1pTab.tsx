@@ -476,7 +476,8 @@ function selectWo(wo: WorkOrderItem) {
 
     const wo = woList.find((w: any) => w.id === selectedWoId);
     if (wo && formData.start_time) {
-      const baseTime = wo.ccp_end_time ?? wo.updated_at;
+      const baseTime = wo.ccp_end_time ?? wo.production_done_at ?? "";
+
       const completedDate = new Date(baseTime);
       const completedKst24 = completedDate.toLocaleTimeString("ko-KR", {
         timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false,
