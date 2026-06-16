@@ -2434,7 +2434,7 @@ if (woSubNameVal) {
     <div className="bg-slate-50 text-slate-900 min-h-screen">
       <div className="mx-auto w-full max-w-[1600px] overflow-x-hidden px-4 py-6">
 
-        {alertOpen ? (
+      {alertOpen ? (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4" onClick={() => setAlertOpen(false)}>
             <div className="w-full max-w-[520px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
@@ -2447,6 +2447,20 @@ if (woSubNameVal) {
               </div>
             </div>
           </div>
+        ) : null}
+
+        {showDeletePinModal && deletePinTargetRow ? (
+          <PinModal
+            employees={employees.filter((e): e is { id: string; name: string; pin: string | null } => e.name !== null)}
+            title="삭제 — 본인 확인"
+            onSuccess={(empId, empName) => {
+              pinLogin(empId, empName);
+              setShowDeletePinModal(false);
+              deleteTradeRow(deletePinTargetRow, empName);
+              setDeletePinTargetRow(null);
+            }}
+            onCancel={() => { setShowDeletePinModal(false); setDeletePinTargetRow(null); }}
+          />
         ) : null}
 
         {/* 휴지통 모달 — ADMIN 전용 */}
