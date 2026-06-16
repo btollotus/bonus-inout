@@ -448,7 +448,11 @@ function selectWo(wo: WorkOrderItem) {
     setFormData({ ...existing });
     if (existing.worker_name) setConfirmedWorker(existing.worker_name);
   } else {
-    setFormData(emptyLog(wo.id, wo.product_name, wo.client_name, selectedDate)); 
+    const prodDoneKst = wo.production_done_at
+      ? new Date(new Date(wo.production_done_at).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }))
+      : new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+    const prodDoneDate = `${prodDoneKst.getFullYear()}-${String(prodDoneKst.getMonth()+1).padStart(2,"0")}-${String(prodDoneKst.getDate()).padStart(2,"0")}`;
+    setFormData(emptyLog(wo.id, wo.product_name, wo.client_name, prodDoneDate));
   }
   setTimeout(() => {
     document.getElementById(`form-${wo.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
