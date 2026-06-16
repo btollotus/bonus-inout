@@ -2256,7 +2256,14 @@ if (woSubNameVal) {
           }
           const finalPaths = [...existingPaths, ...newPaths];
           const matchedELine = eLines[idx];
-          await supabase.from("work_order_items").update({ images: finalPaths, logo_spec: matchedELine?.logo_spec || null }).eq("id", itemId);
+          const syncedQty = toInt(matchedELine?.qty ?? 0);
+          const syncedName = (matchedELine?.name ?? "").trim();
+          await supabase.from("work_order_items").update({
+            images: finalPaths,
+            logo_spec: matchedELine?.logo_spec || null,
+            sub_items: [{ name: syncedName, qty: syncedQty }],
+            order_qty: syncedQty,
+          }).eq("id", itemId);
         }
       }
       {
