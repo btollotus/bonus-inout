@@ -133,7 +133,7 @@ function StepBadge({ step }: { step: number }) {
   ];
   const c = cfg[step] ?? cfg[1]!;
   return (
-    <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${c.bg} ${c.border} ${c.text}`}>
+    <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${c.bg} ${c.border} ${c.text}`}>
       {c.label}
     </span>
   );
@@ -306,7 +306,7 @@ export function PestTab({ role, userId, showToast }: {
                         <th className="border border-slate-200 py-2 px-2 bg-blue-50 text-blue-700 w-10">계</th>
                         <th className="border border-slate-200 py-2 px-2 bg-green-50 text-green-700 w-10">누계</th>
                         <th className="border border-slate-200 py-2 px-2 w-12">단계</th>
-                        <th className="border border-slate-200 py-2 px-2 bg-lime-50 text-lime-700 text-[10px] w-14">끈끈이교체</th>
+                        <th className="border border-slate-200 py-2 px-2 bg-lime-50 text-lime-700 text-[10px] w-20 whitespace-nowrap">끈끈이교체</th>
                         <th className="border border-slate-200 py-1 px-1 bg-amber-50 text-amber-700 text-[10px]" colSpan={3}>쥐먹이(좌)</th>
                         <th className="border border-slate-200 py-1 px-1 bg-orange-50 text-orange-700 text-[10px]" colSpan={3}>쥐먹이(우)</th>
                       </tr>
@@ -339,7 +339,7 @@ export function PestTab({ role, userId, showToast }: {
                                       {fmtDate(date)}
                                     </td>
                                   )}
-                                  <td className="border border-slate-200 py-1 px-2 bg-slate-50 text-[11px] text-slate-600">{loc}</td>
+                                  <td className="border border-slate-200 py-1 px-2 bg-slate-50 text-[11px] text-slate-600 whitespace-nowrap">{loc}</td>
                                   <td className="border border-slate-200 py-1 px-1 text-center">{r?.fly || ""}</td>
                                   <td className="border border-slate-200 py-1 px-1 text-center">{r?.mosquito || ""}</td>
                                   <td className="border border-slate-200 py-1 px-1 text-center">{r?.midges || ""}</td>
@@ -353,8 +353,8 @@ export function PestTab({ role, userId, showToast }: {
                                   <td className="border border-slate-200 py-1 px-2 text-center font-semibold bg-green-50 text-green-700">
                                     {cumul > 0 ? cumul : ""}
                                   </td>
-                                  <td className="border border-slate-200 py-1 px-2 text-center"><StepBadge step={step} /></td>
-                                  <td className="border border-slate-200 py-1 px-2 text-center bg-lime-50">
+                                  <td className="border border-slate-200 py-1 px-2 text-center whitespace-nowrap"><StepBadge step={step} /></td>
+                                  <td className="border border-slate-200 py-1 px-2 text-center bg-lime-50 whitespace-nowrap">
                                     {(() => {
                                       const sr = viewSticky.find(s => s.record_date === date && s.target_type === "flying" && s.target_key === loc);
                                       if (!sr) return <span className="text-slate-300 text-[10px]">—</span>;
@@ -433,7 +433,7 @@ export function PestTab({ role, userId, showToast }: {
                         <th className="border border-slate-200 py-2 px-1">기타</th>
                         <th className="border border-slate-200 py-2 px-2 bg-blue-50 text-blue-700 w-10">계</th>
                         <th className="border border-slate-200 py-2 px-2 bg-green-50 text-green-700 w-10">누계</th>
-                        <th className="border border-slate-200 py-2 px-2 bg-lime-50 text-lime-700 text-[10px] w-14">끈끈이교체</th>
+                        <th className="border border-slate-200 py-2 px-2 bg-lime-50 text-lime-700 text-[10px] w-20 whitespace-nowrap">끈끈이교체</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -462,7 +462,7 @@ export function PestTab({ role, userId, showToast }: {
                                 <td className="border border-slate-200 py-1 px-2 text-center font-semibold bg-green-50 text-green-700">
                                   {cumul > 0 ? cumul : ""}
                                 </td>
-                                <td className="border border-slate-200 py-1 px-2 text-center bg-lime-50">
+                                <td className="border border-slate-200 py-1 px-2 text-center bg-lime-50 whitespace-nowrap">
                                   {(() => {
                                     const sr = viewSticky.find(s => s.record_date === date && s.target_type === "walking" && s.target_key === trap);
                                     if (!sr) return <span className="text-slate-300 text-[10px]">—</span>;
