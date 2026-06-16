@@ -262,26 +262,13 @@ setSlotWoMap(slotMap);
     ])] as string[];
     const assigneeMap: Record<string, string> = {};
     if (allWoNosForAssignee.length > 0) {
-      const { data: woEvData } = await supabase
-        .from("ccp_wo_events")
-        .select("work_order_no, created_by")
+      const { data: woData } = await supabase
+        .from("work_orders")
+        .select("work_order_no, assignee_production")
         .in("work_order_no", allWoNosForAssignee)
-        .not("created_by", "is", null);
-      const userIds = [...new Set((woEvData ?? []).map((e: any) => e.created_by).filter(Boolean))] as string[];
-      const userNameMap: Record<string, string> = {};
-      if (userIds.length > 0) {
-        const { data: usersData } = await supabase
-          .from("users")
-          .select("id, name")
-          .in("id", userIds);
-        for (const u of usersData ?? []) {
-          if (u.name) userNameMap[u.id] = u.name;
-        }
-      }
-      for (const ev of woEvData ?? []) {
-        if (ev.created_by && userNameMap[ev.created_by] && !assigneeMap[ev.work_order_no]) {
-          assigneeMap[ev.work_order_no] = userNameMap[ev.created_by];
-        }
+        .not("assignee_production", "is", null);
+      for (const wo of woData ?? []) {
+        if (wo.assignee_production) assigneeMap[wo.work_order_no] = wo.assignee_production;
       }
     }
 
