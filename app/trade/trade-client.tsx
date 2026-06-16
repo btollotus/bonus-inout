@@ -2249,7 +2249,16 @@ if (woSubNameVal) {
           const newFiles = eItemImageFiles[idx] ?? [];
           const newPaths: string[] = [];
           for (const file of newFiles) {
-            const ext =
+            const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
+            const path = `orders/${eWoId}/item_${idx}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+            const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file, { upsert: true });
+            if (!upErr) newPaths.push(path);
+          }
+          const finalPaths = [...existingPaths, ...newPaths];
+          const matchedELine = eLines[idx];
+          await supabase.from("work_order_items").update({ images: finalPaths, logo_spec: matchedELine?.logo_spec || null }).eq("id", itemId);
+        }
+      }
       {
         const { data: { user } } = await supabase.auth.getUser();
         const stockUserId = user?.id ?? null;
