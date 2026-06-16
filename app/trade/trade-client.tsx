@@ -2183,10 +2183,65 @@ if (woSubNameVal) {
         await supabase.from("work_order_items").update({ delivery_date: eShipDate }).eq("work_order_id", eWoId);
 
       
-        // 품목별 이미지 저장
-        for (let idx = 0; idx < eWoItemIds.length; idx++) {
-          const itemId = eWoItemIds[idx];
-          if (!itemId) continue;
+        // 품목별 이미지 저장 (eLines 전체 기준 — 기존 품목은 update, 신규 추가 품목은 work_order_items부터 생성)
+        for (let idx = 0; idx < eLines.length; idx++) {
+          const eLine = eLines[idx];
+          if (!eLine?.name?.trim()) continue;
+          let itemId = eWoItemIds[idx];
+
+          if (!itemId) {
+            // ── 신규 추가된 품목: work_order_items 생성 + product/variant 생성 (createOrder()와 동일 패턴) ──
+            const newItemName = eLine.name.trim();
+            const newItemQty = toInt(eLine.qty);
+            const { data: newBarcode, error: nbErr } = await supabase.rpc("generate_work_order_barcode");
+            if (nbErr) { stockWarningMsg = `"${newItemName}" 바코드 생성 실패: ${nbErr.message}`; continue; }
+            const newBarcodeNo = newBarcode as string;
+            const { data: createdItem, error: ciErr } = await supabase.from("work_order_items").insert({
+              work_order_id: eWoId, delivery_date: eShipDate,
+              sub_items: [{ name: newItemName, qty: newItemQty }], order_qty: newItemQty,
+              barcode_no: newBarcodeNo,
+              unit_weight: eLine.weight_g && Number(eLine.weight_g) > 0 ? Number(eLine.weight_g) : null,
+              logo_spec: eLine.logo_spec || null,
+            }).select("id").single();
+            if (ciErr || !createdItem) { stockWarningMsg = `"${newItemName}" 작업지시서 항목 생성 실패: ${ciErr?.message ?? ""}`; continue; }
+            itemId = (createdItem as any).id as string;
+            eWoItemIds[idx] = itemId;
+
+            // products/product_variants/product_barcodes 생성 (selectedPartner는 항상 선택되어 있음)
+            if (selectedPartner) {
+              const newVariantName = `${selectedPartner.name}${eWoSubName.trim() ? "-" + eWoSubName.trim() : ""}-${newItemName}`;
+              const { data: existProd } = await supabase.from("products").select("id").eq("name", newVariantName).limit(1).maybeSingle();
+              let newProductId: string;
+              if (existProd?.id) {
+                newProductId = existProd.id;
+              } else {
+                const { data: createdProd, error: cpErr } = await supabase.from("products").insert({ name: newVariantName, category: "업체", food_type: eWoFoodType.trim() || "기타", default_weight_g: 0 }).select("id").single();
+                if (cpErr || !createdProd) { stockWarningMsg = `"${newItemName}" 제품 등록 실패: ${cpErr?.message ?? ""}`; newProductId = ""; }
+                else newProductId = (createdProd as any).id;
+              }
+              if (newProductId) {
+                const { data: existVariant } = await supabase.from("product_variants").select("id, barcode").eq("product_id", newProductId).eq("variant_name", newVariantName).limit(1).maybeSingle();
+                let newVariantId: string;
+                if (existVariant?.id) {
+                  newVariantId = existVariant.id;
+                  const existingBc = existVariant.barcode as string | null;
+                  if (existingBc) {
+                    const { data: existPb } = await supabase.from("product_barcodes").select("id").eq("barcode", existingBc).maybeSingle();
+                    if (!existPb) await supabase.from("product_barcodes").insert({ variant_id: newVariantId, barcode: existingBc, is_primary: true, is_active: true });
+                  }
+                } else {
+                  const { data: createdVariant, error: cvErr } = await supabase.from("product_variants").insert({ product_id: newProductId, variant_name: newVariantName, barcode: newBarcodeNo, pack_unit: 1, unit_type: "EA", weight_g: eLine.weight_g && Number(eLine.weight_g) > 0 ? Number(eLine.weight_g) : null }).select("id").single();
+                  if (cvErr || !createdVariant) { stockWarningMsg = `"${newItemName}" 제품 규격 등록 실패: ${cvErr?.message ?? ""}`; }
+                  else {
+                    newVariantId = (createdVariant as any).id;
+                    const { data: existPb2 } = await supabase.from("product_barcodes").select("id").eq("barcode", newBarcodeNo).maybeSingle();
+                    if (!existPb2) await supabase.from("product_barcodes").insert({ variant_id: newVariantId, barcode: newBarcodeNo, is_primary: true, is_active: true });
+                  }
+                }
+              }
+            }
+          }
+
           const existingPaths: string[] = (eItemExistingImageUrls[idx] ?? []).map((url: string) => {
             if (url.startsWith("http")) { const m = url.match(/work-order-images\/(.+?)(\?|$)/); return m ? m[1] : null; }
             return url;
@@ -2194,16 +2249,7 @@ if (woSubNameVal) {
           const newFiles = eItemImageFiles[idx] ?? [];
           const newPaths: string[] = [];
           for (const file of newFiles) {
-            const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
-            const path = `orders/${eWoId}/item_${idx}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-            const { error: upErr } = await supabase.storage.from("work-order-images").upload(path, file, { upsert: true });
-            if (!upErr) newPaths.push(path);
-          }
-          const finalPaths = [...existingPaths, ...newPaths];
-          const matchedELine = eLines[idx];
-          await supabase.from("work_order_items").update({ images: finalPaths, logo_spec: matchedELine?.logo_spec || null }).eq("id", itemId);
-        }
-      }
+            const ext =
       {
         const { data: { user } } = await supabase.auth.getUser();
         const stockUserId = user?.id ?? null;
