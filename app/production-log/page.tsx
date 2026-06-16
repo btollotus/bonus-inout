@@ -3515,7 +3515,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                 ))}
                <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
                <th className="border border-slate-200 py-1.5 px-2 bg-slate-100 text-slate-400 w-12 text-[10px] whitespace-nowrap">지난주</th>
-                <th className="border border-slate-200 py-1.5 px-2 w-12 whitespace-nowrap">단계</th>
+               <th className="border border-slate-200 py-1.5 px-2 w-14 whitespace-nowrap">단계</th>
                 <th className="border border-slate-200 py-1.5 px-2 bg-lime-50 text-lime-700 w-20 text-[10px] whitespace-nowrap">끈끈이교체</th>
               </tr>
             </thead>
@@ -3535,8 +3535,8 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                       ))}
                       <td className={`border border-slate-200 py-1 px-2 text-center font-semibold ${stepCls}`}>{r.total>0?r.total:""}</td>
                       <td className="border border-slate-200 py-1 px-2 text-center text-[11px] text-slate-400">{prevFlying[loc] ?? "—"}</td>
-                      <td className="border border-slate-200 py-1 px-2 text-center">
-                        <span className={`inline-block rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${r.step===3?"bg-red-50 border-red-300 text-red-700":r.step===2?"bg-amber-50 border-amber-300 text-amber-700":"bg-green-50 border-green-300 text-green-700"}`}>{stepLabel}</span>
+                      <td className="border border-slate-200 py-1 px-2 text-center whitespace-nowrap">
+                        <span className={`inline-block rounded-full border px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${r.step===3?"bg-red-50 border-red-300 text-red-700":r.step===2?"bg-amber-50 border-amber-300 text-amber-700":"bg-green-50 border-green-300 text-green-700"}`}>{stepLabel}</span>
                       </td>
                       <td className="border border-slate-200 py-1 px-2 text-center bg-lime-50">
                         <input type="checkbox"
