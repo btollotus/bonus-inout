@@ -3426,7 +3426,7 @@ if (woSubNameVal) {
       {x.tax_invoice_issued ? "✅ 세금계산서 발행완료" : "☐ 세금계산서 미발행"}
     </button>
     <button className={`${miniBtn} col-span-2`} onClick={async () => {
-      const { data } = await supabase.from("work_orders").select("*,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id,barcode_no,note,images)").eq("linked_order_id", x.rawId).limit(1).maybeSingle();
+      const { data } = await supabase.from("work_orders").select("*,work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,actual_qty,unit_weight,total_weight,expiry_date,order_id,barcode_no,note,images,logo_spec)").eq("linked_order_id", x.rawId).limit(1).maybeSingle();
       if (data) setWo_printTarget(data as WorkOrderRow);
       else setMsg("연결된 작업지시서가 없습니다.");
     }}>🖨️ 작업지시서</button>
