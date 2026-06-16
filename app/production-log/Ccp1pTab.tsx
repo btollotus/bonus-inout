@@ -978,8 +978,8 @@ function selectWo(wo: WorkOrderItem) {
       <div className={`${card} p-4 print:hidden`}>
         <div className="mb-3 flex items-center justify-between">
         <div className="text-sm font-semibold">
-            생산완료 목록 ({selectedDate} KST)
-            {selectedDate === todayKST() && <span className="ml-1 text-xs font-normal text-slate-400">오늘</span>}
+            생산완료 목록 ({rangeFrom === rangeTo ? rangeFrom : `${rangeFrom} ~ ${rangeTo}`})
+            {rangeFrom === todayKST() && rangeTo === todayKST() && <span className="ml-1 text-xs font-normal text-slate-400">오늘</span>}
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">{woList.length}건</span>
@@ -990,7 +990,8 @@ function selectWo(wo: WorkOrderItem) {
         {loading ? (
   <div className="py-6 text-center text-sm text-slate-400">불러오는 중...</div>
 ) : woList.length === 0 ? (
-  <div className="py-6 text-center text-sm text-slate-400">{selectedDate} CCP-1P 대기 중인 작업지시서가 없습니다.</div>
+  <div className="py-6 text-center text-sm text-slate-400">{rangeFrom === rangeTo ? rangeFrom : `${rangeFrom} ~ ${rangeTo}`} CCP-1P 대기 중인 작업지시서가 없습니다.</div>
+
 ) : (
   <div className="space-y-2">
     {woList.map((wo: any) => {
