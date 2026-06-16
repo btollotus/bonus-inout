@@ -671,11 +671,12 @@ function selectWo(wo: WorkOrderItem) {
           }
 
           const endTime = (formData.b_end_time ?? "00:00").slice(0, 5);
+          const happenedDate = formData.log_date ?? rangeFrom;
           const { error: movErr } = await supabase.from("movements").insert({
             lot_id: lotId,
             type: "IN",
             qty: totalProducedQty,
-            happened_at: `${selectedDate}T${endTime}:00+09:00`,
+            happened_at: `${happenedDate}T${endTime}:00+09:00`,
             note: "작업지시서 생산완료 - " + (woData as any).work_order_no,
             created_by: userId,
           });
@@ -687,7 +688,7 @@ function selectWo(wo: WorkOrderItem) {
               lot_id: lotId,
               type: "DISCARD",
               qty: defect_qty,
-              happened_at: `${selectedDate}T${endTime}:00+09:00`,
+              happened_at: `${happenedDate}T${endTime}:00+09:00`,
               note: "작업지시서 생산완료(불량) - " + (woData as any).work_order_no,
               created_by: userId,
             });
