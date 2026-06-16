@@ -5,6 +5,7 @@ import React, { useRef } from "react";
 // ─────────────────────── Types ───────────────────────
 type PrintItem = {
   productType: string;
+  nickname?: string | null;
   colorType: "dark" | "white";
   isRaise: boolean;
   widthMm: number | null;
@@ -156,7 +157,7 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
         ? `${item.widthMm}×${item.heightMm}mm${item.thickness ? `, 두께 ${item.thickness}` : ""}`
         : item.thickness ? `두께 ${item.thickness}` : ""
     );
-    const productName = sizeStr ? `${colorLabel}(${sizeStr})` : colorLabel;
+    const productName = (item.nickname ? `[${item.nickname}] ` : "") + (sizeStr ? `${colorLabel}(${sizeStr})` : colorLabel);
    // 롤리팝레이즈-별도: 인쇄제판 단가에 합산 (plateCost / quantity, 10원 단위 올림)
    const isRollipopRaize = item.productType === "롤리팝레이즈-별도";
    const platePerUnit = (isRollipopRaize && item.plateCost > 0 && item.quantity > 0)

@@ -74,6 +74,7 @@ type QuoteItemRow = {
   id: string;
   request_id: string;
   product_type: string | null;
+  nickname: string | null;
   color_type: string | null;
   width_mm: number | null;
   height_mm: number | null;
@@ -162,6 +163,7 @@ export default function QuoteClient() {
     id: string;
     itemCategory: "custom" | "preset";
     presetName: string;
+    nickname: string;
     productType: string;
     colorType: "dark" | "white";
     widthMm: string;
@@ -182,6 +184,7 @@ export default function QuoteClient() {
     id: crypto.randomUUID(),
     itemCategory: "custom",
     presetName: "",
+    nickname: "",
     productType: "전사3mm", colorType: "dark",
     widthMm: "", heightMm: "", quantity: "",
     isNew: true, designChanged: false,
@@ -584,6 +587,7 @@ async function loadSignageList() {
       id: crypto.randomUUID(),
       itemCategory: "custom",
       presetName: "",
+      nickname: r.nickname ?? "",
       productType: pt,
       colorType: (r.color_type as "dark" | "white") ?? "dark",
       widthMm: r.width_mm ? String(r.width_mm) : "",
@@ -899,8 +903,8 @@ async function loadSignageList() {
                             );
                           })()
                         ) : (
-                        /* ── 제조제품 입력 그리드: 제품 | 색상 | 가로 | 세로 | 수량 | 단가 ── */
-                        <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr" }}>
+                        /* ── 제조제품 입력 그리드: 제품 | 별명 | 색상 | 가로 | 세로 | 수량 | 단가 ── */
+                        <div className="grid gap-2" style={{ gridTemplateColumns: "1.6fr 0.9fr 1fr 1fr 1fr 1fr 1fr" }}>
                           {/* 제품 */}
                           <div>
                             <div className="mb-1 text-[10px] font-semibold text-slate-500">제품</div>
@@ -915,6 +919,13 @@ async function loadSignageList() {
                                 }}>
                               {PRODUCT_TYPES.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
                             </select>
+                          </div>
+
+                          {/* 별명 */}
+                          <div>
+                            <div className="mb-1 text-[10px] font-semibold text-slate-500">별명</div>
+                            <input className={inp} placeholder="예: 당근" value={item.nickname}
+                              onChange={e => updateItem(item.id, { nickname: e.target.value })} />
                           </div>
 
                           {/* 색상 */}
@@ -1167,6 +1178,7 @@ async function loadSignageList() {
                           customer_name: activeCustomerName,
                           request_type: "product",
                           product_type: firstIsPreset ? firstItem.presetName : firstItem.productType,
+                          nickname: firstIsPreset ? null : (firstItem.nickname.trim() || null),
                           color_type: firstIsPreset ? null : firstItem.colorType,
                           width_mm: firstIsPreset ? null : (parseFloat(firstItem.widthMm) || null),
                           height_mm: firstIsPreset ? null : (parseFloat(firstItem.heightMm) || null),
@@ -1202,10 +1214,11 @@ async function loadSignageList() {
                             const V = isPreset
                               ? (presetUnit !== 0 ? presetUnit : Math.round(presetTotalInclVat / 1.1 / presetQty))
                               : (fi.useStockMold && cr?.V_stock ? cr.V_stock : cr?.V ?? 0);
-                            return {
-                              request_id: req.id,
-                              product_type: isPreset ? fi.presetName : fi.productType,
-                              color_type: isPreset ? null : fi.colorType,
+                              return {
+                                request_id: req.id,
+                                product_type: isPreset ? fi.presetName : fi.productType,
+                                nickname: isPreset ? null : (fi.nickname.trim() || null),
+                                color_type: isPreset ? null : fi.colorType,
                               width_mm: isPreset ? null : (parseFloat(fi.widthMm) || null),
                               height_mm: isPreset ? null : (parseFloat(fi.heightMm) || null),
                               quantity: parseInt(fi.quantity) || null,
@@ -1242,6 +1255,7 @@ async function loadSignageList() {
                             customer_name: activeCustomerName,
                             request_type: "product",
                             product_type: firstManualItem.productType,
+                            nickname: firstManualItem.nickname.trim() || null,
                             color_type: firstManualItem.colorType,
                             width_mm: parseFloat(firstManualItem.widthMm) || null,
                             height_mm: parseFloat(firstManualItem.heightMm) || null,
@@ -2119,6 +2133,7 @@ async function loadSignageList() {
               }
               return {
                 productType: PRODUCT_TYPES.find(p => p.key === item.productType)?.label ?? item.productType,
+                nickname: item.nickname.trim() || null,
                 colorType: item.colorType,
                 isRaise: item.productType.startsWith("레이즈"),
                 widthMm: parseFloat(item.widthMm) || null,
