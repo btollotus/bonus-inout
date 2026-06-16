@@ -2833,7 +2833,7 @@ const totalOrder = items
                               let totalCompoundGEdit = 0;
                               for (const item of editItems) {
                                 const pi = prodInputs[item.id];
-                                const aqty = toInt(pi?.actual_qty);
+                                const aqty = toInt(pi?.actual_qty) + toInt(pi?.defect_qty);
                                 const uw   = toNum(pi?.unit_weight);
                                 if (aqty > 0 && uw > 0) totalCompoundGEdit += aqty * uw;
                               }
@@ -2868,7 +2868,7 @@ const totalOrder = items
             let totalCompoundGEdit2 = 0;
             for (const item of editItems2) {
               const pi = prodInputs[item.id];
-              const aqty = toInt(pi?.actual_qty);
+              const aqty = toInt(pi?.actual_qty) + toInt(pi?.defect_qty);
               const uw   = toNum(pi?.unit_weight);
               if (aqty > 0 && uw > 0) totalCompoundGEdit2 += aqty * uw;
             }
