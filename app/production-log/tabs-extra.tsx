@@ -753,10 +753,7 @@ async function handlePrint() {
           className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
           onClick={printRange}
         >🖨️ 기간 인쇄</button>
-        <button
-          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
-          onClick={handlePrint}
-        >🖨️ 목록 인쇄</button>
+       
         {(rangeFrom !== new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }) || rangeTo !== new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })) && (
           <>
             <button
