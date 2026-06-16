@@ -350,17 +350,17 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
       .is("input_done_at", null)
       .order("production_done_at", { ascending: true });
 
-     // ── 기록완료 건: work_order_id로 WO 상세 조회 (필터 없이 ID만으로) ──
-     const loggedIds = Array.from(loggedWoIds);
-     let loggedWoRows: any[] = [];
-     if (loggedIds.length > 0) {
-       const { data: lw } = await supabase
-         .from("work_orders")
-         .select("id, product_name, client_name, production_done_at, input_done_at, work_order_no")
-         .in("id", loggedIds)
-         .order("production_done_at", { ascending: true });
-       loggedWoRows = lw ?? [];
-     }
+// ── 기록완료 건: work_order_id로 WO 상세 조회 (필터 없이 ID만으로) ──
+const loggedIds = Array.from(loggedWoIds);
+let loggedWoRows: any[] = [];
+if (loggedIds.length > 0) {
+  const { data: lw } = await supabase
+    .from("work_orders")
+    .select("id, product_name, client_name, production_done_at, input_done_at, work_order_no")
+    .in("id", loggedIds)
+    .order("production_done_at", { ascending: true });
+  loggedWoRows = lw ?? [];
+}
 
     // ── CCP 종료 시각 조회 ──
     const allWoRows = [
