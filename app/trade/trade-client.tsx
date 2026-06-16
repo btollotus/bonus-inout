@@ -1456,7 +1456,8 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     const { error: sErr } = await supabase.from("order_shipments").insert(buildShipPayloads(orderId, ship1, ship2, twoShip));
     if (sErr) return setMsg(sErr.message);
 
-    if (orderWoEnabled) {
+    const woTargetLines = cleanLines.filter((l) => (l.stock_out_lots ?? []).filter((t) => t.lot_id && toInt(t.qty) > 0).length === 0);
+    if (orderWoEnabled && woTargetLines.length > 0) {
       try {
         const { data: barcodeData, error: barcodeErr } = await supabase.rpc("generate_work_order_barcode");
         if (barcodeErr) throw new Error("바코드 생성 실패: " + barcodeErr.message);
@@ -1466,11 +1467,11 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         if (woNoErr || !newWoNo) throw new Error("작업지시서 번호 생성 실패: " + (woNoErr?.message ?? ""));
         const workOrderNo = newWoNo;
 
-        const firstItemName = cleanLines[0]?.name ?? "";
+        const firstItemName = woTargetLines[0]?.name ?? "";
         const productName = firstItemName
   ? `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${firstItemName}`
   : selectedPartner.name;
-        const foodType = cleanLines[0]?.food_type || null;
+        const foodType = woTargetLines[0]?.food_type || null;
 
         const { data: createdWo, error: woErr } = await supabase.from("work_orders").insert({
           work_order_no: workOrderNo, barcode_no: barcodeNo,
@@ -1502,8 +1503,8 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
 
         // 품목별 바코드 생성 (재주문이면 기존 바코드 재사용)
         const woItemsPayload: any[] = [];
-        for (let li = 0; li < cleanLines.length; li++) {
-          const l = cleanLines[li];
+        for (let li = 0; li < woTargetLines.length; li++) {
+          const l = woTargetLines[li];
           let itemBarcodeNo: string;
           
          
@@ -1531,7 +1532,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
          const itemName = (createdItem.sub_items as WoSubItem[])?.[0]?.name ?? firstItemName;
          const itemVariantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${itemName}`;
          // 해당 품목의 무게: cleanLines에서 이름 매칭으로 찾기
-         const matchedLine = cleanLines.find((l) => l.name === itemName);
+         const matchedLine = woTargetLines.find((l) => l.name === itemName);
          const itemWeightG = matchedLine?.weight_g && Number(matchedLine.weight_g) > 0 ? Number(matchedLine.weight_g) : null;
          const itemFoodType = matchedLine?.food_type || foodType || null;
 
