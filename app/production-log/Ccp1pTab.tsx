@@ -892,113 +892,58 @@ function selectWo(wo: WorkOrderItem) {
           화면용 UI (기존 그대로)
       ══════════════════════════════════════════ */}
 
-      {/* ── 기간 인쇄 패널 ── */}
-      <div className={`${card} print:hidden overflow-hidden transition-all`}>
-        <button
-          className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          onClick={() => setRangePanelOpen((v) => !v)}
-        >
-          <span>📅 기간별 인쇄</span>
-          <span className="text-slate-400 text-xs">{rangePanelOpen ? "▲ 닫기" : "▼ 열기"}</span>
-        </button>
-        {rangePanelOpen && (
-          <div className="border-t border-slate-100 px-4 py-4 space-y-4">
-            <div className="flex flex-wrap items-end gap-4">
-            <div>
-                <div className="mb-1 text-xs text-slate-500">시작일</div>
-                <input
-                  type="date"
-                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
-                  value={rangeFrom}
-                  max={rangeTo}
-                  onChange={(e) => { setRangeFrom(e.target.value); setRangeLogs({}); }}
-                />
-              </div>
-              <div className="text-slate-400 pb-1.5">~</div>
-              <div>
-                <div className="mb-1 text-xs text-slate-500">종료일</div>
-                <input
-                  type="date"
-                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
-                  value={rangeTo}
-                  max={todayKST()}
-                  onChange={(e) => { setRangeTo(e.target.value); setRangeLogs({}); }}
-                />
-              </div>
-              <button
-                className={`rounded-xl px-4 py-1.5 text-sm font-semibold text-white ${rangeLoading ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"}`}
-                disabled={rangeLoading || !rangeFrom || !rangeTo || rangeFrom > rangeTo}
-                onClick={loadRangeLogs}
-              >
-                {rangeLoading ? "조회 중..." : "🔍 조회"}
-              </button>
-              {Object.keys(rangeLogs).length > 0 && !rangeLoading && (
-                <button
-                  className="rounded-xl border border-slate-300 bg-slate-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-slate-800"
-                  onClick={printRange}
-                >
-                  🖨️ 인쇄
-                </button>
-              )}
-            </div>
-            {Object.keys(rangeLogs).length > 0 && !rangeLoading && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                {Object.keys(rangeLogs).sort().map((d) => (
-                  <span key={d} className="mr-3">
-                    <span className="font-semibold">{d}</span>
-                    <span className="text-slate-400 ml-1">{rangeLogs[d].length}건</span>
-                  </span>
-                ))}
-              </div>
-            )}
-            {Object.keys(rangeLogs).length === 0 && !rangeLoading && rangeFrom && rangeTo && (
-              <div className="text-xs text-slate-400">조회 버튼을 눌러 기간 내 기록을 불러오세요.</div>
-            )}
-          </div>
-        )}
-      </div>
-
-   {/* ── 날짜 선택 ── */}
-   <div className={`${card} p-3 print:hidden flex flex-wrap items-center gap-3`}>
-        <span className="text-sm font-semibold text-slate-600">조회 날짜</span>
+     {/* ── 기간 조회 + 인쇄 통합 패널 ── */}
+     <div className={`${card} p-3 print:hidden flex flex-wrap items-center gap-3`}>
+        <span className="text-sm font-semibold text-slate-600">조회 기간</span>
         <input
           type="date"
           className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
-          value={selectedDate}
+          value={rangeFrom}
+          max={rangeTo}
+          onChange={(e) => { setRangeFrom(e.target.value); setSelectedWoId(null); setFormData(null); setRangeLogs({}); }}
+        />
+        <span className="text-slate-400">~</span>
+        <input
+          type="date"
+          className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+          value={rangeTo}
           max={todayKST()}
-          onChange={(e) => {
-            setSelectedDate(e.target.value);
-            setSelectedWoId(null);
-            setFormData(null);
-          }}
+          onChange={(e) => { setRangeTo(e.target.value); setSelectedWoId(null); setFormData(null); setRangeLogs({}); }}
         />
         <button className={btn} onClick={() => { loadWoList(); loadLogs(); }}>🔄 새로고침</button>
-        <button className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50" onClick={() => {
-          const content = document.getElementById("ccp1p-print-inner");
-          if (!content) return;
-          const printTitle = `CCP-1P_금속검출_${selectedDate}`;
-          const win = window.open("", "_blank");
-          if (!win) return;
-          win.document.write(`<!DOCTYPE html><html><head>
-            <meta charset="utf-8">
-            <title>${printTitle}</title>
-            <style>
-              @page { size: A4 landscape; margin: 8mm 10mm; }
-              body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 8.5pt; color: #000; }
-              * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-              table { border-collapse: collapse; }
-              img { max-width: none; }
-            </style>
-          </head><body>${content.innerHTML}</body></html>`);
-          win.document.close();
-          win.focus();
-          setTimeout(() => { win.print(); }, 500);
-        }}>🖨️ 인쇄</button>
-        {selectedDate !== todayKST() && (
+        <button
+          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
+          onClick={async () => { await loadRangeLogs(); printRange(); }}
+        >🖨️ 기간 인쇄</button>
+        <button
+          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
+          onClick={() => {
+            const content = document.getElementById("ccp1p-print-inner");
+            if (!content) return;
+            const printTitle = `CCP-1P_금속검출_${rangeFrom}_${rangeTo}`;
+            const win = window.open("", "_blank");
+            if (!win) return;
+            win.document.write(`<!DOCTYPE html><html><head>
+              <meta charset="utf-8">
+              <title>${printTitle}</title>
+              <style>
+                @page { size: A4 landscape; margin: 8mm 10mm; }
+                body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 8.5pt; color: #000; }
+                * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                table { border-collapse: collapse; }
+                img { max-width: none; }
+              </style>
+            </head><body>${content.innerHTML}</body></html>`);
+            win.document.close();
+            win.focus();
+            setTimeout(() => { win.print(); }, 500);
+          }}
+        >🖨️ 오늘 인쇄</button>
+        {(rangeFrom !== todayKST() || rangeTo !== todayKST()) && (
           <>
             <button
               className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium hover:bg-slate-100"
-              onClick={() => { setSelectedDate(todayKST()); setSelectedWoId(null); setFormData(null); }}
+              onClick={() => { setRangeFrom(todayKST()); setRangeTo(todayKST()); setSelectedWoId(null); setFormData(null); }}
             >
               오늘로 돌아가기
             </button>
