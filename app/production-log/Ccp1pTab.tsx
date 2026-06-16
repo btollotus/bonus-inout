@@ -322,19 +322,48 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
 
   const loadWoList = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-    .from("work_orders")
-    .select("id, product_name, client_name, updated_at, input_done_at, work_order_no")
-    .eq("status_production", true)
-    .in("status", ["생산중", "완료"])
-    .gte("updated_at", `${selectedDate}T00:00:00+09:00`)
-    .lt("updated_at", `${selectedDate}T23:59:59+09:00`)
-    .or("food_type.is.null,food_type.not.ilike.%중간재%")
-    .eq("skip_production_check", false)
-    .order("updated_at", { ascending: true });
 
-    // CCP 종료 시각 조회
-    const woNos = (data ?? []).map((w: any) => w.work_order_no);
+    // ── 기록완료 건: ccp_metal_logs.log_date 기준 ──
+    const { data: logRows } = await supabase
+      .from("ccp_metal_logs")
+      .select("work_order_id, log_date")
+      .gte("log_date", rangeFrom)
+      .lte("log_date", rangeTo);
+    const loggedWoIds = new Set((logRows ?? []).map((r: any) => r.work_order_id));
+
+    // ── 미기록 건: production_done_at 기준 WO 조회 ──
+    const { data: woData } = await supabase
+      .from("work_orders")
+      .select("id, product_name, client_name, production_done_at, input_done_at, work_order_no")
+      .eq("status_production", true)
+      .in("status", ["생산중", "완료"])
+      .gte("production_done_at", `${rangeFrom}T00:00:00+09:00`)
+      .lte("production_done_at", `${rangeTo}T23:59:59+09:00`)
+      .or("food_type.is.null,food_type.not.ilike.%중간재%")
+      .eq("skip_production_check", false)
+      .is("input_done_at", null)
+      .order("production_done_at", { ascending: true });
+
+    // ── 기록완료 건: work_order_id로 WO 상세 조회 ──
+    const loggedIds = Array.from(loggedWoIds);
+    let loggedWoRows: any[] = [];
+    if (loggedIds.length > 0) {
+      const { data: lw } = await supabase
+        .from("work_orders")
+        .select("id, product_name, client_name, production_done_at, input_done_at, work_order_no")
+        .in("id", loggedIds)
+        .or("food_type.is.null,food_type.not.ilike.%중간재%")
+        .eq("skip_production_check", false)
+        .order("production_done_at", { ascending: true });
+      loggedWoRows = lw ?? [];
+    }
+
+    // ── CCP 종료 시각 조회 ──
+    const allWoRows = [
+      ...loggedWoRows,
+      ...(woData ?? []).filter((w: any) => !loggedWoIds.has(w.id)),
+    ];
+    const woNos = allWoRows.map((w: any) => w.work_order_no);
     let ccpEndMap: Record<string, string> = {};
     if (woNos.length > 0) {
       const { data: ccpEvs } = await supabase
@@ -344,27 +373,17 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
         .eq("event_type", "end")
         .order("measured_at", { ascending: false });
       for (const ev of ccpEvs ?? []) {
-        if (!ccpEndMap[ev.work_order_no]) {
-          ccpEndMap[ev.work_order_no] = ev.measured_at;
-        }
+        if (!ccpEndMap[ev.work_order_no]) ccpEndMap[ev.work_order_no] = ev.measured_at;
       }
     }
-    const enriched = (data ?? []).map((w: any) => ({
+
+    const enriched = allWoRows.map((w: any) => ({
       ...w,
       ccp_end_time: ccpEndMap[w.work_order_no] ?? null,
     }));
-    // input_done_at이 있는 건은 input_done_at 날짜 기준, null인 건은 updated_at 날짜 기준으로 필터
-    const filtered = enriched.filter((w: any) => {
-      if (w.input_done_at) {
-        const doneDateKst = new Date(new Date(w.input_done_at).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
-        const doneDate = `${doneDateKst.getFullYear()}-${String(doneDateKst.getMonth()+1).padStart(2,"0")}-${String(doneDateKst.getDate()).padStart(2,"0")}`;
-        return doneDate === selectedDate;
-      }
-      return true; // input_done_at이 null이면 updated_at 기준으로 이미 필터됨
-    });
-    setWoList(filtered as WorkOrderItem[]);
+    setWoList(enriched as WorkOrderItem[]);
     setLoading(false);
-  }, [selectedDate]);
+  }, [rangeFrom, rangeTo]);
 
   const loadLogs = useCallback(async () => {
     const ids = woList.map((w) => w.id);
