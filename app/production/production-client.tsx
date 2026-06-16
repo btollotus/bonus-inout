@@ -2846,8 +2846,13 @@ const totalOrder = items
                                   .eq("work_type", "product")
                                   .limit(1);
                                 if (existingLog && existingLog.length > 0) {
+                                  const { data: matDataEdit } = await supabase.from("materials")
+                                    .select("id").eq("name", compoundNameEdit).maybeSingle();
                                   await supabase.from("material_usage_logs")
-                                    .update({ quantity: totalCompoundGEdit })
+                                    .update({
+                                      quantity: totalCompoundGEdit,
+                                      ...(matDataEdit?.id ? { material_id: matDataEdit.id } : {}),
+                                    })
                                     .eq("id", existingLog[0].id);
                                 }
                               }
