@@ -6,6 +6,7 @@ export const metadata: Metadata = { title: "거래내역(통합) | BONUSMATE ERP
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import { WoPrintModal, isSpecialItem } from "@/app/components/wo-print";
+import { usePinSession, PinModal } from "@/app/contexts/PinSessionContext";
 
 // ─────────────────────── Types ───────────────────────
 type PartnerRow = {
