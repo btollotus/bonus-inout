@@ -3509,14 +3509,14 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
           <table className="w-full border-collapse text-xs" style={{minWidth:520}}>
             <thead>
               <tr className="bg-slate-100">
-                <th className="border border-slate-200 py-1.5 px-2 text-slate-500 w-20">위치</th>
+              <th className="border border-slate-200 py-1.5 px-2 text-slate-500 w-24 whitespace-nowrap">위치</th>
                 {["파리","모기","링다구","초파리","나방","날파리","기타"].map(h=>(
                   <th key={h} className="border border-slate-200 py-1.5 px-1 text-slate-500">{h}</th>
                 ))}
                <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
-                <th className="border border-slate-200 py-1.5 px-2 bg-slate-100 text-slate-400 w-10 text-[10px]">지난주</th>
-                <th className="border border-slate-200 py-1.5 px-2 w-12">단계</th>
-                <th className="border border-slate-200 py-1.5 px-2 bg-lime-50 text-lime-700 w-14 text-[10px]">끈끈이교체</th>
+               <th className="border border-slate-200 py-1.5 px-2 bg-slate-100 text-slate-400 w-12 text-[10px] whitespace-nowrap">지난주</th>
+                <th className="border border-slate-200 py-1.5 px-2 w-12 whitespace-nowrap">단계</th>
+                <th className="border border-slate-200 py-1.5 px-2 bg-lime-50 text-lime-700 w-20 text-[10px] whitespace-nowrap">끈끈이교체</th>
               </tr>
             </thead>
             <tbody>
@@ -3622,8 +3622,8 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                   <th key={h} className="border border-slate-200 py-1.5 px-1 text-slate-500">{h}</th>
                 ))}
                 <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
-                <th className="border border-slate-200 py-1.5 px-2 bg-slate-100 text-slate-400 w-10 text-[10px]">지난주</th>
-                <th className="border border-slate-200 py-1.5 px-2 bg-lime-50 text-lime-700 w-14 text-[10px]">끈끈이교체</th>
+                <th className="border border-slate-200 py-1.5 px-2 bg-slate-100 text-slate-400 w-12 text-[10px] whitespace-nowrap">지난주</th>
+                <th className="border border-slate-200 py-1.5 px-2 bg-lime-50 text-lime-700 w-20 text-[10px] whitespace-nowrap">끈끈이교체</th>
               </tr>
             </thead>
             <tbody>
