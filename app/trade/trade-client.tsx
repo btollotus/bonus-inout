@@ -93,7 +93,7 @@ type UnifiedRow = {
   tax_invoice_received?: boolean | null;
   payment_completed?: boolean | null;
 };
-type EmployeeRow = { id: string; name: string | null };
+type EmployeeRow = { id: string; name: string | null; pin: string | null };
 type DeletedOrderRow = {
   deleted_at: string; original_id: string; customer_name: string;
   ship_date: string; ship_method: string | null; memo: string | null;
@@ -1051,7 +1051,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     if (!error && data) setMasterProducts(data as MasterProductRow[]);
   }
   async function loadEmployees() {
-    const { data, error } = await supabase.from("employees").select("id,name").is("resign_date", null).order("name", { ascending: true }).limit(500);
+    const { data, error } = await supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name", { ascending: true }).limit(500);
     if (!error) setEmployees((data ?? []) as EmployeeRow[]);
   }
 
