@@ -899,7 +899,7 @@ function selectWo(wo: WorkOrderItem) {
           type="date"
           className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
           value={rangeFrom}
-          max={rangeTo}
+          max={todayKST()}
           onChange={(e) => { setRangeFrom(e.target.value); setSelectedWoId(null); setFormData(null); setRangeLogs({}); }}
         />
         <span className="text-slate-400">~</span>
@@ -938,7 +938,8 @@ function selectWo(wo: WorkOrderItem) {
             win.focus();
             setTimeout(() => { win.print(); }, 500);
           }}
-        >🖨️ 오늘 인쇄</button>
+          >🖨️ 목록 인쇄</button>
+
         {(rangeFrom !== todayKST() || rangeTo !== todayKST()) && (
           <>
             <button
@@ -1015,7 +1016,7 @@ function selectWo(wo: WorkOrderItem) {
                 <div className="mt-1 flex items-center gap-3 text-xs">
                   <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5">
                   <span className="text-slate-400">생산완료</span>
-                  <span className="font-semibold text-slate-700 tabular-nums">{wo.ccp_end_time ? toKstTime(wo.ccp_end_time) : toKstTime(wo.updated_at)}</span> 
+                  <span className="font-semibold text-slate-700 tabular-nums">{wo.ccp_end_time ? toKstTime(wo.ccp_end_time) : wo.production_done_at ? toKstTime(wo.production_done_at) : ""}</span>
                   </span>
                   {hasLog && log?.start_time && (
                     <span className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-0.5">
