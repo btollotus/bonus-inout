@@ -729,7 +729,8 @@ function selectWo(wo: WorkOrderItem) {
           try {
             const woNo = (woData as any).work_order_no ?? "";
             const woDateMatch = woNo.match(/WO-(\d{8})-/);
-            const dateStr = woDateMatch ? woDateMatch[1] : selectedDate.replace(/-/g, "");
+            const dateStr = woDateMatch ? woDateMatch[1] : happenedDate.replace(/-/g, "");
+
             const sanitize = (s: string) => (s ?? "").replace(/[*×]/g, "x").replace(/[\\/:?"<>|]/g, "").replace(/\s+/g, "_");
             const fileName = [
               dateStr,
