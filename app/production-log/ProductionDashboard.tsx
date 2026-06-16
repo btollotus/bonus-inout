@@ -366,6 +366,43 @@ export function ProductionDashboard({
       newCards.push({ key: "storage_temp", label: "냉장·냉동·온장고", icon: "❄️", tab: "storage_temp", status: "warn", message: "조회 오류" });
     }
 
+    // ── 9-1. 완제품 소비기한 임박 (재고대장 LOT 기준, D+1~D+90, 재고>0) ──
+    try {
+      const { data: stockRows, error: stockErr } = await supabase
+        .rpc("rpc_daily_stock_report", { p_day: today });
+      if (stockErr) throw new Error(stockErr.message);
+
+      const limitDate = new Date(today + "T00:00:00+09:00");
+      limitDate.setDate(limitDate.getDate() + 90);
+      const limitStr = limitDate.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+
+      const imminentLots = ((stockRows ?? []) as any[]).filter((r) => {
+        const stock = Number(r.today_stock_ea ?? 0);
+        const exp = r.expiry_date as string | null;
+        if (stock <= 0 || !exp) return false;
+        return exp > today && exp <= limitStr;
+      });
+
+      imminentLots.sort((a: any, b: any) => (a.expiry_date ?? "").localeCompare(b.expiry_date ?? ""));
+
+      newCards.push({
+        key: "product_expiry",
+        label: "완제품 소비기한",
+        icon: "📦",
+        status: imminentLots.length > 0 ? "warn" : "ok",
+        message: imminentLots.length > 0 ? `${imminentLots.length}개 LOT 임박 (90일 이내)` : "임박 LOT 없음",
+        detail: imminentLots.map((r: any) => {
+          const daysLeft = Math.ceil(
+            (new Date(r.expiry_date + "T00:00:00+09:00").getTime() - new Date(today + "T00:00:00+09:00").getTime())
+            / (1000 * 60 * 60 * 24)
+          );
+          return `D-${daysLeft} (${r.expiry_date}) — ${r.product_name} · ${Number(r.today_stock_ea ?? 0).toLocaleString()}EA`;
+        }),
+      });
+    } catch {
+      newCards.push({ key: "product_expiry", label: "완제품 소비기한", icon: "📦", status: "warn", message: "조회 오류" });
+    }
+
     // ── 10. 소비기한 임박 (30일 이내) ──
     try {
       const thirtyDaysLater = new Date(today + "T00:00:00+09:00");
