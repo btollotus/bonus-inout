@@ -28,6 +28,7 @@ type QuoteRequestRow = {
   customer_name: string;
   request_type: string;
   product_type: string | null;
+  nickname: string | null;
   color_type: string | null;
   width_mm: number | null;
   height_mm: number | null;
