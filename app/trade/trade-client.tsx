@@ -653,6 +653,9 @@ function ShipBlock({ s1, setS1, s2, setS2, two, setTwo, prefix, inpClass }: {
 export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const isSubAdmin = role === "SUBADMIN";
   const supabase = useMemo(() => createClient(), []);
+  const { session: pinSession, isValid: isPinValid, login: pinLogin } = usePinSession();
+  const [showDeletePinModal, setShowDeletePinModal] = useState(false);
+  const [deletePinTargetRow, setDeletePinTargetRow] = useState<UnifiedRow | null>(null);
 
  
   const [msg, setMsg] = useState<string | null>(null);
