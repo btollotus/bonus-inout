@@ -1436,9 +1436,9 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
       const name = l.name.trim(), qty = toInt(l.qty), unit = toIntSigned(l.unit), weight_g = toNum(l.weight_g), food_type = (l.food_type || "").trim();
       const pack_ea = inferPackEaFromName(name), unit_type = pack_ea > 1 ? "BOX" : "EA", actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
       const r = calcLineAmounts(qty, unit, l.total_incl_vat);
-      return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total, is_sample: !!l.is_sample, stock_out_lots: l.stock_out_lots };
+      return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total, is_sample: !!l.is_sample, stock_out_lots: l.stock_out_lots, logo_spec: (l.logo_spec || "").trim() };
     }).filter((l) => l.name && l.qty > 0 && (l.is_sample || (l.total_amount ?? 0) !== 0));
-    const zeroQtyLine = lines.find((l) => l.name.trim() && toInt(l.qty) <= 0); 
+    const zeroQtyLine = lines.find((l) => l.name.trim() && toInt(l.qty) <= 0);
     if (zeroQtyLine) return setMsg(`"${zeroQtyLine.name.trim()}" 품목의 수량을 입력하세요. (0 또는 빈칸 불가)`);
     
     const noAmountLine = lines.find((l) => !l.is_sample && l.name.trim() && toInt(l.qty) > 0 && calcLineAmounts(toInt(l.qty), toIntSigned(l.unit), l.total_incl_vat).total === 0);
@@ -1524,7 +1524,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
             if (ibErr) throw new Error("제품 바코드 생성 실패: " + ibErr.message);
             itemBarcodeNo = itemBarcode as string;
           }
-          woItemsPayload.push({ work_order_id: woId, delivery_date: shipDate, sub_items: [{ name: l.name, qty: l.qty }], order_qty: l.qty, barcode_no: itemBarcodeNo, unit_weight: l.weight_g && Number(l.weight_g) > 0 ? Number(l.weight_g) : null });
+          woItemsPayload.push({ work_order_id: woId, delivery_date: shipDate, sub_items: [{ name: l.name, qty: l.qty }], order_qty: l.qty, barcode_no: itemBarcodeNo, unit_weight: l.weight_g && Number(l.weight_g) > 0 ? Number(l.weight_g) : null, logo_spec: l.logo_spec || null });
         }
         const { data: createdWoItems, error: wiErr } = await supabase.from("work_order_items").insert(woItemsPayload).select("id,barcode_no,sub_items");
         if (wiErr) throw new Error("작업지시서 항목 생성 실패: " + wiErr.message);
@@ -2155,7 +2155,7 @@ if (woSubNameVal) {
         const name = (l.name || "").trim(), qty = toInt(l.qty), unit = toIntSigned(l.unit), weight_g = toNum(l.weight_g), food_type = (l.food_type || "").trim();
         const pack_ea = inferPackEaFromName(name), unit_type = pack_ea > 1 ? "BOX" : "EA", actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
         const r = calcLineAmounts(qty, unit, l.total_incl_vat);
-        return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total, is_sample: !!l.is_sample, stock_out_lots: l.stock_out_lots };
+        return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total, is_sample: !!l.is_sample, stock_out_lots: l.stock_out_lots, logo_spec: (l.logo_spec || "").trim() };
       }).filter((l) => l.name && l.qty > 0 && (l.is_sample || (l.total_amount ?? 0) !== 0));
       if (cleanLines.length === 0) return setMsg("제품명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
       const { error } = await supabase.from("orders").update({ ship_date: eShipDate, ship_method: eShipMethod, memo: JSON.stringify({ title: eOrderTitle.trim() || null, orderer_name: eOrdererName.trim() || null }), supply_amount: editOrderTotals.supply, vat_amount: editOrderTotals.vat, total_amount: editOrderTotals.total }).eq("id", editRow.rawId);
@@ -2197,7 +2197,8 @@ if (woSubNameVal) {
             if (!upErr) newPaths.push(path);
           }
           const finalPaths = [...existingPaths, ...newPaths];
-          await supabase.from("work_order_items").update({ images: finalPaths }).eq("id", itemId);
+          const matchedELine = eLines[idx];
+          await supabase.from("work_order_items").update({ images: finalPaths, logo_spec: matchedELine?.logo_spec || null }).eq("id", itemId);
         }
       }
       {
