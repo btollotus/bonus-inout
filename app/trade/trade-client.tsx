@@ -2255,7 +2255,7 @@ if (woSubNameVal) {
 
   async function deleteTradeRow(r: UnifiedRow, _pinName: string) {
     if (r.kind === "ORDER") {
-      const { data: linkedWos } = await supabase.from("work_orders").select("id").eq("linked_order_id", r.rawId);
+      const { data: linkedWos } = await supabase.from("work_orders").select("id, work_order_no").eq("linked_order_id", r.rawId);
       await supabase.from("orders").update({ work_order_item_id: null }).eq("id", r.rawId);
       if (linkedWos && linkedWos.length > 0) {
         const woIds = linkedWos.map((w) => w.id);
@@ -2266,6 +2266,11 @@ if (woSubNameVal) {
           const tempLotIds = tempLots.map((l) => l.id);
           await supabase.from("movements").delete().in("lot_id", tempLotIds);
           await supabase.from("lots").delete().in("id", tempLotIds);
+        }
+        for (const wo of linkedWos) {
+          if (wo.work_order_no) {
+            await supabase.from("movements").delete().ilike("note", `거래내역 OUT - ${wo.work_order_no} - %`);
+          }
         }
         await supabase.from("work_orders").delete().in("id", woIds);
       }
