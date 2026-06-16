@@ -15,6 +15,7 @@ export type WoPrintItem = {
   expiry_date?: string | null;
   note?: string | null;
   images?: string[] | null;
+  logo_spec?: string | null;
 };
 
 // WoPrintModal/WoPrintContent이 필요로 하는 WorkOrder 최소 타입
@@ -892,7 +893,8 @@ export function WoPrintContent({
               {(() => {
                 const itemSignedUrls = signedItemImagesMap?.[item.id] ?? [];
                 if (itemSignedUrls.length === 0) return null;
-                const logoSize = parseLogoSize(wo.logo_spec);
+                const effectiveLogoSpec = item.logo_spec || wo.logo_spec;
+                const logoSize = parseLogoSize(effectiveLogoSpec);
                 return (
                   <div
                     style={{
@@ -928,7 +930,7 @@ export function WoPrintContent({
                               position: "relative",
                             }}
                           >
-                            <img
+                          <img
                               src={url}
                               alt={`이미지${imgIdx + 1}`}
                               style={{
@@ -943,7 +945,7 @@ export function WoPrintContent({
                               }}
                             />
                           </div>
-                          {wo.logo_spec ? (
+                          {effectiveLogoSpec ? (
                             <div
                               style={{
                                 fontSize: "7pt",
@@ -951,9 +953,9 @@ export function WoPrintContent({
                                 marginTop: "2px",
                               }}
                             >
-                              {wo.logo_spec}
+                              {effectiveLogoSpec}
                             </div>
-                          ) : null}
+                          ) : null} 
                         </div>
                       ))
                     )}
