@@ -399,8 +399,8 @@ if (loggedIds.length > 0) {
     setLogMap(map);
   }, [woList]);
 
-  async function loadRangeLogs() {
-    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return;
+  async function loadRangeLogs(): Promise<Record<string, MetalLog[]>> {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return {};
     setRangeLoading(true);
     const { data } = await supabase
       .from("ccp_metal_logs")
@@ -410,7 +410,7 @@ if (loggedIds.length > 0) {
       .order("log_date", { ascending: true })
       .order("start_time", { ascending: true });
     setRangeLoading(false);
-    if (!data) return;
+    if (!data) return {};
     const grouped: Record<string, MetalLog[]> = {};
     for (const row of data) {
       const d = row.log_date as string;
@@ -418,6 +418,7 @@ if (loggedIds.length > 0) {
       grouped[d].push(row as MetalLog);
     }
     setRangeLogs(grouped);
+    return grouped;
   }
 
   useEffect(() => {
@@ -911,7 +912,32 @@ function selectWo(wo: WorkOrderItem) {
         <button className={btn} onClick={() => { loadWoList(); loadLogs(); }}>🔄 새로고침</button>
         <button
           className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
-          onClick={async () => { await loadRangeLogs(); printRange(); }}
+          onClick={async () => {
+            const logs = await loadRangeLogs();
+            const dates = Object.keys(logs).sort();
+            if (dates.length === 0) return showToast("조회된 기록이 없습니다.", "error");
+            const content = document.getElementById("ccp1p-range-print-inner");
+            if (!content) return;
+            const printTitle = `CCP-1P_금속검출_${rangeFrom}_${rangeTo}`;
+            const win = window.open("", "_blank");
+            if (!win) return;
+            win.document.write(`<!DOCTYPE html><html><head>
+              <meta charset="utf-8">
+              <title>${printTitle}</title>
+              <style>
+                @page { size: A4 landscape; margin: 8mm 10mm; }
+                body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 8.5pt; color: #000; }
+                * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                table { border-collapse: collapse; }
+                img { max-width: none; }
+                .page-block { page-break-after: always; }
+                .page-block:last-child { page-break-after: avoid; }
+              </style>
+            </head><body>${content.innerHTML}</body></html>`);
+            win.document.close();
+            win.focus();
+            setTimeout(() => { win.print(); }, 500);
+          }}
         >🖨️ 기간 인쇄</button>
         <button
           className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
