@@ -2088,15 +2088,12 @@ if (woSubNameVal) {
         }
         // 품목별 이미지 로드 (eLines 이름 기준 매핑)
         const woItems: any[] = (wo as any).work_order_items ?? [];
-        const visibleWoItems = woItems.filter((wi: any) => {
-          return !isSpecialItem(wi.sub_items?.[0]?.name ?? "");
-        });
-        // woItem id를 eLines 이름 순서로 매핑
+        // woItem id를 eLines 이름 순서로 매핑 (전체 품목 기준 — 인쇄제판/아이스박스/택배비 포함)
         const eLineNames = r.order_lines?.length
           ? r.order_lines.map((l: any) => String(l.name ?? ""))
           : [];
         const orderedItemIds: string[] = eLineNames.map((lineName: string) => {
-          const matched = visibleWoItems.find((wi: any) =>
+          const matched = woItems.find((wi: any) =>
             (wi.sub_items?.[0]?.name ?? "") === lineName
           );
           return matched?.id ?? "";
@@ -2105,7 +2102,14 @@ if (woSubNameVal) {
 
         const eLogoSpecByIndex: Record<number, string> = {};
         eLineNames.forEach((lineName: string, idx: number) => {
-          const matched = visibleWoItems.find((wi: any) =>
+          const matched = woItems.find((wi: any) =>
+            (wi.sub_items?.[0]?.name ?? "") === lineName
+          );
+          if (matched?.logo_spec) eLogoSpecByIndex[idx] = String(matched.logo_spec);
+        });
+        if (Object.keys(eLogoSpecByIndex).length > 0) {
+          setELines((prev) => prev.map((l, i) => ({ ...l, logo_spec: eLogoSpecByIndex[i] ?? l.logo_spec })));
+        } =>
             (wi.sub_items?.[0]?.name ?? "") === lineName
           ) ?? visibleWoItems[idx];
           if (matched?.logo_spec) eLogoSpecByIndex[idx] = String(matched.logo_spec);
@@ -2116,9 +2120,9 @@ if (woSubNameVal) {
         const newExistingMap: Record<number, string[]> = {};
         for (let idx = 0; idx < eLineNames.length; idx++) {
           const lineName = eLineNames[idx];
-          const matchedItem = visibleWoItems.find((wi: any) =>
+          const matchedItem = woItems.find((wi: any) =>
             (wi.sub_items?.[0]?.name ?? "") === lineName
-          ) ?? visibleWoItems[idx];
+          );
 
           const rawItemImages: string[] = matchedItem?.images ?? [];
           if (rawItemImages.length === 0) continue;
