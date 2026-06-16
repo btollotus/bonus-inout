@@ -45,10 +45,11 @@ export function ProductionDashboard({
   userId: string | null;
   onTabChange: (tab: string) => void;
 }) {
-    const [cards, setCards] = useState<DashCard[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<string>("");
-    const [selectedDate, setSelectedDate] = useState<string>(todayKST());
+  const [cards, setCards] = useState<DashCard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<string>("");
+  const [selectedDate, setSelectedDate] = useState<string>(todayKST());
+  const [expandedCardKey, setExpandedCardKey] = useState<string | null>(null);
   
     const today = selectedDate;
 
@@ -543,35 +544,48 @@ export function ProductionDashboard({
             const s = STATUS_STYLE[card.status];
             return (
               <button
-                key={card.key}
-                className={`rounded-2xl border ${s.border} ${s.bg} p-4 text-left transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-95`}
-                onClick={() => card.tab && onTabChange(card.tab)}
-              >
-                <div className="flex items-start justify-between gap-1 mb-2">
-                  <span className="text-lg">{card.icon}</span>
-                  <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${s.badge}`}>
-                    {STATUS_LABEL[card.status]}
-                  </span>
+              key={card.key}
+              className={`rounded-2xl border ${s.border} ${s.bg} p-4 text-left transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-95`}
+              onClick={() => {
+                if (card.key === "product_expiry") {
+                  setExpandedCardKey((prev) => (prev === card.key ? null : card.key));
+                  return;
+                }
+                card.tab && onTabChange(card.tab);
+              }}
+            >
+              <div className="flex items-start justify-between gap-1 mb-2">
+                <span className="text-lg">{card.icon}</span>
+                <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${s.badge}`}>
+                  {STATUS_LABEL[card.status]}
+                </span>
+              </div>
+              <div className="text-xs font-semibold text-slate-600 mb-1">{card.label}</div>
+              <div className={`text-sm font-bold ${
+                card.status === "error" ? "text-red-700"
+                : card.status === "warn" ? "text-amber-700"
+                : "text-green-700"
+              }`}>
+                {card.message}
+              </div>
+              {(card.detail ?? []).length > 0 && (
+                <div className="mt-2 space-y-0.5">
+                  {(card.key === "product_expiry" && expandedCardKey === card.key
+                    ? card.detail!
+                    : card.detail!.slice(0, 3)
+                  ).map((d, i) => (
+                    <div key={i} className="text-[10px] text-slate-500 truncate">{d}</div>
+                  ))}
+                  {card.detail!.length > 3 && (
+                    <div className="text-[10px] text-slate-400">
+                      {card.key === "product_expiry"
+                        ? (expandedCardKey === card.key ? "접기 ▲" : `+${card.detail!.length - 3}건 더보기 ▼`)
+                        : `+${card.detail!.length - 3}건 더보기`}
+                    </div>
+                  )}
                 </div>
-                <div className="text-xs font-semibold text-slate-600 mb-1">{card.label}</div>
-                <div className={`text-sm font-bold ${
-                  card.status === "error" ? "text-red-700"
-                  : card.status === "warn" ? "text-amber-700"
-                  : "text-green-700"
-                }`}>
-                  {card.message}
-                </div>
-                {(card.detail ?? []).length > 0 && (
-                  <div className="mt-2 space-y-0.5">
-                    {card.detail!.slice(0, 3).map((d, i) => (
-                      <div key={i} className="text-[10px] text-slate-500 truncate">{d}</div>
-                    ))}
-                    {card.detail!.length > 3 && (
-                      <div className="text-[10px] text-slate-400">+{card.detail!.length - 3}건 더보기</div>
-                    )}
-                  </div>
-                )}
-              </button>
+              )}
+            </button> 
             );
           })}
         </div>
