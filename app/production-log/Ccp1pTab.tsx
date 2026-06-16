@@ -19,7 +19,7 @@ type WorkOrderItem = {
   id: string;
   product_name: string;
   client_name: string;
-  updated_at: string;
+  production_done_at: string | null;
   input_done_at?: string | null;
   ccp_end_time?: string | null;
 };
