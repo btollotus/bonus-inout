@@ -851,9 +851,12 @@ function selectWo(wo: WorkOrderItem) {
 
   // ── 인쇄용 날짜 포맷 ──
   const printDate = (() => {
-    const d = new Date(selectedDate + "T00:00:00+09:00");
-    const days = ["일","월","화","수","목","금","토"];
-    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+    if (rangeFrom === rangeTo) {
+      const d = new Date(rangeFrom + "T00:00:00+09:00");
+      const days = ["일","월","화","수","목","금","토"];
+      return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+    }
+    return `${rangeFrom} ~ ${rangeTo}`;
   })();
 
   // ── 빈 행 (테이블 여백용, 최소 3행 보장) ──
