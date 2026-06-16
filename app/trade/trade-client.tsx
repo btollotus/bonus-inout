@@ -2242,17 +2242,33 @@ if (woSubNameVal) {
     if (stockWarningMsg) setMsg(stockWarningMsg);
   }
 
-  async function deleteTradeRow(r: UnifiedRow) {
+  function handleDeleteClick(r: UnifiedRow) {
     if (!window.confirm("정말 삭제하시겠습니까?\n삭제하면 복구할 수 없습니다.")) return;
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    setDeletePinTargetRow(r);
+    if (isPinValid() && pinSession) {
+      deleteTradeRow(r, pinSession.employeeName);
+    } else {
+      setShowDeletePinModal(true);
+    }
+  }
+
+  async function deleteTradeRow(r: UnifiedRow, _pinName: string) {
     if (r.kind === "ORDER") {
       const { data: linkedWos } = await supabase.from("work_orders").select("id").eq("linked_order_id", r.rawId);
       await supabase.from("orders").update({ work_order_item_id: null }).eq("id", r.rawId);
       if (linkedWos && linkedWos.length > 0) {
-        for (const wo of linkedWos) await supabase.from("work_order_items").delete().eq("work_order_id", wo.id);
         const woIds = linkedWos.map((w) => w.id);
+        for (const wo of linkedWos) await supabase.from("work_order_items").delete().eq("work_order_id", wo.id);
+        // ── 임시 lot(재고부족 자동생성) + movements 정리 ──
+        const { data: tempLots } = await supabase.from("lots").select("id").in("work_order_id", woIds).eq("is_temp", true);
+        if (tempLots && tempLots.length > 0) {
+          const tempLotIds = tempLots.map((l) => l.id);
+          await supabase.from("movements").delete().in("lot_id", tempLotIds);
+          await supabase.from("lots").delete().in("id", tempLotIds);
+        }
         await supabase.from("work_orders").delete().in("id", woIds);
       }
+      await supabase.from("movements").delete().ilike("note", `재고부족 임시출고 - ${r.rawId} - %`);
       await supabase.from("order_shipments").delete().eq("order_id", r.rawId);
       await supabase.from("order_lines").delete().eq("order_id", r.rawId);
       const { error } = await supabase.from("orders").delete().eq("id", r.rawId);
