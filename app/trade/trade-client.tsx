@@ -2109,13 +2109,6 @@ if (woSubNameVal) {
         });
         if (Object.keys(eLogoSpecByIndex).length > 0) {
           setELines((prev) => prev.map((l, i) => ({ ...l, logo_spec: eLogoSpecByIndex[i] ?? l.logo_spec })));
-        } =>
-            (wi.sub_items?.[0]?.name ?? "") === lineName
-          ) ?? visibleWoItems[idx];
-          if (matched?.logo_spec) eLogoSpecByIndex[idx] = String(matched.logo_spec);
-        });
-        if (Object.keys(eLogoSpecByIndex).length > 0) {
-          setELines((prev) => prev.map((l, i) => ({ ...l, logo_spec: eLogoSpecByIndex[i] ?? l.logo_spec })));
         }
         const newExistingMap: Record<number, string[]> = {};
         for (let idx = 0; idx < eLineNames.length; idx++) {
