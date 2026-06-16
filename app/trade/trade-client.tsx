@@ -344,6 +344,7 @@ async function createTempLotForShortage(
     mold_count: prevWo?.mold_count ?? null,
     note: prevWo?.note ?? null,
     status: "생산중", variant_id: variantId, images: [],
+    linked_order_id: orderId,
   }).select("id").single();
   if (woErr || !createdWo) return { workOrderNo: null, error: `"${lineName}" 임시 작업지시서 생성 실패: ${woErr?.message ?? ""}` };
 
