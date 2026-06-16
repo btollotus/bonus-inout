@@ -3527,7 +3527,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                 return (
                   <React.Fragment key={loc}>
                     <tr>
-                      <td className="border border-slate-200 py-1 px-2 bg-slate-50 text-[11px] font-medium text-slate-600">{loc}</td>
+                    <td className="border border-slate-200 py-1 px-2 bg-slate-50 text-[11px] font-medium text-slate-600 whitespace-nowrap">{loc}</td>
                       {flyFields.map(f=>(
                         <td key={f as string} className="border border-slate-200 p-0.5">
                           <PestNumCell value={r[f] as number} onChange={v=>updateFlying(loc,f,v)} />
@@ -3631,7 +3631,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                 const r=walking[trap];
                 return (
                   <tr key={trap}>
-                    <td className="border border-slate-200 py-1 px-2 bg-slate-50 text-[11px] font-medium text-slate-600">{TRAP_LABELS_PEST[trap]}</td>
+                    <td className="border border-slate-200 py-1 px-2 bg-slate-50 text-[11px] font-medium text-slate-600 whitespace-nowrap">{TRAP_LABELS_PEST[trap]}</td>
                     {walkFields.map(f=>(
                       <td key={f as string} className="border border-slate-200 p-0.5">
                         <PestNumCell value={r[f] as number} onChange={v=>updateWalking(trap,f,v)} />
