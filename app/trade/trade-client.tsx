@@ -1944,42 +1944,33 @@ if (copyPartnerId) {
           // 품목별 기존 바코드 저장 (재주문 시 재사용) - 품목명을 key로 사용
           const woItemsAll: any[] = (wo as any).work_order_items ?? [];
           const barcodeMap: Record<string, string> = {};
-          const weightByIndex: Record<number, number> = {};
-          const logoSpecByIndex: Record<number, string> = {};
-          const visibleWoItemsForBarcode = woItemsAll.filter((wi: any) => {
-            const n = (wi.sub_items?.[0]?.name ?? "").trim();
-            return !n.startsWith("성형틀") && !n.startsWith("인쇄제판");
-          });
-          visibleWoItemsForBarcode.forEach((wi: any, idx: number) => {
-            if (wi.unit_weight) weightByIndex[idx] = Number(wi.unit_weight);
-            if (wi.logo_spec) logoSpecByIndex[idx] = String(wi.logo_spec);
+          woItemsAll.forEach((wi: any) => {
             const itemName = wi.sub_items?.[0]?.name ?? "";
             if (wi.barcode_no && itemName) barcodeMap[itemName] = wi.barcode_no;
           });
-
-
           setWo_itemExistingBarcodes(barcodeMap);
 
-          if (Object.keys(weightByIndex).length > 0 || Object.keys(logoSpecByIndex).length > 0) {
-            setLines((prev) => prev.map((l, i) => ({
+          // lines(화면에 보이는 전체 줄)와 woItemsAll을 품목명 기준으로 매칭 — 인덱스 어긋남 방지
+          setLines((prev) => prev.map((l) => {
+            const matched = woItemsAll.find((wi: any) => (wi.sub_items?.[0]?.name ?? "") === l.name.trim());
+            if (!matched) return l;
+            return {
               ...l,
-              weight_g: weightByIndex[i] ?? l.weight_g,
-              logo_spec: logoSpecByIndex[i] ?? l.logo_spec,
-            })));
-          }
+              weight_g: matched.unit_weight != null ? Number(matched.unit_weight) : l.weight_g,
+              logo_spec: matched.logo_spec ?? l.logo_spec,
+            };
+          }));
 
           // 품목별 이미지 복사 (lines 이름 기준 매핑)
           const woItems: any[] = (wo as any).work_order_items ?? [];
-        // 수정
+       // 수정
 const copiedLines = r.order_lines?.length
 ? r.order_lines.map((l: any) => String(l.name ?? ""))
 : [];
 const newExistingMap: Record<number, string[]> = {};
-const visibleWoItems = woItems.filter((wi: any) => {
-  return !isSpecialItem(wi.sub_items?.[0]?.name ?? "");
-});
 for (let lineIdx = 0; lineIdx < copiedLines.length; lineIdx++) {
-const matchedItem = visibleWoItems[lineIdx];
+const lineName = copiedLines[lineIdx];
+const matchedItem = woItems.find((wi: any) => (wi.sub_items?.[0]?.name ?? "") === lineName);
             const rawImages: string[] = matchedItem?.images ?? [];
             if (rawImages.length === 0) continue;
             const paths = rawImages.map((v: string) => {
@@ -2000,7 +1991,8 @@ const matchedItem = visibleWoItems[lineIdx];
             // raw 경로 별도 저장 (저장 시 URL 역변환 없이 직접 사용)
             const newPathsMap: Record<number, string[]> = {};
             for (let lineIdx = 0; lineIdx < copiedLines.length; lineIdx++) {
-              const matchedItem = visibleWoItems[lineIdx];
+              const lineName = copiedLines[lineIdx];
+              const matchedItem = woItems.find((wi: any) => (wi.sub_items?.[0]?.name ?? "") === lineName);
               const rawImages: string[] = matchedItem?.images ?? [];
               if (rawImages.length > 0) newPathsMap[lineIdx] = rawImages;
             }
