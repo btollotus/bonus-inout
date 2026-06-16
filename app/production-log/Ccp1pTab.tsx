@@ -287,15 +287,14 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
   const todayKST = () =>
     new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 10);
 
-  const [selectedDate, setSelectedDate] = useState<string>(todayKST());
-
   const [woList, setWoList] = useState<WorkOrderItem[]>([]);
+
   const [logMap, setLogMap] = useState<Record<string, MetalLog>>({});
   const [selectedWoId, setSelectedWoId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Omit<MetalLog, "id"> | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [rangePanelOpen, setRangePanelOpen] = useState(false);
+ 
   const [showWorkerPin, setShowWorkerPin] = useState(false);
   const [confirmedWorker, setConfirmedWorker] = useState<string | null>(null);
   const [rangeFrom, setRangeFrom] = useState<string>(todayKST());
