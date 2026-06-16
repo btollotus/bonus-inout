@@ -2270,6 +2270,7 @@ if (woSubNameVal) {
         await supabase.from("work_orders").delete().in("id", woIds);
       }
       await supabase.from("movements").delete().ilike("note", `재고부족 임시출고 - ${r.rawId} - %`);
+      await supabase.from("movements").delete().ilike("note", `거래내역 OUT - ${r.rawId} - %`);
       await supabase.from("order_shipments").delete().eq("order_id", r.rawId);
       await supabase.from("order_lines").delete().eq("order_id", r.rawId);
       const { error } = await supabase.from("orders").delete().eq("id", r.rawId);
