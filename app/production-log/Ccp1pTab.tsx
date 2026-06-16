@@ -329,7 +329,7 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
       .select("work_order_id, log_date")
       .gte("log_date", rangeFrom)
       .lte("log_date", rangeTo);
-    const loggedWoIds = new Set((logRows ?? []).map((r: any) => r.work_order_id));
+      const loggedWoIds = new Set((logRows ?? []).map((r: any) => r.work_order_id).filter((id: any) => !!id));
 
     // ── 미기록 건: production_done_at 기준 WO 조회 ──
     const { data: woData } = await supabase
