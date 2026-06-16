@@ -3312,6 +3312,9 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
   const [ratActionNote, setRatActionNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedDate, setSavedDate] = useState<string|null>(null);
+  const [prevFlying, setPrevFlying] = useState<Record<string, number>>({});
+  const [prevWalking, setPrevWalking] = useState<Record<string, number>>({});
+  const [prevDate, setPrevDate] = useState<string|null>(null);
   const [stickyFlying, setStickyFlying] = useState<Record<string, { replaced: boolean; note: string }>>(() => {
     const m: Record<string, { replaced: boolean; note: string }> = {};
     for (const loc of LOCATIONS_PEST) m[loc] = { replaced: false, note: "" };
@@ -3372,6 +3375,29 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
         }
         setStickyFlying(fMap);
         setStickyWalking(wMap);
+      });
+  }, [today]);
+
+  useEffect(() => {
+    // 오늘 이전 가장 최근 기록 날짜 조회 (참고용 — 신규 발견 수 직접 입력은 그대로)
+    supabase.from("pest_flying_records").select("record_date")
+      .lt("record_date", today).order("record_date", { ascending: false }).limit(1)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return;
+        const lastDate = data[0].record_date;
+        setPrevDate(lastDate);
+        supabase.from("pest_flying_records").select("location,total").eq("record_date", lastDate)
+          .then(({ data: fRows }) => {
+            const m: Record<string, number> = {};
+            (fRows ?? []).forEach((r: any) => { m[r.location] = r.total ?? 0; });
+            setPrevFlying(m);
+          });
+        supabase.from("pest_walking_records").select("trap_no,total").eq("record_date", lastDate)
+          .then(({ data: wRows }) => {
+            const m: Record<string, number> = {};
+            (wRows ?? []).forEach((r: any) => { m[r.trap_no] = r.total ?? 0; });
+            setPrevWalking(m);
+          });
       });
   }, [today]);
 
@@ -3473,6 +3499,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
       <div className="flex items-center justify-between">
         <div className="font-semibold text-sm text-green-700">🪲 방충방서 점검 기록</div>
         {savedDate && <span className="rounded-full border border-green-300 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">✅ {savedDate} 저장됨</span>}
+        {prevDate && <span className="text-[11px] text-slate-400">(지난주 컬럼: {prevDate} 기록)</span>}
       </div>
 
       {/* 비래해충 */}
@@ -3486,7 +3513,8 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                 {["파리","모기","링다구","초파리","나방","날파리","기타"].map(h=>(
                   <th key={h} className="border border-slate-200 py-1.5 px-1 text-slate-500">{h}</th>
                 ))}
-                <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
+               <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
+                <th className="border border-slate-200 py-1.5 px-2 bg-slate-100 text-slate-400 w-10 text-[10px]">지난주</th>
                 <th className="border border-slate-200 py-1.5 px-2 w-12">단계</th>
                 <th className="border border-slate-200 py-1.5 px-2 bg-lime-50 text-lime-700 w-14 text-[10px]">끈끈이교체</th>
               </tr>
@@ -3506,6 +3534,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                         </td>
                       ))}
                       <td className={`border border-slate-200 py-1 px-2 text-center font-semibold ${stepCls}`}>{r.total>0?r.total:""}</td>
+                      <td className="border border-slate-200 py-1 px-2 text-center text-[11px] text-slate-400">{prevFlying[loc] ?? "—"}</td>
                       <td className="border border-slate-200 py-1 px-2 text-center">
                         <span className={`inline-block rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${r.step===3?"bg-red-50 border-red-300 text-red-700":r.step===2?"bg-amber-50 border-amber-300 text-amber-700":"bg-green-50 border-green-300 text-green-700"}`}>{stepLabel}</span>
                       </td>
@@ -3519,7 +3548,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                     </tr>
                     {r.step>=2 && (
                      <tr>
-                     <td colSpan={11} className={`border px-3 py-1.5 ${r.step===3?"border-red-200 bg-red-50":"border-amber-200 bg-amber-50"}`}>
+                     <td colSpan={12} className={`border px-3 py-1.5 ${r.step===3?"border-red-200 bg-red-50":"border-amber-200 bg-amber-50"}`}>
                        <div className={`text-[11px] font-semibold mb-1 ${r.step===3?"text-red-600":"text-amber-700"}`}>⚠ {r.step===3?"3단계":"2단계"} — 조치사항 입력 필수</div>
                        <input className={`w-full rounded-lg border px-2 py-1 text-xs focus:outline-none ${r.step===3?"border-red-300":"border-amber-300"}`}
                          placeholder="조치사항 입력" value={r.action_note}
@@ -3593,6 +3622,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                   <th key={h} className="border border-slate-200 py-1.5 px-1 text-slate-500">{h}</th>
                 ))}
                 <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
+                <th className="border border-slate-200 py-1.5 px-2 bg-slate-100 text-slate-400 w-10 text-[10px]">지난주</th>
                 <th className="border border-slate-200 py-1.5 px-2 bg-lime-50 text-lime-700 w-14 text-[10px]">끈끈이교체</th>
               </tr>
             </thead>
@@ -3607,7 +3637,8 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                         <PestNumCell value={r[f] as number} onChange={v=>updateWalking(trap,f,v)} />
                       </td>
                     ))}
-                   <td className="border border-slate-200 py-1 px-2 text-center font-semibold bg-blue-50 text-blue-700">{r.total>0?r.total:""}</td>
+                  <td className="border border-slate-200 py-1 px-2 text-center font-semibold bg-blue-50 text-blue-700">{r.total>0?r.total:""}</td>
+                    <td className="border border-slate-200 py-1 px-2 text-center text-[11px] text-slate-400">{prevWalking[trap] ?? "—"}</td>
                     <td className="border border-slate-200 py-1 px-2 text-center bg-lime-50">
                       <input type="checkbox"
                         checked={stickyWalking[trap]?.replaced ?? false}
