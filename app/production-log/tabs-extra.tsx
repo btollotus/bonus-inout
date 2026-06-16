@@ -202,8 +202,8 @@ for (const e of filtered) {
 setSlotWoMap(slotMap);
     setLoading(false);
   }, [filterDate]); 
-  async function loadRangeData() {
-    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return;
+  async function loadRangeData(): Promise<typeof rangeData> {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return [];
     setRangeLoading(true);
 
     // 날짜 목록 생성
@@ -292,43 +292,260 @@ setSlotWoMap(slotMap);
 
     setRangeData(results);
     setRangeLoading(false);
+    return results;
   }
 
   async function printRange() {
-    if (rangeData.length === 0) return showToast("조회된 기록이 없습니다.", "error");
+    const results = await loadRangeData();
+    if (results.length === 0) return showToast("조회된 기록이 없습니다.", "error");
 
-    // 날짜별 담당자 조회
-    const allWoNos = [...new Set(rangeData.flatMap(d => d.woEvents.map((e: any) => e.work_order_no)))];
-    const assigneeMap: Record<string, string> = {};
-    if (allWoNos.length > 0) {
-      const { data } = await supabase.from("work_orders")
-        .select("work_order_no,assignee_production").in("work_order_no", allWoNos);
-      for (const row of data ?? []) {
-        if (row.assignee_production) assigneeMap[row.work_order_no] = row.assignee_production;
-      }
+    const tdS = `border:1px solid #000;padding:2px 3px;font-size:8pt;vertical-align:middle;`;
+    const thS = `border:1px solid #000;padding:2px 3px;font-size:7.5pt;font-weight:bold;text-align:center;background:#fff;vertical-align:middle;`;
+    const CHUNK_SIZE_R = 7;
+    const WO_LABEL: Record<string,string> = { start:"시작", mid_check:"중간점검", end:"종료" };
+    const dayNames = ["일","월","화","수","목","금","토"];
+
+    function toKSTTimeStr(isoStr: string): string {
+      const d = new Date(isoStr);
+      return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
     }
 
-    const content = document.getElementById("ccp1b-range-print-inner");
-    if (!content) return;
+    function signImgHtml(name: string | null): string {
+      const signMap: Record<string, string> = {
+        "조은미":"/sign-choem.png","강미라":"/sign-kangml.png",
+        "나현우":"/sign-nahw.png","나미영":"/sign-namiy.png",
+        "조대성":"/sign-chods.png","김영각":"/sign-kimyg.png","고한결":"/sign-gohg.png",
+      };
+      if (!name) return "";
+      const src = signMap[name];
+      if (src) return `<img src="${src}" style="height:20px;object-fit:contain;display:block;margin:0 auto;" alt="${name}"/><div style="font-size:6pt;">${name}</div>`;
+      return `<div style="font-size:7pt;">${name}</div>`;
+    }
+
+    function buildRangeSection(slots: WarmSlot[], label: string, dayData: typeof results[0]): string {
+      if (slots.length === 0) return "";
+
+      const getSlotMaterialType = (slotId: string) => {
+        const lastIn = [...dayData.slotEvents]
+          .filter((e: any) => e.slot_id === slotId && e.event_type === "material_in")
+          .sort((a: any, b: any) => b.measured_at.localeCompare(a.measured_at))[0];
+        return (lastIn as any)?.material_type ?? null;
+      };
+
+      const slotWoEventsDedup = (slotId: string) => {
+        const seen = new Set<string>();
+        return dayData.woEvents
+          .filter((e: any) => e.slot_id === slotId)
+          .sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at))
+          .filter((e: any) => {
+            const key = `${e.measured_at.slice(11,16)}_${e.temperature}`;
+            if (seen.has(key)) return false;
+            seen.add(key); return true;
+          });
+      };
+
+      const chunks: WarmSlot[][] = [];
+      for (let i = 0; i < slots.length; i += CHUNK_SIZE_R) chunks.push(slots.slice(i, i + CHUNK_SIZE_R));
+      if (chunks.length === 0) chunks.push([]);
+
+      const chunkMaxRows = chunks.map(chunk =>
+        Math.max(...chunk.map(s => slotWoEventsDedup(s.id).length), 3)
+      );
+      const totalRowspan = chunks.reduce((sum, _, ci) => sum + 5 + chunkMaxRows[ci], 0);
+      const colW = `calc((100% - 44px) / ${CHUNK_SIZE_R})`;
+
+      let html = `<table style="width:100%;border-collapse:collapse;margin-bottom:6px;table-layout:fixed;"><tbody>`;
+
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const chunk = chunks[ci];
+        const maxRows = chunkMaxRows[ci];
+        const empty = CHUNK_SIZE_R - chunk.length;
+
+        // 슬롯명 행
+        html += `<tr>`;
+        if (ci === 0) html += `<td rowspan="${totalRowspan}" style="${tdS}font-weight:bold;text-align:center;width:44px;font-size:8pt;writing-mode:vertical-rl;">${label}</td>`;
+        for (const s of chunk) {
+          const mt = getSlotMaterialType(s.id);
+          html += `<td style="${tdS}text-align:center;font-weight:bold;font-size:8pt;height:22px;width:${colW};">${s.slot_name}${s.purpose === "유동" ? `<span style="font-size:7pt;color:#854F0B;">(${mt})</span>` : ""}</td>`;
+        }
+        for (let i = 0; i < empty; i++) html += `<td style="${tdS}width:${colW};"></td>`;
+        html += `</tr>`;
+
+        // 원료투입 행
+        html += `<tr>`;
+        for (const s of chunk) {
+          const ev = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && !e.action_note?.includes("→"))
+            .sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at))[0];
+          html += `<td style="${tdS}text-align:center;font-size:8pt;height:22px;">${ev ? `원료투입: ${toKSTTimeStr(ev.measured_at)}` : ""}</td>`;
+        }
+        for (let i = 0; i < empty; i++) html += `<td style="${tdS}"></td>`;
+        html += `</tr>`;
+
+        // 슬롯이동 행
+        html += `<tr>`;
+        for (const s of chunk) {
+          const outEv = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→"))[0];
+          const inEv = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→"))[0];
+          const ev = outEv ?? inEv;
+          html += `<td style="${tdS}text-align:center;font-size:8pt;height:22px;">${ev ? `슬롯이동: ${toKSTTimeStr(ev.measured_at)} (${ev.action_note})` : ""}</td>`;
+        }
+        for (let i = 0; i < empty; i++) html += `<td style="${tdS}"></td>`;
+        html += `</tr>`;
+
+        // 온도기록 행
+        for (let rowIdx = 0; rowIdx < maxRows; rowIdx++) {
+          html += `<tr>`;
+          for (const s of chunk) {
+            const ev = slotWoEventsDedup(s.id)[rowIdx];
+            const isNG = ev?.is_ok === false;
+            html += `<td style="${tdS}text-align:center;font-size:8pt;color:${isNG?"red":"#000"};height:22px;">`;
+            if (ev) {
+              const bg = ev.event_type === "start" ? "#dbeafe" : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9";
+              html += `<span style="font-size:7pt;background:${bg};padding:0 3px;border-radius:2px;margin-right:2px;">${WO_LABEL[ev.event_type] ?? ev.event_type}</span>(${toKSTTimeStr(ev.measured_at)}) ${ev.temperature ?? ""}℃`;
+            }
+            html += `</td>`;
+          }
+          for (let i = 0; i < empty; i++) html += `<td style="${tdS}"></td>`;
+          html += `</tr>`;
+        }
+
+        // 빈 행
+        html += `<tr>`;
+        for (let i = 0; i < CHUNK_SIZE_R; i++) html += `<td style="${tdS}height:22px;"></td>`;
+        html += `</tr>`;
+
+        // 판정+서명 행
+        html += `<tr>`;
+        for (const s of chunk) {
+          const evs = dayData.woEvents.filter((e: any) => e.slot_id === s.id);
+          if (evs.length === 0) { html += `<td style="${tdS}height:28px;"></td>`; continue; }
+          const hasNG = evs.some((e: any) => e.is_ok === false);
+          const woNos = [...new Set(dayData.slotEvents.filter((e: any) => e.slot_id === s.id).map((e: any) => e.work_order_no).filter(Boolean))] as string[];
+          const assignees = [...new Set(woNos.map((no: string) => dayData.assigneeMap?.[no]).filter(Boolean))] as string[];
+          const assigneeName = assignees[0] ?? null;
+          html += `<td style="${tdS}text-align:center;font-size:8pt;height:28px;">`;
+          html += `<div style="margin-bottom:1px;"><span style="font-weight:bold;color:${hasNG?"red":"#000"};">판정: ${hasNG?"X":"O"}</span></div>`;
+          html += signImgHtml(assigneeName);
+          html += `</td>`;
+        }
+        for (let i = 0; i < empty; i++) html += `<td style="${tdS}height:28px;"></td>`;
+        html += `</tr>`;
+      }
+
+      html += `</tbody></table>`;
+      return html;
+    }
+
+    let bodyHtml = "";
+
+    for (let di = 0; di < results.length; di++) {
+      const dayData = results[di];
+      const isLast = di === results.length - 1;
+      const d = new Date(dayData.date + "T00:00:00+09:00");
+      const dateLabel = `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${dayNames[d.getDay()]})`;
+
+      const getSlotMaterialType = (slotId: string) => {
+        const lastIn = [...dayData.slotEvents]
+          .filter((e: any) => e.slot_id === slotId && e.event_type === "material_in")
+          .sort((a: any, b: any) => b.measured_at.localeCompare(a.measured_at))[0];
+        return (lastIn as any)?.material_type ?? null;
+      };
+      const hasActivity = (slotId: string) =>
+        dayData.woEvents.some((e: any) => e.slot_id === slotId) ||
+        dayData.slotEvents.some((e: any) => e.slot_id === slotId);
+
+      const darkActive = [
+        ...allSlots.filter(s => s.purpose === "다크컴파운드"),
+        ...allSlots.filter(s => s.purpose === "유동" && getSlotMaterialType(s.id) === "다크"),
+      ].filter(s => hasActivity(s.id));
+      const whiteActive = [
+        ...allSlots.filter(s => s.purpose === "화이트컴파운드"),
+        ...allSlots.filter(s => s.purpose === "유동" && getSlotMaterialType(s.id) === "화이트"),
+      ].filter(s => hasActivity(s.id));
+
+      const deviations = dayData.woEvents.filter((e: any) => e.is_ok === false)
+        .map((e: any) => `${toKSTTimeStr(e.measured_at)} — ${e.temperature ?? ""}°C / ${e.action_note ?? ""}`)
+        .join("  /  ") || " ";
+
+      bodyHtml += `<div style="page-break-after:${isLast?"avoid":"always"};">`;
+
+      // 제목+결재란
+      bodyHtml += `<table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
+        <tr>
+          <td rowspan="2" style="${tdS}font-size:12pt;font-weight:bold;text-align:center;padding:6px 8px;">중요관리점(CCP-1B) 모니터링일지<br/><span style="font-size:9pt;">[가열공정] 일반</span><br/><span style="font-size:8pt;">*온장고 내 보관기간 : 1개월 미만*</span></td>
+          <td rowspan="2" style="${tdS}width:28px;font-weight:bold;text-align:center;font-size:8pt;">결<br/>재<br/>란</td>
+          <td style="${tdS}width:80px;text-align:center;font-weight:bold;">작성</td>
+          <td style="${tdS}width:80px;text-align:center;font-weight:bold;">승인</td>
+        </tr>
+        <tr>
+          <td style="${tdS}text-align:center;padding:3px;"><img src="/sign-kimyg.png" style="height:30px;object-fit:contain;display:block;margin:0 auto;" alt="김영각"/><div style="font-size:7pt;margin-top:2px;">김영각</div></td>
+          <td style="${tdS}text-align:center;padding:3px;"><img src="/sign-chods.png" style="height:30px;object-fit:contain;display:block;margin:0 auto;" alt="조대성"/><div style="font-size:7pt;margin-top:2px;">조대성</div></td>
+        </tr>
+      </tbody></table>`;
+
+      // 작성일자
+      bodyHtml += `<table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
+        <tr><td style="${tdS}width:80px;font-weight:bold;white-space:nowrap;">작성일자</td><td style="${tdS}">${dateLabel}</td></tr>
+      </tbody></table>`;
+
+      // 위해요소/한계기준/주기/방법
+      bodyHtml += `<table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
+        <tr>
+          <td style="${tdS}font-weight:bold;white-space:nowrap;width:56px;">위해요소</td>
+          <td colspan="3" style="${tdS}font-size:8pt;">병원성 미생물(리스테리아모노사이토제네스, 장출혈성대장균)</td>
+          <td style="${tdS}font-weight:bold;text-align:center;width:60px;">온도</td>
+          <td style="${tdS}font-weight:bold;text-align:center;width:80px;">시간</td>
+        </tr>
+        <tr>
+          <td rowspan="2" style="${tdS}font-weight:bold;">한계기준</td>
+          <td colspan="3" style="${tdS}font-size:8pt;">준초콜릿(다크컴파운드)</td>
+          <td style="${tdS}text-align:center;">45±5℃</td>
+          <td rowspan="2" style="${tdS}text-align:center;font-size:8pt;white-space:nowrap;">4시간 이상 유지</td>
+        </tr>
+        <tr>
+          <td colspan="3" style="${tdS}font-size:8pt;">당류가공품(화이트컴파운드)</td>
+          <td style="${tdS}text-align:center;">45±5℃</td>
+        </tr>
+        <tr>
+          <td style="${tdS}font-weight:bold;">주 기</td>
+          <td colspan="5" style="${tdS}font-size:8pt;">작업시작 전, 작업 중 2시간마다, 작업종료</td>
+        </tr>
+        <tr>
+          <td style="${tdS}font-weight:bold;">방 법</td>
+          <td colspan="5" style="${tdS}font-size:8pt;">◦ 중탕온도 : 바트 품온 온도 확인 &amp;nbsp;&amp;nbsp; ◦ 가열시간 : 4시간 이상 가열</td>
+        </tr>
+      </tbody></table>`;
+
+      bodyHtml += buildRangeSection(darkActive, "준초콜릿", dayData);
+      bodyHtml += buildRangeSection(whiteActive, "당류가공품", dayData);
+
+      // 이탈 및 조치
+      bodyHtml += `<table style="width:100%;border-collapse:collapse;margin-top:4px;"><tbody>
+        <tr>
+          <td style="${tdS}font-weight:bold;font-size:8pt;width:140px;white-space:nowrap;">한계기준 이탈 및 조치내용</td>
+          <td style="${tdS}padding:4px 6px;font-size:8pt;">${deviations}</td>
+        </tr>
+      </tbody></table>`;
+
+      bodyHtml += `</div>`;
+    }
+
     const printTitle = `CCP-1B_가열공정_${rangeFrom}_${rangeTo}`;
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head>
-      <meta charset="utf-8">
-      <title>${printTitle}</title>
+      <meta charset="utf-8"><title>${printTitle}</title>
       <style>
         @page { size: A4 landscape; margin: 8mm 10mm; }
         body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 9pt; color: #000; }
         * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        table { border-collapse: collapse; page-break-inside: avoid; }
+        table { border-collapse: collapse; }
         img { max-width: none; }
-        .range-page { page-break-after: always; }
-        .range-page:last-child { page-break-after: avoid; }
       </style>
-    </head><body>${content.innerHTML}</body></html>`);
+    </head><body>${bodyHtml}</body></html>`);
     win.document.close();
     win.focus();
-    setTimeout(() => { win.print(); }, 500);
+    setTimeout(() => { win.print(); }, 300);
   }
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -526,82 +743,51 @@ async function handlePrint() {
 
   return (
     <div className="space-y-4">
-    {/* ── 기간 인쇄 패널 ── */}
-<div className={`${card} print:hidden overflow-hidden`}>
+    {/* ── 조회 기간 + 인쇄 통합 패널 ── */}
+    <div className={`${card} p-3 print:hidden flex flex-wrap items-center gap-3`}>
+        <span className="text-sm font-semibold text-slate-600">조회 기간</span>
+        <input
+          type="date"
+          className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+          value={rangeFrom}
+          max={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
+          onChange={(e) => { setRangeFrom(e.target.value); setFilterDate(e.target.value); setSelectedSlotId(null); setEditingEventId(null); setRangeData([]); }}
+        />
+        <span className="text-slate-400">~</span>
+        <input
+          type="date"
+          className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+          value={rangeTo}
+          max={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
+          onChange={(e) => { setRangeTo(e.target.value); setFilterDate(e.target.value); setSelectedSlotId(null); setEditingEventId(null); setRangeData([]); }}
+        />
+        <button className={btn} onClick={() => { loadData(); }}>🔄 새로고침</button>
         <button
-          className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          onClick={() => setRangePanelOpen((v) => !v)}
-        >
-          <span>📅 기간별 인쇄</span>
-          <span className="text-slate-400 text-xs">{rangePanelOpen ? "▲ 닫기" : "▼ 열기"}</span>
-        </button>
-        {rangePanelOpen && (
-          <div className="border-t border-slate-100 px-4 py-4 space-y-4">
-            <div className="flex flex-wrap items-end gap-4">
-              <div>
-                <div className="mb-1 text-xs text-slate-500">시작일</div>
-                <input type="date"
-                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
-                  value={rangeFrom} max={rangeTo}
-                  onChange={(e) => { setRangeFrom(e.target.value); setRangeData([]); }}
-                />
-              </div>
-              <div className="text-slate-400 pb-1.5">~</div>
-              <div>
-                <div className="mb-1 text-xs text-slate-500">종료일</div>
-                <input type="date"
-                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
-                  value={rangeTo}
-                  max={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
-                  onChange={(e) => { setRangeTo(e.target.value); setRangeData([]); }}
-                />
-              </div>
-              <button
-                className={`rounded-xl px-4 py-1.5 text-sm font-semibold text-white ${rangeLoading ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"}`}
-                disabled={rangeLoading || !rangeFrom || !rangeTo || rangeFrom > rangeTo}
-                onClick={loadRangeData}
-              >
-                {rangeLoading ? "조회 중..." : "🔍 조회"}
-              </button>
-              {rangeData.length > 0 && !rangeLoading && (
-                <button
-                  className="rounded-xl border border-slate-300 bg-slate-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-slate-800"
-                  onClick={printRange}
-                >
-                  🖨️ 인쇄
-                </button>
-              )}
-            </div>
-            {rangeData.length > 0 && !rangeLoading && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                {rangeData.map((d) => (
-                  <span key={d.date} className="mr-3">
-                    <span className="font-semibold">{d.date}</span>
-                    <span className="text-slate-400 ml-1">{d.woEvents.length}건</span>
-                  </span>
-                ))}
-              </div>
-            )}
-           {rangeData.length === 0 && !rangeLoading && (
-              <div className="text-xs text-slate-400">조회 버튼을 눌러 기간 내 기록을 불러오세요.</div>
-            )}
-          </div>
+          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
+          onClick={printRange}
+        >🖨️ 기간 인쇄</button>
+        <button
+          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
+          onClick={handlePrint}
+        >🖨️ 목록 인쇄</button>
+        {(rangeFrom !== new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }) || rangeTo !== new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })) && (
+          <>
+            <button
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium hover:bg-slate-100"
+              onClick={() => {
+                const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+                setRangeFrom(today); setRangeTo(today); setFilterDate(today);
+                setSelectedSlotId(null); setEditingEventId(null);
+              }}
+            >오늘로 돌아가기</button>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">과거 기록 조회 중</span>
+          </>
         )}
       </div>
 
-      {/* 날짜 필터 + 인쇄 */}
-      <div className={`${card} p-4`}>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div>
-            <div className="mb-1 text-xs text-slate-500">조회 날짜</div>
-            <input type="date" className={inp} style={{ width: 160 }} value={filterDate}
-              max={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
-              onChange={(e) => { setFilterDate(e.target.value); setSelectedSlotId(null); setEditingEventId(null); }} />
-          </div>
-          <button className={btn} onClick={loadData}>🔄 새로고침</button>
-          <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
-        </div>
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+      {/* 공통사항 */}
+      <div className={`${card} p-3 print:hidden`}>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
           <span className="font-semibold">⚠ 한계기준:</span> 준초콜릿·당류가공품 45±5°C (40~50°C), 4시간 이상 유지 / 주기: 작업시작 전, 작업 중 2시간마다, 작업종료
         </div>
       </div>
