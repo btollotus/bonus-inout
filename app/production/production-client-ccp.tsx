@@ -1630,7 +1630,7 @@ export function WoCcpCard({
       <div className={`${card} p-4`}>
         <div className="mb-3 flex items-center justify-between flex-wrap gap-2">
           <div>
-            <div className="font-semibold text-sm">🌡️ CCP-1B 온도 기록 (작업지시서)</div>
+            <div className="font-semibold text-sm">🌡️ CCP-1B 온도 기록 (사인판생산)</div>
             {eCcpSlotId
               ? <div className="mt-0.5 text-xs text-slate-400">슬롯: {warmerSlots.find((s: any) => s.id === eCcpSlotId)?.slot_name ?? "—"}</div>
               : <div className="mt-0.5 text-xs text-amber-500">⚠ 위의 슬롯 지정에서 온장고를 선택하면 기록할 수 있습니다</div>
