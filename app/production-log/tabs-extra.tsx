@@ -1666,6 +1666,18 @@ export function OtherHeatingTab({ role, userId, showToast }: {
   );
   const [loading, setLoading] = useState(false);
 
+  // ── 기간 조회/인쇄 (CCP-1B와 동일 패턴) ──
+  const [rangeFrom, setRangeFrom] = useState<string>(() => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
+  const [rangeTo, setRangeTo] = useState<string>(() => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
+  const [rangeLoading, setRangeLoading] = useState(false);
+  const [rangeData, setRangeData] = useState<{
+    date: string;
+    slotEvents: any[];
+    woEvents: any[];
+    slotAssignees: Record<string, string[]>;
+    woAssigneeMap: Record<string, string>;
+  }[]>([]);
+
   // 고정 슬롯 4개 (코팅 3 + 전사 1)
   const [targetSlots, setTargetSlots] = useState<WarmSlot[]>([]);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
@@ -1921,7 +1933,315 @@ export function OtherHeatingTab({ role, userId, showToast }: {
 
   const relatedWoNos = selectedSlotId ? (slotWoMap[selectedSlotId] ?? []) : [];
 
-  // ── 인쇄 ──
+  // ── 기간 조회 (CCP-1B의 loadRangeData와 동일 패턴) ──
+  async function loadRangeData(): Promise<typeof rangeData> {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return [];
+    setRangeLoading(true);
+
+    const slotIds = targetSlots.map((s) => s.id);
+    if (slotIds.length === 0) { setRangeLoading(false); return []; }
+
+    const dates: string[] = [];
+    const cur = new Date(rangeFrom + "T00:00:00+09:00");
+    const end = new Date(rangeTo + "T00:00:00+09:00");
+    while (cur <= end) {
+      dates.push(cur.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    const results: typeof rangeData = [];
+
+    for (const date of dates) {
+      const [slotRes, woRes] = await Promise.all([
+        supabase.from("ccp_slot_events")
+          .select("id,slot_id,event_date,event_type,measured_at,work_order_no,action_note,material_type")
+          .eq("event_date", date)
+          .in("slot_id", slotIds)
+          .order("measured_at", { ascending: true }),
+        supabase.from("ccp_wo_events")
+          .select("id,work_order_no,slot_id,event_type,measured_at,temperature,is_ok,action_note")
+          .in("slot_id", slotIds)
+          .gte("measured_at", `${date}T00:00:00+09:00`)
+          .lte("measured_at", `${date}T23:59:59+09:00`)
+          .order("measured_at", { ascending: true }),
+      ]);
+
+      const sEvents = (slotRes.data ?? []) as any[];
+      const wEvents = (woRes.data ?? []) as any[];
+      if (sEvents.length === 0 && wEvents.length === 0) continue;
+
+      const allWoNos = [...new Set([
+        ...sEvents.map((e: any) => e.work_order_no).filter(Boolean),
+        ...wEvents.map((e: any) => e.work_order_no).filter(Boolean),
+      ])] as string[];
+
+      const woAssigneeMap: Record<string, string> = {};
+      if (allWoNos.length > 0) {
+        const { data } = await supabase
+          .from("work_orders")
+          .select("work_order_no,assignee_production")
+          .in("work_order_no", allWoNos);
+        for (const row of data ?? []) {
+          if (row.assignee_production) woAssigneeMap[row.work_order_no] = row.assignee_production;
+        }
+      }
+
+      const slotAssignees: Record<string, string[]> = {};
+      for (const s of targetSlots) {
+        const woNosForSlot = [...new Set(
+          sEvents.filter((e: any) => e.slot_id === s.id).map((e: any) => e.work_order_no).filter(Boolean)
+        )] as string[];
+        const assignees: string[] = [];
+        for (const wNo of woNosForSlot) {
+          if (woAssigneeMap[wNo] && !assignees.includes(woAssigneeMap[wNo])) assignees.push(woAssigneeMap[wNo]);
+        }
+        if (assignees.length > 0) slotAssignees[s.id] = assignees;
+      }
+
+      results.push({ date, slotEvents: sEvents, woEvents: wEvents, slotAssignees, woAssigneeMap });
+    }
+
+    setRangeData(results);
+    setRangeLoading(false);
+    return results;
+  }
+
+  // ── 기간 인쇄 (CCP-1B의 printRange와 동일 패턴) ──
+  async function printRange() {
+    const results = await loadRangeData();
+    if (results.length === 0) return showToast("조회된 기록이 없습니다.", "error");
+
+    const tdS = `border:1px solid #000;padding:2px 3px;font-size:8pt;vertical-align:middle;`;
+    const CHUNK_SIZE_R = 4;
+    const WO_LABEL: Record<string, string> = { start: "시작", mid_check: "중간점검", end: "종료" };
+    const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
+
+    function signImgHtml(name: string | null): string {
+      if (!name) return "";
+      const src = SIGN_MAP[name];
+      if (src) return `<img src="${src}" style="height:20px;object-fit:contain;display:block;margin:0 auto;" alt="${name}"/><div style="font-size:6pt;">${name}</div>`;
+      return `<div style="font-size:7pt;">${name}</div>`;
+    }
+
+    function slotWoEventsDedupFor(dayData: typeof results[0], slotId: string) {
+      const seen = new Set<string>();
+      return dayData.woEvents
+        .filter((e: any) => e.slot_id === slotId)
+        .sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at))
+        .filter((e: any) => {
+          const key = `${e.measured_at.slice(11, 16)}_${e.temperature}`;
+          if (seen.has(key)) return false;
+          seen.add(key); return true;
+        });
+    }
+
+    function slotWoEventsByAssigneeFor(dayData: typeof results[0], slotId: string, assignee: string) {
+      const assigneeWoNos = Object.keys(dayData.woAssigneeMap).filter((no) => dayData.woAssigneeMap[no] === assignee);
+      const seen = new Set<string>();
+      return dayData.woEvents
+        .filter((e: any) => e.slot_id === slotId && assigneeWoNos.includes(e.work_order_no))
+        .sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at))
+        .filter((e: any) => {
+          const key = `${e.measured_at.slice(11, 16)}_${e.temperature}`;
+          if (seen.has(key)) return false;
+          seen.add(key); return true;
+        });
+    }
+
+    function buildSlotTable(dayData: typeof results[0]): string {
+      const slots = targetSlots;
+      const maxRows = Math.max(
+        ...slots.flatMap((s) => {
+          const assignees = dayData.slotAssignees[s.id] ?? [""];
+          return assignees.map((a) => a ? slotWoEventsByAssigneeFor(dayData, s.id, a).length : slotWoEventsDedupFor(dayData, s.id).length);
+        }),
+        3
+      );
+      const colW = `calc((100% - 44px) / ${CHUNK_SIZE_R})`;
+      let html = `<table style="width:100%;border-collapse:collapse;margin-bottom:6px;table-layout:fixed;"><tbody>`;
+
+      html += `<tr>`;
+      html += `<td rowspan="${5 + maxRows}" style="${tdS}font-weight:bold;text-align:center;width:44px;font-size:8pt;writing-mode:vertical-rl;">코팅·전사</td>`;
+      for (const s of slots) {
+        const assignees = dayData.slotAssignees[s.id] ?? [""];
+        for (const a of assignees) {
+          html += `<td style="${tdS}text-align:center;font-weight:bold;font-size:8pt;height:22px;width:${colW};">${s.slot_name}${assignees.length > 1 ? `<span style="font-size:6.5pt;margin-left:2px;color:#555;">(${a})</span>` : ""}</td>`;
+        }
+      }
+      for (let i = 0; i < CHUNK_SIZE_R - slots.length; i++) html += `<td style="${tdS}width:${colW};"></td>`;
+      html += `</tr>`;
+
+      html += `<tr>`;
+      for (const s of slots) {
+        const assignees = dayData.slotAssignees[s.id] ?? [""];
+        const ev = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && !e.action_note?.includes("→"))
+          .sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at))[0];
+        assignees.forEach((_, ai) => {
+          html += `<td style="${tdS}text-align:center;font-size:8pt;height:22px;">${ai === 0 ? (ev ? `원료투입: ${toKSTTime(ev.measured_at)}` : "") : ""}</td>`;
+        });
+      }
+      for (let i = 0; i < CHUNK_SIZE_R - slots.length; i++) html += `<td style="${tdS}"></td>`;
+      html += `</tr>`;
+
+      html += `<tr>`;
+      for (const s of slots) {
+        const assignees = dayData.slotAssignees[s.id] ?? [""];
+        const outEv = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→"))[0];
+        const inEv = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→"))[0];
+        const ev = outEv ?? inEv;
+        assignees.forEach((_, ai) => {
+          html += `<td style="${tdS}text-align:center;font-size:8pt;height:22px;">${ai === 0 ? (ev ? `슬롯이동: ${toKSTTime(ev.measured_at)} (${ev.action_note})` : "") : ""}</td>`;
+        });
+      }
+      for (let i = 0; i < CHUNK_SIZE_R - slots.length; i++) html += `<td style="${tdS}"></td>`;
+      html += `</tr>`;
+
+      for (let rowIdx = 0; rowIdx < maxRows; rowIdx++) {
+        html += `<tr>`;
+        for (const s of slots) {
+          const assignees = dayData.slotAssignees[s.id] ?? [""];
+          for (const a of assignees) {
+            const ev = a ? slotWoEventsByAssigneeFor(dayData, s.id, a)[rowIdx] : slotWoEventsDedupFor(dayData, s.id)[rowIdx];
+            const isNG = ev?.is_ok === false;
+            html += `<td style="${tdS}text-align:center;font-size:8pt;color:${isNG ? "red" : "#000"};height:22px;">`;
+            if (ev) {
+              const bg = ev.event_type === "start" ? "#dbeafe" : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9";
+              html += `<span style="font-size:7pt;background:${bg};padding:0 3px;border-radius:2px;margin-right:2px;">${WO_LABEL[ev.event_type] ?? ev.event_type}</span>(${toKSTTime(ev.measured_at)}) ${ev.temperature ?? ""}℃`;
+            }
+            html += `</td>`;
+          }
+        }
+        for (let i = 0; i < CHUNK_SIZE_R - slots.length; i++) html += `<td style="${tdS}"></td>`;
+        html += `</tr>`;
+      }
+
+      html += `<tr>`;
+      for (let i = 0; i < CHUNK_SIZE_R; i++) html += `<td style="${tdS}height:22px;"></td>`;
+      html += `</tr>`;
+
+      html += `<tr>`;
+      for (const s of slots) {
+        const assignees = dayData.slotAssignees[s.id] ?? [""];
+        const evsAll = dayData.woEvents.filter((e: any) => e.slot_id === s.id);
+        if (assignees.length <= 1) {
+          const a = assignees[0] ?? null;
+          const evs = a ? evsAll.filter((e: any) => dayData.woAssigneeMap[e.work_order_no] === a) : evsAll;
+          if (evs.length === 0) { html += `<td style="${tdS}height:28px;"></td>`; continue; }
+          const hasNG = evs.some((e: any) => e.is_ok === false);
+          html += `<td style="${tdS}text-align:center;font-size:8pt;height:28px;">`;
+          html += `<div style="margin-bottom:1px;"><span style="font-weight:bold;color:${hasNG ? "red" : "#000"};">판정: ${hasNG ? "X" : "O"}</span></div>`;
+          html += signImgHtml(a);
+          html += `</td>`;
+        } else {
+          html += `<td style="${tdS}font-size:8pt;height:28px;padding:0;"><div style="display:flex;height:100%;">`;
+          assignees.forEach((a, ai) => {
+            const evs = evsAll.filter((e: any) => dayData.woAssigneeMap[e.work_order_no] === a);
+            const hasNG = evs.some((e: any) => e.is_ok === false);
+            html += `<div style="flex:1;${ai > 0 ? "border-left:0.5px solid #000;" : ""}text-align:center;padding:2px 3px;display:flex;flex-direction:column;align-items:center;justify-content:center;">`;
+            html += `<span style="font-weight:bold;">판정: ${hasNG ? "X" : "O"}</span>`;
+            html += signImgHtml(a);
+            html += `</div>`;
+          });
+          html += `</div></td>`;
+        }
+      }
+      for (let i = 0; i < CHUNK_SIZE_R - slots.length; i++) html += `<td style="${tdS}height:28px;"></td>`;
+      html += `</tr>`;
+
+      html += `</tbody></table>`;
+      return html;
+    }
+
+    let bodyHtml = "";
+
+    for (let di = 0; di < results.length; di++) {
+      const dayData = results[di];
+      const isLast = di === results.length - 1;
+      const d = new Date(dayData.date + "T00:00:00+09:00");
+      const dateLabel = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${dayNames[d.getDay()]})`;
+
+      const deviations = dayData.woEvents.filter((e: any) => e.is_ok === false)
+        .map((e: any) => `${toKSTTime(e.measured_at)} 슬롯${targetSlots.find((s) => s.id === e.slot_id)?.slot_name ?? ""} — ${e.temperature ?? ""}°C / ${e.action_note ?? ""}`)
+        .join("  /  ") || " ";
+
+      bodyHtml += `<div style="page-break-after:${isLast ? "avoid" : "always"};">`;
+
+      bodyHtml += `<table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
+        <tr>
+          <td rowspan="2" style="${tdS}font-size:12pt;font-weight:bold;text-align:center;padding:6px 8px;">기타가공품 가열공정 모니터링일지<br/><span style="font-size:9pt;">*온장고 내 보관기간 : 1개월 미만*</span></td>
+          <td rowspan="2" style="${tdS}width:28px;font-weight:bold;text-align:center;font-size:8pt;">결<br/>재<br/>란</td>
+          <td style="${tdS}width:80px;text-align:center;font-weight:bold;">작성</td>
+          <td style="${tdS}width:80px;text-align:center;font-weight:bold;">승인</td>
+        </tr>
+        <tr>
+          <td style="${tdS}text-align:center;padding:3px;"><img src="/sign-kimyg.png" style="height:30px;object-fit:contain;display:block;margin:0 auto;" alt="김영각"/><div style="font-size:7pt;margin-top:2px;">김영각</div></td>
+          <td style="${tdS}text-align:center;padding:3px;"><img src="/sign-chods.png" style="height:30px;object-fit:contain;display:block;margin:0 auto;" alt="조대성"/><div style="font-size:7pt;margin-top:2px;">조대성</div></td>
+        </tr>
+      </tbody></table>`;
+
+      bodyHtml += `<table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
+        <tr><td style="${tdS}width:80px;font-weight:bold;white-space:nowrap;">작성일자</td><td style="${tdS}">${dateLabel}</td></tr>
+      </tbody></table>`;
+
+      bodyHtml += `<table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
+        <tr>
+          <td style="${tdS}font-weight:bold;white-space:nowrap;width:56px;">위해요소</td>
+          <td colspan="3" style="${tdS}font-size:8pt;">병원성 미생물(리스테리아모노사이토제네스, 장출혈성대장균)</td>
+          <td style="${tdS}font-weight:bold;text-align:center;width:60px;">온도</td>
+          <td style="${tdS}font-weight:bold;text-align:center;width:80px;">시간</td>
+        </tr>
+        <tr>
+          <td style="${tdS}font-weight:bold;">한계기준</td>
+          <td colspan="3" style="${tdS}font-size:8pt;">전사지·코팅 공정 (슬롯: 7-1, 7-2, 7-3, 8)</td>
+          <td style="${tdS}text-align:center;">45±5℃</td>
+          <td style="${tdS}text-align:center;font-size:8pt;white-space:nowrap;">4시간 이상 유지</td>
+        </tr>
+        <tr>
+          <td style="${tdS}font-weight:bold;">주 기</td>
+          <td colspan="5" style="${tdS}font-size:8pt;">작업시작 전, 작업 중 2시간마다, 작업종료</td>
+        </tr>
+        <tr>
+          <td rowspan="2" style="${tdS}font-weight:bold;">방 법</td>
+          <td style="${tdS}font-weight:bold;white-space:nowrap;">감도 모니터링</td>
+          <td colspan="4" style="${tdS}font-size:7.5pt;">중탕온도: 바트 품온 온도 확인</td>
+        </tr>
+        <tr>
+          <td style="${tdS}font-weight:bold;">가열시간</td>
+          <td colspan="4" style="${tdS}font-size:7.5pt;">4시간 이상 가열. ※ 온도계·시계는 연 1회 검·교정 실시 필요</td>
+        </tr>
+      </tbody></table>`;
+
+      bodyHtml += buildSlotTable(dayData);
+
+      bodyHtml += `<table style="width:100%;border-collapse:collapse;margin-top:4px;"><tbody>
+        <tr>
+          <td style="${tdS}font-weight:bold;font-size:8pt;width:140px;white-space:nowrap;">한계기준 이탈 및 조치내용</td>
+          <td style="${tdS}padding:4px 6px;font-size:8pt;">${deviations}</td>
+        </tr>
+      </tbody></table>`;
+
+      bodyHtml += `</div>`;
+    }
+
+    const printTitle = `기타가공품_가열공정_${rangeFrom}_${rangeTo}`;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8"><title>${printTitle}</title>
+      <style>
+        @page { size: A4 landscape; margin: 8mm 10mm; }
+        body { margin: 0; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 9pt; color: #000; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        table { border-collapse: collapse; }
+        img { max-width: none; }
+      </style>
+    </head><body>${bodyHtml}</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 300);
+  }
+
+  // ── 인쇄 (기존 단일 날짜용 — 더 이상 버튼에 연결되지 않지만 코드는 보존) ──
   async function handlePrint() {
     const allWoNos = [...new Set(Object.values(slotWoMap).flat())];
     const assigneeMap: Record<string, string> = {};
@@ -2035,18 +2355,43 @@ setTimeout(() => {
   return (
     <div className="space-y-4">
 
-      {/* 필터 바 */}
-      <div className={`${card} p-4`}>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div>
-            <div className="mb-1 text-xs text-slate-500">날짜</div>
-            <input type="date" className={inp} style={{ width: 160 }} value={filterDate}
-              onChange={(e) => { setFilterDate(e.target.value); setSelectedSlotId(null); setEditingEventId(null); }} />
-          </div>
-          <button className={btn} onClick={loadData}>🔄 조회</button>
-          <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
-        </div>
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+      {/* ── 조회 기간 + 인쇄 통합 패널 (CCP-1B와 동일) ── */}
+      <div className={`${card} p-3 flex flex-wrap items-center gap-3`}>
+        <span className="text-sm font-semibold text-slate-600">조회 기간</span>
+        <input
+          type="date"
+          className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+          value={rangeFrom}
+          max={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
+          onChange={(e) => { setRangeFrom(e.target.value); setFilterDate(e.target.value); setSelectedSlotId(null); setEditingEventId(null); setRangeData([]); }}
+        />
+        <span className="text-slate-400">~</span>
+        <input
+          type="date"
+          className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+          value={rangeTo}
+          max={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
+          onChange={(e) => { setRangeTo(e.target.value); setFilterDate(e.target.value); setSelectedSlotId(null); setEditingEventId(null); setRangeData([]); }}
+        />
+        <button className={btn} onClick={loadData}>🔄 새로고침</button>
+        <button className={btnSm} onClick={printRange}>🖨️ 기간 인쇄</button>
+        {(rangeFrom !== new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }) || rangeTo !== new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })) && (
+          <>
+            <button
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium hover:bg-slate-100"
+              onClick={() => {
+                const t = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+                setRangeFrom(t); setRangeTo(t); setFilterDate(t);
+                setSelectedSlotId(null); setEditingEventId(null);
+              }}
+            >오늘로 돌아가기</button>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">과거 기록 조회 중</span>
+          </>
+        )}
+      </div>
+
+      <div className={`${card} p-3`}>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
           <span className="font-semibold">⚠ 한계기준:</span> 45±5°C (40~50°C), 4시간 이상 유지 / 주기: 작업시작 전, 작업 중 2시간마다, 작업종료 / 해당 슬롯: 7-1, 7-2, 7-3, 8
         </div>
       </div>
