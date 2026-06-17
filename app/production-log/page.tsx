@@ -3541,7 +3541,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                   <th key={h} className="border border-slate-200 py-1.5 px-1 text-slate-500">{h}</th>
                 ))}
                <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
-               <th className="border border-slate-200 py-1.5 px-2 bg-slate-100 text-slate-400 w-12 text-[10px] whitespace-nowrap">지난주</th>
+               <th className="border border-slate-200 py-1.5 px-2 bg-slate-100 text-slate-400 w-12 text-[10px] whitespace-nowrap">누계</th>
                <th className="border border-slate-200 py-1.5 px-2 w-14 whitespace-nowrap">단계</th>
                 <th className="border border-slate-200 py-1.5 px-2 bg-lime-50 text-lime-700 w-20 text-[10px] whitespace-nowrap">끈끈이교체</th>
               </tr>
@@ -3649,7 +3649,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
                   <th key={h} className="border border-slate-200 py-1.5 px-1 text-slate-500">{h}</th>
                 ))}
                 <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
-                <th className="border border-slate-200 py-1.5 px-2 bg-slate-100 text-slate-400 w-12 text-[10px] whitespace-nowrap">지난주</th>
+                <th className="border border-slate-200 py-1.5 px-2 bg-slate-100 text-slate-400 w-12 text-[10px] whitespace-nowrap">누계</th>
                 <th className="border border-slate-200 py-1.5 px-2 bg-lime-50 text-lime-700 w-20 text-[10px] whitespace-nowrap">끈끈이교체</th>
               </tr>
             </thead>
