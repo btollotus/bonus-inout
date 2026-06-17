@@ -7,6 +7,7 @@ import { Ccp1pTab } from "./Ccp1pTab";
 import { ExpiryMgmtTab, WarmerCleaningTab, PestTab, ForeignMatterTab, HygieneCheckTab, TempHumidityTab, StorageTempTab } from "./tabs-hygiene";
 import { NewProductionLogTab } from "./NewProductionLogTab";
 import { ProductionDashboard } from "./ProductionDashboard";
+import { HygieneTrainingTab } from "./tabs-training";
 import { todayKST } from "@/lib/utils/date";
 
 const supabase = createClient();
@@ -22,7 +23,7 @@ const btnSm = "rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs f
 type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
 
 type Tab = "dashboard" | "production" | "material" | "work" | "ccp1b" | "ccp1p" | "other_heating" | "compressor" | "pet"
-  | "expiry" | "warmer_clean" | "pest" | "foreign" | "hygiene" | "temp_humidity" | "storage_temp";
+  | "expiry" | "warmer_clean" | "pest" | "foreign" | "hygiene" | "temp_humidity" | "storage_temp" | "training";
 
 // ─────────────────────── 생산일지 Types ───────────────────────
 type ProductionLog = {
@@ -140,6 +141,7 @@ export default function ProductionLogPage() {
       hygiene: "위생관리",
       temp_humidity: "온습도",
       storage_temp: "냉장·냉동·온장고",
+      training: "사내교육",
     };
     document.title = `${TAB_TITLES[activeTab] ?? "생산관리"} | BONUSMATE`;
   }, [activeTab]);
@@ -205,6 +207,7 @@ export default function ProductionLogPage() {
             { key: "hygiene",       label: "■ 위생관리" },
             { key: "temp_humidity", label: "■ 온습도" },
             { key: "storage_temp",  label: "■ 냉장·냉동·온장고" },
+            { key: "training",      label: "■ 사내교육" },
 ] as { key: Tab; label: string }[]).map((t) => (
   <button key={t.key}
     className={`w-full text-left ${activeTab === t.key ? btnOn : btn}`}
@@ -250,6 +253,7 @@ export default function ProductionLogPage() {
 {activeTab === "hygiene"       && <HygieneCheckTab role={role} userId={userId} showToast={showToast} />}
 {activeTab === "temp_humidity" && <TempHumidityTab role={role} userId={userId} showToast={showToast} />}
 {activeTab === "storage_temp"  && <StorageTempTab role={role} userId={userId} showToast={showToast} />}
+{activeTab === "training"      && <TrainingTab role={role} userId={userId} showToast={showToast} />}
 
 </div>{/* 오른쪽 컨텐츠 끝 */}
         </div>{/* 탭+컨텐츠 레이아웃 끝 */}
@@ -262,6 +266,43 @@ export default function ProductionLogPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 사내교육 (위생교육 / 모니터링교육 서브탭)
+// ═══════════════════════════════════════════════════════════
+function TrainingTab({ role, userId, showToast }: {
+  role: UserRole; userId: string | null;
+  showToast: (msg: string, type?: "success" | "error") => void;
+}) {
+  const [subTab, setSubTab] = useState<"hygiene_edu" | "monitoring_edu">("hygiene_edu");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <button
+          className={subTab === "hygiene_edu" ? btnOn : btn}
+          onClick={() => setSubTab("hygiene_edu")}
+        >위생교육</button>
+        <button
+          className={subTab === "monitoring_edu" ? btnOn : btn}
+          onClick={() => setSubTab("monitoring_edu")}
+        >모니터링교육</button>
+      </div>
+
+      {subTab === "hygiene_edu" && (
+        <HygieneTrainingTab role={role} userId={userId} showToast={showToast} />
+      )}
+      {subTab === "monitoring_edu" && (
+        <div className={`${card} flex items-center justify-center p-12`}>
+          <div className="text-center text-slate-400">
+            <div className="text-3xl mb-2">🚧</div>
+            <div className="text-sm">모니터링교육 화면은 준비 중입니다.</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
