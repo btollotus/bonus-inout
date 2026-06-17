@@ -159,6 +159,8 @@ export function PestTab({ role, userId, showToast }: {
   const [viewLoading, setViewLoading] = useState(false);
   const [viewSticky,  setViewSticky]  = useState<StickyRecord[]>([]);
   const [stickyLoading, setStickyLoading] = useState(false);
+  const [prevMonthFlying, setPrevMonthFlying] = useState<{ location: string; record_date: string; total: number }[]>([]);
+  const [prevMonthWalking, setPrevMonthWalking] = useState<{ trap_no: string; record_date: string; total: number }[]>([]);
 
   async function loadView() {
     setViewLoading(true);
@@ -166,17 +168,23 @@ export function PestTab({ role, userId, showToast }: {
     const dateFrom = `${viewYear}-${monthStr}-01`;
     const lastDay = new Date(viewYear, viewMonth, 0).getDate();
     const dateTo = `${viewYear}-${monthStr}-${String(lastDay).padStart(2, "0")}`;
-    const [{ data: fRows }, { data: wRows }, { data: sRows }] = await Promise.all([
+    const [{ data: fRows }, { data: wRows }, { data: sRows }, { data: fPrevRows }, { data: wPrevRows }] = await Promise.all([
       supabase.from("pest_flying_records").select("*")
         .eq("year", viewYear).eq("month", viewMonth).order("record_date").order("location"),
       supabase.from("pest_walking_records").select("*")
         .eq("year", viewYear).eq("month", viewMonth).order("record_date").order("trap_no"),
       supabase.from("pest_sticky_replacements").select("*")
-        .gte("record_date", dateFrom).lte("record_date", dateTo),
+        .lte("record_date", dateTo),
+      supabase.from("pest_flying_records").select("location,record_date,total")
+        .lt("record_date", dateFrom),
+      supabase.from("pest_walking_records").select("trap_no,record_date,total")
+        .lt("record_date", dateFrom),
     ]);
     setViewFlying((fRows ?? []) as FlyingRecord[]);
     setViewWalking((wRows ?? []) as WalkingRecord[]);
     setViewSticky((sRows ?? []) as StickyRecord[]);
+    setPrevMonthFlying((fPrevRows ?? []) as { location: string; record_date: string; total: number }[]);
+    setPrevMonthWalking((wPrevRows ?? []) as { trap_no: string; record_date: string; total: number }[]);
     setViewLoading(false);
   }
 
@@ -193,19 +201,45 @@ export function PestTab({ role, userId, showToast }: {
     if (!walkingByDate[r.record_date]) walkingByDate[r.record_date] = {};
     walkingByDate[r.record_date][r.trap_no] = r;
   }
+  const lastReplaceFlying: Record<string, string> = {};
+  const lastReplaceWalking: Record<string, string> = {};
+  for (const s of viewSticky) {
+    if (!s.replaced) continue;
+    if (s.target_type === "flying") {
+      if (!lastReplaceFlying[s.target_key] || s.record_date > lastReplaceFlying[s.target_key])
+        lastReplaceFlying[s.target_key] = s.record_date;
+    } else if (s.target_type === "walking") {
+      if (!lastReplaceWalking[s.target_key] || s.record_date > lastReplaceWalking[s.target_key])
+        lastReplaceWalking[s.target_key] = s.record_date;
+    }
+  }
+  const allFlyingForCumul = [
+    ...prevMonthFlying,
+    ...viewFlying.map(r => ({ location: r.location, record_date: r.record_date, total: r.total })),
+  ];
+  const allWalkingForCumul = [
+    ...prevMonthWalking,
+    ...viewWalking.map(r => ({ trap_no: r.trap_no, record_date: r.record_date, total: r.total })),
+  ];
   const flyingCumul: Record<string, Record<string, number>> = {};
   for (const date of viewDates) {
     flyingCumul[date] = {};
-    for (const loc of LOCATIONS)
-      flyingCumul[date][loc] = viewDates.filter(d => d <= date)
-        .reduce((s, d) => s + (flyingByDate[d]?.[loc]?.total ?? 0), 0);
+    for (const loc of LOCATIONS) {
+      const cutoff = lastReplaceFlying[loc];
+      flyingCumul[date][loc] = allFlyingForCumul
+        .filter(r => r.location === loc && r.record_date <= date && (!cutoff || r.record_date > cutoff))
+        .reduce((s, r) => s + (r.total ?? 0), 0);
+    }
   }
   const walkingCumul: Record<string, Record<string, number>> = {};
   for (const date of viewDates) {
     walkingCumul[date] = {};
-    for (const trap of TRAPS)
-      walkingCumul[date][trap] = viewDates.filter(d => d <= date)
-        .reduce((s, d) => s + (walkingByDate[d]?.[trap]?.total ?? 0), 0);
+    for (const trap of TRAPS) {
+      const cutoff = lastReplaceWalking[trap];
+      walkingCumul[date][trap] = allWalkingForCumul
+        .filter(r => r.trap_no === trap && r.record_date <= date && (!cutoff || r.record_date > cutoff))
+        .reduce((s, r) => s + (r.total ?? 0), 0);
+    }
   }
   const flyingMonthTotal = LOCATIONS.reduce((acc, loc) => {
     acc[loc] = viewFlying.filter(r => r.location === loc).reduce((s, r) => s + r.total, 0);
