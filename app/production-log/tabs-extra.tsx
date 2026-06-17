@@ -2058,6 +2058,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
         }),
         3
       );
+      const totalSlotCols = slots.reduce((sum, s) => sum + ((dayData.slotAssignees[s.id] ?? [""]).length), 0);
       const colW = `calc((100% - 44px) / ${CHUNK_SIZE_R})`;
       let html = `<table style="width:100%;border-collapse:collapse;margin-bottom:6px;table-layout:fixed;"><tbody>`;
 
@@ -2069,7 +2070,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
           html += `<td style="${tdS}text-align:center;font-weight:bold;font-size:8pt;height:22px;width:${colW};">${s.slot_name}${assignees.length > 1 ? `<span style="font-size:6.5pt;margin-left:2px;color:#555;">(${a})</span>` : ""}</td>`;
         }
       }
-      for (let i = 0; i < CHUNK_SIZE_R - slots.length; i++) html += `<td style="${tdS}width:${colW};"></td>`;
+      for (let i = 0; i < Math.max(0, CHUNK_SIZE_R - totalSlotCols); i++) html += `<td style="${tdS}width:${colW};"></td>`;
       html += `</tr>`;
 
       html += `<tr>`;
@@ -2081,7 +2082,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
           html += `<td style="${tdS}text-align:center;font-size:8pt;height:22px;">${ai === 0 ? (ev ? `원료투입: ${toKSTTime(ev.measured_at)}` : "") : ""}</td>`;
         });
       }
-      for (let i = 0; i < CHUNK_SIZE_R - slots.length; i++) html += `<td style="${tdS}"></td>`;
+      for (let i = 0; i < Math.max(0, CHUNK_SIZE_R - totalSlotCols); i++) html += `<td style="${tdS}"></td>`;
       html += `</tr>`;
 
       html += `<tr>`;
@@ -2094,7 +2095,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
           html += `<td style="${tdS}text-align:center;font-size:8pt;height:22px;">${ai === 0 ? (ev ? `슬롯이동: ${toKSTTime(ev.measured_at)} (${ev.action_note})` : "") : ""}</td>`;
         });
       }
-      for (let i = 0; i < CHUNK_SIZE_R - slots.length; i++) html += `<td style="${tdS}"></td>`;
+      for (let i = 0; i < Math.max(0, CHUNK_SIZE_R - totalSlotCols); i++) html += `<td style="${tdS}"></td>`;
       html += `</tr>`;
 
       for (let rowIdx = 0; rowIdx < maxRows; rowIdx++) {
@@ -2112,20 +2113,19 @@ export function OtherHeatingTab({ role, userId, showToast }: {
             html += `</td>`;
           }
         }
-        for (let i = 0; i < CHUNK_SIZE_R - slots.length; i++) html += `<td style="${tdS}"></td>`;
+        for (let i = 0; i < Math.max(0, CHUNK_SIZE_R - totalSlotCols); i++) html += `<td style="${tdS}"></td>`;
         html += `</tr>`;
       }
 
       html += `<tr>`;
-      for (let i = 0; i < CHUNK_SIZE_R; i++) html += `<td style="${tdS}height:22px;"></td>`;
+      for (let i = 0; i < Math.max(totalSlotCols, CHUNK_SIZE_R); i++) html += `<td style="${tdS}height:22px;"></td>`;
       html += `</tr>`;
 
       html += `<tr>`;
       for (const s of slots) {
         const assignees = dayData.slotAssignees[s.id] ?? [""];
         const evsAll = dayData.woEvents.filter((e: any) => e.slot_id === s.id);
-        if (assignees.length <= 1) {
-          const a = assignees[0] ?? null;
+        for (const a of assignees) {
           const evs = a ? evsAll.filter((e: any) => dayData.woAssigneeMap[e.work_order_no] === a) : evsAll;
           if (evs.length === 0) { html += `<td style="${tdS}height:28px;"></td>`; continue; }
           const hasNG = evs.some((e: any) => e.is_ok === false);
@@ -2133,20 +2133,9 @@ export function OtherHeatingTab({ role, userId, showToast }: {
           html += `<div style="margin-bottom:1px;"><span style="font-weight:bold;color:${hasNG ? "red" : "#000"};">판정: ${hasNG ? "X" : "O"}</span></div>`;
           html += signImgHtml(a);
           html += `</td>`;
-        } else {
-          html += `<td style="${tdS}font-size:8pt;height:28px;padding:0;"><div style="display:flex;height:100%;">`;
-          assignees.forEach((a, ai) => {
-            const evs = evsAll.filter((e: any) => dayData.woAssigneeMap[e.work_order_no] === a);
-            const hasNG = evs.some((e: any) => e.is_ok === false);
-            html += `<div style="flex:1;${ai > 0 ? "border-left:0.5px solid #000;" : ""}text-align:center;padding:2px 3px;display:flex;flex-direction:column;align-items:center;justify-content:center;">`;
-            html += `<span style="font-weight:bold;">판정: ${hasNG ? "X" : "O"}</span>`;
-            html += signImgHtml(a);
-            html += `</div>`;
-          });
-          html += `</div></td>`;
         }
       }
-      for (let i = 0; i < CHUNK_SIZE_R - slots.length; i++) html += `<td style="${tdS}height:28px;"></td>`;
+      for (let i = 0; i < Math.max(0, CHUNK_SIZE_R - totalSlotCols); i++) html += `<td style="${tdS}height:28px;"></td>`;
       html += `</tr>`;
 
       html += `</tbody></table>`;
