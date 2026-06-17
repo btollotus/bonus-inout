@@ -64,6 +64,9 @@ type WorkOrderRow = {
   assignee_print_check?: string | null;
   assignee_production?: string | null;
   assignee_input?: string | null;
+  transfer_done_at?: string | null;
+  print_check_done_at?: string | null;
+  input_done_at?: string | null;
   linked_order?: { memo: string | null } | { memo: string | null }[] | null;
   work_order_items?: WoItemRow[];
   order_type: string;
@@ -177,6 +180,15 @@ function fmt(n: number | null | undefined) {
   if (n == null || isNaN(Number(n))) return "0";
   return Number(n).toLocaleString("ko-KR");
 }
+function utcToKSTDateTime(utcStr: string | null | undefined): string {
+  if (!utcStr) return "";
+  const d = new Date(new Date(utcStr).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${mm}-${dd} ${hh}:${mi}`;
+}
 function toNum(v: unknown): number {
   const n = parseFloat(String(v ?? "").replace(/,/g, ""));
   return isNaN(n) ? 0 : n;
@@ -200,9 +212,9 @@ const statusColors: Record<string, string> = {
 };
 
 const PROGRESS_STEPS = [
-  { label: "전사인쇄", statusKey: "status_transfer" as const, assigneeKey: "assignee_transfer" as const, icon: "🖨️", cardDone: "border-blue-300 bg-blue-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-blue-100 text-blue-700 border-blue-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
-  { label: "인쇄검수", statusKey: "status_print_check" as const, assigneeKey: "assignee_print_check" as const, icon: "🔍", cardDone: "border-violet-300 bg-violet-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-violet-100 text-violet-700 border-violet-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
-  { label: "금속검출", statusKey: "status_input" as const, assigneeKey: "assignee_input" as const, icon: "🧲", cardDone: "border-green-300 bg-green-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-green-100 text-green-700 border-green-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
+  { label: "전사인쇄", statusKey: "status_transfer" as const, assigneeKey: "assignee_transfer" as const, doneAtKey: "transfer_done_at" as const, icon: "🖨️", cardDone: "border-blue-300 bg-blue-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-blue-100 text-blue-700 border-blue-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
+  { label: "인쇄검수", statusKey: "status_print_check" as const, assigneeKey: "assignee_print_check" as const, doneAtKey: "print_check_done_at" as const, icon: "🔍", cardDone: "border-violet-300 bg-violet-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-violet-100 text-violet-700 border-violet-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
+  { label: "금속검출", statusKey: "status_input" as const, assigneeKey: "assignee_input" as const, doneAtKey: "input_done_at" as const, icon: "🧲", cardDone: "border-green-300 bg-green-50", cardSkip: "border-amber-300 bg-amber-50", cardEmpty: "border-slate-200 bg-white", badgeDone: "bg-green-100 text-green-700 border-green-200", badgeSkip: "bg-amber-100 text-amber-700 border-amber-200" },
 ] as const;
 
 const DARK_FOOD_TYPES = ["다크화이트","다크옐로우","데코초콜릿","롤리팝다크화이트","다크핑크","다크연두","롤리팝다크핑크"];
@@ -239,6 +251,7 @@ const COATING_BASE = { 팜유: 280, 유청분말: 300 };
 type WoChecks = {
   status_transfer: boolean; status_print_check: boolean; status_production: boolean; status_input: boolean;
   assignee_transfer: string; assignee_print_check: string; assignee_production: string; assignee_input: string;
+  transfer_done_at: string | null; print_check_done_at: string | null; input_done_at: string | null;
 };
 
 // ─────────────────────── Component ───────────────────────
@@ -529,7 +542,7 @@ export default function ProductionClient() {
         const d = payload.new as Record<string, unknown>;
         setWoChecks((prev) => {
           if (!prev) return prev;
-          return { ...prev, status_transfer: typeof d.status_transfer === "boolean" ? d.status_transfer : prev.status_transfer, status_print_check: typeof d.status_print_check === "boolean" ? d.status_print_check : prev.status_print_check, status_production: typeof d.status_production === "boolean" ? d.status_production : prev.status_production, status_input: typeof d.status_input === "boolean" ? d.status_input : prev.status_input, assignee_transfer: d.assignee_transfer !== undefined ? (d.assignee_transfer as string ?? "") : prev.assignee_transfer, assignee_print_check: d.assignee_print_check !== undefined ? (d.assignee_print_check as string ?? "") : prev.assignee_print_check, assignee_production: d.assignee_production !== undefined ? (d.assignee_production as string ?? "") : prev.assignee_production, assignee_input: d.assignee_input !== undefined ? (d.assignee_input as string ?? "") : prev.assignee_input };
+          return { ...prev, status_transfer: typeof d.status_transfer === "boolean" ? d.status_transfer : prev.status_transfer, status_print_check: typeof d.status_print_check === "boolean" ? d.status_print_check : prev.status_print_check, status_production: typeof d.status_production === "boolean" ? d.status_production : prev.status_production, status_input: typeof d.status_input === "boolean" ? d.status_input : prev.status_input, assignee_transfer: d.assignee_transfer !== undefined ? (d.assignee_transfer as string ?? "") : prev.assignee_transfer, assignee_print_check: d.assignee_print_check !== undefined ? (d.assignee_print_check as string ?? "") : prev.assignee_print_check, assignee_production: d.assignee_production !== undefined ? (d.assignee_production as string ?? "") : prev.assignee_production, assignee_input: d.assignee_input !== undefined ? (d.assignee_input as string ?? "") : prev.assignee_input, transfer_done_at: d.transfer_done_at !== undefined ? (d.transfer_done_at as string ?? null) : prev.transfer_done_at, print_check_done_at: d.print_check_done_at !== undefined ? (d.print_check_done_at as string ?? null) : prev.print_check_done_at, input_done_at: d.input_done_at !== undefined ? (d.input_done_at as string ?? null) : prev.input_done_at };
         });
         if (d.ccp_slot_id !== undefined) {
           setECcpSlotId((d.ccp_slot_id as string) ?? "");
@@ -563,15 +576,16 @@ export default function ProductionClient() {
     const doSave = async (actionBy: string) => {
       const saveValue = actionBy;
       const isDone = saveValue !== "";
-      setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: saveValue, [statusKey]: isDone } : prev);
-      setStepSaving(assigneeKey);
       const doneAtMap: Record<string, string> = {
         assignee_transfer:    "transfer_done_at",
         assignee_print_check: "print_check_done_at",
         assignee_input:       "input_done_at",
       };
-      const doneAtKey = doneAtMap[assigneeKey as string];
+      const doneAtKey = doneAtMap[assigneeKey as string] as keyof WoChecks | undefined;
       const now = new Date().toISOString();
+      const prevDoneAtVal = doneAtKey ? woChecks[doneAtKey] : undefined;
+      setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: saveValue, [statusKey]: isDone, ...(doneAtKey ? { [doneAtKey]: isDone ? now : null } : {}) } : prev);
+      setStepSaving(assigneeKey);
       const { error } = await supabase.from("work_orders").update({
         [assigneeKey]: saveValue || null,
         [statusKey]: isDone,
@@ -580,7 +594,7 @@ export default function ProductionClient() {
       }).eq("id", selectedWo.id);
       setStepSaving(null);
       if (error) {
-        setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: woChecks[assigneeKey], [statusKey]: woChecks[statusKey] } : prev);
+        setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: woChecks[assigneeKey], [statusKey]: woChecks[statusKey], ...(doneAtKey ? { [doneAtKey]: prevDoneAtVal } : {}) } : prev);
         setMsg("진행상태 저장 실패: " + error.message);
       }
     };
@@ -651,7 +665,7 @@ export default function ProductionClient() {
     setLoading(true); setMsg(null);
     try {
       const LIMIT = filterStatus === "완료" ? 20 : 200;
-      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
+      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,transfer_done_at,print_check_done_at,input_done_at,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
       if (filterStatus !== "전체") q = q.eq("status", filterStatus);
       if (filterDateFrom) q = q.gte("order_date", filterDateFrom);
       if (filterDateTo) q = q.lte("order_date", filterDateTo);
@@ -769,7 +783,7 @@ export default function ProductionClient() {
     setEMoldRows((wo as any).mold_rows ? String((wo as any).mold_rows) : "");
     setEMoldCount((wo as any).mold_count ? String((wo as any).mold_count) : "");
     setENote(wo.note ?? ""); setEReferenceNote(wo.reference_note ?? ""); setECcpSlotId(wo.ccp_slot_id ?? "");
-    setWoChecks({ status_transfer: wo.status_transfer, status_print_check: wo.status_print_check, status_production: wo.status_production, status_input: wo.status_input, assignee_transfer: (wo as any).assignee_transfer ?? "", assignee_print_check: (wo as any).assignee_print_check ?? "", assignee_production: (wo as any).assignee_production ?? "", assignee_input: (wo as any).assignee_input ?? "" });
+    setWoChecks({ status_transfer: wo.status_transfer, status_print_check: wo.status_print_check, status_production: wo.status_production, status_input: wo.status_input, assignee_transfer: (wo as any).assignee_transfer ?? "", assignee_print_check: (wo as any).assignee_print_check ?? "", assignee_production: (wo as any).assignee_production ?? "", assignee_input: (wo as any).assignee_input ?? "", transfer_done_at: (wo as any).transfer_done_at ?? null, print_check_done_at: (wo as any).print_check_done_at ?? null, input_done_at: (wo as any).input_done_at ?? null });
     setLastUpdatedAt(null); setFlashKey(null); setSignedImageUrls([]);
     const userId = currentUserIdRef.current;
     if (userId && !readMap[wo.id]) {
@@ -2003,10 +2017,11 @@ const totalOrder = items
                               <div>{isSaving ? <span className="text-[10px] text-slate-400 animate-pulse">저장 중</span> : isDone ? <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${step.badgeDone}`}>완료</span> : isSkipped ? <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${step.badgeSkip}`}>미입력</span> : <span className="rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-400">대기</span>}</div>
                             </div>
                             {step.statusKey === "status_input" ? (
-                              <div className="text-center">{isDone ? <div className="text-[11px] font-semibold text-slate-600 truncate">{assigneeVal}</div> : <div className="text-[10px] text-slate-400">CCP-1P 후 자동완료</div>}</div>
+                              <div className="text-center">{isDone ? <div className="space-y-0.5"><div className="text-[11px] font-semibold text-slate-600 truncate">{assigneeVal}</div>{woChecks[step.doneAtKey] && <div className="text-[10px] text-slate-400 tabular-nums">{utcToKSTDateTime(woChecks[step.doneAtKey])}</div>}</div> : <div className="text-[10px] text-slate-400">CCP-1P 후 자동완료</div>}</div>
                             ) : isDone ? (
                               <div className="space-y-1">
                                 <div className="text-[11px] font-semibold text-center text-slate-600 truncate">{assigneeVal === "담당자없음" ? "담당자없음" : assigneeVal}</div>
+                                {woChecks[step.doneAtKey] && <div className="text-[10px] text-center text-slate-400 tabular-nums">{utcToKSTDateTime(woChecks[step.doneAtKey])}</div>}
                                 {!(selectedWo?.status === "완료" && !isEditMode) && (
                                   <button type="button" disabled={isSaving} className="w-full rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-red-50 hover:border-red-200 hover:text-red-500 disabled:opacity-60" onClick={() => handleAssigneeChange(step.assigneeKey, step.statusKey, "")}>취소</button>
                                 )}

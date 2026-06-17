@@ -69,6 +69,13 @@ function toKSTTime(isoStr: string): string {
   return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
 
+function toKSTDateTime(isoStr: string): string {
+  const d = new Date(isoStr);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${mm}-${dd} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+
 const inp  = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none";
 const inpR = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-right tabular-nums focus:border-blue-400 focus:outline-none";
 const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
@@ -1703,7 +1710,7 @@ export function WoCcpCard({
                           ? <input className="w-24 rounded-lg border border-blue-300 px-2 py-1 text-xs focus:outline-none"
                               inputMode="numeric" placeholder="HHmm" maxLength={4}
                               value={ccpWoEditTime} onChange={(e) => setCcpWoEditTime(e.target.value.replace(/[^\d]/g,"").slice(0,4))} />
-                          : toKSTTime(ev.measured_at)}
+                          : toKSTDateTime(ev.measured_at)}
                       </td>
                       <td className="py-2 px-3 text-xs text-slate-500 whitespace-nowrap">{slotName}</td>
                       <td className="py-2 px-3 whitespace-nowrap">
