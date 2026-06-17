@@ -585,6 +585,9 @@ export default function ProductionClient() {
   const ccpLoadSlotStatusRef = useRef(ccp.loadSlotStatus);
   useEffect(() => { ccpLoadSlotStatusRef.current = ccp.loadSlotStatus; }, [ccp.loadSlotStatus]);
 
+  const selectedWoCcpSlotIdRef = useRef<string | null>(null);
+  useEffect(() => { selectedWoCcpSlotIdRef.current = selectedWo?.ccp_slot_id ?? null; }, [selectedWo?.ccp_slot_id]);
+
   useEffect(() => {
     if (realtimeChannelRef.current) { supabase.removeChannel(realtimeChannelRef.current); realtimeChannelRef.current = null; setRealtimeConnected(false); }
     if (!selectedWo?.id) return;
@@ -607,12 +610,14 @@ export default function ProductionClient() {
     realtimeChannelRef.current = channel;
 
     const ccpEventsChannel = supabase.channel(`ccp_wo_events:${selectedWo.id}_${Math.random().toString(36).slice(2, 9)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "ccp_wo_events" }, (payload) => {
-        const d = (payload.new ?? payload.old ?? {}) as Record<string, unknown>;
-        const evSlotId = String(d.slot_id ?? "");
-        if (evSlotId && selectedWo.ccp_slot_id && evSlotId !== selectedWo.ccp_slot_id) return;
-        ccp.loadWoEvents(selectedWo.work_order_no, selectedWo.ccp_slot_id, selectedWo.status);
-      }).subscribe();
+    .on("postgres_changes", { event: "*", schema: "public", table: "ccp_wo_events" }, (payload) => {
+      const d = (payload.new ?? payload.old ?? {}) as Record<string, unknown>;
+      if (String(d.work_order_no ?? "") !== selectedWo.work_order_no) return;
+      const evSlotId = String(d.slot_id ?? "");
+      const currentCcpSlotId = selectedWoCcpSlotIdRef.current;
+      if (evSlotId && currentCcpSlotId && evSlotId !== currentCcpSlotId) return;
+      ccp.loadWoEvents(selectedWo.work_order_no, currentCcpSlotId, selectedWo.status);
+    }).subscribe();
 
     return () => {
       supabase.removeChannel(channel);

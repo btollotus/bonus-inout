@@ -364,6 +364,28 @@ if (!lastEvent || lastEvent.event_type === "end") {
           return showToast(`⚠ 시작 시각은 원료투입(${materialInKst}) 이후여야 합니다.`, "error");
         }
       }
+
+      // ── 전사지인쇄 CCP-1B(8번 슬롯) 종료 시각보다 이전이면 차단 ──
+      const transferSlot = warmerSlots.find((s) => s.slot_name === "8");
+      if (transferSlot) {
+        const { data: lastTransferEnd } = await supabase
+          .from("ccp_wo_events")
+          .select("measured_at")
+          .eq("work_order_no", selectedWo.work_order_no)
+          .eq("slot_id", transferSlot.id)
+          .eq("event_type", "end")
+          .order("measured_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (lastTransferEnd) {
+          const transferEndTime = new Date(lastTransferEnd.measured_at);
+          const startTimeKst = new Date(`${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00+09:00`);
+          if (startTimeKst < transferEndTime) {
+            const transferEndKst = toKSTTime(lastTransferEnd.measured_at);
+            return showToast(`⚠ 시작 시각은 전사지인쇄 CCP-1B 종료(${transferEndKst}) 이후여야 합니다.`, "error");
+          }
+        }
+      }
     }
 
     if (ccpWoEventType === "start" && lastEv && lastEv.event_type !== "end") {
