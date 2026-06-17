@@ -355,7 +355,7 @@ export default function ProductionClient() {
       return sum + (aqty > 0 && uw > 0 ? aqty * uw : 0);
     }, 0);
     if (totalWeight <= 0) return "";
-    return String(Math.round(totalWeight / 10));
+    return String(Math.round(totalWeight / 11));
   }, [selectedWo, prodInputs]);
   const [printOpen, setPrintOpen] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null; pin: string | null }[]>([]);
@@ -2430,7 +2430,7 @@ const totalOrder = items
                 <div className={`${card} p-3 border-amber-300 bg-amber-50`}>
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-sm font-semibold text-amber-800">⚠️ 이산화티타늄 사용량</span>
-                    <span className="text-xs text-amber-600">총중량 ÷ 10 자동계산</span>
+                    <span className="text-xs text-amber-600">총중량 ÷ 11 자동계산</span>
                   </div>
                   <div className="flex items-center gap-3">
                     {titaniumDioxideG && Number(titaniumDioxideG) > 0 ? (
