@@ -3379,26 +3379,53 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
   }, [today]);
 
   useEffect(() => {
-    // 오늘 이전 가장 최근 기록 날짜 조회 (참고용 — 신규 발견 수 직접 입력은 그대로)
-    supabase.from("pest_flying_records").select("record_date")
-      .lt("record_date", today).order("record_date", { ascending: false }).limit(1)
-      .then(({ data }) => {
-        if (!data || data.length === 0) return;
-        const lastDate = data[0].record_date;
-        setPrevDate(lastDate);
-        supabase.from("pest_flying_records").select("location,total").eq("record_date", lastDate)
-          .then(({ data: fRows }) => {
-            const m: Record<string, number> = {};
-            (fRows ?? []).forEach((r: any) => { m[r.location] = r.total ?? 0; });
-            setPrevFlying(m);
-          });
-        supabase.from("pest_walking_records").select("trap_no,total").eq("record_date", lastDate)
-          .then(({ data: wRows }) => {
-            const m: Record<string, number> = {};
-            (wRows ?? []).forEach((r: any) => { m[r.trap_no] = r.total ?? 0; });
-            setPrevWalking(m);
-          });
+    // 위치별/트랩별 "마지막 교체일(replaced=true) 이후 ~ 오늘 이전 가장 최근 점검일까지" 누적 합계
+    // 교체일 당일 수치는 교체 전 누적에 포함, 다음 점검부터 새 누적 시작 (사용자 확인됨)
+    (async () => {
+      const [{ data: stickyRows }, { data: fRows }, { data: wRows }] = await Promise.all([
+        supabase.from("pest_sticky_replacements")
+          .select("target_type,target_key,record_date")
+          .eq("replaced", true)
+          .lt("record_date", today),
+        supabase.from("pest_flying_records")
+          .select("location,record_date,total")
+          .lt("record_date", today),
+        supabase.from("pest_walking_records")
+          .select("trap_no,record_date,total")
+          .lt("record_date", today),
+      ]);
+
+      const lastReplaceFlying: Record<string, string> = {};
+      const lastReplaceWalking: Record<string, string> = {};
+      (stickyRows ?? []).forEach((s: any) => {
+        if (s.target_type === "flying") {
+          if (!lastReplaceFlying[s.target_key] || s.record_date > lastReplaceFlying[s.target_key])
+            lastReplaceFlying[s.target_key] = s.record_date;
+        } else if (s.target_type === "walking") {
+          if (!lastReplaceWalking[s.target_key] || s.record_date > lastReplaceWalking[s.target_key])
+            lastReplaceWalking[s.target_key] = s.record_date;
+        }
       });
+
+      const fMap: Record<string, number> = {};
+      (fRows ?? []).forEach((r: any) => {
+        const cutoff = lastReplaceFlying[r.location];
+        if (cutoff && r.record_date <= cutoff) return;
+        fMap[r.location] = (fMap[r.location] ?? 0) + (r.total ?? 0);
+      });
+      setPrevFlying(fMap);
+
+      const wMap: Record<string, number> = {};
+      (wRows ?? []).forEach((r: any) => {
+        const cutoff = lastReplaceWalking[r.trap_no];
+        if (cutoff && r.record_date <= cutoff) return;
+        wMap[r.trap_no] = (wMap[r.trap_no] ?? 0) + (r.total ?? 0);
+      });
+      setPrevWalking(wMap);
+
+      const flyingDates = (fRows ?? []).map((r: any) => r.record_date);
+      if (flyingDates.length > 0) setPrevDate(flyingDates.sort().slice(-1)[0]);
+    })();
   }, [today]);
 
   function updateFlying(loc: string, field: keyof PestFlyingRow, value: number|string) {
