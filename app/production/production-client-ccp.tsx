@@ -1518,7 +1518,7 @@ export function WoCcpCard({
       <div className={`${card} p-4`}>
       <div className="flex items-center justify-between mb-3">
           <div className="font-semibold text-sm">
-            {foodCategory === "중간재" ? "🔥 가열공정 슬롯 지정 (7-1~8번)" : "🌡️ CCP-1B 온장고 슬롯 지정"}
+            {foodCategory === "중간재" ? "🔥 가열공정 슬롯 지정 (7-1~8번)" : "🌡️ CCP-1B 온장고 슬롯 지정(사인판생산)"}
           </div>
           {eCcpSlotId && !(selectedWo?.status === "완료" && !isEditMode) && (
             <button
