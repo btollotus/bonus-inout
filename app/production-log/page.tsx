@@ -7,7 +7,7 @@ import { Ccp1pTab } from "./Ccp1pTab";
 import { ExpiryMgmtTab, WarmerCleaningTab, PestTab, ForeignMatterTab, HygieneCheckTab, TempHumidityTab, StorageTempTab } from "./tabs-hygiene";
 import { NewProductionLogTab } from "./NewProductionLogTab";
 import { ProductionDashboard } from "./ProductionDashboard";
-import { HygieneTrainingTab } from "./tabs-training";
+import { HygieneTrainingTab, MonitoringTrainingTab } from "./tabs-training";
 import { todayKST } from "@/lib/utils/date";
 
 const supabase = createClient();
@@ -296,12 +296,7 @@ function TrainingTab({ role, userId, showToast }: {
         <HygieneTrainingTab role={role} userId={userId} showToast={showToast} />
       )}
       {subTab === "monitoring_edu" && (
-        <div className={`${card} flex items-center justify-center p-12`}>
-          <div className="text-center text-slate-400">
-            <div className="text-3xl mb-2">🚧</div>
-            <div className="text-sm">모니터링교육 화면은 준비 중입니다.</div>
-          </div>
-        </div>
+        <MonitoringTrainingTab role={role} userId={userId} showToast={showToast} />
       )}
     </div>
   );
