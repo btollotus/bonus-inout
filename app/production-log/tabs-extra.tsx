@@ -1979,10 +1979,11 @@ export function OtherHeatingTab({ role, userId, showToast }: {
       if (allWoNos.length > 0) {
         const { data } = await supabase
           .from("work_orders")
-          .select("work_order_no,assignee_production")
+          .select("work_order_no,assignee_production,assignee_transfer")
           .in("work_order_no", allWoNos);
         for (const row of data ?? []) {
-          if (row.assignee_production) woAssigneeMap[row.work_order_no] = row.assignee_production;
+          const assignee = row.assignee_production ?? row.assignee_transfer;
+          if (assignee) woAssigneeMap[row.work_order_no] = assignee;
         }
       }
 
@@ -2247,9 +2248,10 @@ export function OtherHeatingTab({ role, userId, showToast }: {
     const assigneeMap: Record<string, string> = {};
     if (allWoNos.length > 0) {
       const { data } = await supabase.from("work_orders")
-        .select("work_order_no,assignee_production").in("work_order_no", allWoNos);
+        .select("work_order_no,assignee_production,assignee_transfer").in("work_order_no", allWoNos);
       for (const row of data ?? []) {
-        if (row.assignee_production) assigneeMap[row.work_order_no] = row.assignee_production;
+        const assignee = row.assignee_production ?? row.assignee_transfer;
+        if (assignee) assigneeMap[row.work_order_no] = assignee;
       }
     }
    
