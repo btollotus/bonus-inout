@@ -677,23 +677,25 @@ setLoading(false);
                                 <span className="rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">금속검출완료</span>
                               )}
                             </div>
-                            {/* 제품별 행 */}
-                            {rows.map((item, idx) => (
-                              <div key={idx} className="flex items-center gap-3 px-3 py-2 border-b border-slate-100 last:border-b-0">
-                                <span className="flex-1 text-sm text-slate-700">{item.name}</span>
+                           {/* 제품별 행 */}
+                           {rows.map((item, idx) => (
+                              <div key={idx} className="flex flex-col gap-1 px-3 py-2 border-b border-slate-100 last:border-b-0">
+                                <div className="flex items-center gap-3">
+                                  <span className="flex-1 min-w-0 truncate text-sm text-slate-700">{item.name}</span>
+                                  {(wo.usages ?? []).length > 0 && idx === 0 && (
+                                    <div className="flex flex-wrap gap-1 shrink-0">
+                                      {(wo.usages ?? []).map((u, ui) => (
+                                        <span key={ui} className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500">
+                                          {u.name} <span className="font-semibold tabular-nums text-slate-700">{u.quantity.toLocaleString()}{u.unit}</span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
                                 {item.actual_qty > 0 && (
-                                  <span className="text-xs text-slate-400 tabular-nums">
+                                  <span className="text-xs text-slate-400 tabular-nums break-words">
                                     {renderQtyWeightText(item.order_qty ?? 0, item.actual_qty, item.defect_qty ?? 0, item.unit_weight ?? 0, wo.food_type)}
                                   </span>
-                                )}
-                                {(wo.usages ?? []).length > 0 && idx === 0 && (
-                                  <div className="flex flex-wrap gap-1">
-                                    {(wo.usages ?? []).map((u, ui) => (
-                                      <span key={ui} className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500">
-                                        {u.name} <span className="font-semibold tabular-nums text-slate-700">{u.quantity.toLocaleString()}{u.unit}</span>
-                                      </span>
-                                    ))}
-                                  </div>
                                 )}
                               </div>
                             ))}
