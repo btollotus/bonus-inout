@@ -27,7 +27,7 @@ type WorkOrder = {
   input_done_at: string | null;
   status_input: boolean;
   usages?: { name: string; quantity: number; unit: string }[];
-  items?: { name: string; order_qty: number; actual_qty: number; unit_weight: number }[];
+  items?: { name: string; order_qty: number; actual_qty: number; unit_weight: number; defect_qty?: number }[];
   prod_start?: string | null;   // ccp_wo_events start measured_at
   prod_end?: string | null;     // ccp_wo_events end measured_at
   metal_start?: string | null;  // ccp_metal_logs start_time
@@ -93,7 +93,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     const [woRes, blendRes, usageRes, ccpEvRes, metalRes] = await Promise.all([
       supabase
         .from("work_orders")
-        .select("id,work_order_no,client_name,product_name,food_type,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight)")
+        .select("id,work_order_no,client_name,product_name,food_type,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight,defect_qty)")
         .gte("production_done_at", `${selectedDate}T00:00:00+09:00`)
         .lt("production_done_at",  `${selectedDate}T23:59:59+09:00`)
         .eq("status_production", true)
@@ -180,6 +180,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         order_qty: woi.sub_items?.[0]?.qty ?? woi.order_qty ?? 0,
         actual_qty: woi.actual_qty ?? 0,
         unit_weight: woi.unit_weight ?? 0,
+        defect_qty: woi.defect_qty ?? 0,
       }))
       .filter((it: any) => {
         const n = it.name;
@@ -219,7 +220,7 @@ setLoading(false);
       const [woRes, blendRes, usageRes, ccpEvRes2, metalRes2] = await Promise.all([
         supabase
           .from("work_orders")
-          .select("id,work_order_no,client_name,product_name,food_type,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight)")
+          .select("id,work_order_no,client_name,product_name,food_type,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight,defect_qty)")
           .gte("production_done_at", `${date}T00:00:00+09:00`)
           .lt("production_done_at",  `${date}T23:59:59+09:00`)
           .eq("status_production", true)
@@ -294,6 +295,7 @@ setLoading(false);
               order_qty: woi.sub_items?.[0]?.qty ?? woi.order_qty ?? 0,
               actual_qty: woi.actual_qty ?? 0,
               unit_weight: woi.unit_weight ?? 0,
+              defect_qty: woi.defect_qty ?? 0,
             }))
             .filter((it: any) => {
               const n = it.name;
@@ -605,7 +607,9 @@ setLoading(false);
                                 <span className="flex-1 text-sm text-slate-700">{item.name}</span>
                                 {item.actual_qty > 0 && (
                                   <span className="text-xs text-slate-400 tabular-nums">
-                                    {item.actual_qty.toLocaleString()}개
+                                    {(item.defect_qty ?? 0) > 0
+                                      ? `출고 ${item.actual_qty.toLocaleString()} + 불량 ${(item.defect_qty ?? 0).toLocaleString()} = ${(item.actual_qty + (item.defect_qty ?? 0)).toLocaleString()}개`
+                                      : `${item.actual_qty.toLocaleString()}개`}
                                   </span>
                                 )}
                                 {(wo.usages ?? []).length > 0 && idx === 0 && (
