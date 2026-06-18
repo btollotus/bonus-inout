@@ -64,6 +64,82 @@ function toKstTime(utcStr: string) {
   });
 }
 
+// ─── 컴파운드/이산화티타늄 분리 표시용 (production-client.tsx와 동일 기준 — 그쪽 변경 시 같이 수정 필요) ───
+const DARK_FOOD_TYPES = ["다크화이트","다크옐로우","데코초콜릿","롤리팝다크화이트","다크핑크","다크연두","롤리팝다크핑크"];
+
+function getFoodCategoryForWeight(foodType: string | null | undefined): "다크" | "화이트" | "중간재" | null {
+  const ft = (foodType ?? "").trim();
+  if (!ft) return null;
+  if (ft.includes("초콜릿중간재") || ft.includes("중간재")) return "중간재";
+  if (DARK_FOOD_TYPES.some((d) => ft.includes(d))) return "다크";
+  return "화이트";
+}
+
+function getCompoundNameForWeight(foodType: string | null | undefined): string {
+  const ft = foodType ?? "";
+  if (ft.includes("딸기")) return "딸기컴파운드";
+  return getFoodCategoryForWeight(ft) === "다크" ? "다크컴파운드" : "화이트컴파운드";
+}
+
+// 출고/추가생산/불량 텍스트 — "전체 합계를 1회만 반올림"한 뒤, 각 구간은 누적비율-역산 방식으로
+// 그 확정된 합계와의 차이로 계산한다. 이렇게 하면 구간별 합이 항상 실제 저장된 반올림 총량과 정확히 일치한다.
+// (품목이 하나뿐인 작업지시서 기준 — production-client.tsx의 실제 차감 계산과 동일한 결과)
+function renderQtyWeightText(
+  orderQty: number,
+  actualQty: number,
+  defectQty: number,
+  unitWeight: number,
+  foodType: string | null | undefined
+): string {
+  if (actualQty <= 0) return "";
+  const extraQty = Math.max(actualQty - orderQty, 0);
+  if (unitWeight <= 0) {
+    if (extraQty > 0 && defectQty > 0) return `주문 ${orderQty.toLocaleString()} + 추가생산 ${extraQty.toLocaleString()} = 출고 ${actualQty.toLocaleString()} + 불량 ${defectQty.toLocaleString()} = ${(actualQty + defectQty).toLocaleString()}개`;
+    if (extraQty > 0) return `주문 ${orderQty.toLocaleString()} + 추가생산 ${extraQty.toLocaleString()} = ${actualQty.toLocaleString()}개`;
+    if (defectQty > 0) return `출고 ${actualQty.toLocaleString()} + 불량 ${defectQty.toLocaleString()} = ${(actualQty + defectQty).toLocaleString()}개`;
+    return `${actualQty.toLocaleString()}개`;
+  }
+
+  const grandQty = actualQty + defectQty;
+  const grandG = grandQty * unitWeight;
+  const isReal = (foodType ?? "").includes("리얼");
+
+  // production-client.tsx와 동일한 공식 — 전체 합계 1회만 반올림 (구간별 개별 반올림 금지)
+  const grandCompoundG = isReal ? Math.round((grandG * 10) / 11) : Math.round(grandG);
+  const grandTiG = isReal ? Math.round((grandG * 1) / 11) : 0;
+
+  function partG(cumQty: number, grand: number) {
+    return Math.round((grand * cumQty) / grandQty);
+  }
+  const outboundCompoundG = partG(actualQty, grandCompoundG);
+  const orderCompoundG = partG(orderQty, grandCompoundG);
+  const extraCompoundG = outboundCompoundG - orderCompoundG;
+  const defectCompoundG = grandCompoundG - outboundCompoundG;
+
+  const outboundTiG = isReal ? partG(actualQty, grandTiG) : 0;
+  const orderTiG = isReal ? partG(orderQty, grandTiG) : 0;
+  const extraTiG = outboundTiG - orderTiG;
+  const defectTiG = grandTiG - outboundTiG;
+
+  const compoundName = getCompoundNameForWeight(foodType);
+  const fmtG = (compG: number, tiG: number) =>
+    isReal ? `${compoundName} ${compG.toLocaleString()}g+이산화티타늄 ${tiG.toLocaleString()}g` : `${compG.toLocaleString()}g`;
+
+  const parts: string[] = [];
+  if (extraQty > 0) {
+    parts.push(`주문 ${orderQty.toLocaleString()}개(${fmtG(orderCompoundG, orderTiG)})`);
+    parts.push(`+ 추가생산 ${extraQty.toLocaleString()}개(${fmtG(extraCompoundG, extraTiG)})`);
+    parts.push(`= 출고 ${actualQty.toLocaleString()}개(${fmtG(outboundCompoundG, outboundTiG)})`);
+  } else {
+    parts.push(`출고 ${actualQty.toLocaleString()}개(${fmtG(outboundCompoundG, outboundTiG)})`);
+  }
+  if (defectQty > 0) {
+    parts.push(`+ 불량 ${defectQty.toLocaleString()}개(${fmtG(defectCompoundG, defectTiG)})`);
+    parts.push(`= ${grandQty.toLocaleString()}개(${fmtG(grandCompoundG, grandTiG)})`);
+  }
+  return parts.join(" ");
+}
+
 // ─────────────────────── Main Tab ───────────────────────
 export function NewProductionLogTab({ role, userId, showToast }: {
   role: UserRole;
@@ -607,9 +683,7 @@ setLoading(false);
                                 <span className="flex-1 text-sm text-slate-700">{item.name}</span>
                                 {item.actual_qty > 0 && (
                                   <span className="text-xs text-slate-400 tabular-nums">
-                                    {(item.defect_qty ?? 0) > 0
-                                      ? `출고 ${item.actual_qty.toLocaleString()} + 불량 ${(item.defect_qty ?? 0).toLocaleString()} = ${(item.actual_qty + (item.defect_qty ?? 0)).toLocaleString()}개`
-                                      : `${item.actual_qty.toLocaleString()}개`}
+                                    {renderQtyWeightText(item.order_qty ?? 0, item.actual_qty, item.defect_qty ?? 0, item.unit_weight ?? 0, wo.food_type)}
                                   </span>
                                 )}
                                 {(wo.usages ?? []).length > 0 && idx === 0 && (
