@@ -723,8 +723,8 @@ export default function ProductionClient() {
     return !transferCcpEnded;
   }
 
-  async function loadTransferCcpEvents(workOrderNo: string) {
-    const slotId = transferCcpSlotId;
+  async function loadTransferCcpEvents(workOrderNo: string, slotIdOverride?: string | null) {
+    const slotId = slotIdOverride !== undefined ? slotIdOverride : transferCcpSlotId;
     if (!slotId) { setTransferCcpEvents([]); return; }
     const { data } = await supabase
       .from("ccp_wo_events")
@@ -947,7 +947,14 @@ export default function ProductionClient() {
     setNeoColorSprayEditMode(false);
     // 전사지인쇄 CCP-1B(8번 슬롯) 초기화 + 로드
     setTransferCcpTemp(""); setTransferCcpActionNote(""); setTransferCcpIsOk(true); setTransferCcpEditingId(null);
-    if (needsTransferCcp(wo.food_type)) { loadTransferCcpEvents(wo.work_order_no); } else { setTransferCcpEvents([]); }
+    let resolvedTransferSlotId: string | null = transferCcpSlotId;
+    if (needsTransferCcp(wo.food_type)) {
+      if (!resolvedTransferSlotId) {
+        const { data: slotData } = await supabase.from("warmer_slots").select("id").eq("slot_name", "8").eq("is_active", true).maybeSingle();
+        resolvedTransferSlotId = slotData?.id ?? null;
+      }
+      loadTransferCcpEvents(wo.work_order_no, resolvedTransferSlotId);
+    } else { setTransferCcpEvents([]); }
     // 네오컬러화이트/리얼화이트: 저장된 값 불러오기 + lot 자동 검색
     const isNeoColorWo = ["네오컬러화이트", "네오컬러리얼화이트", "롤리팝컬러리얼화이트", "롤리팝컬러화이트"].some((k) => (wo.food_type ?? "").includes(k));
     if (isNeoColorWo && wo.neo_color_spray_lots && wo.neo_color_spray_lots.length > 0) {
@@ -1056,7 +1063,7 @@ export default function ProductionClient() {
         return next;
       });
     })();
-    ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id, wo.status, needsTransferCcp(wo.food_type) ? transferCcpSlotId : null);
+    ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id, wo.status, needsTransferCcp(wo.food_type) ? resolvedTransferSlotId : null);
     // 압축공기 기존 기록 로드 (분사/코팅 작업지시서)
     if (getWoSubType(wo.product_name)) {
       (async () => {
