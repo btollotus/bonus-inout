@@ -889,6 +889,21 @@ export default function ProductionClient() {
 
   useEffect(() => { loadWoList(); }, [loadWoList]);
 
+  // ─── URL 쿼리(?wo=<id>)로 전달된 작업지시서 자동 선택 — 생산일지/원료수불부 바로가기 링크용 ───
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const woIdFromUrl = params.get("wo");
+    if (!woIdFromUrl) return;
+    (async () => {
+      const { data } = await supabase
+        .from("work_orders")
+        .select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,transfer_done_at,print_check_done_at,input_done_at,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`)
+        .eq("id", woIdFromUrl)
+        .maybeSingle();
+      if (data) await applySelection(data as unknown as WorkOrderRow);
+    })();
+  }, []); // eslint-disable-line
+
   useEffect(() => {
     const channelId = `ccp_slot_events_realtime_${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase.channel(channelId)
