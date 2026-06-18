@@ -671,41 +671,71 @@ function selectWo(wo: WorkOrderItem) {
 
           const endTime = (formData.b_end_time ?? "00:00").slice(0, 5);
           const happenedDate = formData.log_date ?? rangeFrom;
-          const { error: movErr } = await supabase.from("movements").insert({
-            lot_id: lotId,
-            type: "IN",
-            qty: totalProducedQty,
-            happened_at: `${happenedDate}T${endTime}:00+09:00`,
-            note: "작업지시서 생산완료 - " + (woData as any).work_order_no,
-            created_by: userId,
-          });
-          if (movErr) stockErrors.push("입고 기록 실패: " + movErr.message);
+          const inNote = "작업지시서 생산완료 - " + (woData as any).work_order_no;
+          const { data: existingInMov } = await supabase.from("movements")
+            .select("id").eq("lot_id", lotId).eq("type", "IN").eq("note", inNote).limit(1);
+          if (existingInMov && existingInMov.length > 0) {
+            const { error: movErr } = await supabase.from("movements")
+              .update({ qty: totalProducedQty, happened_at: `${happenedDate}T${endTime}:00+09:00` })
+              .eq("id", existingInMov[0].id);
+            if (movErr) stockErrors.push("입고 기록 갱신 실패: " + movErr.message);
+          } else {
+            const { error: movErr } = await supabase.from("movements").insert({
+              lot_id: lotId,
+              type: "IN",
+              qty: totalProducedQty,
+              happened_at: `${happenedDate}T${endTime}:00+09:00`,
+              note: inNote,
+              created_by: userId,
+            });
+            if (movErr) stockErrors.push("입고 기록 실패: " + movErr.message);
+          }
 
           // 불량 수량 → 동일 LOT에 폐기(DISCARD) 기록
           if (defect_qty > 0) {
-            const { error: discardErr } = await supabase.from("movements").insert({
-              lot_id: lotId,
-              type: "DISCARD",
-              qty: defect_qty,
-              happened_at: `${happenedDate}T${endTime}:00+09:00`,
-              note: "작업지시서 생산완료(불량) - " + (woData as any).work_order_no,
-              created_by: userId,
-            });
-            if (discardErr) stockErrors.push("불량 폐기 기록 실패: " + discardErr.message);
+            const discardNote = "작업지시서 생산완료(불량) - " + (woData as any).work_order_no;
+            const { data: existingDiscardMov } = await supabase.from("movements")
+              .select("id").eq("lot_id", lotId).eq("type", "DISCARD").eq("note", discardNote).limit(1);
+            if (existingDiscardMov && existingDiscardMov.length > 0) {
+              const { error: discardErr } = await supabase.from("movements")
+                .update({ qty: defect_qty, happened_at: `${happenedDate}T${endTime}:00+09:00` })
+                .eq("id", existingDiscardMov[0].id);
+              if (discardErr) stockErrors.push("불량 폐기 기록 갱신 실패: " + discardErr.message);
+            } else {
+              const { error: discardErr } = await supabase.from("movements").insert({
+                lot_id: lotId,
+                type: "DISCARD",
+                qty: defect_qty,
+                happened_at: `${happenedDate}T${endTime}:00+09:00`,
+                note: discardNote,
+                created_by: userId,
+              });
+              if (discardErr) stockErrors.push("불량 폐기 기록 실패: " + discardErr.message);
+            }
           }
 
           // 업체 주문제작 → 연결된 주문의 출고일 기준으로 동일 LOT에 OUT도 기록
           if (linkedOrderId && shipDateYMD) {
             const itemName = (item.sub_items ?? [])[0]?.name ?? "";
-            const { error: outErr } = await supabase.from("movements").insert({
-              lot_id: lotId,
-              type: "OUT",
-              qty: actual_qty,
-              happened_at: `${shipDateYMD}T00:00:00+09:00`,
-              note: `거래내역 OUT - ${(woData as any).work_order_no} - ${itemName}`,
-              created_by: userId,
-            });
-            if (outErr) stockErrors.push("출고 기록 실패: " + outErr.message);
+            const outNote = `거래내역 OUT - ${(woData as any).work_order_no} - ${itemName}`;
+            const { data: existingOutMov } = await supabase.from("movements")
+              .select("id").eq("lot_id", lotId).eq("type", "OUT").eq("note", outNote).limit(1);
+            if (existingOutMov && existingOutMov.length > 0) {
+              const { error: outErr } = await supabase.from("movements")
+                .update({ qty: actual_qty, happened_at: `${shipDateYMD}T00:00:00+09:00` })
+                .eq("id", existingOutMov[0].id);
+              if (outErr) stockErrors.push("출고 기록 갱신 실패: " + outErr.message);
+            } else {
+              const { error: outErr } = await supabase.from("movements").insert({
+                lot_id: lotId,
+                type: "OUT",
+                qty: actual_qty,
+                happened_at: `${shipDateYMD}T00:00:00+09:00`,
+                note: outNote,
+                created_by: userId,
+              });
+              if (outErr) stockErrors.push("출고 기록 실패: " + outErr.message);
+            }
           }
         }
 
