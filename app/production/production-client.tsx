@@ -1056,7 +1056,7 @@ export default function ProductionClient() {
         return next;
       });
     })();
-    ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id, wo.status);
+    ccp.loadWoEvents(wo.work_order_no, wo.ccp_slot_id, wo.status, needsTransferCcp(wo.food_type) ? transferCcpSlotId : null);
     // 압축공기 기존 기록 로드 (분사/코팅 작업지시서)
     if (getWoSubType(wo.product_name)) {
       (async () => {

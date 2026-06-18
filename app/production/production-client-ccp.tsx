@@ -123,7 +123,7 @@ export function useCcpState(
     return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
   }
 
-  const loadWoEvents = useCallback(async (workOrderNo: string, slotId?: string | null, status?: string) => {
+  const loadWoEvents = useCallback(async (workOrderNo: string, slotId?: string | null, status?: string, excludeSlotId?: string | null) => {
     let query = supabase
       .from("ccp_wo_events")
       .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
@@ -135,6 +135,7 @@ export function useCcpState(
           .eq("work_order_no", workOrderNo);
       } else {
         query = query.eq("work_order_no", workOrderNo);
+        if (excludeSlotId) query = query.neq("slot_id", excludeSlotId);
       }
 
     const { data } = await query;
