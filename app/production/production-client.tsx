@@ -2638,6 +2638,14 @@ const totalOrder = items
                                   for (const tl of neoColorSprayLots) {
                                     const sprayQty = toInt(tl.qty);
                                     if (!tl.lot_id || sprayQty <= 0) continue;
+                                    // 저장 직전 DB 잔량 재확인
+                                    const { data: latestMovs } = await supabase.from("movements").select("type, qty").eq("lot_id", tl.lot_id);
+                                    const latestRemaining = (latestMovs ?? []).reduce((s, m) => m.type === "IN" ? s + m.qty : s - m.qty, 0);
+                                    if (sprayQty > latestRemaining) {
+                                      setNeoColorSpraySaving(false);
+                                      showToast(`재고 부족: 차감 수량(${sprayQty})이 현재 잔량(${latestRemaining})을 초과합니다. 잔량을 확인하세요.`, "error");
+                                      return;
+                                    }
                                     totalSprayQty += sprayQty;
                                     const { error: movErr } = await supabase.from("movements").insert({
                                       lot_id: tl.lot_id, type: "OUT", qty: sprayQty,
@@ -2728,6 +2736,14 @@ const totalOrder = items
                                   for (const tl of neoColorSprayLots) {
                                     const sprayQty = toInt(tl.qty);
                                     if (!tl.lot_id || sprayQty <= 0) continue;
+                                    // 기존 삭제 후 재삽입 직전 DB 잔량 재확인
+                                    const { data: latestMovs2 } = await supabase.from("movements").select("type, qty").eq("lot_id", tl.lot_id);
+                                    const latestRemaining2 = (latestMovs2 ?? []).reduce((s, m) => m.type === "IN" ? s + m.qty : s - m.qty, 0);
+                                    if (sprayQty > latestRemaining2) {
+                                      setNeoColorSpraySaving(false);
+                                      showToast(`재고 부족: 차감 수량(${sprayQty})이 현재 잔량(${latestRemaining2})을 초과합니다. 잔량을 확인하세요.`, "error");
+                                      return;
+                                    }
                                     totalSprayQty += sprayQty;
                                     const { error: movErr } = await supabase.from("movements").insert({
                                       lot_id: tl.lot_id, type: "OUT", qty: sprayQty,
