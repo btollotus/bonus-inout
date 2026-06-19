@@ -88,6 +88,9 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
 
   const [showPinFor, setShowPinFor] = useState<"educator" | "attendee" | null>(null);
   const [photoSignedUrls, setPhotoSignedUrls] = useState<Record<string, string>>({});
+  const [signingEmpId, setSigningEmpId] = useState<string | null>(null);
+  const [signingPin, setSigningPin] = useState("");
+  const [signingError, setSigningError] = useState("");
 
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
@@ -168,6 +171,25 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
     setFAttendees((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  function removeAttendeeById(empId: string) {
+    setFAttendees((prev) => prev.filter((a) => a.employee_id !== empId));
+  }
+
+  function handleSigningDigit(emp: { id: string; name: string; pin: string | null }, d: string) {
+    if (d === "⌫") { setSigningPin((p) => p.slice(0, -1)); setSigningError(""); return; }
+    if (signingPin.length >= 4) return;
+    const next = signingPin + d;
+    setSigningPin(next);
+    if (next.length === 4) {
+      setTimeout(() => {
+        if (!emp.pin) { setSigningError("PIN 미설정"); setSigningPin(""); return; }
+        if (emp.pin !== next) { setSigningError("PIN 오류"); setSigningPin(""); return; }
+        addAttendee(emp.id, emp.name);
+        setSigningEmpId(null); setSigningPin(""); setSigningError("");
+      }, 100);
+    }
+  }
+
   function onPhotoSelected(file: File | null) {
     setFPhotoFile(file);
     setFPhotoPreview(file ? URL.createObjectURL(file) : null);
@@ -182,7 +204,7 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
   }
 
   async function saveLog() {
-    if (!fEducator) return showToast("교육자 PIN 인증이 필요합니다.", "error");
+    const educator = employees.find((e) => e.name === "조대성");
     if (!fLocation.trim()) return showToast("장소를 입력하세요.", "error");
     if (fAttendees.length === 0) return showToast("참석자를 1명 이상 추가하세요.", "error");
     if (!fPhotoFile) return showToast("단체사진을 첨부하세요.", "error");
@@ -204,7 +226,7 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
       content: fContent, result_note: fResultNote.trim() || null,
       attachment_docs: attachmentDocs,
       photo_path: photoPath,
-      educator_employee_id: fEducator.id, educator_name: fEducator.name, educator_signed_at: new Date().toISOString(),
+      educator_employee_id: educator?.id ?? null, educator_name: "조대성", educator_signed_at: new Date().toISOString(),
       created_by: userId,
     }).select().single();
 
@@ -449,35 +471,58 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
           </div>
 
           <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 text-xs font-semibold text-slate-500">교육자 (PIN 인증)</div>
-            {fEducator ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-slate-700">{fEducator.name}</span>
-                <span className="text-xs text-green-600">✓ 인증 완료</span>
-                <button className="text-xs text-slate-400 hover:text-red-500" onClick={() => setFEducator(null)}>변경</button>
-              </div>
-            ) : (
-              <button className={btnSm} onClick={() => setShowPinFor("educator")}>🔒 PIN 인증</button>
-            )}
+            <div className="mb-1 text-xs font-semibold text-slate-500">교육자 (고정)</div>
+            <div className="flex items-center gap-2">
+              <img src="/sign-chods.png" style={{ height: 24, objectFit: "contain" }} alt="조대성" />
+              <span className="text-sm font-semibold text-slate-700">조대성</span>
+              <span className="text-xs text-green-600">✓ 고정</span>
+            </div>
           </div>
 
           <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500">참석자 ({fAttendees.length}명)</span>
-              <button className={btnSm} onClick={() => setShowPinFor("attendee")}>+ 참석자 추가 (PIN)</button>
+            <div className="mb-2 text-xs font-semibold text-slate-500">참석자 서명 ({fAttendees.length}명 완료) — 각자 본인 PIN 입력</div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {employees.filter((e) => e.name !== "조대성").map((emp) => {
+                const signed = fAttendees.some((a) => a.employee_id === emp.id);
+                const isSigning = signingEmpId === emp.id;
+                return (
+                  <div key={emp.id} className={`rounded-xl border p-2.5 transition-all ${signed ? "border-green-300 bg-green-50" : "border-slate-200 bg-white"}`}>
+                    <div className="text-sm font-semibold text-center text-slate-700">{emp.name}</div>
+                    {signed ? (
+                      <div className="flex items-center justify-center gap-1.5 mt-1.5">
+                        {SIGN_MAP[emp.name] && <img src={SIGN_MAP[emp.name]} style={{ height: 18, objectFit: "contain" }} alt={emp.name} />}
+                        <span className="text-xs text-green-600">✓ 서명완료</span>
+                        <button className="text-[10px] text-slate-300 hover:text-red-400 ml-1" onClick={() => removeAttendeeById(emp.id)}>✕</button>
+                      </div>
+                    ) : isSigning ? (
+                      <div className="mt-1.5">
+                        <div className="flex justify-center gap-1.5 mb-1.5">
+                          {[0,1,2,3].map((i) => (
+                            <div key={i} className={`w-5 h-5 rounded border-2 flex items-center justify-center text-[10px] font-bold transition-all ${signingPin.length > i ? "border-blue-500 bg-blue-500 text-white" : "border-slate-200 bg-white"}`}>
+                              {signingPin.length > i ? "●" : ""}
+                            </div>
+                          ))}
+                        </div>
+                        {signingError && <div className="text-[10px] text-red-500 text-center mb-1">{signingError}</div>}
+                        <div className="grid grid-cols-3 gap-0.5">
+                          {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
+                            <button key={i} type="button"
+                              className={`py-1.5 text-xs font-semibold rounded transition-all ${d === "" ? "invisible" : "bg-white border border-slate-200 hover:bg-slate-50 active:bg-slate-100"}`}
+                              onClick={() => handleSigningDigit(emp, d)}>{d}</button>
+                          ))}
+                        </div>
+                        <button className="mt-1 w-full text-[10px] text-slate-400 hover:text-slate-600" onClick={() => { setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>취소</button>
+                      </div>
+                    ) : (
+                      <button className="mt-1.5 w-full rounded-lg border border-slate-200 py-1 text-xs text-slate-500 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all"
+                        onClick={() => { setSigningEmpId(emp.id); setSigningPin(""); setSigningError(""); }}>
+                        🔒 PIN 입력
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            {fAttendees.length === 0 ? (
-              <div className="py-2 text-center text-xs text-slate-400">참석자를 추가하세요.</div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {fAttendees.map((a, idx) => (
-                  <span key={idx} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs">
-                    {a.name}
-                    <button className="text-slate-300 hover:text-red-500" onClick={() => removeAttendee(idx)}>✕</button>
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="mt-3">
@@ -516,22 +561,8 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
         </div>
       )}
 
-      {/* PIN 모달 */}
-      {showPinFor && (
-        <PinModal
-          employees={employees.filter((e) => e.name !== null) as any}
-          title={showPinFor === "educator" ? "교육자 본인 확인" : "참석자 본인 확인"}
-          onSuccess={(empId, empName) => {
-            if (showPinFor === "educator") setFEducator({ id: empId, name: empName });
-            else addAttendee(empId, empName);
-            setShowPinFor(null);
-          }}
-          onCancel={() => setShowPinFor(null)}
-        />
-      )}
-
-      {/* 목록 */}
-      <div className={`${card} p-4`}>
+    {/* 목록 */}
+    <div className={`${card} p-4`}>
         <div className="mb-3 font-semibold text-sm">📋 교육 기록 — {rangeFrom} ~ {rangeTo}</div>
         {loading ? (
           <div className="py-6 text-center text-sm text-slate-400">불러오는 중...</div>
@@ -643,6 +674,9 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
 
   const [showPinFor, setShowPinFor] = useState<"educator" | "attendee" | null>(null);
   const [photoSignedUrls, setPhotoSignedUrls] = useState<Record<string, string>>({});
+  const [signingEmpId, setSigningEmpId] = useState<string | null>(null);
+  const [signingPin, setSigningPin] = useState("");
+  const [signingError, setSigningError] = useState("");
 
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
@@ -692,6 +726,25 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
     setFAttendees((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  function removeAttendeeById(empId: string) {
+    setFAttendees((prev) => prev.filter((a) => a.employee_id !== empId));
+  }
+
+  function handleSigningDigit(emp: { id: string; name: string; pin: string | null }, d: string) {
+    if (d === "⌫") { setSigningPin((p) => p.slice(0, -1)); setSigningError(""); return; }
+    if (signingPin.length >= 4) return;
+    const next = signingPin + d;
+    setSigningPin(next);
+    if (next.length === 4) {
+      setTimeout(() => {
+        if (!emp.pin) { setSigningError("PIN 미설정"); setSigningPin(""); return; }
+        if (emp.pin !== next) { setSigningError("PIN 오류"); setSigningPin(""); return; }
+        addAttendee(emp.id, emp.name);
+        setSigningEmpId(null); setSigningPin(""); setSigningError("");
+      }, 100);
+    }
+  }
+
   function setAttendeePhoto(idx: number, slot: 1 | 2, file: File | null) {
     setFAttendees((prev) => prev.map((a, i) => {
       if (i !== idx) return a;
@@ -709,7 +762,7 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
   }
 
   async function saveLog() {
-    if (!fEducator) return showToast("교육자 PIN 인증이 필요합니다.", "error");
+    const educator = employees.find((e) => e.name === "조대성");
     if (!fLocation.trim()) return showToast("장소를 입력하세요.", "error");
     if (fAttendees.length === 0) return showToast("참석자를 1명 이상 추가하세요.", "error");
     const missingPhoto = fAttendees.find((a) => !a.photo1 || !a.photo2);
@@ -728,7 +781,7 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
       location: fLocation.trim(), target: fTarget.trim(),
       absentee_type: fAbsentee, absentee_note: fAbsentee === "기타" ? fAbsenteeNote.trim() : null,
       attachment_docs: attachmentDocs,
-      educator_employee_id: fEducator.id, educator_name: fEducator.name,
+      educator_employee_id: educator?.id ?? null, educator_name: "조대성",
       created_by: userId,
     }).select().single();
 
@@ -953,49 +1006,76 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
           </div>
 
           <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 text-xs font-semibold text-slate-500">교육자 (PIN 인증)</div>
-            {fEducator ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-slate-700">{fEducator.name}</span>
-                <span className="text-xs text-green-600">✓ 인증 완료</span>
-                <button className="text-xs text-slate-400 hover:text-red-500" onClick={() => setFEducator(null)}>변경</button>
-              </div>
-            ) : (
-              <button className={btnSm} onClick={() => setShowPinFor("educator")}>🔒 PIN 인증</button>
-            )}
+            <div className="mb-1 text-xs font-semibold text-slate-500">교육자 (고정)</div>
+            <div className="flex items-center gap-2">
+              <img src="/sign-chods.png" style={{ height: 24, objectFit: "contain" }} alt="조대성" />
+              <span className="text-sm font-semibold text-slate-700">조대성</span>
+              <span className="text-xs text-green-600">✓ 고정</span>
+            </div>
           </div>
 
           <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500">참석자 ({fAttendees.length}명) — 1인당 사진 2장 필수</span>
-              <button className={btnSm} onClick={() => setShowPinFor("attendee")}>+ 참석자 추가 (PIN)</button>
-            </div>
-            {fAttendees.length === 0 ? (
-              <div className="py-2 text-center text-xs text-slate-400">참석자를 추가하세요.</div>
-            ) : (
-              <div className="space-y-2">
-                {fAttendees.map((a, idx) => (
-                  <div key={idx} className="rounded-lg border border-slate-200 bg-white p-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-slate-700">{a.name}</span>
-                      <button className="text-xs text-slate-300 hover:text-red-500" onClick={() => removeAttendee(idx)}>✕ 제거</button>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-3">
-                      <div>
-                        <div className="mb-1 text-[11px] text-slate-400">사진 1 *</div>
-                        <input type="file" accept="image/*" className="text-xs" onChange={(e) => setAttendeePhoto(idx, 1, e.target.files?.[0] ?? null)} />
-                        {a.photo1Preview && <img src={a.photo1Preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt="사진1" />}
+            <div className="mb-2 text-xs font-semibold text-slate-500">참석자 서명 ({fAttendees.length}명 완료) — 각자 본인 PIN 입력 후 사진 2장 첨부</div>
+            <div className="space-y-2">
+              {employees.filter((e) => e.name !== "조대성").map((emp) => {
+                const attendeeIdx = fAttendees.findIndex((a) => a.employee_id === emp.id);
+                const signed = attendeeIdx >= 0;
+                const isSigning = signingEmpId === emp.id;
+                const attendee = signed ? fAttendees[attendeeIdx] : null;
+                return (
+                  <div key={emp.id} className={`rounded-xl border p-3 transition-all ${signed ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white"}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-slate-700">{emp.name}</span>
+                        {signed && SIGN_MAP[emp.name] && <img src={SIGN_MAP[emp.name]} style={{ height: 18, objectFit: "contain" }} alt={emp.name} />}
+                        {signed && <span className="text-xs text-green-600">✓ 서명완료</span>}
                       </div>
-                      <div>
-                        <div className="mb-1 text-[11px] text-slate-400">사진 2 *</div>
-                        <input type="file" accept="image/*" className="text-xs" onChange={(e) => setAttendeePhoto(idx, 2, e.target.files?.[0] ?? null)} />
-                        {a.photo2Preview && <img src={a.photo2Preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt="사진2" />}
-                      </div>
+                      {signed && <button className="text-[10px] text-slate-300 hover:text-red-400" onClick={() => removeAttendeeById(emp.id)}>✕ 취소</button>}
                     </div>
+                    {!signed && !isSigning && (
+                      <button className="w-full rounded-lg border border-slate-200 py-1.5 text-xs text-slate-500 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all"
+                        onClick={() => { setSigningEmpId(emp.id); setSigningPin(""); setSigningError(""); }}>
+                        🔒 PIN 입력
+                      </button>
+                    )}
+                    {!signed && isSigning && (
+                      <div>
+                        <div className="flex justify-center gap-1.5 mb-1.5">
+                          {[0,1,2,3].map((i) => (
+                            <div key={i} className={`w-5 h-5 rounded border-2 flex items-center justify-center text-[10px] font-bold transition-all ${signingPin.length > i ? "border-blue-500 bg-blue-500 text-white" : "border-slate-200 bg-white"}`}>
+                              {signingPin.length > i ? "●" : ""}
+                            </div>
+                          ))}
+                        </div>
+                        {signingError && <div className="text-[10px] text-red-500 text-center mb-1">{signingError}</div>}
+                        <div className="grid grid-cols-6 gap-0.5 mb-1">
+                          {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
+                            <button key={i} type="button"
+                              className={`py-1.5 text-xs font-semibold rounded transition-all ${d === "" ? "invisible" : "bg-white border border-slate-200 hover:bg-slate-50 active:bg-slate-100"}`}
+                              onClick={() => handleSigningDigit(emp, d)}>{d}</button>
+                          ))}
+                        </div>
+                        <button className="w-full text-[10px] text-slate-400 hover:text-slate-600" onClick={() => { setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>취소</button>
+                      </div>
+                    )}
+                    {signed && (
+                      <div className="mt-2 flex flex-wrap gap-3">
+                        <div>
+                          <div className="mb-1 text-[11px] text-slate-400">사진 1 *</div>
+                          <input type="file" accept="image/*" className="text-xs" onChange={(e) => setAttendeePhoto(attendeeIdx, 1, e.target.files?.[0] ?? null)} />
+                          {attendee?.photo1Preview && <img src={attendee.photo1Preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt="사진1" />}
+                        </div>
+                        <div>
+                          <div className="mb-1 text-[11px] text-slate-400">사진 2 *</div>
+                          <input type="file" accept="image/*" className="text-xs" onChange={(e) => setAttendeePhoto(attendeeIdx, 2, e.target.files?.[0] ?? null)} />
+                          {attendee?.photo2Preview && <img src={attendee.photo2Preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt="사진2" />}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
           </div>
 
           <div className="mt-3">
@@ -1019,20 +1099,6 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
             </button>
           </div>
         </div>
-      )}
-
-      {/* PIN 모달 */}
-      {showPinFor && (
-        <PinModal
-          employees={employees.filter((e) => e.name !== null) as any}
-          title={showPinFor === "educator" ? "교육자 본인 확인" : "참석자 본인 확인"}
-          onSuccess={(empId, empName) => {
-            if (showPinFor === "educator") setFEducator({ id: empId, name: empName });
-            else addAttendee(empId, empName);
-            setShowPinFor(null);
-          }}
-          onCancel={() => setShowPinFor(null)}
-        />
       )}
 
       {/* 목록 */}
