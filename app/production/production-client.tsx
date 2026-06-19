@@ -924,20 +924,30 @@ export default function ProductionClient() {
     const channelId = `movements_realtime_${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase.channel(channelId)
       .on("postgres_changes", { event: "*", schema: "public", table: "movements" }, (payload) => {
-        console.log("[movements realtime]", payload.eventType, JSON.stringify(payload.old), JSON.stringify(payload.new));
-        const d = (payload.eventType === "DELETE" ? payload.old : payload.new ?? payload.old ?? {}) as Record<string, unknown>;
-        const lotId = String(d.lot_id ?? "");
-        if (!lotId) return;
         const currentOptions = neoColorSprayLotOptionsRef.current;
         if (currentOptions.length === 0) return;
-        const matchedLot = currentOptions.find((l) => l.lot_id === lotId);
-        if (!matchedLot) return;
-        // 해당 lot 잔량 재조회
+        // DELETE 이벤트는 payload.old에 id만 오므로 전체 lot 잔량 재조회
+        // INSERT/UPDATE 이벤트는 lot_id로 필터링
+        const d = (payload.new ?? payload.old ?? {}) as Record<string, unknown>;
+        const lotId = String(d.lot_id ?? "");
+        const isRelevant = lotId
+          ? currentOptions.some((l) => l.lot_id === lotId)
+          : payload.eventType === "DELETE"; // DELETE + lot_id 없으면 전체 재조회
+        if (!isRelevant) return;
+        const lotIdsToRefresh = lotId ? [lotId] : currentOptions.map((l) => l.lot_id);
         (async () => {
-          const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", lotId);
-          const newRemaining = (movData ?? []).reduce((s, m) => m.type === "IN" ? s + m.qty : s - m.qty, 0);
+          const { data: movData } = await supabase.from("movements").select("lot_id, type, qty").in("lot_id", lotIdsToRefresh);
+          const remainingMap: Record<string, number> = {};
+          for (const m of movData ?? []) {
+            if (!remainingMap[m.lot_id]) remainingMap[m.lot_id] = 0;
+            if (m.type === "IN") remainingMap[m.lot_id] += m.qty;
+            else remainingMap[m.lot_id] -= m.qty;
+          }
           setNeoColorSprayLotOptions((prev) => {
-            const next = prev.map((l) => l.lot_id === lotId ? { ...l, remaining_qty: newRemaining } : l);
+            const next = prev.map((l) => lotIdsToRefresh.includes(l.lot_id)
+              ? { ...l, remaining_qty: remainingMap[l.lot_id] ?? l.remaining_qty }
+              : l
+            );
             neoColorSprayLotOptionsRef.current = next;
             return next;
           });
