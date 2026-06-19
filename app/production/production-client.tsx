@@ -384,7 +384,7 @@ export default function ProductionClient() {
 
   const [woChecks, setWoChecks] = useState<WoChecks | null>(null);
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
-  const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; extra_qty: string; defect_qty?: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[] }>>({});
+  const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; extra_qty: string; defect_qty?: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[]; skip?: boolean }>>({});
   const titaniumDioxideG = useMemo(() => {
     if (!selectedWo || !(selectedWo.food_type ?? "").includes("리얼")) return "";
     const items = (selectedWo.work_order_items ?? []).filter((item) => {
@@ -1098,6 +1098,7 @@ export default function ProductionClient() {
           transfer_lot_id: item.transfer_lot_id ?? "",
           transfer_qty: item.transfer_qty != null ? String(item.transfer_qty) : "",
           transfer_lots: savedLots ? savedLots.map((l) => ({ lot_id: l.lot_id, qty: String(l.qty) })) : [],
+          skip: false,
         };
     }
     setProdInputs(inputs);
@@ -1677,7 +1678,7 @@ async function doCompleteSprayCoating(productionAssignee: string, subType: "분�
     }
 
     const items = (selectedWo.work_order_items ?? []).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비"); });
-    const missingQtyOrExpiry = items.filter((item) => { const pi = prodInputs[item.id]; return !pi || !pi.actual_qty || !pi.unit_weight || !pi.expiry_date; });
+    const missingQtyOrExpiry = items.filter((item) => { const pi = prodInputs[item.id]; if (pi?.skip) return false; return !pi || !pi.actual_qty || !pi.unit_weight || !pi.expiry_date; });
     if (missingQtyOrExpiry.length > 0) { alert("출고수량, 개당중량, 소비기한은 필수 입력 항목입니다.\n\n입력 후 다시 시도해주세요."); setIsCompleting(false); return; }
     if (isChuganJae) {
       if (!confirm("생산완료 처리하시겠습니까?")) { setIsCompleting(false); return; }
@@ -1711,6 +1712,10 @@ async function doCompleteSprayCoating(productionAssignee: string, subType: "분�
       }
       for (const item of items) {
         const pi = prodInputs[item.id];
+        if (pi?.skip) {
+          await supabase.from("work_order_items").update({ actual_qty: null, defect_qty: null, unit_weight: null, expiry_date: null }).eq("id", item.id);
+          continue;
+        }
         if (!pi || (!pi.actual_qty && !pi.unit_weight && !pi.expiry_date)) continue;
         const { error: itemErr } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, defect_qty: pi.defect_qty ? toInt(pi.defect_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null }).eq("id", item.id);
         if (itemErr) { setMsg("생산입력 저장 실패: " + itemErr.message); setIsCompleting(false); return; }
@@ -1724,6 +1729,7 @@ async function doCompleteSprayCoating(productionAssignee: string, subType: "분�
         const stockErrors: string[] = [];
         for (const item of items) {
           const pi = prodInputs[item.id];
+          if (pi?.skip) continue;
           if (!pi || !pi.actual_qty || !pi.expiry_date) continue;
           const actual_qty = toInt(pi.actual_qty);
           if (actual_qty <= 0) continue;
@@ -3071,7 +3077,18 @@ const totalOrder = items
                         <div key={item.id} className={`rounded-lg border p-2.5 ${isDone ? "border-green-200 bg-green-50" : "border-slate-200 bg-slate-50"}`}>
                           <div className="mb-2 flex flex-wrap items-center justify-between gap-1.5">
                           <div><div className="font-semibold text-xs">납기: <span className="tabular-nums">{item.delivery_date}</span></div>{(item.sub_items ?? [])[0]?.name ? <div className="mt-0.5 text-xs font-medium text-slate-700">{item.sub_items[0].name}{item.barcode_no ? <span className="inline-flex items-center gap-1 ml-2"><span className="font-mono text-xs font-normal text-slate-400">{item.barcode_no}</span><button type="button" className="text-slate-300 hover:text-slate-500 active:text-green-500 transition-colors" title="바코드 복사" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(item.barcode_no!); }}><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></span> : null}</div> : null}</div>
-                            <div className="flex items-center gap-1.5 text-xs"><span className={pill}>주문 {fmt(item.order_qty)}개</span>{isDone && <span className="rounded-full bg-green-100 border border-green-200 px-2 py-0.5 text-[10px] font-semibold text-green-700">완료</span>}</div>
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <span className={pill}>주문 {fmt(item.order_qty)}개</span>
+                            {isDone && !pi.skip && <span className="rounded-full bg-green-100 border border-green-200 px-2 py-0.5 text-[10px] font-semibold text-green-700">완료</span>}
+                            <label className="flex items-center gap-1 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={!!pi.skip}
+                                onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...prev[item.id], skip: e.target.checked } }))}
+                              />
+                              <span className={`text-[11px] font-semibold ${pi.skip ? "text-red-500" : "text-slate-400"}`}>생략</span>
+                            </label>
+                          </div>
                           </div>
                           <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
                             <div>
