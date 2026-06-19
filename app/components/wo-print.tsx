@@ -731,88 +731,34 @@ export function WoPrintContent({
                     </td>
                   </tr>
                   <tr>
-                    <td style={cellHead}>주문수량</td>
                     <td
                       style={{
-                        border: "1px solid #cbd5e1",
-                        borderLeft: "none",
-                        padding: 0,
+                        ...cellHead,
+                        width: "18%",
                       }}
                     >
-                      <table
-                        style={{ width: "100%", borderCollapse: "collapse" }}
-                      >
+                      주문수량
+                    </td>
+                    <td style={{ ...cellHead, border: "1px solid #cbd5e1", borderLeft: "none", width: "82%", padding: 0 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                        <colgroup>
+                          <col style={{ width: "13%" }} />
+                          <col style={{ width: "11%" }} />
+                          <col style={{ width: "10%" }} />
+                          <col style={{ width: "13%" }} />
+                          <col style={{ width: "14%" }} />
+                          <col style={{ width: "18%" }} />
+                          <col style={{ width: "21%" }} />
+                        </colgroup>
                         <tbody>
                           <tr>
-                          <td
-                              style={{
-                                ...cellHead,
-                                border: "none",
-                                borderRight: "1px solid #cbd5e1",
-                                width: "11%",
-                              }}
-                            >
-                              출고수량
-                            </td>
-                            <td
-                              style={{
-                                ...cellHead,
-                                border: "none",
-                                borderRight: "1px solid #cbd5e1",
-                                width: "9%",
-                              }}
-                            >
-                              추가생산
-                            </td>
-                            <td
-                              style={{
-                                ...cellHead,
-                                border: "none",
-                                borderRight: "1px solid #cbd5e1",
-                                width: "8%",
-                              }}
-                            >
-                              불량
-                            </td>
-                            <td
-                              style={{
-                                ...cellHead,
-                                border: "none",
-                                borderRight: "1px solid #cbd5e1",
-                                width: "10%",
-                              }}
-                            >
-                              개당중량(g)
-                            </td>
-                            <td
-                              style={{
-                                ...cellHead,
-                                border: "none",
-                                borderRight: "1px solid #cbd5e1",
-                                width: "12%",
-                              }}
-                            >
-                              총중량(g)
-                            </td>
-                            <td
-                              style={{
-                                ...cellHead,
-                                border: "none",
-                                borderRight: "1px solid #cbd5e1",
-                                width: "15%",
-                              }}
-                            >
-                              소비기한
-                            </td>
-                            <td
-                              style={{
-                                ...cellHead,
-                                border: "none",
-                                width: "35%",
-                              }}
-                            >
-                              비고
-                            </td>
+                            <td style={{ ...cellHead, border: "none", borderRight: "1px solid #cbd5e1" }}>출고수량</td>
+                            <td style={{ ...cellHead, border: "none", borderRight: "1px solid #cbd5e1" }}>추가생산</td>
+                            <td style={{ ...cellHead, border: "none", borderRight: "1px solid #cbd5e1" }}>불량</td>
+                            <td style={{ ...cellHead, border: "none", borderRight: "1px solid #cbd5e1" }}>개당중량(g)</td>
+                            <td style={{ ...cellHead, border: "none", borderRight: "1px solid #cbd5e1" }}>총중량(g)</td>
+                            <td style={{ ...cellHead, border: "none", borderRight: "1px solid #cbd5e1" }}>소비기한</td>
+                            <td style={{ ...cellHead, border: "none" }}>비고</td>
                           </tr>
                         </tbody>
                       </table>
@@ -826,6 +772,7 @@ export function WoPrintContent({
                         fontWeight: "bold",
                         fontSize: "11pt",
                         borderTop: "none",
+                        width: "18%",
                       }}
                     >
                       {f(item.order_qty)}
@@ -836,14 +783,24 @@ export function WoPrintContent({
                         borderLeft: "none",
                         borderTop: "none",
                         padding: 0,
+                        width: "82%",
                       }}
                     >
                       <table
-                        style={{ width: "100%", borderCollapse: "collapse" }}
+                        style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}
                       >
+                        <colgroup>
+                          <col style={{ width: "13%" }} />
+                          <col style={{ width: "11%" }} />
+                          <col style={{ width: "10%" }} />
+                          <col style={{ width: "13%" }} />
+                          <col style={{ width: "14%" }} />
+                          <col style={{ width: "18%" }} />
+                          <col style={{ width: "21%" }} />
+                        </colgroup>
                         <tbody>
-                          <tr>
-                          <td
+                        <tr>
+                            <td
                               style={{
                                 ...cellBase,
                                 border: "none",
@@ -851,7 +808,6 @@ export function WoPrintContent({
                                 textAlign: "right",
                                 fontWeight: "bold",
                                 color: aq ? "#1d4ed8" : "#111",
-                                width: "11%",
                               }}
                             >
                               {aq != null ? f(aq) : ""}
@@ -863,7 +819,6 @@ export function WoPrintContent({
                                 borderRight: "1px solid #cbd5e1",
                                 textAlign: "right",
                                 color: aq != null && aq > item.order_qty ? "#7c3aed" : "#111",
-                                width: "9%",
                               }}
                             >
                               {aq != null && aq > item.order_qty ? f(aq - item.order_qty) : ""}
@@ -875,7 +830,6 @@ export function WoPrintContent({
                                 borderRight: "1px solid #cbd5e1",
                                 textAlign: "right",
                                 color: item.defect_qty ? "#dc2626" : "#111",
-                                width: "8%",
                               }}
                             >
                               {item.defect_qty ? f(item.defect_qty) : ""}
@@ -886,7 +840,6 @@ export function WoPrintContent({
                                 border: "none",
                                 borderRight: "1px solid #cbd5e1",
                                 textAlign: "right",
-                                width: "10%",
                               }}
                             >
                               {uw != null ? uw : ""}
@@ -898,7 +851,6 @@ export function WoPrintContent({
                                 borderRight: "1px solid #cbd5e1",
                                 textAlign: "right",
                                 color: tw ? "#1d4ed8" : "#999",
-                                width: "12%",
                               }}
                             >
                               {tw ? f(Math.round(tw)) : ""}
@@ -910,7 +862,6 @@ export function WoPrintContent({
                                 borderRight: "1px solid #cbd5e1",
                                 textAlign: "center",
                                 fontSize: "8pt",
-                                width: "15%",
                               }}
                             >
                               {exp || ""}
@@ -920,7 +871,6 @@ export function WoPrintContent({
                                 ...cellBase,
                                 border: "none",
                                 padding: "4px 6px",
-                                width: "35%",
                                 fontSize: "11pt",
                                 verticalAlign: "middle",
                               }}
