@@ -985,6 +985,7 @@ export default function ProductionClient() {
     setCompWorkHours(""); setCompDamageOk(true); setCompNote(""); setCompSaved(false); setCompSaving(false); setCompLogId(null);
     setNeoColorSprayLots([]); // 네오컬러 분사-레이즈 lot 초기화
     setNeoColorSprayLotOptions([]); // 네오컬러 분사-레이즈 lot 옵션 초기화
+    neoColorSprayLotOptionsRef.current = []; // ref도 초기화
     setNeoColorSpraySaved(false);
     setNeoColorSprayEditMode(false);
     // 전사지인쇄 CCP-1B(8번 슬롯) 초기화 + 로드
