@@ -339,6 +339,7 @@ export default function ProductionClient() {
 // 네오컬러 분사-레이즈 사용 lot
  const [neoColorSprayLots, setNeoColorSprayLots] = useState<{ lot_id: string; qty: string }[]>([]);
   const [neoColorSprayLotOptions, setNeoColorSprayLotOptions] = useState<{ lot_id: string; expiry_date: string; remaining_qty: number; variant_name: string }[]>([]);
+  const neoColorSprayLotOptionsRef = useRef<{ lot_id: string; expiry_date: string; remaining_qty: number; variant_name: string }[]>([]);
   const [neoColorSprayLotLoading, setNeoColorSprayLotLoading] = useState(false);
   const [neoColorSpraySaved, setNeoColorSpraySaved] = useState(false);
   const [neoColorSprayEditMode, setNeoColorSprayEditMode] = useState(false);
@@ -919,6 +920,31 @@ export default function ProductionClient() {
     return () => { supabase.removeChannel(channel); if (slotStatusTimerRef.current) clearTimeout(slotStatusTimerRef.current); };
   }, []); // eslint-disable-line
 
+  useEffect(() => {
+    const channelId = `movements_realtime_${Math.random().toString(36).slice(2, 9)}`;
+    const channel = supabase.channel(channelId)
+      .on("postgres_changes", { event: "*", schema: "public", table: "movements" }, (payload) => {
+        const d = (payload.new ?? payload.old ?? {}) as Record<string, unknown>;
+        const lotId = String(d.lot_id ?? "");
+        if (!lotId) return;
+        const currentOptions = neoColorSprayLotOptionsRef.current;
+        if (currentOptions.length === 0) return;
+        const matchedLot = currentOptions.find((l) => l.lot_id === lotId);
+        if (!matchedLot) return;
+        // 해당 lot 잔량 재조회
+        (async () => {
+          const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", lotId);
+          const newRemaining = (movData ?? []).reduce((s, m) => m.type === "IN" ? s + m.qty : s - m.qty, 0);
+          setNeoColorSprayLotOptions((prev) => {
+            const next = prev.map((l) => l.lot_id === lotId ? { ...l, remaining_qty: newRemaining } : l);
+            neoColorSprayLotOptionsRef.current = next;
+            return next;
+          });
+        })();
+      }).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []); // eslint-disable-line
+
   useEffect(() => { supabase.from("employees").select("id,name,pin,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => { if (data) setEmployees(data); }); }, []);
   useEffect(() => { supabase.from("warmer_slots").select("id,slot_name,purpose").eq("is_active", true).order("slot_no").then(({ data }) => { if (data) setWarmerSlots(data); }); }, []);
   useEffect(() => {
@@ -993,6 +1019,7 @@ export default function ProductionClient() {
             variant_name: sprayVariantMap[l.variant_id]?.variant_name ?? "",
           }));
         setNeoColorSprayLotOptions(sprayResult);
+        neoColorSprayLotOptionsRef.current = sprayResult;
       }
       setNeoColorSprayLotLoading(false);
     }
