@@ -720,6 +720,11 @@ export default function ProductionClient() {
   function blockedByTransferCcp(assigneeKey: keyof WoChecks): boolean {
     if (assigneeKey !== "assignee_transfer") return false;
     if (!selectedWo || !needsTransferCcp(selectedWo.food_type)) return false;
+    const hasTransferLotSelected = (selectedWo.work_order_items ?? []).some((item) => {
+      const pi = prodInputs[item.id];
+      return (pi?.transfer_lots ?? []).some((l) => l.lot_id && toInt(l.qty) > 0);
+    });
+    if (hasTransferLotSelected) return false;
     return !transferCcpEnded;
   }
 
@@ -1528,7 +1533,11 @@ async function doCompleteSprayCoating(productionAssignee: string, subType: "분�
       }
     }
 
-    if (!selectedWo.skip_production_check && needsTransferCcp(selectedWo.food_type)) {
+   const hasTransferLotSelectedForComplete = (selectedWo.work_order_items ?? []).some((item) => {
+      const pi = prodInputs[item.id];
+      return (pi?.transfer_lots ?? []).some((l) => l.lot_id && toInt(l.qty) > 0);
+    });
+    if (!selectedWo.skip_production_check && needsTransferCcp(selectedWo.food_type) && !hasTransferLotSelectedForComplete) {
       if (!transferCcpSlotId) { alert("전사 슬롯(8번)을 찾을 수 없습니다. 슬롯 설정을 확인해주세요."); setIsCompleting(false); return; }
       const todayKstTransfer = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
       const { data: transferCcpEvs } = await supabase.from("ccp_wo_events").select("event_type, measured_at").eq("work_order_no", selectedWo.work_order_no).eq("slot_id", transferCcpSlotId).gte("measured_at", `${todayKstTransfer}T00:00:00+09:00`).lte("measured_at", `${todayKstTransfer}T23:59:59+09:00`).order("measured_at", { ascending: false });
