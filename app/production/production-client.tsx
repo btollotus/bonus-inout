@@ -1120,7 +1120,36 @@ export default function ProductionClient() {
       for (const item of woItems) {
         const name = (item.sub_items ?? [])[0]?.name ?? "";
         if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
-        if ((item as any).transfer_lots?.length > 0 || item.transfer_lot_id) continue;
+        if ((item as any).transfer_lots?.length > 0 || item.transfer_lot_id) {
+          // 이미 저장된 transfer_lots의 lot 정보를 직접 조회해 옵션에 세팅
+          const savedLots = ((item as any).transfer_lots ?? []) as { lot_id: string; qty: number }[];
+          const savedLotIds = savedLots.map((l) => l.lot_id).filter(Boolean);
+          if (savedLotIds.length > 0) {
+            (async () => {
+              const { data: lotsData } = await supabase.from("lots").select("id, variant_id, expiry_date").in("id", savedLotIds);
+              const variantIds = (lotsData ?? []).map((l: any) => l.variant_id).filter(Boolean);
+              const { data: variantsData } = await supabase.from("product_variants").select("id, variant_name").in("id", variantIds);
+              const variantMap: Record<string, string> = {};
+              for (const v of variantsData ?? []) variantMap[(v as any).id] = (v as any).variant_name ?? "";
+              const { data: movData } = await supabase.from("movements").select("lot_id, type, qty").in("lot_id", savedLotIds);
+              const remainingMap: Record<string, number> = {};
+              for (const m of movData ?? []) {
+                if (!remainingMap[m.lot_id]) remainingMap[m.lot_id] = 0;
+                if (m.type === "IN") remainingMap[m.lot_id] += m.qty;
+                else remainingMap[m.lot_id] -= m.qty;
+              }
+              const result = (lotsData ?? []).map((l: any) => ({
+                lot_id: l.id,
+                expiry_date: l.expiry_date ?? "",
+                remaining_qty: remainingMap[l.id] ?? 0,
+                variant_name: variantMap[l.variant_id] ?? "",
+                barcode: "",
+              }));
+              setTransferLotOptions((prev) => ({ ...prev, [item.id]: result }));
+            })();
+          }
+          continue;
+        }
         const itemKeyword = extractKeyword(name);
         const keywords = clientKeyword
   ? [clientKeyword]
@@ -1146,7 +1175,23 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
       await supabase.from("work_order_items").update({ order_id: null }).eq("work_order_id", woId);
       if (woData.linked_order_id) { await supabase.from("orders").update({ work_order_item_id: null }).eq("id", woData.linked_order_id); }
       await supabase.from("work_order_items").delete().eq("work_order_id", woId);
-      if (woData.work_order_no) { await supabase.from("ccp_wo_events").delete().eq("work_order_no", woData.work_order_no); await supabase.from("deleted_work_order_nos").insert({ work_order_no: woData.work_order_no }); }
+      if (woData.work_order_no) {
+        await supabase.from("ccp_wo_events").delete().eq("work_order_no", woData.work_order_no);
+        await supabase.from("deleted_work_order_nos").insert({ work_order_no: woData.work_order_no });
+        // 원료수불부 차감 기록 삭제 (컴파운드, 이산화티타늄, 전사지)
+        await supabase.from("material_usage_logs").delete().eq("note", `작업지시서 생산완료 - ${woData.work_order_no}`);
+        await supabase.from("material_usage_logs").delete().eq("note", `이산화티타늄 차감 - ${woData.work_order_no}`);
+        await supabase.from("material_usage_logs").delete().like("note", `전사지 차감 - ${woData.work_order_no}%`);
+        // movements 복구 (transfer_lots 차감, 도눔 포장완료)
+        const { data: movToDelete } = await supabase.from("movements").select("id").like("note", `전사지 차감 - ${woData.work_order_no}%`);
+        if (movToDelete && movToDelete.length > 0) {
+          await supabase.from("movements").delete().in("id", movToDelete.map((m) => m.id));
+        }
+        const { data: movToDelete2 } = await supabase.from("movements").select("id").eq("note", `도눔 포장완료 - ${woData.work_order_no}`);
+        if (movToDelete2 && movToDelete2.length > 0) {
+          await supabase.from("movements").delete().in("id", movToDelete2.map((m) => m.id));
+        }
+      }
       const { error: deleteErr } = await supabase.from("work_orders").delete().eq("id", woId);
       if (deleteErr) { showToast("삭제 실패: " + deleteErr.message, "error"); return; }
       if (selectedWo?.id === woId) setSelectedWo(null);
