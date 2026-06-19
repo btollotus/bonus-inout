@@ -2705,6 +2705,22 @@ const totalOrder = items
                                   setNeoColorSpraySaving(false);
                                   setNeoColorSpraySaved(true);
                                   setNeoColorSprayEditMode(false);
+                                  // 저장 후 잔량 즉시 갱신
+                                  const updatedLotIds = neoColorSprayLots.map((l) => l.lot_id).filter(Boolean);
+                                  if (updatedLotIds.length > 0) {
+                                    const { data: refreshMovs } = await supabase.from("movements").select("lot_id, type, qty").in("lot_id", updatedLotIds);
+                                    const refreshMap: Record<string, number> = {};
+                                    for (const m of refreshMovs ?? []) {
+                                      if (!refreshMap[m.lot_id]) refreshMap[m.lot_id] = 0;
+                                      if (m.type === "IN") refreshMap[m.lot_id] += m.qty;
+                                      else refreshMap[m.lot_id] -= m.qty;
+                                    }
+                                    setNeoColorSprayLotOptions((prev) => {
+                                      const next = prev.map((l) => updatedLotIds.includes(l.lot_id) ? { ...l, remaining_qty: refreshMap[l.lot_id] ?? l.remaining_qty } : l);
+                                      neoColorSprayLotOptionsRef.current = next;
+                                      return next;
+                                    });
+                                  }
                                   showToast("분사-레이즈 사용량 저장 완료!");
                                 }}>
                                 {neoColorSpraySaving ? "저장 중..." : "저장"}
@@ -2802,6 +2818,22 @@ const totalOrder = items
                                   setNeoColorSpraySaving(false);
                                   setNeoColorSpraySaved(true);
                                   setNeoColorSprayEditMode(false);
+                                  // 수정 저장 후 잔량 즉시 갱신
+                                  const updatedLotIds2 = neoColorSprayLots.map((l) => l.lot_id).filter(Boolean);
+                                  if (updatedLotIds2.length > 0) {
+                                    const { data: refreshMovs2 } = await supabase.from("movements").select("lot_id, type, qty").in("lot_id", updatedLotIds2);
+                                    const refreshMap2: Record<string, number> = {};
+                                    for (const m of refreshMovs2 ?? []) {
+                                      if (!refreshMap2[m.lot_id]) refreshMap2[m.lot_id] = 0;
+                                      if (m.type === "IN") refreshMap2[m.lot_id] += m.qty;
+                                      else refreshMap2[m.lot_id] -= m.qty;
+                                    }
+                                    setNeoColorSprayLotOptions((prev) => {
+                                      const next = prev.map((l) => updatedLotIds2.includes(l.lot_id) ? { ...l, remaining_qty: refreshMap2[l.lot_id] ?? l.remaining_qty } : l);
+                                      neoColorSprayLotOptionsRef.current = next;
+                                      return next;
+                                    });
+                                  }
                                   showToast("분사-레이즈 사용량 수정 완료!");
                                 }}>
                                 {neoColorSpraySaving ? "저장 중..." : "수정 저장"}
