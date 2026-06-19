@@ -921,6 +921,18 @@ export default function ProductionClient() {
   }, []); // eslint-disable-line
 
   useEffect(() => {
+    const channelId = `wo_delete_realtime_${Math.random().toString(36).slice(2, 9)}`;
+    const channel = supabase.channel(channelId)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "work_orders" }, (payload) => {
+        const deletedId = String((payload.old as Record<string, unknown>)?.id ?? "");
+        if (!deletedId) return;
+        setWoList((prev) => prev.filter((w) => w.id !== deletedId));
+        setSelectedWo((prev) => prev?.id === deletedId ? null : prev);
+      }).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []); // eslint-disable-line
+
+  useEffect(() => {
     const channelId = `movements_realtime_${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase.channel(channelId)
       .on("postgres_changes", { event: "*", schema: "public", table: "movements" }, (payload) => {
