@@ -85,6 +85,7 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
   const [fPhotoFile, setFPhotoFile] = useState<File | null>(null);
   const [fPhotoPreview, setFPhotoPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [generatingResult, setGeneratingResult] = useState(false);
 
   const [showPinFor, setShowPinFor] = useState<"educator" | "attendee" | null>(null);
   const [photoSignedUrls, setPhotoSignedUrls] = useState<Record<string, string>>({});
@@ -135,7 +136,7 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
   function resetForm() {
     setFDate(today); setContentMonthLoaded(null); setFStart(""); setFEnd(""); setFLocation("");
     setFTarget("전원"); setFAbsentee("재교육"); setFAbsenteeNote(""); setFContent("");
-    setFResultNote("교육 효과 및 내용 습득이 기대됩니다.");
+    setFResultNote("");
     setFAttachments([]); setFAttachmentNote(""); setFEducator(null); setFAttendees([]);
     setFPhotoFile(null); setFPhotoPreview(null);
   }
@@ -196,6 +197,33 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
     setFPhotoPreview(file ? URL.createObjectURL(file) : null);
   }
 
+  async function generateResultNote() {
+    setGeneratingResult(true);
+    try {
+      const month = new Date(fDate + "T00:00:00+09:00").getMonth() + 1;
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          messages: [{
+            role: "user",
+            content: `식품 제조 공장의 ${month}월 사내 위생 및 안전교육 결과 문장을 한 문장으로 작성하세요.\n교육내용: ${fContent || "위생 및 안전교육"}\n조건: 30자 이상, 교육 효과·참석자 반응·향후 기대효과 중 하나를 담아 긍정적으로, 매번 다른 표현 사용, 텍스트만 출력(따옴표 없이)`
+          }]
+        })
+      });
+      const data = await res.json();
+      const text = (data.content?.[0]?.text ?? "").trim();
+      if (text) setFResultNote(text);
+      else showToast("생성 실패, 직접 입력해주세요.", "error");
+    } catch {
+      showToast("생성 실패, 직접 입력해주세요.", "error");
+    } finally {
+      setGeneratingResult(false);
+    }
+  }
+
   async function uploadPhoto(file: File, dateStr: string): Promise<string | null> {
     const ext = file.name.split(".").pop() || "jpg";
     const path = `hygiene/${dateStr}-${Date.now()}.${ext}`;
@@ -208,6 +236,7 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
     const educator = employees.find((e) => e.name === "조대성");
     if (!fLocation.trim()) return showToast("장소를 입력하세요.", "error");
     if (fAttendees.length === 0) return showToast("참석자를 1명 이상 추가하세요.", "error");
+    if (fResultNote.trim().length < 30) return showToast("교육 후 결과를 30자 이상 입력하세요.", "error");
     if (!fPhotoFile) return showToast("단체사진을 첨부하세요.", "error");
 
     setSaving(true);
@@ -222,8 +251,8 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
 
       const { data: logData, error: logError } = await supabase.from("hygiene_training_logs").insert({
         training_date: fDate,
-        start_time: fStart.length === 4 ? `${fStart.slice(0,2)}:${fStart.slice(2,4)}:00` : null,
-        end_time: fEnd.length === 4 ? `${fEnd.slice(0,2)}:${fEnd.slice(2,4)}:00` : null,
+        start_time: (() => { const r = fStart.replace(/[^\d]/g, ""); return r.length === 4 ? `${r.slice(0,2)}:${r.slice(2,4)}:00` : null; })(),
+      end_time: (() => { const r = fEnd.replace(/[^\d]/g, ""); return r.length === 4 ? `${r.slice(0,2)}:${r.slice(2,4)}:00` : null; })(),
       location: fLocation.trim(), target: fTarget.trim(),
       absentee_type: fAbsentee, absentee_note: fAbsentee === "기타" ? fAbsenteeNote.trim() : null,
       content: fContent, result_note: fResultNote.trim() || null,
@@ -450,20 +479,22 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
               </div>
             </div>
             <div>
-              <div className="mb-1 text-xs text-slate-500">시작시각 (HHmm)</div>
-              <input className={inp} inputMode="numeric" placeholder="예: 0930" maxLength={4}
-                value={fStart} onChange={(e) => setFStart(e.target.value.replace(/[^\d]/g, "").slice(0, 4))} />
-              {fStart.length === 4 && (
-                <div className="mt-0.5 text-xs text-slate-400 text-right">{fStart.slice(0,2)}:{fStart.slice(2,4)}</div>
-              )}
+              <div className="mb-1 text-xs text-slate-500">시작시각</div>
+              <input className={inp} inputMode="numeric" placeholder="예: 0930"
+                value={fStart}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
+                  setFStart(raw.length === 4 ? `${raw.slice(0,2)}:${raw.slice(2,4)}` : raw);
+                }} />
             </div>
             <div>
-              <div className="mb-1 text-xs text-slate-500">종료시각 (HHmm)</div>
-              <input className={inp} inputMode="numeric" placeholder="예: 1800" maxLength={4}
-                value={fEnd} onChange={(e) => setFEnd(e.target.value.replace(/[^\d]/g, "").slice(0, 4))} />
-              {fEnd.length === 4 && (
-                <div className="mt-0.5 text-xs text-slate-400 text-right">{fEnd.slice(0,2)}:{fEnd.slice(2,4)}</div>
-              )}
+              <div className="mb-1 text-xs text-slate-500">종료시각</div>
+              <input className={inp} inputMode="numeric" placeholder="예: 1800"
+                value={fEnd}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
+                  setFEnd(raw.length === 4 ? `${raw.slice(0,2)}:${raw.slice(2,4)}` : raw);
+                }} />
             </div>
             <div>
               <div className="mb-1 text-xs text-slate-500">대상</div>
@@ -485,15 +516,6 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
           <div className="mt-3">
             <div className="mb-1 text-xs text-slate-500">교육내용 ({new Date(fDate + "T00:00:00+09:00").getMonth() + 1}월 커리큘럼 자동 반영 — 필요시 수정)</div>
             <textarea className={`${inp} min-h-[100px]`} value={fContent} onChange={(e) => setFContent(e.target.value)} />
-          </div>
-
-          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-1 text-xs font-semibold text-slate-500">교육자 (고정)</div>
-            <div className="flex items-center gap-2">
-              <img src="/sign-chods.png" style={{ height: 24, objectFit: "contain" }} alt="조대성" />
-              <span className="text-sm font-semibold text-slate-700">조대성</span>
-              <span className="text-xs text-green-600">✓ 고정</span>
-            </div>
           </div>
 
           <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -543,8 +565,24 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
           </div>
 
           <div className="mt-3">
-            <div className="mb-1 text-xs text-slate-500">교육 후 결과</div>
-            <input className={inp} value={fResultNote} onChange={(e) => setFResultNote(e.target.value)} placeholder="예: 복장착용 요령 및 필요성 인식 제고" />
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-xs text-slate-500">교육 후 결과 (30자 이상)</span>
+              <button type="button"
+                className="rounded-lg border border-violet-300 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-60"
+                disabled={generatingResult}
+                onClick={generateResultNote}>
+                {generatingResult ? "생성 중..." : "✨ AI 자동 생성"}
+              </button>
+            </div>
+            <textarea className={`${inp} min-h-[64px]`} value={fResultNote}
+              onChange={(e) => setFResultNote(e.target.value)}
+              placeholder="교육 결과를 입력하거나 AI 자동 생성을 눌러주세요." />
+            {fResultNote && fResultNote.length < 30 && (
+              <div className="mt-0.5 text-xs text-red-500">{fResultNote.length}/30자 (30자 이상 필요)</div>
+            )}
+            {fResultNote && fResultNote.length >= 30 && (
+              <div className="mt-0.5 text-xs text-green-600">{fResultNote.length}자 ✓</div>
+            )}
           </div>
 
           <div className="mt-3">
@@ -564,7 +602,14 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
 
           <div className="mt-3">
             <div className="mb-1 text-xs text-slate-500">교육 사진 (단체사진 1장) *</div>
-            <input type="file" accept="image/*" onChange={(e) => onPhotoSelected(e.target.files?.[0] ?? null)} className="text-xs" />
+            <label className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed px-4 py-3 transition-all ${fPhotoFile ? "border-green-400 bg-green-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
+              <span className="text-2xl">{fPhotoFile ? "✅" : "📷"}</span>
+              <div>
+                <div className="text-sm font-semibold text-slate-700">{fPhotoFile ? fPhotoFile.name : "사진 선택하기"}</div>
+                <div className="text-xs text-slate-400">{fPhotoFile ? "클릭하여 변경" : "JPG, PNG 등 이미지 파일"}</div>
+              </div>
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => onPhotoSelected(e.target.files?.[0] ?? null)} />
+            </label>
             {fPhotoPreview && (
               <img src={fPhotoPreview} className="mt-2 h-32 rounded-lg border border-slate-200 object-cover" alt="미리보기" />
             )}
