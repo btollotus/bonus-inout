@@ -92,6 +92,7 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
   const [signingEmpId, setSigningEmpId] = useState<string | null>(null);
   const [signingPin, setSigningPin] = useState("");
   const [signingError, setSigningError] = useState("");
+  const [signingLogId, setSigningLogId] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
@@ -152,8 +153,11 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
     const d = new Date(fDate + "T00:00:00+09:00");
     const month = d.getMonth() + 1;
     if (month !== contentMonthLoaded) {
-      setFContent(curriculum[month]?.content ?? "");
+      const newContent = curriculum[month]?.content ?? "";
+      setFContent(newContent);
       setContentMonthLoaded(month);
+      setFResultNote("");
+      generateResultNote(newContent);
     }
   }, [fDate, curriculum, formOpen, contentMonthLoaded]);
 
@@ -183,11 +187,17 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
     const next = signingPin + d;
     setSigningPin(next);
     if (next.length === 4) {
-      setTimeout(() => {
+      setTimeout(async () => {
         if (!emp.pin) { setSigningError("PIN 미설정"); setSigningPin(""); return; }
         if (emp.pin !== next) { setSigningError("PIN 오류"); setSigningPin(""); return; }
-        addAttendee(emp.id, emp.name);
+        if (!signingLogId) { setSigningEmpId(null); setSigningPin(""); setSigningError(""); return; }
+        const { error } = await supabase.from("hygiene_training_attendees").insert({
+          log_id: signingLogId, employee_id: emp.id, name: emp.name, signed_at: new Date().toISOString(),
+        });
+        if (error) { setSigningError("서명 실패"); setSigningPin(""); return; }
+        showToast(`✅ ${emp.name} 서명 완료!`);
         setSigningEmpId(null); setSigningPin(""); setSigningError("");
+        loadLogs();
       }, 100);
     }
   }
@@ -197,10 +207,11 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
     setFPhotoPreview(file ? URL.createObjectURL(file) : null);
   }
 
-  async function generateResultNote() {
+  async function generateResultNote(contentOverride?: string) {
     setGeneratingResult(true);
     try {
       const month = new Date(fDate + "T00:00:00+09:00").getMonth() + 1;
+      const content = contentOverride ?? fContent;
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -209,16 +220,15 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
           max_tokens: 1000,
           messages: [{
             role: "user",
-            content: `식품 제조 공장의 ${month}월 사내 위생 및 안전교육 결과 문장을 한 문장으로 작성하세요.\n교육내용: ${fContent || "위생 및 안전교육"}\n조건: 30자 이상, 교육 효과·참석자 반응·향후 기대효과 중 하나를 담아 긍정적으로, 매번 다른 표현 사용, 텍스트만 출력(따옴표 없이)`
+            content: `식품 제조 공장의 ${month}월 사내 위생 및 안전교육 결과 문장을 한 문장으로 작성하세요.\n교육내용: ${content || "위생 및 안전교육"}\n조건: 30자 이상, 교육 효과·참석자 반응·향후 기대효과 중 하나를 담아 긍정적으로, 매번 다른 표현 사용, 텍스트만 출력(따옴표 없이)`
           }]
         })
       });
       const data = await res.json();
       const text = (data.content?.[0]?.text ?? "").trim();
       if (text) setFResultNote(text);
-      else showToast("생성 실패, 직접 입력해주세요.", "error");
     } catch {
-      showToast("생성 실패, 직접 입력해주세요.", "error");
+      // 실패 시 직접 입력
     } finally {
       setGeneratingResult(false);
     }
@@ -235,7 +245,6 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
   async function saveLog() {
     const educator = employees.find((e) => e.name === "조대성");
     if (!fLocation.trim()) return showToast("장소를 입력하세요.", "error");
-    if (fAttendees.length === 0) return showToast("참석자를 1명 이상 추가하세요.", "error");
     if (fResultNote.trim().length < 30) return showToast("교육 후 결과를 30자 이상 입력하세요.", "error");
     if (!fPhotoFile) return showToast("단체사진을 첨부하세요.", "error");
 
@@ -264,13 +273,7 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
 
     if (logError || !logData) { setSaving(false); return showToast("저장 실패: " + (logError?.message ?? ""), "error"); }
 
-    const attendeeRows = fAttendees.map((a) => ({
-      log_id: logData.id, employee_id: a.employee_id, name: a.name, note: a.note || null, signed_at: a.signed_at,
-    }));
-    const { error: attError } = await supabase.from("hygiene_training_attendees").insert(attendeeRows);
     setSaving(false);
-    if (attError) return showToast("참석자 저장 실패: " + attError.message, "error");
-
     showToast("✅ 교육 기록 저장 완료!");
     setFormOpen(false);
     resetForm();
@@ -518,65 +521,14 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
             <textarea className={`${inp} min-h-[100px]`} value={fContent} onChange={(e) => setFContent(e.target.value)} />
           </div>
 
-          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 text-xs font-semibold text-slate-500">참석자 서명 ({fAttendees.length}명 완료) — 각자 본인 PIN 입력</div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {employees.filter((e) => e.name !== "조대성" && e.name !== "강미라").map((emp) => {
-                const signed = fAttendees.some((a) => a.employee_id === emp.id);
-                const isSigning = signingEmpId === emp.id;
-                return (
-                  <div key={emp.id} className={`rounded-xl border p-2.5 transition-all ${signed ? "border-green-300 bg-green-50" : "border-slate-200 bg-white"}`}>
-                    <div className="text-sm font-semibold text-center text-slate-700">{emp.name}</div>
-                    {signed ? (
-                      <div className="flex items-center justify-center gap-1.5 mt-1.5">
-                        {SIGN_MAP[emp.name] && <img src={SIGN_MAP[emp.name]} style={{ height: 18, objectFit: "contain" }} alt={emp.name} />}
-                        <span className="text-xs text-green-600">✓ 서명완료</span>
-                        <button className="text-[10px] text-slate-300 hover:text-red-400 ml-1" onClick={() => removeAttendeeById(emp.id)}>✕</button>
-                      </div>
-                   ) : isSigning ? (
-                    <div className="mt-2">
-                      <div className="flex justify-center gap-2 mb-3">
-                        {[0,1,2,3].map((i) => (
-                          <div key={i} className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center text-base font-bold transition-all ${signingPin.length > i ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-300"}`}>
-                            {signingPin.length > i ? "●" : "○"}
-                          </div>
-                        ))}
-                      </div>
-                      {signingError && <div className="text-xs text-red-500 text-center mb-2">{signingError}</div>}
-                      <div className="grid grid-cols-3 gap-2">
-                        {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
-                          <button key={i} type="button"
-                            className={`rounded-xl border py-3 text-lg font-semibold transition-all ${d === "" ? "invisible" : "border-slate-200 bg-white hover:bg-slate-50 active:bg-slate-100 active:scale-95"}`}
-                            onClick={() => handleSigningDigit(emp, d)}>{d}</button>
-                        ))}
-                      </div>
-                      <button className="mt-2 w-full text-xs text-slate-400 hover:text-slate-600" onClick={() => { setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>취소</button>
-                    </div>
-                  ) : (
-                    <button className="mt-1.5 w-full rounded-xl border-2 border-slate-200 py-2 text-sm font-semibold text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-all active:scale-95"
-                      onClick={() => { setSigningEmpId(emp.id); setSigningPin(""); setSigningError(""); }}>
-                      🔒 PIN 입력
-                    </button>
-                  )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
           <div className="mt-3">
-            <div className="mb-1 flex items-center justify-between">
+          <div className="mb-1 flex items-center justify-between">
               <span className="text-xs text-slate-500">교육 후 결과 (30자 이상)</span>
-              <button type="button"
-                className="rounded-lg border border-violet-300 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-60"
-                disabled={generatingResult}
-                onClick={generateResultNote}>
-                {generatingResult ? "생성 중..." : "✨ AI 자동 생성"}
-              </button>
+              {generatingResult && <span className="text-xs text-violet-500">✨ 자동 생성 중...</span>}
             </div>
             <textarea className={`${inp} min-h-[64px]`} value={fResultNote}
               onChange={(e) => setFResultNote(e.target.value)}
-              placeholder="교육 결과를 입력하거나 AI 자동 생성을 눌러주세요." />
+              placeholder="교육 내용 등록 시 자동 생성됩니다." />
             {fResultNote && fResultNote.length < 30 && (
               <div className="mt-0.5 text-xs text-red-500">{fResultNote.length}/30자 (30자 이상 필요)</div>
             )}
@@ -653,6 +605,10 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
                     <td className="py-2 px-3 text-center">{log.photo_path ? "✅" : "—"}</td>
                     <td className="py-2 px-3 text-center whitespace-nowrap">
                       <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 mr-1" onClick={() => printSingle(log)}>인쇄</button>
+                      <button className={`rounded-lg border px-2 py-0.5 text-[11px] font-semibold mr-1 ${signingLogId === log.id ? "border-green-500 bg-green-600 text-white" : "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"}`}
+                        onClick={() => { setSigningLogId(signingLogId === log.id ? null : log.id); setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>
+                        {signingLogId === log.id ? "닫기" : "✍️ 서명"}
+                      </button>
                       {isAdminOrSubadmin && (
                         <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500" onClick={() => deleteLog(log.id)}>삭제</button>
                       )}
@@ -662,14 +618,73 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════
-// 모니터링 담당자교육 (내용 고정, 참석자 1인당 사진 2장)
+       )}
+       </div>
+ 
+       {/* ── 서명 패널 ── */}
+       {signingLogId && (() => {
+         const signingLog = logs.find((l) => l.id === signingLogId);
+         if (!signingLog) return null;
+         return (
+           <div className={`${card} p-4`}>
+             <div className="mb-3 flex items-center justify-between">
+               <div>
+                 <span className="font-semibold text-sm">✍️ 참석 서명 — {signingLog.training_date}</span>
+                 <span className="ml-2 text-xs text-slate-400">{signingLog.location}</span>
+               </div>
+               <button className="text-xs text-slate-400 hover:text-slate-600"
+                 onClick={() => { setSigningLogId(null); setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>✕ 닫기</button>
+             </div>
+             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+               {employees.filter((e) => e.name !== "조대성" && e.name !== "강미라").map((emp) => {
+                 const alreadySigned = (signingLog.hygiene_training_attendees ?? []).some((a) => a.employee_id === emp.id);
+                 const isSigning = signingEmpId === emp.id;
+                 return (
+                   <div key={emp.id} className={`rounded-xl border p-3 transition-all ${alreadySigned ? "border-green-300 bg-green-50" : "border-slate-200 bg-white"}`}>
+                     <div className="text-sm font-semibold text-center text-slate-700 mb-1.5">{emp.name}</div>
+                     {alreadySigned ? (
+                       <div className="flex flex-col items-center gap-1">
+                         {SIGN_MAP[emp.name] && <img src={SIGN_MAP[emp.name]} style={{ height: 22, objectFit: "contain" }} alt={emp.name} />}
+                         <span className="text-xs text-green-600">✓ 서명완료</span>
+                       </div>
+                     ) : isSigning ? (
+                       <div>
+                         <div className="flex justify-center gap-2 mb-3">
+                           {[0,1,2,3].map((i) => (
+                             <div key={i} className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center text-base font-bold transition-all ${signingPin.length > i ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-300"}`}>
+                               {signingPin.length > i ? "●" : "○"}
+                             </div>
+                           ))}
+                         </div>
+                         {signingError && <div className="text-xs text-red-500 text-center mb-2">{signingError}</div>}
+                         <div className="grid grid-cols-3 gap-1.5">
+                           {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
+                             <button key={i} type="button"
+                               className={`rounded-xl border py-3 text-lg font-semibold transition-all ${d === "" ? "invisible" : "border-slate-200 bg-white hover:bg-slate-50 active:bg-slate-100 active:scale-95"}`}
+                               onClick={() => handleSigningDigit(emp, d)}>{d}</button>
+                           ))}
+                         </div>
+                         <button className="mt-2 w-full text-xs text-slate-400 hover:text-slate-600" onClick={() => { setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>취소</button>
+                       </div>
+                     ) : (
+                       <button className="w-full rounded-xl border-2 border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-all active:scale-95"
+                         onClick={() => { setSigningEmpId(emp.id); setSigningPin(""); setSigningError(""); }}>
+                         🔒 PIN 입력
+                       </button>
+                     )}
+                   </div>
+                 );
+               })}
+             </div>
+           </div>
+         );
+       })()}
+     </div>
+   );
+ }
+ 
+ // ═══════════════════════════════════════════════════════════
+ // 모니터링 담당자교육 (내용 고정, 참석자 1인당 사진 2장)
 // ═══════════════════════════════════════════════════════════
 
 const MONITORING_FIXED_CONTENT = `CCP-1P
