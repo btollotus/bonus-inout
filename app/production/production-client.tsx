@@ -924,7 +924,8 @@ export default function ProductionClient() {
     const channelId = `movements_realtime_${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase.channel(channelId)
       .on("postgres_changes", { event: "*", schema: "public", table: "movements" }, (payload) => {
-        const d = (payload.new ?? payload.old ?? {}) as Record<string, unknown>;
+        console.log("[movements realtime]", payload.eventType, JSON.stringify(payload.old), JSON.stringify(payload.new));
+        const d = (payload.eventType === "DELETE" ? payload.old : payload.new ?? payload.old ?? {}) as Record<string, unknown>;
         const lotId = String(d.lot_id ?? "");
         if (!lotId) return;
         const currentOptions = neoColorSprayLotOptionsRef.current;
