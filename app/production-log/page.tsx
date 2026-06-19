@@ -1374,7 +1374,12 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     expiry_status: "normal" | "expiring_soon" | "expired";
   }[]>([]);
 
-  const selectedStock = stocks.find((s) => s.material_id === adjMaterialId);
+ // ── 드릴다운 ──
+ const [expandedMaterialId, setExpandedMaterialId] = useState<string | null>(null);
+ const [drillRows, setDrillRows] = useState<{ displayLabel: string; quantity: number; unit: string }[]>([]);
+ const [drillLoading, setDrillLoading] = useState(false);
+
+ const selectedStock = stocks.find((s) => s.material_id === adjMaterialId);
   const currentStockForAdj = selectedStock?.current_stock ?? 0;
   const computedDelta = adjMode === "actual" && adjActualQty !== ""
     ? parseFloat(adjActualQty) - currentStockForAdj
@@ -1506,6 +1511,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
   }, [filterDate]);
 
   useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { setExpandedMaterialId(null); setDrillRows([]); }, [filterDate]);
   useEffect(() => {
     supabase.from("materials").select("id,name,category").eq("is_active", true).neq("id", "00000000-0007-0000-0000-000000000001").order("order_no", { nullsFirst: false })
       .then(({ data }) => setMaterials(data ?? []));
@@ -1710,6 +1716,59 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     win.document.close();
     win.focus();
     setTimeout(() => { win.print(); }, 500);
+  }
+
+  async function handleDrillDown(materialId: string, unit: string) {
+    if (expandedMaterialId === materialId) {
+      setExpandedMaterialId(null);
+      setDrillRows([]);
+      return;
+    }
+    setExpandedMaterialId(materialId);
+    setDrillLoading(true);
+
+    const { data: usageData } = await supabase
+      .from("material_usage_logs")
+      .select("quantity, note, unit")
+      .eq("material_id", materialId)
+      .eq("used_date", filterDate)
+      .order("created_at");
+
+    // note에서 WO 번호 추출
+    const woPattern = /WO-\d{8}-\d{4}/;
+    const woNos = [...new Set(
+      (usageData ?? [])
+        .map((u: any) => u.note?.match(woPattern)?.[0])
+        .filter(Boolean) as string[]
+    )];
+
+    let woMap: Record<string, { client_name: string; product_name: string }> = {};
+    if (woNos.length > 0) {
+      const { data: woData } = await supabase
+        .from("work_orders")
+        .select("work_order_no, client_name, product_name")
+        .in("work_order_no", woNos);
+      (woData ?? []).forEach((w: any) => {
+        woMap[w.work_order_no] = { client_name: w.client_name, product_name: w.product_name };
+      });
+    }
+
+    const rows = (usageData ?? []).map((u: any) => {
+      const note: string = u.note ?? "";
+      const woNo = note.match(woPattern)?.[0];
+      let displayLabel = note;
+      if (woNo && woMap[woNo]) {
+        const wo = woMap[woNo];
+        const tag = note.includes("생산완료") ? "생산완료"
+          : note.includes("이산화티타늄 차감") ? "TiO₂"
+          : "";
+        displayLabel = `${wo.client_name} — ${wo.product_name}${tag ? ` (${tag})` : ""}`;
+      }
+      return { displayLabel, quantity: u.quantity, unit: u.unit ?? unit };
+    });
+
+    setDrillRows(rows);
+    setDrillLoading(false);
   }
 
   async function saveAdjustment() {
@@ -2232,8 +2291,10 @@ function MaterialLedgerTab({ role, userId, showToast }: {
               <tbody>
               {filteredStocks.map((s) => {
                   const hasAdj = adjustments.some((a) => a.material_id === s.material_id);
+                  const isExpanded = expandedMaterialId === s.material_id;
                   return (
-                  <tr key={s.material_id} className={`border-b border-slate-100 hover:bg-slate-50 ${s.is_below_safety_stock ? "bg-red-50" : ""}`}>
+                  <React.Fragment key={s.material_id}>
+                  <tr className={`border-b border-slate-100 hover:bg-slate-50 ${s.is_below_safety_stock ? "bg-red-50" : ""}`}>
                     <td className="py-2 px-3 text-xs text-slate-500">{s.category}</td>
                     <td className="py-2 px-3 font-medium">
                       {s.material_name}
@@ -2242,7 +2303,17 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                       )}
                     </td>
                     <td className="py-2 px-3 text-right tabular-nums text-green-700">{s.total_received.toLocaleString()}{s.unit}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-blue-700">{s.daily_used > 0 ? s.daily_used.toLocaleString() : "0"}{s.unit}</td>
+                    <td className="py-2 px-3 text-right tabular-nums">
+                      {s.daily_used > 0 ? (
+                        <button
+                          className={`tabular-nums font-semibold underline decoration-dotted hover:decoration-solid transition-colors ${isExpanded ? "text-blue-800" : "text-blue-600 hover:text-blue-800"}`}
+                          onClick={() => handleDrillDown(s.material_id, s.unit)}>
+                          {s.daily_used.toLocaleString()}{s.unit} {isExpanded ? "▲" : "▼"}
+                        </button>
+                      ) : (
+                        <span className="text-blue-700">0{s.unit}</span>
+                      )}
+                    </td>
                     <td className="py-2 px-3 text-right tabular-nums text-slate-500">{s.total_disposed.toLocaleString()}{s.unit}</td>
                     <td className={`py-2 px-3 text-right tabular-nums font-bold ${s.current_stock < 0 ? "text-red-600" : s.is_below_safety_stock ? "text-amber-600" : "text-slate-800"}`}>
                       {s.current_stock.toLocaleString()}{s.unit}
@@ -2254,7 +2325,32 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                         <span className="rounded-full border border-green-200 bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">정상</span>
                       )}
                     </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr className="bg-blue-50">
+                      <td colSpan={7} className="py-2 px-6">
+                        {drillLoading ? (
+                          <div className="text-xs text-slate-400 py-1">불러오는 중...</div>
+                        ) : drillRows.length === 0 ? (
+                          <div className="text-xs text-slate-400 py-1">내역이 없습니다.</div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {drillRows.map((row, i) => (
+                              <div key={i} className="flex items-center justify-between text-xs py-0.5 border-b border-blue-100 last:border-0">
+                                <span className="text-slate-600">└ {row.displayLabel}</span>
+                                <span className="tabular-nums font-semibold text-slate-700 ml-4">{row.quantity.toLocaleString()}{row.unit}</span>
+                              </div>
+                            ))}
+                            <div className="flex items-center justify-between text-xs py-1 font-bold text-blue-700 border-t border-blue-200 mt-0.5">
+                              <span>합계</span>
+                              <span className="tabular-nums">{drillRows.reduce((sum, r) => sum + r.quantity, 0).toLocaleString()}{drillRows[0]?.unit ?? ""}</span>
+                            </div>
+                          </div>
+                        )}
+                      </td>
                     </tr>
+                  )}
+                  </React.Fragment>
                   );
                 })}
               </tbody>
