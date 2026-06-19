@@ -2343,7 +2343,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                                   └ {row.displayLabel}
                                   {row.woId && (
                                     
-                                      href={`/production?wo=${row.woId}`}
+                                    <a href={`/production?wo=${row.woId}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="rounded border border-blue-300 bg-white px-1 py-0.5 text-[10px] font-semibold text-blue-600 hover:bg-blue-50"
