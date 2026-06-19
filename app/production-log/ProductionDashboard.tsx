@@ -467,6 +467,115 @@ export function ProductionDashboard({
       newCards.push({ key: "expiry", label: "소비기한", icon: "⏰", tab: "expiry", status: "warn", message: "조회 오류" });
     }
 
+    // ── 11. 오늘 휴가 유형별 현황 ──
+    try {
+      const { data: leaveAllData } = await supabase.from("leave_requests")
+        .select("employee_name, leave_type")
+        .eq("leave_date", today);
+      const leaveTypeLabels: Record<string, string> = {
+        ANNUAL: "연차 (1일)", HALF_AM: "반차 - 오전", HALF_PM: "반차 - 오후",
+        SICK: "병가", FRIDAY_OFF: "금요일 휴무", SPECIAL: "경조사 휴가", REMOTE: "재택근무",
+      };
+      const grouped: Record<string, string[]> = {};
+      (leaveAllData ?? []).forEach((l: any) => {
+        const label = leaveTypeLabels[l.leave_type] ?? l.leave_type;
+        if (!grouped[label]) grouped[label] = [];
+        grouped[label].push(l.employee_name);
+      });
+      const leaveDetail = Object.entries(grouped).map(([type, names]) => `${type}: ${names.join(", ")}`);
+      newCards.push({
+        key: "today_leave",
+        label: "오늘 휴가",
+        icon: "🏖️",
+        status: (leaveAllData ?? []).length > 0 ? "warn" : "ok",
+        message: (leaveAllData ?? []).length > 0 ? `${(leaveAllData ?? []).length}명 휴가 중` : "휴가자 없음",
+        detail: leaveDetail,
+      });
+    } catch {
+      newCards.push({ key: "today_leave", label: "오늘 휴가", icon: "🏖️", status: "warn", message: "조회 오류" });
+    }
+
+    // ── 12. 보건증 만료 30일 이내 ──
+    try {
+      const { data: certData } = await supabase
+        .from("employee_health_certs")
+        .select("employee_id, exam_date, employees(name)")
+        .order("exam_date", { ascending: false });
+      // 직원별 최신 검사일만 추출
+      const latestMap: Record<string, { name: string; examDate: string }> = {};
+      (certData ?? []).forEach((r: any) => {
+        const empId = r.employee_id;
+        if (!latestMap[empId]) {
+          latestMap[empId] = { name: r.employees?.name ?? "알 수 없음", examDate: r.exam_date };
+        }
+      });
+      const limit30 = new Date(today + "T00:00:00+09:00");
+      limit30.setDate(limit30.getDate() + 30);
+      const limit30Str = limit30.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+      const expiring = Object.values(latestMap).filter(({ examDate }) => {
+        const renewDate = new Date(examDate + "T00:00:00+09:00");
+        renewDate.setFullYear(renewDate.getFullYear() + 1);
+        const renewStr = renewDate.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+        return renewStr >= today && renewStr <= limit30Str;
+      });
+      const expired = Object.values(latestMap).filter(({ examDate }) => {
+        const renewDate = new Date(examDate + "T00:00:00+09:00");
+        renewDate.setFullYear(renewDate.getFullYear() + 1);
+        const renewStr = renewDate.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+        return renewStr < today;
+      });
+      const certDetail = [
+        ...expired.map(({ name, examDate }) => {
+          const renewDate = new Date(examDate + "T00:00:00+09:00");
+          renewDate.setFullYear(renewDate.getFullYear() + 1);
+          return `🔴 만료됨 — ${name} (갱신일: ${renewDate.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })})`;
+        }),
+        ...expiring.map(({ name, examDate }) => {
+          const renewDate = new Date(examDate + "T00:00:00+09:00");
+          renewDate.setFullYear(renewDate.getFullYear() + 1);
+          const renewStr = renewDate.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+          const daysLeft = Math.ceil(
+            (new Date(renewStr + "T00:00:00+09:00").getTime() - new Date(today + "T00:00:00+09:00").getTime())
+            / (1000 * 60 * 60 * 24)
+          );
+          return `🟡 D-${daysLeft} (${renewStr}) — ${name}`;
+        }),
+      ];
+      newCards.push({
+        key: "health_cert",
+        label: "보건증 갱신",
+        icon: "🏥",
+        status: expired.length > 0 ? "error" : expiring.length > 0 ? "warn" : "ok",
+        message: expired.length > 0
+          ? `만료 ${expired.length}명 · 임박 ${expiring.length}명`
+          : expiring.length > 0 ? `30일 이내 갱신 필요 ${expiring.length}명`
+          : "갱신 필요 없음",
+        detail: certDetail,
+      });
+    } catch {
+      newCards.push({ key: "health_cert", label: "보건증 갱신", icon: "🏥", status: "warn", message: "조회 오류" });
+    }
+
+    // ── 13. 자가품질검사 / 유효성평가 알람 ──
+    {
+      const currentMonth = new Date(today + "T00:00:00+09:00").getMonth() + 1; // 1~12
+      const isQcMonth = [3, 6, 9, 12].includes(currentMonth);
+      const isValidityMonth = currentMonth === 6;
+      const alarmDetail: string[] = [];
+      if (isQcMonth) alarmDetail.push(`📋 ${currentMonth}월은 자가품질검사 실시 월입니다`);
+      if (isValidityMonth) alarmDetail.push(`🧫 ${currentMonth}월은 유효성평가실험 실시 월입니다`);
+      if (isQcMonth || isValidityMonth) {
+        newCards.push({
+          key: "qc_alarm",
+          label: "품질검사 알람",
+          icon: "🔬",
+          status: "warn",
+          message: isValidityMonth ? "자가품질검사 + 유효성평가 월" : "자가품질검사 월",
+          detail: alarmDetail,
+        });
+      }
+    }
+
     setCards(newCards);
     setLastUpdated(new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" }));
     setLoading(false);
