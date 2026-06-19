@@ -2337,9 +2337,21 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                           <div className="text-xs text-slate-400 py-1">내역이 없습니다.</div>
                         ) : (
                           <div className="space-y-0.5">
-                           {drillRows.map((row, i) => (
+                          {drillRows.map((row, i) => (
                               <div key={i} className="flex items-center justify-between text-xs py-0.5 border-b border-blue-100 last:border-0">
-                                <span className="text-slate-600">└ {row.displayLabel}</span>
+                                <span className="text-slate-600 flex items-center gap-1.5">
+                                  └ {row.displayLabel}
+                                  {row.woId && (
+                                    
+                                      href={`/production?wo=${row.woId}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="rounded border border-blue-300 bg-white px-1 py-0.5 text-[10px] font-semibold text-blue-600 hover:bg-blue-50"
+                                      onClick={(e) => e.stopPropagation()}>
+                                      🔗
+                                    </a>
+                                  )}
+                                </span>
                                 <span className="tabular-nums font-semibold text-slate-700 ml-4">{row.quantity.toLocaleString()}{row.unit}</span>
                               </div>
                             ))}
