@@ -134,7 +134,8 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
 
   function resetForm() {
     setFDate(today); setContentMonthLoaded(null); setFStart(""); setFEnd(""); setFLocation("");
-    setFTarget("전원"); setFAbsentee("재교육"); setFAbsenteeNote(""); setFContent(""); setFResultNote("");
+    setFTarget("전원"); setFAbsentee("재교육"); setFAbsenteeNote(""); setFContent("");
+    setFResultNote("교육 효과 및 내용 습득이 기대됩니다.");
     setFAttachments([]); setFAttachmentNote(""); setFEducator(null); setFAttendees([]);
     setFPhotoFile(null); setFPhotoPreview(null);
   }
@@ -219,8 +220,10 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
           : fAttachments)
       : null;
 
-    const { data: logData, error: logError } = await supabase.from("hygiene_training_logs").insert({
-      training_date: fDate, start_time: fStart || null, end_time: fEnd || null,
+      const { data: logData, error: logError } = await supabase.from("hygiene_training_logs").insert({
+        training_date: fDate,
+        start_time: fStart.length === 4 ? `${fStart.slice(0,2)}:${fStart.slice(2,4)}:00` : null,
+        end_time: fEnd.length === 4 ? `${fEnd.slice(0,2)}:${fEnd.slice(2,4)}:00` : null,
       location: fLocation.trim(), target: fTarget.trim(),
       absentee_type: fAbsentee, absentee_note: fAbsentee === "기타" ? fAbsenteeNote.trim() : null,
       content: fContent, result_note: fResultNote.trim() || null,
@@ -438,15 +441,29 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
             </div>
             <div>
               <div className="mb-1 text-xs text-slate-500">장소 *</div>
-              <input className={inp} value={fLocation} onChange={(e) => setFLocation(e.target.value)} placeholder="예: 휴게실·복도" />
+              <div className="flex gap-2">
+                {["휴게실", "복도"].map((loc) => (
+                  <button key={loc} type="button"
+                    className={`flex-1 rounded-xl border-2 py-2 text-sm font-semibold transition-all ${fLocation === loc ? "border-blue-500 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                    onClick={() => setFLocation(loc)}>{loc}</button>
+                ))}
+              </div>
             </div>
             <div>
-              <div className="mb-1 text-xs text-slate-500">시작시각</div>
-              <input type="time" className={inp} value={fStart} onChange={(e) => setFStart(e.target.value)} />
+              <div className="mb-1 text-xs text-slate-500">시작시각 (HHmm)</div>
+              <input className={inp} inputMode="numeric" placeholder="예: 0930" maxLength={4}
+                value={fStart} onChange={(e) => setFStart(e.target.value.replace(/[^\d]/g, "").slice(0, 4))} />
+              {fStart.length === 4 && (
+                <div className="mt-0.5 text-xs text-slate-400 text-right">{fStart.slice(0,2)}:{fStart.slice(2,4)}</div>
+              )}
             </div>
             <div>
-              <div className="mb-1 text-xs text-slate-500">종료시각</div>
-              <input type="time" className={inp} value={fEnd} onChange={(e) => setFEnd(e.target.value)} />
+              <div className="mb-1 text-xs text-slate-500">종료시각 (HHmm)</div>
+              <input className={inp} inputMode="numeric" placeholder="예: 1800" maxLength={4}
+                value={fEnd} onChange={(e) => setFEnd(e.target.value.replace(/[^\d]/g, "").slice(0, 4))} />
+              {fEnd.length === 4 && (
+                <div className="mt-0.5 text-xs text-slate-400 text-right">{fEnd.slice(0,2)}:{fEnd.slice(2,4)}</div>
+              )}
             </div>
             <div>
               <div className="mb-1 text-xs text-slate-500">대상</div>
@@ -482,7 +499,7 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
           <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="mb-2 text-xs font-semibold text-slate-500">참석자 서명 ({fAttendees.length}명 완료) — 각자 본인 PIN 입력</div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {employees.filter((e) => e.name !== "조대성").map((emp) => {
+              {employees.filter((e) => e.name !== "조대성" && e.name !== "강미라").map((emp) => {
                 const signed = fAttendees.some((a) => a.employee_id === emp.id);
                 const isSigning = signingEmpId === emp.id;
                 return (
@@ -494,31 +511,31 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
                         <span className="text-xs text-green-600">✓ 서명완료</span>
                         <button className="text-[10px] text-slate-300 hover:text-red-400 ml-1" onClick={() => removeAttendeeById(emp.id)}>✕</button>
                       </div>
-                    ) : isSigning ? (
-                      <div className="mt-1.5">
-                        <div className="flex justify-center gap-1.5 mb-1.5">
-                          {[0,1,2,3].map((i) => (
-                            <div key={i} className={`w-5 h-5 rounded border-2 flex items-center justify-center text-[10px] font-bold transition-all ${signingPin.length > i ? "border-blue-500 bg-blue-500 text-white" : "border-slate-200 bg-white"}`}>
-                              {signingPin.length > i ? "●" : ""}
-                            </div>
-                          ))}
-                        </div>
-                        {signingError && <div className="text-[10px] text-red-500 text-center mb-1">{signingError}</div>}
-                        <div className="grid grid-cols-3 gap-0.5">
-                          {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
-                            <button key={i} type="button"
-                              className={`py-1.5 text-xs font-semibold rounded transition-all ${d === "" ? "invisible" : "bg-white border border-slate-200 hover:bg-slate-50 active:bg-slate-100"}`}
-                              onClick={() => handleSigningDigit(emp, d)}>{d}</button>
-                          ))}
-                        </div>
-                        <button className="mt-1 w-full text-[10px] text-slate-400 hover:text-slate-600" onClick={() => { setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>취소</button>
+                   ) : isSigning ? (
+                    <div className="mt-2">
+                      <div className="flex justify-center gap-2 mb-3">
+                        {[0,1,2,3].map((i) => (
+                          <div key={i} className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center text-base font-bold transition-all ${signingPin.length > i ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-300"}`}>
+                            {signingPin.length > i ? "●" : "○"}
+                          </div>
+                        ))}
                       </div>
-                    ) : (
-                      <button className="mt-1.5 w-full rounded-lg border border-slate-200 py-1 text-xs text-slate-500 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all"
-                        onClick={() => { setSigningEmpId(emp.id); setSigningPin(""); setSigningError(""); }}>
-                        🔒 PIN 입력
-                      </button>
-                    )}
+                      {signingError && <div className="text-xs text-red-500 text-center mb-2">{signingError}</div>}
+                      <div className="grid grid-cols-3 gap-2">
+                        {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
+                          <button key={i} type="button"
+                            className={`rounded-xl border py-3 text-lg font-semibold transition-all ${d === "" ? "invisible" : "border-slate-200 bg-white hover:bg-slate-50 active:bg-slate-100 active:scale-95"}`}
+                            onClick={() => handleSigningDigit(emp, d)}>{d}</button>
+                        ))}
+                      </div>
+                      <button className="mt-2 w-full text-xs text-slate-400 hover:text-slate-600" onClick={() => { setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>취소</button>
+                    </div>
+                  ) : (
+                    <button className="mt-1.5 w-full rounded-xl border-2 border-slate-200 py-2 text-sm font-semibold text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-all active:scale-95"
+                      onClick={() => { setSigningEmpId(emp.id); setSigningPin(""); setSigningError(""); }}>
+                      🔒 PIN 입력
+                    </button>
+                  )}
                   </div>
                 );
               })}
