@@ -1182,7 +1182,7 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
         await supabase.from("material_usage_logs").delete().eq("note", `작업지시서 생산완료 - ${woData.work_order_no}`);
         await supabase.from("material_usage_logs").delete().eq("note", `이산화티타늄 차감 - ${woData.work_order_no}`);
         await supabase.from("material_usage_logs").delete().like("note", `전사지 차감 - ${woData.work_order_no}%`);
-        // movements 복구 (transfer_lots 차감, 도눔 포장완료)
+       // movements 복구 (transfer_lots 차감, 도눔 포장완료)
         const { data: movToDelete } = await supabase.from("movements").select("id").like("note", `전사지 차감 - ${woData.work_order_no}%`);
         if (movToDelete && movToDelete.length > 0) {
           await supabase.from("movements").delete().in("id", movToDelete.map((m) => m.id));
@@ -1190,6 +1190,16 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
         const { data: movToDelete2 } = await supabase.from("movements").select("id").eq("note", `도눔 포장완료 - ${woData.work_order_no}`);
         if (movToDelete2 && movToDelete2.length > 0) {
           await supabase.from("movements").delete().in("id", movToDelete2.map((m) => m.id));
+        }
+        // movements + pet_stock_logs 복구 (네오컬러 분사-레이즈 인쇄투입)
+        const neoNote = `네오컬러 인쇄투입 - ${woData.work_order_no}`;
+        const { data: movToDelete3 } = await supabase.from("movements").select("id").eq("note", neoNote);
+        if (movToDelete3 && movToDelete3.length > 0) {
+          await supabase.from("movements").delete().in("id", movToDelete3.map((m) => m.id));
+        }
+        const { data: petToDelete } = await supabase.from("pet_stock_logs").select("id").eq("note", neoNote);
+        if (petToDelete && petToDelete.length > 0) {
+          await supabase.from("pet_stock_logs").delete().in("id", petToDelete.map((p) => p.id));
         }
       }
       const { error: deleteErr } = await supabase.from("work_orders").delete().eq("id", woId);
@@ -3183,8 +3193,16 @@ const totalOrder = items
               {/* 하단 버튼 */}
               <div className={`${card} p-3 flex gap-2`}>
                 {selectedWo.status !== "완료" && !isEditMode ? (
-                  <button className="flex-1 rounded-lg border border-green-500 bg-green-600 py-2 text-sm font-bold text-white hover:bg-green-700 active:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed" onClick={markProductionComplete} disabled={isCompleting}>
-                   {isCompleting ? "처리 중..." : selectedWo.skip_production_check ? "포장완료 처리" : "생산완료 처리"}
+                  <button
+                    className={`flex-1 rounded-lg border py-2 text-sm font-bold text-white disabled:opacity-60 disabled:cursor-not-allowed ${
+                      woChecks?.status_production && !woChecks?.status_input
+                        ? "border-amber-500 bg-amber-500 hover:bg-amber-600 active:bg-amber-700"
+                        : "border-green-500 bg-green-600 hover:bg-green-700 active:bg-green-800"
+                    }`}
+                    onClick={markProductionComplete}
+                    disabled={isCompleting}
+                  >
+                    {isCompleting ? "처리 중..." : selectedWo.skip_production_check ? "포장완료 처리" : woChecks?.status_production && !woChecks?.status_input ? "✅ 생산완료 · CCP-1P 대기 중" : "생산완료 처리"}
                   </button>
                 ) : selectedWo.status === "완료" && !isEditMode ? (
                   <button className="rounded-lg border border-blue-400 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100" onClick={() => {
