@@ -1376,7 +1376,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
 
  // ── 드릴다운 ──
  const [expandedMaterialId, setExpandedMaterialId] = useState<string | null>(null);
- const [drillRows, setDrillRows] = useState<{ displayLabel: string; quantity: number; unit: string }[]>([]);
+ const [drillRows, setDrillRows] = useState<{ displayLabel: string; quantity: number; unit: string; woId?: string }[]>([]);
  const [drillLoading, setDrillLoading] = useState(false);
 
  const selectedStock = stocks.find((s) => s.material_id === adjMaterialId);
@@ -1742,14 +1742,14 @@ function MaterialLedgerTab({ role, userId, showToast }: {
         .filter(Boolean) as string[]
     )];
 
-    let woMap: Record<string, { client_name: string; product_name: string }> = {};
+    let woMap: Record<string, { id: string; client_name: string; product_name: string }> = {};
     if (woNos.length > 0) {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("work_order_no, client_name, product_name")
+        .select("id, work_order_no, client_name, product_name")
         .in("work_order_no", woNos);
       (woData ?? []).forEach((w: any) => {
-        woMap[w.work_order_no] = { client_name: w.client_name, product_name: w.product_name };
+        woMap[w.work_order_no] = { id: w.id, client_name: w.client_name, product_name: w.product_name };
       });
     }
 
@@ -1757,14 +1757,16 @@ function MaterialLedgerTab({ role, userId, showToast }: {
       const note: string = u.note ?? "";
       const woNo = note.match(woPattern)?.[0];
       let displayLabel = note;
+      let woId: string | undefined;
       if (woNo && woMap[woNo]) {
         const wo = woMap[woNo];
+        woId = wo.id;
         const tag = note.includes("생산완료") ? "생산완료"
           : note.includes("이산화티타늄 차감") ? "TiO₂"
           : "";
         displayLabel = `${wo.client_name} — ${wo.product_name}${tag ? ` (${tag})` : ""}`;
       }
-      return { displayLabel, quantity: u.quantity, unit: u.unit ?? unit };
+      return { displayLabel, quantity: u.quantity, unit: u.unit ?? unit, woId };
     });
 
     setDrillRows(rows);
@@ -2335,7 +2337,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                           <div className="text-xs text-slate-400 py-1">내역이 없습니다.</div>
                         ) : (
                           <div className="space-y-0.5">
-                            {drillRows.map((row, i) => (
+                           {drillRows.map((row, i) => (
                               <div key={i} className="flex items-center justify-between text-xs py-0.5 border-b border-blue-100 last:border-0">
                                 <span className="text-slate-600">└ {row.displayLabel}</span>
                                 <span className="tabular-nums font-semibold text-slate-700 ml-4">{row.quantity.toLocaleString()}{row.unit}</span>
