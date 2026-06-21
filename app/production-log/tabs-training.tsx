@@ -511,9 +511,9 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
         ${attendeeRows}
       </tbody></table>
       <table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
-        <tr><td style="${tdS}font-weight:bold;width:80px;vertical-align:top;">교육 후 결과</td><td style="${tdS}white-space:pre-wrap;">${log.result_note ?? ""}</td></tr>
+       <tr><td style="${tdS}font-weight:bold;width:80px;white-space:nowrap;vertical-align:top;">교육 후 결과</td><td style="${tdS}white-space:pre-wrap;">${log.result_note ?? ""}</td></tr>
       </tbody></table>
-      ${photoUrl ? `<div style="margin-top:6px;"><div style="font-size:8pt;font-weight:bold;margin-bottom:3px;">📷 교육 사진</div><img src="${photoUrl}" style="max-width:260px;max-height:200px;border:1px solid #999;"/></div>` : ""}
+      ${photoUrl ? `<div style="margin-top:6px;"><div style="font-size:8pt;font-weight:bold;margin-bottom:3px;">📷 교육 사진</div><img src="${photoUrl}" style="max-width:520px;max-height:400px;border:1px solid #999;"/></div>` : ""}
     </div>`;
   }
 
