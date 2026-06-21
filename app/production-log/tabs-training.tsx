@@ -496,9 +496,11 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
         <tr>
           <td style="${tdS}font-weight:bold;">일 시</td><td style="${tdS}" colspan="3">${dateLabel} &nbsp; ${timeLabel}</td>
         </tr>
+       <tr>
+          <td style="${tdS}font-weight:bold;">대 상</td><td style="${tdS}" colspan="3">${log.target ?? ""}</td>
+        </tr>
         <tr>
-          <td style="${tdS}font-weight:bold;">대 상</td><td style="${tdS}">${log.target ?? ""}</td>
-          <td style="${tdS}font-weight:bold;">불참자처리</td><td style="${tdS}font-size:8pt;">${absenteeChecks}${log.absentee_type === "기타" && log.absentee_note ? ` (${log.absentee_note})` : ""}</td>
+          <td style="${tdS}font-weight:bold;">불참자처리</td><td style="${tdS}font-size:8pt;" colspan="3">${absenteeChecks}${log.absentee_type === "기타" && log.absentee_note ? ` (${log.absentee_note})` : ""}</td>
         </tr>
       </tbody></table>
       <table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
@@ -509,8 +511,7 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
         ${attendeeRows}
       </tbody></table>
       <table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
-        <tr><td style="${tdS}font-weight:bold;width:80px;">교육 후 결과</td><td style="${tdS}">${log.result_note ?? ""}</td></tr>
-        <tr><td style="${tdS}font-weight:bold;">유첨서류</td><td style="${tdS}font-size:8pt;">${attachChecks}</td></tr>
+        <tr><td style="${tdS}font-weight:bold;width:80px;vertical-align:top;">교육 후 결과</td><td style="${tdS}white-space:pre-wrap;">${log.result_note ?? ""}</td></tr>
       </tbody></table>
       ${photoUrl ? `<div style="margin-top:6px;"><div style="font-size:8pt;font-weight:bold;margin-bottom:3px;">📷 교육 사진</div><img src="${photoUrl}" style="max-width:260px;max-height:200px;border:1px solid #999;"/></div>` : ""}
     </div>`;
@@ -527,7 +528,16 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
       *{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
       table{border-collapse:collapse;}img{max-width:none;}</style></head><body>${html}</body></html>`);
     win.document.close(); win.focus();
-    setTimeout(() => { win.print(); }, 400);
+    win.onload = () => {
+      const imgs = win.document.querySelectorAll("img");
+      if (imgs.length === 0) { win.print(); return; }
+      let loaded = 0;
+      const tryPrint = () => { loaded++; if (loaded >= imgs.length) win.print(); };
+      imgs.forEach((img) => {
+        if (img.complete) tryPrint();
+        else { img.onload = tryPrint; img.onerror = tryPrint; }
+      });
+    };
   }
 
   async function printRange() {
