@@ -916,7 +916,9 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
       : null;
 
     const { data: logData, error: logError } = await supabase.from("monitoring_training_logs").insert({
-      training_date: fDate, start_time: fStart || null, end_time: fEnd || null,
+      training_date: fDate,
+      start_time: (() => { const r = fStart.replace(/[^\d]/g, ""); return r.length === 4 ? `${r.slice(0,2)}:${r.slice(2,4)}:00` : null; })(),
+      end_time: (() => { const r = fEnd.replace(/[^\d]/g, ""); return r.length === 4 ? `${r.slice(0,2)}:${r.slice(2,4)}:00` : null; })(),
       location: fLocation.trim(), target: fTarget.trim(),
       absentee_type: fAbsentee, absentee_note: fAbsentee === "기타" ? fAbsenteeNote.trim() : null,
       attachment_docs: attachmentDocs,
@@ -1116,11 +1118,21 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
             </div>
             <div>
               <div className="mb-1 text-xs text-slate-500">시작시각</div>
-              <input type="time" className={inp} value={fStart} onChange={(e) => setFStart(e.target.value)} />
+              <input className={inp} inputMode="numeric" placeholder="예: 0930"
+                value={fStart}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
+                  setFStart(raw.length === 4 ? `${raw.slice(0,2)}:${raw.slice(2,4)}` : raw);
+                }} />
             </div>
             <div>
               <div className="mb-1 text-xs text-slate-500">종료시각</div>
-              <input type="time" className={inp} value={fEnd} onChange={(e) => setFEnd(e.target.value)} />
+              <input className={inp} inputMode="numeric" placeholder="예: 1800"
+                value={fEnd}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
+                  setFEnd(raw.length === 4 ? `${raw.slice(0,2)}:${raw.slice(2,4)}` : raw);
+                }} />
             </div>
             <div>
               <div className="mb-1 text-xs text-slate-500">대상</div>
@@ -1145,18 +1157,9 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
           </div>
 
           <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-1 text-xs font-semibold text-slate-500">교육자 (고정)</div>
-            <div className="flex items-center gap-2">
-              <img src="/sign-chods.png" style={{ height: 24, objectFit: "contain" }} alt="조대성" />
-              <span className="text-sm font-semibold text-slate-700">조대성</span>
-              <span className="text-xs text-green-600">✓ 고정</span>
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="mb-2 text-xs font-semibold text-slate-500">참석자 ({fAttendees.length}명) — 직원 선택 후 사진 2장 첨부</div>
             <div className="space-y-2">
-              {employees.filter((e) => e.name !== "조대성").map((emp) => {
+            {employees.filter((e) => e.name !== "조대성" && e.name !== "강미라").map((emp) => {
                 const attendeeIdx = fAttendees.findIndex((a) => a.employee_id === emp.id);
                 const added = attendeeIdx >= 0;
                 const attendee = added ? fAttendees[attendeeIdx] : null;
