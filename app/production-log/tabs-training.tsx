@@ -94,18 +94,6 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
   const [signingError, setSigningError] = useState("");
   const [signingLogId, setSigningLogId] = useState<string | null>(null);
 
-  // 수정 관련 state
-  const [editingLog, setEditingLog] = useState<MonitoringLog | null>(null);
-  const [eDate, setEDate] = useState("");
-  const [eStart, setEStart] = useState("");
-  const [eEnd, setEEnd] = useState("");
-  const [eLocation, setELocation] = useState("");
-  const [eTarget, setETarget] = useState("");
-  const [eAbsentee, setEAbsentee] = useState("재교육");
-  const [eAbsenteeNote, setEAbsenteeNote] = useState("");
-  const [eAttendeePhotos, setEAttendeePhotos] = useState<Record<string, { photo1?: File; photo1Preview?: string; photo2?: File; photo2Preview?: string }>>({});
-  const [eSaving, setESaving] = useState(false);
-
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
@@ -822,6 +810,18 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
   const [signingPin, setSigningPin] = useState("");
   const [signingError, setSigningError] = useState("");
   const [signingLogId, setSigningLogId] = useState<string | null>(null);
+
+  // 수정 관련 state
+  const [editingLog, setEditingLog] = useState<MonitoringLog | null>(null);
+  const [eDate, setEDate] = useState("");
+  const [eStart, setEStart] = useState("");
+  const [eEnd, setEEnd] = useState("");
+  const [eLocation, setELocation] = useState("");
+  const [eTarget, setETarget] = useState("");
+  const [eAbsentee, setEAbsentee] = useState("재교육");
+  const [eAbsenteeNote, setEAbsenteeNote] = useState("");
+  const [eAttendeePhotos, setEAttendeePhotos] = useState<Record<string, { photo1?: File; photo1Preview?: string; photo2?: File; photo2Preview?: string }>>({});
+  const [eSaving, setESaving] = useState(false);
 
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
