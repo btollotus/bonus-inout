@@ -1175,17 +1175,24 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
                       )}
                     </div>
                     {added && (
-                      <div className="mt-2 flex flex-wrap gap-4">
-                        <div>
-                          <div className="mb-1 text-[11px] text-slate-500 font-medium">CCP-1B 모니터링 사진 *</div>
-                          <input type="file" accept="image/*" className="text-xs" onChange={(e) => setAttendeePhoto(attendeeIdx, 1, e.target.files?.[0] ?? null)} />
-                          {attendee?.photo1Preview && <img src={attendee.photo1Preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt="CCP-1B" />}
-                        </div>
-                        <div>
-                          <div className="mb-1 text-[11px] text-slate-500 font-medium">CCP-1P 모니터링 사진 *</div>
-                          <input type="file" accept="image/*" className="text-xs" onChange={(e) => setAttendeePhoto(attendeeIdx, 2, e.target.files?.[0] ?? null)} />
-                          {attendee?.photo2Preview && <img src={attendee.photo2Preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt="CCP-1P" />}
-                        </div>
+                      <div className="mt-2 flex flex-wrap gap-3">
+                        {([
+                          { slot: 1 as const, label: "CCP-1B 모니터링 사진", preview: attendee?.photo1Preview, file: attendee?.photo1 },
+                          { slot: 2 as const, label: "CCP-1P 모니터링 사진", preview: attendee?.photo2Preview, file: attendee?.photo2 },
+                        ] as const).map(({ slot, label, preview, file }) => (
+                          <div key={slot}>
+                            <div className="mb-1 text-[11px] text-slate-500 font-medium">{label} *</div>
+                            <label className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed px-3 py-2 transition-all ${preview ? "border-green-400 bg-green-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
+                              <span className="text-lg">{preview ? "✅" : "📷"}</span>
+                              <div>
+                                <div className="text-xs font-semibold text-slate-700">{preview ? (file?.name ?? "선택됨") : "사진 선택"}</div>
+                                <div className="text-[10px] text-slate-400">{preview ? "클릭하여 변경" : "JPG, PNG 등"}</div>
+                              </div>
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => setAttendeePhoto(attendeeIdx, slot, e.target.files?.[0] ?? null)} />
+                            </label>
+                            {preview && <img src={preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt={label} />}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
