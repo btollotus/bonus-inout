@@ -886,9 +886,10 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
         if (!emp.pin) { setSigningError("PIN 미설정"); setSigningPin(""); return; }
         if (emp.pin !== next) { setSigningError("PIN 오류"); setSigningPin(""); return; }
         if (!signingLogId) { setSigningEmpId(null); setSigningPin(""); setSigningError(""); return; }
-        const { error } = await supabase.from("monitoring_training_attendees").insert({
-          log_id: signingLogId, employee_id: emp.id, name: emp.name, signed_at: new Date().toISOString(),
-        });
+        const { error } = await supabase.from("monitoring_training_attendees")
+          .update({ signed_at: new Date().toISOString() })
+          .eq("log_id", signingLogId)
+          .eq("employee_id", emp.id);
         if (error) { setSigningError("서명 실패"); setSigningPin(""); return; }
         showToast(`✅ ${emp.name} 서명 완료!`);
         setSigningEmpId(null); setSigningPin(""); setSigningError("");
@@ -948,7 +949,7 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
       if (!p1 || !p2) { setSaving(false); return; }
       attendeeRows.push({
         log_id: logData.id, employee_id: a.employee_id, name: a.name, note: a.note || null,
-        photo_path_1: p1, photo_path_2: p2,
+        photo_path_1: p1, photo_path_2: p2, signed_at: null,
       });
     }
 
@@ -1534,7 +1535,7 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {employees.filter((e) => e.name !== "조대성" && e.name !== "강미라").map((emp) => {
-          const alreadySigned = (signingLog.monitoring_training_attendees ?? []).some((a) => a.employee_id === emp.id);
+          const alreadySigned = (signingLog.monitoring_training_attendees ?? []).some((a) => a.employee_id === emp.id && a.signed_at != null);
           const isSigning = signingEmpId === emp.id;
           return (
             <div key={emp.id} className={`rounded-xl border p-3 transition-all ${alreadySigned ? "border-green-300 bg-green-50" : "border-slate-200 bg-white"}`}>
