@@ -821,6 +821,7 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
   const [eAbsentee, setEAbsentee] = useState("재교육");
   const [eAbsenteeNote, setEAbsenteeNote] = useState("");
   const [eAttendeePhotos, setEAttendeePhotos] = useState<Record<string, { photo1?: File; photo1Preview?: string; photo2?: File; photo2Preview?: string }>>({});
+  const [eCurrentPhotoUrls, setECurrentPhotoUrls] = useState<Record<string, { url1: string | null; url2: string | null }>>({});
   const [eSaving, setESaving] = useState(false);
 
   useEffect(() => {
@@ -969,7 +970,7 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
     loadLogs();
   }
 
-  function openEdit(log: MonitoringLog) {
+  async function openEdit(log: MonitoringLog) {
     setEditingLog(log);
     setEDate(log.training_date);
     const rawStart = log.start_time ? log.start_time.slice(0, 5).replace(":", "") : "";
@@ -981,8 +982,17 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
     setEAbsentee(log.absentee_type ?? "재교육");
     setEAbsenteeNote("");
     setEAttendeePhotos({});
-    // 폼 열릴 때 등록 폼은 닫기
+    setECurrentPhotoUrls({});
     setFormOpen(false);
+    // 참석자별 현재 사진 signed URL fetch
+    const urlMap: Record<string, { url1: string | null; url2: string | null }> = {};
+    for (const a of log.monitoring_training_attendees ?? []) {
+      const empId = a.employee_id ?? "";
+      const url1 = a.photo_path_1 ? await getSignedPhotoUrl(a.photo_path_1) : null;
+      const url2 = a.photo_path_2 ? await getSignedPhotoUrl(a.photo_path_2) : null;
+      urlMap[empId] = { url1, url2 };
+    }
+    setECurrentPhotoUrls(urlMap);
   }
 
   async function saveEdit() {
@@ -1454,31 +1464,43 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
                     { slot: 2 as const, label: "CCP-1P 모니터링 사진", currentPath: a.photo_path_2, newFile: photos.photo2, newPreview: photos.photo2Preview },
                   ] as const).map(({ slot, label, currentPath, newFile, newPreview }) => (
                     <div key={slot}>
-                      <div className="mb-1 text-[11px] text-slate-500 font-medium">{label}</div>
-                      <label className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed px-3 py-2 transition-all ${newPreview ? "border-orange-400 bg-orange-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
-                        <span className="text-lg">{newPreview ? "🔄" : (currentPath ? "✅" : "📷")}</span>
-                        <div>
-                          <div className="text-xs font-semibold text-slate-700">{newPreview ? (newFile?.name ?? "선택됨") : (currentPath ? "현재 사진 있음" : "사진 없음")}</div>
-                          <div className="text-[10px] text-slate-400">{newPreview ? "클릭하여 재선택" : "클릭하여 교체"}</div>
+                    <div className="mb-1 text-[11px] text-slate-500 font-medium">{label}</div>
+                    {/* 현재 저장된 사진 표시 */}
+                    {(() => {
+                      const currentUrl = slot === 1 ? eCurrentPhotoUrls[empId]?.url1 : eCurrentPhotoUrls[empId]?.url2;
+                      return currentUrl && !newPreview ? (
+                        <div className="mb-2">
+                          <a href={currentUrl} target="_blank" rel="noopener noreferrer">
+                            <img src={currentUrl} className="h-20 w-28 rounded-lg border border-slate-300 object-cover cursor-zoom-in hover:opacity-80 transition-opacity" alt={`현재 ${label}`} />
+                          </a>
+                          <div className="mt-0.5 text-[10px] text-slate-400">현재 사진 (클릭하여 원본 보기)</div>
                         </div>
-                        <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                          const f = e.target.files?.[0] ?? null;
-                          if (!f) return;
-                          setEAttendeePhotos((prev) => ({
-                            ...prev,
-                            [empId]: {
-                              ...prev[empId],
-                              ...(slot === 1 ? { photo1: f, photo1Preview: URL.createObjectURL(f) } : { photo2: f, photo2Preview: URL.createObjectURL(f) }),
-                            },
-                          }));
-                        }} />
-                      </label>
-                      {newPreview && (
-                        <a href={newPreview} target="_blank" rel="noopener noreferrer">
-                          <img src={newPreview} className="mt-1 h-20 w-28 rounded-lg border border-orange-300 object-cover cursor-zoom-in hover:opacity-80 transition-opacity" alt={label} />
-                        </a>
-                      )}
-                    </div>
+                      ) : null;
+                    })()}
+                    <label className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed px-3 py-2 transition-all ${newPreview ? "border-orange-400 bg-orange-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
+                      <span className="text-lg">{newPreview ? "🔄" : "📷"}</span>
+                      <div>
+                        <div className="text-xs font-semibold text-slate-700">{newPreview ? (newFile?.name ?? "선택됨") : "사진 교체하기"}</div>
+                        <div className="text-[10px] text-slate-400">{newPreview ? "클릭하여 재선택" : "JPG, PNG 등"}</div>
+                      </div>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                        const f = e.target.files?.[0] ?? null;
+                        if (!f) return;
+                        setEAttendeePhotos((prev) => ({
+                          ...prev,
+                          [empId]: {
+                            ...prev[empId],
+                            ...(slot === 1 ? { photo1: f, photo1Preview: URL.createObjectURL(f) } : { photo2: f, photo2Preview: URL.createObjectURL(f) }),
+                          },
+                        }));
+                      }} />
+                    </label>
+                    {newPreview && (
+                      <a href={newPreview} target="_blank" rel="noopener noreferrer">
+                        <img src={newPreview} className="mt-1 h-20 w-28 rounded-lg border border-orange-300 object-cover cursor-zoom-in hover:opacity-80 transition-opacity" alt={label} />
+                      </a>
+                    )}
+                  </div>
                   ))}
                 </div>
               </div>
