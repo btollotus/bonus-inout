@@ -608,21 +608,6 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
           </div>
 
           <div className="mt-3">
-            <div className="mb-1 text-xs text-slate-500">유첨서류</div>
-            <div className="flex flex-wrap gap-3">
-              {ATTACHMENT_OPTIONS.map((opt) => (
-                <label key={opt} className="flex items-center gap-1.5 text-xs text-slate-600">
-                  <input type="checkbox" checked={fAttachments.includes(opt)} onChange={() => toggleAttachment(opt)} />
-                  {opt}
-                </label>
-              ))}
-            </div>
-            {fAttachments.includes("기타") && (
-              <input className={`${inp} mt-2`} value={fAttachmentNote} onChange={(e) => setFAttachmentNote(e.target.value)} placeholder="기타 서류명" />
-            )}
-          </div>
-
-          <div className="mt-3">
             <div className="mb-1 text-xs text-slate-500">교육 사진 (단체사진 1장) *</div>
             <label className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed px-4 py-3 transition-all ${fPhotoFile ? "border-green-400 bg-green-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
               <span className="text-2xl">{fPhotoFile ? "✅" : "📷"}</span>
@@ -824,6 +809,7 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
   const [signingEmpId, setSigningEmpId] = useState<string | null>(null);
   const [signingPin, setSigningPin] = useState("");
   const [signingError, setSigningError] = useState("");
+  const [signingLogId, setSigningLogId] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
@@ -883,11 +869,17 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
     const next = signingPin + d;
     setSigningPin(next);
     if (next.length === 4) {
-      setTimeout(() => {
+      setTimeout(async () => {
         if (!emp.pin) { setSigningError("PIN 미설정"); setSigningPin(""); return; }
         if (emp.pin !== next) { setSigningError("PIN 오류"); setSigningPin(""); return; }
-        addAttendee(emp.id, emp.name);
+        if (!signingLogId) { setSigningEmpId(null); setSigningPin(""); setSigningError(""); return; }
+        const { error } = await supabase.from("monitoring_training_attendees").insert({
+          log_id: signingLogId, employee_id: emp.id, name: emp.name, signed_at: new Date().toISOString(),
+        });
+        if (error) { setSigningError("서명 실패"); setSigningPin(""); return; }
+        showToast(`✅ ${emp.name} 서명 완료!`);
         setSigningEmpId(null); setSigningPin(""); setSigningError("");
+        loadLogs();
       }, 100);
     }
   }
@@ -941,7 +933,7 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
       if (!p1 || !p2) { setSaving(false); return; }
       attendeeRows.push({
         log_id: logData.id, employee_id: a.employee_id, name: a.name, note: a.note || null,
-        photo_path_1: p1, photo_path_2: p2, signed_at: a.signed_at,
+        photo_path_1: p1, photo_path_2: p2,
       });
     }
 
@@ -1162,60 +1154,34 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
           </div>
 
           <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 text-xs font-semibold text-slate-500">참석자 서명 ({fAttendees.length}명 완료) — 각자 본인 PIN 입력 후 사진 2장 첨부</div>
+            <div className="mb-2 text-xs font-semibold text-slate-500">참석자 ({fAttendees.length}명) — 직원 선택 후 사진 2장 첨부</div>
             <div className="space-y-2">
               {employees.filter((e) => e.name !== "조대성").map((emp) => {
                 const attendeeIdx = fAttendees.findIndex((a) => a.employee_id === emp.id);
-                const signed = attendeeIdx >= 0;
-                const isSigning = signingEmpId === emp.id;
-                const attendee = signed ? fAttendees[attendeeIdx] : null;
+                const added = attendeeIdx >= 0;
+                const attendee = added ? fAttendees[attendeeIdx] : null;
                 return (
-                  <div key={emp.id} className={`rounded-xl border p-3 transition-all ${signed ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white"}`}>
+                  <div key={emp.id} className={`rounded-xl border p-3 transition-all ${added ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white"}`}>
                     <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-700">{emp.name}</span>
-                        {signed && SIGN_MAP[emp.name] && <img src={SIGN_MAP[emp.name]} style={{ height: 18, objectFit: "contain" }} alt={emp.name} />}
-                        {signed && <span className="text-xs text-green-600">✓ 서명완료</span>}
-                      </div>
-                      {signed && <button className="text-[10px] text-slate-300 hover:text-red-400" onClick={() => removeAttendeeById(emp.id)}>✕ 취소</button>}
+                      <span className="text-sm font-semibold text-slate-700">{emp.name}</span>
+                      {!added ? (
+                        <button className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-all"
+                          onClick={() => addAttendee(emp.id, emp.name)}>+ 추가</button>
+                      ) : (
+                        <button className="text-[10px] text-slate-300 hover:text-red-400" onClick={() => removeAttendeeById(emp.id)}>✕ 제외</button>
+                      )}
                     </div>
-                    {!signed && !isSigning && (
-                      <button className="w-full rounded-lg border border-slate-200 py-1.5 text-xs text-slate-500 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all"
-                        onClick={() => { setSigningEmpId(emp.id); setSigningPin(""); setSigningError(""); }}>
-                        🔒 PIN 입력
-                      </button>
-                    )}
-                    {!signed && isSigning && (
-                      <div>
-                        <div className="flex justify-center gap-1.5 mb-1.5">
-                          {[0,1,2,3].map((i) => (
-                            <div key={i} className={`w-5 h-5 rounded border-2 flex items-center justify-center text-[10px] font-bold transition-all ${signingPin.length > i ? "border-blue-500 bg-blue-500 text-white" : "border-slate-200 bg-white"}`}>
-                              {signingPin.length > i ? "●" : ""}
-                            </div>
-                          ))}
-                        </div>
-                        {signingError && <div className="text-[10px] text-red-500 text-center mb-1">{signingError}</div>}
-                        <div className="grid grid-cols-6 gap-0.5 mb-1">
-                          {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
-                            <button key={i} type="button"
-                              className={`py-1.5 text-xs font-semibold rounded transition-all ${d === "" ? "invisible" : "bg-white border border-slate-200 hover:bg-slate-50 active:bg-slate-100"}`}
-                              onClick={() => handleSigningDigit(emp, d)}>{d}</button>
-                          ))}
-                        </div>
-                        <button className="w-full text-[10px] text-slate-400 hover:text-slate-600" onClick={() => { setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>취소</button>
-                      </div>
-                    )}
-                    {signed && (
-                      <div className="mt-2 flex flex-wrap gap-3">
+                    {added && (
+                      <div className="mt-2 flex flex-wrap gap-4">
                         <div>
-                          <div className="mb-1 text-[11px] text-slate-400">사진 1 *</div>
+                          <div className="mb-1 text-[11px] text-slate-500 font-medium">CCP-1B 모니터링 사진 *</div>
                           <input type="file" accept="image/*" className="text-xs" onChange={(e) => setAttendeePhoto(attendeeIdx, 1, e.target.files?.[0] ?? null)} />
-                          {attendee?.photo1Preview && <img src={attendee.photo1Preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt="사진1" />}
+                          {attendee?.photo1Preview && <img src={attendee.photo1Preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt="CCP-1B" />}
                         </div>
                         <div>
-                          <div className="mb-1 text-[11px] text-slate-400">사진 2 *</div>
+                          <div className="mb-1 text-[11px] text-slate-500 font-medium">CCP-1P 모니터링 사진 *</div>
                           <input type="file" accept="image/*" className="text-xs" onChange={(e) => setAttendeePhoto(attendeeIdx, 2, e.target.files?.[0] ?? null)} />
-                          {attendee?.photo2Preview && <img src={attendee.photo2Preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt="사진2" />}
+                          {attendee?.photo2Preview && <img src={attendee.photo2Preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt="CCP-1P" />}
                         </div>
                       </div>
                     )}
@@ -1223,21 +1189,6 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
                 );
               })}
             </div>
-          </div>
-
-          <div className="mt-3">
-            <div className="mb-1 text-xs text-slate-500">유첨서류</div>
-            <div className="flex flex-wrap gap-3">
-              {ATTACHMENT_OPTIONS.map((opt) => (
-                <label key={opt} className="flex items-center gap-1.5 text-xs text-slate-600">
-                  <input type="checkbox" checked={fAttachments.includes(opt)} onChange={() => toggleAttachment(opt)} />
-                  {opt}
-                </label>
-              ))}
-            </div>
-            {fAttachments.includes("기타") && (
-              <input className={`${inp} mt-2`} value={fAttachmentNote} onChange={(e) => setFAttachmentNote(e.target.value)} placeholder="기타 서류명" />
-            )}
           </div>
 
           <div className="mt-4">
@@ -1276,6 +1227,10 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
                     <td className="py-2 px-3 text-center">{(log.monitoring_training_attendees ?? []).length}명</td>
                     <td className="py-2 px-3 text-center whitespace-nowrap">
                       <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 mr-1" onClick={() => printSingle(log)}>인쇄</button>
+                      <button className={`rounded-lg border px-2 py-0.5 text-[11px] font-semibold mr-1 ${signingLogId === log.id ? "border-green-500 bg-green-600 text-white" : "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"}`}
+                        onClick={() => { setSigningLogId(signingLogId === log.id ? null : log.id); setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>
+                        {signingLogId === log.id ? "닫기" : "✍️ 서명"}
+                      </button>
                       {isAdminOrSubadmin && (
                         <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500" onClick={() => deleteLog(log.id)}>삭제</button>
                       )}
@@ -1287,6 +1242,65 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
           </div>
         )}
       </div>
+
+{/* ── 서명 패널 ── */}
+{signingLogId && (() => {
+  const signingLog = logs.find((l) => l.id === signingLogId);
+  if (!signingLog) return null;
+  return (
+    <div className={`${card} p-4`}>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <span className="font-semibold text-sm">✍️ 참석 서명 — {signingLog.training_date}</span>
+          <span className="ml-2 text-xs text-slate-400">{signingLog.location}</span>
+        </div>
+        <button className="text-xs text-slate-400 hover:text-slate-600"
+          onClick={() => { setSigningLogId(null); setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>✕ 닫기</button>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {employees.filter((e) => e.name !== "조대성" && e.name !== "강미라").map((emp) => {
+          const alreadySigned = (signingLog.monitoring_training_attendees ?? []).some((a) => a.employee_id === emp.id);
+          const isSigning = signingEmpId === emp.id;
+          return (
+            <div key={emp.id} className={`rounded-xl border p-3 transition-all ${alreadySigned ? "border-green-300 bg-green-50" : "border-slate-200 bg-white"}`}>
+              <div className="text-sm font-semibold text-center text-slate-700 mb-1.5">{emp.name}</div>
+              {alreadySigned ? (
+                <div className="flex flex-col items-center gap-1">
+                  {SIGN_MAP[emp.name] && <img src={SIGN_MAP[emp.name]} style={{ height: 22, objectFit: "contain" }} alt={emp.name} />}
+                  <span className="text-xs text-green-600">✓ 서명완료</span>
+                </div>
+              ) : isSigning ? (
+                <div>
+                  <div className="flex justify-center gap-2 mb-3">
+                    {[0,1,2,3].map((i) => (
+                      <div key={i} className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center text-base font-bold transition-all ${signingPin.length > i ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-300"}`}>
+                        {signingPin.length > i ? "●" : "○"}
+                      </div>
+                    ))}
+                  </div>
+                  {signingError && <div className="text-xs text-red-500 text-center mb-2">{signingError}</div>}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
+                      <button key={i} type="button"
+                        className={`rounded-xl border py-3 text-lg font-semibold transition-all ${d === "" ? "invisible" : "border-slate-200 bg-white hover:bg-slate-50 active:bg-slate-100 active:scale-95"}`}
+                        onClick={() => handleSigningDigit(emp, d)}>{d}</button>
+                    ))}
+                  </div>
+                  <button className="mt-2 w-full text-xs text-slate-400 hover:text-slate-600" onClick={() => { setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>취소</button>
+                </div>
+              ) : (
+                <button className="w-full rounded-xl border-2 border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-all active:scale-95"
+                  onClick={() => { setSigningEmpId(emp.id); setSigningPin(""); setSigningError(""); }}>
+                  🔒 PIN 입력
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
+})()}
+</div>
+);
 }
