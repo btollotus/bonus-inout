@@ -999,18 +999,34 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
     }
     if (attendees.length === 0) attendeeRows = `<tr>${Array.from({ length: 6 }).map(() => `<td style="${tdS}height:40px;"></td>`).join("")}</tr>`;
 
-    let photoRows = "";
+    // 참석자별 사진 데이터 수집
+    const photoItems: { name: string; url1: string | null; url2: string | null }[] = [];
     for (const a of attendees) {
       const url1 = a.photo_path_1 ? await getSignedPhotoUrl(a.photo_path_1) : null;
       const url2 = a.photo_path_2 ? await getSignedPhotoUrl(a.photo_path_2) : null;
-      photoRows += `<div style="display:inline-block;margin:4px 8px;text-align:center;">
-        <div style="font-size:8pt;font-weight:bold;margin-bottom:3px;">${a.name ?? ""}</div>
-        <div style="display:flex;gap:4px;">
-        ${url1 ? `<img src="${url1}" style="width:165px;height:120px;object-fit:cover;border:1px solid #999;"/>` : ""}
-        ${url2 ? `<img src="${url2}" style="width:165px;height:120px;object-fit:cover;border:1px solid #999;"/>` : ""}
-        </div>
-      </div>`;
+      photoItems.push({ name: a.name ?? "", url1, url2 });
     }
+    // 2열 grid로 배열
+    let photoRows = "";
+    for (let i = 0; i < photoItems.length; i += 2) {
+      const left = photoItems[i];
+      const right = photoItems[i + 1] ?? null;
+      const cellStyle = `width:50%;padding:4px 6px;vertical-align:top;`;
+      const renderCell = (item: { name: string; url1: string | null; url2: string | null } | null) => {
+        if (!item) return `<td style="${cellStyle}"></td>`;
+        return `<td style="${cellStyle}">
+          <div style="font-size:8pt;font-weight:bold;margin-bottom:3px;text-align:center;">${item.name}</div>
+          <div style="display:flex;gap:4px;justify-content:center;">
+            ${item.url1 ? `<img src="${item.url1}" style="width:155px;height:115px;object-fit:cover;border:1px solid #999;"/>` : `<div style="width:155px;height:115px;border:1px dashed #ccc;"></div>`}
+            ${item.url2 ? `<img src="${item.url2}" style="width:155px;height:115px;object-fit:cover;border:1px solid #999;"/>` : `<div style="width:155px;height:115px;border:1px dashed #ccc;"></div>`}
+          </div>
+        </td>`;
+      };
+      photoRows += `<tr>${renderCell(left)}${renderCell(right)}</tr>`;
+    }
+    const photoTable = photoItems.length > 0
+      ? `<div style="margin-top:6px;"><div style="font-size:8pt;font-weight:bold;margin-bottom:3px;">📷 참석자별 첨부사진</div><table style="width:100%;border-collapse:collapse;"><tbody>${photoRows}</tbody></table></div>`
+      : "";
 
     return `<div style="page-break-after:always;">
       <table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
@@ -1030,24 +1046,28 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
           <td style="${tdS}font-weight:bold;width:80px;">교육자</td><td style="${tdS}width:160px;">${log.educator_name ?? ""}</td>
           <td style="${tdS}font-weight:bold;width:60px;">장소</td><td style="${tdS}">${log.location ?? ""}</td>
         </tr>
-        <tr>
-          <td style="${tdS}font-weight:bold;">일 시</td><td style="${tdS}" colspan="3">${dateLabel} &nbsp; ${timeLabel}</td>
-        </tr>
        <tr>
-          <td style="${tdS}font-weight:bold;">대 상</td><td style="${tdS}" colspan="3">${log.target ?? ""}</td>
+          <td style="${tdS}font-weight:bold;">일 시</td>
+          <td style="${tdS}width:200px;">${dateLabel} &nbsp; ${timeLabel}</td>
+          <td style="${tdS}font-weight:bold;width:60px;">대 상</td>
+          <td style="${tdS}">${log.target ?? ""}</td>
         </tr>
         <tr>
-          <td style="${tdS}font-weight:bold;">불참자처리</td><td style="${tdS}" colspan="3" font-size:8pt;">${absenteeChecks}${log.absentee_type === "기타" && log.absentee_note ? ` (${log.absentee_note})` : ""}</td>
+          <td style="${tdS}font-weight:bold;">불참자처리</td><td style="${tdS}font-size:8pt;" colspan="3">${absenteeChecks}${log.absentee_type === "기타" && log.absentee_note ? ` (${log.absentee_note})` : ""}</td>
         </tr>
       </tbody></table>
       <table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
-        <tr><td style="${tdS}font-weight:bold;width:80px;vertical-align:top;">교육내용</td><td style="${tdS}white-space:pre-wrap;font-size:8pt;">${MONITORING_FIXED_CONTENT.replace(/\n/g, "<br/>")}</td></tr>
+        <tr>
+          <td style="${tdS}font-weight:bold;width:80px;vertical-align:top;">교육내용</td>
+          <td style="${tdS}width:50%;white-space:pre-wrap;font-size:8pt;vertical-align:top;">${(() => { const parts = MONITORING_FIXED_CONTENT.split(/\n\n/); return parts[0]?.replace(/\n/g, "<br/>") ?? ""; })()}</td>
+          <td style="${tdS}width:50%;white-space:pre-wrap;font-size:8pt;vertical-align:top;">${(() => { const parts = MONITORING_FIXED_CONTENT.split(/\n\n/); return parts[1]?.replace(/\n/g, "<br/>") ?? ""; })()}</td>
+        </tr>
       </tbody></table>
       <table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
         <tr><td style="${tdS}font-weight:bold;text-align:center;" colspan="6">참석자 서명</td></tr>
         ${attendeeRows}
       </tbody></table>
-      ${photoRows ? `<div style="margin-top:6px;"><div style="font-size:8pt;font-weight:bold;margin-bottom:3px;">📷 참석자별 첨부사진</div>${photoRows}</div>` : ""}
+      ${photoTable}
     </div>`;
   }
 
@@ -1213,7 +1233,11 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
                               });
                             }} />
                           </label>
-                          {preview && <img src={preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt={label} />}
+                          {preview && (
+                            <a href={preview} target="_blank" rel="noopener noreferrer">
+                              <img src={preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover cursor-zoom-in hover:opacity-80 transition-opacity" alt={label} />
+                            </a>
+                          )}
                         </div>
                       ))}
                     </div>
