@@ -1268,7 +1268,7 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
     for (let i = 0; i < attendees.length; i += 6) {
       const chunk = attendees.slice(i, i + 6);
       attendeeRows += `<tr>`;
-      for (const a of chunk) attendeeRows += `<td style="${tdS}text-align:center;height:40px;">${signCell(a.name)}</td>`;
+      for (const a of chunk) attendeeRows += `<td style="${tdS}text-align:center;height:40px;">${a.signed_at ? signCell(a.name) : `<div style="font-size:7pt;color:#999;">${a.name ?? ""}</div>`}</td>`;
       for (let j = chunk.length; j < 6; j++) attendeeRows += `<td style="${tdS}"></td>`;
       attendeeRows += `</tr>`;
     }
