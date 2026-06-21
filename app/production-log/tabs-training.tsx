@@ -7,6 +7,31 @@ import { PinModal } from "@/app/contexts/PinSessionContext";
 
 const supabase = createClient();
 
+// ── 사진 업로드 버튼 (카메라 / 갤러리) ──
+function PhotoUploadBtn({ onFile, label, preview, fileName }: {
+  onFile: (f: File) => void;
+  label?: string;
+  preview?: string | null;
+  fileName?: string | null;
+}) {
+  return (
+    <div className="space-y-1.5">
+      {label && <div className="text-[11px] text-slate-500 font-medium">{label}</div>}
+      <div className="flex gap-2">
+        <label className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl border-2 border-dashed py-2.5 text-xs font-semibold transition-all ${preview ? "border-green-400 bg-green-50 text-green-700" : "border-slate-300 bg-slate-50 text-slate-600 hover:border-blue-400 hover:bg-blue-50"}`}>
+          <span>📷</span> 카메라
+          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
+        </label>
+        <label className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl border-2 border-dashed py-2.5 text-xs font-semibold transition-all ${preview ? "border-green-400 bg-green-50 text-green-700" : "border-slate-300 bg-slate-50 text-slate-600 hover:border-blue-400 hover:bg-blue-50"}`}>
+          <span>🖼️</span> 갤러리
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
+        </label>
+      </div>
+      {fileName && <div className="text-[10px] text-slate-400 truncate">{fileName}</div>}
+    </div>
+  );
+}
+
 const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
 const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none";
 const btn = "rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50 active:bg-slate-100";
@@ -712,14 +737,11 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
 
           <div className="mt-3">
             <div className="mb-1 text-xs text-slate-500">교육 사진 (단체사진 1장) *</div>
-            <label className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed px-4 py-3 transition-all ${fPhotoFile ? "border-green-400 bg-green-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
-              <span className="text-2xl">{fPhotoFile ? "✅" : "📷"}</span>
-              <div>
-                <div className="text-sm font-semibold text-slate-700">{fPhotoFile ? fPhotoFile.name : "사진 선택하기"}</div>
-                <div className="text-xs text-slate-400">{fPhotoFile ? "클릭하여 변경" : "JPG, PNG 등 이미지 파일"}</div>
-              </div>
-              <input type="file" accept="image/*" className="hidden" onChange={(e) => onPhotoSelected(e.target.files?.[0] ?? null)} />
-            </label>
+            <PhotoUploadBtn
+              onFile={(f) => onPhotoSelected(f)}
+              preview={fPhotoPreview}
+              fileName={fPhotoFile?.name}
+            />
             {fPhotoPreview && (
               <img src={fPhotoPreview} className="mt-2 h-32 rounded-lg border border-slate-200 object-cover" alt="미리보기" />
             )}
@@ -856,18 +878,11 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
                  <div className="mt-0.5 text-[10px] text-slate-400">현재 사진 (클릭하여 원본 보기)</div>
                </div>
              )}
-             <label className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed px-4 py-3 transition-all ${eHPhotoFile ? "border-orange-400 bg-orange-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
-               <span className="text-2xl">{eHPhotoFile ? "🔄" : "📷"}</span>
-               <div>
-                 <div className="text-sm font-semibold text-slate-700">{eHPhotoFile ? eHPhotoFile.name : "사진 교체하기"}</div>
-                 <div className="text-xs text-slate-400">{eHPhotoFile ? "클릭하여 재선택" : "JPG, PNG 등 이미지 파일"}</div>
-               </div>
-               <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                 const f = e.target.files?.[0] ?? null;
-                 setEHPhotoFile(f);
-                 setEHPhotoPreview(f ? URL.createObjectURL(f) : null);
-               }} />
-             </label>
+             <PhotoUploadBtn
+               onFile={(f) => { setEHPhotoFile(f); setEHPhotoPreview(URL.createObjectURL(f)); }}
+               preview={eHPhotoPreview}
+               fileName={eHPhotoFile?.name}
+             />
              {eHPhotoPreview && (
                <a href={eHPhotoPreview} target="_blank" rel="noopener noreferrer">
                  <img src={eHPhotoPreview} className="mt-2 h-32 rounded-lg border border-orange-300 object-cover cursor-zoom-in hover:opacity-80 transition-opacity" alt="새 사진 미리보기" />
@@ -1525,37 +1540,29 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
                       ] as const).map(({ slot, label, preview, file }) => (
                         <div key={slot}>
                           <div className="mb-1 text-[11px] text-slate-500 font-medium">{label}</div>
-                          <label className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed px-3 py-2 transition-all ${preview ? "border-green-400 bg-green-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
-                            <span className="text-lg">{preview ? "✅" : "📷"}</span>
-                            <div>
-                              <div className="text-xs font-semibold text-slate-700">{preview ? (file?.name ?? "선택됨") : "사진 선택"}</div>
-                              <div className="text-[10px] text-slate-400">{preview ? "클릭하여 변경" : "JPG, PNG 등"}</div>
-                            </div>
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                              const f = e.target.files?.[0] ?? null;
-                              if (f && !added) addAttendee(emp.id, emp.name);
-                              // addAttendee는 동기적으로 state를 업데이트하므로
-                              // attendeeIdx가 아직 -1일 수 있어 직접 처리
+                          <PhotoUploadBtn
+                            onFile={(f) => {
+                              if (!added) addAttendee(emp.id, emp.name);
                               setFAttendees((prev) => {
                                 const idx = prev.findIndex((a) => a.employee_id === emp.id);
                                 if (idx < 0) {
-                                  // 아직 추가 안 된 경우 새로 추가하면서 사진도 함께 세팅
                                   const newEntry = {
                                     employee_id: emp.id, name: emp.name, note: "", signed_at: null,
-                                    photo1: slot === 1 ? f : null, photo1Preview: slot === 1 && f ? URL.createObjectURL(f) : null,
-                                    photo2: slot === 2 ? f : null, photo2Preview: slot === 2 && f ? URL.createObjectURL(f) : null,
+                                    photo1: slot === 1 ? f : null, photo1Preview: slot === 1 ? URL.createObjectURL(f) : null,
+                                    photo2: slot === 2 ? f : null, photo2Preview: slot === 2 ? URL.createObjectURL(f) : null,
                                   };
-                                  return f ? [...prev, newEntry] : prev;
+                                  return [...prev, newEntry];
                                 }
-                                // 이미 있는 경우 해당 슬롯만 업데이트
                                 return prev.map((a, i) => {
                                   if (i !== idx) return a;
-                                  if (slot === 1) return { ...a, photo1: f, photo1Preview: f ? URL.createObjectURL(f) : null };
-                                  return { ...a, photo2: f, photo2Preview: f ? URL.createObjectURL(f) : null };
+                                  if (slot === 1) return { ...a, photo1: f, photo1Preview: URL.createObjectURL(f) };
+                                  return { ...a, photo2: f, photo2Preview: URL.createObjectURL(f) };
                                 });
                               });
-                            }} />
-                          </label>
+                            }}
+                            preview={preview}
+                            fileName={file?.name}
+                          />
                           {preview && (
                             <a href={preview} target="_blank" rel="noopener noreferrer">
                               <img src={preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover cursor-zoom-in hover:opacity-80 transition-opacity" alt={label} />
@@ -1702,15 +1709,8 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
                         </div>
                       ) : null;
                     })()}
-                    <label className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed px-3 py-2 transition-all ${newPreview ? "border-orange-400 bg-orange-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
-                      <span className="text-lg">{newPreview ? "🔄" : "📷"}</span>
-                      <div>
-                        <div className="text-xs font-semibold text-slate-700">{newPreview ? (newFile?.name ?? "선택됨") : "사진 교체하기"}</div>
-                        <div className="text-[10px] text-slate-400">{newPreview ? "클릭하여 재선택" : "JPG, PNG 등"}</div>
-                      </div>
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                        const f = e.target.files?.[0] ?? null;
-                        if (!f) return;
+                    <PhotoUploadBtn
+                      onFile={(f) => {
                         setEAttendeePhotos((prev) => ({
                           ...prev,
                           [empId]: {
@@ -1718,8 +1718,10 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
                             ...(slot === 1 ? { photo1: f, photo1Preview: URL.createObjectURL(f) } : { photo2: f, photo2Preview: URL.createObjectURL(f) }),
                           },
                         }));
-                      }} />
-                    </label>
+                      }}
+                      preview={newPreview}
+                      fileName={newFile?.name}
+                    />
                     {newPreview && (
                       <a href={newPreview} target="_blank" rel="noopener noreferrer">
                         <img src={newPreview} className="mt-1 h-20 w-28 rounded-lg border border-orange-300 object-cover cursor-zoom-in hover:opacity-80 transition-opacity" alt={label} />
