@@ -1164,37 +1164,50 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
                 const added = attendeeIdx >= 0;
                 const attendee = added ? fAttendees[attendeeIdx] : null;
                 return (
-                  <div key={emp.id} className={`rounded-xl border p-3 transition-all ${added ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white"}`}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-sm font-semibold text-slate-700">{emp.name}</span>
-                      {!added ? (
-                        <button className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-all"
-                          onClick={() => addAttendee(emp.id, emp.name)}>+ 추가</button>
-                      ) : (
-                        <button className="text-[10px] text-slate-300 hover:text-red-400" onClick={() => removeAttendeeById(emp.id)}>✕ 제외</button>
-                      )}
+                  <div key={emp.id} className={`rounded-xl border p-3 transition-all ${(attendee?.photo1Preview || attendee?.photo2Preview) ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white"}`}>
+                    <div className="mb-2 text-sm font-semibold text-slate-700">{emp.name}</div>
+                    <div className="flex flex-wrap gap-3">
+                      {([
+                        { slot: 1 as const, label: "CCP-1B 모니터링 사진", preview: attendee?.photo1Preview, file: attendee?.photo1 },
+                        { slot: 2 as const, label: "CCP-1P 모니터링 사진", preview: attendee?.photo2Preview, file: attendee?.photo2 },
+                      ] as const).map(({ slot, label, preview, file }) => (
+                        <div key={slot}>
+                          <div className="mb-1 text-[11px] text-slate-500 font-medium">{label}</div>
+                          <label className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed px-3 py-2 transition-all ${preview ? "border-green-400 bg-green-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
+                            <span className="text-lg">{preview ? "✅" : "📷"}</span>
+                            <div>
+                              <div className="text-xs font-semibold text-slate-700">{preview ? (file?.name ?? "선택됨") : "사진 선택"}</div>
+                              <div className="text-[10px] text-slate-400">{preview ? "클릭하여 변경" : "JPG, PNG 등"}</div>
+                            </div>
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                              const f = e.target.files?.[0] ?? null;
+                              if (f && !added) addAttendee(emp.id, emp.name);
+                              // addAttendee는 동기적으로 state를 업데이트하므로
+                              // attendeeIdx가 아직 -1일 수 있어 직접 처리
+                              setFAttendees((prev) => {
+                                const idx = prev.findIndex((a) => a.employee_id === emp.id);
+                                if (idx < 0) {
+                                  // 아직 추가 안 된 경우 새로 추가하면서 사진도 함께 세팅
+                                  const newEntry = {
+                                    employee_id: emp.id, name: emp.name, note: "", signed_at: null,
+                                    photo1: slot === 1 ? f : null, photo1Preview: slot === 1 && f ? URL.createObjectURL(f) : null,
+                                    photo2: slot === 2 ? f : null, photo2Preview: slot === 2 && f ? URL.createObjectURL(f) : null,
+                                  };
+                                  return f ? [...prev, newEntry] : prev;
+                                }
+                                // 이미 있는 경우 해당 슬롯만 업데이트
+                                return prev.map((a, i) => {
+                                  if (i !== idx) return a;
+                                  if (slot === 1) return { ...a, photo1: f, photo1Preview: f ? URL.createObjectURL(f) : null };
+                                  return { ...a, photo2: f, photo2Preview: f ? URL.createObjectURL(f) : null };
+                                });
+                              });
+                            }} />
+                          </label>
+                          {preview && <img src={preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt={label} />}
+                        </div>
+                      ))}
                     </div>
-                    {added && (
-                      <div className="mt-2 flex flex-wrap gap-3">
-                        {([
-                          { slot: 1 as const, label: "CCP-1B 모니터링 사진", preview: attendee?.photo1Preview, file: attendee?.photo1 },
-                          { slot: 2 as const, label: "CCP-1P 모니터링 사진", preview: attendee?.photo2Preview, file: attendee?.photo2 },
-                        ] as const).map(({ slot, label, preview, file }) => (
-                          <div key={slot}>
-                            <div className="mb-1 text-[11px] text-slate-500 font-medium">{label} *</div>
-                            <label className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed px-3 py-2 transition-all ${preview ? "border-green-400 bg-green-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
-                              <span className="text-lg">{preview ? "✅" : "📷"}</span>
-                              <div>
-                                <div className="text-xs font-semibold text-slate-700">{preview ? (file?.name ?? "선택됨") : "사진 선택"}</div>
-                                <div className="text-[10px] text-slate-400">{preview ? "클릭하여 변경" : "JPG, PNG 등"}</div>
-                              </div>
-                              <input type="file" accept="image/*" className="hidden" onChange={(e) => setAttendeePhoto(attendeeIdx, slot, e.target.files?.[0] ?? null)} />
-                            </label>
-                            {preview && <img src={preview} className="mt-1 h-20 w-28 rounded-lg border border-slate-200 object-cover" alt={label} />}
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 );
               })}
