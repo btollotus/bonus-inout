@@ -109,6 +109,8 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
   const [eHPhotoPreview, setEHPhotoPreview] = useState<string | null>(null);
   const [eHCurrentPhotoUrl, setEHCurrentPhotoUrl] = useState<string | null>(null);
   const [eHSaving, setEHSaving] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
@@ -156,6 +158,11 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
     setFResultNote("");
     setFAttachments([]); setFAttachmentNote(""); setFEducator(null); setFAttendees([]);
     setFPhotoFile(null); setFPhotoPreview(null);
+  }
+
+  function requirePin(action: () => void) {
+    setPendingAction(() => action);
+    setShowPinModal(true);
   }
 
   function openNewForm() {
@@ -561,6 +568,17 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
 
   return (
     <div className="space-y-4">
+      {showPinModal && (
+        <PinModal
+          employees={employees.filter((e) => e.name === "조대성" || e.name === "김영각")}
+          title="관리자 PIN 확인"
+          onSuccess={() => {
+            setShowPinModal(false);
+            if (pendingAction) { pendingAction(); setPendingAction(null); }
+          }}
+          onCancel={() => { setShowPinModal(false); setPendingAction(null); }}
+        />
+      )}
       {/* 조회 기간 + 인쇄 + 신규등록 */}
       <div className={`${card} p-3 flex flex-wrap items-center gap-3`}>
         <span className="text-sm font-semibold text-slate-600">조회 기간</span>
@@ -570,7 +588,7 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
         <button className={btn} onClick={loadLogs}>🔄 조회</button>
         <button className={btnSm} onClick={printRange}>🖨️ 기간 인쇄</button>
         <div className="flex-1" />
-        <button className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700" onClick={openNewForm}>+ 새 교육 등록</button>
+        <button className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700" onClick={() => requirePin(openNewForm)}>+ 새 교육 등록</button>
       </div>
 
       {/* 커리큘럼 관리 */}
@@ -751,8 +769,8 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
                       </button>
                       {isAdminOrSubadmin && (
                         <>
-                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-600 mr-1" onClick={() => openEditH(log)}>수정</button>
-                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500" onClick={() => deleteLog(log.id)}>삭제</button>
+                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-600 mr-1" onClick={() => requirePin(() => openEditH(log))}>수정</button>
+                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500" onClick={() => requirePin(() => deleteLog(log.id))}>삭제</button>
                         </>
                       )}
                     </td>
@@ -1011,6 +1029,8 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
   const [eAttendeePhotos, setEAttendeePhotos] = useState<Record<string, { photo1?: File; photo1Preview?: string; photo2?: File; photo2Preview?: string }>>({});
   const [eCurrentPhotoUrls, setECurrentPhotoUrls] = useState<Record<string, { url1: string | null; url2: string | null }>>({});
   const [eSaving, setESaving] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
@@ -1037,6 +1057,11 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
     setFAbsentee("재교육"); setFAbsenteeNote("");
     setFAttachments([]); setFAttachmentNote("");
     setFEducator(null); setFAttendees([]);
+  }
+
+  function requirePin(action: () => void) {
+    setPendingAction(() => action);
+    setShowPinModal(true);
   }
 
   function openNewForm() { resetForm(); setFormOpen(true); }
@@ -1397,6 +1422,17 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
 
   return (
     <div className="space-y-4">
+      {showPinModal && (
+        <PinModal
+          employees={employees.filter((e) => e.name === "조대성" || e.name === "김영각")}
+          title="관리자 PIN 확인"
+          onSuccess={() => {
+            setShowPinModal(false);
+            if (pendingAction) { pendingAction(); setPendingAction(null); }
+          }}
+          onCancel={() => { setShowPinModal(false); setPendingAction(null); }}
+        />
+      )}
       {/* 조회 기간 + 인쇄 + 신규등록 */}
       <div className={`${card} p-3 flex flex-wrap items-center gap-3`}>
         <span className="text-sm font-semibold text-slate-600">조회 기간</span>
@@ -1406,7 +1442,7 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
         <button className={btn} onClick={loadLogs}>🔄 조회</button>
         <button className={btnSm} onClick={printRange}>🖨️ 기간 인쇄</button>
         <div className="flex-1" />
-        <button className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700" onClick={openNewForm}>+ 새 교육 등록</button>
+        <button className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700" onClick={() => requirePin(openNewForm)}>+ 새 교육 등록</button>
       </div>
 
       {/* 고정 교육내용 안내 */}
@@ -1576,8 +1612,8 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
                       </button>
                       {isAdminOrSubadmin && (
                         <>
-                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-600 mr-1" onClick={() => openEdit(log)}>수정</button>
-                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500" onClick={() => deleteLog(log.id)}>삭제</button>
+                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-600 mr-1" onClick={() => requirePin(() => openEdit(log))}>수정</button>
+                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500" onClick={() => requirePin(() => deleteLog(log.id))}>삭제</button>
                         </>
                       )}
                     </td>
