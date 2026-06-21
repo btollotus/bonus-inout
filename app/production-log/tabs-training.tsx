@@ -94,6 +94,18 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
   const [signingError, setSigningError] = useState("");
   const [signingLogId, setSigningLogId] = useState<string | null>(null);
 
+  // 수정 관련 state
+  const [editingLog, setEditingLog] = useState<MonitoringLog | null>(null);
+  const [eDate, setEDate] = useState("");
+  const [eStart, setEStart] = useState("");
+  const [eEnd, setEEnd] = useState("");
+  const [eLocation, setELocation] = useState("");
+  const [eTarget, setETarget] = useState("");
+  const [eAbsentee, setEAbsentee] = useState("재교육");
+  const [eAbsenteeNote, setEAbsenteeNote] = useState("");
+  const [eAttendeePhotos, setEAttendeePhotos] = useState<Record<string, { photo1?: File; photo1Preview?: string; photo2?: File; photo2Preview?: string }>>({});
+  const [eSaving, setESaving] = useState(false);
+
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
@@ -957,6 +969,80 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
     loadLogs();
   }
 
+  function openEdit(log: MonitoringLog) {
+    setEditingLog(log);
+    setEDate(log.training_date);
+    const rawStart = log.start_time ? log.start_time.slice(0, 5).replace(":", "") : "";
+    const rawEnd = log.end_time ? log.end_time.slice(0, 5).replace(":", "") : "";
+    setEStart(rawStart.length === 4 ? `${rawStart.slice(0,2)}:${rawStart.slice(2,4)}` : rawStart);
+    setEEnd(rawEnd.length === 4 ? `${rawEnd.slice(0,2)}:${rawEnd.slice(2,4)}` : rawEnd);
+    setELocation(log.location ?? "");
+    setETarget(log.target ?? "");
+    setEAbsentee(log.absentee_type ?? "재교육");
+    setEAbsenteeNote("");
+    setEAttendeePhotos({});
+    // 폼 열릴 때 등록 폼은 닫기
+    setFormOpen(false);
+  }
+
+  async function saveEdit() {
+    if (!editingLog) return;
+    if (!eLocation.trim()) return showToast("장소를 입력하세요.", "error");
+    setESaving(true);
+
+    // 기본 정보 UPDATE
+    const { error: logError } = await supabase.from("monitoring_training_logs").update({
+      training_date: eDate,
+      start_time: (() => { const r = eStart.replace(/[^\d]/g, ""); return r.length === 4 ? `${r.slice(0,2)}:${r.slice(2,4)}:00` : null; })(),
+      end_time: (() => { const r = eEnd.replace(/[^\d]/g, ""); return r.length === 4 ? `${r.slice(0,2)}:${r.slice(2,4)}:00` : null; })(),
+      location: eLocation.trim(),
+      target: eTarget.trim(),
+      absentee_type: eAbsentee,
+      absentee_note: eAbsentee === "기타" ? eAbsenteeNote.trim() : null,
+    }).eq("id", editingLog.id);
+
+    if (logError) { setESaving(false); return showToast("저장 실패: " + logError.message, "error"); }
+
+    // 사진 교체가 있는 참석자만 처리
+    const attendees = editingLog.monitoring_training_attendees ?? [];
+    for (const a of attendees) {
+      const empId = a.employee_id ?? "";
+      const photos = eAttendeePhotos[empId];
+      if (!photos) continue;
+
+      const updates: Record<string, string> = {};
+
+      if (photos.photo1) {
+        const ext = photos.photo1.name.split(".").pop() || "jpg";
+        const path = `monitoring/${eDate}-${empId}-1-${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("training-photos").upload(path, photos.photo1);
+        if (upErr) { setESaving(false); return showToast(`${a.name} 사진1 업로드 실패`, "error"); }
+        updates.photo_path_1 = path;
+      }
+
+      if (photos.photo2) {
+        const ext = photos.photo2.name.split(".").pop() || "jpg";
+        const path = `monitoring/${eDate}-${empId}-2-${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("training-photos").upload(path, photos.photo2);
+        if (upErr) { setESaving(false); return showToast(`${a.name} 사진2 업로드 실패`, "error"); }
+        updates.photo_path_2 = path;
+      }
+
+      if (Object.keys(updates).length > 0 && a.id) {
+        const { error: attErr } = await supabase.from("monitoring_training_attendees").update(updates).eq("id", a.id);
+        if (attErr) { setESaving(false); return showToast(`${a.name} 참석자 저장 실패`, "error"); }
+      }
+    }
+
+    setESaving(false);
+    showToast("✅ 수정 저장 완료!");
+    setEditingLog(null);
+    setEAttendeePhotos({});
+    // signed URL 캐시 초기화 (새 사진 반영)
+    setPhotoSignedUrls({});
+    loadLogs();
+  }
+
   async function getSignedPhotoUrl(path: string): Promise<string | null> {
     if (photoSignedUrls[path]) return photoSignedUrls[path];
     const { data, error } = await supabase.storage.from("training-photos").createSignedUrl(path, 3600);
@@ -1046,11 +1132,13 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
           <td style="${tdS}font-weight:bold;width:80px;">교육자</td><td style="${tdS}width:160px;">${log.educator_name ?? ""}</td>
           <td style="${tdS}font-weight:bold;width:60px;">장소</td><td style="${tdS}">${log.location ?? ""}</td>
         </tr>
-       <tr>
+      <tr>
           <td style="${tdS}font-weight:bold;">일 시</td>
-          <td style="${tdS}width:200px;">${dateLabel} &nbsp; ${timeLabel}</td>
-          <td style="${tdS}font-weight:bold;width:60px;">대 상</td>
-          <td style="${tdS}">${log.target ?? ""}</td>
+          <td style="${tdS}" colspan="3">${dateLabel}&nbsp;&nbsp;${timeLabel}</td>
+        </tr>
+        <tr>
+          <td style="${tdS}font-weight:bold;">대 상</td>
+          <td style="${tdS}" colspan="3">${log.target ?? ""}</td>
         </tr>
         <tr>
           <td style="${tdS}font-weight:bold;">불참자처리</td><td style="${tdS}font-size:8pt;" colspan="3">${absenteeChecks}${log.absentee_type === "기타" && log.absentee_note ? ` (${log.absentee_note})` : ""}</td>
@@ -1282,13 +1370,16 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
                     <td className="py-2 px-3">{log.educator_name}</td>
                     <td className="py-2 px-3 text-center">{(log.monitoring_training_attendees ?? []).length}명</td>
                     <td className="py-2 px-3 text-center whitespace-nowrap">
-                      <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 mr-1" onClick={() => printSingle(log)}>인쇄</button>
+                    <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 mr-1" onClick={() => printSingle(log)}>인쇄</button>
                       <button className={`rounded-lg border px-2 py-0.5 text-[11px] font-semibold mr-1 ${signingLogId === log.id ? "border-green-500 bg-green-600 text-white" : "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"}`}
                         onClick={() => { setSigningLogId(signingLogId === log.id ? null : log.id); setSigningEmpId(null); setSigningPin(""); setSigningError(""); }}>
                         {signingLogId === log.id ? "닫기" : "✍️ 서명"}
                       </button>
                       {isAdminOrSubadmin && (
-                        <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500" onClick={() => deleteLog(log.id)}>삭제</button>
+                        <>
+                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-600 mr-1" onClick={() => openEdit(log)}>수정</button>
+                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500" onClick={() => deleteLog(log.id)}>삭제</button>
+                        </>
                       )}
                     </td>
                   </tr>
@@ -1298,6 +1389,112 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
           </div>
         )}
       </div>
+
+{/* ── 수정 패널 ── */}
+{editingLog && (
+  <div className={`${card} border-orange-200 p-4`}>
+    <div className="mb-3 flex items-center justify-between">
+      <span className="font-semibold text-sm">✏️ 교육 기록 수정 — {editingLog.training_date}</span>
+      <button className="text-xs text-slate-400 hover:text-slate-600" onClick={() => { setEditingLog(null); setEAttendeePhotos({}); }}>✕ 닫기</button>
+    </div>
+
+    {/* 기본 정보 */}
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div>
+        <div className="mb-1 text-xs text-slate-500">교육일자</div>
+        <input type="date" className={inp} value={eDate} max={today} onChange={(e) => setEDate(e.target.value)} />
+      </div>
+      <div>
+        <div className="mb-1 text-xs text-slate-500">장소 *</div>
+        <input className={inp} value={eLocation} onChange={(e) => setELocation(e.target.value)} />
+      </div>
+      <div>
+        <div className="mb-1 text-xs text-slate-500">시작시각</div>
+        <input className={inp} inputMode="numeric" placeholder="예: 0930" value={eStart}
+          onChange={(e) => { const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 4); setEStart(raw.length === 4 ? `${raw.slice(0,2)}:${raw.slice(2,4)}` : raw); }} />
+      </div>
+      <div>
+        <div className="mb-1 text-xs text-slate-500">종료시각</div>
+        <input className={inp} inputMode="numeric" placeholder="예: 1800" value={eEnd}
+          onChange={(e) => { const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 4); setEEnd(raw.length === 4 ? `${raw.slice(0,2)}:${raw.slice(2,4)}` : raw); }} />
+      </div>
+      <div>
+        <div className="mb-1 text-xs text-slate-500">대상</div>
+        <input className={inp} value={eTarget} onChange={(e) => setETarget(e.target.value)} />
+      </div>
+      <div>
+        <div className="mb-1 text-xs text-slate-500">불참자처리</div>
+        <div className="flex gap-2">
+          {ABSENTEE_OPTIONS.map((opt) => (
+            <button key={opt} type="button"
+              className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${eAbsentee === opt ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-500"}`}
+              onClick={() => setEAbsentee(opt)}>{opt}</button>
+          ))}
+        </div>
+        {eAbsentee === "기타" && (
+          <input className={`${inp} mt-2`} value={eAbsenteeNote} onChange={(e) => setEAbsenteeNote(e.target.value)} placeholder="기타 내용" />
+        )}
+      </div>
+    </div>
+
+    {/* 참석자별 사진 교체 */}
+    {(editingLog.monitoring_training_attendees ?? []).length > 0 && (
+      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 text-xs font-semibold text-slate-500">참석자별 사진 교체 (변경할 사진만 선택)</div>
+        <div className="space-y-2">
+          {(editingLog.monitoring_training_attendees ?? []).map((a) => {
+            const empId = a.employee_id ?? "";
+            const photos = eAttendeePhotos[empId] ?? {};
+            return (
+              <div key={empId} className="rounded-xl border border-slate-200 bg-white p-3">
+                <div className="mb-2 text-sm font-semibold text-slate-700">{a.name}</div>
+                <div className="flex flex-wrap gap-3">
+                  {([
+                    { slot: 1 as const, label: "CCP-1B 모니터링 사진", currentPath: a.photo_path_1, newFile: photos.photo1, newPreview: photos.photo1Preview },
+                    { slot: 2 as const, label: "CCP-1P 모니터링 사진", currentPath: a.photo_path_2, newFile: photos.photo2, newPreview: photos.photo2Preview },
+                  ] as const).map(({ slot, label, currentPath, newFile, newPreview }) => (
+                    <div key={slot}>
+                      <div className="mb-1 text-[11px] text-slate-500 font-medium">{label}</div>
+                      <label className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed px-3 py-2 transition-all ${newPreview ? "border-orange-400 bg-orange-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
+                        <span className="text-lg">{newPreview ? "🔄" : (currentPath ? "✅" : "📷")}</span>
+                        <div>
+                          <div className="text-xs font-semibold text-slate-700">{newPreview ? (newFile?.name ?? "선택됨") : (currentPath ? "현재 사진 있음" : "사진 없음")}</div>
+                          <div className="text-[10px] text-slate-400">{newPreview ? "클릭하여 재선택" : "클릭하여 교체"}</div>
+                        </div>
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          if (!f) return;
+                          setEAttendeePhotos((prev) => ({
+                            ...prev,
+                            [empId]: {
+                              ...prev[empId],
+                              ...(slot === 1 ? { photo1: f, photo1Preview: URL.createObjectURL(f) } : { photo2: f, photo2Preview: URL.createObjectURL(f) }),
+                            },
+                          }));
+                        }} />
+                      </label>
+                      {newPreview && (
+                        <a href={newPreview} target="_blank" rel="noopener noreferrer">
+                          <img src={newPreview} className="mt-1 h-20 w-28 rounded-lg border border-orange-300 object-cover cursor-zoom-in hover:opacity-80 transition-opacity" alt={label} />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    )}
+
+    <div className="mt-4">
+      <button className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60" disabled={eSaving} onClick={saveEdit}>
+        {eSaving ? "저장 중..." : "💾 수정 저장"}
+      </button>
+    </div>
+  </div>
+)}
 
 {/* ── 서명 패널 ── */}
 {signingLogId && (() => {
