@@ -570,8 +570,8 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
     <div className="space-y-4">
       {showPinModal && (
         <PinModal
-          employees={employees.filter((e) => e.name === "조대성" || e.name === "김영각")}
-          title="관리자 PIN 확인"
+          employees={employees}
+          title="PIN 확인"
           onSuccess={() => {
             setShowPinModal(false);
             if (pendingAction) { pendingAction(); setPendingAction(null); }
@@ -1422,10 +1422,10 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
 
   return (
     <div className="space-y-4">
-      {showPinModal && (
+     {showPinModal && (
         <PinModal
-          employees={employees.filter((e) => e.name === "조대성" || e.name === "김영각")}
-          title="관리자 PIN 확인"
+          employees={employees}
+          title="PIN 확인"
           onSuccess={() => {
             setShowPinModal(false);
             if (pendingAction) { pendingAction(); setPendingAction(null); }
