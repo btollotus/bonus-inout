@@ -1006,8 +1006,8 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
       photoRows += `<div style="display:inline-block;margin:4px 8px;text-align:center;">
         <div style="font-size:8pt;font-weight:bold;margin-bottom:3px;">${a.name ?? ""}</div>
         <div style="display:flex;gap:4px;">
-          ${url1 ? `<img src="${url1}" style="width:110px;height:80px;object-fit:cover;border:1px solid #999;"/>` : ""}
-          ${url2 ? `<img src="${url2}" style="width:110px;height:80px;object-fit:cover;border:1px solid #999;"/>` : ""}
+        ${url1 ? `<img src="${url1}" style="width:165px;height:120px;object-fit:cover;border:1px solid #999;"/>` : ""}
+        ${url2 ? `<img src="${url2}" style="width:165px;height:120px;object-fit:cover;border:1px solid #999;"/>` : ""}
         </div>
       </div>`;
     }
@@ -1033,9 +1033,11 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
         <tr>
           <td style="${tdS}font-weight:bold;">일 시</td><td style="${tdS}" colspan="3">${dateLabel} &nbsp; ${timeLabel}</td>
         </tr>
+       <tr>
+          <td style="${tdS}font-weight:bold;">대 상</td><td style="${tdS}" colspan="3">${log.target ?? ""}</td>
+        </tr>
         <tr>
-          <td style="${tdS}font-weight:bold;">대 상</td><td style="${tdS}">${log.target ?? ""}</td>
-          <td style="${tdS}font-weight:bold;">불참자처리</td><td style="${tdS}font-size:8pt;">${absenteeChecks}${log.absentee_type === "기타" && log.absentee_note ? ` (${log.absentee_note})` : ""}</td>
+          <td style="${tdS}font-weight:bold;">불참자처리</td><td style="${tdS}" colspan="3" font-size:8pt;">${absenteeChecks}${log.absentee_type === "기타" && log.absentee_note ? ` (${log.absentee_note})` : ""}</td>
         </tr>
       </tbody></table>
       <table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
@@ -1044,9 +1046,6 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
       <table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
         <tr><td style="${tdS}font-weight:bold;text-align:center;" colspan="6">참석자 서명</td></tr>
         ${attendeeRows}
-      </tbody></table>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:4px;"><tbody>
-        <tr><td style="${tdS}font-weight:bold;">유첨서류</td><td style="${tdS}font-size:8pt;">${attachChecks}</td></tr>
       </tbody></table>
       ${photoRows ? `<div style="margin-top:6px;"><div style="font-size:8pt;font-weight:bold;margin-bottom:3px;">📷 참석자별 첨부사진</div>${photoRows}</div>` : ""}
     </div>`;
@@ -1061,7 +1060,17 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
       *{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
       table{border-collapse:collapse;}img{max-width:none;}</style></head><body>${html}</body></html>`);
     win.document.close(); win.focus();
-    setTimeout(() => { win.print(); }, 400);
+    // 이미지 로드 완료 후 인쇄
+    win.onload = () => {
+      const imgs = win.document.querySelectorAll("img");
+      if (imgs.length === 0) { win.print(); return; }
+      let loaded = 0;
+      const tryPrint = () => { loaded++; if (loaded >= imgs.length) win.print(); };
+      imgs.forEach((img) => {
+        if (img.complete) tryPrint();
+        else { img.onload = tryPrint; img.onerror = tryPrint; }
+      });
+    };
   }
 
   async function printRange() {
