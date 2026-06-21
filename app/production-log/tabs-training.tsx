@@ -94,6 +94,22 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
   const [signingError, setSigningError] = useState("");
   const [signingLogId, setSigningLogId] = useState<string | null>(null);
 
+  // 수정 관련 state
+  const [editingHLog, setEditingHLog] = useState<HygieneLog | null>(null);
+  const [eHDate, setEHDate] = useState("");
+  const [eHStart, setEHStart] = useState("");
+  const [eHEnd, setEHEnd] = useState("");
+  const [eHLocation, setEHLocation] = useState("");
+  const [eHTarget, setEHTarget] = useState("");
+  const [eHAbsentee, setEHAbsentee] = useState("재교육");
+  const [eHAbsenteeNote, setEHAbsenteeNote] = useState("");
+  const [eHContent, setEHContent] = useState("");
+  const [eHResultNote, setEHResultNote] = useState("");
+  const [eHPhotoFile, setEHPhotoFile] = useState<File | null>(null);
+  const [eHPhotoPreview, setEHPhotoPreview] = useState<string | null>(null);
+  const [eHCurrentPhotoUrl, setEHCurrentPhotoUrl] = useState<string | null>(null);
+  const [eHSaving, setEHSaving] = useState(false);
+
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
@@ -355,6 +371,65 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
     const { error } = await supabase.from("hygiene_training_logs").delete().eq("id", id);
     if (error) return showToast("삭제 실패: " + error.message, "error");
     showToast("🗑️ 삭제 완료!");
+    loadLogs();
+  }
+
+  async function openEditH(log: HygieneLog) {
+    setEditingHLog(log);
+    setEHDate(log.training_date);
+    const rawStart = log.start_time ? log.start_time.slice(0, 5).replace(":", "") : "";
+    const rawEnd = log.end_time ? log.end_time.slice(0, 5).replace(":", "") : "";
+    setEHStart(rawStart.length === 4 ? `${rawStart.slice(0,2)}:${rawStart.slice(2,4)}` : rawStart);
+    setEHEnd(rawEnd.length === 4 ? `${rawEnd.slice(0,2)}:${rawEnd.slice(2,4)}` : rawEnd);
+    setEHLocation(log.location ?? "");
+    setEHTarget(log.target ?? "");
+    setEHAbsentee(log.absentee_type ?? "재교육");
+    setEHAbsenteeNote("");
+    setEHContent(log.content ?? "");
+    setEHResultNote(log.result_note ?? "");
+    setEHPhotoFile(null);
+    setEHPhotoPreview(null);
+    setEHCurrentPhotoUrl(null);
+    setFormOpen(false);
+    if (log.photo_path) {
+      const url = await getSignedPhotoUrl(log.photo_path);
+      setEHCurrentPhotoUrl(url);
+    }
+  }
+
+  async function saveEditH() {
+    if (!editingHLog) return;
+    if (!eHLocation.trim()) return showToast("장소를 입력하세요.", "error");
+    if (eHResultNote.trim().length < 30) return showToast("교육 후 결과를 30자 이상 입력하세요.", "error");
+    setEHSaving(true);
+
+    let photoPath = editingHLog.photo_path;
+    if (eHPhotoFile) {
+      const ext = eHPhotoFile.name.split(".").pop() || "jpg";
+      const path = `hygiene/${eHDate}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("training-photos").upload(path, eHPhotoFile);
+      if (upErr) { setEHSaving(false); return showToast("사진 업로드 실패: " + upErr.message, "error"); }
+      photoPath = path;
+    }
+
+    const { error } = await supabase.from("hygiene_training_logs").update({
+      training_date: eHDate,
+      start_time: (() => { const r = eHStart.replace(/[^\d]/g, ""); return r.length === 4 ? `${r.slice(0,2)}:${r.slice(2,4)}:00` : null; })(),
+      end_time: (() => { const r = eHEnd.replace(/[^\d]/g, ""); return r.length === 4 ? `${r.slice(0,2)}:${r.slice(2,4)}:00` : null; })(),
+      location: eHLocation.trim(),
+      target: eHTarget.trim(),
+      absentee_type: eHAbsentee,
+      absentee_note: eHAbsentee === "기타" ? eHAbsenteeNote.trim() : null,
+      content: eHContent,
+      result_note: eHResultNote.trim() || null,
+      photo_path: photoPath,
+    }).eq("id", editingHLog.id);
+
+    setEHSaving(false);
+    if (error) return showToast("저장 실패: " + error.message, "error");
+    showToast("✅ 수정 저장 완료!");
+    setEditingHLog(null);
+    setPhotoSignedUrls({});
     loadLogs();
   }
 
@@ -665,7 +740,10 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
                         {signingLogId === log.id ? "닫기" : "✍️ 서명"}
                       </button>
                       {isAdminOrSubadmin && (
-                        <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500" onClick={() => deleteLog(log.id)}>삭제</button>
+                        <>
+                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-600 mr-1" onClick={() => openEditH(log)}>수정</button>
+                          <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500" onClick={() => deleteLog(log.id)}>삭제</button>
+                        </>
                       )}
                     </td>
                     </tr>
@@ -675,7 +753,107 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
           </div>
        )}
        </div>
- 
+
+       {/* ── 수정 패널 ── */}
+       {editingHLog && (
+         <div className={`${card} border-orange-200 p-4`}>
+           <div className="mb-3 flex items-center justify-between">
+             <span className="font-semibold text-sm">✏️ 교육 기록 수정 — {editingHLog.training_date}</span>
+             <button className="text-xs text-slate-400 hover:text-slate-600" onClick={() => setEditingHLog(null)}>✕ 닫기</button>
+           </div>
+           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+             <div>
+               <div className="mb-1 text-xs text-slate-500">교육일자</div>
+               <input type="date" className={inp} value={eHDate} max={today} onChange={(e) => setEHDate(e.target.value)} />
+             </div>
+             <div>
+               <div className="mb-1 text-xs text-slate-500">장소 *</div>
+               <div className="flex gap-2">
+                 {["휴게실", "복도"].map((loc) => (
+                   <button key={loc} type="button"
+                     className={`flex-1 rounded-xl border-2 py-2 text-sm font-semibold transition-all ${eHLocation === loc ? "border-blue-500 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                     onClick={() => setEHLocation(loc)}>{loc}</button>
+                 ))}
+               </div>
+             </div>
+             <div>
+               <div className="mb-1 text-xs text-slate-500">시작시각</div>
+               <input className={inp} inputMode="numeric" placeholder="예: 0930" value={eHStart}
+                 onChange={(e) => { const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 4); setEHStart(raw.length === 4 ? `${raw.slice(0,2)}:${raw.slice(2,4)}` : raw); }} />
+             </div>
+             <div>
+               <div className="mb-1 text-xs text-slate-500">종료시각</div>
+               <input className={inp} inputMode="numeric" placeholder="예: 1800" value={eHEnd}
+                 onChange={(e) => { const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 4); setEHEnd(raw.length === 4 ? `${raw.slice(0,2)}:${raw.slice(2,4)}` : raw); }} />
+             </div>
+             <div>
+               <div className="mb-1 text-xs text-slate-500">대상</div>
+               <input className={inp} value={eHTarget} onChange={(e) => setEHTarget(e.target.value)} />
+             </div>
+             <div>
+               <div className="mb-1 text-xs text-slate-500">불참자처리</div>
+               <div className="flex gap-2">
+                 {ABSENTEE_OPTIONS.map((opt) => (
+                   <button key={opt} type="button"
+                     className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${eHAbsentee === opt ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-500"}`}
+                     onClick={() => setEHAbsentee(opt)}>{opt}</button>
+                 ))}
+               </div>
+               {eHAbsentee === "기타" && (
+                 <input className={`${inp} mt-2`} value={eHAbsenteeNote} onChange={(e) => setEHAbsenteeNote(e.target.value)} placeholder="기타 내용" />
+               )}
+             </div>
+           </div>
+           <div className="mt-3">
+             <div className="mb-1 text-xs text-slate-500">교육내용</div>
+             <textarea className={`${inp} min-h-[100px]`} value={eHContent} onChange={(e) => setEHContent(e.target.value)} />
+           </div>
+           <div className="mt-3">
+             <div className="mb-1 text-xs text-slate-500">교육 후 결과 (30자 이상)</div>
+             <textarea className={`${inp} min-h-[64px]`} value={eHResultNote} onChange={(e) => setEHResultNote(e.target.value)} />
+             {eHResultNote && eHResultNote.length < 30 && (
+               <div className="mt-0.5 text-xs text-red-500">{eHResultNote.length}/30자 (30자 이상 필요)</div>
+             )}
+             {eHResultNote && eHResultNote.length >= 30 && (
+               <div className="mt-0.5 text-xs text-green-600">{eHResultNote.length}자 ✓</div>
+             )}
+           </div>
+           <div className="mt-3">
+             <div className="mb-1 text-xs text-slate-500">단체사진 교체</div>
+             {eHCurrentPhotoUrl && !eHPhotoPreview && (
+               <div className="mb-2">
+                 <a href={eHCurrentPhotoUrl} target="_blank" rel="noopener noreferrer">
+                   <img src={eHCurrentPhotoUrl} className="h-32 rounded-lg border border-slate-300 object-cover cursor-zoom-in hover:opacity-80 transition-opacity" alt="현재 사진" />
+                 </a>
+                 <div className="mt-0.5 text-[10px] text-slate-400">현재 사진 (클릭하여 원본 보기)</div>
+               </div>
+             )}
+             <label className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed px-4 py-3 transition-all ${eHPhotoFile ? "border-orange-400 bg-orange-50" : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50"}`}>
+               <span className="text-2xl">{eHPhotoFile ? "🔄" : "📷"}</span>
+               <div>
+                 <div className="text-sm font-semibold text-slate-700">{eHPhotoFile ? eHPhotoFile.name : "사진 교체하기"}</div>
+                 <div className="text-xs text-slate-400">{eHPhotoFile ? "클릭하여 재선택" : "JPG, PNG 등 이미지 파일"}</div>
+               </div>
+               <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                 const f = e.target.files?.[0] ?? null;
+                 setEHPhotoFile(f);
+                 setEHPhotoPreview(f ? URL.createObjectURL(f) : null);
+               }} />
+             </label>
+             {eHPhotoPreview && (
+               <a href={eHPhotoPreview} target="_blank" rel="noopener noreferrer">
+                 <img src={eHPhotoPreview} className="mt-2 h-32 rounded-lg border border-orange-300 object-cover cursor-zoom-in hover:opacity-80 transition-opacity" alt="새 사진 미리보기" />
+               </a>
+             )}
+           </div>
+           <div className="mt-4">
+             <button className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60" disabled={eHSaving} onClick={saveEditH}>
+               {eHSaving ? "저장 중..." : "💾 수정 저장"}
+             </button>
+           </div>
+         </div>
+       )}
+
        {/* ── 서명 패널 ── */}
        {signingLogId && (() => {
          const signingLog = logs.find((l) => l.id === signingLogId);
