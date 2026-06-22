@@ -371,10 +371,12 @@ setSlotWoMap(slotMap);
         // 슬롯이동 행
         html += `<tr>`;
         for (const s of chunk) {
-          const outEv = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→"))[0];
-          const inEv = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→"))[0];
-          const ev = outEv ?? inEv;
-          html += `<td style="${tdS}text-align:center;font-size:8pt;height:22px;">${ev ? `슬롯이동: ${toKSTTimeStr(ev.measured_at)} (${ev.action_note})` : ""}</td>`;
+          const moveEvs = [
+            ...dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→")),
+            ...dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→")),
+          ].sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at));
+          const cellContent = moveEvs.length === 0 ? "" : moveEvs.map((ev: any) => `슬롯이동: ${toKSTTimeStr(ev.measured_at)} (${ev.action_note})`).join("<br/>");
+          html += `<td style="${tdS}text-align:center;font-size:8pt;min-height:22px;">${cellContent}</td>`;
         }
         for (let i = 0; i < empty; i++) html += `<td style="${tdS}"></td>`;
         html += `</tr>`;
@@ -1093,10 +1095,17 @@ async function handlePrint() {
                   </tr>
                   <tr>
                     {chunk.map((s, i) => {
-                      const outEv = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→"))[0];
-                      const inEv = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→"))[0];
-                      const ev = outEv ?? inEv;
-                      return <td key={i} style={{ ...tdS, textAlign:"center", fontSize:"8pt", height:22 }}>{ev ? `슬롯이동: ${toKSTTime(ev.measured_at)} (${ev.action_note})` : ""}</td>;
+                      const moveEvs = [
+                        ...dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→")),
+                        ...dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→")),
+                      ].sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at));
+                      return (
+                        <td key={i} style={{ ...tdS, textAlign:"center", fontSize:"8pt", minHeight:22 }}>
+                          {moveEvs.length === 0 ? "" : moveEvs.map((ev: any, mi: number) => (
+                            <div key={mi}>{`슬롯이동: ${toKSTTime(ev.measured_at)} (${ev.action_note})`}</div>
+                          ))}
+                        </td>
+                      );
                     })}
                     {Array.from({ length: CHUNK_SIZE_R - chunk.length }).map((_, i) => <td key={i} style={tdS} />)}
                   </tr>
@@ -2071,11 +2080,13 @@ export function OtherHeatingTab({ role, userId, showToast }: {
       html += `<tr>`;
       for (const s of slots) {
         const assignees = dayData.slotAssignees[s.id] ?? [""];
-        const outEv = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→"))[0];
-        const inEv = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→"))[0];
-        const ev = outEv ?? inEv;
+        const moveEvs = [
+          ...dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→")),
+          ...dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→")),
+        ].sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at));
+        const cellContent = moveEvs.length === 0 ? "" : moveEvs.map((ev: any) => `슬롯이동: ${toKSTTime(ev.measured_at)} (${ev.action_note})`).join("<br/>");
         assignees.forEach((_, ai) => {
-          html += `<td style="${tdS}text-align:center;font-size:8pt;height:22px;">${ai === 0 ? (ev ? `슬롯이동: ${toKSTTime(ev.measured_at)} (${ev.action_note})` : "") : ""}</td>`;
+          html += `<td style="${tdS}text-align:center;font-size:8pt;min-height:22px;">${ai === 0 ? cellContent : ""}</td>`;
         });
       }
       for (let i = 0; i < Math.max(0, CHUNK_SIZE_R - totalSlotCols); i++) html += `<td style="${tdS}"></td>`;
