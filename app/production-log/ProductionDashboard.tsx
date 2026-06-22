@@ -693,7 +693,7 @@ export function ProductionDashboard({
             return (
               <button
               key={card.key}
-              className={`rounded-2xl border ${s.border} ${s.bg} p-4 text-left transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-95`}
+              className={`rounded-2xl border ${s.border} ${s.bg} p-3 text-left transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-95`}
               onClick={() => {
                 if (card.key === "product_expiry") {
                   setExpandedCardKey((prev) => (prev === card.key ? null : card.key));
@@ -702,13 +702,12 @@ export function ProductionDashboard({
                 card.tab && onTabChange(card.tab);
               }}
             >
-              <div className="flex items-start justify-between gap-1 mb-2">
-                <span className="text-lg">{card.icon}</span>
-                <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${s.badge}`}>
+              <div className="flex items-center justify-between gap-1 mb-1.5">
+                <div className="text-xs font-semibold text-slate-600">{card.label}</div>
+                <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-bold shrink-0 ${s.badge}`}>
                   {STATUS_LABEL[card.status]}
                 </span>
               </div>
-              <div className="text-xs font-semibold text-slate-600 mb-1">{card.label}</div>
               <div className={`text-sm font-bold ${
                 card.status === "error" ? "text-red-700"
                 : card.status === "warn" ? "text-amber-700"
