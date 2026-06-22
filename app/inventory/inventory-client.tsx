@@ -19,8 +19,8 @@ export default function InventoryClient() {
 
   const [tab, setTab] = useState<Tab>(() => {
     const t = searchParams?.get("tab");
-    if (t === "report") return "REPORT";
-    return "SCAN";
+    if (t === "scan") return "SCAN";
+    return "REPORT";
   });
 
   // ✅ useEffect보다 먼저 선언 (참조 오류 방지)
