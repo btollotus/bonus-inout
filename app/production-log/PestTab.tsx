@@ -332,7 +332,7 @@ export function PestTab({ role, userId, showToast }: {
                         <th className="border border-slate-200 py-2 px-2 text-slate-500 w-20">위치</th>
                         <th className="border border-slate-200 py-2 px-1">파리</th>
                         <th className="border border-slate-200 py-2 px-1">모기</th>
-                        <th className="border border-slate-200 py-2 px-1">링다구</th>
+                        <th className="border border-slate-200 py-2 px-1">깔다구</th>
                         <th className="border border-slate-200 py-2 px-1">초파리</th>
                         <th className="border border-slate-200 py-2 px-1">나방</th>
                         <th className="border border-slate-200 py-2 px-1">날파리</th>
