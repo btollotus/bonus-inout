@@ -576,6 +576,45 @@ export function ProductionDashboard({
       }
     }
 
+    // ── 14. 사내교육 (위생+안전교육 / 모니터링교육) — 이번 달 실시 여부 ──
+    {
+      const thisYear = new Date(today + "T00:00:00+09:00").getFullYear();
+      const thisMonth = new Date(today + "T00:00:00+09:00").getMonth() + 1;
+      const monthStart = `${thisYear}-${String(thisMonth).padStart(2, "0")}-01`;
+      const lastDay = new Date(thisYear, thisMonth, 0).getDate();
+      const monthEnd = `${thisYear}-${String(thisMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+      const [{ data: hygieneData }, { data: monitoringData }] = await Promise.all([
+        supabase.from("hygiene_training_logs")
+          .select("id")
+          .gte("training_date", monthStart)
+          .lte("training_date", monthEnd)
+          .limit(1),
+        supabase.from("monitoring_training_logs")
+          .select("id")
+          .gte("training_date", monthStart)
+          .lte("training_date", monthEnd)
+          .limit(1),
+      ]);
+
+      const hygieneOk = (hygieneData ?? []).length > 0;
+      const monitoringOk = (monitoringData ?? []).length > 0;
+      const allOk = hygieneOk && monitoringOk;
+
+      newCards.push({
+        key: "internal_education",
+        label: "사내교육",
+        icon: "📚",
+        tab: "training",
+        status: allOk ? "ok" : "warn",
+        message: allOk ? "이번 달 교육 완료" : "교육 미실시 항목 있음",
+        detail: [
+          `${hygieneOk ? "✅" : "❌"} 위생 및 안전교육`,
+          `${monitoringOk ? "✅" : "❌"} 모니터링교육`,
+        ],
+      });
+    }
+
     setCards(newCards);
     setLastUpdated(new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" }));
     setLoading(false);
