@@ -2362,6 +2362,7 @@ if (woSubNameVal) {
       if (error) return setMsg(error.message);
     }
     await loadTrades();
+    if (tradeSearchDebounced.trim()) setSearchRefreshTick((v) => v + 1);
   }
   async function loadTrash() {
     setTrashLoading(true);
