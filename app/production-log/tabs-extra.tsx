@@ -1981,10 +1981,19 @@ export function OtherHeatingTab({ role, userId, showToast }: {
           .from("work_orders")
           .select("work_order_no,assignee_production,assignee_transfer")
           .in("work_order_no", allWoNos);
-        for (const row of data ?? []) {
-          const assignee = row.assignee_production ?? row.assignee_transfer;
-          if (assignee) woAssigneeMap[row.work_order_no] = assignee;
-        }
+          for (const row of data ?? []) {
+            const slot = targetSlots.find(s => {
+              const woNosForSlot = [...new Set(
+                sEvents.filter((e: any) => e.slot_id === s.id).map((e: any) => e.work_order_no).filter(Boolean)
+              )];
+              return woNosForSlot.includes(row.work_order_no);
+            });
+            const isTransferSlot = slot?.purpose === "전사용도";
+            const assignee = isTransferSlot
+              ? (row.assignee_transfer ?? row.assignee_production)
+              : (row.assignee_production ?? row.assignee_transfer);
+            if (assignee) woAssigneeMap[row.work_order_no] = assignee;
+          }
       }
 
       const slotAssignees: Record<string, string[]> = {};
