@@ -2317,6 +2317,7 @@ if (woSubNameVal) {
       }
     }
     setEditOpen(false); setEditRow(null); await loadTrades();
+    if (tradeSearchDebounced.trim()) setSearchRefreshTick((v) => v + 1);
     if (stockWarningMsg) setMsg(stockWarningMsg);
   }
 
