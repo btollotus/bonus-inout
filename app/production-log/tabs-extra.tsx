@@ -264,11 +264,11 @@ setSlotWoMap(slotMap);
     if (allWoNosForAssignee.length > 0) {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("work_order_no, assignee_production")
-        .in("work_order_no", allWoNosForAssignee)
-        .not("assignee_production", "is", null);
+        .select("work_order_no, assignee_production, assignee_transfer")
+        .in("work_order_no", allWoNosForAssignee);
       for (const wo of woData ?? []) {
-        if (wo.assignee_production) assigneeMap[wo.work_order_no] = wo.assignee_production;
+        const assignee = wo.assignee_production ?? wo.assignee_transfer;
+        if (assignee) assigneeMap[wo.work_order_no] = assignee;
       }
     }
 
@@ -649,41 +649,15 @@ async function handlePrint() {
   const assigneeMap: Record<string, string> = {};
 
   if (allWoNos.length > 0) {
-    // 1단계: assignee_production 조회
-    const { data } = await supabase
-      .from("work_orders")
-      .select("work_order_no, assignee_production")
-      .in("work_order_no", allWoNos)
-      .not("assignee_production", "is", null);
-    for (const row of data ?? []) {
-      if (row.assignee_production) assigneeMap[row.work_order_no] = row.assignee_production;
-    }
-
-    // 2단계: assignee_production NULL인 WO → ccp_wo_events.created_by → users.name fallback
-    const nullWoNos = allWoNos.filter(no => !assigneeMap[no]);
-    if (nullWoNos.length > 0) {
-      const { data: woEvData } = await supabase
-        .from("ccp_wo_events")
-        .select("work_order_no, created_by")
-        .in("work_order_no", nullWoNos)
-        .not("created_by", "is", null);
-      const userIds = [...new Set((woEvData ?? []).map((e: any) => e.created_by).filter(Boolean))] as string[];
-      const userNameMap: Record<string, string> = {};
-      if (userIds.length > 0) {
-        const { data: usersData } = await supabase
-          .from("users")
-          .select("id, name")
-          .in("id", userIds);
-        for (const u of usersData ?? []) {
-          if (u.name) userNameMap[u.id] = u.name;
-        }
-      }
-      for (const ev of woEvData ?? []) {
-        if (ev.created_by && userNameMap[ev.created_by] && !assigneeMap[ev.work_order_no]) {
-          assigneeMap[ev.work_order_no] = userNameMap[ev.created_by];
-        }
-      }
-    }
+   // assignee_production → assignee_transfer 순으로 fallback 조회
+   const { data } = await supabase
+   .from("work_orders")
+   .select("work_order_no, assignee_production, assignee_transfer")
+   .in("work_order_no", allWoNos);
+ for (const row of data ?? []) {
+   const assignee = row.assignee_production ?? row.assignee_transfer;
+   if (assignee) assigneeMap[row.work_order_no] = assignee;
+ }
   }
 
   const newSlotAssignees: Record<string, string[]> = {};
@@ -2248,7 +2222,13 @@ export function OtherHeatingTab({ role, userId, showToast }: {
       const { data } = await supabase.from("work_orders")
         .select("work_order_no,assignee_production,assignee_transfer").in("work_order_no", allWoNos);
       for (const row of data ?? []) {
-        const assignee = row.assignee_production ?? row.assignee_transfer;
+        const slot = targetSlots.find(s =>
+          (slotWoMap[s.id] ?? []).includes(row.work_order_no)
+        );
+        const isTransferSlot = slot?.purpose === "전사용도";
+        const assignee = isTransferSlot
+          ? (row.assignee_transfer ?? row.assignee_production)
+          : (row.assignee_production ?? row.assignee_transfer);
         if (assignee) assigneeMap[row.work_order_no] = assignee;
       }
     }
