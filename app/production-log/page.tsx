@@ -378,13 +378,9 @@ function ProductionLogTab({ role, userId, showToast }: {
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
       .then(({ data }) => {
-        const sorted = (data ?? []).sort((a: any, b: any) => {
-          const LAST = ["강미라", "조대성"];
-          const aLast = LAST.includes(a.name) ? 1 : 0;
-          const bLast = LAST.includes(b.name) ? 1 : 0;
-          if (aLast !== bLast) return aLast - bLast;
-          return (a.name ?? "").localeCompare(b.name ?? "", "ko");
-        });
+        const sorted = (data ?? [])
+          .filter((a: any) => !["강미라", "조대성"].includes(a.name))
+          .sort((a: any, b: any) => (a.name ?? "").localeCompare(b.name ?? "", "ko"));
         setEmployees(sorted as any);
       });
     supabase.from("production_task_types").select("id,name,order_no").eq("is_active", true).order("order_no")
