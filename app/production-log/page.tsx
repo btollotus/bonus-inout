@@ -3683,7 +3683,7 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
             <thead>
               <tr className="bg-slate-100">
               <th className="border border-slate-200 py-1.5 px-2 text-slate-500 w-24 whitespace-nowrap">위치</th>
-                {["파리","모기","링다구","초파리","나방","날파리","기타"].map(h=>(
+                {["파리","모기","깔다구","초파리","나방","날파리","기타"].map(h=>(
                   <th key={h} className="border border-slate-200 py-1.5 px-1 text-slate-500">{h}</th>
                 ))}
                <th className="border border-slate-200 py-1.5 px-2 bg-blue-50 text-blue-700 w-10">계</th>
