@@ -1690,6 +1690,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
     setOrderSkipProductionCheck(false); setWo_packageUnit(""); setWo_packageUnitCustom("");
     setWo_itemImageFiles({}); setWo_itemImagePreviewUrls({}); setWo_itemExistingImageUrls({}); setWo_itemExistingImagePaths({}); setWo_itemExistingBarcodes({});
     await loadTrades();
+    if (tradeSearchDebounced.trim()) setSearchRefreshTick((v) => v + 1);
     if (stockWarningMsg) setMsg(stockWarningMsg);
   }
 
@@ -1717,6 +1718,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
     if (!selectedPartner) { setManualCounterpartyName(""); setManualBusinessNo(""); }
     setSalaryEmployeeId(""); setToTouched(false);
     await loadTrades();
+    if (tradeSearchDebounced.trim()) setSearchRefreshTick((v) => v + 1);
   }
 
   // ── 작업지시서 ──
@@ -3391,7 +3393,21 @@ if (woSubNameVal) {
                 <div><div className="mb-1 text-xs text-slate-600">From</div><input type="date" className={inp} value={fromYMD} onChange={(e) => { setToTouched(false); setFromYMD(e.target.value); }} /></div>
                 <div><div className="mb-1 text-xs text-slate-600">To</div><input type="date" className={inp} value={toYMD} onChange={(e) => { setToTouched(true); setToYMD(e.target.value); }} /></div>
                 <div className="flex flex-wrap gap-2">
-                  <button className={btn} onClick={() => { setFromYMD("2025-12-01"); setToYMD(todayYMD()); setToTouched(false); }}>기간 초기화</button>
+                <button className={btn} onClick={() => { setFromYMD("2025-12-01"); setToYMD(todayYMD()); setToTouched(false); }}>기간 초기화</button>
+                  <button className={btn} onClick={() => {
+                    const base = toYMD || todayYMD();
+                    const d = new Date(base + "T00:00:00+09:00");
+                    d.setMonth(d.getMonth() - 1);
+                    const from = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+                    setFromYMD(from); setToTouched(true);
+                  }}>1개월</button>
+                  <button className={btn} onClick={() => {
+                    const base = toYMD || todayYMD();
+                    const d = new Date(base + "T00:00:00+09:00");
+                    d.setMonth(d.getMonth() - 3);
+                    const from = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+                    setFromYMD(from); setToTouched(true);
+                  }}>3개월</button>
                   <button className={btnOn} onClick={loadTrades}>조회</button>
                  {/* ── 새로고침 버튼 추가 ── */}
                  <button className={btn} onClick={loadTrades}>🔄 새로고침</button>
