@@ -731,27 +731,21 @@ export function WoPrintContent({
                     </td>
                   </tr>
                   <tr>
-                  <td
-                      style={{
-                        ...cellHead,
-                        width: "8%",
-                      }}
-                    >
-                      주문수량
-                    </td>
-                    <td style={{ ...cellHead, border: "1px solid #cbd5e1", borderLeft: "none", width: "92%", padding: 0 }}>
+                    <td colSpan={2} style={{ border: "1px solid #cbd5e1", borderTop: "none", padding: 0 }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                         <colgroup>
+                          <col style={{ width: "8%" }} />
                           <col style={{ width: "10%" }} />
                           <col style={{ width: "8%" }} />
                           <col style={{ width: "7%" }} />
                           <col style={{ width: "10%" }} />
-                          <col style={{ width: "11%" }} />
-                          <col style={{ width: "17%" }} />
-                          <col style={{ width: "37%" }} />
+                          <col style={{ width: "10%" }} />
+                          <col style={{ width: "16%" }} />
+                          <col style={{ width: "31%" }} />
                         </colgroup>
                         <tbody>
                           <tr>
+                            <td style={{ ...cellHead, border: "none", borderRight: "1px solid #cbd5e1" }}>주문수량</td>
                             <td style={{ ...cellHead, border: "none", borderRight: "1px solid #cbd5e1" }}>출고수량</td>
                             <td style={{ ...cellHead, border: "none", borderRight: "1px solid #cbd5e1" }}>추가생산</td>
                             <td style={{ ...cellHead, border: "none", borderRight: "1px solid #cbd5e1" }}>불량</td>
@@ -760,122 +754,29 @@ export function WoPrintContent({
                             <td style={{ ...cellHead, border: "none", borderRight: "1px solid #cbd5e1" }}>소비기한</td>
                             <td style={{ ...cellHead, border: "none" }}>비고</td>
                           </tr>
-                        </tbody>
-                      </table>
-                    </td>
-                  </tr>
-                  <tr>
-                  <td
-                      style={{
-                        ...cellBase,
-                        textAlign: "right",
-                        fontWeight: "bold",
-                        fontSize: "11pt",
-                        borderTop: "none",
-                        width: "8%",
-                      }}
-                    >
-                      {f(item.order_qty)}
-                    </td>
-                    <td
-                      style={{
-                        border: "1px solid #cbd5e1",
-                        borderLeft: "none",
-                        borderTop: "none",
-                        padding: 0,
-                        width: "92%",
-                      }}
-                    >
-                      <table
-                        style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}
-                      >
-                        <colgroup>
-                          <col style={{ width: "10%" }} />
-                          <col style={{ width: "8%" }} />
-                          <col style={{ width: "7%" }} />
-                          <col style={{ width: "10%" }} />
-                          <col style={{ width: "11%" }} />
-                          <col style={{ width: "17%" }} />
-                          <col style={{ width: "37%" }} />
-                        </colgroup>
-                        <tbody>
-                        <tr>
-                            <td
-                              style={{
-                                ...cellBase,
-                                border: "none",
-                                borderRight: "1px solid #cbd5e1",
-                                textAlign: "right",
-                                fontWeight: "bold",
-                                color: aq ? "#1d4ed8" : "#111",
-                              }}
-                            >
+                          <tr>
+                            <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", borderRight: "1px solid #cbd5e1", textAlign: "right", fontWeight: "bold", fontSize: "11pt" }}>
+                              {f(item.order_qty)}
+                            </td>
+                            <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", borderRight: "1px solid #cbd5e1", textAlign: "right", fontWeight: "bold", color: aq ? "#1d4ed8" : "#111" }}>
                               {aq != null ? f(aq) : ""}
                             </td>
-                            <td
-                              style={{
-                                ...cellBase,
-                                border: "none",
-                                borderRight: "1px solid #cbd5e1",
-                                textAlign: "right",
-                                color: aq != null && aq > item.order_qty ? "#7c3aed" : "#111",
-                              }}
-                            >
+                            <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", borderRight: "1px solid #cbd5e1", textAlign: "right", color: aq != null && aq > item.order_qty ? "#7c3aed" : "#111" }}>
                               {aq != null && aq > item.order_qty ? f(aq - item.order_qty) : ""}
                             </td>
-                            <td
-                              style={{
-                                ...cellBase,
-                                border: "none",
-                                borderRight: "1px solid #cbd5e1",
-                                textAlign: "right",
-                                color: item.defect_qty ? "#dc2626" : "#111",
-                              }}
-                            >
+                            <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", borderRight: "1px solid #cbd5e1", textAlign: "right", color: item.defect_qty ? "#dc2626" : "#111" }}>
                               {item.defect_qty ? f(item.defect_qty) : ""}
                             </td>
-                            <td
-                              style={{
-                                ...cellBase,
-                                border: "none",
-                                borderRight: "1px solid #cbd5e1",
-                                textAlign: "right",
-                              }}
-                            >
+                            <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", borderRight: "1px solid #cbd5e1", textAlign: "right" }}>
                               {uw != null ? uw : ""}
                             </td>
-                            <td
-                              style={{
-                                ...cellBase,
-                                border: "none",
-                                borderRight: "1px solid #cbd5e1",
-                                textAlign: "right",
-                                color: tw ? "#1d4ed8" : "#999",
-                              }}
-                            >
+                            <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", borderRight: "1px solid #cbd5e1", textAlign: "right", color: tw ? "#1d4ed8" : "#999" }}>
                               {tw ? f(Math.round(tw)) : ""}
                             </td>
-                            <td
-                              style={{
-                                ...cellBase,
-                                border: "none",
-                                borderRight: "1px solid #cbd5e1",
-                                textAlign: "center",
-                                fontSize: "8pt",
-                              }}
-                            >
+                            <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", borderRight: "1px solid #cbd5e1", textAlign: "center", fontSize: "8pt" }}>
                               {exp || ""}
                             </td>
-                            <td
-                              style={{
-                                ...cellBase,
-                                border: "none",
-                                padding: "4px 6px",
-                                fontSize: "8.5pt",
-                                verticalAlign: "middle",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
+                            <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", padding: "4px 6px", fontSize: "8.5pt", verticalAlign: "middle", whiteSpace: "nowrap" }}>
                               {noteVal}
                             </td>
                           </tr>
