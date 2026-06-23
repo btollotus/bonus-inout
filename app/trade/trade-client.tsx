@@ -1541,10 +1541,10 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
          const itemWeightG = matchedLine?.weight_g && Number(matchedLine.weight_g) > 0 ? Number(matchedLine.weight_g) : null;
          const itemFoodType = matchedLine?.food_type || foodType || null;
 
-         // ── 기성제품 판별: masterByName에 variant_id가 있으면 기성제품 ──
+         // ── 기성제품 판별: masterByName에 variant_id가 있고 category가 "기성"인 경우만 ──
          const masterEntry = masterByName.get(itemName);
-         const masterVariantId = masterEntry?.variant_id ?? null;
-         const masterBarcode = masterEntry?.barcode ?? null;
+         const masterVariantId = (masterEntry?.category === "기성" ? masterEntry?.variant_id : null) ?? null;
+         const masterBarcode = (masterEntry?.category === "기성" ? masterEntry?.barcode : null) ?? null;
 
          if (masterVariantId && masterBarcode) {
            // 기성제품: product/variant/barcode 신규 생성 없이 기존 variant 재사용
