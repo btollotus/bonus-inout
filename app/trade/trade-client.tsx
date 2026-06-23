@@ -1536,13 +1536,28 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
        // ── 품목별 product/variant 생성 (바코드 중복 방지, 라인별 product_id 분리) ──
        let firstVariantId: string | null = null;
        for (const createdItem of (createdWoItems as any[]) ?? []) {
-         const itemBarcodeNo = createdItem.barcode_no as string;
          const itemName = (createdItem.sub_items as WoSubItem[])?.[0]?.name ?? firstItemName;
-         const itemVariantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${itemName}`;
-         // 해당 품목의 무게: cleanLines에서 이름 매칭으로 찾기
          const matchedLine = woTargetLines.find((l) => l.name === itemName);
          const itemWeightG = matchedLine?.weight_g && Number(matchedLine.weight_g) > 0 ? Number(matchedLine.weight_g) : null;
          const itemFoodType = matchedLine?.food_type || foodType || null;
+
+         // ── 기성제품 판별: masterByName에 variant_id가 있으면 기성제품 ──
+         const masterEntry = masterByName.get(itemName);
+         const masterVariantId = masterEntry?.variant_id ?? null;
+         const masterBarcode = masterEntry?.barcode ?? null;
+
+         if (masterVariantId && masterBarcode) {
+           // 기성제품: product/variant/barcode 신규 생성 없이 기존 variant 재사용
+           // work_order_items.barcode_no는 이미 위에서 생성 시 새 바코드로 저장됐으므로
+           // 기성품 바코드로 덮어씀
+           await supabase.from("work_order_items").update({ barcode_no: masterBarcode }).eq("id", createdItem.id);
+           if (!firstVariantId) firstVariantId = masterVariantId;
+           continue;
+         }
+
+         // ── 신규 제품: 기존 로직 그대로 ──
+         const itemBarcodeNo = createdItem.barcode_no as string;
+         const itemVariantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${itemName}`;
 
          // ── 바코드 재사용 시: 이미 이 바코드를 가진 variant가 있으면 그대로 사용 ──
          // (거래처명 변경 등으로 itemVariantName이 과거와 달라져도 barcode_uq 충돌 방지)
@@ -1573,7 +1588,6 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
          if (existItemVariant?.id) {
            // ── 기존 variant 재사용: 새 바코드 폐기, 기존 바코드 유지 ──
            itemVariantId = existItemVariant.id;
-           // weight_g 업데이트
            if (itemWeightG != null) {
              await supabase.from("product_variants").update({ weight_g: itemWeightG }).eq("id", itemVariantId);
            }
