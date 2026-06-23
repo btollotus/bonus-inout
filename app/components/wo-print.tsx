@@ -731,24 +731,24 @@ export function WoPrintContent({
                     </td>
                   </tr>
                   <tr>
-                    <td
+                  <td
                       style={{
                         ...cellHead,
-                        width: "18%",
+                        width: "8%",
                       }}
                     >
                       주문수량
                     </td>
-                    <td style={{ ...cellHead, border: "1px solid #cbd5e1", borderLeft: "none", width: "90%", padding: 0 }}>
+                    <td style={{ ...cellHead, border: "1px solid #cbd5e1", borderLeft: "none", width: "92%", padding: 0 }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                         <colgroup>
-                          <col style={{ width: "12%" }} />
                           <col style={{ width: "10%" }} />
-                          <col style={{ width: "9%" }} />
-                          <col style={{ width: "12%" }} />
-                          <col style={{ width: "13%" }} />
+                          <col style={{ width: "8%" }} />
+                          <col style={{ width: "7%" }} />
+                          <col style={{ width: "10%" }} />
+                          <col style={{ width: "11%" }} />
                           <col style={{ width: "17%" }} />
-                          <col style={{ width: "27%" }} />
+                          <col style={{ width: "37%" }} />
                         </colgroup>
                         <tbody>
                           <tr>
@@ -765,14 +765,14 @@ export function WoPrintContent({
                     </td>
                   </tr>
                   <tr>
-                    <td
+                  <td
                       style={{
                         ...cellBase,
                         textAlign: "right",
                         fontWeight: "bold",
                         fontSize: "11pt",
                         borderTop: "none",
-                        width: "18%",
+                        width: "8%",
                       }}
                     >
                       {f(item.order_qty)}
@@ -783,20 +783,20 @@ export function WoPrintContent({
                         borderLeft: "none",
                         borderTop: "none",
                         padding: 0,
-                        width: "90%",
+                        width: "92%",
                       }}
                     >
                       <table
                         style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}
                       >
                         <colgroup>
-                          <col style={{ width: "12%" }} />
                           <col style={{ width: "10%" }} />
-                          <col style={{ width: "9%" }} />
-                          <col style={{ width: "12%" }} />
-                          <col style={{ width: "13%" }} />
+                          <col style={{ width: "8%" }} />
+                          <col style={{ width: "7%" }} />
+                          <col style={{ width: "10%" }} />
+                          <col style={{ width: "11%" }} />
                           <col style={{ width: "17%" }} />
-                          <col style={{ width: "27%" }} />
+                          <col style={{ width: "37%" }} />
                         </colgroup>
                         <tbody>
                         <tr>
