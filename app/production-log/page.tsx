@@ -285,7 +285,7 @@ function TrainingTab({ role, userId, showToast }: {
         <button
           className={subTab === "hygiene_edu" ? btnOn : btn}
           onClick={() => setSubTab("hygiene_edu")}
-        >위생교육</button>
+        >위생/위생교육</button>
         <button
           className={subTab === "monitoring_edu" ? btnOn : btn}
           onClick={() => setSubTab("monitoring_edu")}
