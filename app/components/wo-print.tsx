@@ -776,7 +776,7 @@ export function WoPrintContent({
                             <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", borderRight: "1px solid #cbd5e1", textAlign: "center", fontSize: "8pt" }}>
                               {exp || ""}
                             </td>
-                            <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", padding: "4px 6px", fontSize: "8.5pt", verticalAlign: "middle", whiteSpace: "nowrap" }}>
+                            <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", padding: "4px 6px", fontSize: "8.5pt", verticalAlign: "middle" }}>
                               {noteVal}
                             </td>
                           </tr>
