@@ -591,9 +591,11 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     }
   }
 
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+
   const doPrint = () => {
-    if (filteredRows.length === 0) { setMsg("인쇄할 데이터가 없습니다. (날짜/필터 확인 후 조회)"); return; }
-    window.print();
+    if (rows.length === 0) { setMsg("인쇄할 데이터가 없습니다. (날짜/필터 확인 후 조회)"); return; }
+    setPrintModalOpen(true);
   };
 
   const downloadExcel = () => {
@@ -651,9 +653,250 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     ? [...cols, { key: "actions" as any, label: "작업" }]
     : cols;
 
+  // ── 인쇄 모달 ──
+  function PrintModal({ onClose }: { onClose: () => void }) {
+    const PRINT_CATS: Exclude<Category, "ALL">[] = ["업체", "기성", "전사지"];
+    const [activeTab, setActiveTab] = useState<Exclude<Category, "ALL">>("업체");
+
+    const catRows = (cat: Exclude<Category, "ALL">) =>
+      rows.filter((r) => (r.product_category ?? "") === cat);
+
+    function doIframePrint(cat: Exclude<Category, "ALL">) {
+      const catData = catRows(cat);
+      const cols = COLS[cat];
+
+      const tableRows = catData.map((r) => {
+        const sEA = intMin(r.start_stock_ea ?? 0, 0);
+        const inEA = intMin(r.period_in_ea ?? 0, 0);
+        const outEA = intMin(r.period_out_ea ?? 0, 0);
+        const eEA = intMin(r.end_stock_ea ?? 0, 0);
+        const unit = intMin(r.pack_unit ?? 0, 0);
+
+        const cellMap: Record<string, string> = {
+          name: safeStr(r.product_name ?? "-"),
+          food_type: safeStr(r.food_type ?? "-"),
+          prev_stock: toBoxAndEa(sEA, unit).boxText
+            ? `${toBoxAndEa(sEA, unit).boxText} / ${toBoxAndEa(sEA, unit).eaText}`
+            : toBoxAndEa(sEA, unit).eaText,
+          in: toBoxAndEa(inEA, unit).boxText
+            ? `${toBoxAndEa(inEA, unit).boxText} / ${toBoxAndEa(inEA, unit).eaText}`
+            : toBoxAndEa(inEA, unit).eaText,
+          out: toBoxAndEa(outEA, unit).boxText
+            ? `${toBoxAndEa(outEA, unit).boxText} / ${toBoxAndEa(outEA, unit).eaText}`
+            : toBoxAndEa(outEA, unit).eaText,
+          discard: (() => {
+            const d = intMin(r.period_discard_ea ?? 0, 0);
+            return d > 0
+              ? (toBoxAndEa(d, unit).boxText
+                  ? `${toBoxAndEa(d, unit).boxText} / ${toBoxAndEa(d, unit).eaText}`
+                  : toBoxAndEa(d, unit).eaText)
+              : "—";
+          })(),
+          stock: toBoxAndEa(eEA, unit).boxText
+            ? `${toBoxAndEa(eEA, unit).boxText} / ${toBoxAndEa(eEA, unit).eaText}`
+            : toBoxAndEa(eEA, unit).eaText,
+          expiry: safeStr(r.expiry_date),
+          barcode: safeStr(r.barcode),
+          note: safeStr(r.note ?? ""),
+        };
+
+        const tds = cols.map((c) => {
+          const isRight = ["prev_stock", "in", "out", "discard", "stock"].includes(c.key);
+          return `<td style="padding:3px 6px;border:1px solid #d1d5db;font-size:9pt;text-align:${isRight ? "right" : "left"};">${cellMap[c.key] ?? ""}</td>`;
+        }).join("");
+        return `<tr>${tds}</tr>`;
+      }).join("");
+
+      const ths = cols.map((c) => {
+        const isRight = ["prev_stock", "in", "out", "discard", "stock"].includes(c.key);
+        return `<th style="padding:4px 6px;border:1px solid #d1d5db;background:#f3f4f6;font-size:9pt;text-align:${isRight ? "right" : "left"};">${c.label}</th>`;
+      }).join("");
+
+      const todayKST = (() => {
+        const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      })();
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>재고대장_${cat}_${todayKST}</title>
+<style>
+@page{size:A4 landscape;margin:10mm 12mm;}
+body{margin:0;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:9pt;color:#111;}
+*{box-sizing:border-box;}
+table{border-collapse:collapse;width:100%;}
+thead{display:table-header-group;}
+tr{page-break-inside:avoid;}
+</style>
+</head><body>
+<div style="margin-bottom:8px;">
+  <div style="font-size:15pt;font-weight:bold;letter-spacing:4px;border-bottom:2px solid #111;padding-bottom:4px;margin-bottom:4px;">재 고 대 장</div>
+  <div style="font-size:9pt;color:#444;">
+    기준일: <strong>${periodLabel}</strong> &nbsp;|&nbsp; 구분: <strong>${cat}</strong> &nbsp;|&nbsp; 인쇄일: ${todayKST}
+  </div>
+</div>
+<table>
+  <thead><tr>${ths}</tr></thead>
+  <tbody>${tableRows || '<tr><td colspan="${cols.length}" style="padding:6px;color:#888;">데이터 없음</td></tr>'}</tbody>
+</table>
+</body></html>`;
+
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
+      document.body.appendChild(iframe);
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) return;
+      doc.open();
+      doc.write(html);
+      doc.close();
+      iframe.contentWindow?.focus();
+      setTimeout(() => {
+        iframe.contentWindow?.print();
+        setTimeout(() => { document.body.removeChild(iframe); }, 2000);
+      }, 400);
+    }
+
+    const previewRows = catRows(activeTab);
+    const cols = COLS[activeTab];
+
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", background: "#f1f5f9" }}>
+        {/* 헤더 바 */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "#1e3a5f", color: "#fff", flexShrink: 0 }}>
+          <div style={{ fontWeight: "bold", fontSize: "14pt" }}>재고대장 인쇄 미리보기</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => doIframePrint(activeTab)}
+              style={{ padding: "8px 20px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, fontSize: "11pt", fontWeight: "bold", cursor: "pointer" }}
+            >
+              🖨️ {activeTab} 인쇄
+            </button>
+            <button
+              onClick={onClose}
+              style={{ padding: "8px 16px", background: "#64748b", color: "#fff", border: "none", borderRadius: 6, fontSize: "11pt", cursor: "pointer" }}
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+
+        {/* 탭 */}
+        <div style={{ display: "flex", gap: 8, padding: "8px 16px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", flexShrink: 0 }}>
+          {PRINT_CATS.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setActiveTab(cat)}
+              style={{
+                padding: "6px 18px", borderRadius: 8, border: "1px solid",
+                borderColor: activeTab === cat ? "#2563eb" : "#cbd5e1",
+                background: activeTab === cat ? "#2563eb" : "#fff",
+                color: activeTab === cat ? "#fff" : "#374151",
+                fontWeight: "bold", fontSize: "11pt", cursor: "pointer",
+              }}
+            >
+              {cat} ({catRows(cat).length}건)
+            </button>
+          ))}
+        </div>
+
+        {/* 미리보기 */}
+        <div style={{ flex: 1, overflow: "auto", padding: 20, display: "flex", justifyContent: "center" }}>
+          <div style={{ background: "#fff", width: "277mm", minHeight: "190mm", padding: "10mm 12mm", boxShadow: "0 4px 24px rgba(0,0,0,0.15)" }}>
+            {/* 제목 */}
+            <div style={{ fontSize: 15, fontWeight: "bold", letterSpacing: 4, borderBottom: "2px solid #111", paddingBottom: 4, marginBottom: 6 }}>
+              재 고 대 장
+            </div>
+            <div style={{ fontSize: 9, color: "#444", marginBottom: 8 }}>
+              기준일: <strong>{periodLabel}</strong> &nbsp;|&nbsp; 구분: <strong>{activeTab}</strong> &nbsp;|&nbsp; 인쇄일: {printedAt}
+            </div>
+
+            {/* 테이블 */}
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 9 }}>
+              <thead>
+                <tr>
+                  {cols.map((c) => {
+                    const isRight = ["prev_stock", "in", "out", "discard", "stock"].includes(c.key);
+                    return (
+                      <th key={c.key} style={{ padding: "4px 6px", border: "1px solid #d1d5db", background: "#f3f4f6", textAlign: isRight ? "right" : "left", whiteSpace: "nowrap" }}>
+                        {c.label}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {previewRows.length === 0 ? (
+                  <tr><td colSpan={cols.length} style={{ padding: 8, color: "#888", textAlign: "center" }}>데이터 없음</td></tr>
+                ) : (
+                  previewRows.map((r, idx) => {
+                    const sEA = intMin(r.start_stock_ea ?? 0, 0);
+                    const inEA = intMin(r.period_in_ea ?? 0, 0);
+                    const outEA = intMin(r.period_out_ea ?? 0, 0);
+                    const eEA = intMin(r.end_stock_ea ?? 0, 0);
+                    const unit = intMin(r.pack_unit ?? 0, 0);
+                    const discardEA = intMin(r.period_discard_ea ?? 0, 0);
+
+                    const cellMap: Record<string, React.ReactNode> = {
+                      name: <span style={{ fontWeight: 500 }}>{safeStr(r.product_name ?? "-")}</span>,
+                      food_type: safeStr(r.food_type ?? "-"),
+                      prev_stock: (
+                        <div style={{ textAlign: "right", lineHeight: 1.3 }}>
+                          {toBoxAndEa(sEA, unit).boxText && <div style={{ fontWeight: 600 }}>{toBoxAndEa(sEA, unit).boxText}</div>}
+                          <div>{toBoxAndEa(sEA, unit).eaText}</div>
+                        </div>
+                      ),
+                      in: (
+                        <div style={{ textAlign: "right", lineHeight: 1.3 }}>
+                          {toBoxAndEa(inEA, unit).boxText && <div style={{ fontWeight: 700 }}>{toBoxAndEa(inEA, unit).boxText}</div>}
+                          <div style={{ fontWeight: 700 }}>{toBoxAndEa(inEA, unit).eaText}</div>
+                        </div>
+                      ),
+                      out: (
+                        <div style={{ textAlign: "right", lineHeight: 1.3 }}>
+                          {toBoxAndEa(outEA, unit).boxText && <div style={{ fontWeight: 700 }}>{toBoxAndEa(outEA, unit).boxText}</div>}
+                          <div style={{ fontWeight: 700 }}>{toBoxAndEa(outEA, unit).eaText}</div>
+                        </div>
+                      ),
+                      discard: discardEA > 0 ? (
+                        <div style={{ textAlign: "right", lineHeight: 1.3, color: "#dc2626" }}>
+                          {toBoxAndEa(discardEA, unit).boxText && <div style={{ fontWeight: 700 }}>{toBoxAndEa(discardEA, unit).boxText}</div>}
+                          <div style={{ fontWeight: 700 }}>{toBoxAndEa(discardEA, unit).eaText}</div>
+                        </div>
+                      ) : <div style={{ textAlign: "right", color: "#ccc" }}>—</div>,
+                      stock: (
+                        <div style={{ textAlign: "right", lineHeight: 1.3 }}>
+                          {toBoxAndEa(eEA, unit).boxText && <div style={{ fontWeight: 700 }}>{toBoxAndEa(eEA, unit).boxText}</div>}
+                          <div style={{ fontWeight: 700 }}>{toBoxAndEa(eEA, unit).eaText}</div>
+                        </div>
+                      ),
+                      expiry: safeStr(r.expiry_date),
+                      barcode: safeStr(r.barcode),
+                      note: safeStr(r.note ?? ""),
+                    };
+
+                    return (
+                      <tr key={`${r.barcode}-${r.expiry_date}-${idx}`} style={{ borderTop: "1px solid #e5e7eb" }}>
+                        {cols.map((c) => (
+                          <td key={c.key} style={{ padding: "3px 6px", border: "1px solid #e5e7eb", verticalAlign: "middle" }}>
+                            {cellMap[c.key]}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white text-black p-6 print:bg-white print:text-black print:p-0 print:min-h-0">
-      {showNewWoModal && newWoNotifications.length > 0 && (
+      {printModalOpen && <PrintModal onClose={() => setPrintModalOpen(false)} />}
+
+{showNewWoModal && newWoNotifications.length > 0 && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-[480px] rounded-2xl border border-orange-200 bg-white shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between gap-3 bg-orange-500 px-5 py-4">
@@ -825,24 +1068,9 @@ const [adminLoaded, setAdminLoaded] = useState(false);
       ) : null}
 
       <div id="report-print-area">
-        <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold">재고대장</h1>
-              {isAdmin && (
-                <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
-                  ADMIN
-                </span>
-              )}
-            </div>
-            <div className="print-only" style={{ marginTop: 6 }}>
-              인쇄일: {printedAt}<br />
-              기간: {periodLabel}<br />
-              구분 필터: {categoryFilter === "ALL" ? "전체" : categoryFilter}
-            </div>
-            <p className="text-black/60 mt-2 print:text-black/70">
-              - 시작재고/기간입고합/기간출고합/종료재고를 LOT(소비기한) 단위로 표시합니다.
-            </p>
+            <h1 className="text-2xl font-semibold">재고대장</h1>
           </div>
         </div>
 
