@@ -551,6 +551,7 @@ export default function ManualClient() {
 
   const selectItem=(id:number)=>{
     if(viewLocked){alert("본인 확인 후 열람 가능합니다.");setShowPin(true);return;}
+    if(editing && selectedItem!==id && !confirm("작성 중인 내용이 있습니다. 저장하지 않고 이동하시겠습니까?")) return;
     const itemName=menuItems.find(m=>m.id===id)?.name||"";
     setSelectedItem(id);setEditing(false);setShowSidebar(false);
     logView(id,itemName);
@@ -684,7 +685,10 @@ export default function ManualClient() {
         const missing=missingCount(cat.id), total=totalItems(cat.id);
         return(
           <div key={cat.id} {...(isAdmin&&showManage?catDrag(catIdx):{})}>
-            <div onClick={()=>{ setSelectedCat(isSel?null:cat.id); setSelectedSub(null); setSelectedItem(null); }}
+           <div onClick={()=>{
+              if(editing && !confirm("작성 중인 내용이 있습니다. 저장하지 않고 이동하시겠습니까?")) return;
+              if(editing) setEditing(false);
+              setSelectedCat(isSel?null:cat.id); setSelectedSub(null); setSelectedItem(null); }}
               style={{padding:"10px 16px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",background:isSel?blueLt:"transparent",borderLeft:`3px solid ${isSel?blue:"transparent"}`,userSelect:"none"}}>
               <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
                 {isAdmin&&showManage&&<span style={{color:"#ccc",fontSize:13,cursor:"grab"}}>⠿</span>}
@@ -723,7 +727,10 @@ export default function ManualClient() {
                   const mSub=missingSubCount(sub.id), tSub=totalSubItems(sub.id);
                   return(
                     <div key={sub.id} {...(isAdmin&&showManage?subDrag(subIdx):{})}>
-                      <div onClick={()=>{ setSelectedSub(isSubSel?null:sub.id); setSelectedItem(null); }}
+                       <div onClick={()=>{
+                        if(editing && !confirm("작성 중인 내용이 있습니다. 저장하지 않고 이동하시겠습니까?")) return;
+                        if(editing) setEditing(false);
+                        setSelectedSub(isSubSel?null:sub.id); setSelectedItem(null); }}
                         style={{padding:"8px 14px 8px 28px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",background:isSubSel?blueMd:"transparent",borderLeft:`3px solid ${isSubSel?"#6b8ef5":"transparent"}`}}>
                         <div style={{display:"flex",alignItems:"center",gap:5,flex:1,minWidth:0}}>
                           {isAdmin&&showManage&&<span style={{color:"#ccc",fontSize:12,cursor:"grab"}}>⠿</span>}
