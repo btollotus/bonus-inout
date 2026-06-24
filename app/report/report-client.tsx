@@ -296,6 +296,8 @@ const [adminLoaded, setAdminLoaded] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [expirySaving, setExpirySaving] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [sortKey, setSortKey] = useState<"expiry" | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const printedAt = formatYYYYMMDD(new Date());
 
@@ -348,6 +350,13 @@ const [adminLoaded, setAdminLoaded] = useState(false);
       matchesSearch(safeStr(r.product_name), k) ||
       matchesSearch(safeStr(r.barcode), k)
     );
+  })
+  .sort((a, b) => {
+    if (sortKey === "expiry") {
+      const cmp = safeStr(a.expiry_date).localeCompare(safeStr(b.expiry_date));
+      return sortDir === "asc" ? cmp : -cmp;
+    }
+    return 0;
   });
 
   const periodLabel = startDay === endDay ? `${startDay}` : `${startDay} ~ ${endDay}`;
@@ -1412,17 +1421,34 @@ tr{page-break-inside:avoid;}
           <table className="w-full text-sm">
           <thead className="bg-black/5 print:bg-black/5">
 
-
-              <tr>
+          <tr>
                 {displayCols.map((col) => (
                   <th
                     key={col.key}
                     className={`p-3 print:p-2 ${isRightAlign(col.key as ColKey) ? "text-right" : "text-left"}`}
                   >
-                    {col.label}
+                    {col.key === "expiry" ? (
+                      <button
+                        className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                        onClick={() => {
+                          if (sortKey === "expiry") {
+                            setSortDir((d) => d === "asc" ? "desc" : "asc");
+                          } else {
+                            setSortKey("expiry");
+                            setSortDir("asc");
+                          }
+                        }}
+                      >
+                        {col.label}
+                        <span className="text-xs">
+                          {sortKey === "expiry" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+                        </span>
+                      </button>
+                    ) : col.label}
                   </th>
                 ))}
               </tr>
+             
             </thead>
 
             <tbody>
