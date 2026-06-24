@@ -130,7 +130,7 @@ export default function HumidityTempClient() {
         .select("*")
         .eq("log_date", logDate)
         .in("period", ["AM", "PM"])
-        .eq("role", "humidity_inspector");
+        .in("role", ["inspector", "humidity_inspector"]);
 
       const base = initEntries();
 
@@ -546,7 +546,7 @@ function HumidityQueryView() {
         .from("fridge_monitoring_signatures")
         .select("period,inspector_name,check_time")
         .eq("log_date", queryDate)
-        .eq("role", "humidity_inspector"),
+        .in("role", ["inspector", "humidity_inspector"]),
     ]);
     setLoading(false);
 
@@ -709,7 +709,7 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
     const dates = getDates(dateFrom, dateTo);
     const [{ data: logs }, { data: sigs }] = await Promise.all([
       supabase.from("humidity_temp_logs").select("*").in("log_date", dates),
-      supabase.from("fridge_monitoring_signatures").select("*").in("log_date", dates).eq("role", "humidity_inspector"),
+      supabase.from("fridge_monitoring_signatures").select("*").in("log_date", dates).in("role", ["inspector", "humidity_inspector"]),
     ]);
     setLoading(false);
 
