@@ -1098,7 +1098,24 @@ function getMaterialOptions(purpose: string): string[] {
               <div className="mb-1.5 text-xs font-semibold text-slate-500">코팅/핑크</div>
 
               <div className="flex flex-row gap-1.5">
-                {warmerSlots.filter(s => s.purpose === "코팅용도").map(renderSlot)}
+                {warmerSlots.filter(s => s.purpose === "코팅용도").map((s) => {
+                  const mt = slotStatus[s.id]?.materialType ?? null;
+                  const cls = mt === "팜유"
+                    ? "text-orange-700"
+                    : mt === "핑크"
+                    ? "text-pink-700"
+                    : mt === "다크"
+                    ? "text-amber-800"
+                    : mt === "화이트"
+                    ? "text-yellow-700"
+                    : "";
+                  return (
+                    <div key={s.id} style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "3px" }}>
+                      {renderSlot(s)}
+                      {mt && <span className={`text-[9px] font-semibold whitespace-nowrap ${cls}`}>{mt}</span>}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
