@@ -3237,7 +3237,7 @@ export function CompressorTab({ role, userId, showToast }: {
               </tr>
             </thead>
             <tbody>
-            {logs.map((log, idx) => {
+            {visibleLogs.map((log, idx) => {
                 const signSrc = log.worker_name ? SIGN_MAP[log.worker_name] ?? null : null;
                 return (
                   <tr key={log.id} style={{ background: idx % 2 === 0 ? "#fff" : "#fafafa" }}>
@@ -3258,9 +3258,9 @@ export function CompressorTab({ role, userId, showToast }: {
                   </tr>
                 );
               })}
-              {Array.from({ length: Math.max(0, 20 - logs.length) }).map((_, i) => (
-                <tr key={`empty-${i}`} style={{ background: (logs.length + i) % 2 === 0 ? "#fff" : "#fafafa" }}>
-                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center", whiteSpace:"nowrap" }}>{logs.length + i + 1}</td>
+              {Array.from({ length: Math.max(0, 20 - visibleLogs.length) }).map((_, i) => (
+                <tr key={`empty-${i}`} style={{ background: (visibleLogs.length + i) % 2 === 0 ? "#fff" : "#fafafa" }}>
+                  <td style={{ border:"1px solid #bbb", padding:"3px 6px", textAlign:"center", whiteSpace:"nowrap" }}>{visibleLogs.length + i + 1}</td>
                   <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}></td>
                   <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}></td>
                   <td style={{ border:"1px solid #bbb", padding:"3px 6px" }}></td>
