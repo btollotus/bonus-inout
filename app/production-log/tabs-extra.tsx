@@ -3380,6 +3380,9 @@ export function PetLedgerTab({ role, userId, showToast }: {
       else if (log.log_type === "transfer_used")   cumRaw       -= log.quantity;
       else if (log.log_type === "adjustment")       cumRaw       += log.quantity;
 
+      // 보정 행은 인쇄에서 제외
+      if (log.log_type === "adjustment" || (log.note ?? "").includes("초기재고 보정")) continue;
+
       const d = new Date(log.log_date + "T00:00:00+09:00");
       const dateLabel = `${d.getMonth()+1}/${d.getDate()}(${days[d.getDay()]})`;
       const typeLabel = PET_LOG_TYPE_LABELS[log.log_type] ?? log.log_type;
