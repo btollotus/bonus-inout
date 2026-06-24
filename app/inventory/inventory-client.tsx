@@ -7,8 +7,9 @@ import { createClient } from "@/lib/supabase/browser";
 import ScanClient from "@/app/scan/scan-client";
 import ReportClient from "@/app/report/report-client";
 import ProductsClient from "@/app/products/products-client";
+import DiscardClient from "@/app/discard/discard-client";
 
-type Tab = "SCAN" | "REPORT" | "PRODUCTS";
+type Tab = "SCAN" | "REPORT" | "DISCARD" | "PRODUCTS";
 
 export default function InventoryClient() {
   const searchParams = useSearchParams();
@@ -64,14 +65,16 @@ export default function InventoryClient() {
     const titles: Record<Tab, string> = {
       SCAN:     "재고관리 · 스캔 | BONUSMATE ERP",
       REPORT:   "재고관리 · 재고대장 | BONUSMATE ERP",
+      DISCARD:  "재고관리 · 폐기목록 | BONUSMATE ERP",
       PRODUCTS: "재고관리 · 품목/바코드 | BONUSMATE ERP",
     };
     document.title = titles[tab];
   }, [tab]);
 
   const tabs: { key: Tab; label: string; productsOnly?: boolean }[] = [
-    { key: "SCAN",     label: "📦 스캔"          },
-    { key: "REPORT",   label: "📋 재고대장"      },
+    { key: "SCAN",     label: "📦 스캔"           },
+    { key: "REPORT",   label: "📋 재고대장"       },
+    { key: "DISCARD",  label: "🗑️ 폐기목록", productsOnly: true },
     { key: "PRODUCTS", label: "🏷️ 품목/바코드", productsOnly: true },
   ];
 
@@ -141,6 +144,11 @@ export default function InventoryClient() {
       <div style={{ display: tab === "REPORT" ? "block" : "none" }}>
         <ReportClient />
       </div>
+      {canSeeProducts && (
+        <div style={{ display: tab === "DISCARD" ? "block" : "none" }}>
+          <DiscardClient />
+        </div>
+      )}
       {canSeeProducts && (
         <div style={{ display: tab === "PRODUCTS" ? "block" : "none" }}>
           <ProductsClient />
