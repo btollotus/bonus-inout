@@ -2240,7 +2240,7 @@ export function TempHumidityTab({ role, userId, showToast }: {
     setLoading(true);
     try {
       const { data: logs } = await supabase.from("humidity_temp_logs").select("*").eq("log_date", logDate).eq("period", period);
-      const { data: sigs } = await supabase.from("fridge_monitoring_signatures").select("*").eq("log_date", logDate).in("period", ["AM", "PM"]).eq("role", "humidity_inspector");
+      const { data: sigs } = await supabase.from("fridge_monitoring_signatures").select("*").eq("log_date", logDate).in("period", ["AM", "PM"]).in("role", ["inspector", "humidity_inspector"]);
       const base = initEntries();
       if (logs && logs.length > 0) {
         for (const log of logs) {
@@ -2474,7 +2474,7 @@ function HumidQueryView() {
     setLoading(true);
     const [{ data: logs }, { data: sigs }] = await Promise.all([
       supabase.from("humidity_temp_logs").select("*").eq("log_date", queryDate),
-      supabase.from("fridge_monitoring_signatures").select("period,inspector_name").eq("log_date", queryDate).eq("role", "humidity_inspector"),  
+      supabase.from("fridge_monitoring_signatures").select("period,inspector_name").eq("log_date", queryDate).in("role", ["inspector", "humidity_inspector"]),
     ]);
     setLoading(false);
     const am = {} as Record<HumidRoom, HumidLogEntry>;
