@@ -352,15 +352,20 @@ export default function HumidityTempClient() {
                 </div>
               </div>
 
-              <div className="ml-auto">
-                {currentInspector ? (
+              <div className="ml-auto flex items-center gap-3">
+                {amInspector && (
                   <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
-                    <span className="text-green-600 text-sm font-semibold">👤 {currentInspector.name}</span>
-                    <span className="text-xs text-green-500">
-                      {period === "AM" ? "오전" : "오후"} 점검자 확인됨
-                    </span>
+                    <span className="text-green-600 text-sm font-semibold">👤 {amInspector.name}</span>
+                    <span className="text-xs text-green-500">오전 점검자 확인됨</span>
                   </div>
-                ) : (
+                )}
+                {pmInspector && (
+                  <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
+                    <span className="text-green-600 text-sm font-semibold">👤 {pmInspector.name}</span>
+                    <span className="text-xs text-green-500">오후 점검자 확인됨</span>
+                  </div>
+                )}
+                {!currentInspector && (
                   <button
                     className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
                     onClick={() => {
