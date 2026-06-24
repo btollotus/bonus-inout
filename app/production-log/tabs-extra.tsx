@@ -2938,6 +2938,8 @@ export function CompressorTab({ role, userId, showToast }: {
   const [employees, setEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingCumId, setEditingCumId] = useState<string | null>(null);
+  const [editingCumVal, setEditingCumVal] = useState<string>("");
 
   // PIN
   const [inspector, setInspector] = useState<{ id: string; name: string } | null>(null);
@@ -2968,6 +2970,9 @@ export function CompressorTab({ role, userId, showToast }: {
     setLoading(false);
   }, [filterFrom, filterTo]);
 
+  const [showHidden, setShowHidden] = useState(false);
+  const visibleLogs = showHidden ? logs : logs.filter((l: any) => !l.is_hidden);
+
   useEffect(() => { loadLogs(); }, [loadLogs]);
 
   // 마지막 누계 계산
@@ -2980,6 +2985,25 @@ export function CompressorTab({ role, userId, showToast }: {
   }
 
   
+
+  async function toggleHidden(id: string, currentHidden: boolean) {
+    const { error } = await supabase.from("compressor_logs")
+      .update({ is_hidden: !currentHidden })
+      .eq("id", id);
+    if (error) return showToast("처리 실패: " + error.message, "error");
+    showToast(currentHidden ? "✅ 복원 완료!" : "🙈 숨김 처리 완료!");
+    loadLogs();
+  }
+
+  async function updateCumulative(id: string, newVal: number) {
+    if (isNaN(newVal) || newVal <= 0) return showToast("유효한 누계를 입력하세요.", "error");
+    const { error } = await supabase.from("compressor_logs")
+      .update({ cumulative_hours: newVal })
+      .eq("id", id);
+    if (error) return showToast("수정 실패: " + error.message, "error");
+    showToast("✅ 누계 수정 완료!");
+    loadLogs();
+  }
 
   async function deleteLog(id: string) {
     if (!confirm("이 기록을 삭제하시겠습니까?\n삭제 후 누계가 맞지 않을 수 있으니 주의하세요.")) return;
@@ -3025,6 +3049,12 @@ export function CompressorTab({ role, userId, showToast }: {
           </div>
           <button className={btn} onClick={loadLogs}>🔄 조회</button>
           <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
+          {isAdminOrSubadmin && (
+            <button
+              className={`rounded-lg border px-2.5 py-1 text-xs font-medium ${showHidden ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+              onClick={() => setShowHidden((v) => !v)}
+            >{showHidden ? "👁 숨김 포함 보기 중" : "👁 숨김 포함 보기"}</button>
+          )}
 
           </div>
       </div>
@@ -3076,12 +3106,29 @@ export function CompressorTab({ role, userId, showToast }: {
                 </tr>
               </thead>
               <tbody>
-                {logs.map((log, idx) => (
-                  <tr key={log.id} className={`border-b border-slate-100 hover:bg-slate-50 ${log.is_damaged ? "bg-red-50" : ""}`}>
+              {visibleLogs.map((log, idx) => (
+                  <tr key={log.id} className={`border-b border-slate-100 hover:bg-slate-50 ${(log as any).is_hidden ? "opacity-40 bg-slate-100" : log.is_damaged ? "bg-red-50" : ""}`}>
                     <td className="py-2 px-3 text-center text-xs text-slate-400">{idx + 1}</td>
-                    <td className="py-2 px-3 tabular-nums text-slate-700">{log.log_date}</td>
+                    <td className="py-2 px-3 tabular-nums text-slate-700">{log.log_date}{(log as any).is_hidden && <span className="ml-1 text-[9px] text-slate-400">(숨김)</span>}</td>
                     <td className="py-2 px-3 text-right tabular-nums font-medium">{Number(log.work_hours).toFixed(1)} h</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-blue-700 font-semibold">{Number(log.cumulative_hours).toFixed(1)} h</td>
+                    <td className="py-2 px-3 text-right tabular-nums">
+                      {editingCumId === log.id ? (
+                        <div className="flex items-center gap-1 justify-end">
+                          <input className="w-20 rounded border border-blue-300 px-1.5 py-0.5 text-xs text-right tabular-nums focus:outline-none"
+                            inputMode="decimal" value={editingCumVal}
+                            onChange={(e) => setEditingCumVal(e.target.value)} />
+                          <button className="rounded border border-blue-400 bg-blue-600 px-1.5 py-0.5 text-[10px] text-white hover:bg-blue-700"
+                            onClick={() => { updateCumulative(log.id, Number(editingCumVal)); setEditingCumId(null); }}>저장</button>
+                          <button className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400"
+                            onClick={() => setEditingCumId(null)}>취소</button>
+                        </div>
+                      ) : (
+                        <span
+                          className={`tabular-nums font-semibold text-blue-700 ${isAdminOrSubadmin ? "cursor-pointer hover:underline decoration-dotted" : ""}`}
+                          onClick={() => { if (isAdminOrSubadmin) { setEditingCumId(log.id); setEditingCumVal(String(Number(log.cumulative_hours))); } }}
+                        >{Number(log.cumulative_hours).toFixed(1)} h</span>
+                      )}
+                    </td>
                     <td className="py-2 px-3 text-center">
                     {log.is_damaged
                         ? <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">○ 파손</span>
@@ -3096,7 +3143,11 @@ export function CompressorTab({ role, userId, showToast }: {
                     </td>
                     <td className="py-2 px-3 text-xs text-slate-500">{log.note ?? "—"}</td>
                     {isAdminOrSubadmin && (
-                      <td className="py-2 px-3 text-center">
+                      <td className="py-2 px-3 text-center whitespace-nowrap">
+                        <button className="text-[10px] text-slate-400 hover:text-amber-500 mr-1"
+                          onClick={() => toggleHidden(log.id, (log as any).is_hidden)}>
+                          {(log as any).is_hidden ? "복원" : "숨김"}
+                        </button>
                         <button className="text-[10px] text-slate-300 hover:text-red-500" onClick={() => deleteLog(log.id)}>✕</button>
                       </td>
                     )}
@@ -3107,10 +3158,10 @@ export function CompressorTab({ role, userId, showToast }: {
                 <tr className="border-t border-slate-200 bg-slate-50">
                   <td colSpan={2} className="py-2 px-3 text-xs font-semibold text-slate-500">합계</td>
                   <td className="py-2 px-3 text-right tabular-nums text-sm font-bold text-slate-700">
-                    {logs.reduce((s, l) => s + Number(l.work_hours), 0).toFixed(1)} h
+                    {visibleLogs.reduce((s, l) => s + Number(l.work_hours), 0).toFixed(1)} h
                   </td>
                   <td className="py-2 px-3 text-right tabular-nums text-sm font-bold text-blue-700">
-                    {logs.length > 0 ? Number(logs[logs.length - 1].cumulative_hours).toFixed(1) + " h" : "—"}
+                    {visibleLogs.length > 0 ? Number(visibleLogs[visibleLogs.length - 1].cumulative_hours).toFixed(1) + " h" : "—"}
                   </td>
                   <td colSpan={isAdminOrSubadmin ? 5 : 4} />
                 </tr>
