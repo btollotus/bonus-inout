@@ -1364,18 +1364,19 @@ tr{page-break-inside:avoid;}
             </div>
           )}
 
-          <div>
-            <label className="text-sm text-black/70">구분 필터</label>
-            <select
-              className="mt-1 w-44 rounded-xl bg-white border border-black/15 px-3 py-2 outline-none"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value as Category)}
-            >
-              <option value="ALL">전체</option>
-              <option value="기성">기성</option>
-              <option value="업체">업체</option>
-              <option value="전사지">전사지</option>
-            </select>
+<div className="flex items-end gap-1">
+            {(["ALL", "기성", "업체", "전사지"] as Category[]).map((cat) => (
+              <button
+                key={cat}
+                className={`rounded-xl px-3 py-2 text-sm font-semibold border transition-all
+                  ${categoryFilter === cat
+                    ? "border-blue-500 bg-blue-600 text-white"
+                    : "border-black/15 bg-white text-black/70 hover:bg-black/5"}`}
+                onClick={() => setCategoryFilter(cat)}
+              >
+                {cat === "ALL" ? "전체" : cat}
+              </button>
+            ))}
           </div>
 
           <button
@@ -1402,12 +1403,20 @@ tr{page-break-inside:avoid;}
             PDF/인쇄
           </button>
 
-          <input
-            className="w-44 rounded-xl border border-black/15 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
-            placeholder="제품명 또는 바코드 검색"
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
-          />
+          <div className="relative w-44">
+            <input
+              className="w-full rounded-xl border border-black/15 bg-white px-3 py-2 pr-7 text-sm outline-none focus:border-blue-400"
+              placeholder="제품명 또는 바코드 검색"
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+            />
+            {searchKeyword && (
+              <button
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-black/30 hover:text-black/60"
+                onClick={() => setSearchKeyword("")}
+              >✕</button>
+            )}
+          </div>
 
           {msg && (
             <div className={`text-sm ${msg.startsWith("✅") || msg.startsWith("🗑️") ? "text-green-700" : "text-red-600"}`}>
