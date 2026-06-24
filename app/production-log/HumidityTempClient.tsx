@@ -125,12 +125,12 @@ export default function HumidityTempClient() {
         .eq("log_date", logDate)
         .eq("period", period);
 
-      const { data: sigs } = await supabase
+        const { data: sigs } = await supabase
         .from("fridge_monitoring_signatures")
         .select("*")
         .eq("log_date", logDate)
         .in("period", ["AM", "PM"])
-        .eq("role", "inspector");
+        .eq("role", "humidity_inspector");
 
       const base = initEntries();
 
@@ -226,12 +226,11 @@ export default function HumidityTempClient() {
       const sigPayload = {
         log_date: logDate,
         period,
-        role: "inspector",
+        role: "humidity_inspector",
         inspector_id: currentInspector.id,
         inspector_name: currentInspector.name,
         signature_data: null,
       };
-      console.log("서명 저장 payload:", JSON.stringify(sigPayload));
       const { error: sigError } = await supabase.from("fridge_monitoring_signatures").upsert(
         sigPayload,
         { onConflict: "log_date,period,role" }
@@ -547,7 +546,7 @@ function HumidityQueryView() {
         .from("fridge_monitoring_signatures")
         .select("period,inspector_name,check_time")
         .eq("log_date", queryDate)
-        .eq("role", "inspector"),
+        .eq("role", "humidity_inspector"),
     ]);
     setLoading(false);
 
@@ -710,7 +709,7 @@ function PrintModal({ logDate, onClose }: { logDate: string; onClose: () => void
     const dates = getDates(dateFrom, dateTo);
     const [{ data: logs }, { data: sigs }] = await Promise.all([
       supabase.from("humidity_temp_logs").select("*").in("log_date", dates),
-      supabase.from("fridge_monitoring_signatures").select("*").in("log_date", dates).eq("role", "inspector"),
+      supabase.from("fridge_monitoring_signatures").select("*").in("log_date", dates).eq("role", "humidity_inspector"),
     ]);
     setLoading(false);
 
