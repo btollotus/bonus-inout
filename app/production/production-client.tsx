@@ -3234,24 +3234,24 @@ const totalOrder = items
                        newLots[tlIdx] = { ...newLots[tlIdx], qty: e.target.value.replace(/[^\d]/g, "") };
                        return { ...prev, [item.id]: { ...prev[item.id], transfer_lots: newLots } };
                      })} />
-                   {lotInfo && tl.qty && (
-                     <div className="text-[11px] text-slate-500 shrink-0">차감 후: <b className={effectiveRemaining - toInt(tl.qty) < 0 ? "text-red-600" : "text-blue-700"}>{(effectiveRemaining - toInt(tl.qty)).toLocaleString()} EA</b></div>
-                   )}
-                 </div>
-               </div>
-             );
-           })}
-         </div>
-       )}
-       {/* lot 추가 목록 */}
-       {!(selectedWo?.status === "완료" && !isEditMode) && (
-         <div>
-           {transferLotSearching[item.id] ? (
-             <div className="text-xs text-slate-400 py-1">불러오는 중...</div>
-           ) : (() => {
-             const selectedLotIds = new Set((prodInputs[item.id]?.transfer_lots ?? []).map((l) => l.lot_id));
-             const availableLots = (transferLotOptions[item.id] ?? []).filter((l) => !selectedLotIds.has(l.lot_id));
-             if (availableLots.length === 0) return <div className="text-xs text-slate-400">{selectedLotIds.size > 0 ? "추가할 재고 없음" : "관련 재고 없음"}</div>;
+                   {lotInfo && tl.qty && selectedWo?.status !== "완료" && (
+                                      <div className="text-[11px] text-slate-500 shrink-0">차감 후: <b className={effectiveRemaining - toInt(tl.qty) < 0 ? "text-red-600" : "text-blue-700"}>{(effectiveRemaining - toInt(tl.qty)).toLocaleString()} EA</b></div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {/* lot 추가 목록 */}
+                        {!(selectedWo?.status === "완료" && !isEditMode) && (
+                          <div>
+                            {transferLotSearching[item.id] ? (
+                              <div className="text-xs text-slate-400 py-1">불러오는 중...</div>
+                            ) : (() => {
+                              const selectedLotIds = new Set((prodInputs[item.id]?.transfer_lots ?? []).map((l) => l.lot_id));
+                              const availableLots = (transferLotOptions[item.id] ?? []).filter((l) => !selectedLotIds.has(l.lot_id));
+                              if (availableLots.length === 0) return <div className="text-xs text-slate-400">{selectedLotIds.size > 0 ? "추가할 재고 없음" : "관련 재고 없음"}</div>;
              return (
                <div className="rounded-lg border border-slate-200 bg-white overflow-hidden max-h-44 overflow-y-auto">
                  {availableLots.map((lot) => (
