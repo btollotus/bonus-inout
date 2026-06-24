@@ -3049,12 +3049,7 @@ export function CompressorTab({ role, userId, showToast }: {
           </div>
           <button className={btn} onClick={loadLogs}>🔄 조회</button>
           <button className={btnSm} onClick={handlePrint}>🖨️ 인쇄</button>
-          {isAdminOrSubadmin && (
-            <button
-              className={`rounded-lg border px-2.5 py-1 text-xs font-medium ${showHidden ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-              onClick={() => setShowHidden((v) => !v)}
-            >{showHidden ? "👁 숨김 포함 보기 중" : "👁 숨김 포함 보기"}</button>
-          )}
+          
 
           </div>
       </div>
