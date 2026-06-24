@@ -1547,6 +1547,16 @@ if (dupCheck && dupCheck.length > 0) {
               return;
             }
           }
+          // work_order_items에 transfer_lots 저장
+          if (transferLots.length > 0) {
+            const lotsForDb = transferLots.map((l) => ({ lot_id: l.lot_id, qty: toInt(l.qty) }));
+            const totalQty = lotsForDb.reduce((s, l) => s + l.qty, 0);
+            await supabase.from("work_order_items").update({
+              transfer_lot_id: lotsForDb[0]?.lot_id ?? null,
+              transfer_qty: totalQty > 0 ? totalQty : null,
+              transfer_lots: lotsForDb,
+            }).eq("id", item.id);
+          }
         }
         // 분사: pet_stock_logs — 단일 insert
         const sprayProdQtyNum = toInt(sprayProdQty);
