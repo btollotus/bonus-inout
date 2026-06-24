@@ -1623,6 +1623,11 @@ if (dupCheck && dupCheck.length > 0) {
         setIsCompleting(false);
         return;
       }
+      if (subType === "분사" && (!sprayProdQty || toInt(sprayProdQty) <= 0)) {
+        alert("분사완료 수량을 입력 후 생산완료 처리해주세요.");
+        setIsCompleting(false);
+        return;
+      }
       setPinProgressPending(() => async (name: string) => {
         await doCompleteSprayCoating(name, subType);
       });
