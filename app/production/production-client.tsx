@@ -1159,7 +1159,36 @@ export default function ProductionClient() {
       for (const item of (wo.work_order_items ?? [])) {
         const name = (item.sub_items ?? [])[0]?.name ?? "";
         if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
-        if ((item as any).transfer_lots?.length > 0 || item.transfer_lot_id) continue;
+        const savedLots = ((item as any).transfer_lots ?? []) as { lot_id: string; qty: number }[];
+        if (savedLots.length > 0 || item.transfer_lot_id) {
+          // 이미 저장된 코팅-레이즈 lot 정보를 조회해 transferLotOptions에 세팅
+          const savedLotIds = savedLots.map((l) => l.lot_id).filter(Boolean);
+          if (savedLotIds.length > 0) {
+            (async () => {
+              const { data: lotsData } = await supabase.from("lots").select("id, variant_id, expiry_date").in("id", savedLotIds);
+              const variantIds = (lotsData ?? []).map((l: any) => l.variant_id).filter(Boolean);
+              const { data: variantsData } = await supabase.from("product_variants").select("id, variant_name").in("id", variantIds);
+              const variantMap: Record<string, string> = {};
+              for (const v of variantsData ?? []) variantMap[(v as any).id] = (v as any).variant_name ?? "";
+              const { data: movData } = await supabase.from("movements").select("lot_id, type, qty").in("lot_id", savedLotIds);
+              const remainingMap: Record<string, number> = {};
+              for (const m of movData ?? []) {
+                if (!remainingMap[m.lot_id]) remainingMap[m.lot_id] = 0;
+                if (m.type === "IN") remainingMap[m.lot_id] += m.qty;
+                else remainingMap[m.lot_id] -= m.qty;
+              }
+              const result = (lotsData ?? []).map((l: any) => ({
+                lot_id: l.id,
+                expiry_date: l.expiry_date ?? "",
+                remaining_qty: remainingMap[l.id] ?? 0,
+                variant_name: variantMap[l.variant_id] ?? "",
+                barcode: "",
+              }));
+              setTransferLotOptions((prev) => ({ ...prev, [item.id]: result }));
+            })();
+          }
+          continue;
+        }
         searchTransferLots(item.id, "코팅-레이즈", false, true);
       }
     }
