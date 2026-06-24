@@ -253,7 +253,34 @@ export default function ReportClient() {
   }, []); // eslint-disable-line
 
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSubAdmin, setIsSubAdmin] = useState(false);
 const [adminLoaded, setAdminLoaded] = useState(false);
+
+  // ── PIN 모달 state ──
+  type PinModalState = {
+    open: boolean;
+    targetAction: "edit" | "expiry" | "delete" | "discard" | null;
+    targetRow: AggRow | null;
+    employees: { id: string; name: string; pin: string | null }[];
+    selectedEmp: { id: string; name: string; pin: string | null } | null;
+    pinInput: string;
+    pinError: string;
+  };
+  const [pinModal, setPinModal] = useState<PinModalState>({
+    open: false, targetAction: null, targetRow: null,
+    employees: [], selectedEmp: null, pinInput: "", pinError: "",
+  });
+
+  // ── 폐기 모달 state ──
+  type DiscardModalState = {
+    open: boolean;
+    row: AggRow | null;
+    qty: string;
+    saving: boolean;
+  };
+  const [discardModal, setDiscardModal] = useState<DiscardModalState>({
+    open: false, row: null, qty: "", saving: false,
+  });
 
   // ── 수정 모달 state (소비기한 제외) ──
   const [editModal, setEditModal] = useState<EditModalState>({
@@ -282,11 +309,28 @@ const [adminLoaded, setAdminLoaded] = useState(false);
         .eq("user_id", user.id)
         .limit(1)
         .maybeSingle();
-      setIsAdmin(data?.role === "ADMIN");
-      setAdminLoaded(true);
+        setIsAdmin(data?.role === "ADMIN");
+        setIsSubAdmin(data?.role === "SUBADMIN");
+        setAdminLoaded(true);
     })();
   }, []);
   
+  // employees(PIN 검증용) 로드
+  useEffect(() => {
+    if (!adminLoaded) return;
+    supabase
+      .from("employees")
+      .select("id,name,pin")
+      .is("resign_date", null)
+      .order("name")
+      .then(({ data }) => {
+        const sorted = (data ?? [])
+          .filter((e: any) => !["강미라", "조대성"].includes(e.name))
+          .sort((a: any, b: any) => (a.name ?? "").localeCompare(b.name ?? "", "ko"));
+        setPinModal((prev) => ({ ...prev, employees: sorted as any }));
+      });
+  }, [adminLoaded]); // eslint-disable-line
+
   useEffect(() => {
     if (adminLoaded) fetchReport();
   }, [adminLoaded]); // eslint-disable-line
@@ -520,6 +564,96 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     setExpiryModal({ open: true, row: r, newExpiry: r.expiry_date });
   }
 
+  // ── PIN 모달 열기 ──
+  function openPinModal(action: PinModalState["targetAction"], row: AggRow) {
+    setPinModal((prev) => ({
+      ...prev,
+      open: true,
+      targetAction: action,
+      targetRow: row,
+      selectedEmp: null,
+      pinInput: "",
+      pinError: "",
+    }));
+  }
+
+  function closePinModal() {
+    setPinModal((prev) => ({
+      ...prev,
+      open: false,
+      targetAction: null,
+      targetRow: null,
+      selectedEmp: null,
+      pinInput: "",
+      pinError: "",
+    }));
+  }
+
+  function handlePinDigitInventory(digit: string) {
+    if (pinModal.pinInput.length >= 4) return;
+    const next = pinModal.pinInput + digit;
+    setPinModal((prev) => ({ ...prev, pinInput: next, pinError: "" }));
+    if (next.length === 4) {
+      setTimeout(() => verifyPinInventory(next), 100);
+    }
+  }
+
+  function verifyPinInventory(pin: string) {
+    const emp = pinModal.selectedEmp;
+    if (!emp) return;
+    if (!emp.pin) {
+      setPinModal((prev) => ({ ...prev, pinError: "PIN이 설정되지 않았습니다.", pinInput: "" }));
+      return;
+    }
+    if (emp.pin !== pin) {
+      setPinModal((prev) => ({ ...prev, pinError: "PIN이 올바르지 않습니다.", pinInput: "" }));
+      return;
+    }
+    // 인증 성공
+    const { targetAction, targetRow } = pinModal;
+    closePinModal();
+    if (!targetRow) return;
+    if (targetAction === "edit")    openEdit(targetRow);
+    if (targetAction === "expiry")  openExpiryModal(targetRow);
+    if (targetAction === "delete")  deleteRow(targetRow);
+    if (targetAction === "discard") setDiscardModal({ open: true, row: targetRow, qty: "", saving: false });
+  }
+
+  // ── 폐기 저장 ──
+  async function saveDiscard() {
+    const { row, qty } = discardModal;
+    if (!row || !row.lot_id) {
+      setMsg("lot 정보가 없어 폐기할 수 없습니다.");
+      return;
+    }
+    const qtyNum = intMin(Number(qty), 0);
+    if (!qtyNum || qtyNum <= 0) { setMsg("폐기 수량을 입력하세요."); return; }
+    if (qtyNum > intMin(row.end_stock_ea, 0)) {
+      setMsg(`폐기 수량(${qtyNum})이 현재 재고(${intMin(row.end_stock_ea, 0)})를 초과합니다.`);
+      return;
+    }
+    setDiscardModal((prev) => ({ ...prev, saving: true }));
+    setMsg(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase.from("movements").insert({
+        lot_id: row.lot_id,
+        type: "DISCARD",
+        qty: qtyNum,
+        happened_at: `${startDay}T00:00:00+09:00`,
+        note: `재고대장 폐기 처리`,
+        created_by: user?.id ?? null,
+      });
+      if (error) throw new Error(error.message);
+      setMsg(`✅ 폐기 완료 — ${row.product_name} ${qtyNum} EA`);
+      setDiscardModal({ open: false, row: null, qty: "", saving: false });
+      await fetchReport();
+    } catch (e: any) {
+      setMsg("폐기 오류: " + (e?.message ?? e));
+      setDiscardModal((prev) => ({ ...prev, saving: false }));
+    }
+  }
+
   // ── 소비기한 저장 (LOT 병합 처리 포함) ──
   async function saveExpiry() {
     const { row, newExpiry } = expiryModal;
@@ -649,7 +783,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
   const cols = getCols(categoryFilter);
   const isRightAlign = (key: ColKey) => ["prev_stock", "in", "out", "discard", "stock"].includes(key);
 
-  const displayCols = isAdmin
+  const displayCols = (isAdmin || isSubAdmin)
     ? [...cols, { key: "actions" as any, label: "작업" }]
     : cols;
 
@@ -959,6 +1093,118 @@ tr{page-break-inside:avoid;}
         .print-only { display: none; }
       `}</style>
 
+      {/* ── PIN 인증 모달 ── */}
+      {pinModal.open && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl p-6">
+            {!pinModal.selectedEmp ? (
+              <>
+                <div className="mb-4 font-bold text-base text-slate-700 text-center">
+                  {pinModal.targetAction === "discard" ? "🗑️ 폐기"
+                    : pinModal.targetAction === "edit" ? "✏️ 수정"
+                    : pinModal.targetAction === "expiry" ? "📅 소비기한 수정"
+                    : "🗑️ 삭제"} — 작업자 선택
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  {pinModal.employees.map((emp) => (
+                    <button key={emp.id}
+                      className="rounded-xl border-2 border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 active:scale-95 transition-all text-center"
+                      onClick={() => setPinModal((prev) => ({ ...prev, selectedEmp: emp, pinInput: "", pinError: "" }))}>
+                      {emp.name}
+                      <div className="text-[10px] font-normal text-slate-400 mt-0.5">{emp.pin ? "PIN 설정됨" : "PIN 미설정"}</div>
+                    </button>
+                  ))}
+                </div>
+                <button className="w-full text-xs text-slate-400 hover:text-slate-600" onClick={closePinModal}>취소</button>
+              </>
+            ) : (
+              <>
+                <button className="mb-4 text-xs text-slate-400 hover:text-slate-600"
+                  onClick={() => setPinModal((prev) => ({ ...prev, selectedEmp: null, pinInput: "", pinError: "" }))}>
+                  ← 작업자 선택으로
+                </button>
+                <div className="mb-1 font-semibold text-base text-slate-700 text-center">{pinModal.selectedEmp.name}</div>
+                <div className="mb-4 text-sm text-slate-500 text-center">PIN 4자리를 입력하세요</div>
+                <div className="flex justify-center gap-3 mb-4">
+                  {[0,1,2,3].map((i) => (
+                    <div key={i} className={`w-10 h-10 rounded-xl border-2 flex items-center justify-center text-lg font-bold transition-all
+                      ${pinModal.pinInput.length > i ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-300"}`}>
+                      {pinModal.pinInput.length > i ? "●" : "○"}
+                    </div>
+                  ))}
+                </div>
+                {pinModal.pinError && <div className="mb-3 text-center text-xs text-red-500">{pinModal.pinError}</div>}
+                <div className="grid grid-cols-3 gap-2">
+                  {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => (
+                    <button key={i}
+                      className={`rounded-xl border py-3 text-lg font-semibold transition-all
+                        ${d === "" ? "invisible" : "border-slate-200 bg-white hover:bg-slate-50 active:bg-slate-100 active:scale-95"}`}
+                      onClick={() => {
+                        if (d === "⌫") { setPinModal((prev) => ({ ...prev, pinInput: prev.pinInput.slice(0, -1), pinError: "" })); }
+                        else if (d !== "") handlePinDigitInventory(d);
+                      }}>
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 폐기 모달 ── */}
+      {discardModal.open && discardModal.row ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-black/10 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-black/10 px-5 py-4">
+              <div className="font-semibold text-orange-700">🗑️ 폐기 처리</div>
+              <button
+                className="rounded-lg border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5"
+                onClick={() => setDiscardModal({ open: false, row: null, qty: "", saving: false })}
+              >닫기</button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="text-sm font-medium text-slate-700 truncate">{discardModal.row.product_name}</div>
+              <div className="flex gap-4 text-xs text-slate-500">
+                <span>소비기한: <span className="font-semibold text-slate-700">{discardModal.row.expiry_date}</span></span>
+                <span>현재 재고: <span className="font-semibold text-slate-700">{fmt(intMin(discardModal.row.end_stock_ea))} EA</span></span>
+              </div>
+              {!discardModal.row.lot_id && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+                  ⚠ lot 정보를 찾을 수 없습니다. 하루 조회 모드로 다시 조회해주세요.
+                </div>
+              )}
+              <div>
+                <div className="mb-1 text-xs text-black/60">폐기 수량 (EA) *</div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="w-full rounded-xl border border-black/15 px-3 py-2 text-sm text-right tabular-nums outline-none focus:border-orange-400"
+                  value={discardModal.qty}
+                  onChange={(e) => setDiscardModal((prev) => ({ ...prev, qty: e.target.value.replace(/[^\d]/g, "") }))}
+                  placeholder="0"
+                />
+              </div>
+              <div className="rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-xs text-orange-700">
+                ⚠ DISCARD movement가 기록됩니다. 현재 기준일({startDay}) 기준으로 처리됩니다.
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-black/10 px-5 py-3">
+              <button
+                className="rounded-xl border border-black/15 px-4 py-2 text-sm hover:bg-black/5"
+                onClick={() => setDiscardModal({ open: false, row: null, qty: "", saving: false })}
+              >취소</button>
+              <button
+                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+                onClick={saveDiscard}
+                disabled={discardModal.saving || !discardModal.row.lot_id || !discardModal.qty}
+              >{discardModal.saving ? "처리 중..." : "폐기 처리"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* ── 수정 모달 (제품명·식품유형·재고수량) ── */}
       {editModal.open && editModal.row ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -1237,20 +1483,28 @@ tr{page-break-inside:avoid;}
                     expiry: safeStr(r.expiry_date),
                     barcode: safeStr(r.barcode),
                     note: safeStr(r.note ?? ""),
-                    actions: isAdmin ? (
+                    actions: (isAdmin || isSubAdmin) ? (
                       <div className="flex gap-1 no-print">
+                        {isAdmin && (
+                          <>
+                            <button
+                              className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                              onClick={() => openPinModal("edit", r)}
+                            >수정</button>
+                            <button
+                              className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                              onClick={() => openPinModal("expiry", r)}
+                            >소비기한</button>
+                            <button
+                              className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
+                              onClick={() => openPinModal("delete", r)}
+                            >삭제</button>
+                          </>
+                        )}
                         <button
-                          className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
-                          onClick={() => openEdit(r)}
-                        >수정</button>
-                        <button
-                          className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
-                          onClick={() => openExpiryModal(r)}
-                        >소비기한</button>
-                        <button
-                          className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
-                          onClick={() => deleteRow(r)}
-                        >삭제</button>
+                          className="rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-100"
+                          onClick={() => openPinModal("discard", r)}
+                        >폐기</button>
                       </div>
                     ) : null,
                   };
