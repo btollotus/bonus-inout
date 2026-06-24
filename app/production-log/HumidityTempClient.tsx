@@ -223,19 +223,21 @@ export default function HumidityTempClient() {
       if (error) throw error;
 
       // 점검자 사인 기록
+      const sigPayload = {
+        log_date: logDate,
+        period,
+        role: "inspector",
+        inspector_id: currentInspector.id,
+        inspector_name: currentInspector.name,
+        signature_data: null,
+      };
+      console.log("서명 저장 payload:", JSON.stringify(sigPayload));
       const { error: sigError } = await supabase.from("fridge_monitoring_signatures").upsert(
-        {
-          log_date: logDate,
-          period,
-          role: "inspector",
-          inspector_id: currentInspector.id,
-          inspector_name: currentInspector.name,
-          signature_data: null,
-        },
+        sigPayload,
         { onConflict: "log_date,period,role" }
       );
       if (sigError) {
-        console.error("서명 저장 오류:", sigError.message);
+        console.error("서명 저장 오류:", sigError.message, sigError.details, sigError.hint);
         showToast("점검자 서명 저장 실패: " + sigError.message, "error");
       }
 
