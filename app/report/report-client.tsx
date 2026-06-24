@@ -442,7 +442,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
       );
 
       // ADMIN: lot_id·variant_id 매핑 (쿼리 2번으로 처리)
-      if (isAdmin && listAgg.length > 0) {
+      if ((isAdmin || isSubAdmin) && listAgg.length > 0) {
         const barcodes = [...new Set(listAgg.map((r) => r.barcode).filter(Boolean))];
 
         const { data: pvList } = await supabase
