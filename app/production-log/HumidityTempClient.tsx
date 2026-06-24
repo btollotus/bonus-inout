@@ -234,7 +234,10 @@ export default function HumidityTempClient() {
         },
         { onConflict: "log_date,period,role" }
       );
-      if (sigError) console.error("서명 저장 오류:", sigError.message);
+      if (sigError) {
+        console.error("서명 저장 오류:", sigError.message);
+        showToast("점검자 서명 저장 실패: " + sigError.message, "error");
+      }
 
       showToast("✅ 저장 완료!");
       await loadData();
