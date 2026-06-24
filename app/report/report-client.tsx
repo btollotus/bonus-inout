@@ -327,7 +327,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
       .order("name")
       .then(({ data }) => {
         const sorted = (data ?? [])
-          .filter((e: any) => !["강미라", "조대성"].includes(e.name))
+          .filter((e: any) => !["강미라"].includes(e.name))
           .sort((a: any, b: any) => (a.name ?? "").localeCompare(b.name ?? "", "ko"));
         setPinModal((prev) => ({ ...prev, employees: sorted as any }));
       });
