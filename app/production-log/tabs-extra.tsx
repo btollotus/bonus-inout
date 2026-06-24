@@ -3740,7 +3740,10 @@ export function PetLedgerTab({ role, userId, showToast }: {
                   </tr>
                 </thead>
                 <tbody>
-                  {logRows.map(({ log, cumRaw, cumCoating, cumSprayProd, cumSpraySale }, idx) => {
+                {logRows.filter(({ log }) =>
+                    log.log_type !== "adjustment" &&
+                    !(log.note ?? "").includes("초기재고 보정")
+                  ).map(({ log, cumRaw, cumCoating, cumSprayProd, cumSpraySale }, idx) => {
                     const d = new Date(log.log_date + "T00:00:00+09:00");
                     const dateLabel = `${d.getMonth()+1}/${d.getDate()}`;
                     const isEven = idx % 2 === 0;
