@@ -3269,6 +3269,8 @@ export function PetLedgerTab({ role, userId, showToast }: {
   const [saleCutQty, setSaleCutQty] = useState("");
   const [saleCutSaving, setSaleCutSaving] = useState(false);
   const [editingSaleCut, setEditingSaleCut] = useState<{ logId: string; qty: string } | null>(null);
+  const [adjustingPet, setAdjustingPet] = useState<{ logId: string; inputQty: string; currentCumRaw: number } | null>(null);
+  const [adjustPetSaving, setAdjustPetSaving] = useState(false);
   const [printUsedPopup, setPrintUsedPopup] = useState<{
     note: string | null;
     woInfo: { work_order_no: string; client_name: string; product_name: string; food_type: string | null } | null;
@@ -3844,7 +3846,58 @@ export function PetLedgerTab({ role, userId, showToast }: {
                           </button>
                         ) : ""}
                       </td>
-                       <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{cumRaw.toLocaleString()}</td>
+                       {/* PET 열 — 클릭 시 수량 조정 */}
+                       {adjustingPet?.logId === log.id ? (
+                          <td className="border border-slate-200 px-1 py-1" colSpan={1}>
+                            <div className="flex items-center gap-1">
+                              <input
+                                className="w-20 rounded border border-amber-300 px-1.5 py-0.5 text-xs text-right tabular-nums focus:border-amber-500 focus:outline-none"
+                                inputMode="numeric"
+                                placeholder={cumRaw.toLocaleString()}
+                                value={adjustingPet.inputQty}
+                                onChange={(e) => setAdjustingPet({ ...adjustingPet, inputQty: e.target.value.replace(/[^\d]/g, "") })}
+                              />
+                              <button
+                                className="rounded border border-amber-400 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
+                                disabled={adjustPetSaving}
+                                onClick={() => {
+                                  const inputVal = Number(adjustingPet.inputQty);
+                                  if (!adjustingPet.inputQty || isNaN(inputVal)) return showToast("수량을 입력하세요.", "error");
+                                  const delta = inputVal - adjustingPet.currentCumRaw;
+                                  if (delta === 0) { setAdjustingPet(null); return showToast("현재고와 동일합니다.", "error"); }
+                                  requirePin(async (actionBy) => {
+                                    setAdjustPetSaving(true);
+                                    const { error } = await supabase.from("pet_stock_logs").insert({
+                                      log_date: log.log_date,
+                                      log_type: "adjustment",
+                                      quantity: delta,
+                                      defect_qty: 0,
+                                      note: `PET재고조정 — ${actionBy} (${adjustingPet.currentCumRaw.toLocaleString()}→${inputVal.toLocaleString()})`,
+                                      created_by: userId,
+                                    });
+                                    setAdjustPetSaving(false);
+                                    if (error) return showToast("저장 실패: " + error.message, "error");
+                                    showToast(`✅ PET 재고 조정 완료 (${delta > 0 ? "+" : ""}${delta.toLocaleString()})`);
+                                    setAdjustingPet(null);
+                                    loadData();
+                                  });
+                                }}
+                              >{adjustPetSaving ? "..." : "저장"}</button>
+                              <button
+                                className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-slate-50"
+                                onClick={() => setAdjustingPet(null)}
+                              >취소</button>
+                            </div>
+                          </td>
+                        ) : (
+                          <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">
+                            <button
+                              className="tabular-nums font-semibold text-slate-800 hover:text-amber-600 hover:underline decoration-dotted underline-offset-2 transition-colors"
+                              title="클릭하여 재고 조정"
+                              onClick={() => setAdjustingPet({ logId: log.id, inputQty: "", currentCumRaw: cumRaw })}
+                            >{cumRaw.toLocaleString()}</button>
+                          </td>
+                        )}
                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{cumCoating.toLocaleString()}</td>
                         <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800">{(cumSprayProd + cumSpraySale).toLocaleString()}</td>
                       </tr>
