@@ -69,7 +69,7 @@ const PET_LOG_TYPE_LABELS: Record<string, string> = {
   incoming: "입고", coating_done: "코팅완료", spray_done_prod: "분사완료(생산용)",
   spray_done_sale: "분사완료(판매용)", print_used: "인쇄사용",
   print_used_prod: "인쇄사용(생산용)", print_used_sale: "인쇄사용(판매용)",
-  sale_cut: "재단판매",
+  sale_cut: "재단판매", adjustment: "재고조정(PET)",
 };
 const CCP_EVENT_LABELS: Record<string, string> = {
   start: "시작", mid_check: "중간점검", end: "종료",
@@ -3354,6 +3354,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       else if (log.log_type === "print_used_prod") cumSprayProd -= log.quantity;
       else if (log.log_type === "print_used_sale") cumSpraySale -= log.quantity;
       else if (log.log_type === "transfer_used")   cumRaw       -= log.quantity;
+      else if (log.log_type === "adjustment")       cumRaw       += log.quantity;
     }
 
     const days = ["일","월","화","수","목","금","토"];
@@ -3375,6 +3376,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       else if (log.log_type === "print_used_prod") cumSprayProd -= log.quantity;
       else if (log.log_type === "print_used_sale") cumSpraySale -= log.quantity;
       else if (log.log_type === "transfer_used")   cumRaw       -= log.quantity;
+      else if (log.log_type === "adjustment")       cumRaw       += log.quantity;
 
       const d = new Date(log.log_date + "T00:00:00+09:00");
       const dateLabel = `${d.getMonth()+1}/${d.getDate()}(${days[d.getDay()]})`;
@@ -3590,6 +3592,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       else if (log.log_type === "print_used_prod") cumSprayProd -= log.quantity;
       else if (log.log_type === "print_used_sale") cumSpraySale -= log.quantity;
       else if (log.log_type === "transfer_used") cumRaw -= log.quantity;
+      else if (log.log_type === "adjustment")    cumRaw += log.quantity;
     }
     // 해당 월 로그 각 건별로 누적 계산
     const monthLogs = allLogs.filter(l => l.log_date >= monthFrom && l.log_date <= (dateRange?.to ?? "9999-99-99"));
@@ -3602,6 +3605,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       else if (log.log_type === "print_used_prod") cumSprayProd -= log.quantity;
       else if (log.log_type === "print_used_sale") cumSpraySale -= log.quantity;
       else if (log.log_type === "transfer_used") cumRaw -= log.quantity;
+      else if (log.log_type === "adjustment")    cumRaw += log.quantity;
       return {
         log,
         cumRaw, cumCoating, cumSprayProd, cumSpraySale,
