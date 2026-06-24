@@ -2979,6 +2979,7 @@ export function CompressorTab({ role, userId, showToast }: {
   async function getLastCumulative(): Promise<number> {
     const { data } = await supabase.from("compressor_logs")
       .select("cumulative_hours")
+      .eq("is_hidden", false)
       .order("worked_at", { ascending: false })
       .limit(1);
     return (data?.[0]?.cumulative_hours ?? 0) as number;
