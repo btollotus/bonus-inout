@@ -1405,15 +1405,26 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
 
 // ─── 분사/코팅 생산완료 처리 ───
 async function doCompleteSprayCoating(productionAssignee: string, subType: "분사" | "코팅") {
-    if (!selectedWo) return;
-    setIsCompleting(true);
-    setMsg("저장 중...");
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const userId = user?.id ?? null;
-      const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+  if (!selectedWo) return;
+  setIsCompleting(true);
+  setMsg("저장 중...");
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id ?? null;
+    const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
 
-      // 1. work_order_items 저장
+    // ── 중복 실행 방어: 이미 blend_logs가 존재하면 중단 ──
+    const recipeName = subType === "분사" ? "레이즈 분사" : "레이즈 코팅";
+    const dupNote = `${selectedWo.work_order_no} 생산완료`;
+    const { data: dupCheck } = await supabase.from("blend_logs")
+      .select("id").eq("note", dupNote).eq("recipe_name", recipeName).limit(1);
+    if (dupCheck && dupCheck.length > 0) {
+      showToast("이미 생산완료 처리된 작업지시서입니다.", "error");
+      setIsCompleting(false);
+      return;
+    }
+
+    // 1. work_order_items 저장
       const items = (selectedWo.work_order_items ?? []).filter((item) => {
         const name = (item.sub_items ?? [])[0]?.name ?? "";
         return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비");
