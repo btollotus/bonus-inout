@@ -29,7 +29,7 @@ function playNotificationSound() {
 }
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type Category = "ALL" | "기성" | "업체" | "전사지" | "코팅/분사";
+type Category = "ALL" | "기성" | "업체" | "전사지" | "코팅/분사" | "생산용전사지";
 
 type RpcRow = {
   product_name: string;
@@ -149,6 +149,18 @@ type ColKey = "name" | "food_type" | "prev_stock" | "in" | "out" | "discard" | "
 
 const COLS: Record<Exclude<Category, "ALL">, { key: ColKey; label: string }[]> = {
   "코팅/분사": [
+    { key: "name",       label: "제품명" },
+    { key: "food_type",  label: "식품유형" },
+    { key: "prev_stock", label: "전일재고" },
+    { key: "in",         label: "입고" },
+    { key: "out",        label: "출고" },
+    { key: "discard",    label: "폐기" },
+    { key: "stock",      label: "재고" },
+    { key: "expiry",     label: "소비기한" },
+    { key: "barcode",    label: "바코드" },
+    { key: "note",       label: "비고" },
+  ],
+  "생산용전사지": [
     { key: "name",       label: "제품명" },
     { key: "food_type",  label: "식품유형" },
     { key: "prev_stock", label: "전일재고" },
@@ -811,7 +823,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
 
   // ── 인쇄 모달 ──
   function PrintModal({ onClose }: { onClose: () => void }) {
-    const PRINT_CATS: Exclude<Category, "ALL">[] = ["업체", "기성", "전사지", "코팅/분사"];
+    const PRINT_CATS: Exclude<Category, "ALL">[] = ["업체", "기성", "전사지", "코팅/분사", "생산용전사지"];
     const [activeTab, setActiveTab] = useState<Exclude<Category, "ALL">>("업체");
 
     const catRows = (cat: Exclude<Category, "ALL">) =>
@@ -1378,7 +1390,7 @@ tr{page-break-inside:avoid;}
           )}
 
 <div className="flex items-end gap-1">
-           {(["ALL", "기성", "업체", "전사지", "코팅/분사"] as Category[]).map((cat) => (
+{(["ALL", "기성", "업체", "전사지", "코팅/분사", "생산용전사지"] as Category[]).map((cat) => (
               <button
                 key={cat}
                 className={`rounded-xl px-3 py-2 text-sm font-semibold border transition-all
