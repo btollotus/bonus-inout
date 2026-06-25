@@ -149,15 +149,16 @@ type ColKey = "name" | "food_type" | "prev_stock" | "in" | "out" | "discard" | "
 
 const COLS: Record<Exclude<Category, "ALL">, { key: ColKey; label: string }[]> = {
   "코팅/분사": [
-    { key: "name",      label: "제품명" },
-    { key: "food_type", label: "식품유형" },
-    { key: "in",        label: "입고" },
-    { key: "out",       label: "출고" },
-    { key: "discard",   label: "폐기" },
-    { key: "stock",     label: "재고" },
-    { key: "expiry",    label: "소비기한" },
-    { key: "barcode",   label: "바코드" },
-    { key: "note",      label: "비고" },
+    { key: "name",       label: "제품명" },
+    { key: "food_type",  label: "식품유형" },
+    { key: "prev_stock", label: "전일재고" },
+    { key: "in",         label: "입고" },
+    { key: "out",        label: "출고" },
+    { key: "discard",    label: "폐기" },
+    { key: "stock",      label: "재고" },
+    { key: "expiry",     label: "소비기한" },
+    { key: "barcode",    label: "바코드" },
+    { key: "note",       label: "비고" },
   ],
   기성: [
     { key: "name",       label: "제품명" },
@@ -184,26 +185,27 @@ const COLS: Record<Exclude<Category, "ALL">, { key: ColKey; label: string }[]> =
     { key: "note",       label: "비고" },
   ],
   전사지: [
-    { key: "name",      label: "제품명" },
-    { key: "food_type", label: "식품유형" },
-    { key: "in",        label: "입고" },
+    { key: "name",       label: "제품명" },
+    { key: "food_type",  label: "식품유형" },
+    { key: "prev_stock", label: "전일재고" },
+    { key: "in",         label: "입고" },
     { key: "out",        label: "출고" },
     { key: "discard",    label: "폐기" },
     { key: "stock",      label: "재고" },
-    { key: "expiry",    label: "소비기한" },
-    { key: "barcode",   label: "바코드" },
-    { key: "note",      label: "비고" },
+    { key: "expiry",     label: "소비기한" },
+    { key: "barcode",    label: "바코드" },
+    { key: "note",       label: "비고" },
   ],
 };
 
 const COLS_ALL: { key: ColKey; label: string }[] = [
   { key: "name",       label: "제품명" },
   { key: "food_type",  label: "식품유형" },
-  { key: "prev_stock", label: "시작재고" },
-  { key: "in",         label: "기간입고합" },
-  { key: "out",        label: "기간출고합" },
-  { key: "discard",    label: "기간폐기합" },
-  { key: "stock",      label: "종료재고" },
+  { key: "prev_stock", label: "전일재고" },
+  { key: "in",         label: "입고" },
+  { key: "out",        label: "출고" },
+  { key: "discard",    label: "폐기" },
+  { key: "stock",      label: "재고" },
   { key: "expiry",     label: "소비기한" },
   { key: "barcode",    label: "바코드" },
   { key: "note",       label: "비고" },
@@ -1438,7 +1440,20 @@ tr{page-break-inside:avoid;}
 
 <div className="mt-6 rounded-2xl border border-black/10 overflow-x-auto print-tight print:border-black/20">
 
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
+          <colgroup>
+            <col style={{ width: "18%" }} />{/* 제품명 */}
+            <col style={{ width: "14%" }} />{/* 식품유형 */}
+            <col style={{ width: "8%" }} /> {/* 전일재고 */}
+            <col style={{ width: "8%" }} /> {/* 입고 */}
+            <col style={{ width: "8%" }} /> {/* 출고 */}
+            <col style={{ width: "6%" }} /> {/* 폐기 */}
+            <col style={{ width: "8%" }} /> {/* 재고 */}
+            <col style={{ width: "9%" }} /> {/* 소비기한 */}
+            <col style={{ width: "12%" }} />{/* 바코드 */}
+            <col style={{ width: "5%" }} /> {/* 비고 */}
+            <col style={{ width: "14%" }} />{/* 작업(admin) */}
+          </colgroup>
           <thead className="bg-black/5 print:bg-black/5">
 
           <tr>
