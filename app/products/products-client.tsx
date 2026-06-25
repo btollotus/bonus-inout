@@ -33,7 +33,7 @@ type VariantRow = {
 };
 
 // ✅ 1. '기타'를 '전사지' 오른쪽으로 이동 (순서 유지 — 기존과 동일하므로 변경 없음)
-const CATEGORIES = ["기성", "업체", "전사지", "기타"] as const;
+const CATEGORIES = ["기성", "업체", "전사지", "코팅/분사", "생산용전사지"] as const;
 
 function hangulToQwerty(input: string) {
   const CONS: Record<string, string> = { ㄱ:"r",ㄲ:"R",ㄴ:"s",ㄷ:"e",ㄸ:"E",ㄹ:"f",ㅁ:"a",ㅂ:"q",ㅃ:"Q",ㅅ:"t",ㅆ:"T",ㅇ:"d",ㅈ:"w",ㅉ:"W",ㅊ:"c",ㅋ:"z",ㅌ:"x",ㅍ:"v",ㅎ:"g" };
