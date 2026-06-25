@@ -57,7 +57,8 @@ export function isSpecialItem(itemName: string): boolean {
     n.startsWith("인쇄제판") ||
     n.startsWith("아이스박스") ||
     n.startsWith("택배비") ||
-    n.startsWith("퀵")
+    n.startsWith("퀵") ||
+    n.startsWith("두명opp포장")
   );
 }
 
