@@ -697,7 +697,10 @@ export default function ProductionClient() {
       const { data: variants } = await supabase.from("product_variants").select("id, variant_name, barcode, products(food_type)").ilike("variant_name", keyword.trim() ? `%${keyword}%` : "%").limit(100);
       const filtered = skipProductionCheck
         ? (variants ?? []).filter((v: any) => v.variant_name === "도눔(은박)")
-        : (variants ?? []).filter((v: any) => (v.products?.food_type ?? "").includes("초콜릿중간재"));
+        : (variants ?? []).filter((v: any) =>
+            (v.products?.food_type ?? "").includes("초콜릿중간재") ||
+            (v.products?.food_type ?? "") === "생산용전사지"
+          );
       if (filtered.length === 0) continue;
       const variantIds = filtered.map((v: any) => v.id);
       const { data: lots } = await supabase.from("lots").select("id, variant_id, expiry_date").in("variant_id", variantIds).order("expiry_date", { ascending: true });
