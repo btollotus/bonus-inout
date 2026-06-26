@@ -1703,12 +1703,8 @@ if (dupCheck && dupCheck.length > 0) {
       return (pi?.transfer_lots ?? []).some((l) => l.lot_id && toInt(l.qty) > 0);
     });
     if (!selectedWo.skip_production_check && needsTransferCcp(selectedWo.food_type) && !hasTransferLotSelectedForComplete) {
-      if (!transferCcpSlotId) { alert("전사 슬롯(8번)을 찾을 수 없습니다. 슬롯 설정을 확인해주세요."); setIsCompleting(false); return; }
-      const todayKstTransfer = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-      const { data: transferCcpEvs } = await supabase.from("ccp_wo_events").select("event_type, measured_at").eq("work_order_no", selectedWo.work_order_no).eq("slot_id", transferCcpSlotId).gte("measured_at", `${todayKstTransfer}T00:00:00+09:00`).lte("measured_at", `${todayKstTransfer}T23:59:59+09:00`).order("measured_at", { ascending: false });
-      const lastTransferEv = (transferCcpEvs ?? [])[0];
-      if (!lastTransferEv) { alert("CCP-1B(전사지인쇄) 온도 기록이 없습니다.\n시작 → 중간점검 → 종료 순으로 기록 후 생산완료 처리해주세요."); setIsCompleting(false); return; }
-      if (lastTransferEv.event_type !== "end") { const stateLabel = lastTransferEv.event_type === "start" ? "시작" : "중간점검"; alert(`CCP-1B(전사지인쇄) 온도 기록이 종료되지 않았습니다.\n현재 상태: [${stateLabel}]\n\n종료 기록 후 생산완료 처리해주세요.`); setIsCompleting(false); return; }
+      if (transferCcpEvents.length === 0) { alert("CCP-1B(전사지인쇄) 온도 기록이 없습니다.\n시작 → 중간점검 → 종료 순으로 기록 후 생산완료 처리해주세요."); setIsCompleting(false); return; }
+      if (!transferCcpEnded) { const sorted = [...transferCcpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at)); const lastEv = sorted[sorted.length - 1]; const stateLabel = lastEv.event_type === "start" ? "시작" : "중간점검"; alert(`CCP-1B(전사지인쇄) 온도 기록이 종료되지 않았습니다.\n현재 상태: [${stateLabel}]\n\n종료 기록 후 생산완료 처리해주세요.`); setIsCompleting(false); return; }
     }
 
     let ccpEndedAt: string | null = null;
