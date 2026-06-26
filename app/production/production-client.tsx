@@ -2131,7 +2131,7 @@ if (dupCheck && dupCheck.length > 0) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-lg px-2.5 py-1">재고생산</span>
+          <span className="text-xs font-semibold text-emerald-700 opacity-70">재고생산 ▶</span>
             {(["기성","업체","코팅/분사","생산용전사지"] as const).map((cat) => (
               <button key={cat}
                 className={kiseongCategory === cat ? "rounded-lg border border-emerald-500 bg-emerald-600 px-2.5 py-1 text-sm font-semibold text-white hover:bg-emerald-700" : "rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"}
@@ -2298,15 +2298,36 @@ const totalOrder = items
                 </div>
                 <div className="mb-3">
                   <div className="mb-1 text-xs font-semibold text-slate-700">제품 선택 *</div>
-                  <input className={inp} placeholder="제품명 또는 바코드로 검색" value={kiseongSearch} onChange={(e) => setKiseongSearch(e.target.value)} />
-                  {kiseongSearch.trim() && kiseongFilteredVariants.length > 0 && (
-                    <div className="mt-1 rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden max-h-40 overflow-y-auto">
+                  {kiseongCategory === "코팅/분사" ? (
+                    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
                       {kiseongFilteredVariants.map((v) => (
-                        <button key={v.variant_id} className={`w-full text-left px-2.5 py-2 text-xs border-b border-slate-100 last:border-0 ${kiseongSelected?.variant_id === v.variant_id ? "bg-emerald-50 font-semibold" : "hover:bg-emerald-50"}`} onClick={() => { setKiseongSearch(v.product_name); handleKiseongVariantSelect(v); }}>
-                          <span className="font-medium text-slate-800">{v.product_name}</span>{v.food_type && <span className="ml-2 text-slate-500">{v.food_type}</span>}{v.barcode && <span className="ml-2 font-mono text-slate-400">{v.barcode}</span>}
+                        <button key={v.variant_id}
+                          className={`w-full text-left px-3 py-2.5 text-xs border-b border-slate-100 last:border-0 transition-colors ${kiseongSelected?.variant_id === v.variant_id ? "bg-emerald-100 font-semibold border-emerald-200" : "hover:bg-emerald-50"}`}
+                          onClick={() => { handleKiseongVariantSelect(v); }}>
+                          <span className="font-semibold text-slate-800">{v.variant_name}</span>
+                          {v.barcode && <span className="ml-2 font-mono text-slate-400">{v.barcode}</span>}
                         </button>
                       ))}
                     </div>
+                  ) : (
+                    <>
+                      <div className="relative">
+                        <input className={inp} placeholder="제품명 또는 바코드로 검색" value={kiseongSearch} onChange={(e) => setKiseongSearch(e.target.value)} />
+                        {kiseongSearch && (
+                          <button className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                            onClick={() => { setKiseongSearch(""); setKiseongSelected(null); }}>✕</button>
+                        )}
+                      </div>
+                      {kiseongSearch.trim() && kiseongFilteredVariants.length > 0 && (
+                        <div className="mt-1 rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden max-h-40 overflow-y-auto">
+                          {kiseongFilteredVariants.map((v) => (
+                            <button key={v.variant_id} className={`w-full text-left px-2.5 py-2 text-xs border-b border-slate-100 last:border-0 ${kiseongSelected?.variant_id === v.variant_id ? "bg-emerald-50 font-semibold" : "hover:bg-emerald-50"}`} onClick={() => { setKiseongSearch(v.product_name); handleKiseongVariantSelect(v); }}>
+                              <span className="font-medium text-slate-800">{v.product_name}</span>{v.food_type && <span className="ml-2 text-slate-500">{v.food_type}</span>}{v.barcode && <span className="ml-2 font-mono text-slate-400">{v.barcode}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                   {kiseongSelected && (
                     <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5">
