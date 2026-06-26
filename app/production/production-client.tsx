@@ -92,6 +92,7 @@ type KiseongVariant = {
   food_type: string | null;
   weight_g: number | null;
   barcode: string;
+  category: string | null;
 };
 
 const CHOSUNG = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"].map(ch => ch.normalize("NFC"));
@@ -458,6 +459,7 @@ export default function ProductionClient() {
 
   // 기성생산 State
   const [isKiseongForm, setIsKiseongForm] = useState(false);
+  const [kiseongCategory, setKiseongCategory] = useState<string | null>(null);
   const [kiseongVariants, setKiseongVariants] = useState<KiseongVariant[]>([]);
   const [kiseongSearch, setKiseongSearch] = useState("");
   const [kiseongSelected, setKiseongSelected] = useState<KiseongVariant | null>(null);
@@ -504,7 +506,7 @@ export default function ProductionClient() {
     (async () => {
       const { data, error } = await supabase.from("product_variants").select("id, variant_name, weight_g, barcode, product_id, products(name, food_type, category)").order("variant_name");
       if (error || !data) return;
-      setKiseongVariants((data as any[]).map((r) => ({ variant_id: r.id, product_id: r.product_id, product_name: r.products?.name ?? r.variant_name, variant_name: r.variant_name ?? "", food_type: r.products?.food_type ?? null, weight_g: r.weight_g ?? null, barcode: r.barcode ?? "" })));
+      setKiseongVariants((data as any[]).map((r) => ({ variant_id: r.id, product_id: r.product_id, product_name: r.products?.name ?? r.variant_name, variant_name: r.variant_name ?? "", food_type: r.products?.food_type ?? null, weight_g: r.weight_g ?? null, barcode: r.barcode ?? "", category: r.products?.category ?? null })));
     })();
   }, []);
 
@@ -523,7 +525,7 @@ export default function ProductionClient() {
   };
 
   const resetKiseongForm = () => {
-    setIsKiseongForm(false); setKiseongSearch(""); setKiseongSelected(null);
+    setIsKiseongForm(false); setKiseongCategory(null); setKiseongSearch(""); setKiseongSelected(null);
     setKSubName(""); setKFoodType(""); setKLogoSpec(""); setKThickness("3mm"); setKPackagingType("트레이-정사각20구"); setKPackageUnit("100ea"); setKMoldCols(""); setKMoldRows(""); setKNote(""); setKReferenceNote(""); setKActualQty(""); setKUnitWeight("");
   };
 
@@ -563,10 +565,14 @@ export default function ProductionClient() {
 
   const kiseongFilteredVariants = useMemo(() => {
     const q = kiseongSearch.trim().toLowerCase();
-    const base = kiseongVariants.filter((v) => !v.variant_name.includes("성형틀") && !v.variant_name.includes("인쇄제판"));
+    const base = kiseongVariants.filter((v) => {
+      if (v.variant_name.includes("성형틀") || v.variant_name.includes("인쇄제판")) return false;
+      if (kiseongCategory) return (v.category ?? "") === kiseongCategory;
+      return true;
+    });
     if (!q) return base;
     return base.filter((v) => v.product_name.toLowerCase().includes(q) || v.variant_name.toLowerCase().includes(q) || v.barcode.toLowerCase().includes(q));
-  }, [kiseongVariants, kiseongSearch]);
+  }, [kiseongVariants, kiseongSearch, kiseongCategory]);
 
   const loadReadMap = useCallback(async (woIds: string[]) => {
     if (woIds.length === 0) return;
@@ -2125,8 +2131,14 @@ if (dupCheck && dupCheck.length > 0) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button className={isKiseongForm ? "rounded-lg border border-emerald-500 bg-emerald-600 px-2.5 py-1 text-sm font-semibold text-white hover:bg-emerald-700" : "rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"}
-              onClick={() => { if (isKiseongForm) resetKiseongForm(); else { setIsKiseongForm(true); setSelectedWo(null); } }}>재고생산</button>
+          {(["기성","업체","코팅/분사","생산용전사지"] as const).map((cat) => (
+              <button key={cat}
+                className={kiseongCategory === cat ? "rounded-lg border border-emerald-500 bg-emerald-600 px-2.5 py-1 text-sm font-semibold text-white hover:bg-emerald-700" : "rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"}
+                onClick={() => {
+                  if (kiseongCategory === cat) { resetKiseongForm(); }
+                  else { setKiseongCategory(cat); setIsKiseongForm(true); setSelectedWo(null); setKiseongSearch(""); setKiseongSelected(null); }
+                }}>{cat}</button>
+            ))}
             {isAdminOrSubadmin && (
               <a href="/production/deleted" className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-sm font-semibold text-red-600 hover:bg-red-100">삭제내역</a>
             )}
@@ -2280,7 +2292,7 @@ const totalOrder = items
             <div className="space-y-3 overflow-y-auto" style={{ maxHeight: "calc(100vh - 130px)" }}>
               <div className={`${card} p-3`}>
                 <div className="flex items-center justify-between mb-3">
-                  <div><h2 className="text-base font-bold text-emerald-700">재고생산 등록</h2><p className="text-xs text-slate-500 mt-0.5">거래처 없이 등록됩니다.</p></div>
+                <div><h2 className="text-base font-bold text-emerald-700">재고생산 등록 — {kiseongCategory}</h2><p className="text-xs text-slate-500 mt-0.5">거래처 없이 등록됩니다.</p></div>
                   <button className={btn} onClick={resetKiseongForm}>✕ 닫기</button>
                 </div>
                 <div className="mb-3">
