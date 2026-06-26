@@ -3273,7 +3273,7 @@ const totalOrder = items
  )}
 
 {/* 재고 차감 — 중간재 제외 */}
-{getFoodCategory(selectedWo.food_type) !== "중간재" && (
+{getFoodCategory(selectedWo.food_type) !== "중간재" && (selectedWo.food_type ?? "") !== "생산용전사지" && (
                             <div className="mt-2 rounded-lg border border-violet-100 bg-violet-50 p-2.5">
                               <div className="mb-1.5 flex items-center justify-between">
                                 <span className="text-xs font-semibold text-violet-700">재고 차감 선택</span>
