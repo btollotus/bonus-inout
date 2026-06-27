@@ -171,7 +171,7 @@ export function ProductionDashboard({
           .in("status", ["생산중", "완료"])
           .gte("updated_at", `${today}T00:00:00+09:00`)
           .lte("updated_at", `${today}T23:59:59+09:00`)
-          .not("food_type", "ilike", "%중간재%")
+          .or("food_type.is.null,food_type.not.ilike.%중간재%,food_type.not.ilike.%생산용전사지%")
           .eq("skip_production_check", false),
         supabase.from("ccp_metal_logs")
           .select("work_order_id")
