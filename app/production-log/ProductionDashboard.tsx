@@ -187,7 +187,7 @@ export function ProductionDashboard({
         return true;
       });
       const recordedIds = new Set((ccpData ?? []).map((c: any) => c.work_order_id));
-      const missing = filteredWo.filter((w: any) => !recordedIds.has(w.id));
+      const missing = filteredWo.filter((w: any) => !recordedIds.has(w.id) && !w.input_done_at);
       newCards.push({
         key: "ccp1p",
         label: "CCP-1P 금속검출",
