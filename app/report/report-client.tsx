@@ -518,10 +518,9 @@ const [adminLoaded, setAdminLoaded] = useState(false);
       ? listAgg
       : listAgg.filter((r) => (r.product_category ?? "") === activeCat);
 
-    setMsg(
-      `조회 완료 ✅ ${after.length}건 (${periodLabel})` +
-      (activeCat === "ALL" ? "" : ` / 구분: ${activeCat}`)
-    );
+      setMsg(
+        `조회 완료 ✅ ${after.length}건 (${periodLabel})` +
+        (activeCat === "ALL" ? "" : ` / 구분: ${activeCat}`)
       );
     } catch (e: any) {
       setRows([]);
