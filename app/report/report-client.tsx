@@ -386,7 +386,8 @@ const [adminLoaded, setAdminLoaded] = useState(false);
 
   const periodLabel = startDay === endDay ? `${startDay}` : `${startDay} ~ ${endDay}`;
 
-  const fetchReport = async () => {
+  const fetchReport = async (cat?: Category) => {
+    const activeCat = cat ?? categoryFilter;
     const s = startDay;
     const e = mode === "DAY" ? startDay : endDay;
 
@@ -513,13 +514,14 @@ const [adminLoaded, setAdminLoaded] = useState(false);
 
       setRows(listAgg);
 
-      const after = categoryFilter === "ALL"
-        ? listAgg
-        : listAgg.filter((r) => (r.product_category ?? "") === categoryFilter);
+      const after = activeCat === "ALL"
+      ? listAgg
+      : listAgg.filter((r) => (r.product_category ?? "") === activeCat);
 
-      setMsg(
-        `조회 완료 ✅ ${after.length}건 (${periodLabel})` +
-        (categoryFilter === "ALL" ? "" : ` / 구분: ${categoryFilter}`)
+    setMsg(
+      `조회 완료 ✅ ${after.length}건 (${periodLabel})` +
+      (activeCat === "ALL" ? "" : ` / 구분: ${activeCat}`)
+    );
       );
     } catch (e: any) {
       setRows([]);
@@ -1397,7 +1399,7 @@ tr{page-break-inside:avoid;}
                   ${categoryFilter === cat
                     ? "border-blue-500 bg-blue-600 text-white"
                     : "border-black/15 bg-white text-black/70 hover:bg-black/5"}`}
-                onClick={() => setCategoryFilter(cat)}
+                    onClick={() => { setCategoryFilter(cat); fetchReport(cat); }}
               >
                 {cat === "ALL" ? "전체" : cat}
               </button>
