@@ -1881,8 +1881,8 @@ if (dupCheck && dupCheck.length > 0) {
         }
        // 네오컬러 분사-레이즈 차감은 "분사-레이즈 사용량 저장" 버튼에서 즉시 처리됨
 
-        // ── 컴파운드 자동 차감 (다크/화이트/딸기) ──
-        {
+        // ── 컴파운드 자동 차감 (다크/화이트/딸기, 생산용전사지 제외) ──
+        if ((selectedWo.food_type ?? "") !== "생산용전사지") {
           const ft = selectedWo.food_type ?? "";
           const compoundName = ft.includes("딸기") || ft === "핑크데코" || ft === "핑크화이트" ? "딸기컴파운드"
           : getFoodCategory(ft) === "다크" ? "다크컴파운드"
