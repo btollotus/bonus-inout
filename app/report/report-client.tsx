@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { createClient } from "@/lib/supabase/browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
