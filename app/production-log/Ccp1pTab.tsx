@@ -339,7 +339,9 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
       .in("status", ["생산중", "완료"])
       .gte("production_done_at", `${rangeFrom}T00:00:00+09:00`)
       .lte("production_done_at", `${rangeTo}T23:59:59+09:00`)
-      .or("food_type.is.null,food_type.not.ilike.%중간재%,food_type.not.ilike.%생산용전사지%,food_type.not.ilike.%초콜릿중간재%")
+      .or("food_type.is.null,food_type.not.ilike.%중간재%")
+      .not("food_type", "ilike", "%초콜릿중간재%")
+      .not("food_type", "ilike", "%생산용전사지%")
       .eq("skip_production_check", false)
       .is("input_done_at", null)
       .order("production_done_at", { ascending: true });
