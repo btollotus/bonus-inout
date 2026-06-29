@@ -1723,7 +1723,8 @@ tr{page-break-inside:avoid;}
                       </tr>
                       {isDrillExpanded && (
                         <tr className={drillOpen?.colType === "out" ? "bg-blue-50" : "bg-green-50"}>
-                          <td colSpan={displayCols.length} className="py-2 px-8">
+                          <td colSpan={displayCols.length} className="py-2 px-8 w-full">
+                            <div className="max-w-xl">
                             {drillMovLoading ? (
                               <div className="text-xs text-slate-400 py-1">불러오는 중...</div>
                             ) : drillMovements.length === 0 ? (
@@ -1751,10 +1752,11 @@ tr{page-break-inside:avoid;}
                                   <span className="tabular-nums">{drillMovements.reduce((s, m) => s + m.qty, 0).toLocaleString()} EA</span>
                                 </div>
                               </div>
-                            )}
-                          </td>
-                        </tr>
-                      )}
+                           )}
+                           </div>
+                         </td>
+                       </tr>
+                     )}
                     </React.Fragment>
                   );
                 })
