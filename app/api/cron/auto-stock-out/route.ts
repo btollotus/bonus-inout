@@ -119,7 +119,23 @@ export async function GET() {
             continue;
           }
 
-          // 8. OUT insert (qty = order_qty, happened_at = ship_date KST)
+          // 8. 임시출고(재고부족) 기록 삭제 — 정식 OUT으로 교체하기 전에 정리
+          //    linked_order_id = order.id 인 임시 lot movements 조회 후 삭제
+          const tempNotePrefix = `재고부족 임시출고 - ${order.id} - ${itemName}`;
+          const { data: tempMovs } = await supabase
+            .from("movements")
+            .select("id, lot_id")
+            .eq("note", tempNotePrefix)
+            .limit(1);
+          if (tempMovs && tempMovs.length > 0) {
+            const tempMov = tempMovs[0];
+            await supabase.from("movements").delete().eq("id", tempMov.id);
+            // 임시 lot도 삭제 (movements가 없어지면 고아 lot이 되므로)
+            await supabase.from("lots").delete().eq("id", tempMov.lot_id).eq("is_temp", true);
+            console.log(`[auto-stock-out] 임시출고 정리 완료: ${tempNotePrefix}`);
+          }
+
+          // 9. OUT insert (qty = order_qty, happened_at = ship_date KST)
           const { error: outErr } = await supabase.from("movements").insert({
             lot_id: lot.id,
             type: "OUT",
