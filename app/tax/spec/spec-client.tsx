@@ -65,6 +65,7 @@ type SpecLine = {
   supply: number;
   vat: number;
   total: number;
+  giftQty?: number;
 };
 
 function formatMoney(n: number | null | undefined) {
@@ -147,7 +148,8 @@ function mapLineToSpec(line: LineLoose): SpecLine {
     if (baseSupply > 0) unitPrice = Math.round(baseSupply / qty);
   }
 
-  return { itemName, qty, unitPrice, supply, vat, total };
+  const giftQty = pickNumber(line, ["gift_qty"], 0);
+  return { itemName, qty, unitPrice, supply, vat, total, giftQty: giftQty > 0 ? giftQty : undefined };
 }
 
 type RawLineWithOrder = SpecLine & { orderId: string };
@@ -268,12 +270,14 @@ useEffect(() => {
           supply: r.supply,
           vat: r.vat,
           total: r.total,
+          giftQty: r.giftQty ?? 0,
         });
       } else {
         prev.qty += r.qty;
         prev.supply += r.supply;
         prev.vat += r.vat;
         prev.total += r.total;
+        prev.giftQty = (prev.giftQty ?? 0) + (r.giftQty ?? 0);
       }
     }
 
@@ -587,12 +591,13 @@ useEffect(() => {
     for (const r of picked) {
       const key = `${r.itemName}||${r.unitPrice}`;
       const prev = agg.get(key);
-      if (!prev) agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total });
+      if (!prev) agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total, giftQty: r.giftQty ?? 0 });
       else {
         prev.qty += r.qty;
         prev.supply += r.supply;
         prev.vat += r.vat;
         prev.total += r.total;
+        prev.giftQty = (prev.giftQty ?? 0) + (r.giftQty ?? 0);
       }
     }
     return Array.from(agg.values()).filter((x) => x.itemName.trim() !== "");
@@ -977,6 +982,11 @@ useEffect(() => {
                         <tr key={idx} className="border-t border-slate-100">
                           <td className="px-3 py-2">
                             <div className="truncate">{r.itemName}</div>
+                            {(r.giftQty ?? 0) > 0 && (
+                              <div className="mt-0.5 text-xs text-violet-600 font-semibold">
+                                주문 {formatMoney(r.qty)}개 +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty + (r.giftQty ?? 0))}개
+                              </div>
+                            )}
                           </td>
                           <td className="px-3 py-2 text-right">{formatMoney(r.qty)}</td>
                           <td className="px-3 py-2 text-right">{formatMoney(r.unitPrice)}</td>
@@ -1101,7 +1111,7 @@ useEffect(() => {
                           </tr>
                         </thead>
                         <tbody>
-                          {orderLines.length === 0 ? (
+                        {orderLines.length === 0 ? (
                             <tr>
                               <td className="px-3 py-6 text-center text-slate-500" colSpan={6}>
                                 표시할 내역이 없습니다.
@@ -1112,6 +1122,11 @@ useEffect(() => {
                               <tr key={idx} className="border-t border-slate-100">
                                 <td className="px-3 py-2">
                                   <div className="truncate">{r.itemName}</div>
+                                  {(r.giftQty ?? 0) > 0 && (
+                                    <div className="mt-0.5 text-xs text-violet-600 font-semibold">
+                                      주문 {formatMoney(r.qty)}개 +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty + (r.giftQty ?? 0))}개
+                                    </div>
+                                  )}
                                 </td>
                                 <td className="px-3 py-2 text-right">{formatMoney(r.qty)}</td>
                                 <td className="px-3 py-2 text-right">{formatMoney(r.unitPrice)}</td>
@@ -1226,20 +1241,25 @@ useEffect(() => {
                             표시할 내역이 없습니다.
                           </td>
                         </tr>
-                      ) : (
-                        lines.map((r, idx) => (
-                          <tr key={idx} className="border-t border-slate-100">
-                            <td className="px-3 py-2">
-                              <div className="truncate">{r.itemName}</div>
-                            </td>
-                            <td className="px-3 py-2 text-right">{formatMoney(r.qty)}</td>
-                            <td className="px-3 py-2 text-right">{formatMoney(r.unitPrice)}</td>
-                            <td className="px-3 py-2 text-right font-semibold">{formatMoney(r.supply)}</td>
-                            <td className="px-3 py-2 text-right">{formatMoney(r.vat)}</td>
-                            <td className="px-3 py-2 text-right font-semibold">{formatMoney(r.total)}</td>
-                          </tr>
-                        ))
-                      )}
+                     ) : (
+                      lines.map((r, idx) => (
+                        <tr key={idx} className="border-t border-slate-100">
+                          <td className="px-3 py-2">
+                            <div className="truncate">{r.itemName}</div>
+                            {(r.giftQty ?? 0) > 0 && (
+                              <div className="mt-0.5 text-xs text-violet-600 font-semibold">
+                                주문 {formatMoney(r.qty)}개 +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty + (r.giftQty ?? 0))}개
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right">{formatMoney(r.qty)}</td>
+                          <td className="px-3 py-2 text-right">{formatMoney(r.unitPrice)}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{formatMoney(r.supply)}</td>
+                          <td className="px-3 py-2 text-right">{formatMoney(r.vat)}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{formatMoney(r.total)}</td>
+                        </tr>
+                      ))
+                    )}
                     </tbody>
                   </table>
                 </div>
