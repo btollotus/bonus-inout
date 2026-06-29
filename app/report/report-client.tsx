@@ -777,7 +777,6 @@ const [adminLoaded, setAdminLoaded] = useState(false);
 
   // ── 드릴다운 핸들러 ──
   async function handleMovDrillDown(r: AggRow, colType: "in" | "out") {
-    const key = `${r.barcode}__${r.expiry_date}`;
     if (drillOpen?.barcode === r.barcode && drillOpen?.expiry === r.expiry_date && drillOpen?.colType === colType) {
       setDrillOpen(null);
       setDrillMovements([]);
@@ -801,7 +800,60 @@ const [adminLoaded, setAdminLoaded] = useState(false);
       .lte("happened_at", `${startDay}T23:59:59+09:00`)
       .order("happened_at");
 
-    setDrillMovements(data ?? []);
+    const movements = data ?? [];
+
+    // note에서 WO번호 및 orders UUID 추출하여 거래처명 조회
+    const woPattern = /WO-\d{8}-\d{4}/;
+    const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+    const woNos = [...new Set(
+      movements.map((m) => m.note?.match(woPattern)?.[0]).filter(Boolean) as string[]
+    )];
+    const orderIds = [...new Set(
+      movements
+        .map((m) => {
+          const note = m.note ?? "";
+          // WO번호가 있으면 UUID가 아님
+          if (woPattern.test(note)) return null;
+          return note.match(uuidPattern)?.[0] ?? null;
+        })
+        .filter(Boolean) as string[]
+    )];
+
+    const woClientMap: Record<string, string> = {};
+    if (woNos.length > 0) {
+      const { data: woData } = await supabase
+        .from("work_orders")
+        .select("work_order_no, client_name")
+        .in("work_order_no", woNos);
+      (woData ?? []).forEach((w: any) => {
+        woClientMap[w.work_order_no] = w.client_name;
+      });
+    }
+
+    const orderClientMap: Record<string, string> = {};
+    if (orderIds.length > 0) {
+      const { data: orderData } = await supabase
+        .from("orders")
+        .select("id, customer_name")
+        .in("id", orderIds);
+      (orderData ?? []).forEach((o: any) => {
+        orderClientMap[o.id] = o.customer_name;
+      });
+    }
+
+    // 각 movement에 거래처명 추가
+    const enriched = movements.map((m) => {
+      const note = m.note ?? "";
+      const woNo = note.match(woPattern)?.[0];
+      const uuid = (!woPattern.test(note)) ? (note.match(uuidPattern)?.[0] ?? null) : null;
+      let clientName: string | null = null;
+      if (woNo && woClientMap[woNo]) clientName = woClientMap[woNo];
+      else if (uuid && orderClientMap[uuid]) clientName = orderClientMap[uuid];
+      return { ...m, clientName };
+    });
+
+    setDrillMovements(enriched as any);
     setDrillMovLoading(false);
   }
 
@@ -1673,11 +1725,18 @@ tr{page-break-inside:avoid;}
                               <div className="text-xs text-slate-400 py-1">내역이 없습니다.</div>
                             ) : (
                               <div className="space-y-0.5">
-                                {drillMovements.map((m, i) => (
+                               {drillMovements.map((m: any, i) => (
                                   <div key={i} className="flex items-center justify-between text-xs py-0.5 border-b border-slate-100 last:border-0">
-                                    <span className="text-slate-600">
+                                    <span className="text-slate-600 flex items-center gap-1.5">
                                       └ {new Date(m.happened_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" })}
-                                      {m.note && <span className="ml-2 text-slate-500">{m.note}</span>}
+                                      {m.clientName && (
+                                        <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                                          {m.clientName}
+                                        </span>
+                                      )}
+                                      {!m.clientName && m.note && (
+                                        <span className="text-slate-400">{m.note}</span>
+                                      )}
                                     </span>
                                     <span className="tabular-nums font-semibold text-slate-700 ml-4">{m.qty.toLocaleString()} EA</span>
                                   </div>
