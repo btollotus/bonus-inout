@@ -1241,9 +1241,11 @@ export default function ProductionClient() {
           continue;
         }
         const itemKeyword = extractKeyword(name);
-        const keywords = clientKeyword
-  ? [clientKeyword]
-  : itemKeyword ? [itemKeyword] : [];
+        const MARKETPLACE_CLIENTS = ["네이버-판매", "카카오플러스-판매", "쿠팡-판매"];
+        const isMarketplace = MARKETPLACE_CLIENTS.includes(wo.client_name ?? "");
+        const keywords = (clientKeyword && !isMarketplace)
+          ? [clientKeyword]
+          : itemKeyword ? [itemKeyword] : [];
 searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
       }
     }
