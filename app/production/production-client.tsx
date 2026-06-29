@@ -1720,8 +1720,7 @@ if (dupCheck && dupCheck.length > 0) {
     }
     if (!selectedWo.skip_production_check && (foodCat === "다크" || foodCat === "화이트")) {
       if (selectedWo.ccp_slot_id) {
-        const todayKst = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-        const { data: ccpEvs } = await supabase.from("ccp_wo_events").select("event_type, measured_at").eq("work_order_no", selectedWo.work_order_no).gte("measured_at", `${todayKst}T00:00:00+09:00`).lte("measured_at", `${todayKst}T23:59:59+09:00`).order("measured_at", { ascending: false });
+        const { data: ccpEvs } = await supabase.from("ccp_wo_events").select("event_type, measured_at").eq("work_order_no", selectedWo.work_order_no).eq("slot_id", selectedWo.ccp_slot_id).order("measured_at", { ascending: false });
         const lastEv = (ccpEvs ?? [])[0];
         ccpEndedAt = lastEv?.measured_at ?? null;
         if (!lastEv) { alert("CCP-1B 온도 기록이 없습니다.\n시작 → 중간점검 → 종료 순으로 기록 후 생산완료 처리해주세요."); setIsCompleting(false); return; }
