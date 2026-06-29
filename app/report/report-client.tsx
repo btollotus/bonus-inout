@@ -826,9 +826,9 @@ const [adminLoaded, setAdminLoaded] = useState(false);
         .from("work_orders")
         .select("work_order_no, client_name")
         .in("work_order_no", woNos);
-      (woData ?? []).forEach((w: any) => {
-        woClientMap[w.work_order_no] = w.client_name;
-      });
+        (woData ?? []).forEach((w: any) => {
+          woClientMap[w.work_order_no] = `${w.client_name} (${w.work_order_no})`;
+        });
     }
 
     const orderClientMap: Record<string, string> = {};
