@@ -11,6 +11,7 @@ export type WoPrintItem = {
   order_qty: number;
   barcode_no?: string | null;
   actual_qty?: number | null;
+  gift_qty?: number | null;
   defect_qty?: number | null;
   unit_weight?: number | null;
   expiry_date?: string | null;
@@ -761,8 +762,8 @@ export function WoPrintContent({
                             <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", borderRight: "1px solid #cbd5e1", textAlign: "right", fontWeight: "bold", color: aq ? "#1d4ed8" : "#111" }}>
                               {aq != null ? f(aq) : ""}
                             </td>
-                            <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", borderRight: "1px solid #cbd5e1", textAlign: "right", color: aq != null && aq > item.order_qty ? "#7c3aed" : "#111" }}>
-                              {aq != null && aq > item.order_qty ? f(aq - item.order_qty) : ""}
+                            <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", borderRight: "1px solid #cbd5e1", textAlign: "right", color: (item.gift_qty ?? (aq != null && aq > item.order_qty ? aq - item.order_qty : 0)) > 0 ? "#7c3aed" : "#111" }}>
+                              {(() => { const gq = item.gift_qty != null ? item.gift_qty : (aq != null && aq > item.order_qty ? aq - item.order_qty : 0); return gq > 0 ? f(gq) : ""; })()}
                             </td>
                             <td style={{ ...cellBase, border: "none", borderTop: "1px solid #cbd5e1", borderRight: "1px solid #cbd5e1", textAlign: "right", color: item.defect_qty ? "#dc2626" : "#111" }}>
                               {item.defect_qty ? f(item.defect_qty) : ""}
