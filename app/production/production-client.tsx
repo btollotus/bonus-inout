@@ -1092,7 +1092,7 @@ export default function ProductionClient() {
       const { data, error } = await supabase.storage.from("work-order-images").createSignedUrls(paths, 60 * 60);
       if (!error && data) setSignedImageUrls(data.map((d) => d.signedUrl)); else setSignedImageUrls(rawPaths);
     })();
-    const inputs: Record<string, { actual_qty: string; extra_qty: string; defect_qty?: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[]; skip?: boolean }> = {};
+    const inputs: Record<string, { actual_qty: string; gift_qty: string; defect_qty?: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[]; skip?: boolean }> = {};
     for (const item of wo.work_order_items ?? []) {
       const savedLots = (item as any).transfer_lots as { lot_id: string; qty: number }[] | null;
       const extraQtyCalc = (item.actual_qty != null && item.actual_qty > item.order_qty)
