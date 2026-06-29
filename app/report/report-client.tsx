@@ -320,6 +320,11 @@ const [adminLoaded, setAdminLoaded] = useState(false);
 
   const [editSaving, setEditSaving] = useState(false);
   const [expirySaving, setExpirySaving] = useState(false);
+  // ── 드릴다운 (출고/입고) ──
+  const [drillOpen, setDrillOpen] = useState<{ barcode: string; expiry: string; colType: "in" | "out" } | null>(null);
+  const [drillMovements, setDrillMovements] = useState<{ type: string; qty: number; happened_at: string; note: string | null }[]>([]);
+  const [drillMovLoading, setDrillMovLoading] = useState(false);
+
   const [searchKeyword, setSearchKeyword] = useState("");
   const [sortKey, setSortKey] = useState<"expiry" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -364,6 +369,8 @@ const [adminLoaded, setAdminLoaded] = useState(false);
 
   useEffect(() => {
     if (mode === "DAY") setEndDay(startDay);
+    setDrillOpen(null);
+    setDrillMovements([]);
   }, [mode, startDay]);
 
   const filteredRows = rows
@@ -766,6 +773,36 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     if (rows.length === 0) { setMsg("인쇄할 데이터가 없습니다. (날짜/필터 확인 후 조회)"); return; }
     setPrintModalOpen(true);
   };
+
+  // ── 드릴다운 핸들러 ──
+  async function handleMovDrillDown(r: AggRow, colType: "in" | "out") {
+    const key = `${r.barcode}__${r.expiry_date}`;
+    if (drillOpen?.barcode === r.barcode && drillOpen?.expiry === r.expiry_date && drillOpen?.colType === colType) {
+      setDrillOpen(null);
+      setDrillMovements([]);
+      return;
+    }
+    if (!r.lot_id) {
+      setDrillOpen(null);
+      setDrillMovements([]);
+      return;
+    }
+    setDrillOpen({ barcode: r.barcode, expiry: r.expiry_date, colType });
+    setDrillMovLoading(true);
+
+    const movType = colType === "out" ? "OUT" : "IN";
+    const { data } = await supabase
+      .from("movements")
+      .select("type, qty, happened_at, note")
+      .eq("lot_id", r.lot_id)
+      .eq("type", movType)
+      .gte("happened_at", `${startDay}T00:00:00+09:00`)
+      .lte("happened_at", `${startDay}T23:59:59+09:00`)
+      .order("happened_at");
+
+    setDrillMovements(data ?? []);
+    setDrillMovLoading(false);
+  }
 
   const downloadExcel = () => {
     if (filteredRows.length === 0) { setMsg("저장할 데이터가 없습니다. (날짜/필터 확인 후 조회)"); return; }
@@ -1526,18 +1563,46 @@ tr{page-break-inside:avoid;}
                         <div className="text-sm font-medium text-black/80 print-sub">{toBoxAndEa(sEA, unit).eaText}</div>
                       </div>
                     ),
-                    in: (
-                      <div className="text-right leading-tight">
-                        <div className="font-bold">{toBoxAndEa(inEA, unit).boxText}</div>
-                        <div className="text-sm font-bold text-black/80 print-sub">{toBoxAndEa(inEA, unit).eaText}</div>
-                      </div>
-                    ),
-                    out: (
-                      <div className="text-right leading-tight">
-                        <div className="font-bold">{toBoxAndEa(outEA, unit).boxText}</div>
-                        <div className="text-sm font-bold text-black/80 print-sub">{toBoxAndEa(outEA, unit).eaText}</div>
-                      </div>
-                    ),
+                    in: (() => {
+                      const isExpanded = drillOpen?.barcode === r.barcode && drillOpen?.expiry === r.expiry_date && drillOpen?.colType === "in";
+                      if (inEA > 0 && r.lot_id && mode === "DAY") {
+                        return (
+                          <button
+                            className={`w-full text-right leading-tight underline decoration-dotted hover:decoration-solid transition-colors ${isExpanded ? "text-green-800" : "text-green-700 hover:text-green-900"}`}
+                            onClick={() => handleMovDrillDown(r, "in")}
+                          >
+                            <div className="font-bold">{toBoxAndEa(inEA, unit).boxText}</div>
+                            <div className="text-sm font-bold print-sub">{toBoxAndEa(inEA, unit).eaText} {isExpanded ? "▲" : "▼"}</div>
+                          </button>
+                        );
+                      }
+                      return (
+                        <div className="text-right leading-tight">
+                          <div className="font-bold">{toBoxAndEa(inEA, unit).boxText}</div>
+                          <div className="text-sm font-bold text-black/80 print-sub">{toBoxAndEa(inEA, unit).eaText}</div>
+                        </div>
+                      );
+                    })(),
+                    out: (() => {
+                      const isExpanded = drillOpen?.barcode === r.barcode && drillOpen?.expiry === r.expiry_date && drillOpen?.colType === "out";
+                      if (outEA > 0 && r.lot_id && mode === "DAY") {
+                        return (
+                          <button
+                            className={`w-full text-right leading-tight underline decoration-dotted hover:decoration-solid transition-colors ${isExpanded ? "text-blue-800" : "text-blue-600 hover:text-blue-800"}`}
+                            onClick={() => handleMovDrillDown(r, "out")}
+                          >
+                            <div className="font-bold">{toBoxAndEa(outEA, unit).boxText}</div>
+                            <div className="text-sm font-bold print-sub">{toBoxAndEa(outEA, unit).eaText} {isExpanded ? "▲" : "▼"}</div>
+                          </button>
+                        );
+                      }
+                      return (
+                        <div className="text-right leading-tight">
+                          <div className="font-bold">{toBoxAndEa(outEA, unit).boxText}</div>
+                          <div className="text-sm font-bold text-black/80 print-sub">{toBoxAndEa(outEA, unit).eaText}</div>
+                        </div>
+                      );
+                    })(),
                     discard: (() => {
                       const discardEA = intMin(r.period_discard_ea ?? 0, 0);
                       return discardEA > 0 ? (
@@ -1583,20 +1648,49 @@ tr{page-break-inside:avoid;}
                     ) : null,
                   };
 
+                  const isDrillExpanded =
+                    drillOpen?.barcode === r.barcode && drillOpen?.expiry === r.expiry_date;
+
                   return (
-                    <tr
-                      key={`${r.barcode}-${r.expiry_date}-${idx}`}
-                      className="border-t border-black/10 print:border-black/15"
-                    >
-                      {displayCols.map((col) => (
-                        <td
-                          key={col.key}
-                          className="p-3 print:p-2"
-                        >
-                          {cellMap[col.key]}
-                        </td>
-                      ))}
-                    </tr>
+                    <React.Fragment key={`${r.barcode}-${r.expiry_date}-${idx}`}>
+                      <tr className="border-t border-black/10 print:border-black/15">
+                        {displayCols.map((col) => (
+                          <td
+                            key={col.key}
+                            className="p-3 print:p-2"
+                          >
+                            {cellMap[col.key]}
+                          </td>
+                        ))}
+                      </tr>
+                      {isDrillExpanded && (
+                        <tr className={drillOpen?.colType === "out" ? "bg-blue-50" : "bg-green-50"}>
+                          <td colSpan={displayCols.length} className="py-2 px-8">
+                            {drillMovLoading ? (
+                              <div className="text-xs text-slate-400 py-1">불러오는 중...</div>
+                            ) : drillMovements.length === 0 ? (
+                              <div className="text-xs text-slate-400 py-1">내역이 없습니다.</div>
+                            ) : (
+                              <div className="space-y-0.5">
+                                {drillMovements.map((m, i) => (
+                                  <div key={i} className="flex items-center justify-between text-xs py-0.5 border-b border-slate-100 last:border-0">
+                                    <span className="text-slate-600">
+                                      └ {new Date(m.happened_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" })}
+                                      {m.note && <span className="ml-2 text-slate-500">{m.note}</span>}
+                                    </span>
+                                    <span className="tabular-nums font-semibold text-slate-700 ml-4">{m.qty.toLocaleString()} EA</span>
+                                  </div>
+                                ))}
+                                <div className="flex items-center justify-between text-xs py-1 font-bold border-t border-slate-200 mt-0.5">
+                                  <span className={drillOpen?.colType === "out" ? "text-blue-700" : "text-green-700"}>합계</span>
+                                  <span className="tabular-nums">{drillMovements.reduce((s, m) => s + m.qty, 0).toLocaleString()} EA</span>
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })
               )}
