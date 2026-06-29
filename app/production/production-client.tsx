@@ -385,7 +385,7 @@ export default function ProductionClient() {
 
   const [woChecks, setWoChecks] = useState<WoChecks | null>(null);
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
-  const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; extra_qty: string; defect_qty?: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[]; skip?: boolean }>>({});
+  const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; gift_qty: string; defect_qty?: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[]; skip?: boolean }>>({});
   const titaniumDioxideG = useMemo(() => {
     if (!selectedWo || !(selectedWo.food_type ?? "").includes("리얼")) return "";
     const items = (selectedWo.work_order_items ?? []).filter((item) => {
@@ -1100,7 +1100,7 @@ export default function ProductionClient() {
         : "";
         inputs[item.id] = {
           actual_qty: item.actual_qty != null ? String(item.actual_qty) : "",
-          extra_qty: extraQtyCalc,
+          gift_qty: (item as any).gift_qty != null ? String((item as any).gift_qty) : extraQtyCalc,
           defect_qty: item.defect_qty != null ? String(item.defect_qty) : "",
           unit_weight: item.unit_weight != null ? String(item.unit_weight) : "",
           expiry_date: item.expiry_date ?? "",
@@ -1778,7 +1778,7 @@ if (dupCheck && dupCheck.length > 0) {
           continue;
         }
         if (!pi || (!pi.actual_qty && !pi.unit_weight && !pi.expiry_date)) continue;
-        const { error: itemErr } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, defect_qty: pi.defect_qty ? toInt(pi.defect_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null }).eq("id", item.id);
+        const { error: itemErr } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, gift_qty: pi.gift_qty ? toInt(pi.gift_qty) : 0, defect_qty: pi.defect_qty ? toInt(pi.defect_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null }).eq("id", item.id);
         if (itemErr) { setMsg("생산입력 저장 실패: " + itemErr.message); setIsCompleting(false); return; }
       }
       const allItems = selectedWo.work_order_items ?? [];
@@ -3186,14 +3186,14 @@ const totalOrder = items
                               <div className="mt-0.5 text-[11px] text-slate-400">주문 {fmt(item.order_qty)}개</div>
                             </div>
                             <div>
-                              <div className="mb-1 text-xs text-slate-500">+추가생산</div>
+                              <div className="mb-1 text-xs text-slate-500">+추가생산(증정)</div>
                               <input className={inpR} inputMode="numeric" placeholder="0"
-                                value={pi.extra_qty}
+                                value={pi.gift_qty}
                                 disabled={selectedWo?.status === "완료" && !isEditMode}
                                 onChange={(e) => {
-                                  const extra = e.target.value.replace(/[^\d]/g, "");
-                                  const newActual = String(toInt(item.order_qty) + toInt(extra));
-                                  setProdInputs((prev) => ({ ...prev, [item.id]: { ...prev[item.id], extra_qty: extra, actual_qty: newActual } }));
+                                  const gift = e.target.value.replace(/[^\d]/g, "");
+                                  const newActual = String(toInt(item.order_qty) + toInt(gift));
+                                  setProdInputs((prev) => ({ ...prev, [item.id]: { ...prev[item.id], gift_qty: gift, actual_qty: newActual } }));
                                 }} />
                               <div className="mt-0.5 text-[11px] text-slate-400">합계 {fmt(toInt(pi.actual_qty))}개</div>
                             </div>
@@ -3437,7 +3437,7 @@ const totalOrder = items
                             if (!pi || (!pi.actual_qty && !pi.unit_weight && !pi.expiry_date)) continue;
                             const oldDefectQty = item.defect_qty ?? 0;
                             const newDefectQty = pi.defect_qty ? toInt(pi.defect_qty) : 0;
-                            const { error } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, defect_qty: pi.defect_qty ? toInt(pi.defect_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null, transfer_lot_id: pi.transfer_lot_id || null, transfer_qty: pi.transfer_qty ? toInt(pi.transfer_qty) : null }).eq("id", item.id);
+                            const { error } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, gift_qty: pi.gift_qty ? toInt(pi.gift_qty) : 0, defect_qty: pi.defect_qty ? toInt(pi.defect_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null, transfer_lot_id: pi.transfer_lot_id || null, transfer_qty: pi.transfer_qty ? toInt(pi.transfer_qty) : null }).eq("id", item.id);
                             if (error) { showToast("수정 실패: " + error.message, "error"); return; }
 
                             // ── 불량(defect_qty) 변경 시 — 기존 LOT의 IN/DISCARD movements 동기화 ──

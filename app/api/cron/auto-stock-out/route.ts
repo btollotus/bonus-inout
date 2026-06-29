@@ -135,11 +135,11 @@ export async function GET() {
             console.log(`[auto-stock-out] 임시출고 정리 완료: ${tempNotePrefix}`);
           }
 
-          // 9. OUT insert (qty = order_qty, happened_at = ship_date KST)
+          // 9. OUT insert (qty = actual_qty 기준 — 추가생산 포함 전체 출고, happened_at = ship_date KST)
           const { error: outErr } = await supabase.from("movements").insert({
             lot_id: lot.id,
             type: "OUT",
-            qty: item.order_qty,
+            qty: item.actual_qty,
             happened_at: `${order.ship_date}T00:00:00+09:00`,
             note: outNote,
           });
