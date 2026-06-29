@@ -714,8 +714,9 @@ function selectWo(wo: WorkOrderItem) {
             }
           }
 
-          // 업체 주문제작 → 연결된 주문의 출고일 기준으로 동일 LOT에 OUT도 기록
-          if (linkedOrderId && shipDateYMD) {
+// 업체 주문제작 → ship_date가 오늘 이전인 경우만 즉시 OUT 기록 (오늘 날짜는 크론 15:00에 처리)
+const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
             const itemName = (item.sub_items ?? [])[0]?.name ?? "";
             const outNote = `거래내역 OUT - ${(woData as any).work_order_no} - ${itemName}`;
             const { data: existingOutMov } = await supabase.from("movements")
