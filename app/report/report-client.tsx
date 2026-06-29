@@ -1734,7 +1734,7 @@ tr{page-break-inside:avoid;}
                                {drillMovements.map((m: any, i) => (
                                   <div key={i} className="flex items-center justify-between text-xs py-0.5 border-b border-slate-100 last:border-0">
                                     <span className="text-slate-600 flex items-center gap-1.5">
-                                      └ {new Date(m.happened_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" })}
+                                      └
                                       {m.clientName && (
                                         <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
                                           {m.clientName}
