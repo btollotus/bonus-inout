@@ -1682,7 +1682,8 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
       const stockErrors = await applyStockOutLots(supabase, cleanLines, orderId, stockWorkOrderNo, shipDate, stockUserId);
 
       // ── Step4: 재고부족(마켓플레이스 거래처) 라인 → 임시 lot + 임시 작업지시서 자동생성 ──
-      if (SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name)) {
+      // orderWoEnabled이고 woTargetLines이 있는 경우 정상 WO가 이미 생성됐으므로 스킵
+      if (SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name) && !(orderWoEnabled && woTargetLines.length > 0)) {
         for (const cl of cleanLines) {
           if (isSpecialItem(cl.name)) continue;
           if ((cl.stock_out_lots ?? []).length > 0) continue;
