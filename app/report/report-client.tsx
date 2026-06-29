@@ -835,10 +835,15 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     if (orderIds.length > 0) {
       const { data: orderData } = await supabase
         .from("orders")
-        .select("id, customer_name")
+        .select("id, customer_name, memo")
         .in("id", orderIds);
       (orderData ?? []).forEach((o: any) => {
-        orderClientMap[o.id] = o.customer_name;
+        let label = o.customer_name ?? "";
+        try {
+          const parsed = typeof o.memo === "string" ? JSON.parse(o.memo) : o.memo;
+          if (parsed?.orderer_name) label += ` · ${parsed.orderer_name}`;
+        } catch {}
+        orderClientMap[o.id] = label;
       });
     }
 
