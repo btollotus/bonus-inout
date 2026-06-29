@@ -129,7 +129,9 @@ export function useCcpState(
       .select("id, work_order_no, slot_id, event_type, measured_at, temperature, is_ok, action_note")
       .order("measured_at", { ascending: true });
   
-      if (slotId) {
+      // slotId가 있더라도 excludeSlotId와 같으면 전사지 슬롯 기록이 포함되므로,
+      // 그 경우 slotId 조건 없이 excludeSlotId 제외 방식으로 처리
+      if (slotId && slotId !== excludeSlotId) {
         query = query
           .eq("slot_id", slotId)
           .eq("work_order_no", workOrderNo);
