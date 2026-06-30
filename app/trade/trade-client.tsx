@@ -3499,7 +3499,9 @@ if (woSubNameVal) {
                             <div className="grid grid-cols-2 gap-1">
                               <button className={miniBtn} onClick={() => onCopyClick(x)}>복사</button>
                               <button className={miniBtn} onClick={() => onMemoClick(x)}>메모</button>
-                              <button className={miniBtn} onClick={() => openEdit(x)}>수정</button>
+                              {!(isSubAdmin && x.kind === "ORDER" && SUBADMIN_PINNED_TOP_NAMES.includes(x.partnerName)) && (
+                <button className={miniBtn} onClick={() => openEdit(x)}>수정</button>
+              )}
                               <button className={miniBtn} onClick={() => handleDeleteClick(x)}>삭제</button>
                               {x.kind === "ORDER" ? (
   <>
