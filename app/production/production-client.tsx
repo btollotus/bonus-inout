@@ -1104,7 +1104,7 @@ export default function ProductionClient() {
         : "";
         inputs[item.id] = {
           actual_qty: item.actual_qty != null ? String(item.actual_qty) : "",
-          gift_qty: (item as any).gift_qty != null ? String((item as any).gift_qty) : extraQtyCalc,
+          gift_qty: (item as any).gift_qty != null && (item as any).gift_qty > 0 ? String((item as any).gift_qty) : extraQtyCalc,
           defect_qty: item.defect_qty != null ? String(item.defect_qty) : "",
           unit_weight: item.unit_weight != null ? String(item.unit_weight) : "",
           expiry_date: item.expiry_date ?? "",
