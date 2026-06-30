@@ -327,7 +327,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
   const [drillMovLoading, setDrillMovLoading] = useState(false);
 
   const [searchKeyword, setSearchKeyword] = useState("");
-  const [sortKey, setSortKey] = useState<"expiry" | null>(null);
+  const [sortKey, setSortKey] = useState<"name" | "food_type" | "prev_stock" | "in" | "out" | "discard" | "stock" | "expiry" | "barcode" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const printedAt = formatYYYYMMDD(new Date());
@@ -385,11 +385,18 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     );
   })
   .sort((a, b) => {
-    if (sortKey === "expiry") {
-      const cmp = safeStr(a.expiry_date).localeCompare(safeStr(b.expiry_date));
-      return sortDir === "asc" ? cmp : -cmp;
-    }
-    return 0;
+    if (!sortKey) return 0;
+    let cmp = 0;
+    if (sortKey === "name")       cmp = safeStr(a.product_name).localeCompare(safeStr(b.product_name), "ko");
+    else if (sortKey === "food_type")   cmp = safeStr(a.food_type).localeCompare(safeStr(b.food_type), "ko");
+    else if (sortKey === "prev_stock")  cmp = intMin(a.start_stock_ea) - intMin(b.start_stock_ea);
+    else if (sortKey === "in")          cmp = intMin(a.period_in_ea) - intMin(b.period_in_ea);
+    else if (sortKey === "out")         cmp = intMin(a.period_out_ea) - intMin(b.period_out_ea);
+    else if (sortKey === "discard")     cmp = intMin(a.period_discard_ea) - intMin(b.period_discard_ea);
+    else if (sortKey === "stock")       cmp = intMin(a.end_stock_ea) - intMin(b.end_stock_ea);
+    else if (sortKey === "expiry")      cmp = safeStr(a.expiry_date).localeCompare(safeStr(b.expiry_date));
+    else if (sortKey === "barcode")     cmp = safeStr(a.barcode).localeCompare(safeStr(b.barcode));
+    return sortDir === "asc" ? cmp : -cmp;
   });
 
   const periodLabel = startDay === endDay ? `${startDay}` : `${startDay} ~ ${endDay}`;
@@ -1570,21 +1577,21 @@ tr{page-break-inside:avoid;}
                     key={col.key}
                     className={`p-3 print:p-2 ${isRightAlign(col.key as ColKey) ? "text-right" : "text-left"}`}
                   >
-                    {col.key === "expiry" ? (
+                   {(["name","food_type","prev_stock","in","out","discard","stock","expiry","barcode"] as const).includes(col.key as any) ? (
                       <button
-                        className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                        className="flex items-center gap-1 hover:text-blue-600 transition-colors whitespace-nowrap"
                         onClick={() => {
-                          if (sortKey === "expiry") {
+                          if (sortKey === col.key) {
                             setSortDir((d) => d === "asc" ? "desc" : "asc");
                           } else {
-                            setSortKey("expiry");
+                            setSortKey(col.key as any);
                             setSortDir("asc");
                           }
                         }}
                       >
                         {col.label}
                         <span className="text-xs">
-                          {sortKey === "expiry" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+                          {sortKey === col.key ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
                         </span>
                       </button>
                     ) : col.label}
