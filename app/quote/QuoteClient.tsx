@@ -232,6 +232,7 @@ export default function QuoteClient() {
   // 전사지 견적 폼
   type SheetItem = {
     id: string;
+    nickname: string;
     quantity: string;
     isNew: boolean;
     calcResult: { plateCost: number; sheetCost: number; total: number } | null;
@@ -241,6 +242,7 @@ export default function QuoteClient() {
   
   const newSheetItem = (): SheetItem => ({
     id: crypto.randomUUID(),
+    nickname: "",
     quantity: "",
     isNew: true,
     calcResult: null,
@@ -464,6 +466,7 @@ async function loadSignageList() {
     const itemRows = calcedItems.map((x, idx) => ({
       request_id:    req.id,
       product_type:  "전사지",
+      nickname:      x.nickname.trim() || null,
       quantity:      parseInt(x.quantity) || 0,
       is_new:        x.isNew,
       plate_cost:    x.calcResult!.plateCost,
@@ -516,6 +519,7 @@ async function loadSignageList() {
     const itemRows = calcedItems.map((x, idx) => ({
       request_id:    req.id,
       product_type:  "전사지",
+      nickname:      x.nickname.trim() || null,
       quantity:      parseInt(x.quantity) || 0,
       is_new:        x.isNew,
       plate_cost:    x.calcResult!.plateCost,
@@ -541,6 +545,7 @@ async function loadSignageList() {
     .sort((a, b) => a.sort_order - b.sort_order)
     .map(qi => ({
       id: crypto.randomUUID(),
+      nickname: qi.nickname ?? "",
       quantity: String(qi.quantity ?? ""),
       isNew: qi.is_new,
       calcResult: {
@@ -1547,8 +1552,14 @@ async function loadSignageList() {
             )}
           </div>
           <div className="flex gap-2 items-end flex-wrap">
-            {sheetInputMode === "auto" ? (
+          {sheetInputMode === "auto" ? (
               <>
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-slate-600">별명</div>
+                  <input className={`${inp} w-28`} placeholder="예: 당근"
+                    value={item.nickname}
+                    onChange={e => updateSheetItem(item.id, { nickname: e.target.value })} />
+                </div>
                 <div>
                   <div className="mb-1 text-xs font-semibold text-slate-600">전사지 장수</div>
                   <input className={`${inp} w-28`} inputMode="numeric" placeholder="예: 10"
@@ -1588,23 +1599,29 @@ async function loadSignageList() {
                   </div>
                 )}
               </>
-           ) : (
-            <>
-              <div>
-                <div className="mb-1 text-xs font-semibold text-slate-600">전사지 장수</div>
-                <input className={`${inp} w-28`} inputMode="numeric" placeholder="예: 10"
-                  value={item.quantity}
-                  onChange={e => updateSheetItem(item.id, {
-                    quantity: e.target.value.replace(/[^\d]/g, ""),
-                    calcResult: null,
-                  })} />
-              </div>
-              <div>
-                <div className="mb-1 text-xs font-semibold text-orange-600">단가(원) ✏️</div>
-                <input className={`${inp} w-28 border-orange-300 bg-orange-50`} type="number" placeholder="예: 3000"
-                  value={item.manualUnitPrice}
-                  onChange={e => updateSheetItem(item.id, { manualUnitPrice: e.target.value, calcResult: null })} />
-              </div>
+            ) : (
+              <>
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-slate-600">별명</div>
+                  <input className={`${inp} w-28`} placeholder="예: 당근"
+                    value={item.nickname}
+                    onChange={e => updateSheetItem(item.id, { nickname: e.target.value })} />
+                </div>
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-slate-600">전사지 장수</div>
+                  <input className={`${inp} w-28`} inputMode="numeric" placeholder="예: 10"
+                    value={item.quantity}
+                    onChange={e => updateSheetItem(item.id, {
+                      quantity: e.target.value.replace(/[^\d]/g, ""),
+                      calcResult: null,
+                    })} />
+                </div>
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-orange-600">단가(원) ✏️</div>
+                  <input className={`${inp} w-28 border-orange-300 bg-orange-50`} type="number" placeholder="예: 3000"
+                    value={item.manualUnitPrice}
+                    onChange={e => updateSheetItem(item.id, { manualUnitPrice: e.target.value, calcResult: null })} />
+                </div>
               <button type="button"
                 className={`rounded-lg border px-4 py-2 text-sm font-bold transition-all ${
                   item.isNew
