@@ -66,8 +66,6 @@ type SpecLine = {
   vat: number;
   total: number;
   giftQty?: number;
-  unitType?: string;
-  actualEa?: number;
 };
 
 function formatMoney(n: number | null | undefined) {
@@ -151,9 +149,7 @@ function mapLineToSpec(line: LineLoose): SpecLine {
   }
 
   const giftQty = pickNumber(line, ["gift_qty"], 0);
-  const unitType = pickString(line, ["unit_type"], "EA");
-  const actualEa = pickNumber(line, ["actual_ea"], 0);
-  return { itemName, qty, unitPrice, supply, vat, total, giftQty: giftQty > 0 ? giftQty : undefined, unitType, actualEa: actualEa > 0 ? actualEa : undefined };
+  return { itemName, qty, unitPrice, supply, vat, total, giftQty: giftQty > 0 ? giftQty : undefined };
 }
 
 type RawLineWithOrder = SpecLine & { orderId: string };
@@ -275,8 +271,6 @@ useEffect(() => {
           vat: r.vat,
           total: r.total,
           giftQty: r.giftQty ?? 0,
-          unitType: r.unitType,
-          actualEa: r.actualEa,
         });
       } else {
         prev.qty += r.qty;
@@ -284,7 +278,6 @@ useEffect(() => {
         prev.vat += r.vat;
         prev.total += r.total;
         prev.giftQty = (prev.giftQty ?? 0) + (r.giftQty ?? 0);
-        prev.actualEa = (prev.actualEa ?? 0) + (r.actualEa ?? 0);
       }
     }
 
@@ -598,14 +591,13 @@ useEffect(() => {
     for (const r of picked) {
       const key = `${r.itemName}||${r.unitPrice}`;
       const prev = agg.get(key);
-      if (!prev) agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total, giftQty: r.giftQty ?? 0, unitType: r.unitType, actualEa: r.actualEa });
+      if (!prev) agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total, giftQty: r.giftQty ?? 0 });
       else {
         prev.qty += r.qty;
         prev.supply += r.supply;
         prev.vat += r.vat;
         prev.total += r.total;
         prev.giftQty = (prev.giftQty ?? 0) + (r.giftQty ?? 0);
-        prev.actualEa = (prev.actualEa ?? 0) + (r.actualEa ?? 0);
       }
     }
     return Array.from(agg.values()).filter((x) => x.itemName.trim() !== "");
@@ -995,11 +987,6 @@ useEffect(() => {
                                 주문 {formatMoney(r.qty)}개 +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty + (r.giftQty ?? 0))}개
                               </div>
                             )}
-                            {r.unitType === "BOX" && (r.actualEa ?? 0) > 0 && (
-                              <div className="mt-0.5 text-xs text-blue-600 font-semibold">
-                                BOX {formatMoney(r.qty)}개 = 실제 {formatMoney(r.actualEa)}개
-                              </div>
-                            )}
                           </td>
                           <td className="px-3 py-2 text-right">{formatMoney(r.qty)}</td>
                           <td className="px-3 py-2 text-right">{formatMoney(r.unitPrice)}</td>
@@ -1140,11 +1127,6 @@ useEffect(() => {
                                       주문 {formatMoney(r.qty)}개 +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty + (r.giftQty ?? 0))}개
                                     </div>
                                   )}
-                                  {r.unitType === "BOX" && (r.actualEa ?? 0) > 0 && (
-                                    <div className="mt-0.5 text-xs text-blue-600 font-semibold">
-                                      BOX {formatMoney(r.qty)}개 = 실제 {formatMoney(r.actualEa)}개
-                                    </div>
-                                  )}
                                 </td>
                                 <td className="px-3 py-2 text-right">{formatMoney(r.qty)}</td>
                                 <td className="px-3 py-2 text-right">{formatMoney(r.unitPrice)}</td>
@@ -1267,11 +1249,6 @@ useEffect(() => {
                             {(r.giftQty ?? 0) > 0 && (
                               <div className="mt-0.5 text-xs text-violet-600 font-semibold">
                                 주문 {formatMoney(r.qty)}개 +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty + (r.giftQty ?? 0))}개
-                              </div>
-                            )}
-                            {r.unitType === "BOX" && (r.actualEa ?? 0) > 0 && (
-                              <div className="mt-0.5 text-xs text-blue-600 font-semibold">
-                                BOX {formatMoney(r.qty)}개 = 실제 {formatMoney(r.actualEa)}개
                               </div>
                             )}
                           </td>
