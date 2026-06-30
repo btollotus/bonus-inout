@@ -1555,28 +1555,23 @@ tr{page-break-inside:avoid;}
 
 <div className="mt-6 rounded-2xl border border-black/10 overflow-x-auto print-tight print:border-black/20">
 
-          <table className="w-full text-sm table-fixed">
-          바꿀 코드:
-          <colgroup>
-            <col style={{ width: "18%" }} />{/* 제품명 */}
-            <col style={{ width: "12%" }} />{/* 식품유형 */}
-            <col style={{ width: "8%" }} /> {/* 전일재고 */}
-            <col style={{ width: "7%" }} /> {/* 입고 */}
-            <col style={{ width: "7%" }} /> {/* 출고 */}
-            <col style={{ width: "6%" }} /> {/* 폐기 */}
-            <col style={{ width: "7%" }} /> {/* 재고 */}
-            <col style={{ width: "9%" }} /> {/* 소비기한 */}
-            <col style={{ width: "12%" }} />{/* 바코드 */}
-            <col style={{ width: "4%" }} /> {/* 비고 */}
-            <col style={{ width: "10%" }} />{/* 작업(admin) */}
-          </colgroup>
-          <thead className="bg-black/5 print:bg-black/5">
+<table className="w-full text-sm">
+<thead className="bg-black/5 print:bg-black/5">
 
           <tr>
-                {displayCols.map((col) => (
+          {displayCols.map((col) => {
+                  const colMinW: Record<string, string> = {
+                    name: "130px", food_type: "90px",
+                    prev_stock: "75px", in: "65px", out: "65px",
+                    discard: "55px", stock: "75px",
+                    expiry: "88px", barcode: "105px",
+                    note: "36px", actions: "130px",
+                  };
+                  return (
                   <th
                     key={col.key}
                     className={`p-3 print:p-2 ${isRightAlign(col.key as ColKey) ? "text-right" : "text-left"}`}
+                    style={{ minWidth: colMinW[col.key] ?? "auto", whiteSpace: "nowrap" }}
                   >
                    {(["name","food_type","prev_stock","in","out","discard","stock","expiry","barcode"] as const).includes(col.key as any) ? (
                       <button
@@ -1596,8 +1591,9 @@ tr{page-break-inside:avoid;}
                         </span>
                       </button>
                     ) : col.label}
-                  </th>
-                ))}
+                 </th>
+                  );
+                })}
               </tr>
              
             </thead>
