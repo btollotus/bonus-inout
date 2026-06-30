@@ -595,6 +595,9 @@ export default function ProductionClient() {
   const selectedWoCcpSlotIdRef = useRef<string | null>(null);
   useEffect(() => { selectedWoCcpSlotIdRef.current = selectedWo?.ccp_slot_id ?? null; }, [selectedWo?.ccp_slot_id]);
 
+  const transferCcpSlotIdRef = useRef<string | null>(null);
+  useEffect(() => { transferCcpSlotIdRef.current = transferCcpSlotId; }, [transferCcpSlotId]);
+
   useEffect(() => {
     if (realtimeChannelRef.current) { supabase.removeChannel(realtimeChannelRef.current); realtimeChannelRef.current = null; setRealtimeConnected(false); }
     if (!selectedWo?.id) return;
@@ -622,8 +625,9 @@ export default function ProductionClient() {
       if (String(d.work_order_no ?? "") !== selectedWo.work_order_no) return;
       const evSlotId = String(d.slot_id ?? "");
       const currentCcpSlotId = selectedWoCcpSlotIdRef.current;
+      const currentExcludeSlotId = needsTransferCcp(selectedWo.food_type) ? transferCcpSlotIdRef.current : null;
       if (evSlotId && currentCcpSlotId && evSlotId !== currentCcpSlotId) return;
-      ccp.loadWoEvents(selectedWo.work_order_no, currentCcpSlotId, selectedWo.status);
+      ccp.loadWoEvents(selectedWo.work_order_no, currentCcpSlotId, selectedWo.status, currentExcludeSlotId);
     }).subscribe();
 
     return () => {
