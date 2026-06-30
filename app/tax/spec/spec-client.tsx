@@ -66,6 +66,7 @@ type SpecLine = {
   vat: number;
   total: number;
   giftQty?: number;
+  packEa?: number;
 };
 
 function formatMoney(n: number | null | undefined) {
@@ -149,7 +150,8 @@ function mapLineToSpec(line: LineLoose): SpecLine {
   }
 
   const giftQty = pickNumber(line, ["gift_qty"], 0);
-  return { itemName, qty, unitPrice, supply, vat, total, giftQty: giftQty > 0 ? giftQty : undefined };
+  const packEa = pickNumber(line, ["pack_ea"], 1);
+  return { itemName, qty, unitPrice, supply, vat, total, giftQty: giftQty > 0 ? giftQty : undefined, packEa: packEa > 1 ? packEa : undefined };
 }
 
 type RawLineWithOrder = SpecLine & { orderId: string };
@@ -271,6 +273,7 @@ useEffect(() => {
           vat: r.vat,
           total: r.total,
           giftQty: r.giftQty ?? 0,
+          packEa: r.packEa,
         });
       } else {
         prev.qty += r.qty;
@@ -591,7 +594,7 @@ useEffect(() => {
     for (const r of picked) {
       const key = `${r.itemName}||${r.unitPrice}`;
       const prev = agg.get(key);
-      if (!prev) agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total, giftQty: r.giftQty ?? 0 });
+      if (!prev) agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total, giftQty: r.giftQty ?? 0, packEa: r.packEa });
       else {
         prev.qty += r.qty;
         prev.supply += r.supply;
@@ -984,7 +987,7 @@ useEffect(() => {
                             <div className="truncate">{r.itemName}</div>
                             {(r.giftQty ?? 0) > 0 && (
                               <div className="mt-0.5 text-xs text-violet-600 font-semibold">
-                                주문 {formatMoney(r.qty)}개 +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty + (r.giftQty ?? 0))}개
+                                주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""} +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
                               </div>
                             )}
                           </td>
@@ -996,20 +999,16 @@ useEffect(() => {
                         </tr>
                       ))
                     )}
-                  </tbody>
-                </table>
-              </div>
+                    </tbody>
+                  </table>
+                </div>
 
-              <div className="mt-2 flex justify-end avoid-break">
-                <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 text-sm">
-                  <div className="flex items-center justify-between py-1">
-                    <div className="text-slate-700">공급가</div>
-                    <div className="font-semibold">{formatMoney(sumSupply)}</div>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <div className="text-slate-700">부가세</div>
-                    <div className="font-semibold">{formatMoney(sumVat)}</div>
-                  </div>
+                <div className="mt-2 flex justify-end avoid-break">
+                  <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 text-sm">
+                    <div className="flex items-center justify-between py-1">
+                      <div className="text-slate-700">공급가</div>
+                      <div className="font-semibold">{formatMoney(sumSupply)}</div>
+                    </div>
                   <div className="flex items-center justify-between py-1">
                     <div className="text-slate-900">합계</div>
                     <div className="text-base font-bold">{formatMoney(sumTotal)}</div>
@@ -1124,7 +1123,7 @@ useEffect(() => {
                                   <div className="truncate">{r.itemName}</div>
                                   {(r.giftQty ?? 0) > 0 && (
                                     <div className="mt-0.5 text-xs text-violet-600 font-semibold">
-                                      주문 {formatMoney(r.qty)}개 +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty + (r.giftQty ?? 0))}개
+                                      주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""} +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
                                     </div>
                                   )}
                                 </td>
@@ -1248,7 +1247,7 @@ useEffect(() => {
                             <div className="truncate">{r.itemName}</div>
                             {(r.giftQty ?? 0) > 0 && (
                               <div className="mt-0.5 text-xs text-violet-600 font-semibold">
-                                주문 {formatMoney(r.qty)}개 +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty + (r.giftQty ?? 0))}개
+                                주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""} +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
                               </div>
                             )}
                           </td>
