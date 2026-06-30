@@ -1776,9 +1776,10 @@ async function loadSignageList() {
                   </div>
                   <div className="overflow-x-auto rounded-2xl border border-slate-200">
                     <table className="w-full table-fixed text-sm">
-                      <colgroup>
+                    <colgroup>
                         <col style={{ width: 100 }} />
                         <col style={{ width: 140 }} />
+                        <col style={{ width: 100 }} />
                         <col style={{ width: 80 }} />
                         <col style={{ width: 80 }} />
                         <col style={{ width: 100 }} />
@@ -1789,6 +1790,7 @@ async function loadSignageList() {
                         <tr>
                           <th className="px-3 py-2 text-left">날짜</th>
                           <th className="px-3 py-2 text-left">업체명</th>
+                          <th className="px-3 py-2 text-left">별명</th>
                           <th className="px-3 py-2 text-center">장수</th>
                           <th className="px-3 py-2 text-center">신규</th>
                           <th className="px-3 py-2 text-right">합계금액</th>
@@ -1810,6 +1812,9 @@ async function loadSignageList() {
                             <tr key={r.id} className="border-t border-slate-200 bg-white hover:bg-slate-50">
                               <td className="px-3 py-2 tabular-nums text-xs text-slate-500">{utcToKSTDate(r.created_at)}                              </td>
                               <td className="px-3 py-2 font-semibold truncate">{r.customer_name}</td>
+                              <td className="px-3 py-2 text-xs text-slate-600 truncate">
+                                {(r.quote_items ?? []).map(qi => qi.nickname).filter(Boolean).join(", ") || "—"}
+                              </td>
                               <td className="px-3 py-2 text-center text-xs">{r.quantity}장</td>
                               <td className="px-3 py-2 text-center text-xs">
                                 <span style={{ padding: "2px 8px", borderRadius: 8, fontSize: 11, fontWeight: "bold",
@@ -2018,6 +2023,7 @@ async function loadSignageList() {
               const qiThickness = qiPt.includes("2mm") ? "2mm" : qiPt.includes("3mm") ? "3mm" : qiPt.includes("5mm") ? "5mm" : "";
               return {
                 productType: qiPt,
+                nickname: qi.nickname ?? null,
                 colorType: (qi.color_type as "dark" | "white") ?? "dark",
                 isRaise: qiPt.startsWith("레이즈"),
                 widthMm: qi.width_mm,
@@ -2084,6 +2090,7 @@ async function loadSignageList() {
         inputMode: "auto" as const,
         items: calced.map(x => ({
           productType: "전사지",
+          nickname: x.nickname.trim() || null,
           colorType: "dark" as const,
           isRaise: false,
           widthMm: null,
