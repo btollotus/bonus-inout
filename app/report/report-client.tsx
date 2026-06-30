@@ -1557,17 +1557,17 @@ tr{page-break-inside:avoid;}
 
           <table className="w-full text-sm table-fixed">
           <colgroup>
-            <col style={{ width: "18%" }} />{/* 제품명 */}
-            <col style={{ width: "14%" }} />{/* 식품유형 */}
-            <col style={{ width: "8%" }} /> {/* 전일재고 */}
-            <col style={{ width: "8%" }} /> {/* 입고 */}
-            <col style={{ width: "8%" }} /> {/* 출고 */}
-            <col style={{ width: "6%" }} /> {/* 폐기 */}
-            <col style={{ width: "8%" }} /> {/* 재고 */}
+            <col style={{ width: "15%" }} />{/* 제품명 */}
+            <col style={{ width: "11%" }} />{/* 식품유형 */}
+            <col style={{ width: "9%" }} /> {/* 전일재고 */}
+            <col style={{ width: "9%" }} /> {/* 입고 */}
+            <col style={{ width: "9%" }} /> {/* 출고 */}
+            <col style={{ width: "7%" }} /> {/* 폐기 */}
+            <col style={{ width: "9%" }} /> {/* 재고 */}
             <col style={{ width: "9%" }} /> {/* 소비기한 */}
-            <col style={{ width: "12%" }} />{/* 바코드 */}
-            <col style={{ width: "5%" }} /> {/* 비고 */}
-            <col style={{ width: "14%" }} />{/* 작업(admin) */}
+            <col style={{ width: "11%" }} />{/* 바코드 */}
+            <col style={{ width: "4%" }} /> {/* 비고 */}
+            <col style={{ width: "7%" }} /> {/* 작업(admin) */}
           </colgroup>
           <thead className="bg-black/5 print:bg-black/5">
 
