@@ -3208,7 +3208,7 @@ const totalOrder = items
                             </div>
                             <div>
                               <div className="mb-1 text-xs text-slate-500">+추가생산(증정)</div>
-                              <input className={inpR} inputMode="numeric" placeholder="0"
+                              <input className={inpR} inputMode="numeric"
                                 value={pi.gift_qty}
                                 disabled={selectedWo?.status === "완료" && !isEditMode}
                                 onChange={(e) => {
@@ -3220,7 +3220,7 @@ const totalOrder = items
                             </div>
                             <div>
                               <div className="mb-1 text-xs text-slate-500">불량</div>
-                              <input className={inpR} inputMode="numeric" placeholder="0"
+                              <input className={inpR} inputMode="numeric"
                                 value={pi.defect_qty ?? ""}
                                 disabled={selectedWo?.status === "완료" && !isEditMode}
                                 onChange={(e) => {
