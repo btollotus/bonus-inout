@@ -1524,7 +1524,8 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
             if (ibErr) throw new Error("제품 바코드 생성 실패: " + ibErr.message);
             itemBarcodeNo = itemBarcode as string;
           }
-          woItemsPayload.push({ work_order_id: woId, delivery_date: shipDate, sub_items: [{ name: l.name, qty: l.qty }], order_qty: l.qty, barcode_no: itemBarcodeNo, unit_weight: l.weight_g && Number(l.weight_g) > 0 ? Number(l.weight_g) : null, logo_spec: l.logo_spec || null });
+          const woItemQty = l.unit_type === "BOX" ? l.qty * l.pack_ea : l.qty;
+          woItemsPayload.push({ work_order_id: woId, delivery_date: shipDate, sub_items: [{ name: l.name, qty: woItemQty }], order_qty: woItemQty, barcode_no: itemBarcodeNo, unit_weight: l.weight_g && Number(l.weight_g) > 0 ? Number(l.weight_g) : null, logo_spec: l.logo_spec || null });
         }
         const { data: createdWoItems, error: wiErr } = await supabase.from("work_order_items").insert(woItemsPayload).select("id,barcode_no,sub_items");
         if (wiErr) throw new Error("작업지시서 항목 생성 실패: " + wiErr.message);
@@ -2209,7 +2210,8 @@ if (woSubNameVal) {
           if (!itemId) {
             // ── 신규 추가된 품목: work_order_items 생성 + product/variant 생성 (createOrder()와 동일 패턴) ──
             const newItemName = eLine.name.trim();
-            const newItemQty = toInt(eLine.qty);
+            const newItemPackEa = inferPackEaFromName(newItemName);
+            const newItemQty = newItemPackEa > 1 ? toInt(eLine.qty) * newItemPackEa : toInt(eLine.qty);
             const { data: newBarcode, error: nbErr } = await supabase.rpc("generate_work_order_barcode");
             if (nbErr) { stockWarningMsg = `"${newItemName}" 바코드 생성 실패: ${nbErr.message}`; continue; }
             const newBarcodeNo = newBarcode as string;
@@ -2273,8 +2275,9 @@ if (woSubNameVal) {
           }
           const finalPaths = [...existingPaths, ...newPaths];
           const matchedELine = eLines[idx];
-          const syncedQty = toInt(matchedELine?.qty ?? 0);
           const syncedName = (matchedELine?.name ?? "").trim();
+          const syncedPackEa = inferPackEaFromName(syncedName);
+          const syncedQty = syncedPackEa > 1 ? toInt(matchedELine?.qty ?? 0) * syncedPackEa : toInt(matchedELine?.qty ?? 0);
           await supabase.from("work_order_items").update({
             images: finalPaths,
             logo_spec: matchedELine?.logo_spec || null,
