@@ -122,17 +122,18 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   const lineItems: LineItem[] = [];
 
   for (const item of items) {
-    // ── 전사지 단독 품목 처리 ──
-    if (item.productType === "전사지") {
-      const sheetSupply = item.quantity * 3000;
-      lineItems.push({
-        name: `전사지 (${item.quantity}장 × 3,000원)`,
-        qty: String(item.quantity),
-        unit: 3000,
-        supply: sheetSupply,
-        vat: Math.round(sheetSupply * 0.1),
-        total: sheetSupply + Math.round(sheetSupply * 0.1),
-      });
+      // ── 전사지 단독 품목 처리 ──
+      if (item.productType === "전사지") {
+        const sheetSupply = item.quantity * 3000;
+        const sheetName = (item.nickname ? `[${item.nickname}] ` : "") + `전사지 (${item.quantity}장 × 3,000원)`;
+        lineItems.push({
+          name: sheetName,
+          qty: String(item.quantity),
+          unit: 3000,
+          supply: sheetSupply,
+          vat: Math.round(sheetSupply * 0.1),
+          total: sheetSupply + Math.round(sheetSupply * 0.1),
+        });
       if (item.plateCost > 0) {
         lineItems.push({
           name: "인쇄판비 (최초 1회)",
