@@ -1746,10 +1746,10 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     if (woNos.length > 0) {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("id, work_order_no, client_name, product_name")
+        .select("id, work_order_no, client_name, product_name, assignee_production")
         .in("work_order_no", woNos);
       (woData ?? []).forEach((w: any) => {
-        woMap[w.work_order_no] = { id: w.id, client_name: w.client_name, product_name: w.product_name };
+        woMap[w.work_order_no] = { id: w.id, client_name: w.client_name, product_name: w.product_name, assignee_production: w.assignee_production };
       });
     }
 
@@ -1764,7 +1764,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
         const tag = note.includes("생산완료") ? "생산완료"
           : note.includes("이산화티타늄 차감") ? "TiO₂"
           : "";
-        displayLabel = `${wo.client_name} — ${wo.product_name}${tag ? ` (${tag})` : ""}`;
+          displayLabel = `${wo.client_name} — ${wo.product_name}${tag ? ` (${tag})` : ""}${wo.assignee_production ? ` · ${wo.assignee_production}` : ""}`;
       }
       return { displayLabel, quantity: u.quantity, unit: u.unit ?? unit, woId };
     });
