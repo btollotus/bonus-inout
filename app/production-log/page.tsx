@@ -1742,7 +1742,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
         .filter(Boolean) as string[]
     )];
 
-    let woMap: Record<string, { id: string; client_name: string; product_name: string }> = {};
+    let woMap: Record<string, { id: string; client_name: string; product_name: string; assignee_production: string | null }> = {};
     if (woNos.length > 0) {
       const { data: woData } = await supabase
         .from("work_orders")
