@@ -2366,6 +2366,9 @@ if (woSubNameVal) {
         for (const wo of linkedWos) {
           if (wo.work_order_no) {
             await supabase.from("movements").delete().ilike("note", `거래내역 OUT - ${wo.work_order_no} - %`);
+            await supabase.from("ccp_wo_events").delete().eq("work_order_no", wo.work_order_no);
+            await supabase.from("ccp_slot_events").delete().eq("work_order_no", wo.work_order_no);
+            await supabase.from("deleted_work_order_nos").insert({ work_order_no: wo.work_order_no });
           }
         }
         await supabase.from("work_orders").delete().in("id", woIds);
