@@ -2034,7 +2034,7 @@ if (dupCheck && dupCheck.length > 0) {
                 .update({ gift_qty: giftQty })
                 .eq("order_id", selectedWo.linked_order_id)
                 .eq("name", itemName)
-                .eq("qty", orderQty);
+                .eq("actual_ea", orderQty);
             }
           }
 
