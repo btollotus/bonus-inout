@@ -1556,18 +1556,19 @@ tr{page-break-inside:avoid;}
 <div className="mt-6 rounded-2xl border border-black/10 overflow-x-auto print-tight print:border-black/20">
 
           <table className="w-full text-sm table-fixed">
+          바꿀 코드:
           <colgroup>
-            <col style={{ width: "15%" }} />{/* 제품명 */}
-            <col style={{ width: "11%" }} />{/* 식품유형 */}
-            <col style={{ width: "9%" }} /> {/* 전일재고 */}
-            <col style={{ width: "9%" }} /> {/* 입고 */}
-            <col style={{ width: "9%" }} /> {/* 출고 */}
-            <col style={{ width: "7%" }} /> {/* 폐기 */}
-            <col style={{ width: "9%" }} /> {/* 재고 */}
+            <col style={{ width: "18%" }} />{/* 제품명 */}
+            <col style={{ width: "12%" }} />{/* 식품유형 */}
+            <col style={{ width: "8%" }} /> {/* 전일재고 */}
+            <col style={{ width: "7%" }} /> {/* 입고 */}
+            <col style={{ width: "7%" }} /> {/* 출고 */}
+            <col style={{ width: "6%" }} /> {/* 폐기 */}
+            <col style={{ width: "7%" }} /> {/* 재고 */}
             <col style={{ width: "9%" }} /> {/* 소비기한 */}
-            <col style={{ width: "11%" }} />{/* 바코드 */}
+            <col style={{ width: "12%" }} />{/* 바코드 */}
             <col style={{ width: "4%" }} /> {/* 비고 */}
-            <col style={{ width: "7%" }} /> {/* 작업(admin) */}
+            <col style={{ width: "10%" }} />{/* 작업(admin) */}
           </colgroup>
           <thead className="bg-black/5 print:bg-black/5">
 
