@@ -1575,7 +1575,7 @@ tr{page-break-inside:avoid;}
                   >
                    {(["name","food_type","prev_stock","in","out","discard","stock","expiry","barcode"] as const).includes(col.key as any) ? (
                       <button
-                        className="flex items-center gap-1 hover:text-blue-600 transition-colors whitespace-nowrap"
+                        className={`flex items-center gap-1 hover:text-blue-600 transition-colors whitespace-nowrap ${isRightAlign(col.key as ColKey) ? "justify-end w-full" : ""}`}
                         onClick={() => {
                           if (sortKey === col.key) {
                             setSortDir((d) => d === "asc" ? "desc" : "asc");
