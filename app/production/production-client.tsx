@@ -2029,10 +2029,12 @@ if (dupCheck && dupCheck.length > 0) {
               if (giftQty <= 0) continue;
               const itemName = (item.sub_items ?? [])[0]?.name ?? "";
               if (!itemName) continue;
+              const orderQty = item.order_qty ?? 0;
               await supabase.from("order_lines")
                 .update({ gift_qty: giftQty })
                 .eq("order_id", selectedWo.linked_order_id)
-                .eq("name", itemName);
+                .eq("name", itemName)
+                .eq("qty", orderQty);
             }
           }
 
