@@ -1810,8 +1810,18 @@ if (dupCheck && dupCheck.length > 0) {
             lotId = newLot.id;
           }
           const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
-          const { error: movErr } = await supabase.from("movements").insert({ lot_id: lotId, type: "IN", qty: actual_qty, happened_at: `${todayKSTDate}T00:00:00+09:00`, note: "작업지시서 생산완료 - " + selectedWo.work_order_no, created_by: userId });
-          if (movErr) stockErrors.push("입고 기록 실패: " + movErr.message);
+          const inNoteChuganJae = "작업지시서 생산완료 - " + selectedWo.work_order_no;
+          const { data: existingChuganJaeInMov } = await supabase.from("movements")
+            .select("id").eq("lot_id", lotId).eq("type", "IN").eq("note", inNoteChuganJae).limit(1);
+          if (existingChuganJaeInMov && existingChuganJaeInMov.length > 0) {
+            const { error: movUpdErr } = await supabase.from("movements")
+              .update({ qty: actual_qty, happened_at: `${todayKSTDate}T00:00:00+09:00` })
+              .eq("id", existingChuganJaeInMov[0].id);
+            if (movUpdErr) stockErrors.push("입고 기록 갱신 실패: " + movUpdErr.message);
+          } else {
+            const { error: movErr } = await supabase.from("movements").insert({ lot_id: lotId, type: "IN", qty: actual_qty, happened_at: `${todayKSTDate}T00:00:00+09:00`, note: inNoteChuganJae, created_by: userId });
+            if (movErr) stockErrors.push("입고 기록 실패: " + movErr.message);
+          }
         }
         // ── 전사지 자동 차감 (중간재, 네오컬러 제외) ──
         {
