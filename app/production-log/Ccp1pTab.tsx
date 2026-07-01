@@ -719,13 +719,15 @@ function selectWo(wo: WorkOrderItem) {
 // 업체 주문제작 → ship_date가 오늘 이전인 경우만 즉시 OUT 기록 (오늘 날짜는 크론 15:00에 처리)
 const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
 if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
+            // OUT이 IN(happenedDate)보다 앞서지 않도록 보정 — 생산완료가 ship_date보다 늦게(소급) 처리된 경우 대비
+            const outHappenedDate = shipDateYMD < happenedDate ? happenedDate : shipDateYMD;
             const itemName = (item.sub_items ?? [])[0]?.name ?? "";
             const outNote = `거래내역 OUT - ${(woData as any).work_order_no} - ${itemName}`;
             const { data: existingOutMov } = await supabase.from("movements")
               .select("id").eq("lot_id", lotId).eq("type", "OUT").eq("note", outNote).limit(1);
             if (existingOutMov && existingOutMov.length > 0) {
               const { error: outErr } = await supabase.from("movements")
-                .update({ qty: actual_qty, happened_at: `${shipDateYMD}T00:00:00+09:00` })
+                .update({ qty: actual_qty, happened_at: `${outHappenedDate}T00:00:00+09:00` })
                 .eq("id", existingOutMov[0].id);
               if (outErr) stockErrors.push("출고 기록 갱신 실패: " + outErr.message);
             } else {
@@ -733,7 +735,7 @@ if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
                 lot_id: lotId,
                 type: "OUT",
                 qty: actual_qty,
-                happened_at: `${shipDateYMD}T00:00:00+09:00`,
+                happened_at: `${outHappenedDate}T00:00:00+09:00`,
                 note: outNote,
                 created_by: userId,
               });
