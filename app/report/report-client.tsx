@@ -831,11 +831,33 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     if (woNos.length > 0) {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("work_order_no, client_name")
+        .select("work_order_no, client_name, linked_order_id")
         .in("work_order_no", woNos);
-        (woData ?? []).forEach((w: any) => {
-          woClientMap[w.work_order_no] = `${w.client_name} (${w.work_order_no})`;
+
+      const linkedOrderIds = [...new Set(
+        (woData ?? []).map((w: any) => w.linked_order_id).filter(Boolean)
+      )];
+
+      const ordererMap: Record<string, string> = {};
+      if (linkedOrderIds.length > 0) {
+        const { data: linkedOrders } = await supabase
+          .from("orders")
+          .select("id, memo")
+          .in("id", linkedOrderIds);
+        (linkedOrders ?? []).forEach((o: any) => {
+          try {
+            const parsed = typeof o.memo === "string" ? JSON.parse(o.memo) : o.memo;
+            if (parsed?.orderer_name) ordererMap[o.id] = parsed.orderer_name;
+          } catch {}
         });
+      }
+
+      (woData ?? []).forEach((w: any) => {
+        const ordererName = w.linked_order_id ? ordererMap[w.linked_order_id] : null;
+        woClientMap[w.work_order_no] = ordererName
+          ? `${w.client_name} · ${ordererName} (${w.work_order_no})`
+          : `${w.client_name} (${w.work_order_no})`;
+      });
     }
 
     const orderClientMap: Record<string, string> = {};
