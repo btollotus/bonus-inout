@@ -1424,8 +1424,8 @@ tr{page-break-inside:avoid;}
         </div>
       ) : null}
 
-      <div id="report-print-area">
-      <div className="flex items-start justify-between gap-3">
+<div id="report-print-area">
+      <div className="flex items-start justify-between gap-3 print:hidden">
           <div>
             <h1 className="text-2xl font-semibold">재고대장</h1>
           </div>
@@ -1527,7 +1527,7 @@ tr{page-break-inside:avoid;}
           )}
         </div>
 
-<div className="mt-6 rounded-2xl border border-black/10 overflow-x-auto print-tight print:border-black/20">
+        <div className="mt-6 rounded-2xl border border-black/10 overflow-x-auto print-tight print:hidden">
 
 <table className="w-full text-sm">
 <thead className="bg-black/5 print:bg-black/5">
