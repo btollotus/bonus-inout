@@ -1011,26 +1011,19 @@ tr{page-break-inside:avoid;}
 </table>
 </body></html>`;
 
-      const iframe = document.createElement("iframe");
-      iframe.style.cssText = "position:fixed;width:0;height:0;border:none;";
-      document.body.appendChild(iframe);
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!doc) return;
-      doc.open();
-      doc.write(html);
-      doc.close();
-      iframe.contentWindow?.focus();
-      setTimeout(() => {
-        iframe.contentWindow?.print();
-        setTimeout(() => { document.body.removeChild(iframe); }, 2000);
-      }, 400);
-    }
+const win = window.open("", "_blank");
+if (!win) return;
+win.document.write(html);
+win.document.close();
+win.focus();
+setTimeout(() => { win.print(); }, 500);
+}
 
     const previewRows = catRows(activeTab);
     const cols = COLS[activeTab];
 
     return (
-      <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", background: "#f1f5f9" }}>
+      <div className="print:hidden" style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", background: "#f1f5f9" }}>
         {/* 헤더 바 */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "#1e3a5f", color: "#fff", flexShrink: 0 }}>
           <div style={{ fontWeight: "bold", fontSize: "14pt" }}>재고대장 인쇄 미리보기</div>
