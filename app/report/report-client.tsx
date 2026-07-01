@@ -1202,33 +1202,7 @@ tr{page-break-inside:avoid;}
         </div>
       )}
 
-      <style jsx global>{`
-        @media print {
-          header, nav { display: none !important; }
-          body * { visibility: hidden !important; }
-          #report-print-area, #report-print-area * { visibility: visible !important; }
-          #report-print-area {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-          }
-          @page { size: A4; margin: 10mm; }
-          html, body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 10px !important; }
-          table { border-collapse: collapse !important; font-size: 10px !important; }
-          thead { display: table-header-group !important; }
-          tfoot { display: table-footer-group !important; }
-          tr { page-break-inside: avoid !important; }
-          th, td { padding-top: 3px !important; padding-bottom: 3px !important; line-height: 1.12 !important; }
-          .print-sub { font-size: 9px !important; line-height: 1.1 !important; }
-          .print-tight { margin-top: 0 !important; }
-          .no-print { display: none !important; }
-          .print-only { display: block !important; }
-          #report-print-area { padding: 0 !important; margin: 0 !important; }
-        }
-        .print-only { display: none; }
-      `}</style>
+      
 
       {/* ── PIN 인증 모달 ── */}
       {pinModal.open && (
@@ -1457,7 +1431,7 @@ tr{page-break-inside:avoid;}
           </div>
         </div>
 
-        <div className="mt-6 flex flex-wrap items-end gap-3 no-print">
+        <div className="mt-6 flex flex-wrap items-end gap-3 print:hidden">
           <div>
             <label className="text-sm text-black/70">조회 방식</label>
             <select
@@ -1685,7 +1659,7 @@ tr{page-break-inside:avoid;}
                     barcode: safeStr(r.barcode),
                     note: safeStr(r.note ?? ""),
                     actions: (isAdmin || isSubAdmin) ? (
-                      <div className="flex gap-1 no-print">
+                      <div className="flex gap-1 print:hidden">
                         {isAdmin && (
                           <>
                             <button
@@ -1769,7 +1743,7 @@ tr{page-break-inside:avoid;}
           </table>
         </div>
 
-        <div className="mt-2 text-xs text-black/50 no-print">
+        <div className="mt-2 text-xs text-black/50 print:hidden">
           ※ 선택한 "구분 필터"가 화면/엑셀/인쇄에 동일하게 적용됩니다. / 기간 조회는 내부적으로 날짜별 재고리포트를 집계합니다.
           {isAdmin && " / ADMIN: 수정(제품명·식품유형·재고수량) · 소비기한 · 삭제 기능 활성화됨"}
         </div>
@@ -1778,7 +1752,7 @@ tr{page-break-inside:avoid;}
       <button
         type="button"
         onClick={scrollTop}
-        className="no-print fixed bottom-24 right-6 z-50 rounded-2xl bg-black text-white px-5 py-4 shadow-lg hover:bg-black/85 active:scale-[0.99]"
+        className="print:hidden fixed bottom-24 right-6 z-50 rounded-2xl bg-black text-white px-5 py-4 shadow-lg hover:bg-black/85 active:scale-[0.99]"
         aria-label="TOP"
         title="TOP"
       >
