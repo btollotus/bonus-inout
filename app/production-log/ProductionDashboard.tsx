@@ -209,6 +209,7 @@ export function ProductionDashboard({
         supabase.from("blend_logs")
           .select("id, recipe_name")
           .eq("log_date", today)
+          .neq("recipe_name", "구아검 배합")
           .in("recipe_id",
             (await supabase.from("blend_recipes").select("id").in("category", ["spray", "coating"])).data?.map((r: any) => r.id) ?? []
           ),
