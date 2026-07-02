@@ -426,7 +426,6 @@ setLoading(false);
                 <td style="${td}">${item.name}</td>
                 <td style="${tdC}">${item.actual_qty > 0 ? item.actual_qty.toLocaleString() : "—"}</td>
                 ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}</td>` : ""}
-                ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${wo.metal_start ? wo.metal_start.slice(0,5) : "—"}~${wo.metal_end ? wo.metal_end.slice(0,5) : "—"}</td>` : ""}
                 ${showUsage ? `<td style="${td}" rowspan="${rows.length}">${usageStr}</td>` : ""}
               </tr>
             `;
@@ -438,12 +437,12 @@ setLoading(false);
          <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
          <colgroup>
             <col style="width:48px"><col style="width:80px"><col><col style="width:38px">
-            <col style="width:75px"><col style="width:75px"><col style="width:110px">
+            <col style="width:75px"><col style="width:110px">
           </colgroup>
           <thead>
             <tr>
               <th style="${th}">작업자</th><th style="${th}">업체명</th><th style="${th}">제품명</th><th style="${th}">수량</th>
-              <th style="${th}">생산시간</th><th style="${th}">금속검출</th><th style="${th}">원료 사용량</th>
+              <th style="${th}">생산시간</th><th style="${th}">원료 사용량</th>
             </tr>
           </thead>
           <tbody>${woRows}</tbody>
