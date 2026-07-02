@@ -1381,6 +1381,32 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     expiry_status: "normal" | "expiring_soon" | "expired";
   }[]>([]);
 
+  // ── 로트별 현황 정렬 ──
+  const [lotSortCol, setLotSortCol] = useState<"material_name" | "received_date" | "expiry_date">("expiry_date");
+  const [lotSortDir, setLotSortDir] = useState<"asc" | "desc">("asc");
+
+  const sortedLotStocks = useMemo(() => {
+    const arr = [...lotStocks];
+    arr.sort((a, b) => {
+      let av: string, bv: string;
+      if (lotSortCol === "material_name") { av = a.material_name; bv = b.material_name; }
+      else if (lotSortCol === "received_date") { av = a.received_date; bv = b.received_date; }
+      else { av = a.expiry_date ?? "9999-99-99"; bv = b.expiry_date ?? "9999-99-99"; }
+      const cmp = av.localeCompare(bv, "ko");
+      return lotSortDir === "asc" ? cmp : -cmp;
+    });
+    return arr;
+  }, [lotStocks, lotSortCol, lotSortDir]);
+
+  function handleLotSort(col: "material_name" | "received_date" | "expiry_date") {
+    if (lotSortCol === col) {
+      setLotSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setLotSortCol(col);
+      setLotSortDir("asc");
+    }
+  }
+
  // ── 드릴다운 ──
  const [expandedMaterialId, setExpandedMaterialId] = useState<string | null>(null);
  const [drillRows, setDrillRows] = useState<{ displayLabel: string; quantity: number; unit: string; woId?: string }[]>([]);
@@ -2442,11 +2468,20 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     <div className="overflow-x-auto">
       <table className="w-full text-sm border-collapse">
         <thead>
-          <tr className="border-b border-slate-200">
+        <tr className="border-b border-slate-200">
             <th className="text-left py-2 px-3 text-xs text-slate-500 font-semibold">분류</th>
-            <th className="text-left py-2 px-3 text-xs text-slate-500 font-semibold">원료명</th>
-            <th className="text-center py-2 px-3 text-xs text-slate-500 font-semibold">입고일</th>
-            <th className="text-center py-2 px-3 text-xs text-slate-500 font-semibold">소비기한</th>
+            <th className="text-left py-2 px-3 text-xs text-slate-500 font-semibold cursor-pointer select-none hover:text-slate-700"
+              onClick={() => handleLotSort("material_name")}>
+              원료명 {lotSortCol === "material_name" ? (lotSortDir === "asc" ? "▲" : "▼") : ""}
+            </th>
+            <th className="text-center py-2 px-3 text-xs text-slate-500 font-semibold cursor-pointer select-none hover:text-slate-700"
+              onClick={() => handleLotSort("received_date")}>
+              입고일 {lotSortCol === "received_date" ? (lotSortDir === "asc" ? "▲" : "▼") : ""}
+            </th>
+            <th className="text-center py-2 px-3 text-xs text-slate-500 font-semibold cursor-pointer select-none hover:text-slate-700"
+              onClick={() => handleLotSort("expiry_date")}>
+              소비기한 {lotSortCol === "expiry_date" ? (lotSortDir === "asc" ? "▲" : "▼") : ""}
+            </th>
             <th className="text-right py-2 px-3 text-xs text-slate-500 font-semibold">입고수량</th>
             <th className="text-right py-2 px-3 text-xs text-slate-500 font-semibold">폐기수량</th>
             <th className="text-right py-2 px-3 text-xs text-slate-500 font-semibold">잔여수량</th>
@@ -2454,7 +2489,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
           </tr>
         </thead>
         <tbody>
-          {lotStocks.map((lot) => (
+          {sortedLotStocks.map((lot) => (
             <tr key={lot.receipt_id} className={`border-b border-slate-100 hover:bg-slate-50
               ${lot.expiry_status === "expired" ? "bg-red-50" : lot.expiry_status === "expiring_soon" ? "bg-orange-50" : ""}`}>
               <td className="py-2 px-3 text-xs text-slate-500">{lot.category}</td>
