@@ -280,7 +280,7 @@ export function PestTab({ role, userId, showToast }: {
     win.document.write(`<!DOCTYPE html><html><head>
       <meta charset="utf-8"><title>${title}</title>
       <style>
-        @page { size: A4 ${isWalking ? "portrait" : "landscape"}; margin: 6mm 8mm; }
+        @page { size: A4 landscape; margin: 6mm 8mm; }
         body { margin:0; font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:${isWalking ? "7pt" : "9pt"}; color:#000; }
         * { box-sizing:border-box; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
         table { border-collapse:collapse; width:100%; }
