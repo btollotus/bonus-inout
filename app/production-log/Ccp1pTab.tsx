@@ -584,7 +584,12 @@ function selectWo(wo: WorkOrderItem) {
     }
 
     setSaving(false);
-    if (error) return showToast("저장 실패: " + error.message, "error");
+    if (error) {
+      if (error.code === "23505") {
+        return showToast("이미 저장된 기록입니다. 새로고침 후 확인해주세요.", "error");
+      }
+      return showToast("저장 실패: " + error.message, "error");
+    }
 
     // ── CCP-1P 저장 완료 후: 재고 입고 + assignee_input + status = "완료" ──
     try {
