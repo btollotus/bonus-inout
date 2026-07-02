@@ -201,17 +201,26 @@ export function PestTab({ role, userId, showToast }: {
     if (!walkingByDate[r.record_date]) walkingByDate[r.record_date] = {};
     walkingByDate[r.record_date][r.trap_no] = r;
   }
-  const lastReplaceFlying: Record<string, string> = {};
-  const lastReplaceWalking: Record<string, string> = {};
+  const replaceDatesFlying: Record<string, string[]> = {};
+  const replaceDatesWalking: Record<string, string[]> = {};
   for (const s of viewSticky) {
     if (!s.replaced) continue;
     if (s.target_type === "flying") {
-      if (!lastReplaceFlying[s.target_key] || s.record_date > lastReplaceFlying[s.target_key])
-        lastReplaceFlying[s.target_key] = s.record_date;
+      if (!replaceDatesFlying[s.target_key]) replaceDatesFlying[s.target_key] = [];
+      replaceDatesFlying[s.target_key].push(s.record_date);
     } else if (s.target_type === "walking") {
-      if (!lastReplaceWalking[s.target_key] || s.record_date > lastReplaceWalking[s.target_key])
-        lastReplaceWalking[s.target_key] = s.record_date;
+      if (!replaceDatesWalking[s.target_key]) replaceDatesWalking[s.target_key] = [];
+      replaceDatesWalking[s.target_key].push(s.record_date);
     }
+  }
+  for (const k of Object.keys(replaceDatesFlying)) replaceDatesFlying[k].sort();
+  for (const k of Object.keys(replaceDatesWalking)) replaceDatesWalking[k].sort();
+  // 목표 날짜보다 "이전"인 교체일만 컷오프로 사용 — 교체 당일 누계는 유지, 다음 조회일부터 리셋
+  function cutoffBefore(dates: string[] | undefined, targetDate: string): string | undefined {
+    if (!dates) return undefined;
+    let result: string | undefined;
+    for (const d of dates) { if (d < targetDate) result = d; else break; }
+    return result;
   }
   const allFlyingForCumul = [
     ...prevMonthFlying,
@@ -225,7 +234,7 @@ export function PestTab({ role, userId, showToast }: {
   for (const date of viewDates) {
     flyingCumul[date] = {};
     for (const loc of LOCATIONS) {
-      const cutoff = lastReplaceFlying[loc];
+      const cutoff = cutoffBefore(replaceDatesFlying[loc], date);
       flyingCumul[date][loc] = allFlyingForCumul
         .filter(r => r.location === loc && r.record_date <= date && (!cutoff || r.record_date > cutoff))
         .reduce((s, r) => s + (r.total ?? 0), 0);
@@ -235,7 +244,7 @@ export function PestTab({ role, userId, showToast }: {
   for (const date of viewDates) {
     walkingCumul[date] = {};
     for (const trap of TRAPS) {
-      const cutoff = lastReplaceWalking[trap];
+      const cutoff = cutoffBefore(replaceDatesWalking[trap], date);
       walkingCumul[date][trap] = allWalkingForCumul
         .filter(r => r.trap_no === trap && r.record_date <= date && (!cutoff || r.record_date > cutoff))
         .reduce((s, r) => s + (r.total ?? 0), 0);
