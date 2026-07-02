@@ -378,10 +378,12 @@ function ProductionLogTab({ role, userId, showToast }: {
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
       .then(({ data }) => {
-        const sorted = (data ?? [])
-          .filter((a: any) => !["강미라", "조대성"].includes(a.name))
+        const filtered = (data ?? []).filter((a: any) => a.name !== "강미라");
+        const sorted = filtered
+          .filter((a: any) => a.name !== "조대성")
           .sort((a: any, b: any) => (a.name ?? "").localeCompare(b.name ?? "", "ko"));
-        setEmployees(sorted as any);
+        const jds = filtered.filter((a: any) => a.name === "조대성");
+        setEmployees([...sorted, ...jds] as any);
       });
     supabase.from("production_task_types").select("id,name,order_no").eq("is_active", true).order("order_no")
       .then(({ data }) => setTaskTypes(data ?? []));
