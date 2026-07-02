@@ -7,6 +7,7 @@ import { getDistanceMeters, getCurrentPosition, nowKSTIso, todayKST } from "@/ut
 
 type Employee = { id: string; name: string; pin: string | null; webauthn_credential: any };
 type AttendanceRecord = { type: string; happened_at: string };
+type HealthCertRecord = { id: string; employee_id: string; exam_date: string; note: string | null; created_at: string };
 
 export default function AttendanceClient() {
   const supabase = useMemo(() => createClient(), []);
@@ -15,6 +16,7 @@ export default function AttendanceClient() {
   const [pinEmployee, setPinEmployee] = useState<Employee | null>(null); // PIN 인증 대상
   const [verifiedEmployee, setVerifiedEmployee] = useState<{ id: string; name: string } | null>(null);
   const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([]);
+  const [healthCert, setHealthCert] = useState<HealthCertRecord | null>(null);
   const [officeLocation, setOfficeLocation] = useState<{ latitude: number; longitude: number; radius_m: number } | null>(null);
   const [status, setStatus] = useState<{ type: "idle" | "ok" | "err" | "warn"; msg: string }>({ type: "idle", msg: "" });
   const [loading, setLoading] = useState(false);
@@ -47,6 +49,38 @@ export default function AttendanceClient() {
     setTodayRecords((data ?? []) as AttendanceRecord[]);
   }
 
+  // 보건증 최신 검사 기록 조회
+  async function loadHealthCert(employeeId: string) {
+    const { data } = await supabase
+      .from("employee_health_certs")
+      .select("id,employee_id,exam_date,note,created_at")
+      .eq("employee_id", employeeId)
+      .order("exam_date", { ascending: false })
+      .limit(1);
+    setHealthCert(((data && data[0]) as HealthCertRecord) ?? null);
+  }
+
+  // 보건증 만료일 계산 (검사일 + 1년)
+  function healthExpiry(examDate: string) {
+    const d = new Date(examDate);
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().split("T")[0];
+  }
+  function daysUntilExpiry(examDate: string) {
+    const expiry = new Date(healthExpiry(examDate));
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.ceil((expiry.getTime() - today.getTime()) / 86400000);
+  }
+  function healthCertBadge(examDate: string) {
+    const days = daysUntilExpiry(examDate);
+    if (days < 0) return { label: "만료됨", cls: "bg-red-50 border-red-200 text-red-700" };
+    if (days <= 7) return { label: `D-${days} · 1주일 이내`, cls: "bg-red-50 border-red-200 text-red-700" };
+    if (days <= 14) return { label: `D-${days} · 2주 이내`, cls: "bg-orange-50 border-orange-200 text-orange-700" };
+    if (days <= 30) return { label: `D-${days} · 1개월 이내`, cls: "bg-amber-50 border-amber-200 text-amber-700" };
+    return { label: `D-${days}`, cls: "bg-green-50 border-green-200 text-green-700" };
+  }
+
   // 출근/퇴근 버튼 클릭 → PIN 모달 먼저
   function handleAttendanceClick(type: "IN" | "OUT") {
     if (!officeLocation) {
@@ -65,6 +99,7 @@ export default function AttendanceClient() {
 
     setVerifiedEmployee({ id: employeeId, name: employeeName });
     await loadTodayRecords(employeeId);
+    await loadHealthCert(employeeId);
 
     // WebAuthn 등록 여부 확인
     if (!emp.webauthn_credential) {
@@ -242,7 +277,7 @@ const { error } = await supabase.from("attendance").insert({
             <span className="text-sm font-semibold text-slate-700">{verifiedEmployee.name}</span>
             <button
               className="text-xs text-slate-400 hover:text-slate-600"
-              onClick={() => { setVerifiedEmployee(null); setTodayRecords([]); setStatus({ type: "idle", msg: "" }); }}
+              onClick={() => { setVerifiedEmployee(null); setTodayRecords([]); setHealthCert(null); setStatus({ type: "idle", msg: "" }); }}
             >
               변경
             </button>
@@ -266,6 +301,20 @@ const { error } = await supabase.from("attendance").insert({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 보건증 만료 안내 */}
+      {verifiedEmployee && (
+        healthCert ? (
+          <div className={`flex items-center justify-between rounded-xl border px-4 py-2.5 mb-4 text-xs ${healthCertBadge(healthCert.exam_date).cls}`}>
+            <span>🏥 보건증 만료일 <strong>{healthExpiry(healthCert.exam_date)}</strong></span>
+            <span className="font-bold">{healthCertBadge(healthCert.exam_date).label}</span>
+          </div>
+        ) : (
+          <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 mb-4 text-xs text-slate-400">
+            🏥 등록된 보건증 검사 기록이 없습니다. 관리자에게 문의하세요.
+          </div>
+        )
       )}
 
       {/* 출근/퇴근 버튼 */}
