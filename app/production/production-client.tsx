@@ -3532,6 +3532,51 @@ const totalOrder = items
                                 if (transferErr) { showToast("전사지 차감 실패: " + transferErr.message, "error"); return; }
                               }
                             }
+
+                            // ── 재고 차감 선택(transfer_lots 배열) 변경분 저장 + 재고 diff 반영 — 완료된 WO 수정 시 ──
+                            if (isGeneralCompletedWo) {
+                              const savedLotsForItem = savedTransferLotsSnapshotRef.current[item.id] ?? [];
+                              const currentLotsForItem = (pi.transfer_lots ?? [])
+                                .map((l) => ({ lot_id: l.lot_id, qty: toInt(l.qty) }))
+                                .filter((l) => l.lot_id && l.qty > 0);
+
+                              if (savedLotsForItem.length > 0 || currentLotsForItem.length > 0) {
+                                const savedQtyMap: Record<string, number> = {};
+                                for (const l of savedLotsForItem) savedQtyMap[l.lot_id] = (savedQtyMap[l.lot_id] ?? 0) + l.qty;
+                                const currentQtyMap: Record<string, number> = {};
+                                for (const l of currentLotsForItem) currentQtyMap[l.lot_id] = (currentQtyMap[l.lot_id] ?? 0) + l.qty;
+                                const allLotIds = Array.from(new Set([...Object.keys(savedQtyMap), ...Object.keys(currentQtyMap)]));
+
+                                if (allLotIds.some((lotId) => (currentQtyMap[lotId] ?? 0) !== (savedQtyMap[lotId] ?? 0))) {
+                                  const { data: { user: diffUser } } = await supabase.auth.getUser();
+                                  for (const lotId of allLotIds) {
+                                    const savedQty = savedQtyMap[lotId] ?? 0;
+                                    const currentQty = currentQtyMap[lotId] ?? 0;
+                                    const diffQty = currentQty - savedQty;
+                                    if (diffQty === 0) continue;
+                                    if (diffQty > 0) {
+                                      const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", lotId);
+                                      const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
+                                      if (diffQty > remaining) { showToast(`재고 차감 실패: 추가 차감(${diffQty})이 잔량(${remaining})을 초과합니다.`, "error"); return; }
+                                      const { error: addOutErr } = await supabase.from("movements").insert({ lot_id: lotId, type: "OUT", qty: diffQty, happened_at: new Date().toISOString(), note: `전사지 차감 - ${selectedWo.work_order_no} - ${item.delivery_date} (수정추가)`, created_by: diffUser?.id ?? null });
+                                      if (addOutErr) { showToast("재고 차감 실패: " + addOutErr.message, "error"); return; }
+                                    } else {
+                                      const { error: revertInErr } = await supabase.from("movements").insert({ lot_id: lotId, type: "IN", qty: -diffQty, happened_at: new Date().toISOString(), note: `전사지 차감 - ${selectedWo.work_order_no} - ${item.delivery_date} (수정취소)`, created_by: diffUser?.id ?? null });
+                                      if (revertInErr) { showToast("재고 차감 취소 실패: " + revertInErr.message, "error"); return; }
+                                    }
+                                  }
+                                }
+
+                                const { error: lotsUpdErr } = await supabase.from("work_order_items").update({
+                                  transfer_lot_id: currentLotsForItem[0]?.lot_id ?? null,
+                                  transfer_qty: currentLotsForItem.reduce((s, l) => s + l.qty, 0) || null,
+                                  transfer_lots: currentLotsForItem,
+                                }).eq("id", item.id);
+                                if (lotsUpdErr) { showToast("재고 차감 저장 실패: " + lotsUpdErr.message, "error"); return; }
+
+                                savedTransferLotsSnapshotRef.current[item.id] = currentLotsForItem;
+                              }
+                            }
                           }
                           // ── 불량(defect_qty) 즉시 동기화를 위해 selectedWo 로컬 상태 갱신 ──
                           setSelectedWo((prev) => prev ? {
