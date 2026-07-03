@@ -1653,7 +1653,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
             if ((cl.stock_out_lots ?? []).length > 0) continue;
             const variantId = masterByName.get(cl.name)?.variant_id;
             if (!variantId) continue;
-            const shortageResult = await createTempLotForShortage(supabase, variantId, cl.qty, cl.name, shipDate, selectedPartner.name, woFailUserId, orderId);
+            const shortageResult = await createTempLotForShortage(supabase, variantId, cl.actual_ea, cl.name, shipDate, selectedPartner.name, woFailUserId, orderId);
             if (shortageResult.error) stockErrorsOnWoFail.push(shortageResult.error);
           }
         }
@@ -1690,7 +1690,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
           if ((cl.stock_out_lots ?? []).length > 0) continue;
           const variantId = masterByName.get(cl.name)?.variant_id;
           if (!variantId) continue;
-          const shortageResult = await createTempLotForShortage(supabase, variantId, cl.qty, cl.name, shipDate, selectedPartner.name, stockUserId, orderId);
+          const shortageResult = await createTempLotForShortage(supabase, variantId, cl.actual_ea, cl.name, shipDate, selectedPartner.name, stockUserId, orderId);
           if (shortageResult.error) stockErrors.push(shortageResult.error);
         }
       }
@@ -2311,7 +2311,7 @@ if (woSubNameVal) {
             if ((cl.stock_out_lots ?? []).length > 0) continue;
             const variantId = masterByName.get(cl.name)?.variant_id;
             if (!variantId) continue;
-            const shortageResult = await createTempLotForShortage(supabase, variantId, cl.qty, cl.name, eShipDate, selectedPartner.name, stockUserId, editRow.rawId);
+            const shortageResult = await createTempLotForShortage(supabase, variantId, cl.actual_ea, cl.name, eShipDate, selectedPartner.name, stockUserId, editRow.rawId);
             if (shortageResult.error) stockErrors.push(shortageResult.error);
           }
         }
