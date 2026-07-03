@@ -435,6 +435,8 @@ export default function ProductionClient() {
   const [transferLotSearching, setTransferLotSearching] = useState<Record<string, boolean>>({});
 
   const currentUserIdRef = useRef<string | null>(null);
+  // ── 완료된 WO 수정 시 "이미 이 WO가 차감한 LOT 수량" 스냅샷 (재고 차감 선택 잔량 계산용) ──
+  const savedTransferLotsSnapshotRef = useRef<Record<string, { lot_id: string; qty: number }[]>>({});
 
   const { session: pinSession, isValid: isPinValid, login: pinLogin } = usePinSession();
   const [showPinModalForProgress, setShowPinModalForProgress] = useState(false);
@@ -1099,6 +1101,7 @@ export default function ProductionClient() {
     const inputs: Record<string, { actual_qty: string; gift_qty: string; defect_qty?: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[]; skip?: boolean }> = {};
     for (const item of wo.work_order_items ?? []) {
       const savedLots = (item as any).transfer_lots as { lot_id: string; qty: number }[] | null;
+      savedTransferLotsSnapshotRef.current[item.id] = savedLots ? savedLots.map((l) => ({ lot_id: l.lot_id, qty: toInt(l.qty) })) : [];
       const extraQtyCalc = (item.actual_qty != null && item.actual_qty > item.order_qty)
         ? String(item.actual_qty - item.order_qty)
         : "";
@@ -3355,7 +3358,11 @@ const totalOrder = items
                                     const allLots = Object.values(transferLotOptions).flat();
                                     const lotInfo = allLots.find((l) => l.lot_id === tl.lot_id) ?? (transferLotOptions[item.id] ?? []).find((l) => l.lot_id === tl.lot_id);
                                     const usedQtyByOthers = (prodInputs[item.id].transfer_lots).filter((_, i) => i !== tlIdx).reduce((s, l) => l.lot_id === tl.lot_id ? s + toInt(l.qty) : s, 0);
-                                    const effectiveRemaining = (lotInfo?.remaining_qty ?? 0) - usedQtyByOthers;
+                                    // 완료된 WO 수정 시 — 이 WO가 최초 완료 때 이미 이 lot에서 차감해 놓은 수량을 되돌려 더해줌 (진짜 가용 잔량 계산)
+                                    const alreadyDeductedByThisWo = selectedWo?.status === "완료"
+                                      ? (savedTransferLotsSnapshotRef.current[item.id] ?? []).filter((sl) => sl.lot_id === tl.lot_id).reduce((s, sl) => s + sl.qty, 0)
+                                      : 0;
+                                    const effectiveRemaining = (lotInfo?.remaining_qty ?? 0) + alreadyDeductedByThisWo - usedQtyByOthers;
                                     return (
                                       <div key={tlIdx} className="rounded-lg border border-violet-200 bg-white px-2.5 py-1.5">
                                         <div className="flex items-center gap-2">
