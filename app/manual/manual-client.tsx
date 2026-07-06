@@ -107,6 +107,16 @@ function RteToolbar({onFormat}:{onFormat:(fn:(v:string,ta:HTMLTextAreaElement)=>
         {btn("H3",(v,ta)=>applyFormat(ta,"\n### ",""))}
         {btn("하이픈",(v,ta)=>applyFormat(ta,"\n- ",""))}
 
+        {/* 접기 — 선택 영역을 [[FOLD]]~[[/FOLD]] 마커로 감싸 H2와 무관하게 임의 구간을 접기/펼치기 가능하게 함 */}
+        {btn("접기",(v,ta)=>{
+          const s=ta.selectionStart, e=ta.selectionEnd;
+          const sel=v.slice(s,e)||"접을 내용을 입력하세요";
+          const before=v.slice(0,s), after=v.slice(e);
+          const preNl=(before.length>0 && !before.endsWith("\n")) ? "\n" : "";
+          const postNl=(after.length>0 && !after.startsWith("\n")) ? "\n" : "";
+          return before+preNl+"[[FOLD:제목]]\n"+sel+"\n[[/FOLD]]"+postNl+after;
+        },"선택 영역을 접기 블록으로 감싸기")}
+
         {/* 번호 — 숫자만 연달아 */}
         {btn("번호",(v,ta)=>{
           const s=ta.selectionStart;
@@ -266,7 +276,7 @@ function renderBody(body: string): string {
 
 
 // ─── 섹션 분리 (접기/펼치기용) ──────────────────────────────────────────────
-interface BodySection { key: string; heading: string|null; headingHtml: string|null; bodyHtml: string; }
+interface BodySection { key: string; heading: string|null; headingHtml: string|null; bodyHtml: string; isFold?: boolean; }
 function splitSections(body: string): BodySection[] {
   const lines = body.split("\n");
   const sections: BodySection[] = [];
@@ -277,10 +287,35 @@ function splitSections(body: string): BodySection[] {
       sections.push({key:cur.heading??`__top__${sections.length}`,heading:cur.heading,headingHtml:cur.headingHtml,bodyHtml:renderBody(partial)});
     }
   };
-  for(const line of lines){
+  let i=0;
+  while(i<lines.length){
+    const line=lines[i];
     const h2=line.match(/^## (.+)$/);
-    if(h2){ flush(); cur={heading:h2[1],headingHtml:`<strong>${h2[1]}</strong>`,lines:[]}; continue; }
+    if(h2){ flush(); cur={heading:h2[1],headingHtml:`<strong>${h2[1]}</strong>`,lines:[]}; i++; continue; }
+    // [[FOLD:제목]] ~ [[/FOLD]] — H2와 무관하게 임의 구간을 접을 수 있는 전용 마커
+    const foldStart=line.match(/^\[\[FOLD(?::(.*))?\]\]$/);
+    if(foldStart){
+      flush();
+      cur={heading:null,headingHtml:null,lines:[]};
+      const foldLines: string[] = [];
+      let j=i+1;
+      while(j<lines.length && lines[j].trim()!=="[[/FOLD]]"){
+        foldLines.push(lines[j]);
+        j++;
+      }
+      const foldTitle=(foldStart[1]?.trim())||"접기";
+      sections.push({
+        key:`__fold__${sections.length}_${foldTitle}`,
+        heading:foldTitle,
+        headingHtml:`<strong>${foldTitle}</strong>`,
+        bodyHtml:renderBody(foldLines.join("\n")),
+        isFold:true,
+      });
+      i=j+1;
+      continue;
+    }
     cur.lines.push(line);
+    i++;
   }
   flush();
   return sections;
@@ -1195,7 +1230,7 @@ export default function ManualClient() {
                         dangerouslySetInnerHTML={{__html:renderBody(editBody)}}/>
                     )}
                     </div>
-                    <div style={{fontSize:11,color:"#bbb",marginTop:4}}>**굵게** / _기울임_ / ## 제목 / - 목록 / `코드` / --- 구분선</div>
+                    <div style={{fontSize:11,color:"#bbb",marginTop:4}}>**굵게** / _기울임_ / ## 제목 / - 목록 / `코드` / --- 구분선 / [[FOLD]]~[[/FOLD]] 접기(툴바 '접기' 버튼)</div>
                   </div>
                   <div style={{marginBottom:14}}>
                     <label style={{fontSize:12,color:"#666",display:"block",marginBottom:6}}>이미지</label>
@@ -1243,23 +1278,29 @@ export default function ManualClient() {
                   </h2>
                 {/* 마크다운 렌더링 — 섹션별 접기/펼치기 */}
                 <div style={{fontSize:14,lineHeight:1.8,color:"#444",marginBottom:currentContent.image_urls?.length?22:0}}>
-                    {splitSections(currentContent.body).map((sec)=>{
+                {splitSections(currentContent.body).map((sec)=>{
                       const isCollapsed=!!collapsedSections[sec.key];
                       return(
                         <div key={sec.key}>
-                          {sec.heading&&(
+                          {sec.heading&&(sec.isFold?(
+                            <div onClick={()=>toggleSection(sec.key)}
+                              style={{display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer",userSelect:"none",margin:"10px 0",padding:"4px 12px",borderRadius:14,background:"#f0f4ff",border:"1px solid #dce5ff",fontSize:12,color:"#2d5be3",fontWeight:600}}>
+                              <span style={{fontSize:10}}>{isCollapsed?"▶":"▼"}</span>
+                              {sec.heading}
+                            </div>
+                          ):(
                             <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none",margin:"20px 0 8px"}}
                               onClick={()=>toggleSection(sec.key)}>
                               <h2 style={{fontSize:18,fontWeight:700,color:"#1a1a2e",margin:0,flex:1}}>{sec.heading}</h2>
                               <span style={{fontSize:13,color:"#aaa",flexShrink:0}}>{isCollapsed?"▶":"▼"}</span>
                             </div>
-                          )}
+                          ))}
                           {!isCollapsed&&(
                             <div dangerouslySetInnerHTML={{__html:sec.bodyHtml}}/>
                           )}
                         </div>
                       );
-                    })}
+                    })} 
                   </div>
                   {/* 이미지 */}
                   {currentContent.image_urls?.length>0&&(
