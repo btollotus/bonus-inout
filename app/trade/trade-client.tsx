@@ -3329,18 +3329,20 @@ if (woSubNameVal) {
                   <div className="text-sm text-slate-600">방향: <span className="font-semibold">{categoryToDirection(category) === "IN" ? "입금(+)" : "출금(-)"}</span></div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div><div className="mb-1 text-xs text-slate-600">일자</div><input type="date" className={inp} value={entryDate} onChange={(e) => setEntryDate(e.target.value)} /></div>
-                  <div><div className="mb-1 text-xs text-slate-600">결제수단</div>
-                    <select className={inp} value={payMethod} onChange={(e) => setPayMethod(e.target.value as any)}>
-                      {[["BANK", "입금"], ["CASH", "현금"], ["CARD", "카드"], ["ETC", "기타"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
-                  </div>
-                  <div className="md:col-span-3"><div className="mb-1 text-xs text-slate-600">카테고리</div>
-                    <div className="flex flex-wrap gap-2">
-                      {CATEGORIES.map((c) => (
-                        <button key={c} type="button" className={category === c ? btnOn : btn}
-                          onClick={() => { setCategory(c); if (c !== "급여") { setSalaryEmployeeId(""); setVatFree(false); } else { setVatFree(true); } }}>{c}</button>
-                      ))}
+                  <div className="md:col-span-3 flex flex-wrap items-start gap-3">
+                    <div className="w-full sm:w-36"><div className="mb-1 text-xs text-slate-600">일자</div><input type="date" className={inp} value={entryDate} onChange={(e) => setEntryDate(e.target.value)} /></div>
+                    <div className="w-full sm:w-28"><div className="mb-1 text-xs text-slate-600">결제수단</div>
+                      <select className={inp} value={payMethod} onChange={(e) => setPayMethod(e.target.value as any)}>
+                        {[["BANK", "입금"], ["CASH", "현금"], ["CARD", "카드"], ["ETC", "기타"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div className="min-w-0 flex-1"><div className="mb-1 text-xs text-slate-600">카테고리</div>
+                      <div className="flex flex-wrap gap-2">
+                        {CATEGORIES.map((c) => (
+                          <button key={c} type="button" className={category === c ? btnOn : btn}
+                            onClick={() => { setCategory(c); if (c !== "급여") { setSalaryEmployeeId(""); setVatFree(false); } else { setVatFree(true); } }}>{c}</button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   {category === "급여" ? (
