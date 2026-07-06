@@ -1110,7 +1110,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
       if (selectedPartnerId || selectedBusinessNo) {
         const ors: string[] = [];
         if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
-        if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
+        if (selectedBusinessNo) ors.push(`and(business_no.eq.${selectedBusinessNo},partner_id.is.null)`);
         if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
         lqLatest = lqLatest.or(ors.join(","));
       } else if (subAdminPartnerNames) {
@@ -1149,7 +1149,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         if (selectedPartnerId || selectedBusinessNo) {
           const ors: string[] = [];
           if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
-          if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
+          if (selectedBusinessNo) ors.push(`and(business_no.eq.${selectedBusinessNo},partner_id.is.null)`);
           if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
           lq = lq.or(ors.join(","));
         } else if (subAdminPartnerNames) {
@@ -1188,7 +1188,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         if (selectedPartnerId || selectedBusinessNo) {
           const ors: string[] = [];
           if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
-          if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
+          if (selectedBusinessNo) ors.push(`and(business_no.eq.${selectedBusinessNo},partner_id.is.null)`);
           if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
           lq2 = lq2.or(ors.join(","));
         } else if (subAdminPartnerNames) {
@@ -1244,7 +1244,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         if (selectedPartnerId || selectedBusinessNo) {
           const ors: string[] = [];
           if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
-          if (selectedBusinessNo) ors.push(`business_no.eq.${selectedBusinessNo}`);
+          if (selectedBusinessNo) ors.push(`and(business_no.eq.${selectedBusinessNo},partner_id.is.null)`);
           if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
           lq = lq.or(ors.join(","));
         }
