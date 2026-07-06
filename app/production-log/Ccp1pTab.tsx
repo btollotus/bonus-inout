@@ -1134,7 +1134,7 @@ if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
                       <td style="${tdS}width:60px;font-weight:bold;">작성일자</td>
                       <td style="${tdS}">${dateLabel}</td>
                       <td style="${tdS}width:60px;font-weight:bold;">한계기준</td>
-                      <td style="${tdS}">악성 85</td>
+                      <td style="${tdS}">약성 85</td>
                       <td style="${tdS}width:20px;font-weight:bold;">Fe</td>
                       <td style="${tdS}">2.5mmφ</td>
                       <td style="${tdS}width:30px;font-weight:bold;">SUS</td>
@@ -1513,7 +1513,7 @@ if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
               <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff" }}>작성일자</td>
               <td style={tdBase}>{dateLabel}</td>
               <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff" }}>한계기준</td>
-              <td style={tdBase}>악성 85</td>
+              <td style={tdBase}>약성 85</td>
               <td style={{ ...tdBase, width: 20, fontWeight: "bold", background: "#fff" }}>Fe</td>
               <td style={tdBase}>2.5mmφ</td>
               <td style={{ ...tdBase, width: 30, fontWeight: "bold", background: "#fff" }}>SUS</td>
@@ -1718,7 +1718,7 @@ if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
               <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff" }}>작성일자</td>
               <td style={tdBase}>{printDate}</td>
               <td style={{ ...tdBase, width: 60, fontWeight: "bold", background: "#fff" }}>한계기준</td>
-              <td style={tdBase}>악성 85</td>
+              <td style={tdBase}>약성 85</td>
               <td style={{ ...tdBase, width: 20, fontWeight: "bold", background: "#fff" }}>Fe</td>
               <td style={tdBase}>2.5mmφ</td>
               <td style={{ ...tdBase, width: 30, fontWeight: "bold", background: "#fff" }}>SUS</td>
