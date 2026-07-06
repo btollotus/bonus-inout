@@ -185,16 +185,26 @@ function renderBody(body: string): string {
   while(i < lines.length) {
     const raw = lines[i];
     // HTML 이스케이프 (ul/ol 내부에서도 적용)
-    const esc = (s: string) => s
-      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-      .replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")
-      .replace(/_(.+?)_/g,"<em>$1</em>")
-      .replace(/`(.+?)`/g,"<code style='background:#f0f4ff;color:#2d5be3;border-radius:3px;padding:1px 5px;font-size:13px'>$1</code>")
-      .replace(/&lt;u&gt;(.+?)&lt;\/u&gt;/g,"<u>$1</u>")
-      // 이미지
-      .replace(/!\[\]\((.+?)\)/g,"<img src='$1' style='max-width:100%;border-radius:6px;margin:6px 0;display:block'/>")
-      // 앞 공백 보존
-      .replace(/^ +/, m => "&nbsp;".repeat(m.length));
+    const esc = (s: string) => {
+      // 이미지 마크다운을 먼저 안전한 플레이스홀더로 치환
+      // (URL에 포함된 밑줄(_)이 아래 기울임 정규식에 의해 깨지는 것을 방지)
+      const imgUrls: string[] = [];
+      let out = s.replace(/!\[\]\((.+?)\)/g, (_m, url) => {
+        imgUrls.push(url);
+        return `\u0000IMG${imgUrls.length - 1}\u0000`;
+      });
+      out = out
+        .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+        .replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")
+        .replace(/_(.+?)_/g,"<em>$1</em>")
+        .replace(/`(.+?)`/g,"<code style='background:#f0f4ff;color:#2d5be3;border-radius:3px;padding:1px 5px;font-size:13px'>$1</code>")
+        .replace(/&lt;u&gt;(.+?)&lt;\/u&gt;/g,"<u>$1</u>")
+        // 앞 공백 보존
+        .replace(/^ +/, m => "&nbsp;".repeat(m.length));
+      // 플레이스홀더를 실제 img 태그로 복원
+      out = out.replace(/\u0000IMG(\d+)\u0000/g, (_m, i) => `<img src='${imgUrls[Number(i)]}' style='max-width:100%;border-radius:6px;margin:6px 0;display:block'/>`);
+      return out;
+    };
     // 구분선
     if(raw.trim()==="---"){
       out.push("<hr style='border:none;border-top:1.5px solid #e2e5ea;margin:16px 0;display:block;width:100%'>");
@@ -567,9 +577,15 @@ export default function ManualClient() {
   // RTE 포맷 적용
   const handleFormat=(fn:(v:string,ta:HTMLTextAreaElement)=>string)=>{
     const ta=textareaRef.current; if(!ta) return;
-    const newVal=fn(editBody,ta);
+    const oldVal=editBody;
+    const newVal=fn(oldVal,ta);
     setEditBody(newVal);
-    setTimeout(()=>{ ta.focus(); });
+    // 커서 위치를 삽입 지점 다음으로 복원 (공통 접미사 길이로 계산, 어떤 버튼 함수든 동일하게 동작)
+    let suffixLen=0;
+    const maxLen=Math.min(oldVal.length,newVal.length);
+    while(suffixLen<maxLen && oldVal[oldVal.length-1-suffixLen]===newVal[newVal.length-1-suffixLen]) suffixLen++;
+    const newPos=newVal.length-suffixLen;
+    setTimeout(()=>{ ta.focus(); ta.selectionStart=ta.selectionEnd=newPos; });
   };
 
   // ── 이미지 업로드 (Public 버킷) ──
