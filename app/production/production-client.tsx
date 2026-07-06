@@ -2167,7 +2167,7 @@ if (dupCheck && dupCheck.length > 0) {
           </div>
           <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-emerald-700 opacity-70">재고생산 ▶</span>
-            {(["기성","업체","코팅/분사","생산용전사지"] as const).map((cat) => (
+            {(["기성","업체","전사지","코팅/분사","생산용전사지"] as const).map((cat) => (
               <button key={cat}
                 className={kiseongCategory === cat ? "rounded-lg border border-emerald-500 bg-emerald-600 px-2.5 py-1 text-sm font-semibold text-white hover:bg-emerald-700" : "rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"}
                 onClick={() => {
