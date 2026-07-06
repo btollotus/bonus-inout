@@ -16,6 +16,7 @@ type PartnerRow = {
   partner_type: string | null; group_name: string | null;
   ship_to_name: string | null; ship_to_address1: string | null;
   ship_to_mobile: string | null; ship_to_phone: string | null;
+  sub_place_no: string | null;
 };
 type PartnerShippingHistoryRow = {
   id: string; partner_id: string; ship_to_name: string | null;
@@ -701,11 +702,13 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [recentPartnerIds, setRecentPartnerIds] = useState<string[]>([]);
 
   const [p_name, setP_name] = useState(""); const [p_businessNo, setP_businessNo] = useState("");
+  const [p_subPlaceNo, setP_subPlaceNo] = useState("");
   const [p_ceo, setP_ceo] = useState(""); const [p_phone, setP_phone] = useState("");
   const [p_address1, setP_address1] = useState(""); const [p_bizType, setP_bizType] = useState("");
   const [p_bizItem, setP_bizItem] = useState(""); const [p_partnerType, setP_partnerType] = useState<PartnerType>("CUSTOMER");
 
   const [ep_name, setEP_name] = useState(""); const [ep_businessNo, setEP_businessNo] = useState("");
+  const [ep_subPlaceNo, setEP_subPlaceNo] = useState("");
   const [ep_ceo, setEP_ceo] = useState(""); const [ep_phone, setEP_phone] = useState("");
   const [ep_address1, setEP_address1] = useState(""); const [ep_bizType, setEP_bizType] = useState("");
   const [ep_bizItem, setEP_bizItem] = useState(""); const [ep_partnerType, setEP_partnerType] = useState<PartnerType>("CUSTOMER");
@@ -1027,7 +1030,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
    setMsg(null);
     try {
       const { data, error } = await supabase.from("partners")
-        .select("id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone")
+        .select("id,name,business_no,sub_place_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone")
         .order("is_pinned", { ascending: false }).order("pin_order", { ascending: true }).order("name", { ascending: true }).limit(500);
       if (error) {
         // AbortError는 정상적인 언마운트로 인한 취소 — 무시
@@ -1319,13 +1322,13 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
   
   useEffect(() => { loadTrades(); /* eslint-disable-next-line */ }, [selectedPartner?.id, fromYMD, toYMD, toTouched]);
 
-  function resetPartnerForm() { setP_name(""); setP_businessNo(""); setP_ceo(""); setP_phone(""); setP_address1(""); setP_bizType(""); setP_bizItem(""); setP_partnerType("CUSTOMER"); }
+  function resetPartnerForm() { setP_name(""); setP_businessNo(""); setP_subPlaceNo(""); setP_ceo(""); setP_phone(""); setP_address1(""); setP_bizType(""); setP_bizItem(""); setP_partnerType("CUSTOMER"); }
 
   async function createPartner() {
     setMsg(null);
     const name = p_name.trim();
     if (!name) return setMsg("업체명(필수)을 입력하세요.");
-    const { data, error } = await supabase.from("partners").insert({ name, business_no: p_businessNo.trim() || null, ceo_name: p_ceo.trim() || null, phone: p_phone.trim() || null, address1: p_address1.trim() || null, biz_type: p_bizType.trim() || null, biz_item: p_bizItem.trim() || null, partner_type: p_partnerType, is_pinned: false, pin_order: 9999 }).select("*").single();
+    const { data, error } = await supabase.from("partners").insert({ name, business_no: p_businessNo.trim() || null, sub_place_no: p_subPlaceNo.trim() || null, ceo_name: p_ceo.trim() || null, phone: p_phone.trim() || null, address1: p_address1.trim() || null, biz_type: p_bizType.trim() || null, biz_item: p_bizItem.trim() || null, partner_type: p_partnerType, is_pinned: false, pin_order: 9999 }).select("*").single();
     if (error) return setMsg(error.message);
     setShowPartnerForm(false); resetPartnerForm();
     await loadPartners(); setSelectedPartner(data as PartnerRow); pushRecentPartner((data as PartnerRow).id);
@@ -1342,6 +1345,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
   async function openPartnerEdit() {
     if (!selectedPartner) return setMsg("왼쪽에서 거래처를 먼저 선택하세요.");
     setEP_name(selectedPartner.name ?? ""); setEP_businessNo(selectedPartner.business_no ?? "");
+    setEP_subPlaceNo(selectedPartner.sub_place_no ?? "");
     setEP_ceo(selectedPartner.ceo_name ?? ""); setEP_phone(selectedPartner.phone ?? "");
     setEP_address1(selectedPartner.address1 ?? ""); setEP_bizType(selectedPartner.biz_type ?? "");
     setEP_bizItem(selectedPartner.biz_item ?? "");
@@ -1361,7 +1365,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     const nextShip = { ship_to_name: normText(shipEdit.name), ship_to_address1: normText(shipEdit.addr), ship_to_mobile: normText(shipEdit.mobile), ship_to_phone: normText(shipEdit.phone) };
     const prevShip = { ship_to_name: normText(selectedPartner.ship_to_name), ship_to_address1: normText(selectedPartner.ship_to_address1), ship_to_mobile: normText(selectedPartner.ship_to_mobile), ship_to_phone: normText(selectedPartner.ship_to_phone) };
     const shippingChanged = JSON.stringify(prevShip) !== JSON.stringify(nextShip);
-    const { data: updated, error: uErr } = await supabase.from("partners").update({ name, business_no: normText(ep_businessNo), ceo_name: normText(ep_ceo), phone: normText(ep_phone), address1: normText(ep_address1), biz_type: normText(ep_bizType), biz_item: normText(ep_bizItem), partner_type: ep_partnerType, ...nextShip }).eq("id", selectedPartner.id).select("id,name,business_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone").single();
+    const { data: updated, error: uErr } = await supabase.from("partners").update({ name, business_no: normText(ep_businessNo), sub_place_no: normText(ep_subPlaceNo), ceo_name: normText(ep_ceo), phone: normText(ep_phone), address1: normText(ep_address1), biz_type: normText(ep_bizType), biz_item: normText(ep_bizItem), partner_type: ep_partnerType, ...nextShip }).eq("id", selectedPartner.id).select("id,name,business_no,sub_place_no,ceo_name,biz_type,biz_item,phone,address1,is_pinned,pin_order,partner_type,group_name,ship_to_name,ship_to_address1,ship_to_mobile,ship_to_phone").single();
     if (uErr) return setMsg(uErr.message);
     if (shippingChanged) {
       const { error: hErr } = await supabase.from("partner_shipping_history").insert({ partner_id: selectedPartner.id, ...nextShip });
@@ -2710,6 +2714,7 @@ if (woSubNameVal) {
                 <div className="space-y-2">
                   <input className={inp} placeholder="업체명(필수)" value={ep_name} onChange={(e) => setEP_name(e.target.value)} />
                   <input className={inp} placeholder="사업자등록번호" value={ep_businessNo} onChange={(e) => setEP_businessNo(e.target.value)} />
+                  <input className={inp} placeholder="종사업장번호 (사업자번호 같은 지점일 때만 입력)" value={ep_subPlaceNo} onChange={(e) => setEP_subPlaceNo(e.target.value)} />
                   <PartnerTypeSelect value={ep_partnerType} onChange={setEP_partnerType} />
                   <input className={inp} placeholder="대표자" value={ep_ceo} onChange={(e) => setEP_ceo(e.target.value)} />
                   <input className={inp} placeholder="연락처" value={ep_phone} onChange={(e) => setEP_phone(e.target.value)} />
@@ -3044,6 +3049,7 @@ if (woSubNameVal) {
                 <div className="space-y-2">
                   <input className={inp} placeholder="업체명(필수)" value={p_name} onChange={(e) => setP_name(e.target.value)} />
                   <input className={inp} placeholder="사업자등록번호" value={p_businessNo} onChange={(e) => setP_businessNo(e.target.value)} />
+                  <input className={inp} placeholder="종사업장번호 (사업자번호 같은 지점일 때만 입력)" value={p_subPlaceNo} onChange={(e) => setP_subPlaceNo(e.target.value)} />
                   <PartnerTypeSelect value={p_partnerType} onChange={setP_partnerType} />
                   <input className={inp} placeholder="대표자" value={p_ceo} onChange={(e) => setP_ceo(e.target.value)} />
                   <input className={inp} placeholder="연락처" value={p_phone} onChange={(e) => setP_phone(e.target.value)} />
