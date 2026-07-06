@@ -632,6 +632,14 @@ export default function ManualClient() {
   };
   const delCategory=async(id:number)=>{
     if(!confirm("대분류를 삭제하면 하위 항목이 모두 삭제됩니다.")) return;
+    // 하위 중분류의 소분류(menu_items)를 참조하는 manual_view_logs를 먼저 삭제 (FK 제약 위반 방지)
+    const{data:subs}=await supabase.from("manual_subcategories").select("id").eq("category_id",id);
+    const subIds=(subs||[]).map(s=>s.id);
+    if(subIds.length>0){
+      const{data:items}=await supabase.from("manual_menu_items").select("id").in("subcategory_id",subIds);
+      const itemIds=(items||[]).map(i=>i.id);
+      if(itemIds.length>0) await supabase.from("manual_view_logs").delete().in("menu_item_id",itemIds);
+    }
     await supabase.from("manual_categories").delete().eq("id",id);
     await loadAll(); setSelectedCat(null); setSelectedSub(null); setSelectedItem(null);
   };
@@ -642,6 +650,10 @@ export default function ManualClient() {
   };
   const delSub=async(id:number)=>{
     if(!confirm("중분류를 삭제하면 하위 항목이 모두 삭제됩니다.")) return;
+    // 하위 소분류(menu_items)를 참조하는 manual_view_logs를 먼저 삭제 (FK 제약 위반 방지)
+    const{data:items}=await supabase.from("manual_menu_items").select("id").eq("subcategory_id",id);
+    const itemIds=(items||[]).map(i=>i.id);
+    if(itemIds.length>0) await supabase.from("manual_view_logs").delete().in("menu_item_id",itemIds);
     const{error}=await supabase.from("manual_subcategories").delete().eq("id",id);
     if(error){alert("삭제 실패: "+error.message);return;}
     await loadAll(); setSelectedSub(null); setSelectedItem(null);
@@ -653,6 +665,8 @@ export default function ManualClient() {
   };
   const delItem=async(id:number)=>{
     if(!confirm("소분류를 삭제합니다.")) return;
+    // manual_view_logs가 menu_item_id를 참조하므로 먼저 삭제 (FK 제약 위반 방지)
+    await supabase.from("manual_view_logs").delete().eq("menu_item_id",id);
     const{error}=await supabase.from("manual_menu_items").delete().eq("id",id);
     if(error){alert("삭제 실패: "+error.message);return;}
     await loadAll(); if(selectedItem===id) setSelectedItem(null);
@@ -1023,7 +1037,7 @@ export default function ManualClient() {
 )}
 
 {/* ── Desktop 사이드바 ── */}
-<div style={{width:240,flexShrink:0,marginRight:18,display:showViewLog?"none":"block"}} className="manual-sidebar-desktop">
+<div style={{width:240,flexShrink:0,marginRight:18,display:showViewLog?"none":"block",position:"sticky",top:16,alignSelf:"flex-start",maxHeight:"calc(100vh - 32px)",overflowY:"auto"}} className="manual-sidebar-desktop">
   {SidebarContent()}
 </div>
 
