@@ -3335,7 +3335,7 @@ if (woSubNameVal) {
                       {[["BANK", "입금"], ["CASH", "현금"], ["CARD", "카드"], ["ETC", "기타"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                   </div>
-                  <div><div className="mb-1 text-xs text-slate-600">카테고리</div>
+                  <div className="md:col-span-3"><div className="mb-1 text-xs text-slate-600">카테고리</div>
                     <div className="flex flex-wrap gap-2">
                       {CATEGORIES.map((c) => (
                         <button key={c} type="button" className={category === c ? btnOn : btn}
