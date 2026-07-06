@@ -144,7 +144,7 @@ function matchesSearch(target: string, keyword: string): boolean {
 }
 
 // ─────────────────────── Constants ───────────────────────
-const CATEGORIES = ["매출입금", "매출환불", "급여", "세금", "기타"] as const;
+const CATEGORIES = ["매출입금", "매출환불", "지원금", "급여", "세금", "기타"] as const;
 type Category = (typeof CATEGORIES)[number];
 const PARTNER_TYPES = ["CUSTOMER", "VENDOR", "BOTH"] as const;
 type PartnerType = (typeof PARTNER_TYPES)[number];
@@ -212,7 +212,7 @@ function addDays(ymd: string, delta: number) {
   const d = new Date(ymd + "T00:00:00"); d.setDate(d.getDate() + delta);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-const categoryToDirection = (c: Category): "IN" | "OUT" => c === "매출입금" ? "IN" : "OUT";
+const categoryToDirection = (c: Category): "IN" | "OUT" => (c === "매출입금" || c === "지원금") ? "IN" : "OUT";
 
 async function applyStockOutLots(
   supabaseClient: ReturnType<typeof createClient>,
