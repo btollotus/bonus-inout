@@ -1998,14 +1998,25 @@ if (dupCheck && dupCheck.length > 0) {
                {
                 const ft = selectedWo.food_type ?? "";
                 const isNeoColorWo = ft.startsWith("네오컬러") || ft.startsWith("롤리팝컬러");
+                const isTransferPaperWo3 = ft === "생산용전사지" || ft === "전사지";
                 if (!isNeoColorWo) {
+              let totalSheets = 0;
+              if (isTransferPaperWo3) {
+                // 전사지/생산용전사지: 출고수량(증정 포함) + 불량 합계로 직접 차감
+                for (const it of items) {
+                  const pi = prodInputs[it.id];
+                  totalSheets += toInt(pi?.actual_qty) + toInt(pi?.defect_qty);
+                }
+              } else {
               const noteStr = selectedWo.note ?? "";
               // "전사지: N장" 또는 "전사지: N장 M줄" 파싱
               const match = noteStr.match(/전사지[：:]\s*(\d+)장(?:\s*(\d+)줄)?/);
               if (match) {
                 const sheets = parseInt(match[1], 10);
                 const hasRows = !!match[2];
-                const totalSheets = hasRows ? sheets + 1 : sheets;
+                totalSheets = hasRows ? sheets + 1 : sheets;
+              }
+              }
                 if (totalSheets > 0) {
                   const jeonsakNote = `전사지 차감 - ${selectedWo.work_order_no}`;
                   const { data: jsDupCheck } = await supabase.from("material_usage_logs")
@@ -2033,7 +2044,6 @@ if (dupCheck && dupCheck.length > 0) {
                     }
                   }
                 }
-              }
             }
           }
   
