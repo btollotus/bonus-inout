@@ -1796,7 +1796,7 @@ if (dupCheck && dupCheck.length > 0) {
       if (selectedWo.variant_id && firstUw > 0) await supabase.from("product_variants").update({ weight_g: firstUw }).eq("id", selectedWo.variant_id);
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id ?? null;
-      if (isChuganJae) {
+      if (isChuganJae || isTransferPaperWo) {
         const stockErrors: string[] = [];
         for (const item of items) {
           const pi = prodInputs[item.id];
