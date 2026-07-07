@@ -395,7 +395,7 @@ setLoading(false);
 
     const pages = items.map(({ date, workOrders: wos, blendLogs: bls, materialUsages: mus = [] }, idx) => {
       const woByWorkerPrint = wos.reduce<Record<string, WorkOrder[]>>((acc, wo) => {
-        const isChuganJae = (wo.food_type ?? "").includes("중간재");
+        const isChuganJae = (wo.food_type ?? "").includes("중간재") || (wo.food_type ?? "").includes("전사");
         const name = isChuganJae
           ? (wo.assignee_transfer ?? wo.assignee_production ?? "미지정")
           : (wo.assignee_production ?? "미지정");
