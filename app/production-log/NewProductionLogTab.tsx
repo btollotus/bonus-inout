@@ -271,7 +271,7 @@ setLoading(false);
 
   // 작업자별 그룹화
   const woByWorker = workOrders.reduce<Record<string, WorkOrder[]>>((acc, wo) => {
-    const isChuganJae = (wo.product_name ?? "").includes("중간재") || (wo.food_type ?? "").includes("중간재");
+    const isChuganJae = (wo.product_name ?? "").includes("중간재") || (wo.food_type ?? "").includes("중간재") || (wo.food_type ?? "").includes("전사");
     const name = isChuganJae
       ? (wo.assignee_transfer ?? wo.assignee_production ?? "미지정")
       : (wo.assignee_production ?? "미지정");
