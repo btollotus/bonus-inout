@@ -2474,34 +2474,57 @@ const totalOrder = items
                   </div>
                   {isAdminOrSubadmin ? (
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                      <div><div className="mb-1 text-xs text-slate-500">제품명 *</div><input className={inp} value={eProductName} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEProductName(e.target.value)} /></div>
-                      <div><div className="mb-1 text-xs text-slate-500">서브네임</div><input className={inp} value={eSubName} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setESubName(e.target.value)} /></div>
-                      <div><div className="mb-1 text-xs text-slate-500">식품유형</div><input className={inp} value={eFoodType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEFoodType(e.target.value)} /></div>
-                      <div><div className="mb-1 text-xs text-slate-500">규격</div><input className={inp} value={eLogoSpec} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setELogoSpec(e.target.value)} /></div>
-                      <div><div className="mb-1 text-xs text-slate-500">두께</div><select className={inp} value={eThickness} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEThickness(e.target.value)}>{["2mm","3mm","5mm","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
-                      <div><div className="mb-1 text-xs text-slate-500">납품방법</div><select className={inp} value={eDeliveryMethod} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEDeliveryMethod(e.target.value)}>{["택배","퀵-신용","퀵-착불","방문","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
-                      <div><div className="mb-1 text-xs text-slate-500">포장방법</div><select className={inp} value={ePackagingType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => { setEPackagingType(e.target.value); if (e.target.value === "벌크") setEPackageUnit("기타"); }}>{["","트레이-정사각20구","트레이-직사각20구","트레이-35구","벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}</select></div>
-                      <div>
-                        <div className="mb-1 text-xs text-slate-500">포장단위</div>
-                        <select className={inp} value={ePackageUnit} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEPackageUnit(e.target.value)}>{["100ea","200ea","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select>
-                        {ePackageUnit === "기타" && (
-                          <div className="flex items-center gap-1 mt-1">
-                            <input className={inpR} inputMode="numeric" placeholder="수량 입력" disabled={selectedWo?.status === "완료" && !isEditMode} value={ePackageUnitCustom} onChange={(e) => setEPackageUnitCustom(e.target.value.replace(/[^\d]/g, ""))} />
-                            <span className="shrink-0 text-xs text-slate-500">ea</span>
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <div className="mb-1 text-xs text-slate-500">성형틀 (가로×세로){eMoldCols && eMoldRows && toInt(eMoldCols) > 0 && toInt(eMoldRows) > 0 && <span className="ml-1 font-semibold text-blue-600">= {toInt(eMoldCols) * toInt(eMoldRows)}개</span>}</div>
-                        <div className="flex items-center gap-1"><input className={inpR} inputMode="numeric" placeholder="가로" value={eMoldCols} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldCols(e.target.value.replace(/[^\d]/g, ""))} /><span className="shrink-0 font-bold text-slate-400">×</span><input className={inpR} inputMode="numeric" placeholder="세로" value={eMoldRows} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldRows(e.target.value.replace(/[^\d]/g, ""))} /></div>
-                      </div>
-                      <div><div className="mb-1 text-xs text-slate-500">성형틀 장수</div><input className={inpR} inputMode="numeric" value={eMoldCount} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldCount(e.target.value.replace(/[^\d]/g, ""))} /></div>
-                      <div><div className="mb-1 text-xs text-slate-500">비고</div><textarea className={`${inp} resize-none`} rows={2} value={eNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setENote(e.target.value)} /></div>
-                      <div><div className="mb-1 text-xs text-slate-500">참고사항</div><input className={inp} value={eReferenceNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEReferenceNote(e.target.value)} /></div>
+                    <div><div className="mb-1 text-xs text-slate-500">제품명 *</div><input className={inp} value={eProductName} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEProductName(e.target.value)} /></div>
+                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    <div><div className="mb-1 text-xs text-slate-500">서브네임</div><input className={inp} value={eSubName} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setESubName(e.target.value)} /></div>
+                    )}
+                    <div><div className="mb-1 text-xs text-slate-500">식품유형</div><input className={inp} value={eFoodType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEFoodType(e.target.value)} /></div>
+                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    <div><div className="mb-1 text-xs text-slate-500">규격</div><input className={inp} value={eLogoSpec} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setELogoSpec(e.target.value)} /></div>
+                    )}
+                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    <div><div className="mb-1 text-xs text-slate-500">두께</div><select className={inp} value={eThickness} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEThickness(e.target.value)}>{["2mm","3mm","5mm","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
+                    )}
+                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    <div><div className="mb-1 text-xs text-slate-500">납품방법</div><select className={inp} value={eDeliveryMethod} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEDeliveryMethod(e.target.value)}>{["택배","퀵-신용","퀵-착불","방문","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
+                    )}
+                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    <div><div className="mb-1 text-xs text-slate-500">포장방법</div><select className={inp} value={ePackagingType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => { setEPackagingType(e.target.value); if (e.target.value === "벌크") setEPackageUnit("기타"); }}>{["","트레이-정사각20구","트레이-직사각20구","트레이-35구","벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}</select></div>
+                    )}
+                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    <div>
+                      <div className="mb-1 text-xs text-slate-500">포장단위</div>
+                      <select className={inp} value={ePackageUnit} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEPackageUnit(e.target.value)}>{["100ea","200ea","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select>
+                      {ePackageUnit === "기타" && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <input className={inpR} inputMode="numeric" placeholder="수량 입력" disabled={selectedWo?.status === "완료" && !isEditMode} value={ePackageUnitCustom} onChange={(e) => setEPackageUnitCustom(e.target.value.replace(/[^\d]/g, ""))} />
+                          <span className="shrink-0 text-xs text-slate-500">ea</span>
+                        </div>
+                      )}
                     </div>
+                    )}
+                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    <div>
+                      <div className="mb-1 text-xs text-slate-500">성형틀 (가로×세로){eMoldCols && eMoldRows && toInt(eMoldCols) > 0 && toInt(eMoldRows) > 0 && <span className="ml-1 font-semibold text-blue-600">= {toInt(eMoldCols) * toInt(eMoldRows)}개</span>}</div>
+                      <div className="flex items-center gap-1"><input className={inpR} inputMode="numeric" placeholder="가로" value={eMoldCols} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldCols(e.target.value.replace(/[^\d]/g, ""))} /><span className="shrink-0 font-bold text-slate-400">×</span><input className={inpR} inputMode="numeric" placeholder="세로" value={eMoldRows} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldRows(e.target.value.replace(/[^\d]/g, ""))} /></div>
+                    </div>
+                    )}
+                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    <div><div className="mb-1 text-xs text-slate-500">성형틀 장수</div><input className={inpR} inputMode="numeric" value={eMoldCount} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldCount(e.target.value.replace(/[^\d]/g, ""))} /></div>
+                    )}
+                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    <div><div className="mb-1 text-xs text-slate-500">비고</div><textarea className={`${inp} resize-none`} rows={2} value={eNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setENote(e.target.value)} /></div>
+                    )}
+                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    <div><div className="mb-1 text-xs text-slate-500">참고사항</div><input className={inp} value={eReferenceNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEReferenceNote(e.target.value)} /></div>
+                    )}
+                  </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
-                      {([["식품유형", selectedWo.food_type], ["규격", selectedWo.logo_spec], ["두께", selectedWo.thickness], ["납품방법", selectedWo.delivery_method], ["포장방법", selectedWo.packaging_type], ["포장단위", selectedWo.package_unit], ["성형틀/장", selectedWo.mold_per_sheet ? `${selectedWo.mold_per_sheet}개` : null], ["비고", selectedWo.note], ["참고사항", selectedWo.reference_note]] as [string, string | null][]).map(([label, value]) => value ? <div key={label}><div className="text-slate-400">{label}</div><div className="font-medium text-slate-800">{value}</div></div> : null)}
+                      {(((selectedWo.food_type ?? "") === "생산용전사지" || (selectedWo.food_type ?? "") === "전사지")
+                        ? ([["식품유형", selectedWo.food_type]] as [string, string | null][])
+                        : ([["식품유형", selectedWo.food_type], ["규격", selectedWo.logo_spec], ["두께", selectedWo.thickness], ["납품방법", selectedWo.delivery_method], ["포장방법", selectedWo.packaging_type], ["포장단위", selectedWo.package_unit], ["성형틀/장", selectedWo.mold_per_sheet ? `${selectedWo.mold_per_sheet}개` : null], ["비고", selectedWo.note], ["참고사항", selectedWo.reference_note]] as [string, string | null][])
+                      ).map(([label, value]) => value ? <div key={label}><div className="text-slate-400">{label}</div><div className="font-medium text-slate-800">{value}</div></div> : null)}
                     </div>
                   )}
                   {(() => {
@@ -3377,7 +3400,7 @@ const totalOrder = items
  )}
 
 {/* 재고 차감 — 중간재 제외 */}
-{getFoodCategory(selectedWo.food_type) !== "중간재" && (selectedWo.food_type ?? "") !== "생산용전사지" && (
+{getFoodCategory(selectedWo.food_type) !== "중간재" && (selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
                             <div className="mt-2 rounded-lg border border-violet-100 bg-violet-50 p-2.5">
                               <div className="mb-1.5 flex items-center justify-between">
                                 <span className="text-xs font-semibold text-violet-700">재고 차감 선택</span>
