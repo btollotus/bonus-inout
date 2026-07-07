@@ -1872,7 +1872,14 @@ if (dupCheck && dupCheck.length > 0) {
           }
         }
 
-        const { error: statusErr } = await supabase.from("work_orders").update({ status: "완료", status_production: true, ccp_slot_id: null, production_done_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
+        const { error: statusErr } = await supabase.from("work_orders").update({
+          status: "완료",
+          status_production: true,
+          ccp_slot_id: null,
+          production_done_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          ...(isTransferPaperWo ? { status_input: true, input_done_at: new Date().toISOString() } : {}),
+        }).eq("id", selectedWo.id);
         if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
         if (stockErrors.length > 0) showToast("저장됐으나 재고 연동 오류: " + stockErrors.join(" / "), "error");
         else showToast("생산완료 처리 완료!");
