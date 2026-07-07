@@ -2698,7 +2698,8 @@ const totalOrder = items
                   {woChecks ? (
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {PROGRESS_STEPS.filter((step) => {
-                        if (getFoodCategory(selectedWo.food_type) === "중간재" && step.statusKey === "status_input") return false;
+                        const ft = selectedWo.food_type ?? "";
+                        if ((getFoodCategory(ft) === "중간재" || ft === "생산용전사지" || ft === "전사지") && step.statusKey === "status_input") return false;
                         return true;
                       }).map((step) => {
                         const assigneeVal = woChecks[step.assigneeKey] ?? "";
