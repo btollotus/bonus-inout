@@ -501,7 +501,7 @@ setSlotWoMap(slotMap);
         </tr>
         <tr>
           <td style="${tdS}font-weight:bold;">방 법</td>
-          <td colspan="5" style="${tdS}font-size:8pt;">◦ 중탕온도 : 바트 품온 온도 확인 &amp;nbsp;&amp;nbsp; ◦ 가열시간 : 4시간 이상 가열</td>
+          <td colspan="5" style="${tdS}font-size:8pt;">◦ 중탕온도 : 바트 품온 온도 확인  ◦ 가열시간 : 4시간 이상 가열</td>
         </tr>
       </tbody></table>`;
 
