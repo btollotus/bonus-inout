@@ -1697,6 +1697,7 @@ if (dupCheck && dupCheck.length > 0) {
 
     const foodCat = getFoodCategory(selectedWo.food_type);
     const isChuganJae = foodCat === "중간재";
+    const isTransferPaperWo = (selectedWo.food_type ?? "") === "생산용전사지" || (selectedWo.food_type ?? "") === "전사지";
 
     // 이산화티타늄 사용량 필수 입력 검사 (식품유형에 "리얼" 포함 시)
     if ((selectedWo.food_type ?? "").includes("리얼")) {
@@ -1750,7 +1751,7 @@ if (dupCheck && dupCheck.length > 0) {
     const items = (selectedWo.work_order_items ?? []).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비"); });
     const missingQtyOrExpiry = items.filter((item) => { const pi = prodInputs[item.id]; if (pi?.skip) return false; return !pi || !pi.actual_qty || !pi.unit_weight || !pi.expiry_date; });
     if (missingQtyOrExpiry.length > 0) { alert("출고수량, 개당중량, 소비기한은 필수 입력 항목입니다.\n\n입력 후 다시 시도해주세요."); setIsCompleting(false); return; }
-    if (isChuganJae) {
+    if (isChuganJae || isTransferPaperWo) {
       if (!confirm("생산완료 처리하시겠습니까?")) { setIsCompleting(false); return; }
     } else {
       setCompleteModalWoId(selectedWo.id);
@@ -2053,7 +2054,14 @@ if (dupCheck && dupCheck.length > 0) {
             }
           }
 
-          const { error: statusErr } = await supabase.from("work_orders").update({ status_production: true, ccp_slot_id: null, production_done_at: new Date().toISOString(), updated_at: ccpEndedAt ?? new Date().toISOString() }).eq("id", selectedWo.id);
+          const isTransferPaperWo2 = (selectedWo.food_type ?? "") === "생산용전사지" || (selectedWo.food_type ?? "") === "전사지";
+          const { error: statusErr } = await supabase.from("work_orders").update({
+            ...(isTransferPaperWo2 ? { status: "완료", status_input: true, input_done_at: new Date().toISOString() } : {}),
+            status_production: true,
+            ccp_slot_id: null,
+            production_done_at: new Date().toISOString(),
+            updated_at: ccpEndedAt ?? new Date().toISOString(),
+          }).eq("id", selectedWo.id);
           if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
           if (stockErrors.length > 0) showToast("저장됐으나 전사지 차감 오류: " + stockErrors.join(" / "), "error");
           else showToast("생산완료 처리 완료!");
