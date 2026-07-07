@@ -536,7 +536,8 @@ export default function ProductionClient() {
     if (!kActualQty || toInt(kActualQty) < 1) return setMsg("생산수량을 입력하세요.");
     if (!kFoodType.trim()) return setMsg("식품유형을 입력하세요.");
     const foodCatK = getFoodCategory(kFoodType);
-    if (foodCatK !== "중간재") {
+    const skipSpecMoldCheck = foodCatK === "중간재" || kiseongCategory === "생산용전사지" || kiseongCategory === "전사지";
+    if (!skipSpecMoldCheck) {
       if (!kLogoSpec.trim()) return setMsg("규격(로고스펙)을 입력하세요.");
       if (!kMoldCols || !kMoldRows || toInt(kMoldCols) < 1 || toInt(kMoldRows) < 1)
         return setMsg("성형틀 가로/세로 열수를 입력하세요.");
@@ -2375,11 +2376,20 @@ const totalOrder = items
                 {kiseongSelected && (
                   <>
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-3 mb-3">
+                      {kiseongCategory !== "생산용전사지" && kiseongCategory !== "전사지" && (
                       <div><div className="mb-1 text-xs text-slate-500">서브네임</div><input className={inp} value={kSubName} onChange={(e) => setKSubName(e.target.value)} /></div>
+                      )}
                       <div><div className="mb-1 text-xs text-slate-500">식품유형 *</div><input className={inp} value={kFoodType} onChange={(e) => setKFoodType(e.target.value)} /></div>
+                      {kiseongCategory !== "생산용전사지" && kiseongCategory !== "전사지" && (
                       <div><div className="mb-1 text-xs text-slate-500">규격</div><input className={inp} value={kLogoSpec} onChange={(e) => setKLogoSpec(e.target.value)} /></div>
+                      )}
+                      {kiseongCategory !== "생산용전사지" && kiseongCategory !== "전사지" && (
                       <div><div className="mb-1 text-xs text-slate-500">두께</div><select className={inp} value={kThickness} onChange={(e) => setKThickness(e.target.value)}>{["2mm","3mm","5mm","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
+                      )}
+                      {kiseongCategory !== "생산용전사지" && kiseongCategory !== "전사지" && (
                       <div><div className="mb-1 text-xs text-slate-500">포장방법</div><select className={inp} value={kPackagingType} onChange={(e) => { setKPackagingType(e.target.value); if (e.target.value === "벌크") setKPackageUnit("기타"); }}>{["트레이-정사각20구","트레이-직사각20구","트레이-35구","벌크"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
+                      )}
+                      {kiseongCategory !== "생산용전사지" && kiseongCategory !== "전사지" && (
                       <div>
                         <div className="mb-1 text-xs text-slate-500">포장단위</div>
                         <select className={inp} value={kPackageUnit} onChange={(e) => setKPackageUnit(e.target.value)}>{["100ea","200ea","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select>
@@ -2390,12 +2400,17 @@ const totalOrder = items
                           </div>
                         )}
                       </div>
+                      )}
+                      {kiseongCategory !== "생산용전사지" && kiseongCategory !== "전사지" && (
                       <div>
                         <div className="mb-1 text-xs text-slate-500">성형틀 열수 (가로 × 세로){kMoldCols && kMoldRows && toInt(kMoldCols) > 0 && toInt(kMoldRows) > 0 && <span className="ml-1 font-semibold text-blue-600">= {toInt(kMoldCols) * toInt(kMoldRows)}개</span>}</div>
                         <div className="flex items-center gap-1"><input className={inpR} inputMode="numeric" placeholder="가로" value={kMoldCols} onChange={(e) => setKMoldCols(e.target.value.replace(/[^\d]/g, ""))} /><span className="shrink-0 font-bold text-slate-400">×</span><input className={inpR} inputMode="numeric" placeholder="세로" value={kMoldRows} onChange={(e) => setKMoldRows(e.target.value.replace(/[^\d]/g, ""))} /></div>
                       </div>
+                      )}
                       <div><div className="mb-1 text-xs text-slate-500">개당 중량 (g)</div><input className={inpR} inputMode="decimal" value={kUnitWeight} onChange={(e) => setKUnitWeight(e.target.value.replace(/[^\d.]/g, ""))} /></div>
+                      {kiseongCategory !== "생산용전사지" && kiseongCategory !== "전사지" && (
                       <div><div className="mb-1 text-xs text-slate-500">비고</div><textarea className={`${inp} resize-none`} rows={2} value={kNote} onChange={(e) => setKNote(e.target.value)} /></div>
+                      )}
                     </div>
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 mb-3">
                       <div className="mb-2 text-xs font-semibold text-emerald-700">생산 정보</div>
