@@ -92,6 +92,16 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
+// ✅ 거래명세서 표시 전용: "거래처명-" 접두사만 제거 (order_lines.name 원본은 그대로 둠)
+function stripPartnerPrefix(itemName: string, partnerName: string | null | undefined) {
+  const name = String(itemName ?? "");
+  const p = String(partnerName ?? "").trim();
+  if (!p) return name;
+  const prefix = `${p}-`;
+  if (name.startsWith(prefix)) return name.slice(prefix.length);
+  return name;
+}
+
 function safeFileNamePart(s: string) {
   // 윈도우 파일명 금지문자 제거
   return String(s ?? "")
@@ -984,7 +994,7 @@ useEffect(() => {
                       lines.map((r, idx) => (
                         <tr key={idx} className="border-t border-slate-100">
                           <td className="px-3 py-2">
-                            <div className="truncate">{r.itemName}</div>
+                            <div className="truncate">{stripPartnerPrefix(r.itemName, selectedPartner?.name)}</div>
                             {(r.giftQty ?? 0) > 0 && (
                               <div className="mt-0.5 text-xs text-violet-600 font-semibold">
                                 주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""} +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
@@ -1120,7 +1130,7 @@ useEffect(() => {
                             orderLines.map((r, idx) => (
                               <tr key={idx} className="border-t border-slate-100">
                                 <td className="px-3 py-2">
-                                  <div className="truncate">{r.itemName}</div>
+                                  <div className="truncate">{stripPartnerPrefix(r.itemName, selectedPartner?.name)}</div>
                                   {(r.giftQty ?? 0) > 0 && (
                                     <div className="mt-0.5 text-xs text-violet-600 font-semibold">
                                       주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""} +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
@@ -1158,7 +1168,7 @@ useEffect(() => {
                   </div>
                 </div>
               );
-            })
+            })  
           ) : (
             // ✅ 일반 거래처: 선택된 여러 주문을 "1건"으로 통합 출력 (요청사항)
             <div className={`${card} p-4`}>
@@ -1244,7 +1254,7 @@ useEffect(() => {
                       lines.map((r, idx) => (
                         <tr key={idx} className="border-t border-slate-100">
                           <td className="px-3 py-2">
-                            <div className="truncate">{r.itemName}</div>
+                            <div className="truncate">{stripPartnerPrefix(r.itemName, selectedPartner?.name)}</div>
                             {(r.giftQty ?? 0) > 0 && (
                               <div className="mt-0.5 text-xs text-violet-600 font-semibold">
                                 주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""} +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
