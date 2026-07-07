@@ -673,7 +673,7 @@ setLoading(false);
                                   </span>
                                 )}
                               </div>
-                              {wo.skip_production_check ? (
+                              {(wo.skip_production_check || (wo.food_type ?? "").includes("전사")) ? (
                                 <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">생산완료</span>
                               ) : (
                                 <span className="rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">금속검출완료</span>
