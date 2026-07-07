@@ -1767,6 +1767,7 @@ if (dupCheck && dupCheck.length > 0) {
     if (!selectedWo) return;
     const foodCat = getFoodCategory(selectedWo.food_type);
     const isChuganJae = foodCat === "중간재";
+    const isTransferPaperWo = (selectedWo.food_type ?? "") === "생산용전사지" || (selectedWo.food_type ?? "") === "전사지";
     const items = (selectedWo.work_order_items ?? []).filter((item) => {
       const name = (item.sub_items ?? [])[0]?.name ?? "";
       return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비");
