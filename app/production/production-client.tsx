@@ -239,6 +239,7 @@ const TRANSFER_CCP_FOOD_TYPES = [
   "네오모어화이트그린","네오화이트다크","네오화이트레드","네오화이트밀크","네오화이트블루",
   "네오화이트핑크(TR)","다크연두","다크옐로우","다크핑크","다크화이트","롤리팝다크핑크",
   "롤리팝다크화이트","리얼화이트다크블루","미니붕어빵-화이트다크(벌크)","핑크화이트","화이트초록",
+  "생산용전사지","전사지",
 ];
 
 function needsTransferCcp(foodType: string | null | undefined): boolean {
@@ -1728,7 +1729,7 @@ if (dupCheck && dupCheck.length > 0) {
       const missing = [!woChecks.assignee_transfer && "전사인쇄", !woChecks.assignee_print_check && "인쇄검수"].filter(Boolean) as string[];
       if (missing.length > 0) { alert(`다음 단계의 담당자를 선택해주세요:\n\n• ${missing.join("\n• ")}`); setIsCompleting(false); return; }
     }
-    if (!selectedWo.skip_production_check && (foodCat === "다크" || foodCat === "화이트")) {
+    if (!selectedWo.skip_production_check && (selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (foodCat === "다크" || foodCat === "화이트")) {
       if (selectedWo.ccp_slot_id) {
         const { data: ccpEvs } = await supabase.from("ccp_wo_events").select("event_type, measured_at").eq("work_order_no", selectedWo.work_order_no).eq("slot_id", selectedWo.ccp_slot_id).order("measured_at", { ascending: false });
         const lastEv = (ccpEvs ?? [])[0];
@@ -3132,7 +3133,7 @@ const totalOrder = items
             )}
 
             {/* CCP-1B 슬롯 지정 + 온도 기록 */}
-            {!selectedWo.skip_production_check && (getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트" || (getFoodCategory(selectedWo.food_type) === "중간재" && !selectedWo.product_name.includes("분사-레이즈"))) && (
+            {!selectedWo.skip_production_check && (selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트" || (getFoodCategory(selectedWo.food_type) === "중간재" && !selectedWo.product_name.includes("분사-레이즈"))) && ( 
                 <WoCcpCard
                   selectedWo={selectedWo}
                   eCcpSlotId={eCcpSlotId}
