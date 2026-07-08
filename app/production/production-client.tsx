@@ -203,6 +203,10 @@ function toInt(v: unknown): number {
   const n = parseInt(String(v ?? "").replace(/,/g, ""), 10);
   return isNaN(n) ? 0 : n;
 }
+function formatHHmmInput(digits: string): string {
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+}
 
 // ─────────────────────── Styles (컴팩트 버전) ───────────────────────
 const card = "rounded-xl border border-slate-200 bg-white shadow-sm";
@@ -2613,29 +2617,32 @@ const totalOrder = items
              {!getWoSubType(selectedWo.product_name) && !selectedWo.skip_production_check && needsTransferCcp(selectedWo.food_type) && (
                 <div className={`${card} p-3`}>
                   <div className="mb-2 flex items-center justify-between flex-wrap gap-2">
-                    <div className="font-semibold text-sm">🌡️ CCP-1B 온장고 슬롯(전사지인쇄) <span className="text-xs text-slate-400 font-normal">— 8번 슬롯 자동지정</span></div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="font-semibold text-sm">🌡️ CCP-1B 온장고 슬롯(전사지인쇄) <span className="text-xs text-slate-400 font-normal">— 8번 슬롯 자동지정</span></div>
                       {isTransferSheetType(selectedWo.food_type) && (selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
-                        <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-                          {(["300x400", "320x450"] as const).map((size) => (
-                            <button
-                              key={size}
-                              type="button"
-                              disabled={selectedWo?.status === "완료" && !isEditMode}
-                              className={`px-3 py-1 text-xs font-semibold transition-all disabled:opacity-40 ${
-                                selectedWo.transfer_sheet_size === size
-                                  ? "bg-blue-600 text-white"
-                                  : "bg-white text-slate-500 hover:bg-slate-50"
-                              }`}
-                              onClick={() => saveTransferSheetSize(size)}
-                            >
-                              {size === "300x400" ? "300×400mm" : "320×450mm"}
-                            </button>
-                          ))}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-semibold text-slate-500">전사지 선택</span>
+                          <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                            {(["300x400", "320x450"] as const).map((size) => (
+                              <button
+                                key={size}
+                                type="button"
+                                disabled={selectedWo?.status === "완료" && !isEditMode}
+                                className={`px-3 py-1 text-xs font-semibold transition-all disabled:opacity-40 ${
+                                  selectedWo.transfer_sheet_size === size
+                                    ? "bg-blue-600 text-white"
+                                    : "bg-white text-slate-500 hover:bg-slate-50"
+                                }`}
+                                onClick={() => saveTransferSheetSize(size)}
+                              >
+                                {size === "300x400" ? "300×400mm" : "320×450mm"}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
-                      {transferCcpEnded && <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">종료됨</span>}
                     </div>
+                    {transferCcpEnded && <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">종료됨</span>}
                   </div>
                   {!transferCcpSlotId ? (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">전사 슬롯(8번)을 찾을 수 없습니다. warmer_slots 설정을 확인해주세요.</div>
@@ -2661,15 +2668,12 @@ const totalOrder = items
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                          <div>
+                        <div>
                             <div className="mb-1 text-xs text-slate-500">측정시각 (HHmm)</div>
-                            <input className={inp} inputMode="numeric" placeholder="예: 1430" maxLength={4}
+                            <input className={inp} inputMode="numeric" placeholder="예: 1430" maxLength={5}
                               disabled={selectedWo?.status === "완료" && !isEditMode}
-                              value={transferCcpTime}
+                              value={formatHHmmInput(transferCcpTime)}
                               onChange={(e) => setTransferCcpTime(e.target.value.replace(/[^\d]/g,"").slice(0,4))} />
-                            {transferCcpTime.length === 4 && (
-                              <div className="mt-0.5 text-xs text-slate-400 text-right">{transferCcpTime.slice(0,2)}:{transferCcpTime.slice(2,4)}</div>
-                            )}
                           </div>
                           <div>
                             <div className="mb-1 text-xs text-slate-500">온도 (40~50°C)</div>
