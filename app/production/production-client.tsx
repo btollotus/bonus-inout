@@ -242,10 +242,18 @@ const TRANSFER_CCP_FOOD_TYPES = [
   "생산용전사지","전사지",
 ];
 
+function isTransferSheetType(foodType: string | null | undefined): boolean {
+  const ft = (foodType ?? "").trim();
+  if (!ft) return false;
+  if (ft === "생산용전사지" || ft === "전사지") return true;
+  return getFoodCategory(ft) === "중간재" && (ft.includes("트랜스퍼시트") || ft.includes("전사지"));
+}
+
 function needsTransferCcp(foodType: string | null | undefined): boolean {
   const ft = (foodType ?? "").trim();
   if (!ft) return false;
-  return TRANSFER_CCP_FOOD_TYPES.includes(ft);
+  if (TRANSFER_CCP_FOOD_TYPES.includes(ft)) return true;
+  return isTransferSheetType(ft);
 }
 
 // ─── 분사/코팅 판별 ───
@@ -1738,7 +1746,7 @@ if (dupCheck && dupCheck.length > 0) {
         if (!lastEv) { alert("CCP-1B 온도 기록이 없습니다.\n시작 → 중간점검 → 종료 순으로 기록 후 생산완료 처리해주세요."); setIsCompleting(false); return; }
         if (lastEv.event_type !== "end") { const stateLabel = lastEv.event_type === "start" ? "시작" : "중간점검"; alert(`CCP-1B 온도 기록이 종료되지 않았습니다.\n현재 상태: [${stateLabel}]\n\n종료 기록 후 생산완료 처리해주세요.`); setIsCompleting(false); return; }
       } else { alert("CCP-1B 슬롯이 지정되지 않았습니다.\n슬롯 지정 및 온도 기록(시작→중간점검→종료) 후 생산완료 처리해주세요."); setIsCompleting(false); return; }
-    } else if (!selectedWo.skip_production_check && foodCat === "중간재" && !selectedWo.product_name.includes("분사-레이즈")) {
+    } else if (!selectedWo.skip_production_check && foodCat === "중간재" && !isTransferSheetType(selectedWo.food_type) && !selectedWo.product_name.includes("분사-레이즈")) {
       if (selectedWo.ccp_slot_id) {
         const todayKst = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
         const { data: ccpEvs } = await supabase.from("ccp_wo_events").select("event_type").eq("work_order_no", selectedWo.work_order_no).eq("slot_id", selectedWo.ccp_slot_id).gte("measured_at", `${todayKst}T00:00:00+09:00`).lte("measured_at", `${todayKst}T23:59:59+09:00`).order("measured_at", { ascending: false });
@@ -1767,7 +1775,7 @@ if (dupCheck && dupCheck.length > 0) {
     if (!selectedWo) return;
     const foodCat = getFoodCategory(selectedWo.food_type);
     const isChuganJae = foodCat === "중간재";
-    const isTransferPaperWo = (selectedWo.food_type ?? "") === "생산용전사지" || (selectedWo.food_type ?? "") === "전사지";
+    const isTransferPaperWo = isTransferSheetType(selectedWo.food_type);
     const items = (selectedWo.work_order_items ?? []).filter((item) => {
       const name = (item.sub_items ?? [])[0]?.name ?? "";
       return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비");
@@ -2006,7 +2014,7 @@ if (dupCheck && dupCheck.length > 0) {
                {
                 const ft = selectedWo.food_type ?? "";
                 const isNeoColorWo = ft.startsWith("네오컬러") || ft.startsWith("롤리팝컬러");
-                const isTransferPaperWo3 = ft === "생산용전사지" || ft === "전사지";
+                const isTransferPaperWo3 = isTransferSheetType(ft);
                 if (!isNeoColorWo) {
               let totalSheets = 0;
               if (isTransferPaperWo3) {
@@ -2072,7 +2080,7 @@ if (dupCheck && dupCheck.length > 0) {
             }
           }
 
-          const isTransferPaperWo2 = (selectedWo.food_type ?? "") === "생산용전사지" || (selectedWo.food_type ?? "") === "전사지";
+          const isTransferPaperWo2 = isTransferSheetType(selectedWo.food_type);
           const { error: statusErr } = await supabase.from("work_orders").update({
             ...(isTransferPaperWo2 ? { status: "완료", status_input: true, input_done_at: new Date().toISOString() } : {}),
             status_production: true,
@@ -2483,23 +2491,23 @@ const totalOrder = items
                   {isAdminOrSubadmin ? (
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                     <div><div className="mb-1 text-xs text-slate-500">제품명 *</div><input className={inp} value={eProductName} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEProductName(e.target.value)} /></div>
-                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    {!isTransferSheetType(selectedWo.food_type) && (
                     <div><div className="mb-1 text-xs text-slate-500">서브네임</div><input className={inp} value={eSubName} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setESubName(e.target.value)} /></div>
                     )}
                     <div><div className="mb-1 text-xs text-slate-500">식품유형</div><input className={inp} value={eFoodType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEFoodType(e.target.value)} /></div>
-                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    {!isTransferSheetType(selectedWo.food_type) && (
                     <div><div className="mb-1 text-xs text-slate-500">규격</div><input className={inp} value={eLogoSpec} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setELogoSpec(e.target.value)} /></div>
                     )}
-                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                   {!isTransferSheetType(selectedWo.food_type) && (
                     <div><div className="mb-1 text-xs text-slate-500">두께</div><select className={inp} value={eThickness} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEThickness(e.target.value)}>{["2mm","3mm","5mm","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
-                    )}
-                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    )} 
+                    {!isTransferSheetType(selectedWo.food_type) && (
                     <div><div className="mb-1 text-xs text-slate-500">납품방법</div><select className={inp} value={eDeliveryMethod} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEDeliveryMethod(e.target.value)}>{["택배","퀵-신용","퀵-착불","방문","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
                     )}
-                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    {!isTransferSheetType(selectedWo.food_type) && (
                     <div><div className="mb-1 text-xs text-slate-500">포장방법</div><select className={inp} value={ePackagingType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => { setEPackagingType(e.target.value); if (e.target.value === "벌크") setEPackageUnit("기타"); }}>{["","트레이-정사각20구","트레이-직사각20구","트레이-35구","벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}</select></div>
                     )}
-                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    {!isTransferSheetType(selectedWo.food_type) && (
                     <div>
                       <div className="mb-1 text-xs text-slate-500">포장단위</div>
                       <select className={inp} value={ePackageUnit} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEPackageUnit(e.target.value)}>{["100ea","200ea","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select>
@@ -2511,25 +2519,25 @@ const totalOrder = items
                       )}
                     </div>
                     )}
-                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    {!isTransferSheetType(selectedWo.food_type) && (
                     <div>
                       <div className="mb-1 text-xs text-slate-500">성형틀 (가로×세로){eMoldCols && eMoldRows && toInt(eMoldCols) > 0 && toInt(eMoldRows) > 0 && <span className="ml-1 font-semibold text-blue-600">= {toInt(eMoldCols) * toInt(eMoldRows)}개</span>}</div>
                       <div className="flex items-center gap-1"><input className={inpR} inputMode="numeric" placeholder="가로" value={eMoldCols} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldCols(e.target.value.replace(/[^\d]/g, ""))} /><span className="shrink-0 font-bold text-slate-400">×</span><input className={inpR} inputMode="numeric" placeholder="세로" value={eMoldRows} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldRows(e.target.value.replace(/[^\d]/g, ""))} /></div>
                     </div>
                     )}
-                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    {!isTransferSheetType(selectedWo.food_type) && (
                     <div><div className="mb-1 text-xs text-slate-500">성형틀 장수</div><input className={inpR} inputMode="numeric" value={eMoldCount} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldCount(e.target.value.replace(/[^\d]/g, ""))} /></div>
                     )}
-                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    {!isTransferSheetType(selectedWo.food_type) && (
                     <div><div className="mb-1 text-xs text-slate-500">비고</div><textarea className={`${inp} resize-none`} rows={2} value={eNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setENote(e.target.value)} /></div>
                     )}
-                    {(selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                    {!isTransferSheetType(selectedWo.food_type) && (
                     <div><div className="mb-1 text-xs text-slate-500">참고사항</div><input className={inp} value={eReferenceNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEReferenceNote(e.target.value)} /></div>
                     )}
                   </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
-                      {(((selectedWo.food_type ?? "") === "생산용전사지" || (selectedWo.food_type ?? "") === "전사지")
+                      {(isTransferSheetType(selectedWo.food_type)
                         ? ([["식품유형", selectedWo.food_type]] as [string, string | null][])
                         : ([["식품유형", selectedWo.food_type], ["규격", selectedWo.logo_spec], ["두께", selectedWo.thickness], ["납품방법", selectedWo.delivery_method], ["포장방법", selectedWo.packaging_type], ["포장단위", selectedWo.package_unit], ["성형틀/장", selectedWo.mold_per_sheet ? `${selectedWo.mold_per_sheet}개` : null], ["비고", selectedWo.note], ["참고사항", selectedWo.reference_note]] as [string, string | null][])
                       ).map(([label, value]) => value ? <div key={label}><div className="text-slate-400">{label}</div><div className="font-medium text-slate-800">{value}</div></div> : null)}
@@ -3183,7 +3191,7 @@ const totalOrder = items
             )}
 
             {/* CCP-1B 슬롯 지정 + 온도 기록 */}
-            {!selectedWo.skip_production_check && (selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트" || (getFoodCategory(selectedWo.food_type) === "중간재" && !selectedWo.product_name.includes("분사-레이즈"))) && ( 
+            {!selectedWo.skip_production_check && !isTransferSheetType(selectedWo.food_type) && (getFoodCategory(selectedWo.food_type) === "다크" || getFoodCategory(selectedWo.food_type) === "화이트" || (getFoodCategory(selectedWo.food_type) === "중간재" && !selectedWo.product_name.includes("분사-레이즈"))) && (
                 <WoCcpCard
                   selectedWo={selectedWo}
                   eCcpSlotId={eCcpSlotId}
