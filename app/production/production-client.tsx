@@ -73,6 +73,7 @@ type WorkOrderRow = {
   ccp_slot_id?: string | null;
   skip_production_check?: boolean | null;
   neo_color_spray_lots?: { lot_id: string; qty: string }[] | null;
+  transfer_sheet_size?: string | null;
 };
 
 type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
@@ -896,11 +897,24 @@ export default function ProductionClient() {
     await loadTransferCcpEvents(workOrderNo);
   }
 
+  // ─── 전사지 크기 선택 (트랜스퍼시트류 중간재 전용) ───
+  async function saveTransferSheetSize(size: string) {
+    if (!selectedWo) return;
+    const { error } = await supabase.from("work_orders").update({
+      transfer_sheet_size: size,
+      updated_at: new Date().toISOString(),
+    }).eq("id", selectedWo.id);
+    if (error) { showToast("전사지 크기 저장 실패: " + error.message, "error"); return; }
+    setSelectedWo((prev) => prev ? { ...prev, transfer_sheet_size: size } : prev);
+    setWoList((prev) => prev.map((w) => w.id === selectedWo.id ? { ...w, transfer_sheet_size: size } : w));
+    showToast("전사지 크기 저장됨: " + (size === "300x400" ? "300×400mm" : "320×450mm"));
+  }
+
   const loadWoList = useCallback(async (offset = 0) => {
     setLoading(true); setMsg(null);
     try {
       const LIMIT = filterStatus === "완료" ? 20 : 200;
-      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,transfer_done_at,print_check_done_at,input_done_at,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,gift_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
+      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,transfer_done_at,print_check_done_at,input_done_at,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,transfer_sheet_size,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,gift_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
       if (filterStatus !== "전체") q = q.eq("status", filterStatus);
       if (filterDateFrom) q = q.gte("order_date", filterDateFrom);
       if (filterDateTo) q = q.lte("order_date", filterDateTo);
@@ -928,7 +942,7 @@ export default function ProductionClient() {
     (async () => {
       const { data } = await supabase
         .from("work_orders")
-        .select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,transfer_done_at,print_check_done_at,input_done_at,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,gift_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`)
+        .select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,transfer_done_at,print_check_done_at,input_done_at,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,transfer_sheet_size,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,gift_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`)
         .eq("id", woIdFromUrl)
         .maybeSingle();
       if (data) await applySelection(data as unknown as WorkOrderRow);
@@ -1707,6 +1721,13 @@ if (dupCheck && dupCheck.length > 0) {
     const isChuganJae = foodCat === "중간재";
     const isTransferPaperWo = (selectedWo.food_type ?? "") === "생산용전사지" || (selectedWo.food_type ?? "") === "전사지";
 
+    // 전사지 크기 필수 선택 검사 (트랜스퍼시트류 중간재 — 생산용전사지/전사지 완전일치는 제외)
+    if (!selectedWo.skip_production_check && isTransferSheetType(selectedWo.food_type) && !isTransferPaperWo && !selectedWo.transfer_sheet_size) {
+      alert("전사지 크기(300×400mm / 320×450mm)를 선택하세요.");
+      setIsCompleting(false);
+      return;
+    }
+
     // 이산화티타늄 사용량 필수 입력 검사 (식품유형에 "리얼" 포함 시)
     if ((selectedWo.food_type ?? "").includes("리얼")) {
       if (!titaniumDioxideG || Number(titaniumDioxideG) <= 0) {
@@ -1842,7 +1863,8 @@ if (dupCheck && dupCheck.length > 0) {
         {
           const ft = selectedWo.food_type ?? "";
           const isNeoColorWo = ft.startsWith("네오컬러") || ft.startsWith("롤리팝컬러");
-          if (!isNeoColorWo) {
+          const isExactTransferPaperWo = ft === "생산용전사지" || ft === "전사지";
+          if (!isNeoColorWo && isExactTransferPaperWo) {
             const noteStr = selectedWo.note ?? "";
             const match = noteStr.match(/전사지[：:]\s*(\d+)장(?:\s*(\d+)줄)?/);
             if (match) {
@@ -1874,6 +1896,40 @@ if (dupCheck && dupCheck.length > 0) {
                   } else {
                     stockErrors.push(`원료 '${jeonsakName30}'을 찾을 수 없습니다.`);
                   }
+                }
+              }
+            }
+          } else if (!isNeoColorWo && isTransferSheetType(ft)) {
+            // 트랜스퍼시트류 중간재 (생산용전사지/전사지 완전일치 제외) — 선택된 크기 기준 출고+불량 합계로 직접 차감
+            const sheetMaterialName = selectedWo.transfer_sheet_size === "320x450" ? "전사지 32*45" : "전사지 30*40";
+            let totalSheets = 0;
+            for (const it of items) {
+              const pi = prodInputs[it.id];
+              totalSheets += toInt(pi?.actual_qty) + toInt(pi?.defect_qty);
+            }
+            if (totalSheets > 0) {
+              const jeonsakNote = `전사지 차감 - ${selectedWo.work_order_no}`;
+              const { data: jsDupCheck } = await supabase.from("material_usage_logs")
+                .select("id").eq("note", jeonsakNote).limit(1);
+              if (!jsDupCheck || jsDupCheck.length === 0) {
+                const { data: jsMatData } = await supabase.from("materials")
+                  .select("id").eq("name", sheetMaterialName).maybeSingle();
+                if (jsMatData?.id) {
+                  const todayKSTDate = new Date(
+                    new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
+                  ).toISOString().slice(0, 10);
+                  const { error: jsErr } = await supabase.from("material_usage_logs").insert({
+                    material_id: jsMatData.id,
+                    used_date: todayKSTDate,
+                    quantity: totalSheets,
+                    unit: "ea",
+                    work_type: "product",
+                    note: jeonsakNote,
+                    created_by: userId,
+                  });
+                  if (jsErr) stockErrors.push(`전사지 차감 실패: ${jsErr.message}`);
+                } else {
+                  stockErrors.push(`원료 '${sheetMaterialName}'을 찾을 수 없습니다.`);
                 }
               }
             }
@@ -2558,7 +2614,28 @@ const totalOrder = items
                 <div className={`${card} p-3`}>
                   <div className="mb-2 flex items-center justify-between flex-wrap gap-2">
                     <div className="font-semibold text-sm">🌡️ CCP-1B 온장고 슬롯(전사지인쇄) <span className="text-xs text-slate-400 font-normal">— 8번 슬롯 자동지정</span></div>
-                    {transferCcpEnded && <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">종료됨</span>}
+                    <div className="flex items-center gap-2">
+                      {isTransferSheetType(selectedWo.food_type) && (selectedWo.food_type ?? "") !== "생산용전사지" && (selectedWo.food_type ?? "") !== "전사지" && (
+                        <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                          {(["300x400", "320x450"] as const).map((size) => (
+                            <button
+                              key={size}
+                              type="button"
+                              disabled={selectedWo?.status === "완료" && !isEditMode}
+                              className={`px-3 py-1 text-xs font-semibold transition-all disabled:opacity-40 ${
+                                selectedWo.transfer_sheet_size === size
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-white text-slate-500 hover:bg-slate-50"
+                              }`}
+                              onClick={() => saveTransferSheetSize(size)}
+                            >
+                              {size === "300x400" ? "300×400mm" : "320×450mm"}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {transferCcpEnded && <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">종료됨</span>}
+                    </div>
                   </div>
                   {!transferCcpSlotId ? (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">전사 슬롯(8번)을 찾을 수 없습니다. warmer_slots 설정을 확인해주세요.</div>
