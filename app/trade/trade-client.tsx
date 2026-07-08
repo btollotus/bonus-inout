@@ -2201,7 +2201,15 @@ if (woSubNameVal) {
             if (!upErr) uploadedUrls.push(path);
           }
         }
-        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, package_unit: eWoPackageUnit === "기타" ? (eWoPackageUnitCustom.trim() ? eWoPackageUnitCustom.trim() + "ea" : null) : eWoPackageUnit || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, mold_count: toInt(eWoMoldCount) > 0 ? toInt(eWoMoldCount) : null, note: eWoNote.trim() || null, reference_note: eOrderTitle.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString()}).eq("id", eWoId);
+        await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, package_unit: eWoPackageUnit === "기타" ? (eWoPackageUnitCustom.trim() ? eWoPackageUnitCustom.trim() + "ea" : null) : eWoPackageUnit || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, mold_count: toInt(eWoMoldCount) > 0 ? toInt(eWoMoldCount) : null, note: (() => {
+          const realMemo = "화이트초콜릿(이산화티타늄첨가)\n이산화티타늄 혼합. 흰색으로 만들것.\n배합비 10kg + 1kg";
+          const hasReal = (eWoFoodType ?? "").includes("리얼");
+          const base = eWoNote.trim();
+          if (hasReal && base.includes(realMemo)) return base;
+          if (hasReal && base) return `${realMemo}\n\n${base}`;
+          if (hasReal) return realMemo;
+          return base || null;
+        })(), reference_note: eOrderTitle.trim() || null, images: uploadedUrls, updated_at: new Date().toISOString()}).eq("id", eWoId);
         await supabase.from("work_order_items").update({ delivery_date: eShipDate }).eq("work_order_id", eWoId);
 
       
