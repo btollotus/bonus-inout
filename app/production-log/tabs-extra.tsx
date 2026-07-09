@@ -2322,9 +2322,20 @@ setTimeout(() => {
       (no) => woAssigneeMapRef.current[no] === assignee
     );
     const seen = new Set<string>();
-    return woEvents
-      .filter((e) => e.slot_id === slotId && assigneeWoNos.includes(e.work_order_no))
-      .sort((a, b) => a.measured_at.localeCompare(b.measured_at))
+    const filtered = woEvents.filter((e) => e.slot_id === slotId && assigneeWoNos.includes(e.work_order_no));
+    // 작업지시서별 최초 발생시각 — 같은 WO의 시작~종료가 항상 붙어서 정렬되도록
+    const firstTimeByWo: Record<string, string> = {};
+    for (const e of filtered) {
+      if (!firstTimeByWo[e.work_order_no] || e.measured_at < firstTimeByWo[e.work_order_no]) {
+        firstTimeByWo[e.work_order_no] = e.measured_at;
+      }
+    }
+    return filtered
+      .sort((a, b) => {
+        const groupCompare = firstTimeByWo[a.work_order_no].localeCompare(firstTimeByWo[b.work_order_no]);
+        if (groupCompare !== 0) return groupCompare;
+        return a.measured_at.localeCompare(b.measured_at);
+      })
       .filter((e) => {
         const key = `${e.measured_at.slice(11, 16)}_${e.temperature}`;
         if (seen.has(key)) return false;
