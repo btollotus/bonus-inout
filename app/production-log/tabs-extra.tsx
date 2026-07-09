@@ -2043,6 +2043,9 @@ export function OtherHeatingTab({ role, userId, showToast }: {
         .sort((a: any, b: any) => {
           const groupCompare = firstTimeByWo[a.work_order_no].localeCompare(firstTimeByWo[b.work_order_no]);
           if (groupCompare !== 0) return groupCompare;
+          // 최초시각이 동일한 WO끼리는 work_order_no로 그룹을 먼저 고정 — 같은 WO의 이벤트가 흩어지지 않도록
+          const woCompare = a.work_order_no.localeCompare(b.work_order_no);
+          if (woCompare !== 0) return woCompare;
           return a.measured_at.localeCompare(b.measured_at);
         })
         .filter((e: any) => {
