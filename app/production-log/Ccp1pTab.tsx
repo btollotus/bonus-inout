@@ -22,6 +22,7 @@ type WorkOrderItem = {
   production_done_at: string | null;
   input_done_at?: string | null;
   ccp_end_time?: string | null;
+  full_product_name?: string | null;
 };
 
 type MetalLog = {
@@ -68,6 +69,39 @@ const SIGN_MAP: Record<string, string> = {
   "김영각": "/sign-kimyg.png",
   "고한결": "/sign-gohg.png",
 };
+
+// 제외 품목 접두어 (성형틀/인쇄제판/아이스박스/퀵/택배비)
+const EXCLUDE_ITEM_PREFIXES = ["성형틀", "인쇄제판", "아이스박스", "퀵", "택배비"];
+
+// work_order_items(sub_items) 배열 → 제외 품목 필터링 후 줄바꿈으로 합친 전체 품목명 문자열
+function buildFullItemNames(items: { sub_items?: any }[] | null | undefined): string {
+  const names = (items ?? [])
+    .map((item: any) => ((item.sub_items ?? [])[0]?.name ?? "").trim())
+    .filter((n: string) => n && !EXCLUDE_ITEM_PREFIXES.some((p) => n.startsWith(p)));
+  return names.join("\n");
+}
+
+// work_order_id 목록 → { work_order_id: 전체품목명 } 맵 조회
+async function fetchWoFullNames(workOrderIds: string[]): Promise<Record<string, string>> {
+  const uniqueIds = Array.from(new Set(workOrderIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return {};
+  const { data } = await supabase
+    .from("work_order_items")
+    .select("work_order_id, sub_items")
+    .in("work_order_id", uniqueIds);
+  const grouped: Record<string, { sub_items?: any }[]> = {};
+  for (const row of data ?? []) {
+    const woId = (row as any).work_order_id;
+    if (!woId) continue;
+    if (!grouped[woId]) grouped[woId] = [];
+    grouped[woId].push(row as any);
+  }
+  const result: Record<string, string> = {};
+  for (const [woId, items] of Object.entries(grouped)) {
+    result[woId] = buildFullItemNames(items);
+  }
+  return result;
+}
 
 // 빈 기록 초기값
 function emptyLog(workOrderId: string, productName: string, clientName: string, logDate: string): Omit<MetalLog, "id"> {
@@ -300,6 +334,7 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
   const [rangeFrom, setRangeFrom] = useState<string>(() => todayKST());
   const [rangeTo, setRangeTo] = useState<string>(() => todayKST());
   const [rangeLogs, setRangeLogs] = useState<Record<string, MetalLog[]>>({});
+  const [rangeFullNames, setRangeFullNames] = useState<Record<string, string>>({});
   const [rangeLoading, setRangeLoading] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
 
@@ -377,9 +412,12 @@ if (loggedIds.length > 0) {
       }
     }
 
+    const fullNameMap = await fetchWoFullNames(allWoRows.map((w: any) => w.id));
+
     const enriched = allWoRows.map((w: any) => ({
       ...w,
       ccp_end_time: ccpEndMap[w.work_order_no] ?? null,
+      full_product_name: fullNameMap[w.id] || w.product_name,
     }));
     setWoList(enriched as WorkOrderItem[]);
     setLoading(false);
@@ -401,8 +439,8 @@ if (loggedIds.length > 0) {
     setLogMap(map);
   }, [woList]);
 
-  async function loadRangeLogs(): Promise<Record<string, MetalLog[]>> {
-    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return {};
+  async function loadRangeLogs(): Promise<{ grouped: Record<string, MetalLog[]>; fullNames: Record<string, string> }> {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return { grouped: {}, fullNames: {} };
     setRangeLoading(true);
     const { data } = await supabase
       .from("ccp_metal_logs")
@@ -411,16 +449,18 @@ if (loggedIds.length > 0) {
       .lte("log_date", rangeTo)
       .order("log_date", { ascending: true })
       .order("start_time", { ascending: true });
-    setRangeLoading(false);
-    if (!data) return {};
+    if (!data) { setRangeLoading(false); return { grouped: {}, fullNames: {} }; }
     const grouped: Record<string, MetalLog[]> = {};
     for (const row of data) {
       const d = row.log_date as string;
       if (!grouped[d]) grouped[d] = [];
       grouped[d].push(row as MetalLog);
     }
+    const fullNames = await fetchWoFullNames(data.map((row: any) => (row as any).work_order_id));
+    setRangeLoading(false);
     setRangeLogs(grouped);
-    return grouped;
+    setRangeFullNames(fullNames);
+    return { grouped, fullNames };
   }
 
   useEffect(() => {
@@ -862,6 +902,10 @@ if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
     return ta.localeCompare(tb);
   });
 
+  const woFullNameMap: Record<string, string> = Object.fromEntries(
+    woList.map((w: any) => [w.id, w.full_product_name ?? w.product_name])
+  );
+
   // ── 인쇄용: 이탈 기록 수집 ──
   function getDeviationDesc(log: MetalLog): string {
     const parts: string[] = [];
@@ -953,7 +997,7 @@ if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
         <button
           className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
           onClick={async () => {
-            const grouped = await loadRangeLogs();
+            const { grouped, fullNames } = await loadRangeLogs();
             const dates = Object.keys(grouped).sort();
             if (dates.length === 0) return showToast("조회된 기록이 없습니다.", "error");
 
@@ -1047,8 +1091,8 @@ if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
                   ${COLGROUP}
                   <tbody>
                     <tr style="background:${bg};">
-                      <td rowspan="2" style="${tdS}text-align:left;font-size:6.5pt;padding-left:3px;white-space:normal;word-break:keep-all;">
-                        ${hasDev ? `<span style="color:#DC2626;">⚠ </span>` : ""}${log.client_name ?? ""} — ${log.product_name ?? ""}
+                      <td rowspan="2" style="${tdS}text-align:left;font-size:6.5pt;padding-left:3px;white-space:normal;word-break:keep-all;line-height:1.3;">
+                        ${hasDev ? `<span style="color:#DC2626;">⚠ </span>` : ""}${log.client_name ?? ""} — ${(fullNames[log.work_order_id] || log.product_name || "").split("\n").join("<br/>")}
                       </td>
                       <td rowspan="2" style="${tdS}text-align:center;font-size:7pt;">${(log.start_time ?? "").slice(0,5)}</td>
                       <td rowspan="2" style="${tdS}text-align:center;font-size:7pt;">${(log.b_end_time ?? "").slice(0,5)}</td>
@@ -1274,8 +1318,8 @@ if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
             onClick={() => selectWo(wo)}
           >
             <div className="flex items-center justify-between gap-2">
-              <div>
-                <div className="font-semibold text-sm">{wo.client_name} — {wo.product_name}</div>
+            <div>
+            <div className="font-semibold text-sm" style={{ whiteSpace: "pre-line" }}>{wo.client_name} — {wo.full_product_name ?? wo.product_name}</div>
                 <div className="mt-1 flex items-center gap-3 text-xs">
                   <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5">
                   <span className="text-slate-400">생산완료</span>
@@ -1613,10 +1657,10 @@ if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
             <table key={log.id} style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", pageBreakInside: "avoid" }}>
               {cg}
               <tbody>
-                <tr style={{ background: hasDeviation ? "#fff9f9" : "#fff" }}>
-                  <td rowSpan={2} style={{ ...tdBase, textAlign: "left", fontSize: "6.5pt", paddingLeft: 3, whiteSpace: "normal", wordBreak: "keep-all" }}>
+              <tr style={{ background: hasDeviation ? "#fff9f9" : "#fff" }}>
+                  <td rowSpan={2} style={{ ...tdBase, textAlign: "left", fontSize: "6.5pt", paddingLeft: 3, whiteSpace: "pre-line", wordBreak: "keep-all" }}>
                     {hasDeviation && <span style={{ color: "#DC2626" }}>⚠ </span>}
-                    {log.client_name} — {log.product_name}
+                    {log.client_name} — {rangeFullNames[log.work_order_id] || log.product_name}
                   </td>
                   <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{(log.start_time ?? "").slice(0,5)}</td>
                   <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{(log.b_end_time ?? "").slice(0,5)}</td>
@@ -1831,10 +1875,10 @@ if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
     <table key={log.id} style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", pageBreakInside: "avoid" }}>
       {colgroup}
       <tbody>
-        <tr style={{ background: hasDeviation ? "#fff9f9" : "#fff" }}>
-          <td rowSpan={2} style={{ ...tdBase, textAlign: "left", fontSize: "6.5pt", paddingLeft: 3, whiteSpace: "normal", wordBreak: "keep-all" }}>
+      <tr style={{ background: hasDeviation ? "#fff9f9" : "#fff" }}>
+          <td rowSpan={2} style={{ ...tdBase, textAlign: "left", fontSize: "6.5pt", paddingLeft: 3, whiteSpace: "pre-line", wordBreak: "keep-all" }}>
             {hasDeviation && <span style={{ color: "#DC2626" }}>⚠ </span>}
-            {log.client_name} — {log.product_name}
+            {log.client_name} — {woFullNameMap[log.work_order_id] || log.product_name}
           </td>
           <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{(log.start_time ?? "").slice(0, 5)}</td>
           <td rowSpan={2} style={{ ...tdBase, textAlign: "center", fontSize: "7pt" }}>{(log.b_end_time ?? "").slice(0, 5)}</td>
