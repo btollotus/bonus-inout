@@ -2046,7 +2046,8 @@ export function OtherHeatingTab({ role, userId, showToast }: {
           return a.measured_at.localeCompare(b.measured_at);
         })
         .filter((e: any) => {
-          const key = `${e.measured_at.slice(11, 16)}_${e.temperature}`;
+          // work_order_no를 키에 포함 — 서로 다른 WO의 우연히 같은 시각+온도인 기록이 중복으로 오인되어 삭제되는 것을 방지
+          const key = `${e.work_order_no}_${e.measured_at.slice(11, 16)}_${e.temperature}`;
           if (seen.has(key)) return false;
           seen.add(key); return true;
         });
