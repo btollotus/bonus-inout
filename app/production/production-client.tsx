@@ -1423,6 +1423,34 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
          transfer_lots: lotsForDb,
        }).eq("id", item.id);
      }
+     // 도눔(은박) 완성품 입고 (포장완료 수량만큼 IN, 화면 입력 소비기한 사용)
+     const todayKSTDatePkg = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+     for (const item of items) {
+       const pi = prodInputs[item.id];
+       if (!pi || !pi.actual_qty || !pi.expiry_date) continue;
+       const actual_qty = toInt(pi.actual_qty);
+       if (actual_qty <= 0) continue;
+       let variantId: string | null = null;
+       if (item.barcode_no) { const { data: pbData } = await supabase.from("product_barcodes").select("variant_id").eq("barcode", item.barcode_no).maybeSingle(); variantId = pbData?.variant_id ?? null; }
+       if (!variantId) variantId = selectedWo.variant_id;
+       if (!variantId) { stockErrors.push(`variant 없음 (${(item.sub_items ?? [])[0]?.name ?? item.id})`); continue; }
+       let lotId: string | null = null;
+       const { data: existingLot } = await supabase.from("lots").select("id").eq("variant_id", variantId).eq("expiry_date", pi.expiry_date).maybeSingle();
+       if (existingLot) { lotId = existingLot.id; } else {
+         const { data: newLot, error: lotErr } = await supabase.from("lots").insert({ variant_id: variantId, expiry_date: pi.expiry_date }).select("id").single();
+         if (lotErr) { stockErrors.push("LOT 생성 실패: " + lotErr.message); continue; }
+         lotId = newLot.id;
+       }
+       const inNote = `포장완료 - ${selectedWo.work_order_no}`;
+       const { data: existingInMov } = await supabase.from("movements").select("id").eq("lot_id", lotId).eq("type", "IN").eq("note", inNote).limit(1);
+       if (existingInMov && existingInMov.length > 0) {
+         const { error: movUpdErr } = await supabase.from("movements").update({ qty: actual_qty }).eq("id", existingInMov[0].id);
+         if (movUpdErr) stockErrors.push("입고 갱신 실패: " + movUpdErr.message);
+       } else {
+         const { error: movErr } = await supabase.from("movements").insert({ lot_id: lotId, type: "IN", qty: actual_qty, happened_at: `${todayKSTDatePkg}T00:00:00+09:00`, note: inNote, created_by: userId });
+         if (movErr) stockErrors.push("입고 실패: " + movErr.message);
+       }
+     }
       // 상태 완료
       const { error: statusErr } = await supabase.from("work_orders").update({
         status: "완료",
