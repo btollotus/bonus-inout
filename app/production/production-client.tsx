@@ -2520,7 +2520,9 @@ const totalOrder = items
                         <div className="flex items-center gap-1"><input className={inpR} inputMode="numeric" placeholder="가로" value={kMoldCols} onChange={(e) => setKMoldCols(e.target.value.replace(/[^\d]/g, ""))} /><span className="shrink-0 font-bold text-slate-400">×</span><input className={inpR} inputMode="numeric" placeholder="세로" value={kMoldRows} onChange={(e) => setKMoldRows(e.target.value.replace(/[^\d]/g, ""))} /></div>
                       </div>
                       )}
+                      {kiseongSelected.variant_name !== "도눔(은박)" && (
                       <div><div className="mb-1 text-xs text-slate-500">개당 중량 (g)</div><input className={inpR} inputMode="decimal" value={kUnitWeight} onChange={(e) => setKUnitWeight(e.target.value.replace(/[^\d.]/g, ""))} /></div>
+                      )}
                       {kiseongCategory !== "생산용전사지" && kiseongCategory !== "전사지" && kiseongCategory !== "코팅/분사" && kiseongSelected.variant_name !== "도눔(은박)" && (
                       <div><div className="mb-1 text-xs text-slate-500">비고</div><textarea className={`${inp} resize-none`} rows={2} value={kNote} onChange={(e) => setKNote(e.target.value)} /></div>
                       )}
