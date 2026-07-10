@@ -1738,6 +1738,15 @@ if (dupCheck && dupCheck.length > 0) {
 
      // ── 포장완료(도눔 포장 출고) 처리 ──
      if (selectedWo.skip_production_check) {
+      const hasPackagingLotSelected = (selectedWo.work_order_items ?? []).some((item) => {
+        const pi = prodInputs[item.id];
+        return (pi?.transfer_lots ?? []).some((l) => l.lot_id && toInt(l.qty) > 0);
+      });
+      if (!hasPackagingLotSelected) {
+        alert("재고 차감 선택에서 차감 수량을 입력해주세요.");
+        setIsCompleting(false);
+        return;
+      }
       setPinProgressPending(() => async (name: string) => {
         await doCompletePackaging(name);
       });
