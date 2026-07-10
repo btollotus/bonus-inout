@@ -1257,7 +1257,7 @@ export default function ProductionClient() {
 
     if (getFoodCategory(wo.food_type) !== "중간재") {
       const woItems = wo.work_order_items ?? [];
-      const extractKeyword = (raw: string) => raw.replace(/^(주식회사|유한회사|합자회사|협동조합|\(주\)|\(유\))\s*/g, "").replace(/\(.*?\)/g, "").trim().split(/[\s\-_]/)[0] ?? raw.trim();
+      const extractKeyword = (raw: string) => raw.replace(/^(주식회사|유한회사|합자회사|협동조합|\(주\)|\(유\))\s*/g, "").replace(/^\d+\.\s*/, "").replace(/\(.*?\)/g, "").trim().split(/[\s\-_]/)[0] ?? raw.trim();
       const clientRaw = wo.order_type === "재고" ? (wo.product_name ?? "") : (wo.client_name ?? "");
       const clientKeyword = wo.skip_production_check ? "도눔" : extractKeyword(clientRaw);
       for (const item of woItems) {
