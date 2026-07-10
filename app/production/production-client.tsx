@@ -585,7 +585,7 @@ export default function ProductionClient() {
       const { data: newWoNo3, error: woNoErr3 } = await supabase.rpc("generate_work_order_no", { date_str: dateStr });
       if (woNoErr3 || !newWoNo3) throw new Error("작업지시서 번호 생성 실패: " + (woNoErr3?.message ?? ""));
       const workOrderNo = newWoNo3;
-      const { data: wo, error: woErr } = await supabase.from("work_orders").insert({ work_order_no: workOrderNo, barcode_no: kiseongSelected.barcode, client_id: null, client_name: "재고생산", sub_name: kSubName.trim() || null, order_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, food_type: kFoodType.trim() || null, product_name: kiseongSelected.product_name, logo_spec: kLogoSpec.trim() || null, thickness: kThickness || null, delivery_method: null, packaging_type: kPackagingType || null, tray_slot: null, package_unit: kPackageUnit === "기타" ? (kPackageUnitCustom.trim() ? kPackageUnitCustom.trim() + "ea" : null) : kPackageUnit || null, mold_per_sheet: kMoldPerSheetNum > 0 ? kMoldPerSheetNum : null, mold_cols: kMoldColsNum > 0 ? kMoldColsNum : null, mold_rows: kMoldRowsNum > 0 ? kMoldRowsNum : null, note: kNote.trim() || null, reference_note: kReferenceNote.trim() || null, status: "생산중", variant_id: kiseongSelected.variant_id, order_type: "재고" }).select("id").single();
+      const { data: wo, error: woErr } = await supabase.from("work_orders").insert({ work_order_no: workOrderNo, barcode_no: kiseongSelected.barcode, client_id: null, client_name: "재고생산", sub_name: kSubName.trim() || null, order_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, food_type: kFoodType.trim() || null, product_name: kiseongSelected.product_name, logo_spec: kLogoSpec.trim() || null, thickness: kThickness || null, delivery_method: null, packaging_type: kPackagingType || null, tray_slot: null, package_unit: kPackageUnit === "기타" ? (kPackageUnitCustom.trim() ? kPackageUnitCustom.trim() + "ea" : null) : kPackageUnit || null, mold_per_sheet: kMoldPerSheetNum > 0 ? kMoldPerSheetNum : null, mold_cols: kMoldColsNum > 0 ? kMoldColsNum : null, mold_rows: kMoldRowsNum > 0 ? kMoldRowsNum : null, note: kNote.trim() || null, reference_note: kReferenceNote.trim() || null, status: "생산중", variant_id: kiseongSelected.variant_id, order_type: "재고", skip_production_check: kiseongSelected.variant_name === "도눔(은박)" }).select("id").single();
       if (woErr) throw woErr;
       const { error: itemErr } = await supabase.from("work_order_items").insert({ work_order_id: wo.id, delivery_date: `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`, sub_items: [{ name: kiseongSelected.product_name, qty: toInt(kActualQty) }], order_qty: toInt(kActualQty), barcode_no: kiseongSelected.barcode, actual_qty: toInt(kActualQty), unit_weight: kUnitWeight ? toNum(kUnitWeight) : (kiseongSelected.weight_g ?? null), expiry_date: null });
       if (itemErr) {
@@ -2566,7 +2566,7 @@ const totalOrder = items
                     <div className="font-semibold text-sm">기본정보</div>
                     <div className="text-xs text-slate-400">{isEditMode ? "수정 모드" : "수정 버튼으로 편집"}</div>
                   </div>
-                  {needsTransferSheetSizeSelection(selectedWo.food_type) && (
+                  {needsTransferSheetSizeSelection(selectedWo.food_type) && !selectedWo.skip_production_check && (
                     <div className="mb-3 flex items-center gap-1.5">
                       <span className="text-xs font-semibold text-slate-500">전사지 선택</span>
                       <div className="flex rounded-lg border border-slate-200 overflow-hidden">
@@ -2591,23 +2591,23 @@ const totalOrder = items
                   {isAdminOrSubadmin ? (
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                     <div><div className="mb-1 text-xs text-slate-500">제품명 *</div><input className={inp} value={eProductName} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEProductName(e.target.value)} /></div>
-                    {!isTransferSheetType(selectedWo.food_type) && (
+                    {!isTransferSheetType(selectedWo.food_type) && !selectedWo.skip_production_check && (
                     <div><div className="mb-1 text-xs text-slate-500">서브네임</div><input className={inp} value={eSubName} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setESubName(e.target.value)} /></div>
                     )}
                     <div><div className="mb-1 text-xs text-slate-500">식품유형</div><input className={inp} value={eFoodType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEFoodType(e.target.value)} /></div>
-                    {!isTransferSheetType(selectedWo.food_type) && (
+                    {!isTransferSheetType(selectedWo.food_type) && !selectedWo.skip_production_check && (
                     <div><div className="mb-1 text-xs text-slate-500">규격</div><input className={inp} value={eLogoSpec} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setELogoSpec(e.target.value)} /></div>
                     )}
-                   {!isTransferSheetType(selectedWo.food_type) && (
+                   {!isTransferSheetType(selectedWo.food_type) && !selectedWo.skip_production_check && (
                     <div><div className="mb-1 text-xs text-slate-500">두께</div><select className={inp} value={eThickness} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEThickness(e.target.value)}>{["2mm","3mm","5mm","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
-                    )} 
-                    {!isTransferSheetType(selectedWo.food_type) && (
+                    )}
+                    {!isTransferSheetType(selectedWo.food_type) && !selectedWo.skip_production_check && (
                     <div><div className="mb-1 text-xs text-slate-500">납품방법</div><select className={inp} value={eDeliveryMethod} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEDeliveryMethod(e.target.value)}>{["택배","퀵-신용","퀵-착불","방문","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
                     )}
-                    {!isTransferSheetType(selectedWo.food_type) && (
+                    {!isTransferSheetType(selectedWo.food_type) && !selectedWo.skip_production_check && (
                     <div><div className="mb-1 text-xs text-slate-500">포장방법</div><select className={inp} value={ePackagingType} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => { setEPackagingType(e.target.value); if (e.target.value === "벌크") setEPackageUnit("기타"); }}>{["","트레이-정사각20구","트레이-직사각20구","트레이-35구","벌크"].map((v) => <option key={v} value={v}>{v === "" ? "선택안함" : v}</option>)}</select></div>
                     )}
-                    {!isTransferSheetType(selectedWo.food_type) && (
+                    {!isTransferSheetType(selectedWo.food_type) && !selectedWo.skip_production_check && (
                     <div>
                       <div className="mb-1 text-xs text-slate-500">포장단위</div>
                       <select className={inp} value={ePackageUnit} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEPackageUnit(e.target.value)}>{["100ea","200ea","기타"].map((v) => <option key={v} value={v}>{v}</option>)}</select>
@@ -2619,19 +2619,19 @@ const totalOrder = items
                       )}
                     </div>
                     )}
-                    {!isTransferSheetType(selectedWo.food_type) && (
+                    {!isTransferSheetType(selectedWo.food_type) && !selectedWo.skip_production_check && (
                     <div>
                       <div className="mb-1 text-xs text-slate-500">성형틀 (가로×세로){eMoldCols && eMoldRows && toInt(eMoldCols) > 0 && toInt(eMoldRows) > 0 && <span className="ml-1 font-semibold text-blue-600">= {toInt(eMoldCols) * toInt(eMoldRows)}개</span>}</div>
                       <div className="flex items-center gap-1"><input className={inpR} inputMode="numeric" placeholder="가로" value={eMoldCols} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldCols(e.target.value.replace(/[^\d]/g, ""))} /><span className="shrink-0 font-bold text-slate-400">×</span><input className={inpR} inputMode="numeric" placeholder="세로" value={eMoldRows} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldRows(e.target.value.replace(/[^\d]/g, ""))} /></div>
                     </div>
                     )}
-                    {!isTransferSheetType(selectedWo.food_type) && (
+                    {!isTransferSheetType(selectedWo.food_type) && !selectedWo.skip_production_check && (
                     <div><div className="mb-1 text-xs text-slate-500">성형틀 장수</div><input className={inpR} inputMode="numeric" value={eMoldCount} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEMoldCount(e.target.value.replace(/[^\d]/g, ""))} /></div>
                     )}
-                    {!isTransferSheetType(selectedWo.food_type) && (
+                    {!isTransferSheetType(selectedWo.food_type) && !selectedWo.skip_production_check && (
                     <div><div className="mb-1 text-xs text-slate-500">비고</div><textarea className={`${inp} resize-none`} rows={2} value={eNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setENote(e.target.value)} /></div>
                     )}
-                    {!isTransferSheetType(selectedWo.food_type) && (
+                    {!isTransferSheetType(selectedWo.food_type) && !selectedWo.skip_production_check && (
                     <div><div className="mb-1 text-xs text-slate-500">참고사항</div><input className={inp} value={eReferenceNote} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setEReferenceNote(e.target.value)} /></div>
                     )}
                   </div>
