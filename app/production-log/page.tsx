@@ -368,6 +368,8 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [pestDoneThisWeek, setPestDoneThisWeek] = useState(false);
   const [todayWarmerClean, setTodayWarmerClean] = useState(false);
   const [viewWarmerCleanMap, setViewWarmerCleanMap] = useState<Record<string, boolean>>({});
+  const [todayForeignMatter, setTodayForeignMatter] = useState(false);
+  const [viewForeignMatterMap, setViewForeignMatterMap] = useState<Record<string, boolean>>({});
 
   // 작업자 선택 화면용 — 선택 날짜 기준 출퇴근+작성여부 맵
   const [empStatusMap, setEmpStatusMap] = useState<Record<string, {
@@ -518,6 +520,15 @@ function ProductionLogTab({ role, userId, showToast }: {
         .eq("is_active", true)
         .maybeSingle();
       setTodayWarmerClean(!!warmerData);
+
+      // 이물관리 점검 완료 여부 (해당 날짜에 이 직원이 점검자로 활성화되었는지)
+      const { data: fmData } = await supabase.from("foreign_matter_daily_inspectors")
+        .select("is_active")
+        .eq("log_date", date)
+        .eq("inspector_name", empName)
+        .eq("is_active", true)
+        .maybeSingle();
+      setTodayForeignMatter(!!fmData);
   
       // 이번 주 방충방서 완료 여부 (월요일 기준)
       const todayDate = new Date(date + "T00:00:00+09:00");
@@ -764,6 +775,16 @@ function ProductionLogTab({ role, userId, showToast }: {
    if (warmerDayData?.inspector_name) warmerMap[warmerDayData.inspector_name] = true;
    setViewWarmerCleanMap(warmerMap);
 
+   // 이물관리 점검자 조회 (조회 모드용) — 하루에 한 명만 활성화되는 구조
+   const { data: fmDayData } = await supabase.from("foreign_matter_daily_inspectors")
+     .select("inspector_name, is_active")
+     .eq("log_date", viewDate)
+     .eq("is_active", true)
+     .maybeSingle();
+   const fmMap: Record<string, boolean> = {};
+   if (fmDayData?.inspector_name) fmMap[fmDayData.inspector_name] = true;
+   setViewForeignMatterMap(fmMap);
+
    setViewLoading(false);
  }
 
@@ -884,7 +905,7 @@ function ProductionLogTab({ role, userId, showToast }: {
                   ))}
                 </div>
               </div>
-              {(viewRaizeCutMap[log.employee_name] || viewWarmerCleanMap[log.employee_name]) && (
+              {(viewRaizeCutMap[log.employee_name] || viewWarmerCleanMap[log.employee_name] || viewForeignMatterMap[log.employee_name]) && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {viewRaizeCutMap[log.employee_name] && (
                     <span className="rounded-lg border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700">
@@ -894,6 +915,11 @@ function ProductionLogTab({ role, userId, showToast }: {
                   {viewWarmerCleanMap[log.employee_name] && (
                     <span className="rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700">
                       🧼 온장고세척 점검 완료
+                    </span>
+                  )}
+                  {viewForeignMatterMap[log.employee_name] && (
+                    <span className="rounded-lg border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-medium text-teal-700">
+                      🔍 이물관리 점검 완료
                     </span>
                   )}
                 </div>
@@ -1181,17 +1207,24 @@ function ProductionLogTab({ role, userId, showToast }: {
         )}
       </div>
 
-{/* 위생·안전 점검 완료 현황 (온장고세척 등, 별도 화면에서 PIN 인증 후 점검한 항목) */}
-{todayWarmerClean && (
-  <div className={`${card} p-4`}>
-    <div className="mb-2 font-semibold text-sm text-sky-700">🧼 위생·안전 점검 완료</div>
-    <div className="flex flex-wrap gap-2">
-      <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700">
-        ✅ 온장고세척 점검 완료
-      </span>
-    </div>
-  </div>
-)}
+{/* 위생·안전 점검 완료 현황 (온장고세척/이물관리 등, 별도 화면에서 PIN 인증 후 점검한 항목) */}
+{(todayWarmerClean || todayForeignMatter) && (
+        <div className={`${card} p-4`}>
+          <div className="mb-2 font-semibold text-sm text-sky-700">🧼 위생·안전 점검 완료</div>
+          <div className="flex flex-wrap gap-2">
+            {todayWarmerClean && (
+              <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700">
+                ✅ 온장고세척 점검 완료
+              </span>
+            )}
+            {todayForeignMatter && (
+              <span className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700">
+                ✅ 이물관리 점검 완료
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
 {/* 업무 체크리스트 */}
 <div className={`${card} p-4`}>
