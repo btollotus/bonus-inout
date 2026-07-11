@@ -372,6 +372,8 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [viewForeignMatterMap, setViewForeignMatterMap] = useState<Record<string, boolean>>({});
   const [todayHygieneCheck, setTodayHygieneCheck] = useState(false);
   const [viewHygieneCheckMap, setViewHygieneCheckMap] = useState<Record<string, boolean>>({});
+  const [todayHumidityCheck, setTodayHumidityCheck] = useState(false);
+  const [viewHumidityCheckMap, setViewHumidityCheckMap] = useState<Record<string, boolean>>({});
 
   // 작업자 선택 화면용 — 선택 날짜 기준 출퇴근+작성여부 맵
   const [empStatusMap, setEmpStatusMap] = useState<Record<string, {
@@ -540,6 +542,15 @@ function ProductionLogTab({ role, userId, showToast }: {
         .eq("is_active", true)
         .maybeSingle();
       setTodayHygieneCheck(!!hygieneData);
+
+      // 온습도 점검 완료 여부 (해당 날짜에 이 직원이 오전/오후 중 점검자로 서명했는지)
+      const { data: humidityData } = await supabase.from("fridge_monitoring_signatures")
+        .select("id")
+        .eq("log_date", date)
+        .eq("role", "humidity_inspector")
+        .eq("inspector_name", empName)
+        .limit(1);
+      setTodayHumidityCheck((humidityData ?? []).length > 0);
   
       // 이번 주 방충방서 완료 여부 (월요일 기준)
       const todayDate = new Date(date + "T00:00:00+09:00");
@@ -806,6 +817,17 @@ function ProductionLogTab({ role, userId, showToast }: {
    if (hygieneDayData?.inspector_name) hygieneMap[hygieneDayData.inspector_name] = true;
    setViewHygieneCheckMap(hygieneMap);
 
+   // 온습도 점검자 조회 (조회 모드용) — 오전/오후 각각 다른 점검자 가능
+   const { data: humidityDayData } = await supabase.from("fridge_monitoring_signatures")
+     .select("inspector_name")
+     .eq("log_date", viewDate)
+     .eq("role", "humidity_inspector");
+   const humidityMap: Record<string, boolean> = {};
+   (humidityDayData ?? []).forEach((row: any) => {
+     if (row.inspector_name) humidityMap[row.inspector_name] = true;
+   });
+   setViewHumidityCheckMap(humidityMap);
+
    setViewLoading(false);
  }
 
@@ -926,7 +948,7 @@ function ProductionLogTab({ role, userId, showToast }: {
                   ))}
                 </div>
               </div>
-              {(viewRaizeCutMap[log.employee_name] || viewWarmerCleanMap[log.employee_name] || viewForeignMatterMap[log.employee_name] || viewHygieneCheckMap[log.employee_name]) && (
+              {(viewRaizeCutMap[log.employee_name] || viewWarmerCleanMap[log.employee_name] || viewForeignMatterMap[log.employee_name] || viewHygieneCheckMap[log.employee_name] || viewHumidityCheckMap[log.employee_name]) && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {viewRaizeCutMap[log.employee_name] && (
                     <span className="rounded-lg border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700">
@@ -946,6 +968,11 @@ function ProductionLogTab({ role, userId, showToast }: {
                   {viewHygieneCheckMap[log.employee_name] && (
                     <span className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700">
                       🧴 위생관리 점검 완료
+                    </span>
+                  )}
+                  {viewHumidityCheckMap[log.employee_name] && (
+                    <span className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                      🌡️ 온습도 점검 완료
                     </span>
                   )}
                 </div>
@@ -1234,7 +1261,7 @@ function ProductionLogTab({ role, userId, showToast }: {
       </div>
 
 {/* 위생·안전 점검 완료 현황 (온장고세척/이물관리/위생관리 등, 별도 화면에서 PIN 인증 후 점검한 항목) */}
-{(todayWarmerClean || todayForeignMatter || todayHygieneCheck) && (
+{(todayWarmerClean || todayForeignMatter || todayHygieneCheck || todayHumidityCheck) && (
         <div className={`${card} p-4`}>
           <div className="mb-2 font-semibold text-sm text-sky-700">🧼 위생·안전 점검 완료</div>
           <div className="flex flex-wrap gap-2">
@@ -1251,6 +1278,11 @@ function ProductionLogTab({ role, userId, showToast }: {
             {todayHygieneCheck && (
               <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">
                 ✅ 위생관리 점검 완료
+              </span>
+            )}
+            {todayHumidityCheck && (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+                ✅ 온습도 점검 완료
               </span>
             )}
           </div>
