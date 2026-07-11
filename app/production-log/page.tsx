@@ -330,6 +330,15 @@ type WorkOrderRef = {
 
 type WoInfoMap = Record<string, { client_name: string; product_name: string }>;
 
+function formatCheckPeriods(periods: string[] | undefined): string {
+  const list = periods ?? [];
+  const has = (p: string) => list.includes(p);
+  if (has("AM") && has("PM")) return "오전·오후";
+  if (has("AM")) return "오전";
+  if (has("PM")) return "오후";
+  return "";
+}
+
 function ProductionLogTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
@@ -372,10 +381,10 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [viewForeignMatterMap, setViewForeignMatterMap] = useState<Record<string, boolean>>({});
   const [todayHygieneCheck, setTodayHygieneCheck] = useState(false);
   const [viewHygieneCheckMap, setViewHygieneCheckMap] = useState<Record<string, boolean>>({});
-  const [todayHumidityCheck, setTodayHumidityCheck] = useState(false);
-  const [viewHumidityCheckMap, setViewHumidityCheckMap] = useState<Record<string, boolean>>({});
-  const [todayFridgeCheck, setTodayFridgeCheck] = useState(false);
-  const [viewFridgeCheckMap, setViewFridgeCheckMap] = useState<Record<string, boolean>>({});
+  const [todayHumidityPeriods, setTodayHumidityPeriods] = useState<string[]>([]);
+  const [viewHumidityPeriodMap, setViewHumidityPeriodMap] = useState<Record<string, string[]>>({});
+  const [todayFridgePeriods, setTodayFridgePeriods] = useState<string[]>([]);
+  const [viewFridgePeriodMap, setViewFridgePeriodMap] = useState<Record<string, string[]>>({});
 
   // 작업자 선택 화면용 — 선택 날짜 기준 출퇴근+작성여부 맵
   const [empStatusMap, setEmpStatusMap] = useState<Record<string, {
@@ -545,23 +554,21 @@ function ProductionLogTab({ role, userId, showToast }: {
         .maybeSingle();
       setTodayHygieneCheck(!!hygieneData);
 
-      // 온습도 점검 완료 여부 (해당 날짜에 이 직원이 오전/오후 중 점검자로 서명했는지)
+      // 온습도 점검 완료 여부 (해당 날짜에 이 직원이 점검한 오전/오후 구분)
       const { data: humidityData } = await supabase.from("fridge_monitoring_signatures")
-        .select("id")
+        .select("period")
         .eq("log_date", date)
         .eq("role", "humidity_inspector")
-        .eq("inspector_name", empName)
-        .limit(1);
-      setTodayHumidityCheck((humidityData ?? []).length > 0);
+        .eq("inspector_name", empName);
+      setTodayHumidityPeriods((humidityData ?? []).map((row: any) => row.period));
 
-      // 냉장·냉동·온장고 점검 완료 여부 (해당 날짜에 이 직원이 오전/오후 중 점검자로 서명했는지)
+      // 냉장·냉동·온장고 점검 완료 여부 (해당 날짜에 이 직원이 점검한 오전/오후 구분)
       const { data: fridgeData } = await supabase.from("fridge_monitoring_signatures")
-        .select("id")
+        .select("period")
         .eq("log_date", date)
         .eq("role", "inspector")
-        .eq("inspector_name", empName)
-        .limit(1);
-      setTodayFridgeCheck((fridgeData ?? []).length > 0);
+        .eq("inspector_name", empName);
+      setTodayFridgePeriods((fridgeData ?? []).map((row: any) => row.period));
   
       // 이번 주 방충방서 완료 여부 (월요일 기준)
       const todayDate = new Date(date + "T00:00:00+09:00");
@@ -828,27 +835,31 @@ function ProductionLogTab({ role, userId, showToast }: {
    if (hygieneDayData?.inspector_name) hygieneMap[hygieneDayData.inspector_name] = true;
    setViewHygieneCheckMap(hygieneMap);
 
-   // 온습도 점검자 조회 (조회 모드용) — 오전/오후 각각 다른 점검자 가능
+   // 온습도 점검자 조회 (조회 모드용) — 직원별 오전/오후 기록을 배열로 저장
    const { data: humidityDayData } = await supabase.from("fridge_monitoring_signatures")
-     .select("inspector_name")
+     .select("inspector_name, period")
      .eq("log_date", viewDate)
      .eq("role", "humidity_inspector");
-   const humidityMap: Record<string, boolean> = {};
+   const humidityMap: Record<string, string[]> = {};
    (humidityDayData ?? []).forEach((row: any) => {
-     if (row.inspector_name) humidityMap[row.inspector_name] = true;
+     if (!row.inspector_name) return;
+     if (!humidityMap[row.inspector_name]) humidityMap[row.inspector_name] = [];
+     humidityMap[row.inspector_name].push(row.period);
    });
-   setViewHumidityCheckMap(humidityMap);
+   setViewHumidityPeriodMap(humidityMap);
 
-   // 냉장·냉동·온장고 점검자 조회 (조회 모드용) — 오전/오후 각각 다른 점검자 가능
+   // 냉장·냉동·온장고 점검자 조회 (조회 모드용) — 직원별 오전/오후 기록을 배열로 저장
    const { data: fridgeDayData } = await supabase.from("fridge_monitoring_signatures")
-     .select("inspector_name")
+     .select("inspector_name, period")
      .eq("log_date", viewDate)
      .eq("role", "inspector");
-   const fridgeMap: Record<string, boolean> = {};
+   const fridgeMap: Record<string, string[]> = {};
    (fridgeDayData ?? []).forEach((row: any) => {
-     if (row.inspector_name) fridgeMap[row.inspector_name] = true;
+     if (!row.inspector_name) return;
+     if (!fridgeMap[row.inspector_name]) fridgeMap[row.inspector_name] = [];
+     fridgeMap[row.inspector_name].push(row.period);
    });
-   setViewFridgeCheckMap(fridgeMap);
+   setViewFridgePeriodMap(fridgeMap);
 
    setViewLoading(false);
  }
@@ -866,8 +877,8 @@ function ProductionLogTab({ role, userId, showToast }: {
         ...Object.keys(viewWarmerCleanMap),
         ...Object.keys(viewForeignMatterMap),
         ...Object.keys(viewHygieneCheckMap),
-        ...Object.keys(viewHumidityCheckMap),
-        ...Object.keys(viewFridgeCheckMap),
+        ...Object.keys(viewHumidityPeriodMap),
+        ...Object.keys(viewFridgePeriodMap),
       ])].filter((name) => !loggedEmployeeNames.has(name));
       return (
         <div className="space-y-4">
@@ -980,7 +991,7 @@ function ProductionLogTab({ role, userId, showToast }: {
                   ))}
                 </div>
               </div>
-              {(viewRaizeCutMap[log.employee_name] || viewWarmerCleanMap[log.employee_name] || viewForeignMatterMap[log.employee_name] || viewHygieneCheckMap[log.employee_name] || viewHumidityCheckMap[log.employee_name] || viewFridgeCheckMap[log.employee_name]) && (
+              {(viewRaizeCutMap[log.employee_name] || viewWarmerCleanMap[log.employee_name] || viewForeignMatterMap[log.employee_name] || viewHygieneCheckMap[log.employee_name] || (viewHumidityPeriodMap[log.employee_name]?.length ?? 0) > 0 || (viewFridgePeriodMap[log.employee_name]?.length ?? 0) > 0) && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {viewRaizeCutMap[log.employee_name] && (
                     <span className="rounded-lg border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700">
@@ -1002,14 +1013,14 @@ function ProductionLogTab({ role, userId, showToast }: {
                       🧴 위생관리 점검 완료
                     </span>
                   )}
-                  {viewHumidityCheckMap[log.employee_name] && (
+                  {(viewHumidityPeriodMap[log.employee_name]?.length ?? 0) > 0 && (
                     <span className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
-                      🌡️ 온습도 점검 완료
+                      🌡️ 온습도 점검 완료 ({formatCheckPeriods(viewHumidityPeriodMap[log.employee_name])})
                     </span>
                   )}
-                  {viewFridgeCheckMap[log.employee_name] && (
+                  {(viewFridgePeriodMap[log.employee_name]?.length ?? 0) > 0 && (
                     <span className="rounded-lg border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-medium text-cyan-700">
-                      ❄️ 냉장·냉동·온장고 점검 완료
+                      ❄️ 냉장·냉동·온장고 점검 완료 ({formatCheckPeriods(viewFridgePeriodMap[log.employee_name])})
                     </span>
                   )}
                 </div>
@@ -1043,11 +1054,11 @@ function ProductionLogTab({ role, userId, showToast }: {
                 {viewHygieneCheckMap[name] && (
                   <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">🧴 위생관리 점검 완료</span>
                 )}
-                {viewHumidityCheckMap[name] && (
-                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">🌡️ 온습도 점검 완료</span>
+                {(viewHumidityPeriodMap[name]?.length ?? 0) > 0 && (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">🌡️ 온습도 점검 완료 ({formatCheckPeriods(viewHumidityPeriodMap[name])})</span>
                 )}
-                {viewFridgeCheckMap[name] && (
-                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-700">❄️ 냉장·냉동·온장고 점검 완료</span>
+                {(viewFridgePeriodMap[name]?.length ?? 0) > 0 && (
+                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-700">❄️ 냉장·냉동·온장고 점검 완료 ({formatCheckPeriods(viewFridgePeriodMap[name])})</span>
                 )}
               </div>
             </div>
@@ -1325,7 +1336,7 @@ function ProductionLogTab({ role, userId, showToast }: {
       </div>
 
 {/* 위생·안전 점검 완료 현황 (온장고세척/이물관리/위생관리 등, 별도 화면에서 PIN 인증 후 점검한 항목) */}
-{(todayWarmerClean || todayForeignMatter || todayHygieneCheck || todayHumidityCheck || todayFridgeCheck) && (
+{(todayWarmerClean || todayForeignMatter || todayHygieneCheck || todayHumidityPeriods.length > 0 || todayFridgePeriods.length > 0) && (
         <div className={`${card} p-4`}>
           <div className="mb-2 font-semibold text-sm text-sky-700">🧼 위생·안전 점검 완료</div>
           <div className="flex flex-wrap gap-2">
@@ -1344,14 +1355,14 @@ function ProductionLogTab({ role, userId, showToast }: {
                 ✅ 위생관리 점검 완료
               </span>
             )}
-            {todayHumidityCheck && (
+            {todayHumidityPeriods.length > 0 && (
               <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
-                ✅ 온습도 점검 완료
+                ✅ 온습도 점검 완료 ({formatCheckPeriods(todayHumidityPeriods)})
               </span>
             )}
-            {todayFridgeCheck && (
+            {todayFridgePeriods.length > 0 && (
               <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-700">
-                ✅ 냉장·냉동·온장고 점검 완료
+                ✅ 냉장·냉동·온장고 점검 완료 ({formatCheckPeriods(todayFridgePeriods)})
               </span>
             )}
           </div>
