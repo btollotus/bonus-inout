@@ -370,6 +370,8 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [viewWarmerCleanMap, setViewWarmerCleanMap] = useState<Record<string, boolean>>({});
   const [todayForeignMatter, setTodayForeignMatter] = useState(false);
   const [viewForeignMatterMap, setViewForeignMatterMap] = useState<Record<string, boolean>>({});
+  const [todayHygieneCheck, setTodayHygieneCheck] = useState(false);
+  const [viewHygieneCheckMap, setViewHygieneCheckMap] = useState<Record<string, boolean>>({});
 
   // 작업자 선택 화면용 — 선택 날짜 기준 출퇴근+작성여부 맵
   const [empStatusMap, setEmpStatusMap] = useState<Record<string, {
@@ -529,6 +531,15 @@ function ProductionLogTab({ role, userId, showToast }: {
         .eq("is_active", true)
         .maybeSingle();
       setTodayForeignMatter(!!fmData);
+
+      // 위생관리 점검 완료 여부 (해당 날짜에 이 직원이 점검자로 활성화되었는지)
+      const { data: hygieneData } = await supabase.from("hygiene_daily_inspectors")
+        .select("is_active")
+        .eq("log_date", date)
+        .eq("inspector_name", empName)
+        .eq("is_active", true)
+        .maybeSingle();
+      setTodayHygieneCheck(!!hygieneData);
   
       // 이번 주 방충방서 완료 여부 (월요일 기준)
       const todayDate = new Date(date + "T00:00:00+09:00");
@@ -785,6 +796,16 @@ function ProductionLogTab({ role, userId, showToast }: {
    if (fmDayData?.inspector_name) fmMap[fmDayData.inspector_name] = true;
    setViewForeignMatterMap(fmMap);
 
+   // 위생관리 점검자 조회 (조회 모드용) — 하루에 한 명만 활성화되는 구조
+   const { data: hygieneDayData } = await supabase.from("hygiene_daily_inspectors")
+     .select("inspector_name, is_active")
+     .eq("log_date", viewDate)
+     .eq("is_active", true)
+     .maybeSingle();
+   const hygieneMap: Record<string, boolean> = {};
+   if (hygieneDayData?.inspector_name) hygieneMap[hygieneDayData.inspector_name] = true;
+   setViewHygieneCheckMap(hygieneMap);
+
    setViewLoading(false);
  }
 
@@ -905,7 +926,7 @@ function ProductionLogTab({ role, userId, showToast }: {
                   ))}
                 </div>
               </div>
-              {(viewRaizeCutMap[log.employee_name] || viewWarmerCleanMap[log.employee_name] || viewForeignMatterMap[log.employee_name]) && (
+              {(viewRaizeCutMap[log.employee_name] || viewWarmerCleanMap[log.employee_name] || viewForeignMatterMap[log.employee_name] || viewHygieneCheckMap[log.employee_name]) && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {viewRaizeCutMap[log.employee_name] && (
                     <span className="rounded-lg border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700">
@@ -920,6 +941,11 @@ function ProductionLogTab({ role, userId, showToast }: {
                   {viewForeignMatterMap[log.employee_name] && (
                     <span className="rounded-lg border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-medium text-teal-700">
                       🔍 이물관리 점검 완료
+                    </span>
+                  )}
+                  {viewHygieneCheckMap[log.employee_name] && (
+                    <span className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700">
+                      🧴 위생관리 점검 완료
                     </span>
                   )}
                 </div>
@@ -1207,8 +1233,8 @@ function ProductionLogTab({ role, userId, showToast }: {
         )}
       </div>
 
-{/* 위생·안전 점검 완료 현황 (온장고세척/이물관리 등, 별도 화면에서 PIN 인증 후 점검한 항목) */}
-{(todayWarmerClean || todayForeignMatter) && (
+{/* 위생·안전 점검 완료 현황 (온장고세척/이물관리/위생관리 등, 별도 화면에서 PIN 인증 후 점검한 항목) */}
+{(todayWarmerClean || todayForeignMatter || todayHygieneCheck) && (
         <div className={`${card} p-4`}>
           <div className="mb-2 font-semibold text-sm text-sky-700">🧼 위생·안전 점검 완료</div>
           <div className="flex flex-wrap gap-2">
@@ -1220,6 +1246,11 @@ function ProductionLogTab({ role, userId, showToast }: {
             {todayForeignMatter && (
               <span className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700">
                 ✅ 이물관리 점검 완료
+              </span>
+            )}
+            {todayHygieneCheck && (
+              <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">
+                ✅ 위생관리 점검 완료
               </span>
             )}
           </div>
