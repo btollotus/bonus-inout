@@ -366,6 +366,8 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [viewRaizeCutMap, setViewRaizeCutMap] = useState<Record<string, number>>({});
   const [todayRaizeCut, setTodayRaizeCut] = useState<number | null>(null);
   const [pestDoneThisWeek, setPestDoneThisWeek] = useState(false);
+  const [todayWarmerClean, setTodayWarmerClean] = useState(false);
+  const [viewWarmerCleanMap, setViewWarmerCleanMap] = useState<Record<string, boolean>>({});
 
   // 작업자 선택 화면용 — 선택 날짜 기준 출퇴근+작성여부 맵
   const [empStatusMap, setEmpStatusMap] = useState<Record<string, {
@@ -507,6 +509,15 @@ function ProductionLogTab({ role, userId, showToast }: {
       .ilike("note", `%${empName}%`);
       const raizeTotal = (raizeData ?? []).reduce((s: number, d: any) => s + d.quantity, 0);
       setTodayRaizeCut(raizeTotal > 0 ? raizeTotal : null);
+
+      // 온장고세척 점검 완료 여부 (해당 날짜에 이 직원이 점검자로 활성화되었는지)
+      const { data: warmerData } = await supabase.from("warmer_cleaning_daily")
+        .select("is_active")
+        .eq("log_date", date)
+        .eq("inspector_name", empName)
+        .eq("is_active", true)
+        .maybeSingle();
+      setTodayWarmerClean(!!warmerData);
   
       // 이번 주 방충방서 완료 여부 (월요일 기준)
       const todayDate = new Date(date + "T00:00:00+09:00");
@@ -743,6 +754,16 @@ function ProductionLogTab({ role, userId, showToast }: {
      setViewRaizeCutMap(raizeMap);
    }
 
+   // 온장고세척 점검자 조회 (조회 모드용) — 하루에 한 명만 활성화되는 구조
+   const { data: warmerDayData } = await supabase.from("warmer_cleaning_daily")
+     .select("inspector_name, is_active")
+     .eq("log_date", viewDate)
+     .eq("is_active", true)
+     .maybeSingle();
+   const warmerMap: Record<string, boolean> = {};
+   if (warmerDayData?.inspector_name) warmerMap[warmerDayData.inspector_name] = true;
+   setViewWarmerCleanMap(warmerMap);
+
    setViewLoading(false);
  }
 
@@ -863,11 +884,18 @@ function ProductionLogTab({ role, userId, showToast }: {
                   ))}
                 </div>
               </div>
-              {viewRaizeCutMap[log.employee_name] && (
+              {(viewRaizeCutMap[log.employee_name] || viewWarmerCleanMap[log.employee_name]) && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  <span className="rounded-lg border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700">
-                    ✂️ 레이즈재단 {viewRaizeCutMap[log.employee_name].toLocaleString()} EA
-                  </span>
+                  {viewRaizeCutMap[log.employee_name] && (
+                    <span className="rounded-lg border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700">
+                      ✂️ 레이즈재단 {viewRaizeCutMap[log.employee_name].toLocaleString()} EA
+                    </span>
+                  )}
+                  {viewWarmerCleanMap[log.employee_name] && (
+                    <span className="rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700">
+                      🧼 온장고세척 점검 완료
+                    </span>
+                  )}
                 </div>
               )}
               {log.extra_note && (
@@ -1153,10 +1181,22 @@ function ProductionLogTab({ role, userId, showToast }: {
         )}
       </div>
 
-     {/* 업무 체크리스트 */}
-     <div className={`${card} p-4`}>
-        <div className="mb-3 flex items-center justify-between">
-          <div className="font-semibold text-sm">📋 업무 체크리스트</div>
+{/* 위생·안전 점검 완료 현황 (온장고세척 등, 별도 화면에서 PIN 인증 후 점검한 항목) */}
+{todayWarmerClean && (
+  <div className={`${card} p-4`}>
+    <div className="mb-2 font-semibold text-sm text-sky-700">🧼 위생·안전 점검 완료</div>
+    <div className="flex flex-wrap gap-2">
+      <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700">
+        ✅ 온장고세척 점검 완료
+      </span>
+    </div>
+  </div>
+)}
+
+{/* 업무 체크리스트 */}
+<div className={`${card} p-4`}>
+  <div className="mb-3 flex items-center justify-between">
+    <div className="font-semibold text-sm">📋 업무 체크리스트</div>
           <div className="text-xs text-slate-400">{checkedCount}/{taskTypes.length} 완료</div>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
