@@ -860,8 +860,17 @@ function ProductionLogTab({ role, userId, showToast }: {
 
     // ── 렌더: ADMIN/SUBADMIN 조회 모드 ──
     if (isAdminOrSubadmin && viewMode) {
-    return (
-      <div className="space-y-4">
+      // 근무일지(daily_work_logs)는 없지만 위생·안전 점검만 기록된 직원 — 별도로 표시
+      const loggedEmployeeNames = new Set(viewLogs.map((l) => l.employee_name));
+      const hygieneOnlyNames = [...new Set([
+        ...Object.keys(viewWarmerCleanMap),
+        ...Object.keys(viewForeignMatterMap),
+        ...Object.keys(viewHygieneCheckMap),
+        ...Object.keys(viewHumidityCheckMap),
+        ...Object.keys(viewFridgeCheckMap),
+      ])].filter((name) => !loggedEmployeeNames.has(name));
+      return (
+        <div className="space-y-4">
         <div className={`${card} p-4`}>
           <div className="flex flex-wrap gap-3 items-end">
             <div>
@@ -907,10 +916,11 @@ function ProductionLogTab({ role, userId, showToast }: {
         </div>
         {viewLoading ? (
           <div className={`${card} p-8 text-center text-sm text-slate-400`}>불러오는 중...</div>
-        ) : viewLogs.length === 0 ? (
+        ) : viewLogs.length === 0 && hygieneOnlyNames.length === 0 ? (
           <div className={`${card} p-8 text-center text-sm text-slate-400`}>{(() => { const d = new Date(viewDate + "T00:00:00+09:00"); const days = ["일","월","화","수","목","금","토"]; return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]}) 근무일지가 없습니다.`; })()}</div>
         ) : (
-          viewLogs.map((log) => (
+          <>
+          {viewLogs.map((log) => (
             <div key={log.id} className={`${card} p-4`}>
               <div className="flex items-center justify-between mb-3">
                 <div className="font-bold text-base">👤 {log.employee_name}</div>
@@ -1015,7 +1025,34 @@ function ProductionLogTab({ role, userId, showToast }: {
                 </div>
               )}
             </div>
-          ))
+          ))}
+          {hygieneOnlyNames.map((name) => (
+            <div key={`hygiene-only-${name}`} className={`${card} p-4`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="font-bold text-base">👤 {name}</div>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-400">근무일지 미작성</span>
+              </div>
+              <div className="mb-1.5 text-xs font-semibold text-slate-500">위생·안전 점검 완료</div>
+              <div className="flex flex-wrap gap-2">
+                {viewWarmerCleanMap[name] && (
+                  <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700">🧼 온장고세척 점검 완료</span>
+                )}
+                {viewForeignMatterMap[name] && (
+                  <span className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700">🔍 이물관리 점검 완료</span>
+                )}
+                {viewHygieneCheckMap[name] && (
+                  <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">🧴 위생관리 점검 완료</span>
+                )}
+                {viewHumidityCheckMap[name] && (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">🌡️ 온습도 점검 완료</span>
+                )}
+                {viewFridgeCheckMap[name] && (
+                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-700">❄️ 냉장·냉동·온장고 점검 완료</span>
+                )}
+              </div>
+            </div>
+          ))}
+          </>
         )}
         <div id="production-view-print-inner" style={{ display: "none" }}> 
           <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
