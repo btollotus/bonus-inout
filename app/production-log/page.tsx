@@ -1104,11 +1104,49 @@ function ProductionLogTab({ role, userId, showToast }: {
                     </div> 
                   </div>
                 )}
+                {(() => {
+                  const hygieneItems = [
+                    viewWarmerCleanMap[log.employee_name] && "온장고세척 점검 완료",
+                    viewForeignMatterMap[log.employee_name] && "이물관리 점검 완료",
+                    viewHygieneCheckMap[log.employee_name] && "위생관리 점검 완료",
+                    (viewHumidityPeriodMap[log.employee_name]?.length ?? 0) > 0 && `온습도 점검 완료 (${formatCheckPeriods(viewHumidityPeriodMap[log.employee_name])})`,
+                    (viewFridgePeriodMap[log.employee_name]?.length ?? 0) > 0 && `냉장·냉동·온장고 점검 완료 (${formatCheckPeriods(viewFridgePeriodMap[log.employee_name])})`,
+                  ].filter(Boolean) as string[];
+                  if (hygieneItems.length === 0) return null;
+                  return (
+                    <div style={{ marginBottom: 6 }}>
+                      <div style={{ fontSize: "7pt", color: "#333", fontWeight: "bold", marginBottom: 3 }}>위생·안전 점검</div>
+                      <div style={{ fontSize: "7.5pt", color: "#333", lineHeight: 1.8 }}>
+                        {hygieneItems.join(" · ")}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {log.extra_note && (
                   <div style={{ fontSize: "8pt" }}><b>기타:</b> {log.extra_note}</div>
                 )}
               </div>
             ))}
+            {hygieneOnlyNames.map((name) => {
+              const hygieneItems = [
+                viewWarmerCleanMap[name] && "온장고세척 점검 완료",
+                viewForeignMatterMap[name] && "이물관리 점검 완료",
+                viewHygieneCheckMap[name] && "위생관리 점검 완료",
+                (viewHumidityPeriodMap[name]?.length ?? 0) > 0 && `온습도 점검 완료 (${formatCheckPeriods(viewHumidityPeriodMap[name])})`,
+                (viewFridgePeriodMap[name]?.length ?? 0) > 0 && `냉장·냉동·온장고 점검 완료 (${formatCheckPeriods(viewFridgePeriodMap[name])})`,
+              ].filter(Boolean) as string[];
+              return (
+                <div key={`print-hygiene-only-${name}`} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "10px 14px", marginBottom: 10, pageBreakInside: "avoid" }}>
+                  <div style={{ fontSize: "10pt", fontWeight: "bold", marginBottom: 6, paddingBottom: 4, borderBottom: "0.5px solid #ddd" }}>
+                    {name} <span style={{ fontSize: "7.5pt", fontWeight: "normal", color: "#999" }}>(근무일지 미작성)</span>
+                  </div>
+                  <div style={{ fontSize: "7pt", color: "#333", fontWeight: "bold", marginBottom: 3 }}>위생·안전 점검</div>
+                  <div style={{ fontSize: "7.5pt", color: "#333", lineHeight: 1.8 }}>
+                    {hygieneItems.join(" · ")}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
     </div>
