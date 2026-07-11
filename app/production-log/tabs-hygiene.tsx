@@ -2201,6 +2201,50 @@ function TempInput({ value, onChange, disabled }: {
   );
 }
 
+function HumidInput({ value, onChange, disabled }: {
+  value: number | null;
+  onChange: (v: number | null) => void;
+  disabled: boolean;
+}) {
+  const [raw, setRaw] = useState("");
+
+  function handleInput(input: string) {
+    const digits = input.replace(/[^\d]/g, "").slice(0, 2);
+    setRaw(digits);
+    if (digits.length === 2) {
+      onChange(parseInt(digits, 10));
+      setRaw("");
+    } else if (digits === "") {
+      onChange(null);
+    }
+  }
+
+  return (
+    <div className="relative w-28">
+      <input
+        type="text"
+        inputMode="numeric"
+        maxLength={2}
+        placeholder="—"
+        value={raw}
+        disabled={disabled}
+        onChange={(e) => handleInput(e.target.value)}
+        className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-center tabular-nums focus:border-blue-400 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
+        style={{ opacity: value !== null && raw === "" ? 0 : 1, position: "relative", zIndex: 1 }}
+      />
+      {value !== null && raw === "" && (
+        <div
+          className="absolute inset-0 flex items-center justify-center text-sm font-semibold tabular-nums text-blue-700 rounded-xl cursor-text"
+          style={{ border: "1px solid #93c5fd", background: "#eff6ff", zIndex: 2 }}
+          onClick={() => !disabled && setRaw(String(value))}
+        >
+          {value}%
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TempHumidityTab({ role, userId, showToast }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
@@ -2429,10 +2473,11 @@ export function TempHumidityTab({ role, userId, showToast }: {
                               />
                             </td>
                             <td className="border border-slate-200 px-3 py-2">
-                              <input type="number" step="1" min="0" max="100" placeholder="—" value={e?.humidity ?? ""}
+                              <HumidInput
+                                value={e?.humidity ?? null}
+                                onChange={(v) => setEntries((prev) => ({ ...prev, [room]: { ...prev[room], humidity: v } }))}
                                 disabled={isReadOnly || !currentInspector}
-                                onChange={(v) => handleChange(room, "humidity", v.target.value)}
-                                className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-center tabular-nums focus:border-blue-400 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400" />
+                              />
                             </td>
                             <td className="border border-slate-200 px-3 py-2">
                               <input type="text" placeholder="특이사항" value={e?.note ?? ""}
