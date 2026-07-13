@@ -698,6 +698,8 @@ export default function ProductionClient() {
       if (error) {
         setWoChecks((prev) => prev ? { ...prev, [assigneeKey]: woChecks[assigneeKey], [statusKey]: woChecks[statusKey], ...(doneAtKey ? { [doneAtKey]: prevDoneAtVal } : {}) } : prev);
         setMsg("진행상태 저장 실패: " + error.message);
+      } else {
+        setWoList((prev) => prev.map((w) => w.id === selectedWo.id ? ({ ...w, [assigneeKey]: saveValue || null, [statusKey]: isDone, ...(doneAtKey ? { [doneAtKey]: isDone ? now : null } : {}) } as any) : w));
       }
     };
     if (value === "" || value === "담당자없음") { await doSave(value); return; }
