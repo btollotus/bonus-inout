@@ -17,6 +17,12 @@ function normalizeBizNo(bn: any) {
   return s || "";
 }
 
+function methodLabel(m: any) {
+  const map: Record<string, string> = { BANK: "입금", CASH: "현금", CARD: "카드", ETC: "기타" };
+  const s = String(m ?? "").trim();
+  return map[s] ?? s;
+}
+
 function safeStr(v: any) {
   return String(v ?? "").trim();
 }
@@ -300,6 +306,7 @@ export async function GET(req: Request) {
         세금계산서발행: o.tax_invoice_issued ? "✅" : "☐",
         계산서수령: "",
         결제완료: "",
+        결제수단: "",
         사업자등록번호: normalizeBizNo(partnerBizNo),
         거래처: String(o.customer_name ?? ""),
 
@@ -369,6 +376,7 @@ export async function GET(req: Request) {
         세금계산서발행: o.tax_invoice_issued ? "✅" : "☐",
         계산서수령: "",
         결제완료: "",
+        결제수단: "",
         사업자등록번호: normalizeBizNo(partnerBizNo),
         거래처: String(o.customer_name ?? ""),
 
@@ -449,6 +457,7 @@ export async function GET(req: Request) {
       세금계산서발행: "",
       계산서수령: (l as any).tax_invoice_received ? "✅" : "☐",
       결제완료: (l as any).payment_completed ? "✅" : "☐",
+      결제수단: methodLabel(l.method),
       사업자등록번호: normalizeBizNo(l.business_no),
       거래처: String(l.counterparty_name ?? ""),
 
@@ -492,6 +501,7 @@ export async function GET(req: Request) {
     "세금계산서발행",
     "계산서수령",
     "결제완료",
+    "결제수단",
     "사업자등록번호",
     "거래처",
     "주문자",
@@ -526,6 +536,7 @@ export async function GET(req: Request) {
     { wch: 14 }, // 세금계산서발행
     { wch: 12 }, // 계산서수령
     { wch: 12 }, // 결제완료
+    { wch: 10 }, // 결제수단
     { wch: 16 }, // 사업자등록번호
     { wch: 26 }, // 거래처
     { wch: 14 }, // 주문자
