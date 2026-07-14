@@ -1661,6 +1661,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
     woEvents: any[];
     slotAssignees: Record<string, string[]>;
     woAssigneeMap: Record<string, string>;
+    woLabelMap: Record<string, string>;
   }[]>([]);
 
   // 고정 슬롯 4개 (코팅 3 + 전사 1)
@@ -1961,6 +1962,24 @@ export function OtherHeatingTab({ role, userId, showToast }: {
         ...wEvents.map((e: any) => e.work_order_no).filter(Boolean),
       ])] as string[];
 
+      const woLabelMap: Record<string, string> = {};
+      if (allWoNos.length > 0) {
+        const { data: woNameData } = await supabase
+          .from("work_orders")
+          .select("work_order_no,client_name,sub_name,product_name")
+          .in("work_order_no", allWoNos);
+        for (const wo of woNameData ?? []) {
+          const rawSecond = wo.sub_name ?? wo.product_name ?? "";
+          const secondPart = (rawSecond.startsWith(wo.client_name)
+            ? rawSecond.slice(wo.client_name.length).replace(/^[-_\s·]+/, "")
+            : rawSecond
+          ).replace(/\s*외\s*\d+건\s*$/, "");
+          woLabelMap[wo.work_order_no] = secondPart
+            ? `${wo.client_name} · ${secondPart}`
+            : wo.client_name;
+        }
+      }
+
       const woAssigneeMap: Record<string, string> = {};
       if (allWoNos.length > 0) {
         const { data } = await supabase
@@ -1994,7 +2013,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
         if (assignees.length > 0) slotAssignees[s.id] = assignees;
       }
 
-      results.push({ date, slotEvents: sEvents, woEvents: wEvents, slotAssignees, woAssigneeMap });
+      results.push({ date, slotEvents: sEvents, woEvents: wEvents, slotAssignees, woAssigneeMap, woLabelMap });
     }
 
     setRangeData(results);
@@ -2120,7 +2139,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
             html += `<td style="${tdS}text-align:center;font-size:8pt;color:${isNG ? "red" : "#000"};height:22px;">`;
             if (ev) {
               const bg = ev.event_type === "start" ? "#dbeafe" : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9";
-              html += `<span style="font-size:7pt;background:${bg};padding:0 3px;border-radius:2px;margin-right:2px;">${WO_LABEL[ev.event_type] ?? ev.event_type}</span>(${toKSTTime(ev.measured_at)}) ${ev.temperature ?? ""}℃`;
+              html += `<span style="font-size:7pt;background:${bg};padding:0 3px;border-radius:2px;margin-right:2px;">${WO_LABEL[ev.event_type] ?? ev.event_type}</span>(${toKSTTime(ev.measured_at)}) ${ev.temperature ?? ""}℃<br/><span style="font-size:6.5pt;color:#475569;">${dayData.woLabelMap?.[ev.work_order_no] ?? ""}</span>`;
             }
             html += `</td>`;
           }
