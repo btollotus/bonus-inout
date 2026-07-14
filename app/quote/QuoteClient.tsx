@@ -585,43 +585,81 @@ async function loadSignageList() {
   // ─── 기존 견적 불러오기 (견적 입력 탭으로 이동) ───
   function loadQuoteToForm(r: QuoteRequestRow) {
     const q = r.quotes?.[0];
-    const pt = r.product_type ?? "전사3mm";
-    const isRaiseItem = pt.startsWith("레이즈");
     setPartnerMode("direct");
     setCustomerName(r.customer_name);
-    setItems([{
-      id: crypto.randomUUID(),
-      itemCategory: "custom",
-      presetName: "",
-      nickname: r.nickname ?? "",
-      productType: pt,
-      colorType: (r.color_type as "dark" | "white") ?? "dark",
-      widthMm: r.width_mm ? String(r.width_mm) : "",
-      heightMm: r.height_mm ? String(r.height_mm) : "",
-      quantity: r.quantity ? String(r.quantity) : "",
-      isNew: r.is_new,
-      designChanged: r.design_changed,
-      useStockMold: r.use_stock_mold,
-      reuseExistingMold: r.reuse_existing_mold,
-      sheetPerPage: "",
-      calcResult: q ? {
-        unitPrice: q.unit_price ?? 0,
-        moldCost: q.mold_cost ?? 0,
-        plateCost: q.plate_cost ?? 0,
-        sheetCount: q.transfer_sheets ?? 0,
-        sheetCost: q.transfer_cost ?? 0,
-        workFee: q.work_fee ?? 0,
-        totalActual: q.total ?? 0,
-        totalWithVat: Math.round((q.total ?? 0) * 1.1),
-        T: q.t_price ?? 0,
-        U: q.u_price ?? 0,
-        V: q.final_price ?? 0,
-        V_stock: q.final_price_stock ?? null,
-      } : null,
-      calcLoading: false,
-      manualV: "",
-      presetTotal: "",
-    }]);
+
+    // quote_items가 있으면(다품목 저장) 전체 품목 복원, 없으면(기존 단일 품목) 기존 방식 그대로
+    const loadedItems: QuoteItem[] = (r.quote_items && r.quote_items.length > 0)
+      ? r.quote_items
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map(qi => ({
+            id: crypto.randomUUID(),
+            itemCategory: "custom" as const,
+            presetName: "",
+            nickname: qi.nickname ?? "",
+            productType: qi.product_type ?? "전사3mm",
+            colorType: (qi.color_type as "dark" | "white") ?? "dark",
+            widthMm: qi.width_mm ? String(qi.width_mm) : "",
+            heightMm: qi.height_mm ? String(qi.height_mm) : "",
+            quantity: qi.quantity ? String(qi.quantity) : "",
+            isNew: qi.is_new,
+            designChanged: qi.design_changed,
+            useStockMold: qi.use_stock_mold,
+            reuseExistingMold: qi.reuse_existing_mold,
+            sheetPerPage: "",
+            calcResult: {
+              unitPrice: qi.unit_price ?? 0,
+              moldCost: qi.mold_cost ?? 0,
+              plateCost: qi.plate_cost ?? 0,
+              sheetCount: 0,
+              sheetCost: qi.transfer_cost ?? 0,
+              workFee: qi.work_fee ?? 0,
+              totalActual: qi.total ?? 0,
+              totalWithVat: Math.round((qi.total ?? 0) * 1.1),
+              T: 0,
+              U: 0,
+              V: qi.final_price ?? 0,
+              V_stock: qi.final_price_stock ?? null,
+            },
+            calcLoading: false,
+            manualV: "",
+            presetTotal: "",
+          }))
+      : [{
+          id: crypto.randomUUID(),
+          itemCategory: "custom" as const,
+          presetName: "",
+          nickname: r.nickname ?? "",
+          productType: r.product_type ?? "전사3mm",
+          colorType: (r.color_type as "dark" | "white") ?? "dark",
+          widthMm: r.width_mm ? String(r.width_mm) : "",
+          heightMm: r.height_mm ? String(r.height_mm) : "",
+          quantity: r.quantity ? String(r.quantity) : "",
+          isNew: r.is_new,
+          designChanged: r.design_changed,
+          useStockMold: r.use_stock_mold,
+          reuseExistingMold: r.reuse_existing_mold,
+          sheetPerPage: "",
+          calcResult: q ? {
+            unitPrice: q.unit_price ?? 0,
+            moldCost: q.mold_cost ?? 0,
+            plateCost: q.plate_cost ?? 0,
+            sheetCount: q.transfer_sheets ?? 0,
+            sheetCost: q.transfer_cost ?? 0,
+            workFee: q.work_fee ?? 0,
+            totalActual: q.total ?? 0,
+            totalWithVat: Math.round((q.total ?? 0) * 1.1),
+            T: q.t_price ?? 0,
+            U: q.u_price ?? 0,
+            V: q.final_price ?? 0,
+            V_stock: q.final_price_stock ?? null,
+          } : null,
+          calcLoading: false,
+          manualV: "",
+          presetTotal: "",
+        }];
+
+    setItems(loadedItems);
     setMemo(r.memo ?? "");
     setInputMode("auto");
     setTab("input");
