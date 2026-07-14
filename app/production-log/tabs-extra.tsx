@@ -325,7 +325,7 @@ setSlotWoMap(slotMap);
           .filter((e: any) => e.slot_id === slotId)
           .sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at))
           .filter((e: any) => {
-            const key = `${e.measured_at.slice(11,16)}_${e.temperature}`;
+            const key = `${e.work_order_no}_${e.measured_at.slice(11,16)}_${e.temperature}`;
             if (seen.has(key)) return false;
             seen.add(key); return true;
           });
