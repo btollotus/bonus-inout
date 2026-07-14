@@ -1235,6 +1235,25 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         }
         const { data: oData } = await oq;
 
+        // 품목명(order_lines.name)으로도 검색 — customer_name/memo/ship_method에 없는 품목명 검색어 보완
+        const { data: lineMatches } = await supabase.from("order_lines").select("order_id").ilike("name", likeQ).limit(500);
+        const lineOrderIds = [...new Set((lineMatches ?? []).map((r: any) => r.order_id).filter(Boolean))];
+        let oDataByLine: any[] = [];
+        if (lineOrderIds.length > 0) {
+          let oqLine = supabase.from("orders")
+            .select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,tax_invoice_issued,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,is_sample,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)")
+            .in("id", lineOrderIds)
+            .order("ship_date", { ascending: false })
+            .limit(200);
+          if (selectedPartnerId) {
+            oqLine = oqLine.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
+          }
+          const { data: oLineData } = await oqLine;
+          oDataByLine = oLineData ?? [];
+        }
+        const oDataSeenIds = new Set((oData ?? []).map((o: any) => o.id));
+        const oDataAll = [...(oData ?? []), ...oDataByLine.filter((o: any) => !oDataSeenIds.has(o.id))];
+
         // ledger 검색
         let lq = supabase.from("ledger_entries")
           .select("id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,status,partner_id,created_at,supply_amount,vat_amount,total_amount,tax_invoice_received,payment_completed")
@@ -1264,7 +1283,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         const safeParseMs = (iso: string) => { const ms = Date.parse(iso); return Number.isFinite(ms) ? ms : 0; };
         const ymdToMs = (ymd: string) => { const v = String(ymd ?? "").trim(); if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return 0; const ms = Date.parse(`${v}T00:00:00.000Z`); return Number.isFinite(ms) ? ms : 0; };
 
-        for (const o of (oData ?? []) as OrderRow[]) {
+        for (const o of oDataAll as OrderRow[]) {
           const memo = safeJsonParse<{ title: string | null; orderer_name?: string | null }>(o.memo);
           const date = o.ship_date ?? (o.created_at ? o.created_at.slice(0, 10) : "");
           const total = Number(o.total_amount ?? 0);
