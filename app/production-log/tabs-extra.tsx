@@ -177,9 +177,10 @@ if (allWoNos.length > 0) {
   const map: Record<string, string> = {};
   for (const wo of woData ?? []) {
     const rawSecond = wo.sub_name ?? wo.product_name ?? "";
-    const secondPart = rawSecond.startsWith(wo.client_name)
+    const secondPart = (rawSecond.startsWith(wo.client_name)
       ? rawSecond.slice(wo.client_name.length).replace(/^[-_\s·]+/, "")
-      : rawSecond;
+      : rawSecond
+    ).replace(/\s*외\s*\d+건\s*$/, "");
     const label = secondPart
       ? `${wo.client_name} · ${secondPart}`
       : wo.client_name;
@@ -246,9 +247,10 @@ setSlotWoMap(slotMap);
           .in("work_order_no", allWoNos);
         for (const wo of woData ?? []) {
           const rawSecond = wo.sub_name ?? wo.product_name ?? "";
-          const secondPart = rawSecond.startsWith(wo.client_name)
+          const secondPart = (rawSecond.startsWith(wo.client_name)
             ? rawSecond.slice(wo.client_name.length).replace(/^[-_\s·]+/, "")
-            : rawSecond;
+            : rawSecond
+          ).replace(/\s*외\s*\d+건\s*$/, "");
           labelMap[wo.work_order_no] = secondPart
             ? `${wo.client_name} · ${secondPart}`
             : wo.client_name;
@@ -1754,9 +1756,10 @@ export function OtherHeatingTab({ role, userId, showToast }: {
       const map: Record<string, string> = {};
       for (const wo of woData ?? []) {
         const rawSecond = wo.sub_name ?? wo.product_name ?? "";
-        const secondPart = rawSecond.startsWith(wo.client_name)
+        const secondPart = (rawSecond.startsWith(wo.client_name)
           ? rawSecond.slice(wo.client_name.length).replace(/^[-_\s·]+/, "")
-          : rawSecond;
+          : rawSecond
+        ).replace(/\s*외\s*\d+건\s*$/, "");
         map[wo.work_order_no] = secondPart
           ? `${wo.client_name} · ${secondPart}`
           : wo.client_name;
