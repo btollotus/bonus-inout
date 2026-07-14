@@ -390,7 +390,7 @@ setSlotWoMap(slotMap);
             html += `<td style="${tdS}text-align:center;font-size:8pt;color:${isNG?"red":"#000"};height:22px;">`;
             if (ev) {
               const bg = ev.event_type === "start" ? "#dbeafe" : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9";
-              html += `<span style="font-size:7pt;background:${bg};padding:0 3px;border-radius:2px;margin-right:2px;">${WO_LABEL[ev.event_type] ?? ev.event_type}</span>(${toKSTTimeStr(ev.measured_at)}) ${ev.temperature ?? ""}℃`;
+              html += `<span style="font-size:7pt;background:${bg};padding:0 3px;border-radius:2px;margin-right:2px;">${WO_LABEL[ev.event_type] ?? ev.event_type}</span>(${toKSTTimeStr(ev.measured_at)}) ${ev.temperature ?? ""}℃<br/><span style="font-size:6.5pt;color:#475569;">${dayData.woLabelMap?.[ev.work_order_no] ?? ""}</span>`;
             }
             html += `</td>`;
           }
