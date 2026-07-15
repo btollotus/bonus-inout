@@ -149,7 +149,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
 
     const [slotRes, woRes] = await Promise.all([
       supabase.from("ccp_slot_events")
-      .select("id, slot_id, event_date, event_type, measured_at, work_order_no, action_note, temperature, is_ok, material_type")
+      .select("id, slot_id, event_date, event_type, measured_at, work_order_no, action_note, temperature, is_ok, material_type, action_by")
         .eq("event_date", filterDate)
         .order("measured_at", { ascending: true }),
       supabase.from("ccp_wo_events")
@@ -221,7 +221,7 @@ setSlotWoMap(slotMap);
     for (const date of dates) {
       const [slotRes, woRes] = await Promise.all([
         supabase.from("ccp_slot_events")
-          .select("id,slot_id,event_date,event_type,measured_at,work_order_no,action_note,temperature,is_ok,material_type")
+        .select("id,slot_id,event_date,event_type,measured_at,work_order_no,action_note,temperature,is_ok,material_type,action_by")
           .eq("event_date", date)
           .order("measured_at", { ascending: true }),
         supabase.from("ccp_wo_events")
@@ -365,7 +365,7 @@ setSlotWoMap(slotMap);
         for (const s of chunk) {
           const ev = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && !e.action_note?.includes("→"))
             .sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at))[0];
-          html += `<td style="${tdS}text-align:center;font-size:8pt;height:22px;">${ev ? `원료투입: ${toKSTTimeStr(ev.measured_at)}` : ""}</td>`;
+            html += `<td style="${tdS}text-align:center;font-size:8pt;height:22px;">${ev ? `원료투입: ${toKSTTimeStr(ev.measured_at)}${ev.action_by ? ` (${ev.action_by})` : ""}` : ""}</td>`;
         }
         for (let i = 0; i < empty; i++) html += `<td style="${tdS}"></td>`;
         html += `</tr>`;
@@ -377,7 +377,7 @@ setSlotWoMap(slotMap);
             ...dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→")),
             ...dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→")),
           ].sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at));
-          const cellContent = moveEvs.length === 0 ? "" : moveEvs.map((ev: any) => `슬롯이동: ${toKSTTimeStr(ev.measured_at)} (${ev.action_note})`).join("<br/>");
+          const cellContent = moveEvs.length === 0 ? "" : moveEvs.map((ev: any) => `슬롯이동: ${toKSTTimeStr(ev.measured_at)} (${ev.action_note})${ev.action_by ? ` (${ev.action_by})` : ""}`).join("<br/>");
           html += `<td style="${tdS}text-align:center;font-size:8pt;min-height:22px;">${cellContent}</td>`;
         }
         for (let i = 0; i < empty; i++) html += `<td style="${tdS}"></td>`;
@@ -1483,7 +1483,7 @@ async function handlePrint() {
   ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
   return assignees.map((_, ai) => (
     <td key={`${i}-${ai}`} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
-      {ai === 0 ? (ev ? `원료투입: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}` : "") : ""}
+      {ai === 0 ? (ev ? `원료투입: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)}${ev.action_by ? ` (${ev.action_by})` : ""}` : "") : ""}
     </td>
   ));
 })}
@@ -1505,7 +1505,7 @@ async function handlePrint() {
   const ev = outEv ?? inEv;
   return assignees.map((_, ai) => (
     <td key={`${i}-${ai}`} style={{ border: "1px solid #000", padding: "4px", textAlign: "center", fontSize: "8pt", height: 22 }}>
-      {ai === 0 ? (ev ? `슬롯이동: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})` : "") : ""}
+      {ai === 0 ? (ev ? `슬롯이동: ${ev.measured_at.slice(5,10).replace("-","/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})${ev.action_by ? ` (${ev.action_by})` : ""}` : "") : ""}
     </td>
   ));
 })}
