@@ -2388,23 +2388,21 @@ if (woSubNameVal) {
 
   async function deleteTradeRow(r: UnifiedRow, _pinName: string) {
     if (r.kind === "ORDER") {
-      const { data: linkedWos } = await supabase.from("work_orders").select("id, work_order_no").eq("linked_order_id", r.rawId);
-      if (linkedWos && linkedWos.length > 0) {
-        const woIds = linkedWos.map((w) => w.id);
-        const { data: reads } = await supabase.from("work_order_reads").select("work_order_id").in("work_order_id", woIds);
-        if (reads && reads.length > 0) {
-          const readWoIds = new Set(reads.map((x) => x.work_order_id));
-          const readWoNos = linkedWos.filter((w) => readWoIds.has(w.id)).map((w) => w.work_order_no).filter(Boolean);
-          if (readWoNos.length > 0) {
-            window.alert(`⚠️ 삭제할 수 없습니다.\n연결된 작업지시서(${readWoNos.join(", ")})를 이미 열람한 기록이 있습니다.`);
-            return;
-          }
+      const { data: linkedWos } = await supabase.from("work_orders").select("id, work_order_no, status").eq("linked_order_id", r.rawId);
+      // 생산완료(status="완료") WO는 실물 재고(LOT/movements/material_usage_logs/CCP기록) 보존 대상 — 삭제하지 않고 연결만 해제.
+      // 미완료 WO는 기존과 동일하게 전체 삭제(열람 이력과 무관하게 삭제 가능하도록 열람 체크 제거).
+      const completedWos = (linkedWos ?? []).filter((w) => w.status === "완료");
+      const incompleteWos = (linkedWos ?? []).filter((w) => w.status !== "완료");
+      await supabase.from("orders").update({ work_order_item_id: null }).eq("id", r.rawId);
+      // ── 생산완료된 WO: linked_order_id만 해제, 실물 LOT/movements/material_usage_logs/CCP기록은 그대로 보존 ──
+      if (completedWos.length > 0) {
+        for (const wo of completedWos) {
+          await supabase.from("work_orders").update({ linked_order_id: null }).eq("id", wo.id);
         }
       }
-      await supabase.from("orders").update({ work_order_item_id: null }).eq("id", r.rawId);
-      if (linkedWos && linkedWos.length > 0) {
-        const woIds = linkedWos.map((w) => w.id);
-        for (const wo of linkedWos) await supabase.from("work_order_items").delete().eq("work_order_id", wo.id);
+      if (incompleteWos.length > 0) {
+        const woIds = incompleteWos.map((w) => w.id);
+        for (const wo of incompleteWos) await supabase.from("work_order_items").delete().eq("work_order_id", wo.id);
         // ── 임시 lot(재고부족 자동생성) + movements 정리 ──
         const { data: tempLots } = await supabase.from("lots").select("id").in("work_order_id", woIds).eq("is_temp", true);
         if (tempLots && tempLots.length > 0) {
@@ -2412,7 +2410,7 @@ if (woSubNameVal) {
           await supabase.from("movements").delete().in("lot_id", tempLotIds);
           await supabase.from("lots").delete().in("id", tempLotIds);
         }
-        for (const wo of linkedWos) {
+        for (const wo of incompleteWos) {
           if (wo.work_order_no) {
             await supabase.from("movements").delete().ilike("note", `거래내역 OUT - ${wo.work_order_no} - %`);
             await supabase.from("ccp_wo_events").delete().eq("work_order_no", wo.work_order_no);
