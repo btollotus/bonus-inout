@@ -1723,7 +1723,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
 
     const [slotRes, woRes, woSlotRes] = await Promise.all([
       supabase.from("ccp_slot_events")
-        .select("id,slot_id,event_date,event_type,measured_at,work_order_no,action_note,material_type")
+        .select("id,slot_id,event_date,event_type,measured_at,work_order_no,action_note,material_type,action_by")
         .eq("event_date", filterDate)
         .in("slot_id", slotIds)
         .order("measured_at", { ascending: true }),
@@ -1941,7 +1941,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
     for (const date of dates) {
       const [slotRes, woRes] = await Promise.all([
         supabase.from("ccp_slot_events")
-          .select("id,slot_id,event_date,event_type,measured_at,work_order_no,action_note,material_type")
+          .select("id,slot_id,event_date,event_type,measured_at,work_order_no,action_note,material_type,action_by")
           .eq("event_date", date)
           .in("slot_id", slotIds)
           .order("measured_at", { ascending: true }),
@@ -2108,7 +2108,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
         const ev = dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && !e.action_note?.includes("→"))
           .sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at))[0];
         assignees.forEach((_, ai) => {
-          html += `<td style="${tdS}text-align:center;font-size:8pt;height:22px;">${ai === 0 ? (ev ? `원료투입: ${toKSTTime(ev.measured_at)}` : "") : ""}</td>`;
+          html += `<td style="${tdS}text-align:center;font-size:8pt;height:22px;">${ai === 0 ? (ev ? `원료투입: ${toKSTTime(ev.measured_at)}${ev.action_by ? ` (${ev.action_by})` : ""}` : "") : ""}</td>`;
         });
       }
       for (let i = 0; i < Math.max(0, CHUNK_SIZE_R - totalSlotCols); i++) html += `<td style="${tdS}"></td>`;
@@ -2121,7 +2121,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
           ...dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_out" && e.action_note?.startsWith("→")),
           ...dayData.slotEvents.filter((e: any) => e.slot_id === s.id && e.event_type === "material_in" && e.action_note?.includes("→")),
         ].sort((a: any, b: any) => a.measured_at.localeCompare(b.measured_at));
-        const cellContent = moveEvs.length === 0 ? "" : moveEvs.map((ev: any) => `슬롯이동: ${toKSTTime(ev.measured_at)} (${ev.action_note})`).join("<br/>");
+        const cellContent = moveEvs.length === 0 ? "" : moveEvs.map((ev: any) => `슬롯이동: ${toKSTTime(ev.measured_at)} (${ev.action_note})${ev.action_by ? ` (${ev.action_by})` : ""}`).join("<br/>");
         assignees.forEach((_, ai) => {
           html += `<td style="${tdS}text-align:center;font-size:8pt;min-height:22px;">${ai === 0 ? cellContent : ""}</td>`;
         });
@@ -2820,7 +2820,7 @@ setTimeout(() => {
   ).sort((a, b) => a.measured_at.localeCompare(b.measured_at))[0];
   return assignees.map((_, ai) => (
     <td key={`${i}-${ai}`} style={{ ...tdBase, textAlign: "center", fontSize: "8pt", height: 22 }}>
-      {ai === 0 ? (ev ? `원료투입: ${ev.measured_at.slice(5, 10).replace("-", "/")} ${toKSTTime(ev.measured_at)}` : "") : ""}
+      {ai === 0 ? (ev ? `원료투입: ${ev.measured_at.slice(5, 10).replace("-", "/")} ${toKSTTime(ev.measured_at)}${ev.action_by ? ` (${ev.action_by})` : ""}` : "") : ""}
     </td>
   ));
 })}
@@ -2842,7 +2842,7 @@ setTimeout(() => {
   const ev = outEv ?? inEv;
   return assignees.map((_, ai) => (
     <td key={`${i}-${ai}`} style={{ ...tdBase, textAlign: "center", fontSize: "8pt", height: 22 }}>
-      {ai === 0 ? (ev ? `슬롯이동: ${ev.measured_at.slice(5, 10).replace("-", "/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})` : "") : ""}
+      {ai === 0 ? (ev ? `슬롯이동: ${ev.measured_at.slice(5, 10).replace("-", "/")} ${toKSTTime(ev.measured_at)} (${ev.action_note})${ev.action_by ? ` (${ev.action_by})` : ""}` : "") : ""}
     </td>
   ));
 })}
