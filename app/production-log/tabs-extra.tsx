@@ -118,7 +118,7 @@ export function Ccp1bTab({ role, userId, showToast }: {
   const [slotEvents, setSlotEvents] = useState<{
     id: string; slot_id: string; event_date: string; event_type: string;
     measured_at: string; work_order_no: string | null; action_note: string | null;
-    material_type: string | null;
+    material_type: string | null; action_by: string | null;
   }[]>([]);
 
   // 작업지시서 온도기록 — 작업지시서 기준
