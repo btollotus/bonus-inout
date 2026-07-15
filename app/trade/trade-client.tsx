@@ -2383,6 +2383,18 @@ if (woSubNameVal) {
   async function deleteTradeRow(r: UnifiedRow, _pinName: string) {
     if (r.kind === "ORDER") {
       const { data: linkedWos } = await supabase.from("work_orders").select("id, work_order_no").eq("linked_order_id", r.rawId);
+      if (linkedWos && linkedWos.length > 0) {
+        const woIds = linkedWos.map((w) => w.id);
+        const { data: reads } = await supabase.from("work_order_reads").select("work_order_id").in("work_order_id", woIds);
+        if (reads && reads.length > 0) {
+          const readWoIds = new Set(reads.map((x) => x.work_order_id));
+          const readWoNos = linkedWos.filter((w) => readWoIds.has(w.id)).map((w) => w.work_order_no).filter(Boolean);
+          if (readWoNos.length > 0) {
+            window.alert(`⚠️ 삭제할 수 없습니다.\n연결된 작업지시서(${readWoNos.join(", ")})를 이미 열람한 기록이 있습니다.`);
+            return;
+          }
+        }
+      }
       await supabase.from("orders").update({ work_order_item_id: null }).eq("id", r.rawId);
       if (linkedWos && linkedWos.length > 0) {
         const woIds = linkedWos.map((w) => w.id);
