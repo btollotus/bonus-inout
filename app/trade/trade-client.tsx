@@ -2335,13 +2335,19 @@ if (woSubNameVal) {
           if (outSyncErr) stockErrors.push("출고일 동기화 실패: " + outSyncErr.message);
         }
 
-        // ── Step4: 재고부족(마켓플레이스 거래처) 라인 → 임시 lot + 임시 작업지시서 자동생성 ──
+       // ── Step4: 재고부족(마켓플레이스 거래처) 라인 → 임시 lot + 임시 작업지시서 자동생성 ──
+        // 2026-07-15 수정: 이미 다른 작업지시서(eWoId, 정상경로 생성)가 연결돼 있고,
+        // 이 라인에 대한 임시출고 기록이 "한 번도 없었던" 경우에만 신규 WO 생성을 건너뜀(중복 방지).
+        // 이미 임시출고 기록이 있는 라인(= 기존 임시WO 자신)은 그대로 동기화(수량 갱신)되도록 유지 — 기존 정상 기능 보존.
         if (selectedPartner && SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name)) {
           for (const cl of cleanLines) {
             if (isSpecialItem(cl.name)) continue;
             if ((cl.stock_out_lots ?? []).length > 0) continue;
             const variantId = masterByName.get(cl.name)?.variant_id;
             if (!variantId) continue;
+            const shortageNoteKey = `재고부족 임시출고 - ${editRow.rawId} - ${cl.name}`;
+            const { data: existingShortageMov } = await supabase.from("movements").select("id").eq("note", shortageNoteKey).limit(1).maybeSingle();
+            if (!existingShortageMov && eWoId) continue;
             const shortageResult = await createTempLotForShortage(supabase, variantId, cl.actual_ea, cl.name, eShipDate, selectedPartner.name, stockUserId, editRow.rawId);
             if (shortageResult.error) stockErrors.push(shortageResult.error);
           }
