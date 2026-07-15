@@ -3792,6 +3792,22 @@ const totalOrder = items
                               }
                             }
                           }
+                          // ── order_lines.gift_qty 업데이트 (linked_order_id 경로) — 완료 후 "수정" 저장 시에도 동일 반영 ──
+                          if (selectedWo.linked_order_id) {
+                            for (const item of items) {
+                              const pi = prodInputs[item.id];
+                              const giftQty = pi?.gift_qty ? toInt(pi.gift_qty) : 0;
+                              if (giftQty <= 0) continue;
+                              const itemName = (item.sub_items ?? [])[0]?.name ?? "";
+                              if (!itemName) continue;
+                              const orderQty = item.order_qty ?? 0;
+                              await supabase.from("order_lines")
+                                .update({ gift_qty: giftQty })
+                                .eq("order_id", selectedWo.linked_order_id)
+                                .eq("name", itemName)
+                                .eq("actual_ea", orderQty);
+                            }
+                          }
                           // ── 불량(defect_qty) 즉시 동기화를 위해 selectedWo 로컬 상태 갱신 ──
                           setSelectedWo((prev) => prev ? {
                             ...prev,
