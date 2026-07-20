@@ -52,11 +52,11 @@ export default function InventoryClient() {
     }
   }, [role, searchParams, canSeeProducts]);
 
-  // ── PRODUCTS 탭인데 권한 없는 경우 강제 SCAN ──
+  // ── PRODUCTS/SCAN 탭인데 권한 없는 경우 강제 REPORT ──
   useEffect(() => {
     if (role === null) return;
-    if (tab === "PRODUCTS" && !canSeeProducts) {
-      setTab("SCAN");
+    if ((tab === "PRODUCTS" || tab === "SCAN") && !canSeeProducts) {
+      setTab("REPORT");
     }
   }, [role, tab, canSeeProducts]);
 
@@ -72,7 +72,7 @@ export default function InventoryClient() {
   }, [tab]);
 
   const tabs: { key: Tab; label: string; productsOnly?: boolean }[] = [
-    { key: "SCAN",     label: "📦 스캔"           },
+    { key: "SCAN",     label: "📦 스캔",           productsOnly: true },
     { key: "REPORT",   label: "📋 재고대장"       },
     { key: "DISCARD",  label: "🗑️ 폐기목록", productsOnly: true },
     { key: "PRODUCTS", label: "🏷️ 품목/바코드", productsOnly: true },
@@ -138,9 +138,11 @@ export default function InventoryClient() {
       </div>
 
       {/* ── 탭 콘텐츠: unmount 방지 → display none으로 숨겨서 state 유지 ── */}
-      <div style={{ display: tab === "SCAN" ? "block" : "none" }}>
-        <ScanClient />
-      </div>
+      {canSeeProducts && (
+        <div style={{ display: tab === "SCAN" ? "block" : "none" }}>
+          <ScanClient />
+        </div>
+      )}
       <div style={{ display: tab === "REPORT" ? "block" : "none" }}>
         <ReportClient />
       </div>
