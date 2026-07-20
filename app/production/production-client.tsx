@@ -742,8 +742,9 @@ export default function ProductionClient() {
       setTransferLotSearch((prev) => ({ ...prev, [itemId]: keyword }));
       setTransferLotSearching((prev) => ({ ...prev, [itemId]: true }));
       const { data: variants } = await supabase.from("product_variants").select("id, variant_name, barcode, products(food_type)").ilike("variant_name", keyword.trim() ? `%${keyword}%` : "%").limit(100);
+      const DONOM_STOCK_BARCODES = ["BO202604020001", "BO202604220021"]; // 도눔(50*35mm,두께5mm), 도눔(은박) — 데코초콜릿 재고 포장 출고용 재고 차감 후보
       const filtered = skipProductionCheck
-        ? (variants ?? []).filter((v: any) => v.barcode === "BO202604020001")
+        ? (variants ?? []).filter((v: any) => DONOM_STOCK_BARCODES.includes(v.barcode))
         : (variants ?? []).filter((v: any) =>
             (v.products?.food_type ?? "").includes("초콜릿중간재") ||
             (v.products?.food_type ?? "") === "생산용전사지"
