@@ -323,7 +323,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
   const [expirySaving, setExpirySaving] = useState(false);
   // ── 드릴다운 (출고/입고) ──
   const [drillOpen, setDrillOpen] = useState<{ barcode: string; expiry: string; colType: "in" | "out" } | null>(null);
-  const [drillMovements, setDrillMovements] = useState<{ type: string; qty: number; happened_at: string; note: string | null }[]>([]);
+  const [drillMovements, setDrillMovements] = useState<{ type: string; qty: number; happened_at: string; note: string | null; clientName?: string | null; woId?: string }[]>([]);
   const [drillMovLoading, setDrillMovLoading] = useState(false);
 
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -828,10 +828,11 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     )];
 
     const woClientMap: Record<string, string> = {};
+    const woIdMap: Record<string, string> = {};
     if (woNos.length > 0) {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("work_order_no, client_name, linked_order_id")
+        .select("id, work_order_no, client_name, linked_order_id")
         .in("work_order_no", woNos);
 
       const linkedOrderIds = [...new Set(
@@ -857,6 +858,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
         woClientMap[w.work_order_no] = ordererName
           ? `${w.client_name} · ${ordererName} (${w.work_order_no})`
           : `${w.client_name} (${w.work_order_no})`;
+        woIdMap[w.work_order_no] = w.id;
       });
     }
 
@@ -882,9 +884,10 @@ const [adminLoaded, setAdminLoaded] = useState(false);
       const woNo = note.match(woPattern)?.[0];
       const uuid = (!woPattern.test(note)) ? (note.match(uuidPattern)?.[0] ?? null) : null;
       let clientName: string | null = null;
-      if (woNo && woClientMap[woNo]) clientName = woClientMap[woNo];
+      let woId: string | undefined;
+      if (woNo && woClientMap[woNo]) { clientName = woClientMap[woNo]; woId = woIdMap[woNo]; }
       else if (uuid && orderClientMap[uuid]) clientName = orderClientMap[uuid];
-      return { ...m, clientName };
+      return { ...m, clientName, woId };
     });
 
     setDrillMovements(enriched as any);
@@ -1732,6 +1735,15 @@ setTimeout(() => { win.print(); }, 500);
                                         <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
                                           {m.clientName}
                                         </span>
+                                      )}
+                                      {m.woId && (
+                                        <a href={`/production?wo=${m.woId}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="rounded border border-blue-300 bg-white px-1 py-0.5 text-[10px] font-semibold text-blue-600 hover:bg-blue-50"
+                                          onClick={(e) => e.stopPropagation()}>
+                                          🔗
+                                        </a>
                                       )}
                                       {!m.clientName && m.note && (
                                         <span className="text-slate-400">{m.note}</span>
