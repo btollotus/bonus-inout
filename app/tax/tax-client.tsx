@@ -292,7 +292,7 @@ export default function TaxClient() {
       return s.replaceAll(/[^0-9]/g, "");
     }
     function normName(n: string | null | undefined) {
-      return String(n ?? "").trim();
+      return String(n ?? "").trim().replaceAll(/\s+/g, "");
     }
 
     try {
