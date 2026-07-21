@@ -780,11 +780,12 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [vatFree, setVatFree] = useState(false);
 
   // 선발행 기록(거래내역 미입력 상태에서 세금계산서만 먼저 발행한 경우의 메모)
-  type PrepaidNoteRow = { id: string; customer_name: string; amount: number | null; memo: string | null; created_at: string };
+  type PrepaidNoteRow = { id: string; customer_name: string; amount: number | null; memo: string | null; issued_date: string | null; created_at: string };
   const [prepaidNotes, setPrepaidNotes] = useState<PrepaidNoteRow[]>([]);
   const [prepaidNoteCustomer, setPrepaidNoteCustomer] = useState("");
   const [prepaidNoteAmount, setPrepaidNoteAmount] = useState("");
   const [prepaidNoteMemo, setPrepaidNoteMemo] = useState("");
+  const [prepaidNoteDate, setPrepaidNoteDate] = useState(todayYMD());
 
   const [wo_subName, setWo_subName] = useState("");
   const [wo_orderDate, setWo_orderDate] = useState(todayYMD());
@@ -2585,8 +2586,8 @@ if (woSubNameVal) {
   async function loadPrepaidNotes() {
     const { data, error } = await supabase
       .from("prepaid_invoice_notes")
-      .select("id,customer_name,amount,memo,created_at")
-      .order("created_at", { ascending: false });
+      .select("id,customer_name,amount,memo,issued_date,created_at")
+      .order("issued_date", { ascending: false });
     if (error) return setMsg(error.message);
     setPrepaidNotes((data ?? []) as PrepaidNoteRow[]);
   }
@@ -2597,11 +2598,13 @@ if (woSubNameVal) {
       customer_name: prepaidNoteCustomer.trim(),
       amount: prepaidNoteAmount.trim() ? Number(prepaidNoteAmount) : null,
       memo: prepaidNoteMemo.trim() || null,
+      issued_date: prepaidNoteDate || null,
     });
     if (error) return setMsg(error.message);
     setPrepaidNoteCustomer("");
     setPrepaidNoteAmount("");
     setPrepaidNoteMemo("");
+    setPrepaidNoteDate(todayYMD());
     await loadPrepaidNotes();
   }
 
@@ -3506,6 +3509,10 @@ if (woSubNameVal) {
               </div>
               <div className="flex flex-wrap items-end gap-2">
                 <div>
+                  <div className="mb-1 text-xs text-slate-600">발행일</div>
+                  <input type="date" className={inp} value={prepaidNoteDate} onChange={(e) => setPrepaidNoteDate(e.target.value)} />
+                </div>
+                <div>
                   <div className="mb-1 text-xs text-slate-600">거래처명</div>
                   <input className={inp} lang="ko" list="prepaid-customer-names" value={prepaidNoteCustomer} onChange={(e) => setPrepaidNoteCustomer(e.target.value)} placeholder="예: (주)코팬글로벌" />
                   <datalist id="prepaid-customer-names">
@@ -3529,6 +3536,7 @@ if (woSubNameVal) {
                   {prepaidNotes.map((n) => (
                     <div key={n.id} className="flex items-center justify-between rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-sm">
                       <div>
+                        {n.issued_date ? <span className="mr-2 tabular-nums text-slate-500">{n.issued_date}</span> : null}
                         <span className="font-semibold">{n.customer_name}</span>
                         {n.amount != null ? <span className="ml-2 tabular-nums text-slate-600">{fmt(n.amount)}</span> : null}
                         {n.memo ? <span className="ml-2 text-slate-500">· {n.memo}</span> : null}
