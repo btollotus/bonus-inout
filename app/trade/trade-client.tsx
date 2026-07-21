@@ -3507,7 +3507,12 @@ if (woSubNameVal) {
               <div className="flex flex-wrap items-end gap-2">
                 <div>
                   <div className="mb-1 text-xs text-slate-600">거래처명</div>
-                  <input className={inp} lang="ko" value={prepaidNoteCustomer} onChange={(e) => setPrepaidNoteCustomer(e.target.value)} placeholder="예: (주)코팬글로벌" />
+                  <input className={inp} lang="ko" list="prepaid-customer-names" value={prepaidNoteCustomer} onChange={(e) => setPrepaidNoteCustomer(e.target.value)} placeholder="예: (주)코팬글로벌" />
+                  <datalist id="prepaid-customer-names">
+                    {partners.map((p) => (
+                      <option key={p.id} value={p.name} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <div className="mb-1 text-xs text-slate-600">금액(선택)</div>
