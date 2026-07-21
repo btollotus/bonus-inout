@@ -779,6 +779,13 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [manualBusinessNo, setManualBusinessNo] = useState("");
   const [vatFree, setVatFree] = useState(false);
 
+  // 선발행 기록(거래내역 미입력 상태에서 세금계산서만 먼저 발행한 경우의 메모)
+  type PrepaidNoteRow = { id: string; customer_name: string; amount: number | null; memo: string | null; created_at: string };
+  const [prepaidNotes, setPrepaidNotes] = useState<PrepaidNoteRow[]>([]);
+  const [prepaidNoteCustomer, setPrepaidNoteCustomer] = useState("");
+  const [prepaidNoteAmount, setPrepaidNoteAmount] = useState("");
+  const [prepaidNoteMemo, setPrepaidNoteMemo] = useState("");
+
   const [wo_subName, setWo_subName] = useState("");
   const [wo_orderDate, setWo_orderDate] = useState(todayYMD());
   const [wo_foodType, setWo_foodType] = useState("");
@@ -1343,7 +1350,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     return () => { cancelled = true; };
   }, [tradeSearchDebounced, selectedPartner?.id, searchRefreshTick]); // eslint-disable-line
 
-  useEffect(() => { setRecentPartnerIds(loadRecentFromLS()); loadPartners(); loadFoodTypes(); loadPresetProducts(); loadMasterProducts(); loadEmployees(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { setRecentPartnerIds(loadRecentFromLS()); loadPartners(); loadFoodTypes(); loadPresetProducts(); loadMasterProducts(); loadEmployees(); loadPrepaidNotes(); /* eslint-disable-next-line */ }, []);
   
   useEffect(() => { loadTrades(); /* eslint-disable-next-line */ }, [selectedPartner?.id, fromYMD, toYMD, toTouched]);
 
@@ -2574,6 +2581,35 @@ if (woSubNameVal) {
     await loadTrades();
     if (tradeSearchDebounced.trim()) setSearchRefreshTick((v) => v + 1);
   }
+
+  async function loadPrepaidNotes() {
+    const { data, error } = await supabase
+      .from("prepaid_invoice_notes")
+      .select("id,customer_name,amount,memo,created_at")
+      .order("created_at", { ascending: false });
+    if (error) return setMsg(error.message);
+    setPrepaidNotes((data ?? []) as PrepaidNoteRow[]);
+  }
+
+  async function addPrepaidNote() {
+    if (!prepaidNoteCustomer.trim()) return setMsg("거래처명을 입력하세요.");
+    const { error } = await supabase.from("prepaid_invoice_notes").insert({
+      customer_name: prepaidNoteCustomer.trim(),
+      amount: prepaidNoteAmount.trim() ? Number(prepaidNoteAmount) : null,
+      memo: prepaidNoteMemo.trim() || null,
+    });
+    if (error) return setMsg(error.message);
+    setPrepaidNoteCustomer("");
+    setPrepaidNoteAmount("");
+    setPrepaidNoteMemo("");
+    await loadPrepaidNotes();
+  }
+
+  async function deletePrepaidNote(id: string) {
+    const { error } = await supabase.from("prepaid_invoice_notes").delete().eq("id", id);
+    if (error) return setMsg(error.message);
+    await loadPrepaidNotes();
+  }
   // Styles
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
@@ -3461,6 +3497,43 @@ if (woSubNameVal) {
                 <div className="mt-4 flex justify-end"><button className={btnOn} onClick={createLedger}>금전출납 기록</button></div>
               </div>
             ) : null}
+
+            {/* 선발행 기록 (거래내역 입력 전 세금계산서만 먼저 발행한 경우) */}
+            <div className={`${card} p-4`}>
+              <div className="mb-3">
+                <div className="text-lg font-semibold">⚠️ 선발행 기록 (거래내역 입력 전)</div>
+                <div className="mt-1 text-xs text-slate-600">거래내역을 아직 입력하지 않았지만 세금계산서를 먼저 발행한 경우, 잊지 않도록 여기에 메모해두세요. 나중에 거래내역을 입력한 뒤 직접 삭제하시면 됩니다.</div>
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <div>
+                  <div className="mb-1 text-xs text-slate-600">거래처명</div>
+                  <input className={inp} lang="ko" value={prepaidNoteCustomer} onChange={(e) => setPrepaidNoteCustomer(e.target.value)} placeholder="예: (주)코팬글로벌" />
+                </div>
+                <div>
+                  <div className="mb-1 text-xs text-slate-600">금액(선택)</div>
+                  <input className={inpR} value={prepaidNoteAmount} onChange={(e) => setPrepaidNoteAmount(e.target.value.replace(/[^0-9]/g, ""))} placeholder="예: 638000" />
+                </div>
+                <div className="flex-1 min-w-[200px]">
+                  <div className="mb-1 text-xs text-slate-600">메모(선택)</div>
+                  <input className={inp} lang="ko" value={prepaidNoteMemo} onChange={(e) => setPrepaidNoteMemo(e.target.value)} placeholder="예: 시나모롤 발주 예정" />
+                </div>
+                <button className={btnOn} onClick={addPrepaidNote}>기록 추가</button>
+              </div>
+              {prepaidNotes.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  {prepaidNotes.map((n) => (
+                    <div key={n.id} className="flex items-center justify-between rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-sm">
+                      <div>
+                        <span className="font-semibold">{n.customer_name}</span>
+                        {n.amount != null ? <span className="ml-2 tabular-nums text-slate-600">{fmt(n.amount)}</span> : null}
+                        {n.memo ? <span className="ml-2 text-slate-500">· {n.memo}</span> : null}
+                      </div>
+                      <button className={miniBtn} onClick={() => deletePrepaidNote(n.id)}>삭제</button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
 
             {/* 거래내역 */}
             <div className={`${card} p-4`}>
