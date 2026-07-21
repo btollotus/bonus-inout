@@ -38,6 +38,7 @@ type LedgerRow = {
   method: string | null;
   counterparty_name: string | null;
   business_no: string | null;
+  partner_id: string | null;
   memo: string | null;
 
   // ✅ 옵션2(정확 VAT) 컬럼들 (migration 완료 기준)
@@ -318,7 +319,7 @@ export default function TaxClient() {
       const { data: lData, error: lErr } = await supabase
         .from("ledger_entries")
         .select(
-          "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,memo,supply_amount,vat_amount,total_amount,vat_type,vat_rate"
+          "id,entry_date,entry_ts,direction,amount,category,method,counterparty_name,business_no,partner_id,memo,supply_amount,vat_amount,total_amount,vat_type,vat_rate"
         )
         .gte("entry_date", START)
         .lte("entry_date", asOf)
@@ -408,7 +409,8 @@ export default function TaxClient() {
         const lName = normName(l.counterparty_name);
 
         let pid = "";
-        if (lBiz && bizToPartnerId.has(lBiz)) pid = bizToPartnerId.get(lBiz)!;
+        if (l.partner_id && map.has(String(l.partner_id))) pid = String(l.partner_id);
+        else if (lBiz && bizToPartnerId.has(lBiz)) pid = bizToPartnerId.get(lBiz)!;
         else if (lName && nameToPartnerId.has(lName)) pid = nameToPartnerId.get(lName)!;
 
         // 출고가 있는 거래처만 누적 입금/환불 반영(리포트 AR 표 구조 유지)
