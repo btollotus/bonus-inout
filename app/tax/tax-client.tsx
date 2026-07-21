@@ -155,13 +155,20 @@ export default function TaxClient() {
     method: string | null;
     vat_amount: number | null;
   };
+  type PendingPrepaidRow = {
+    id: string;
+    customer_name: string;
+    ship_date: string;
+    total_amount: number;
+  };
   
   const [pendingOrders, setPendingOrders] = useState<PendingOrderRow[]>([]);
   const [pendingLedgers, setPendingLedgers] = useState<PendingLedgerRow[]>([]);
+  const [pendingPrepaid, setPendingPrepaid] = useState<PendingPrepaidRow[]>([]);
   const [excludePartners, setExcludePartners] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("pending_exclude_partners") ?? "[]"); } catch { return []; }
   });
-  const [pendingTab, setPendingTab] = useState<"ORDER" | "LEDGER">("ORDER");
+  const [pendingTab, setPendingTab] = useState<"ORDER" | "LEDGER" | "PREPAID">("ORDER");
   const [excludeCategories, setExcludeCategories] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("pending_exclude_categories") ?? "[]"); } catch { return []; }
   });
@@ -463,6 +470,24 @@ export default function TaxClient() {
       return true;
     });
     setPendingLedgers(filtered as PendingLedgerRow[]);
+
+    const { data: pData } = await supabase
+      .from("orders")
+      .select("id,customer_name,ship_date,total_amount")
+      .eq("tax_invoice_prepaid", true)
+      .is("tax_invoice_prepaid_confirmed_at", null)
+      .order("ship_date", { ascending: false })
+      .limit(500);
+    setPendingPrepaid((pData ?? []) as PendingPrepaidRow[]);
+  }
+
+  async function confirmPrepaidPayment(id: string) {
+    const { error } = await supabase
+      .from("orders")
+      .update({ tax_invoice_prepaid_confirmed_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) return setMsg(error.message);
+    await loadPending();
   }
 
   useEffect(() => {
@@ -1057,11 +1082,14 @@ export default function TaxClient() {
           <div className="mt-6 space-y-6">
             {/* 서브탭 */}
             <div className="flex gap-2">
-              <button className={pendingTab === "ORDER" ? btnOn : btn} onClick={() => setPendingTab("ORDER")}>
+            <button className={pendingTab === "ORDER" ? btnOn : btn} onClick={() => setPendingTab("ORDER")}>
                 ☐ 세금계산서 미발행
               </button>
               <button className={pendingTab === "LEDGER" ? btnOn : btn} onClick={() => setPendingTab("LEDGER")}>
                 ☐ 계산서미수령 / 결제미완료
+              </button>
+              <button className={pendingTab === "PREPAID" ? btnOn : btn} onClick={() => setPendingTab("PREPAID")}>
+                ⚠️ 선발행·미입금
               </button>
             </div>
 
@@ -1070,9 +1098,11 @@ export default function TaxClient() {
               const allNames = Array.from(new Set([
                 ...pendingOrders.map((r) => r.customer_name),
                 ...pendingLedgers.map((r) => r.counterparty_name ?? "").filter(Boolean),
+                ...pendingPrepaid.map((r) => r.customer_name),
               ])).sort();
               const filteredOrders = pendingOrders.filter((r) => !excludePartners.includes(r.customer_name));
               const filteredLedgers = pendingLedgers.filter((r) => !excludePartners.includes(r.counterparty_name ?? ""));
+              const filteredPrepaid = pendingPrepaid.filter((r) => !excludePartners.includes(r.customer_name));
               return (
                 <>
                   <div className={`${card} p-4`}>
@@ -1228,6 +1258,53 @@ export default function TaxClient() {
                     </div>
                   </div>
                   ) : null} 
+
+                  {pendingTab === "PREPAID" ? (
+                  <div className={`${card} p-4`}>
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div>
+                        <div className="text-lg font-semibold">⚠️ 선발행 · 미입금 주문</div>
+                        <div className="mt-1 text-xs text-slate-600">세금계산서를 미리 발행했지만 아직 입금확인 안 된 주문 목록</div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-slate-500">{filteredPrepaid.length}건 (전체 {pendingPrepaid.length}건)</span>
+                        <button className={btn} onClick={loadPending}>새로고침</button>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                      <table className="w-full table-fixed text-sm">
+                        <colgroup>
+                          <col style={{ width: "130px" }} />
+                          <col style={{ width: "220px" }} />
+                          <col style={{ width: "160px" }} />
+                          <col style={{ width: "140px" }} />
+                        </colgroup>
+                        <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                          <tr>
+                            <th className="px-3 py-2 text-left">출고일</th>
+                            <th className="px-3 py-2 text-left">거래처</th>
+                            <th className="px-3 py-2 text-right">총액</th>
+                            <th className="px-3 py-2 text-center">입금확인</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredPrepaid.length === 0 ? (
+                            <tr><td colSpan={4} className="bg-white px-4 py-4 text-sm text-slate-500">선발행 미확인 건이 없습니다. ✅</td></tr>
+                          ) : filteredPrepaid.map((r) => (
+                            <tr key={r.id} className="border-t border-slate-200 bg-white">
+                              <td className="px-3 py-2 tabular-nums">{r.ship_date}</td>
+                              <td className="px-3 py-2 font-semibold">{r.customer_name}</td>
+                              <td className="px-3 py-2 text-right tabular-nums">{formatMoney(r.total_amount)}</td>
+                              <td className="px-3 py-2 text-center">
+                                <button className={btn} onClick={() => confirmPrepaidPayment(r.id)}>입금확인</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  ) : null}
 
                 </>
               );
