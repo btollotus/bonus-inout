@@ -1318,7 +1318,7 @@ searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
       const { data: woData, error: woFetchErr } = await supabase.from("work_orders").select("*").eq("id", woId).single();
       if (woFetchErr || !woData) { showToast("작업지시서 조회 실패", "error"); return; }
       const { data: readRows } = await supabase.from("work_order_reads").select("work_order_id").eq("work_order_id", woId).limit(1);
-      if (readRows && readRows.length > 0) {
+      if (readRows && readRows.length > 0 && !isAdmin) {
         showToast(`⚠️ 삭제할 수 없습니다. 이 작업지시서(${woData.work_order_no ?? ""})는 이미 열람한 기록이 있습니다.`, "error");
         return;
       }
