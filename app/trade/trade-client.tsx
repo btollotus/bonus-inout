@@ -1595,7 +1595,8 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
 
          // ── 신규 제품: 기존 로직 그대로 ──
          const itemBarcodeNo = createdItem.barcode_no as string;
-         const itemVariantName = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-${itemName}`;
+         const itemNamePrefix = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-`;
+         const itemVariantName = itemName.startsWith(itemNamePrefix) ? itemName : `${itemNamePrefix}${itemName}`;
 
          // ── 바코드 재사용 시: 이미 이 바코드를 가진 variant가 있으면 그대로 사용 ──
          // (거래처명 변경 등으로 itemVariantName이 과거와 달라져도 barcode_uq 충돌 방지)
