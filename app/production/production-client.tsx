@@ -736,14 +736,14 @@ export default function ProductionClient() {
     setTransferLotSearching((prev) => ({ ...prev, [itemId]: false }));
   }
 
-  async function searchTransferLotsMulti(itemId: string, keywords: string[], skipProductionCheck = false) {
+  async function searchTransferLotsMulti(itemId: string, keywords: string[], skipProductionCheck = false, donomBarcodes: string[] | null = null) {
     const uniqueKeywords = [...new Set(keywords.filter(Boolean))];
     for (const keyword of uniqueKeywords) {
       setTransferLotSearch((prev) => ({ ...prev, [itemId]: keyword }));
       setTransferLotSearching((prev) => ({ ...prev, [itemId]: true }));
       const { data: variants } = await supabase.from("product_variants").select("id, variant_name, barcode, products(food_type)").ilike("variant_name", keyword.trim() ? `%${keyword}%` : "%").limit(100);
-      const DONOM_STOCK_BARCODES = ["BO202604020001", "BO202604220021"]; // 도눔(50*35mm,두께5mm), 도눔(은박) — 데코초콜릿 재고 포장 출고용 재고 차감 후보
-      const filtered = skipProductionCheck
+      const DONOM_STOCK_BARCODES = donomBarcodes ?? ["BO202604020001", "BO202604220021"]; // 도눔(50*35mm,두께5mm), 도눔(은박) — 데코초콜릿 재고 포장 출고용 재고 차감 후보
+      const filtered = (skipProductionCheck || !!donomBarcodes)
         ? (variants ?? []).filter((v: any) => DONOM_STOCK_BARCODES.includes(v.barcode))
         : (variants ?? []).filter((v: any) =>
             (v.products?.food_type ?? "").includes("초콜릿중간재") ||
@@ -1262,7 +1262,9 @@ export default function ProductionClient() {
       const woItems = wo.work_order_items ?? [];
       const extractKeyword = (raw: string) => raw.replace(/^(주식회사|유한회사|합자회사|협동조합|\(주\)|\(유\))\s*/g, "").replace(/^\d+\.\s*/, "").replace(/\(.*?\)/g, "").trim().split(/[\s\-_]/)[0] ?? raw.trim();
       const clientRaw = wo.order_type === "재고" ? (wo.product_name ?? "") : (wo.client_name ?? "");
-      const clientKeyword = wo.skip_production_check ? "도눔" : extractKeyword(clientRaw);
+      const isEunbakWo = wo.product_name === "도눔(은박)";
+      const isDecoDonomWo = !isEunbakWo && wo.order_type === "재고" && (wo.food_type ?? "") === "데코초콜릿" && (wo.product_name ?? "").includes("도눔");
+      const clientKeyword = (wo.skip_production_check || isDecoDonomWo) ? "도눔" : extractKeyword(clientRaw);
       for (const item of woItems) {
         const name = (item.sub_items ?? [])[0]?.name ?? "";
         if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
@@ -1302,7 +1304,8 @@ export default function ProductionClient() {
         const keywords = (clientKeyword && !isMarketplace)
           ? [clientKeyword]
           : itemKeyword ? [itemKeyword] : [];
-searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check);
+          const donomBarcodes = isEunbakWo ? ["BO202604020001"] : isDecoDonomWo ? ["BO202604220021"] : null;
+          searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check, donomBarcodes);
       }
     }
   }
