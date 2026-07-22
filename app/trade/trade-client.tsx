@@ -1636,6 +1636,9 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
              if (!existPb) {
                await supabase.from("product_barcodes").insert({ variant_id: itemVariantId, barcode: existingBarcode, is_primary: true, is_active: true });
              }
+             if (existingBarcode !== itemBarcodeNo) {
+               await supabase.from("work_order_items").update({ barcode_no: existingBarcode }).eq("id", createdItem.id);
+             }
            }
          } else {
            // ── 신규 variant 생성: 새 바코드 사용 ──
