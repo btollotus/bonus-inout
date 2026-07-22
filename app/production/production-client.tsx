@@ -1262,9 +1262,7 @@ export default function ProductionClient() {
       const woItems = wo.work_order_items ?? [];
       const extractKeyword = (raw: string) => raw.replace(/^(주식회사|유한회사|합자회사|협동조합|\(주\)|\(유\))\s*/g, "").replace(/^\d+\.\s*/, "").replace(/\(.*?\)/g, "").trim().split(/[\s\-_]/)[0] ?? raw.trim();
       const clientRaw = wo.order_type === "재고" ? (wo.product_name ?? "") : (wo.client_name ?? "");
-      const isEunbakWo = wo.product_name === "도눔(은박)";
-      const isDecoDonomWo = !isEunbakWo && wo.order_type === "재고" && (wo.food_type ?? "") === "데코초콜릿" && (wo.product_name ?? "").includes("도눔");
-      const clientKeyword = (wo.skip_production_check || isDecoDonomWo) ? "도눔" : extractKeyword(clientRaw);
+      const clientKeyword = wo.skip_production_check ? "도눔" : extractKeyword(clientRaw);
       for (const item of woItems) {
         const name = (item.sub_items ?? [])[0]?.name ?? "";
         if (name.startsWith("성형틀") || name.startsWith("인쇄제판")) continue;
@@ -1301,10 +1299,13 @@ export default function ProductionClient() {
         const itemKeyword = extractKeyword(name);
         const MARKETPLACE_CLIENTS = ["네이버-판매", "카카오플러스-판매", "쿠팡-판매"];
         const isMarketplace = MARKETPLACE_CLIENTS.includes(wo.client_name ?? "");
-        const keywords = (clientKeyword && !isMarketplace)
-          ? [clientKeyword]
+        const isEunbakItem = name === "도눔(은박)";
+        const isDecoDonomItem = !isEunbakItem && wo.order_type === "재고" && (wo.food_type ?? "") === "데코초콜릿" && name.includes("도눔");
+        const donomBarcodes = isEunbakItem ? ["BO202604020001"] : isDecoDonomItem ? ["BO202604220021"] : null;
+        const itemClientKeyword = (isEunbakItem || isDecoDonomItem) ? "도눔" : clientKeyword;
+        const keywords = (itemClientKeyword && !isMarketplace)
+          ? [itemClientKeyword]
           : itemKeyword ? [itemKeyword] : [];
-          const donomBarcodes = isEunbakWo ? ["BO202604020001"] : isDecoDonomWo ? ["BO202604220021"] : null;
           searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check, donomBarcodes);
       }
     }
