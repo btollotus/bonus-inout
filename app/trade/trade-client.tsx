@@ -787,6 +787,10 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [prepaidNoteMemo, setPrepaidNoteMemo] = useState("");
   const [prepaidNoteDate, setPrepaidNoteDate] = useState(todayYMD());
 
+  // 세무 페이지(/tax)의 "선발행·미입금 주문" 목록 (orders.tax_invoice_prepaid=true, 미입금)
+  type PendingPrepaidOrderRow = { id: string; customer_name: string; ship_date: string; total_amount: number };
+  const [pendingPrepaidOrders, setPendingPrepaidOrders] = useState<PendingPrepaidOrderRow[]>([]);
+
   const [wo_subName, setWo_subName] = useState("");
   const [wo_orderDate, setWo_orderDate] = useState(todayYMD());
   const [wo_foodType, setWo_foodType] = useState("");
@@ -1351,7 +1355,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     return () => { cancelled = true; };
   }, [tradeSearchDebounced, selectedPartner?.id, searchRefreshTick]); // eslint-disable-line
 
-  useEffect(() => { setRecentPartnerIds(loadRecentFromLS()); loadPartners(); loadFoodTypes(); loadPresetProducts(); loadMasterProducts(); loadEmployees(); loadPrepaidNotes(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { setRecentPartnerIds(loadRecentFromLS()); loadPartners(); loadFoodTypes(); loadPresetProducts(); loadMasterProducts(); loadEmployees(); loadPrepaidNotes(); loadPendingPrepaidOrders(); /* eslint-disable-next-line */ }, []);
   
   useEffect(() => { loadTrades(); /* eslint-disable-next-line */ }, [selectedPartner?.id, fromYMD, toYMD, toTouched]);
 
@@ -2617,6 +2621,27 @@ if (woSubNameVal) {
     if (error) return setMsg(error.message);
     await loadPrepaidNotes();
   }
+
+  async function loadPendingPrepaidOrders() {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("id,customer_name,ship_date,total_amount")
+      .eq("tax_invoice_prepaid", true)
+      .is("tax_invoice_prepaid_confirmed_at", null)
+      .order("ship_date", { ascending: false })
+      .limit(500);
+    if (error) return setMsg(error.message);
+    setPendingPrepaidOrders((data ?? []) as PendingPrepaidOrderRow[]);
+  }
+
+  async function confirmPrepaidOrderPayment(id: string) {
+    const { error } = await supabase
+      .from("orders")
+      .update({ tax_invoice_prepaid_confirmed_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) return setMsg(error.message);
+    await loadPendingPrepaidOrders();
+  }
   // Styles
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
@@ -3511,6 +3536,28 @@ if (woSubNameVal) {
                 <div className="text-lg font-semibold">⚠️ 선발행 기록 (거래내역 입력 전)</div>
                 <div className="mt-1 text-xs text-slate-600">거래내역을 아직 입력하지 않았지만 세금계산서를 먼저 발행한 경우, 잊지 않도록 여기에 메모해두세요. 나중에 거래내역을 입력한 뒤 직접 삭제하시면 됩니다.</div>
               </div>
+
+              {pendingPrepaidOrders.length > 0 ? (
+                <div className="mb-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-sm font-semibold text-red-600">세무 · 선발행·미입금 주문 (세금계산서 발행완료, 입금 미확인) {pendingPrepaidOrders.length}건</div>
+                    <button className={miniBtn} onClick={loadPendingPrepaidOrders}>새로고침</button>
+                  </div>
+                  <div className="space-y-2">
+                    {pendingPrepaidOrders.map((r) => (
+                      <div key={r.id} className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm">
+                        <div>
+                          <span className="mr-2 tabular-nums text-slate-500">{r.ship_date}</span>
+                          <span className="font-semibold">{r.customer_name}</span>
+                          <span className="ml-2 tabular-nums text-slate-600">{fmt(r.total_amount)}</span>
+                        </div>
+                        <button className={miniBtn} onClick={() => confirmPrepaidOrderPayment(r.id)}>입금확인</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="flex flex-wrap items-end gap-2">
                 <div>
                   <div className="mb-1 text-xs text-slate-600">발행일</div>
