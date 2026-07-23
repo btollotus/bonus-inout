@@ -404,12 +404,11 @@ setLoading(false);
         return acc;
       }, {});
 
-      // 인쇄 전용: "도눔(은박)" 품목/작업지시서는 인쇄 행에서 제외 (화면 조회에는 표시 유지)
+      // 인쇄 전용: 실제 생산 없이 재고차감(재고전환)으로만 처리된 작업지시서(skip_production_check=true)는 인쇄 행에서 제외 (화면 조회에는 표시 유지)
       const getPrintRows = (wo: WorkOrder) => {
-        const woItems = (wo.items ?? []).filter(it => it.name && it.name !== "도눔(은박)");
-        if (woItems.length > 0) return woItems;
-        if (wo.product_name === "도눔(은박)") return [];
-        return [{ name: wo.product_name, order_qty: 0, actual_qty: 0, unit_weight: 0 }];
+        if (wo.skip_production_check) return [];
+        const woItems = (wo.items ?? []).filter(it => it.name);
+        return woItems.length > 0 ? woItems : [{ name: wo.product_name, order_qty: 0, actual_qty: 0, unit_weight: 0 }];
       };
       const woRows = Object.entries(woByWorkerPrint).flatMap(([worker, orders]) => {
         // 작업자별 전체 행 수 계산 (rowspan용)
