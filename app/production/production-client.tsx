@@ -133,9 +133,17 @@ function matchesSearch(target: string, keyword: string): boolean {
   const t = target.toLowerCase();
   const k = keyword.normalize("NFC");
   if (t.includes(k.toLowerCase())) return true;
-  const kChosung = extractKeywordChosung(k);
-  const isAllChosung = kChosung.length > 0 && [...kChosung].every(ch => CHOSUNG.includes(ch));
-  if (isAllChosung) return getChosung(target).includes(kChosung);
+  // 검색어 원문이 완성형 글자(모음 포함, 예: 아/모/스) 없이 자음 낱자(ㅇ/ㅁ/ㅅ 등)로만 구성된 경우에만 초성 검색 모드로 진입.
+  // (완성형 단어를 초성으로 강제 변환하면 결과가 항상 초성 문자들로만 나오기 때문에, 변환 후 값이 아니라 원문 자체를 검사해야 함)
+  const isAllChosung = k.length > 0 && [...k].every(ch => {
+    const code = ch.charCodeAt(0);
+    if (code >= 0xAC00 && code <= 0xD7A3) return false; // 완성형 글자 → 초성 검색어 아님
+    return CHOSUNG.includes(ch) || JAMO_TO_CHOSUNG[ch] !== undefined;
+  });
+  if (isAllChosung) {
+    const kChosung = extractKeywordChosung(k);
+    return getChosung(target).includes(kChosung);
+  }
   return false;
 }
 
