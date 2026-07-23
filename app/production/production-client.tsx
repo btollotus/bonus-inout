@@ -2622,6 +2622,7 @@ const totalOrder = items
                         return dates.length > 0 ? (<><span>·</span><span>납기일 {dates.join(", ")}</span></>) : null;
                       })()}
                       {selectedWo.production_done_at && (<><span>·</span><span>생산완료일 {new Date(new Date(selectedWo.production_done_at).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10)}</span></>)}
+                      {selectedWo.assignee_production && (<><span>·</span><span>생산담당 {selectedWo.assignee_production}</span></>)}
                     </div>
                   </div>
                   <div className="flex gap-1.5">
