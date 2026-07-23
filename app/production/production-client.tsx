@@ -67,6 +67,7 @@ type WorkOrderRow = {
   transfer_done_at?: string | null;
   print_check_done_at?: string | null;
   input_done_at?: string | null;
+  production_done_at?: string | null;
   linked_order?: { memo: string | null } | { memo: string | null }[] | null;
   work_order_items?: WoItemRow[];
   order_type: string;
@@ -939,7 +940,7 @@ export default function ProductionClient() {
     setLoading(true); setMsg(null);
     try {
       const LIMIT = filterStatus === "완료" ? 20 : 200;
-      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,transfer_done_at,print_check_done_at,input_done_at,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,transfer_sheet_size,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,gift_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
+      let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,transfer_done_at,print_check_done_at,input_done_at,production_done_at,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,transfer_sheet_size,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,gift_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
       if (filterStatus !== "전체") q = q.eq("status", filterStatus);
       if (filterDateFrom) q = q.gte("order_date", filterDateFrom);
       if (filterDateTo) q = q.lte("order_date", filterDateTo);
@@ -967,7 +968,7 @@ export default function ProductionClient() {
     (async () => {
       const { data } = await supabase
         .from("work_orders")
-        .select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,transfer_done_at,print_check_done_at,input_done_at,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,transfer_sheet_size,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,gift_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`)
+        .select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,transfer_done_at,print_check_done_at,input_done_at,production_done_at,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,transfer_sheet_size,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,gift_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`)
         .eq("id", woIdFromUrl)
         .maybeSingle();
       if (data) await applySelection(data as unknown as WorkOrderRow);
@@ -2601,7 +2602,16 @@ const totalOrder = items
                       {selectedWo.skip_production_check && <span className="rounded-full bg-violet-100 border border-violet-200 px-2 py-0.5 text-[11px] font-semibold text-violet-700">생략</span>}
                     </div>
                     <div className="mt-0.5 font-semibold text-sm text-slate-700">{selectedWo.product_name}</div>
-                    <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-slate-500"><span>{selectedWo.work_order_no}</span><span>·</span><span>{selectedWo.order_date}</span></div>
+                    <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-slate-500">
+                      <span>{selectedWo.work_order_no}</span>
+                      <span>·</span>
+                      <span>주문일 {selectedWo.order_date}</span>
+                      {(() => {
+                        const dates = Array.from(new Set((selectedWo.work_order_items ?? []).map((it) => it.delivery_date).filter(Boolean)));
+                        return dates.length > 0 ? (<><span>·</span><span>납기일 {dates.join(", ")}</span></>) : null;
+                      })()}
+                      {selectedWo.production_done_at && (<><span>·</span><span>생산완료일 {utcToKSTDateTime(selectedWo.production_done_at)}</span></>)}
+                    </div>
                   </div>
                   <div className="flex gap-1.5">
                     <button className={btnSm} onClick={() => setPrintOpen(true)}>인쇄</button>
