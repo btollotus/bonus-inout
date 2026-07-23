@@ -939,7 +939,10 @@ export default function ProductionClient() {
   const loadWoList = useCallback(async (offset = 0) => {
     setLoading(true); setMsg(null);
     try {
-      const LIMIT = filterStatus === "완료" ? 20 : 200;
+      const hasSearch = filterSearch.trim().length > 0;
+      // 검색어가 있으면 현재 상태/날짜 필터에 맞는 전체 목록을 가져와 클라이언트 검색(matchesSearch, 초성 포함)이
+      // 서버에서 이미 불러온 페이지 밖의 항목도 찾을 수 있도록 함
+      const LIMIT = hasSearch ? 5000 : (filterStatus === "완료" ? 20 : 200);
       let q = supabase.from("work_orders").select(`id,work_order_no,barcode_no,client_id,client_name,sub_name,order_date,food_type,product_name,logo_spec,thickness,delivery_method,packaging_type,tray_slot,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,status,status_transfer,status_print_check,status_production,status_input,is_reorder,original_work_order_id,variant_id,images,linked_order_id,created_at,assignee_transfer,assignee_print_check,assignee_production,assignee_input,transfer_done_at,print_check_done_at,input_done_at,production_done_at,order_type,ccp_slot_id,skip_production_check,neo_color_spray_lots,transfer_sheet_size,work_order_items(id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,gift_qty,defect_qty,unit_weight,expiry_date,transfer_lot_id,transfer_qty,transfer_lots,images),linked_order:orders!linked_order_id(memo)`).order("created_at", { ascending: false }).range(offset, offset + LIMIT - 1);
       if (filterStatus !== "전체") q = q.eq("status", filterStatus);
       if (filterDateFrom) q = q.gte("order_date", filterDateFrom);
@@ -956,7 +959,7 @@ export default function ProductionClient() {
       await loadReadMap(ids);
       if (selectedWo) { const refreshed = list.find((w) => w.id === selectedWo.id); if (refreshed) await applySelection(refreshed, false); }
     } finally { setLoading(false); }
-  }, [filterStatus, filterDateFrom, filterDateTo, loadReadMap]); // eslint-disable-line
+  }, [filterStatus, filterDateFrom, filterDateTo, filterSearch.trim().length > 0, loadReadMap]); // eslint-disable-line
 
   useEffect(() => { loadWoList(); }, [loadWoList]);
 
