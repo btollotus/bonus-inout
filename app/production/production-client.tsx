@@ -1950,39 +1950,46 @@ if (dupCheck && dupCheck.length > 0) {
           if (!isNeoColorWo && isExactTransferPaperWo) {
             const noteStr = selectedWo.note ?? "";
             const match = noteStr.match(/전사지[：:]\s*(\d+)장(?:\s*(\d+)줄)?/);
+            let totalSheets = 0;
             if (match) {
               const sheets = parseInt(match[1], 10);
               const hasRows = !!match[2];
-              const totalSheets = hasRows ? sheets + 1 : sheets;
-              if (totalSheets > 0) {
-                const jeonsakNote = `전사지 차감 - ${selectedWo.work_order_no}`;
-                const { data: jsDupCheck } = await supabase.from("material_usage_logs")
-                  .select("id").eq("note", jeonsakNote).limit(1);
-                  if (!jsDupCheck || jsDupCheck.length === 0) {
-                    const jeonsakName30 = selectedWo.transfer_sheet_size === "320x450" ? "전사지 32*45" : "전사지 30*40";
-                    const { data: jsMatData } = await supabase.from("materials")
-                      .select("id").eq("name", jeonsakName30).maybeSingle();
-                    if (jsMatData?.id) {
-                      const todayKSTDate = new Date(
-                        new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
-                      ).toISOString().slice(0, 10);
-                      const { error: jsErr } = await supabase.from("material_usage_logs").insert({
-                        material_id: jsMatData.id,
-                        used_date: todayKSTDate,
-                        quantity: totalSheets,
-                        unit: "ea",
-                        work_type: "product",
-                        note: jeonsakNote,
-                        created_by: userId,
-                      });
-                      if (jsErr) stockErrors.push(`전사지 차감 실패: ${jsErr.message}`);
-                    } else {
-                      stockErrors.push(`원료 '${jeonsakName30}'을 찾을 수 없습니다.`);
-                    }
-                  }
+              totalSheets = hasRows ? sheets + 1 : sheets;
+            } else {
+              // note에 "전사지:00장" 패턴 미입력 시 출고수량(+불량) 기준 자동 계산 — 무기록 방지 (아래 else-if 분기와 동일 로직으로 통일)
+              for (const it of items) {
+                const pi = prodInputs[it.id];
+                totalSheets += toInt(pi?.actual_qty) + toInt(pi?.defect_qty);
+              }
+            }
+            if (totalSheets > 0) {
+              const jeonsakNote = `전사지 차감 - ${selectedWo.work_order_no}`;
+              const { data: jsDupCheck } = await supabase.from("material_usage_logs")
+                .select("id").eq("note", jeonsakNote).limit(1);
+              if (!jsDupCheck || jsDupCheck.length === 0) {
+                const jeonsakName30 = selectedWo.transfer_sheet_size === "320x450" ? "전사지 32*45" : "전사지 30*40";
+                const { data: jsMatData } = await supabase.from("materials")
+                  .select("id").eq("name", jeonsakName30).maybeSingle();
+                if (jsMatData?.id) {
+                  const todayKSTDate = new Date(
+                    new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
+                  ).toISOString().slice(0, 10);
+                  const { error: jsErr } = await supabase.from("material_usage_logs").insert({
+                    material_id: jsMatData.id,
+                    used_date: todayKSTDate,
+                    quantity: totalSheets,
+                    unit: "ea",
+                    work_type: "product",
+                    note: jeonsakNote,
+                    created_by: userId,
+                  });
+                  if (jsErr) stockErrors.push(`전사지 차감 실패: ${jsErr.message}`);
+                } else {
+                  stockErrors.push(`원료 '${jeonsakName30}'을 찾을 수 없습니다.`);
                 }
               }
-            } else if (!isNeoColorWo && isTransferSheetType(ft)) {
+            }
+          } else if (!isNeoColorWo && isTransferSheetType(ft)) {
             // 트랜스퍼시트류 중간재 (생산용전사지/전사지 완전일치 제외) — 선택된 크기 기준 출고+불량 합계로 직접 차감
             const sheetMaterialName = selectedWo.transfer_sheet_size === "320x450" ? "전사지 32*45" : "전사지 30*40";
             let totalSheets = 0;
