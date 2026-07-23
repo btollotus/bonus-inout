@@ -3533,14 +3533,14 @@ if (woSubNameVal) {
             {/* 선발행 기록 (거래내역 입력 전 세금계산서만 먼저 발행한 경우) */}
             <div className={`${card} p-4`}>
               <div className="mb-3">
-                <div className="text-lg font-semibold">⚠️ 선발행 기록 (거래내역 입력 전)</div>
-                <div className="mt-1 text-xs text-slate-600">거래내역을 아직 입력하지 않았지만 세금계산서를 먼저 발행한 경우, 잊지 않도록 여기에 메모해두세요. 나중에 거래내역을 입력한 뒤 직접 삭제하시면 됩니다.</div>
+                <div className="text-lg font-semibold">⚠️ 세금계산서 선발행 기록 </div>
+                <div className="mt-1 text-xs text-slate-600"> 세금계산서 선발행한 경우 기록, 입금 확인 후 삭제.</div>
               </div>
 
               {pendingPrepaidOrders.length > 0 ? (
                 <div className="mb-4">
                   <div className="mb-2 flex items-center justify-between">
-                    <div className="text-sm font-semibold text-red-600">세무 · 선발행·미입금 주문 (세금계산서 발행완료, 입금 미확인) {pendingPrepaidOrders.length}건</div>
+                    <div className="text-sm font-semibold text-red-600">세금계산서 선발행·미입금 주문 {pendingPrepaidOrders.length}건</div>
                     <button className={miniBtn} onClick={loadPendingPrepaidOrders}>새로고침</button>
                   </div>
                   <div className="space-y-2">
