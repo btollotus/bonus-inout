@@ -3540,7 +3540,7 @@ if (woSubNameVal) {
               {pendingPrepaidOrders.length > 0 ? (
                 <div className="mb-4">
                   <div className="mb-2 flex items-center justify-between">
-                    <div className="text-sm font-semibold text-red-600">세금계산서 선발행·미입금 주문 자동기록 {pendingPrepaidOrders.length}건</div>
+                    <div className="text-sm font-semibold text-red-600">[자동입력]세금계산서 선발행·미입금 주문 {pendingPrepaidOrders.length}건</div>
                     <button className={miniBtn} onClick={loadPendingPrepaidOrders}>새로고침</button>
                   </div>
                   <div className="space-y-2">
@@ -3558,7 +3558,7 @@ if (woSubNameVal) {
                 </div>
               ) : null}
 
-                    <div className="text-sm font-semibold text-red-600">세금계산서 선발행·미입금 주문 수동입력</div>
+                    <div className="text-sm font-semibold text-red-600">[수동입력]세금계산서 선발행·미입금 주문</div>
               <div className="flex flex-wrap items-end gap-2">
                 <div>
                   <div className="mb-1 text-xs text-slate-600">발행일</div>
