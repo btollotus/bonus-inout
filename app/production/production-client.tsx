@@ -2610,7 +2610,7 @@ const totalOrder = items
                         const dates = Array.from(new Set((selectedWo.work_order_items ?? []).map((it) => it.delivery_date).filter(Boolean)));
                         return dates.length > 0 ? (<><span>·</span><span>납기일 {dates.join(", ")}</span></>) : null;
                       })()}
-                      {selectedWo.production_done_at && (<><span>·</span><span>생산완료일 {utcToKSTDateTime(selectedWo.production_done_at)}</span></>)}
+                      {selectedWo.production_done_at && (<><span>·</span><span>생산완료일 {new Date(new Date(selectedWo.production_done_at).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10)}</span></>)}
                     </div>
                   </div>
                   <div className="flex gap-1.5">
