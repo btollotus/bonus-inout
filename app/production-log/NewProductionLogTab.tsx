@@ -404,16 +404,20 @@ setLoading(false);
         return acc;
       }, {});
 
+      // 인쇄 전용: "도눔(은박)" 품목/작업지시서는 인쇄 행에서 제외 (화면 조회에는 표시 유지)
+      const getPrintRows = (wo: WorkOrder) => {
+        const woItems = (wo.items ?? []).filter(it => it.name && it.name !== "도눔(은박)");
+        if (woItems.length > 0) return woItems;
+        if (wo.product_name === "도눔(은박)") return [];
+        return [{ name: wo.product_name, order_qty: 0, actual_qty: 0, unit_weight: 0 }];
+      };
       const woRows = Object.entries(woByWorkerPrint).flatMap(([worker, orders]) => {
         // 작업자별 전체 행 수 계산 (rowspan용)
-        const workerTotalRows = orders.reduce((sum, wo) => {
-          const woItems = (wo.items ?? []).filter(it => it.name);
-          return sum + Math.max(woItems.length, 1);
-        }, 0);
+        const workerTotalRows = orders.reduce((sum, wo) => sum + getPrintRows(wo).length, 0);
         let workerRendered = false;
         return orders.flatMap((wo) => {
-          const woItems = (wo.items ?? []).filter(it => it.name);
-          const rows = woItems.length > 0 ? woItems : [{ name: wo.product_name, order_qty: 0, actual_qty: 0, unit_weight: 0 }];
+          const rows = getPrintRows(wo);
+          if (rows.length === 0) return [];
           const usageStr = (wo.usages ?? []).map(u => `${u.name} ${u.quantity.toLocaleString()}${u.unit}`).join(", ") || "—";
           return rows.map((item, idx) => {
             const showWorker = !workerRendered && idx === 0;
