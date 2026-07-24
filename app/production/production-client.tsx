@@ -212,6 +212,15 @@ function toInt(v: unknown): number {
   const n = parseInt(String(v ?? "").replace(/,/g, ""), 10);
   return isNaN(n) ? 0 : n;
 }
+async function logStockError(params: { workOrderId: string | null; workOrderNo: string; itemId?: string | null; errorType: "OUT" | "IN"; errorMessage: string; }) {
+  await supabase.from("work_order_stock_errors").insert({
+    work_order_id: params.workOrderId,
+    work_order_no: params.workOrderNo,
+    item_id: params.itemId ?? null,
+    error_type: params.errorType,
+    error_message: params.errorMessage,
+  });
+}
 function formatHHmmInput(digits: string): string {
   if (digits.length <= 2) return digits;
   return `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
@@ -1437,7 +1446,10 @@ export default function ProductionClient() {
            note: `도눔 포장완료 - ${selectedWo.work_order_no}`,
            created_by: userId,
          });
-         if (transferErr) stockErrors.push("차감 실패: " + transferErr.message);
+         if (transferErr) {
+          stockErrors.push("차감 실패: " + transferErr.message);
+          await logStockError({ workOrderId: selectedWo.id, workOrderNo: selectedWo.work_order_no, itemId: item.id, errorType: "OUT", errorMessage: transferErr.message });
+        }
        }
        const lotsForDb = transferLots.map((l) => ({ lot_id: l.lot_id, qty: toInt(l.qty) }));
        const totalQty = lotsForDb.reduce((s, l) => s + l.qty, 0);
@@ -1462,17 +1474,27 @@ export default function ProductionClient() {
        const { data: existingLot } = await supabase.from("lots").select("id").eq("variant_id", variantId).eq("expiry_date", pi.expiry_date).maybeSingle();
        if (existingLot) { lotId = existingLot.id; } else {
          const { data: newLot, error: lotErr } = await supabase.from("lots").insert({ variant_id: variantId, expiry_date: pi.expiry_date }).select("id").single();
-         if (lotErr) { stockErrors.push("LOT 생성 실패: " + lotErr.message); continue; }
+         if (lotErr) {
+           stockErrors.push("LOT 생성 실패: " + lotErr.message);
+           await logStockError({ workOrderId: selectedWo.id, workOrderNo: selectedWo.work_order_no, itemId: item.id, errorType: "IN", errorMessage: "LOT 생성 실패: " + lotErr.message });
+           continue;
+         }
          lotId = newLot.id;
        }
        const inNote = `포장완료 - ${selectedWo.work_order_no}`;
        const { data: existingInMov } = await supabase.from("movements").select("id").eq("lot_id", lotId).eq("type", "IN").eq("note", inNote).limit(1);
        if (existingInMov && existingInMov.length > 0) {
          const { error: movUpdErr } = await supabase.from("movements").update({ qty: actual_qty }).eq("id", existingInMov[0].id);
-         if (movUpdErr) stockErrors.push("입고 갱신 실패: " + movUpdErr.message);
+         if (movUpdErr) {
+          stockErrors.push("입고 갱신 실패: " + movUpdErr.message);
+          await logStockError({ workOrderId: selectedWo.id, workOrderNo: selectedWo.work_order_no, itemId: item.id, errorType: "IN", errorMessage: "입고 갱신 실패: " + movUpdErr.message });
+        }
        } else {
          const { error: movErr } = await supabase.from("movements").insert({ lot_id: lotId, type: "IN", qty: actual_qty, happened_at: `${todayKSTDatePkg}T00:00:00+09:00`, note: inNote, created_by: userId });
-         if (movErr) stockErrors.push("입고 실패: " + movErr.message);
+         if (movErr) {
+          stockErrors.push("입고 실패: " + movErr.message);
+          await logStockError({ workOrderId: selectedWo.id, workOrderNo: selectedWo.work_order_no, itemId: item.id, errorType: "IN", errorMessage: "입고 실패: " + movErr.message });
+        }
        }
      }
       // 상태 완료
@@ -3746,7 +3768,10 @@ const totalOrder = items
                                   const { data: existingInLot } = await supabase.from("lots").select("id").eq("variant_id", inVariantId).eq("expiry_date", pi.expiry_date).maybeSingle();
                                   if (existingInLot) { inLotId = existingInLot.id; } else {
                                     const { data: newInLot, error: newInLotErr } = await supabase.from("lots").insert({ variant_id: inVariantId, expiry_date: pi.expiry_date }).select("id").single();
-                                    if (newInLotErr) { showToast("LOT 생성 실패: " + newInLotErr.message, "error"); return; }
+                                    if (newInLotErr) {
+                                      await logStockError({ workOrderId: selectedWo.id, workOrderNo: selectedWo.work_order_no, itemId: item.id, errorType: "IN", errorMessage: "LOT 생성 실패: " + newInLotErr.message });
+                                      showToast("LOT 생성 실패: " + newInLotErr.message, "error"); return;
+                                    }
                                     inLotId = newInLot.id;
                                   }
                                   const packagingInNote = `포장완료 - ${selectedWo.work_order_no}`;
@@ -3759,7 +3784,10 @@ const totalOrder = items
                                       happened_at: `${todayKSTForIn}T00:00:00+09:00`,
                                       note: packagingInNote, created_by: inUser?.id ?? null,
                                     });
-                                    if (packagingInErr) { showToast("완제품 입고 실패: " + packagingInErr.message, "error"); return; }
+                                    if (packagingInErr) {
+                                      await logStockError({ workOrderId: selectedWo.id, workOrderNo: selectedWo.work_order_no, itemId: item.id, errorType: "IN", errorMessage: "완제품 입고 실패: " + packagingInErr.message });
+                                      showToast("완제품 입고 실패: " + packagingInErr.message, "error"); return;
+                                    }
                                   }
                                 }
                               }
