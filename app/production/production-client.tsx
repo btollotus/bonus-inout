@@ -3731,6 +3731,40 @@ const totalOrder = items
                             const { error } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, gift_qty: pi.gift_qty ? toInt(pi.gift_qty) : 0, defect_qty: pi.defect_qty ? toInt(pi.defect_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null, transfer_lot_id: pi.transfer_lot_id || null, transfer_qty: pi.transfer_qty ? toInt(pi.transfer_qty) : null }).eq("id", item.id);
                             if (error) { showToast("수정 실패: " + error.message, "error"); return; }
 
+                            // ── 도늠 포장(skip_production_check) WO: 완제품 입고(IN) 누락분 보정 — 최초 포장완료 처리 시 수량/소비기한이 비어있어 입고가 스킵된 경우, 수정 저장 시점에 값이 채워지면 여기서 생성 ──
+                            if (selectedWo.status === "완료" && selectedWo.skip_production_check && pi.actual_qty && pi.expiry_date) {
+                              const actualQtyForIn = toInt(pi.actual_qty);
+                              if (actualQtyForIn > 0) {
+                                let inVariantId: string | null = null;
+                                if (item.barcode_no) {
+                                  const { data: pbData } = await supabase.from("product_barcodes").select("variant_id").eq("barcode", item.barcode_no).maybeSingle();
+                                  inVariantId = pbData?.variant_id ?? null;
+                                }
+                                if (!inVariantId) inVariantId = selectedWo.variant_id;
+                                if (inVariantId) {
+                                  let inLotId: string | null = null;
+                                  const { data: existingInLot } = await supabase.from("lots").select("id").eq("variant_id", inVariantId).eq("expiry_date", pi.expiry_date).maybeSingle();
+                                  if (existingInLot) { inLotId = existingInLot.id; } else {
+                                    const { data: newInLot, error: newInLotErr } = await supabase.from("lots").insert({ variant_id: inVariantId, expiry_date: pi.expiry_date }).select("id").single();
+                                    if (newInLotErr) { showToast("LOT 생성 실패: " + newInLotErr.message, "error"); return; }
+                                    inLotId = newInLot.id;
+                                  }
+                                  const packagingInNote = `포장완료 - ${selectedWo.work_order_no}`;
+                                  const { data: existingPackagingIn } = await supabase.from("movements").select("id").eq("lot_id", inLotId).eq("type", "IN").eq("note", packagingInNote).limit(1);
+                                  if (!existingPackagingIn || existingPackagingIn.length === 0) {
+                                    const { data: { user: inUser } } = await supabase.auth.getUser();
+                                    const todayKSTForIn = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+                                    const { error: packagingInErr } = await supabase.from("movements").insert({
+                                      lot_id: inLotId, type: "IN", qty: actualQtyForIn,
+                                      happened_at: `${todayKSTForIn}T00:00:00+09:00`,
+                                      note: packagingInNote, created_by: inUser?.id ?? null,
+                                    });
+                                    if (packagingInErr) { showToast("완제품 입고 실패: " + packagingInErr.message, "error"); return; }
+                                  }
+                                }
+                              }
+                            }
+
                             // ── 불량(defect_qty) 변경 시 — 기존 LOT의 IN/DISCARD movements 동기화 ──
                             if (isGeneralCompletedWo && newDefectQty !== oldDefectQty && item.expiry_date) {
                               let syncVariantId: string | null = null;
