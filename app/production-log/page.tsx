@@ -398,6 +398,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
   const [pestFormOpen, setPestFormOpen] = useState(false); // 방충방서 점검 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
   const [pestHasRecordToday, setPestHasRecordToday] = useState(false); // 오늘 방충방서 실제 저장 기록이 있는지 (폼에서 실시간 갱신)
   const [qcFormOpen, setQcFormOpen] = useState(false); // 자가품질검사 샘플준비 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
+  const [qcHasRecordToday, setQcHasRecordToday] = useState(false); // 오늘 자가품질검사 샘플준비 실제 저장 기록이 있는지 (폼에서 실시간 갱신)
   const [validityFormOpen, setValidityFormOpen] = useState(false); // 유효성평가검사 샘플준비 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
   const [validityHasRecordToday, setValidityHasRecordToday] = useState(false); // 오늘 유효성평가검사 실제 저장 기록이 있는지 (폼에서 실시간 갱신)
   const [pestDoneThisWeek, setPestDoneThisWeek] = useState(false);
@@ -767,7 +768,13 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
       return;
     }
     if (taskId === QC_SAMPLE_TASK_ID && currentChecked) {
-      setQcFormOpen((prev) => !prev);
+      const willOpen = !qcFormOpen;
+      setQcFormOpen(willOpen);
+      // 폼을 닫는 시점인데 오늘 실제 저장된 차감 기록이 없으면 체크를 원래대로(미체크) 되돌림
+      if (!willOpen && !qcHasRecordToday) {
+        setTaskChecks((prev) => ({ ...prev, [taskId]: false }));
+        setHasUnsavedChanges(true);
+      }
       return;
     }
     if (taskId === VALIDITY_SAMPLE_TASK_ID && currentChecked) {
@@ -1653,6 +1660,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
             userId={userId}
             showToast={showToast}
             onCancel={handleQcCancel}
+            onHasRecordChange={setQcHasRecordToday}
           />
         )}
 
@@ -4384,11 +4392,12 @@ const QC_MATERIALS = [
   { id: "00000000-0002-0000-0000-000000000001", name: "화이트컴파운드", qty: 600 },
 ];
 
-function QcSampleForm({ employeeName, userId, showToast, onCancel }: {
+function QcSampleForm({ employeeName, userId, showToast, onCancel, onHasRecordChange }: {
   employeeName: string;
   userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
   onCancel?: () => void;
+  onHasRecordChange?: (hasRecord: boolean) => void;
 }) {
   const today = todayKST();
   const [saving, setSaving] = useState(false);
@@ -4409,6 +4418,10 @@ function QcSampleForm({ employeeName, userId, showToast, onCancel }: {
         if (data && data.length > 0) setSavedAt(today);
       });
   }, [today, employeeName]);
+
+  useEffect(() => {
+    onHasRecordChange?.(!!savedAt);
+  }, [savedAt]);
 
   async function handleSave() {
     if (savedAt) return showToast("이미 오늘 저장된 기록이 있습니다.", "error");
