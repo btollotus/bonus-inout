@@ -390,12 +390,16 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
   const [viewRaizeCutMap, setViewRaizeCutMap] = useState<Record<string, number>>({});
   const [todayRaizeCut, setTodayRaizeCut] = useState<number | null>(null);
   const [raizeFormOpen, setRaizeFormOpen] = useState(false); // 레이즈재단 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
+  const [raizeHasRecordToday, setRaizeHasRecordToday] = useState(false); // 오늘 레이즈재단 실제 저장 기록이 있는지 (폼에서 실시간 갱신)
   const [pigmentFormOpen, setPigmentFormOpen] = useState(false); // 색소 배합 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
   const [pigmentHasRecordToday, setPigmentHasRecordToday] = useState(false); // 오늘 색소 배합 실제 저장 기록이 있는지 (폼에서 실시간 갱신)
   const [guarFormOpen, setGuarFormOpen] = useState(false); // 구아검 배합 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
+  const [guarHasRecordToday, setGuarHasRecordToday] = useState(false); // 오늘 구아검 배합 실제 저장 기록이 있는지 (폼에서 실시간 갱신)
   const [pestFormOpen, setPestFormOpen] = useState(false); // 방충방서 점검 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
+  const [pestHasRecordToday, setPestHasRecordToday] = useState(false); // 오늘 방충방서 실제 저장 기록이 있는지 (폼에서 실시간 갱신)
   const [qcFormOpen, setQcFormOpen] = useState(false); // 자가품질검사 샘플준비 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
   const [validityFormOpen, setValidityFormOpen] = useState(false); // 유효성평가검사 샘플준비 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
+  const [validityHasRecordToday, setValidityHasRecordToday] = useState(false); // 오늘 유효성평가검사 실제 저장 기록이 있는지 (폼에서 실시간 갱신)
   const [pestDoneThisWeek, setPestDoneThisWeek] = useState(false);
   const [todayWarmerClean, setTodayWarmerClean] = useState(false);
   const [viewWarmerCleanMap, setViewWarmerCleanMap] = useState<Record<string, boolean>>({});
@@ -723,7 +727,13 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
   async function handleTaskCheck(taskId: string, currentChecked: boolean) {
     // 레이즈재단/색소배합/구아검배합/방충방서/자가품질검사/유효성평가검사: 이미 체크된 상태에서 다시 누르면 체크는 해제하지 않고 폼만 펼치기/접기 (초록색 UI 유지)
     if (taskId === "ab0142bd-5f95-48cc-9786-1100186b0502" && currentChecked) {
-      setRaizeFormOpen((prev) => !prev);
+      const willOpen = !raizeFormOpen;
+      setRaizeFormOpen(willOpen);
+      // 폼을 닫는 시점인데 오늘 실제 저장된 재단 기록이 없으면 체크를 원래대로(미체크) 되돌림
+      if (!willOpen && !raizeHasRecordToday) {
+        setTaskChecks((prev) => ({ ...prev, [taskId]: false }));
+        setHasUnsavedChanges(true);
+      }
       return;
     }
     if (taskId === "7e8ecc06-6f92-49b5-802e-7da0bd868a2c" && currentChecked) {
@@ -737,11 +747,23 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
       return;
     }
     if (taskId === "3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673" && currentChecked) {
-      setGuarFormOpen((prev) => !prev);
+      const willOpen = !guarFormOpen;
+      setGuarFormOpen(willOpen);
+      // 폼을 닫는 시점인데 오늘 실제 저장된 배합 기록이 없으면 체크를 원래대로(미체크) 되돌림
+      if (!willOpen && !guarHasRecordToday) {
+        setTaskChecks((prev) => ({ ...prev, [taskId]: false }));
+        setHasUnsavedChanges(true);
+      }
       return;
     }
     if (taskId === PEST_TASK_ID && currentChecked) {
-      setPestFormOpen((prev) => !prev);
+      const willOpen = !pestFormOpen;
+      setPestFormOpen(willOpen);
+      // 폼을 닫는 시점인데 오늘 실제 저장된 방충방서 기록이 없으면 체크를 원래대로(미체크) 되돌림
+      if (!willOpen && !pestHasRecordToday) {
+        setTaskChecks((prev) => ({ ...prev, [taskId]: false }));
+        setHasUnsavedChanges(true);
+      }
       return;
     }
     if (taskId === QC_SAMPLE_TASK_ID && currentChecked) {
@@ -749,7 +771,13 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
       return;
     }
     if (taskId === VALIDITY_SAMPLE_TASK_ID && currentChecked) {
-      setValidityFormOpen((prev) => !prev);
+      const willOpen = !validityFormOpen;
+      setValidityFormOpen(willOpen);
+      // 폼을 닫는 시점인데 오늘 실제 저장된 차감 기록이 없으면 체크를 원래대로(미체크) 되돌림
+      if (!willOpen && !validityHasRecordToday) {
+        setTaskChecks((prev) => ({ ...prev, [taskId]: false }));
+        setHasUnsavedChanges(true);
+      }
       return;
     }
 
@@ -1585,6 +1613,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
             employeeName={selectedEmployee.name}
             userId={userId}
             showToast={showToast}
+            onHasRecordChange={setGuarHasRecordToday}
           />
         )}
 
@@ -1594,6 +1623,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
             employeeName={selectedEmployee.name}
             userId={userId}
             showToast={showToast}
+            onHasRecordChange={setRaizeHasRecordToday}
           />
         )}
 
@@ -1604,6 +1634,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
             userId={userId}
             showToast={showToast}
             onSaved={() => setPestDoneThisWeek(true)}
+            onHasRecordChange={setPestHasRecordToday}
           />
         )}
 
@@ -1624,6 +1655,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
             userId={userId}
             showToast={showToast}
             onCancel={handleValidityCancel}
+            onHasRecordChange={setValidityHasRecordToday}
           />
         )}
       </div>
@@ -3497,10 +3529,11 @@ function PigmentBlendForm({ employeeName, userId, showToast, onHasRecordChange }
 // ═══════════════════════════════════════════════════════════
 // 구아검 배합 폼 (체크리스트 연동)
 // ═══════════════════════════════════════════════════════════
-function GuarBlendForm({ employeeName, userId, showToast }: {
+function GuarBlendForm({ employeeName, userId, showToast, onHasRecordChange }: {
   employeeName: string;
   userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
+  onHasRecordChange?: (hasRecord: boolean) => void;
 }) {
   const today = todayKST();
   const [multiplier, setMultiplier] = useState(1);
@@ -3513,6 +3546,10 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
   const WATER_PER_BATCH = 1000;
 
   useEffect(() => { loadSavedLog(); }, []);
+
+  useEffect(() => {
+    onHasRecordChange?.(!!savedLog);
+  }, [savedLog]);
 
   async function loadSavedLog() {
     const { data: guarRecipe, error: guarRecipeErr } = await supabase.from("blend_recipes")
@@ -3614,10 +3651,11 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
   );
 }
 
-function RaizeCutForm({ employeeName, userId, showToast }: {
+function RaizeCutForm({ employeeName, userId, showToast, onHasRecordChange }: {
   employeeName: string;
   userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
+  onHasRecordChange?: (hasRecord: boolean) => void;
 }) {
   const today = todayKST();
   const [cutDate, setCutDate] = useState(today);
@@ -3630,6 +3668,10 @@ function RaizeCutForm({ employeeName, userId, showToast }: {
   const [selected, setSelected] = useState<{ lot_id: string; qty: string }[]>([]);
 
   useEffect(() => { loadLots(); loadSavedLogs(); }, []);
+
+  useEffect(() => {
+    onHasRecordChange?.(savedLogs.length > 0);
+  }, [savedLogs]);
 
   async function loadLots() {
     setLoading(true);
@@ -3877,10 +3919,11 @@ function PestNumCell({ value, onChange }: { value:number; onChange:(v:number)=>v
   );
 }
 
-function PestInputForm({ employeeName, userId, showToast, onSaved }: {
+function PestInputForm({ employeeName, userId, showToast, onSaved, onHasRecordChange }: {
   employeeName: string; userId: string | null;
   showToast: (msg:string, type?:"success"|"error")=>void;
   onSaved: ()=>void;
+  onHasRecordChange?: (hasRecord: boolean) => void;
 }) {
   const today = todayKST();
   const season = getPestSeason(today);
@@ -3904,6 +3947,10 @@ function PestInputForm({ employeeName, userId, showToast, onSaved }: {
     for (const trap of TRAPS_PEST) m[trap] = { replaced: false, note: "" };
     return m;
   });
+
+  useEffect(() => {
+    onHasRecordChange?.(!!savedDate);
+  }, [savedDate]);
 
   useEffect(() => {
     // 오늘 이미 저장된 기록 있으면 불러오기
@@ -4412,11 +4459,12 @@ const VALIDITY_MATERIALS = [
   { id: "00000000-0003-0000-0000-000000000001", name: "팜유",           qty: 200 },
 ];
 
-function ValiditySampleForm({ employeeName, userId, showToast, onCancel }: {
+function ValiditySampleForm({ employeeName, userId, showToast, onCancel, onHasRecordChange }: {
   employeeName: string;
   userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
   onCancel?: () => void;
+  onHasRecordChange?: (hasRecord: boolean) => void;
 }) {
   const today = todayKST();
   const [saving, setSaving] = useState(false);
@@ -4437,6 +4485,10 @@ function ValiditySampleForm({ employeeName, userId, showToast, onCancel }: {
         if (data && data.length > 0) setSavedAt(today);
       });
   }, [today, employeeName]);
+
+  useEffect(() => {
+    onHasRecordChange?.(!!savedAt);
+  }, [savedAt]);
 
   async function handleSave() {
     if (savedAt) return showToast("이미 오늘 저장된 기록이 있습니다.", "error");
