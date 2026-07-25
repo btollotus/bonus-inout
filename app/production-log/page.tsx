@@ -359,6 +359,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [todayLog, setTodayLog] = useState<DailyWorkLog | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrderRef[]>([]);
   const [taskChecks, setTaskChecks] = useState<Record<string, boolean>>({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // 체크리스트 변경 후 임시저장 버튼을 아직 안 눌렀는지 여부 (경고 표시용)
   const [guarLoggedToday, setGuarLoggedToday] = useState(false); // 오늘 구아검 배합 기록 존재 여부 (체크박스와 별개)
   const [pigmentLoggedToday, setPigmentLoggedToday] = useState(false); // 오늘 색소 배합 기록 존재 여부 (체크박스와 별개, recipe_name 무관)
   const [qcSampleLoggedToday, setQcSampleLoggedToday] = useState(false); // 오늘 자가품질검사 샘플준비 기록 존재 여부 (체크박스와 별개)
@@ -494,6 +495,7 @@ function ProductionLogTab({ role, userId, showToast }: {
     const log = logRes.data as DailyWorkLog | null;
     setTodayLog(log);
     setWorkOrders((woRes.data ?? []) as WorkOrderRef[]);
+    setHasUnsavedChanges(false);
     if (log) {
       setTaskChecks(log.task_checks ?? {});
       setExtraNote(log.extra_note ?? "");
@@ -688,6 +690,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   async function handleTaskCheck(taskId: string, currentChecked: boolean) {
     const nextChecked = !currentChecked;
     setTaskChecks((prev) => ({ ...prev, [taskId]: nextChecked }));
+    setHasUnsavedChanges(true);
 
     // 자가품질검사 체크 해제 시 → 차감 기록 삭제
     if (taskId === QC_SAMPLE_TASK_ID && !nextChecked && selectedEmployee) {
@@ -1451,7 +1454,14 @@ function ProductionLogTab({ role, userId, showToast }: {
 <div className={`${card} p-4`}>
   <div className="mb-3 flex items-center justify-between">
     <div className="font-semibold text-sm">📋 업무 체크리스트</div>
-          <div className="text-xs text-slate-400">{checkedCount}/{taskTypes.length} 완료</div>
+          <div className="flex items-center gap-2">
+            {!readOnly && hasUnsavedChanges && (
+              <span className="rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+                ⚠ 저장 안 된 변경사항 있음 · 아래 임시저장 버튼을 눌러주세요
+              </span>
+            )}
+            <div className="text-xs text-slate-400">{checkedCount}/{taskTypes.length} 완료</div>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {taskTypes.map((t) => {
