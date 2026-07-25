@@ -1446,6 +1446,8 @@ function ProductionLogTab({ role, userId, showToast }: {
             const pestWarning = isPest && !pestDoneThisWeek && !checked;
             const guarHasRecordBadge = isGuar && guarLoggedToday && !checked;
             const pigmentHasRecordBadge = isPigment && pigmentLoggedToday && !checked;
+            const isRaizeCut = t.id === "ab0142bd-5f95-48cc-9786-1100186b0502";
+            const raizeCutHasRecordBadge = isRaizeCut && !!todayRaizeCut && !checked;
             return (
               <button key={t.id}
                 disabled={isDisabled}
@@ -1456,16 +1458,16 @@ function ProductionLogTab({ role, userId, showToast }: {
                       : "border-green-400 bg-green-50 text-green-700"
                       : pestWarning
                       ? "border-amber-400 bg-amber-50 text-amber-700"
-                      : (guarHasRecordBadge || pigmentHasRecordBadge)
+                      : (guarHasRecordBadge || pigmentHasRecordBadge || raizeCutHasRecordBadge)
                         ? "border-blue-400 bg-blue-50 text-blue-700"
                         : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}
                   ${isDisabled ? "opacity-60 cursor-not-allowed" : "active:scale-95"}`}
                   onClick={() => !isDisabled && handleTaskCheck(t.id, taskChecks[t.id] === true)}>
-                <span className="mr-1.5">{checked ? "✅" : pestWarning ? "⚠" : (guarHasRecordBadge || pigmentHasRecordBadge) ? "✅" : "☐"}</span>
+                <span className="mr-1.5">{checked ? "✅" : pestWarning ? "⚠" : (guarHasRecordBadge || pigmentHasRecordBadge || raizeCutHasRecordBadge) ? "✅" : "☐"}</span>
                 {t.name}
                 {pestWarning && <span className="ml-1 text-[10px] font-semibold">이번 주 미완료</span>}
                 {isPest && pestDoneThisWeek && !checked && <span className="ml-1 text-[10px] text-green-600 font-semibold">이번 주 완료</span>}
-                {(guarHasRecordBadge || pigmentHasRecordBadge) && (
+                {(guarHasRecordBadge || pigmentHasRecordBadge || raizeCutHasRecordBadge) && (
                   <span className="ml-1 text-[10px] text-blue-600 font-semibold">📝 오늘 입력 있음 · 눌러서 확인</span>
                 )}
               </button>
