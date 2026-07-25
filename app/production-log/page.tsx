@@ -715,11 +715,17 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
   }
 
   async function handleTaskCheck(taskId: string, currentChecked: boolean) {
+    // 레이즈재단: 이미 체크된 상태에서 다시 누르면 체크는 해제하지 않고 폼만 펼치기/접기 (초록색 UI 유지)
+    if (taskId === "ab0142bd-5f95-48cc-9786-1100186b0502" && currentChecked) {
+      setRaizeFormOpen((prev) => !prev);
+      return;
+    }
+
     const nextChecked = !currentChecked;
     setTaskChecks((prev) => ({ ...prev, [taskId]: nextChecked }));
     setHasUnsavedChanges(true);
 
-    // 레이즈재단 체크박스를 이번 세션에서 직접 누른 경우에만 폼을 펼침/접음
+    // 레이즈재단을 이번 세션에서 처음 체크하는 경우에만 폼을 펼침
     if (taskId === "ab0142bd-5f95-48cc-9786-1100186b0502") {
       setRaizeFormOpen(nextChecked);
     }
