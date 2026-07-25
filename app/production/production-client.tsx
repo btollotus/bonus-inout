@@ -3717,7 +3717,11 @@ const totalOrder = items
                         ? "border-amber-500 bg-amber-500 hover:bg-amber-600 active:bg-amber-700"
                         : "border-green-500 bg-green-600 hover:bg-green-700 active:bg-green-800"
                     }`}
-                    onClick={markProductionComplete}
+                    onClick={
+                      woChecks?.status_production && !woChecks?.status_input
+                        ? () => router.push(`/production-log?tab=ccp1p&wo=${selectedWo.id}`)
+                        : markProductionComplete
+                    }
                     disabled={isCompleting}
                   >
                     {isCompleting ? "처리 중..." : selectedWo.skip_production_check ? "포장완료 처리" : woChecks?.status_production && !woChecks?.status_input ? "✅ 생산완료 · CCP-1P 대기 중" : "생산완료 처리"}
