@@ -663,7 +663,7 @@ export default function ScanClient() {
       type: MovementType;
       qty: number;
       note?: string | null;
-      created_at: string;
+      happened_at: string;
     }[] = [];
 
     for (const lot of fefoLots) {
@@ -677,7 +677,7 @@ export default function ScanClient() {
         type: row.type,
         qty: use,
         note: row.note || null,
-        created_at: workDateTimestamp(),
+        happened_at: workDateTimestamp(),  // ✅ created_at → happened_at 으로 변경 (saveInDiscard와 동일 패턴, 데이터 영향 0건 확인 후 반영)
       });
       remain -= use;
     }
