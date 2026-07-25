@@ -391,6 +391,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
   const [todayRaizeCut, setTodayRaizeCut] = useState<number | null>(null);
   const [raizeFormOpen, setRaizeFormOpen] = useState(false); // 레이즈재단 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
   const [pigmentFormOpen, setPigmentFormOpen] = useState(false); // 색소 배합 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
+  const [pigmentHasRecordToday, setPigmentHasRecordToday] = useState(false); // 오늘 색소 배합 실제 저장 기록이 있는지 (폼에서 실시간 갱신)
   const [guarFormOpen, setGuarFormOpen] = useState(false); // 구아검 배합 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
   const [pestFormOpen, setPestFormOpen] = useState(false); // 방충방서 점검 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
   const [qcFormOpen, setQcFormOpen] = useState(false); // 자가품질검사 샘플준비 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
@@ -726,7 +727,13 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
       return;
     }
     if (taskId === "7e8ecc06-6f92-49b5-802e-7da0bd868a2c" && currentChecked) {
-      setPigmentFormOpen((prev) => !prev);
+      const willOpen = !pigmentFormOpen;
+      setPigmentFormOpen(willOpen);
+      // 폼을 닫는 시점인데 오늘 실제 저장된 배합 기록이 없으면 체크를 원래대로(미체크) 되돌림
+      if (!willOpen && !pigmentHasRecordToday) {
+        setTaskChecks((prev) => ({ ...prev, [taskId]: false }));
+        setHasUnsavedChanges(true);
+      }
       return;
     }
     if (taskId === "3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673" && currentChecked) {
@@ -1568,6 +1575,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
             employeeName={selectedEmployee.name}
             userId={userId}
             showToast={showToast}
+            onHasRecordChange={setPigmentHasRecordToday}
           />
         )}
 
@@ -3300,10 +3308,11 @@ const PEST_TASK_ID = "3d4a86df-e4cb-455e-b672-9f1910c04bc9";
 const QC_SAMPLE_TASK_ID = "acccc4a9-e51b-4fe4-95e3-172ce81288c5";
 const VALIDITY_SAMPLE_TASK_ID = "8ff14867-9b34-491c-ac1f-eb00c777340f";
 
-function PigmentBlendForm({ employeeName, userId, showToast }: {
+function PigmentBlendForm({ employeeName, userId, showToast, onHasRecordChange }: {
   employeeName: string;
   userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
+  onHasRecordChange?: (hasRecord: boolean) => void;
 }) {
   const today = todayKST();
   const [recipes, setRecipes] = useState<BlendRecipe[]>([]);
@@ -3322,6 +3331,10 @@ function PigmentBlendForm({ employeeName, userId, showToast }: {
       .then(({ data }) => setRecipes(data ?? []));
     loadSavedLogs();
   }, []);
+
+  useEffect(() => {
+    onHasRecordChange?.(savedLogs.length > 0);
+  }, [savedLogs]);
 
   async function loadSavedLogs() {
     const { data } = await supabase.from("blend_logs")
