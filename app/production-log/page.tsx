@@ -1485,14 +1485,8 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {taskTypes.map((t) => {
             const checked = taskChecks[t.id] === true;
-            const isPigment = t.id === "7e8ecc06-6f92-49b5-802e-7da0bd868a2c";
-            const isGuar = t.id === "3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673";
             const isPest = t.id === PEST_TASK_ID;
             const pestWarning = isPest && !pestDoneThisWeek && !checked;
-            const guarHasRecordBadge = isGuar && guarLoggedToday && !checked;
-            const pigmentHasRecordBadge = isPigment && pigmentLoggedToday && !checked;
-            const isRaizeCut = t.id === "ab0142bd-5f95-48cc-9786-1100186b0502";
-            const raizeCutHasRecordBadge = isRaizeCut && !!todayRaizeCut && !checked;
             const isQcSample = t.id === QC_SAMPLE_TASK_ID;
             const qcSampleHasRecordBadge = isQcSample && qcSampleLoggedToday && !checked;
             const isValiditySample = t.id === VALIDITY_SAMPLE_TASK_ID;
@@ -1502,21 +1496,19 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
                 disabled={isDisabled}
                 className={`rounded-xl border-2 px-3 py-3 text-sm font-medium text-left transition-all
                   ${checked
-                    ? (isPigment || isGuar)
-                      ? "border-blue-400 bg-blue-50 text-blue-700"
-                      : "border-green-400 bg-green-50 text-green-700"
+                    ? "border-green-400 bg-green-50 text-green-700"
                       : pestWarning
                       ? "border-amber-400 bg-amber-50 text-amber-700"
-                      : (guarHasRecordBadge || pigmentHasRecordBadge || raizeCutHasRecordBadge || qcSampleHasRecordBadge || validitySampleHasRecordBadge)
+                      : (qcSampleHasRecordBadge || validitySampleHasRecordBadge)
                         ? "border-blue-400 bg-blue-50 text-blue-700"
                         : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}
                   ${isDisabled ? "opacity-60 cursor-not-allowed" : "active:scale-95"}`}
                   onClick={() => !isDisabled && handleTaskCheck(t.id, taskChecks[t.id] === true)}>
-                <span className="mr-1.5">{checked ? "✅" : pestWarning ? "⚠" : (guarHasRecordBadge || pigmentHasRecordBadge || raizeCutHasRecordBadge || qcSampleHasRecordBadge || validitySampleHasRecordBadge) ? "✅" : "☐"}</span>
+                <span className="mr-1.5">{checked ? "✅" : pestWarning ? "⚠" : (qcSampleHasRecordBadge || validitySampleHasRecordBadge) ? "✅" : "☐"}</span>
                 {t.name}
                 {pestWarning && <span className="ml-1 text-[10px] font-semibold">이번 주 미완료</span>}
                 {isPest && pestDoneThisWeek && !checked && <span className="ml-1 text-[10px] text-green-600 font-semibold">이번 주 완료</span>}
-                {(guarHasRecordBadge || pigmentHasRecordBadge || raizeCutHasRecordBadge || qcSampleHasRecordBadge || validitySampleHasRecordBadge) && (
+                {(qcSampleHasRecordBadge || validitySampleHasRecordBadge) && (
                   <span className="ml-1 text-[10px] text-blue-600 font-semibold">📝 오늘 입력 있음 · 눌러서 확인</span>
                 )}
               </button>
