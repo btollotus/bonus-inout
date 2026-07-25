@@ -1437,19 +1437,19 @@ function ProductionLogTab({ role, userId, showToast }: {
                     ? (isPigment || isGuar)
                       ? "border-blue-400 bg-blue-50 text-blue-700"
                       : "border-green-400 bg-green-50 text-green-700"
-                    : pestWarning
+                      : pestWarning
                       ? "border-amber-400 bg-amber-50 text-amber-700"
                       : guarHasRecordBadge
-                        ? "border-red-400 bg-red-50 text-red-700"
+                        ? "border-blue-400 bg-blue-50 text-blue-700"
                         : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}
                   ${isDisabled ? "opacity-60 cursor-not-allowed" : "active:scale-95"}`}
                   onClick={() => !isDisabled && handleTaskCheck(t.id, taskChecks[t.id] === true)}>
-                <span className="mr-1.5">{checked ? "✅" : pestWarning ? "⚠" : "☐"}</span>
+                <span className="mr-1.5">{checked ? "✅" : pestWarning ? "⚠" : guarHasRecordBadge ? "✅" : "☐"}</span>
                 {t.name}
                 {pestWarning && <span className="ml-1 text-[10px] font-semibold">이번 주 미완료</span>}
                 {isPest && pestDoneThisWeek && !checked && <span className="ml-1 text-[10px] text-green-600 font-semibold">이번 주 완료</span>}
                 {guarHasRecordBadge && (
-                  <span className="ml-1 text-[10px] text-red-600 font-semibold">📝 오늘 입력 있음 · 눌러서 확인</span>
+                  <span className="ml-1 text-[10px] text-blue-600 font-semibold">📝 오늘 입력 있음 · 눌러서 확인</span>
                 )}
               </button>
             );
