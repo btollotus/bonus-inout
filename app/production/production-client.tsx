@@ -1350,34 +1350,52 @@ export default function ProductionClient() {
       const { data: itemsData } = await supabase.from("work_order_items").select("*").eq("work_order_id", woId);
       const { error: backupErr } = await supabase.from("deleted_work_orders").insert({ original_id: woId, work_order_no: woData.work_order_no, snapshot: woData, items_snapshot: itemsData ?? [], deleted_by: currentUserIdRef.current, deleted_by_name: pinName });
       if (backupErr) { showToast("백업 저장 실패: " + backupErr.message, "error"); return; }
-      await supabase.from("work_order_items").update({ order_id: null }).eq("work_order_id", woId);
-      if (woData.linked_order_id) { await supabase.from("orders").update({ work_order_item_id: null }).eq("id", woData.linked_order_id); }
-      await supabase.from("work_order_items").delete().eq("work_order_id", woId);
+      const { error: itemsClearErr } = await supabase.from("work_order_items").update({ order_id: null }).eq("work_order_id", woId);
+      if (itemsClearErr) console.error(`[deleteWo] work_order_items order_id 초기화 오류 (${woData.work_order_no}):`, itemsClearErr.message);
+      if (woData.linked_order_id) {
+        const { error: orderClearErr } = await supabase.from("orders").update({ work_order_item_id: null }).eq("id", woData.linked_order_id);
+        if (orderClearErr) console.error(`[deleteWo] orders.work_order_item_id 초기화 오류 (${woData.work_order_no}):`, orderClearErr.message);
+      }
+      const { error: itemsDeleteErr } = await supabase.from("work_order_items").delete().eq("work_order_id", woId);
+      if (itemsDeleteErr) console.error(`[deleteWo] work_order_items 삭제 오류 (${woData.work_order_no}):`, itemsDeleteErr.message);
       if (woData.work_order_no) {
-        await supabase.from("ccp_wo_events").delete().eq("work_order_no", woData.work_order_no);
-        await supabase.from("deleted_work_order_nos").insert({ work_order_no: woData.work_order_no });
+        const { error: ccpDeleteErr } = await supabase.from("ccp_wo_events").delete().eq("work_order_no", woData.work_order_no);
+        if (ccpDeleteErr) console.error(`[deleteWo] ccp_wo_events 삭제 오류 (${woData.work_order_no}):`, ccpDeleteErr.message);
+        const { error: deletedNoInsertErr } = await supabase.from("deleted_work_order_nos").insert({ work_order_no: woData.work_order_no });
+        if (deletedNoInsertErr) console.error(`[deleteWo] deleted_work_order_nos insert 오류 (${woData.work_order_no}):`, deletedNoInsertErr.message);
         // 원료수불부 차감 기록 삭제 (컴파운드, 이산화티타늄, 전사지)
-        await supabase.from("material_usage_logs").delete().eq("note", `작업지시서 생산완료 - ${woData.work_order_no}`);
-        await supabase.from("material_usage_logs").delete().eq("note", `이산화티타늄 차감 - ${woData.work_order_no}`);
-        await supabase.from("material_usage_logs").delete().like("note", `전사지 차감 - ${woData.work_order_no}%`);
+        const { error: matLog1Err } = await supabase.from("material_usage_logs").delete().eq("note", `작업지시서 생산완료 - ${woData.work_order_no}`);
+        if (matLog1Err) console.error(`[deleteWo] material_usage_logs(생산완료) 삭제 오류 (${woData.work_order_no}):`, matLog1Err.message);
+        const { error: matLog2Err } = await supabase.from("material_usage_logs").delete().eq("note", `이산화티타늄 차감 - ${woData.work_order_no}`);
+        if (matLog2Err) console.error(`[deleteWo] material_usage_logs(이산화티타늄) 삭제 오류 (${woData.work_order_no}):`, matLog2Err.message);
+        const { error: matLog3Err } = await supabase.from("material_usage_logs").delete().like("note", `전사지 차감 - ${woData.work_order_no}%`);
+        if (matLog3Err) console.error(`[deleteWo] material_usage_logs(전사지) 삭제 오류 (${woData.work_order_no}):`, matLog3Err.message);
        // movements 복구 (transfer_lots 차감, 도눔 포장완료)
-        const { data: movToDelete } = await supabase.from("movements").select("id").like("note", `전사지 차감 - ${woData.work_order_no}%`);
+        const { data: movToDelete, error: movSelectErr } = await supabase.from("movements").select("id").like("note", `전사지 차감 - ${woData.work_order_no}%`);
+        if (movSelectErr) console.error(`[deleteWo] movements(전사지) 조회 오류 (${woData.work_order_no}):`, movSelectErr.message);
         if (movToDelete && movToDelete.length > 0) {
-          await supabase.from("movements").delete().in("id", movToDelete.map((m) => m.id));
+          const { error: movDelErr } = await supabase.from("movements").delete().in("id", movToDelete.map((m) => m.id));
+          if (movDelErr) console.error(`[deleteWo] movements(전사지) 삭제 오류 (${woData.work_order_no}):`, movDelErr.message);
         }
-        const { data: movToDelete2 } = await supabase.from("movements").select("id").eq("note", `도눔 포장완료 - ${woData.work_order_no}`);
+        const { data: movToDelete2, error: movSelect2Err } = await supabase.from("movements").select("id").eq("note", `도눔 포장완료 - ${woData.work_order_no}`);
+        if (movSelect2Err) console.error(`[deleteWo] movements(도눔 포장완료) 조회 오류 (${woData.work_order_no}):`, movSelect2Err.message);
         if (movToDelete2 && movToDelete2.length > 0) {
-          await supabase.from("movements").delete().in("id", movToDelete2.map((m) => m.id));
+          const { error: movDel2Err } = await supabase.from("movements").delete().in("id", movToDelete2.map((m) => m.id));
+          if (movDel2Err) console.error(`[deleteWo] movements(도눔 포장완료) 삭제 오류 (${woData.work_order_no}):`, movDel2Err.message);
         }
         // movements + pet_stock_logs 복구 (네오컬러 분사-레이즈 인쇄투입)
         const neoNote = `네오컬러 인쇄투입 - ${woData.work_order_no}`;
-        const { data: movToDelete3 } = await supabase.from("movements").select("id").eq("note", neoNote);
+        const { data: movToDelete3, error: movSelect3Err } = await supabase.from("movements").select("id").eq("note", neoNote);
+        if (movSelect3Err) console.error(`[deleteWo] movements(네오컬러) 조회 오류 (${woData.work_order_no}):`, movSelect3Err.message);
         if (movToDelete3 && movToDelete3.length > 0) {
-          await supabase.from("movements").delete().in("id", movToDelete3.map((m) => m.id));
+          const { error: movDel3Err } = await supabase.from("movements").delete().in("id", movToDelete3.map((m) => m.id));
+          if (movDel3Err) console.error(`[deleteWo] movements(네오컬러) 삭제 오류 (${woData.work_order_no}):`, movDel3Err.message);
         }
-        const { data: petToDelete } = await supabase.from("pet_stock_logs").select("id").eq("note", neoNote);
+        const { data: petToDelete, error: petSelectErr } = await supabase.from("pet_stock_logs").select("id").eq("note", neoNote);
+        if (petSelectErr) console.error(`[deleteWo] pet_stock_logs 조회 오류 (${woData.work_order_no}):`, petSelectErr.message);
         if (petToDelete && petToDelete.length > 0) {
-          await supabase.from("pet_stock_logs").delete().in("id", petToDelete.map((p) => p.id));
+          const { error: petDelErr } = await supabase.from("pet_stock_logs").delete().in("id", petToDelete.map((p) => p.id));
+          if (petDelErr) console.error(`[deleteWo] pet_stock_logs 삭제 오류 (${woData.work_order_no}):`, petDelErr.message);
         }
       }
       const { error: deleteErr } = await supabase.from("work_orders").delete().eq("id", woId);
