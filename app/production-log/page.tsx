@@ -822,6 +822,13 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
     setValidityFormOpen(false);
   }
 
+  // 구아검 배합 폼 내부 "차감취소" 버튼에서 호출 — 체크 해제 + 폼 닫기
+  function handleGuarCancel() {
+    setTaskChecks((prev) => ({ ...prev, ["3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673"]: false }));
+    setHasUnsavedChanges(true);
+    setGuarFormOpen(false);
+  }
+
   async function saveLog() {
     if (!selectedEmployee) return;
     setSaving(true);
@@ -1614,6 +1621,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
             userId={userId}
             showToast={showToast}
             onHasRecordChange={setGuarHasRecordToday}
+            onCancel={handleGuarCancel}
           />
         )}
 
@@ -2214,6 +2222,11 @@ function MaterialLedgerTab({ role, userId, showToast }: {
           : note.includes("이산화티타늄 차감") ? "TiO₂"
           : "";
           displayLabel = `${wo.client_name} — ${wo.product_name}${tag ? ` (${tag})` : ""}${wo.assignee_production ? ` · ${wo.assignee_production}` : ""}`;
+      } else {
+        // 구아검 배합 note는 뒤에 "- 직원명"이 붙어있음(차감취소 시 직원별로 정확히 구분하기 위함).
+        // 원료수불부 화면 표시는 기존과 동일하게 직원명 없이 보여줌
+        const guarMatch = note.match(/^(구아검 배합 \d+번) - .+$/);
+        if (guarMatch) displayLabel = guarMatch[1];
       }
       return { displayLabel, quantity: u.quantity, unit: u.unit ?? unit, woId };
     });
@@ -3529,16 +3542,18 @@ function PigmentBlendForm({ employeeName, userId, showToast, onHasRecordChange }
 // ═══════════════════════════════════════════════════════════
 // 구아검 배합 폼 (체크리스트 연동)
 // ═══════════════════════════════════════════════════════════
-function GuarBlendForm({ employeeName, userId, showToast, onHasRecordChange }: {
+function GuarBlendForm({ employeeName, userId, showToast, onHasRecordChange, onCancel }: {
   employeeName: string;
   userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
   onHasRecordChange?: (hasRecord: boolean) => void;
+  onCancel?: () => void;
 }) {
   const today = todayKST();
   const [multiplier, setMultiplier] = useState(1);
   const [saving, setSaving] = useState(false);
-  const [savedLog, setSavedLog] = useState<{ multiplier: number } | null>(null);
+  const [canceling, setCanceling] = useState(false);
+  const [savedLog, setSavedLog] = useState<{ id: string; multiplier: number } | null>(null);
 
   // 구아검 레시피 ID (spray 카테고리, 레이즈 분사)
   // 구아검 배합은 별도 레시피: guar 카테고리로 찾음
@@ -3557,12 +3572,13 @@ function GuarBlendForm({ employeeName, userId, showToast, onHasRecordChange }: {
     if (guarRecipeErr) console.error("구아검 레시피 조회 오류(loadSavedLog):", guarRecipeErr.message);
     if (!guarRecipe) return;
     const { data } = await supabase.from("blend_logs")
-      .select("multiplier").eq("log_date", today).eq("employee_name", employeeName)
+      .select("id, multiplier").eq("log_date", today).eq("employee_name", employeeName)
       .eq("recipe_id", guarRecipe.id).maybeSingle();
     if (data) setSavedLog(data);
   }
 
   async function handleSave() {
+    if (savedLog) return showToast("이미 오늘 저장된 기록이 있습니다.", "error");
     setSaving(true);
     const { data: guarRecipe, error: guarRecipeErr } = await supabase.from("blend_recipes")
       .select("id").eq("name", "레이즈 분사").single();
@@ -3590,6 +3606,7 @@ function GuarBlendForm({ employeeName, userId, showToast, onHasRecordChange }: {
     await supabase.from("blend_log_items").insert(logItems);
 
     // 재고 차감 (구아검만, 물은 차감 불필요)
+    // note에 직원명을 포함시켜, 이후 차감취소 시 다른 직원의 기록과 섞이지 않도록 정확히 특정
     const { data: matsData } = await supabase.from("materials").select("id,name").eq("name", "구아검");
     if (matsData && matsData.length > 0) {
       await supabase.from("material_usage_logs").insert({
@@ -3598,14 +3615,44 @@ function GuarBlendForm({ employeeName, userId, showToast, onHasRecordChange }: {
         quantity: GUAR_PER_BATCH * multiplier,
         unit: "g",
         work_type: "blend",
-        note: `구아검 배합 ${multiplier}번`,
+        note: `구아검 배합 ${multiplier}번 - ${employeeName}`,
         created_by: userId,
       });
     }
 
     setSaving(false);
     showToast(`✅ 구아검 배합 ${multiplier}번 저장! 구아검 ${GUAR_PER_BATCH * multiplier}g 차감됨`);
-    setSavedLog({ multiplier });
+    setSavedLog({ id: blendLog.id, multiplier });
+  }
+
+  async function handleCancel() {
+    if (!savedLog) return;
+    setCanceling(true);
+
+    const { error: itemsErr } = await supabase.from("blend_log_items")
+      .delete().eq("blend_log_id", savedLog.id);
+    if (itemsErr) { setCanceling(false); return showToast("삭제 실패(blend_log_items): " + itemsErr.message, "error"); }
+
+    const { error: logErr } = await supabase.from("blend_logs")
+      .delete().eq("id", savedLog.id);
+    if (logErr) { setCanceling(false); return showToast("삭제 실패(blend_logs): " + logErr.message, "error"); }
+
+    const { data: matsData } = await supabase.from("materials").select("id,name").eq("name", "구아검");
+    if (matsData && matsData.length > 0) {
+      const { error: usageErr } = await supabase.from("material_usage_logs")
+        .delete()
+        .eq("material_id", matsData[0].id)
+        .eq("used_date", today)
+        .eq("work_type", "blend")
+        .eq("note", `구아검 배합 ${savedLog.multiplier}번 - ${employeeName}`);
+      if (usageErr) { setCanceling(false); return showToast("삭제 실패(material_usage_logs): " + usageErr.message, "error"); }
+    }
+
+    setCanceling(false);
+    showToast("🗑️ 구아검 배합 기록 및 원료 차감이 취소되었습니다.");
+    setSavedLog(null);
+    setMultiplier(1);
+    onCancel?.();
   }
 
   return (
@@ -3623,7 +3670,7 @@ function GuarBlendForm({ employeeName, userId, showToast, onHasRecordChange }: {
         <div className="flex items-center gap-2">
           <button
             className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white text-lg font-bold text-slate-600 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40"
-            disabled={multiplier <= 1}
+            disabled={multiplier <= 1 || !!savedLog}
             onClick={() => setMultiplier((n) => Math.max(1, n - 1))}>
             −
           </button>
@@ -3631,7 +3678,8 @@ function GuarBlendForm({ employeeName, userId, showToast, onHasRecordChange }: {
             {multiplier}
           </div>
           <button
-            className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white text-lg font-bold text-slate-600 hover:bg-slate-50 active:bg-slate-100"
+            className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white text-lg font-bold text-slate-600 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40"
+            disabled={!!savedLog}
             onClick={() => setMultiplier((n) => n + 1)}>
             ＋
           </button>
@@ -3641,12 +3689,21 @@ function GuarBlendForm({ employeeName, userId, showToast, onHasRecordChange }: {
         </div>
       </div>
 
-      <button
-        className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
-        disabled={saving}
-        onClick={handleSave}>
-        {saving ? "저장 중..." : "💾 구아검 배합 저장 (재고 차감)"}
-      </button>
+      {savedLog ? (
+        <button
+          className="w-full rounded-xl bg-white border border-red-300 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-60"
+          disabled={canceling}
+          onClick={handleCancel}>
+          {canceling ? "취소 중..." : "🗑️ 차감취소"}
+        </button>
+      ) : (
+        <button
+          className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+          disabled={saving}
+          onClick={handleSave}>
+          {saving ? "저장 중..." : "💾 구아검 배합 저장 (재고 차감)"}
+        </button>
+      )}
     </div>
   );
 }
