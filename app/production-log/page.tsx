@@ -359,6 +359,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [todayLog, setTodayLog] = useState<DailyWorkLog | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrderRef[]>([]);
   const [taskChecks, setTaskChecks] = useState<Record<string, boolean>>({});
+  const [guarLoggedToday, setGuarLoggedToday] = useState(false); // 오늘 구아검 배합 기록 존재 여부 (체크박스와 별개)
   const [extraNote, setExtraNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -499,6 +500,13 @@ function ProductionLogTab({ role, userId, showToast }: {
       setTaskChecks(init);
       setExtraNote("");
     }
+
+    // 오늘 구아검 배합 기록이 실제로 있는지 확인 (체크박스 표시용 배지, 체크박스 값 자체는 건드리지 않음)
+    const { data: guarBlendLog, error: guarBlendLogErr } = await supabase.from("blend_logs")
+      .select("id").eq("log_date", date).eq("employee_name", empName)
+      .eq("recipe_name", "구아검 배합").limit(1).maybeSingle();
+    if (guarBlendLogErr) console.error("구아검 배합 기록 확인 오류(loadTodayData):", guarBlendLogErr.message);
+    setGuarLoggedToday(!!guarBlendLog);
 
     // WO 번호 → 업체명/제품명 맵 구성
     const allNos = (logRes.data as DailyWorkLog | null)?.work_order_nos ?? [];
@@ -1437,6 +1445,9 @@ function ProductionLogTab({ role, userId, showToast }: {
                 {t.name}
                 {pestWarning && <span className="ml-1 text-[10px] font-semibold">이번 주 미완료</span>}
                 {isPest && pestDoneThisWeek && !checked && <span className="ml-1 text-[10px] text-green-600 font-semibold">이번 주 완료</span>}
+                {isGuar && guarLoggedToday && !checked && (
+                  <span className="ml-1 text-[10px] text-blue-600 font-semibold">📝 오늘 입력 있음 · 눌러서 확인</span>
+                )}
               </button>
             );
           })}
