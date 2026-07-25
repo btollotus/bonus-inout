@@ -683,7 +683,11 @@ bottom_size: form.bottom_size || null,
       (e.position || '').includes(searchQuery)
   )
 
-  const unmappedEmployees = employees.filter((e) => !e.auth_user_id && e.email)
+  const unmappedEmployees = employees.filter((e) => {
+    const todayStr = new Date().toISOString().split('T')[0]
+    const alreadyResigned = !!(e.resign_date && e.resign_date <= todayStr)
+    return !e.auth_user_id && e.email && !alreadyResigned
+  })
 
   return (
     <div className="min-h-screen bg-gray-50">
