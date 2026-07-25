@@ -360,6 +360,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [workOrders, setWorkOrders] = useState<WorkOrderRef[]>([]);
   const [taskChecks, setTaskChecks] = useState<Record<string, boolean>>({});
   const [guarLoggedToday, setGuarLoggedToday] = useState(false); // 오늘 구아검 배합 기록 존재 여부 (체크박스와 별개)
+  const [pigmentLoggedToday, setPigmentLoggedToday] = useState(false); // 오늘 색소 배합 기록 존재 여부 (체크박스와 별개, recipe_name 무관)
   const [extraNote, setExtraNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -505,8 +506,23 @@ function ProductionLogTab({ role, userId, showToast }: {
     const { data: guarBlendLog, error: guarBlendLogErr } = await supabase.from("blend_logs")
       .select("id").eq("log_date", date).eq("employee_name", empName)
       .eq("recipe_name", "구아검 배합").limit(1).maybeSingle();
-    if (guarBlendLogErr) console.error("구아검 배합 기록 확인 오류(loadTodayData):", guarBlendLogErr.message);
-    setGuarLoggedToday(!!guarBlendLog);
+      if (guarBlendLogErr) console.error("구아검 배합 기록 확인 오류(loadTodayData):", guarBlendLogErr.message);
+      setGuarLoggedToday(!!guarBlendLog);
+  
+      // 오늘 색소 배합 기록이 실제로 있는지 확인 (recipe_name 무관 - pigment_oil/pigment_water 카테고리 전체 중 하나라도 있으면 인정)
+      const { data: pigmentRecipeIds, error: pigmentRecipeErr } = await supabase.from("blend_recipes")
+        .select("id").in("category", ["pigment_oil", "pigment_water"]);
+      if (pigmentRecipeErr) console.error("색소 레시피 조회 오류(loadTodayData):", pigmentRecipeErr.message);
+      let pigmentHasLog = false;
+      if ((pigmentRecipeIds ?? []).length > 0) {
+        const { data: pigmentBlendLog, error: pigmentBlendLogErr } = await supabase.from("blend_logs")
+          .select("id").eq("log_date", date).eq("employee_name", empName)
+          .in("recipe_id", (pigmentRecipeIds ?? []).map((r: any) => r.id))
+          .limit(1).maybeSingle();
+        if (pigmentBlendLogErr) console.error("색소 배합 기록 확인 오류(loadTodayData):", pigmentBlendLogErr.message);
+        pigmentHasLog = !!pigmentBlendLog;
+      }
+      setPigmentLoggedToday(pigmentHasLog);
 
     // WO 번호 → 업체명/제품명 맵 구성
     const allNos = (logRes.data as DailyWorkLog | null)?.work_order_nos ?? [];
@@ -1429,6 +1445,7 @@ function ProductionLogTab({ role, userId, showToast }: {
             const isPest = t.id === PEST_TASK_ID;
             const pestWarning = isPest && !pestDoneThisWeek && !checked;
             const guarHasRecordBadge = isGuar && guarLoggedToday && !checked;
+            const pigmentHasRecordBadge = isPigment && pigmentLoggedToday && !checked;
             return (
               <button key={t.id}
                 disabled={isDisabled}
@@ -1439,16 +1456,16 @@ function ProductionLogTab({ role, userId, showToast }: {
                       : "border-green-400 bg-green-50 text-green-700"
                       : pestWarning
                       ? "border-amber-400 bg-amber-50 text-amber-700"
-                      : guarHasRecordBadge
+                      : (guarHasRecordBadge || pigmentHasRecordBadge)
                         ? "border-blue-400 bg-blue-50 text-blue-700"
                         : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}
                   ${isDisabled ? "opacity-60 cursor-not-allowed" : "active:scale-95"}`}
                   onClick={() => !isDisabled && handleTaskCheck(t.id, taskChecks[t.id] === true)}>
-                <span className="mr-1.5">{checked ? "✅" : pestWarning ? "⚠" : guarHasRecordBadge ? "✅" : "☐"}</span>
+                <span className="mr-1.5">{checked ? "✅" : pestWarning ? "⚠" : (guarHasRecordBadge || pigmentHasRecordBadge) ? "✅" : "☐"}</span>
                 {t.name}
                 {pestWarning && <span className="ml-1 text-[10px] font-semibold">이번 주 미완료</span>}
                 {isPest && pestDoneThisWeek && !checked && <span className="ml-1 text-[10px] text-green-600 font-semibold">이번 주 완료</span>}
-                {guarHasRecordBadge && (
+                {(guarHasRecordBadge || pigmentHasRecordBadge) && (
                   <span className="ml-1 text-[10px] text-blue-600 font-semibold">📝 오늘 입력 있음 · 눌러서 확인</span>
                 )}
               </button>
