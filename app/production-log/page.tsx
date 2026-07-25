@@ -389,6 +389,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
   const [woTagMap, setWoTagMap] = useState<Record<string, Record<string, string[]>>>({});
   const [viewRaizeCutMap, setViewRaizeCutMap] = useState<Record<string, number>>({});
   const [todayRaizeCut, setTodayRaizeCut] = useState<number | null>(null);
+  const [raizeFormOpen, setRaizeFormOpen] = useState(false); // 레이즈재단 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
   const [pestDoneThisWeek, setPestDoneThisWeek] = useState(false);
   const [todayWarmerClean, setTodayWarmerClean] = useState(false);
   const [viewWarmerCleanMap, setViewWarmerCleanMap] = useState<Record<string, boolean>>({});
@@ -717,6 +718,11 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
     const nextChecked = !currentChecked;
     setTaskChecks((prev) => ({ ...prev, [taskId]: nextChecked }));
     setHasUnsavedChanges(true);
+
+    // 레이즈재단 체크박스를 이번 세션에서 직접 누른 경우에만 폼을 펼침/접음
+    if (taskId === "ab0142bd-5f95-48cc-9786-1100186b0502") {
+      setRaizeFormOpen(nextChecked);
+    }
 
     // 자가품질검사 체크 해제 시 → 차감 기록 삭제
     if (taskId === QC_SAMPLE_TASK_ID && !nextChecked && selectedEmployee) {
@@ -1535,7 +1541,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
         )}
 
         {/* 레이즈재단 폼 */}
-        {taskChecks["ab0142bd-5f95-48cc-9786-1100186b0502"] && !isDisabled && (
+        {taskChecks["ab0142bd-5f95-48cc-9786-1100186b0502"] && raizeFormOpen && !isDisabled && (
           <RaizeCutForm
             employeeName={selectedEmployee.name}
             userId={userId}
