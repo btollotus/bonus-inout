@@ -1632,18 +1632,22 @@ export function WoCcpCard({
             <div>
               <div className="mb-1 text-xs text-slate-500">유형</div>
               <div className="flex flex-wrap gap-1">
-                {([
-                  { value: "start",     label: "시작",     cls: "bg-blue-100 border-blue-400 text-blue-800" },
-                  { value: "mid_check", label: "중간점검", cls: "bg-slate-100 border-slate-400 text-slate-700" },
-                  { value: "end",       label: "종료",     cls: "bg-purple-100 border-purple-400 text-purple-800" },
-                ] as { value: string; label: string; cls: string }[]).map((t) => (
-                  <button key={t.value} type="button"
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all ${
-                      ccpWoEventType === t.value ? t.cls + " shadow-sm scale-105" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                    }`}
-                    onClick={() => setCcpWoEventType(t.value as any)}
-                  >{t.label}</button>
-                ))}
+                {(() => {
+                  const startDisabled = woEvents.length > 0;
+                  return ([
+                    { value: "start",     label: "시작",     cls: "bg-blue-100 border-blue-400 text-blue-800" },
+                    { value: "mid_check", label: "중간점검", cls: "bg-slate-100 border-slate-400 text-slate-700" },
+                    { value: "end",       label: "종료",     cls: "bg-purple-100 border-purple-400 text-purple-800" },
+                  ] as { value: string; label: string; cls: string }[]).map((t) => (
+                    <button key={t.value} type="button"
+                      disabled={t.value === "start" && startDisabled}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                        ccpWoEventType === t.value ? t.cls + " shadow-sm scale-105" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                      }`}
+                      onClick={() => setCcpWoEventType(t.value as any)}
+                    >{t.label}</button>
+                  ));
+                })()}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
