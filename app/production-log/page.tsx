@@ -114,6 +114,7 @@ export default function ProductionLogPage() {
 
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [initialWoId, setInitialWoId] = useState<string | null>(null);
+  const [workTabUnsaved, setWorkTabUnsaved] = useState(false); // 근무일지 탭의 미저장 변경사항 존재 여부 (사이드바 탭 전환 경고용)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -177,6 +178,14 @@ export default function ProductionLogPage() {
     );
   }
 
+  function handleTabSwitch(nextTab: Tab) {
+    if (activeTab === "work" && workTabUnsaved && nextTab !== "work") {
+      const ok = window.confirm("근무일지에 저장하지 않은 변경사항이 있습니다. 이동하면 내용이 사라질 수 있습니다. 그래도 이동하시겠습니까?");
+      if (!ok) return;
+    }
+    setActiveTab(nextTab);
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-4">
       <div className="mx-auto max-w-[1400px] space-y-4">
@@ -211,7 +220,7 @@ export default function ProductionLogPage() {
 ] as { key: Tab; label: string }[]).map((t) => (
   <button key={t.key}
     className={`w-full text-left ${activeTab === t.key ? btnOn : btn}`}
-    onClick={() => setActiveTab(t.key)}
+    onClick={() => handleTabSwitch(t.key)}
   >{t.label}</button>
 ))}
 </div>
@@ -229,7 +238,7 @@ export default function ProductionLogPage() {
           <MaterialLedgerTab role={role} userId={userId} showToast={showToast} />
         )}
 {activeTab === "work" && (
-  <ProductionLogTab role={role} userId={userId} showToast={showToast} />
+  <ProductionLogTab role={role} userId={userId} showToast={showToast} onUnsavedChange={setWorkTabUnsaved} />
 )}
         {activeTab === "ccp1b" && (
           <Ccp1bTab role={role} userId={userId} showToast={showToast} />
@@ -339,9 +348,10 @@ function formatCheckPeriods(periods: string[] | undefined): string {
   return "";
 }
 
-function ProductionLogTab({ role, userId, showToast }: {
+function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
   role: UserRole; userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
+  onUnsavedChange?: (unsaved: boolean) => void;
 }) {
   const isAdmin = role === "ADMIN";
   const isAdminOrSubadmin = role === "ADMIN" || role === "SUBADMIN";
@@ -398,6 +408,22 @@ function ProductionLogTab({ role, userId, showToast }: {
 
   const today = todayKST();
   const [workDate, setWorkDate] = useState(today);
+
+  // 미저장 변경사항 상태를 상위(ProductionLogPage)에 알림 — 사이드바 탭 전환 경고에 사용
+  useEffect(() => {
+    onUnsavedChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onUnsavedChange]);
+
+  // 미저장 변경사항이 있을 때 브라우저 새로고침/탭 닫기 경고
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedChanges]);
 
   useEffect(() => {
     supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
