@@ -1480,14 +1480,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
 <div className={`${card} p-4`}>
   <div className="mb-3 flex items-center justify-between">
     <div className="font-semibold text-sm">📋 업무 체크리스트</div>
-          <div className="flex items-center gap-2">
-            {!readOnly && hasUnsavedChanges && (
-              <span className="rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
-                ⚠ 저장 안 된 변경사항 있음 · 아래 임시저장 버튼을 눌러주세요
-              </span>
-            )}
-            <div className="text-xs text-slate-400">{checkedCount}/{taskTypes.length} 완료</div>
-          </div>
+          <div className="text-xs text-slate-400">{checkedCount}/{taskTypes.length} 완료</div>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {taskTypes.map((t) => {
