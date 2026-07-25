@@ -390,6 +390,11 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
   const [viewRaizeCutMap, setViewRaizeCutMap] = useState<Record<string, number>>({});
   const [todayRaizeCut, setTodayRaizeCut] = useState<number | null>(null);
   const [raizeFormOpen, setRaizeFormOpen] = useState(false); // 레이즈재단 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
+  const [pigmentFormOpen, setPigmentFormOpen] = useState(false); // 색소 배합 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
+  const [guarFormOpen, setGuarFormOpen] = useState(false); // 구아검 배합 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
+  const [pestFormOpen, setPestFormOpen] = useState(false); // 방충방서 점검 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
+  const [qcFormOpen, setQcFormOpen] = useState(false); // 자가품질검사 샘플준비 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
+  const [validityFormOpen, setValidityFormOpen] = useState(false); // 유효성평가검사 샘플준비 폼 펼침 여부 (체크박스 체크상태와 별개, 재진입 시 항상 false로 시작)
   const [pestDoneThisWeek, setPestDoneThisWeek] = useState(false);
   const [todayWarmerClean, setTodayWarmerClean] = useState(false);
   const [viewWarmerCleanMap, setViewWarmerCleanMap] = useState<Record<string, boolean>>({});
@@ -715,9 +720,29 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
   }
 
   async function handleTaskCheck(taskId: string, currentChecked: boolean) {
-    // 레이즈재단: 이미 체크된 상태에서 다시 누르면 체크는 해제하지 않고 폼만 펼치기/접기 (초록색 UI 유지)
+    // 레이즈재단/색소배합/구아검배합/방충방서/자가품질검사/유효성평가검사: 이미 체크된 상태에서 다시 누르면 체크는 해제하지 않고 폼만 펼치기/접기 (초록색 UI 유지)
     if (taskId === "ab0142bd-5f95-48cc-9786-1100186b0502" && currentChecked) {
       setRaizeFormOpen((prev) => !prev);
+      return;
+    }
+    if (taskId === "7e8ecc06-6f92-49b5-802e-7da0bd868a2c" && currentChecked) {
+      setPigmentFormOpen((prev) => !prev);
+      return;
+    }
+    if (taskId === "3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673" && currentChecked) {
+      setGuarFormOpen((prev) => !prev);
+      return;
+    }
+    if (taskId === PEST_TASK_ID && currentChecked) {
+      setPestFormOpen((prev) => !prev);
+      return;
+    }
+    if (taskId === QC_SAMPLE_TASK_ID && currentChecked) {
+      setQcFormOpen((prev) => !prev);
+      return;
+    }
+    if (taskId === VALIDITY_SAMPLE_TASK_ID && currentChecked) {
+      setValidityFormOpen((prev) => !prev);
       return;
     }
 
@@ -729,28 +754,37 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
     if (taskId === "ab0142bd-5f95-48cc-9786-1100186b0502") {
       setRaizeFormOpen(nextChecked);
     }
-
-    // 자가품질검사 체크 해제 시 → 차감 기록 삭제
-    if (taskId === QC_SAMPLE_TASK_ID && !nextChecked && selectedEmployee) {
-      const { error } = await supabase.from("material_usage_logs")
-        .delete()
-        .eq("used_date", workDate)
-        .eq("work_type", "qc_sample")
-        .eq("note", `자가품질검사 샘플준비 — ${selectedEmployee.name}`);
-      if (error) showToast("차감 취소 실패: " + error.message, "error");
-      else showToast("🗑️ 자가품질검사 원료 차감이 취소되었습니다.");
+    // 색소배합/구아검배합/방충방서를 이번 세션에서 처음 체크하는 경우에만 폼을 펼침
+    if (taskId === "7e8ecc06-6f92-49b5-802e-7da0bd868a2c") {
+      setPigmentFormOpen(nextChecked);
     }
-
-    // 유효성평가검사 체크 해제 시 → 차감 기록 삭제
-    if (taskId === VALIDITY_SAMPLE_TASK_ID && !nextChecked && selectedEmployee) {
-      const { error } = await supabase.from("material_usage_logs")
-        .delete()
-        .eq("used_date", workDate)
-        .eq("work_type", "validity_sample")
-        .eq("note", `유효성평가검사 샘플준비 — ${selectedEmployee.name}`);
-      if (error) showToast("차감 취소 실패: " + error.message, "error");
-      else showToast("🗑️ 유효성평가검사 원료 차감이 취소되었습니다.");
+    if (taskId === "3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673") {
+      setGuarFormOpen(nextChecked);
     }
+    if (taskId === PEST_TASK_ID) {
+      setPestFormOpen(nextChecked);
+    }
+    // 자가품질검사/유효성평가검사를 이번 세션에서 처음 체크하는 경우에만 폼을 펼침
+    if (taskId === QC_SAMPLE_TASK_ID) {
+      setQcFormOpen(nextChecked);
+    }
+    if (taskId === VALIDITY_SAMPLE_TASK_ID) {
+      setValidityFormOpen(nextChecked);
+    }
+  }
+
+  // 자가품질검사 샘플준비 폼 내부 "차감취소" 버튼에서 호출 — 체크 해제 + 폼 닫기
+  function handleQcCancel() {
+    setTaskChecks((prev) => ({ ...prev, [QC_SAMPLE_TASK_ID]: false }));
+    setHasUnsavedChanges(true);
+    setQcFormOpen(false);
+  }
+
+  // 유효성평가검사 샘플준비 폼 내부 "차감취소" 버튼에서 호출 — 체크 해제 + 폼 닫기
+  function handleValidityCancel() {
+    setTaskChecks((prev) => ({ ...prev, [VALIDITY_SAMPLE_TASK_ID]: false }));
+    setHasUnsavedChanges(true);
+    setValidityFormOpen(false);
   }
 
   async function saveLog() {
@@ -1529,7 +1563,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
         </div>
 
         {/* 색소 배합 폼 */}
-        {taskChecks["7e8ecc06-6f92-49b5-802e-7da0bd868a2c"] && !isDisabled && (
+        {taskChecks["7e8ecc06-6f92-49b5-802e-7da0bd868a2c"] && pigmentFormOpen && !isDisabled && (
           <PigmentBlendForm
             employeeName={selectedEmployee.name}
             userId={userId}
@@ -1538,7 +1572,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
         )}
 
         {/* 구아검 배합 폼 */}
-        {taskChecks["3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673"] && !isDisabled && (
+        {taskChecks["3ab0bd67-4215-4f8d-a0c1-0f06f3f4f673"] && guarFormOpen && !isDisabled && (
           <GuarBlendForm
             employeeName={selectedEmployee.name}
             userId={userId}
@@ -1556,7 +1590,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
         )}
 
        {/* 방충방서 폼 */}
-       {taskChecks[PEST_TASK_ID] && !isDisabled && (
+       {taskChecks[PEST_TASK_ID] && pestFormOpen && !isDisabled && (
           <PestInputForm
             employeeName={selectedEmployee.name}
             userId={userId}
@@ -1566,20 +1600,22 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
         )}
 
        {/* 자가품질검사 샘플준비 폼 */}
-       {taskChecks[QC_SAMPLE_TASK_ID] && !isDisabled && (
+       {taskChecks[QC_SAMPLE_TASK_ID] && qcFormOpen && !isDisabled && (
           <QcSampleForm
             employeeName={selectedEmployee.name}
             userId={userId}
             showToast={showToast}
+            onCancel={handleQcCancel}
           />
         )}
 
         {/* 유효성평가검사 샘플준비 폼 */}
-        {taskChecks[VALIDITY_SAMPLE_TASK_ID] && !isDisabled && (
+        {taskChecks[VALIDITY_SAMPLE_TASK_ID] && validityFormOpen && !isDisabled && (
           <ValiditySampleForm
             employeeName={selectedEmployee.name}
             userId={userId}
             showToast={showToast}
+            onCancel={handleValidityCancel}
           />
         )}
       </div>
@@ -4231,13 +4267,15 @@ const QC_MATERIALS = [
   { id: "00000000-0002-0000-0000-000000000001", name: "화이트컴파운드", qty: 600 },
 ];
 
-function QcSampleForm({ employeeName, userId, showToast }: {
+function QcSampleForm({ employeeName, userId, showToast, onCancel }: {
   employeeName: string;
   userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
+  onCancel?: () => void;
 }) {
   const today = todayKST();
   const [saving, setSaving] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [qtys, setQtys] = useState<Record<string, number>>(
     () => Object.fromEntries(QC_MATERIALS.map((m) => [m.id, m.qty]))
@@ -4274,6 +4312,20 @@ function QcSampleForm({ employeeName, userId, showToast }: {
     if (error) return showToast("재고 차감 실패: " + error.message, "error");
     showToast("✅ 자가품질검사 샘플준비 원료 차감 완료!");
     setSavedAt(today);
+  }
+
+  async function handleCancel() {
+    setCanceling(true);
+    const { error } = await supabase.from("material_usage_logs")
+      .delete()
+      .eq("used_date", today)
+      .eq("work_type", "qc_sample")
+      .eq("note", `자가품질검사 샘플준비 — ${employeeName}`);
+    setCanceling(false);
+    if (error) return showToast("차감 취소 실패: " + error.message, "error");
+    showToast("🗑️ 자가품질검사 원료 차감이 취소되었습니다.");
+    setSavedAt(null);
+    onCancel?.();
   }
 
   const total = QC_MATERIALS.reduce((s, m) => s + (qtys[m.id] || 0), 0);
@@ -4319,12 +4371,21 @@ function QcSampleForm({ employeeName, userId, showToast }: {
         </div>
       </div>
 
-      <button
-        className="w-full rounded-xl bg-cyan-600 py-2.5 text-sm font-bold text-white hover:bg-cyan-700 disabled:opacity-60"
-        disabled={saving || !!savedAt}
-        onClick={handleSave}>
-        {saving ? "저장 중..." : savedAt ? "✅ 완료" : "💾 저장"}
-      </button>
+      {savedAt ? (
+        <button
+          className="w-full rounded-xl bg-white border border-red-300 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-60"
+          disabled={canceling}
+          onClick={handleCancel}>
+          {canceling ? "취소 중..." : "🗑️ 차감취소"}
+        </button>
+      ) : (
+        <button
+          className="w-full rounded-xl bg-cyan-600 py-2.5 text-sm font-bold text-white hover:bg-cyan-700 disabled:opacity-60"
+          disabled={saving}
+          onClick={handleSave}>
+          {saving ? "저장 중..." : "💾 저장"}
+        </button>
+      )}
     </div>
   );
 }
@@ -4338,13 +4399,15 @@ const VALIDITY_MATERIALS = [
   { id: "00000000-0003-0000-0000-000000000001", name: "팜유",           qty: 200 },
 ];
 
-function ValiditySampleForm({ employeeName, userId, showToast }: {
+function ValiditySampleForm({ employeeName, userId, showToast, onCancel }: {
   employeeName: string;
   userId: string | null;
   showToast: (msg: string, type?: "success" | "error") => void;
+  onCancel?: () => void;
 }) {
   const today = todayKST();
   const [saving, setSaving] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [qtys, setQtys] = useState<Record<string, number>>(
     () => Object.fromEntries(VALIDITY_MATERIALS.map((m) => [m.id, m.qty]))
@@ -4381,6 +4444,20 @@ function ValiditySampleForm({ employeeName, userId, showToast }: {
     if (error) return showToast("재고 차감 실패: " + error.message, "error");
     showToast("✅ 유효성평가검사 샘플준비 원료 차감 완료!");
     setSavedAt(today);
+  }
+
+  async function handleCancel() {
+    setCanceling(true);
+    const { error } = await supabase.from("material_usage_logs")
+      .delete()
+      .eq("used_date", today)
+      .eq("work_type", "validity_sample")
+      .eq("note", `유효성평가검사 샘플준비 — ${employeeName}`);
+    setCanceling(false);
+    if (error) return showToast("차감 취소 실패: " + error.message, "error");
+    showToast("🗑️ 유효성평가검사 원료 차감이 취소되었습니다.");
+    setSavedAt(null);
+    onCancel?.();
   }
 
   const total = VALIDITY_MATERIALS.reduce((s, m) => s + (qtys[m.id] || 0), 0);
@@ -4426,12 +4503,21 @@ function ValiditySampleForm({ employeeName, userId, showToast }: {
         </div>
       </div>
 
-      <button
-        className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
-        disabled={saving || !!savedAt}
-        onClick={handleSave}>
-        {saving ? "저장 중..." : savedAt ? "✅ 완료" : "💾 저장"}
-      </button>
+      {savedAt ? (
+        <button
+          className="w-full rounded-xl bg-white border border-red-300 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-60"
+          disabled={canceling}
+          onClick={handleCancel}>
+          {canceling ? "취소 중..." : "🗑️ 차감취소"}
+        </button>
+      ) : (
+        <button
+          className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+          disabled={saving}
+          onClick={handleSave}>
+          {saving ? "저장 중..." : "💾 저장"}
+        </button>
+      )}
     </div>
   );
 }
