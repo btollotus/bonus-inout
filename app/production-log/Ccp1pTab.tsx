@@ -631,193 +631,42 @@ function selectWo(wo: WorkOrderItem) {
       return showToast("저장 실패: " + error.message, "error");
     }
 
-    // ── CCP-1P 저장 완료 후: 재고 입고 + assignee_input + status = "완료" ──
+    // ── CCP-1P 저장 완료 후: 재고 입고 + assignee_input + status = "완료" (RPC로 원자 처리) ──
     try {
-      const { data: woData } = await supabase
-        .from("work_orders")
-        .select("variant_id, work_order_no, client_name, product_name, food_type, logo_spec, linked_order_id, work_order_items(id, actual_qty, defect_qty, unit_weight, expiry_date, barcode_no, sub_items, transfer_lot_id, transfer_qty)")
-        .eq("id", selectedWoId)
-        .single();
+      const happenedDate = formData.log_date ?? rangeFrom;
+      const { data: rpcData, error: rpcError } = await supabase.rpc("rpc_ccp1p_complete_work_order", {
+        p_work_order_id: selectedWoId,
+        p_worker_name: formData.worker_name ?? null,
+        p_happened_date: happenedDate,
+        p_end_time: formData.b_end_time ?? "00:00",
+      });
 
-      if (woData) {
-        const { data: { user } } = await supabase.auth.getUser();
-        const userId = user?.id ?? null;
-        const stockErrors: string[] = [];
+      if (rpcError) {
+        showToast("⚠️ CCP-1P 저장됐으나 완료 처리 실패: " + rpcError.message, "error");
+      } else {
+        const woData = rpcData as any;
+        const stockErrors: string[] = woData?.stock_errors ?? [];
+        const statusUpdateError: string | null = woData?.status_update_error ?? null;
 
-        // 업체 주문제작(linked_order_id 있음)인 경우, 연결된 주문의 출고일 조회 (출고일 기준 OUT 기록용)
-        const linkedOrderId = (woData as any).linked_order_id ?? null;
-        let shipDateYMD: string | null = null;
-        if (linkedOrderId) {
-          const { data: linkedOrder } = await supabase.from("orders").select("ship_date").eq("id", linkedOrderId).maybeSingle();
-          shipDateYMD = (linkedOrder as any)?.ship_date ?? null;
-        }
-
-        const items = ((woData as any).work_order_items ?? []).filter((item: any) => {
-          const name = (item.sub_items ?? [])[0]?.name ?? "";
-          return !name.startsWith("성형틀") && !name.startsWith("인쇄제판");
-        });
-
-        // 재고 입고
-        for (const item of items) {
-          if (!item.actual_qty || !item.expiry_date) continue;
-          const actual_qty = Number(item.actual_qty);
-          const defect_qty = Number((item as any).defect_qty ?? 0);
-          const totalProducedQty = actual_qty + defect_qty;
-          if (actual_qty <= 0) continue;
-          let variantId: string | null = null;
-          if (item.barcode_no) {
-            const { data: pbData } = await supabase
-              .from("product_barcodes").select("variant_id")
-              .eq("barcode", item.barcode_no).maybeSingle();
-            variantId = pbData?.variant_id ?? null;
-          }
-          if (!variantId) variantId = (woData as any).variant_id;
-          if (!variantId) { stockErrors.push(`variant 없음 (${(item.sub_items ?? [])[0]?.name ?? item.id})`); continue; }
-
-          let lotId: string | null = null;
-
-          // ── Step5: 임시 lot(is_temp=true, 이 WO에 연결, 동일 variant) → 실제 lot 마이그레이션 ──
-          const { data: tempLot } = await supabase
-            .from("lots").select("id")
-            .eq("is_temp", true).eq("work_order_id", selectedWoId).eq("variant_id", variantId)
-            .maybeSingle();
-
-          if (tempLot) {
-            const { data: existingLotForMerge } = await supabase
-              .from("lots").select("id")
-              .eq("variant_id", variantId).eq("expiry_date", item.expiry_date).neq("id", tempLot.id).maybeSingle();
-            if (existingLotForMerge) {
-              const { error: mvUpdErr } = await supabase.from("movements")
-                .update({ lot_id: existingLotForMerge.id }).eq("lot_id", tempLot.id);
-              if (mvUpdErr) { stockErrors.push("임시 lot 병합 실패: " + mvUpdErr.message); continue; }
-              const { error: tempDelErr } = await supabase.from("lots").delete().eq("id", tempLot.id);
-              if (tempDelErr) { stockErrors.push("임시 lot 삭제 실패: " + tempDelErr.message); continue; }
-              lotId = existingLotForMerge.id;
-            } else {
-              const { error: tempUpdErr } = await supabase.from("lots")
-                .update({ expiry_date: item.expiry_date, is_temp: false }).eq("id", tempLot.id);
-              if (tempUpdErr) { stockErrors.push("임시 lot 전환 실패: " + tempUpdErr.message); continue; }
-              lotId = tempLot.id;
-            }
-          }
-
-          if (!lotId) {
-            const { data: existingLot } = await supabase
-              .from("lots").select("id")
-              .eq("variant_id", variantId).eq("expiry_date", item.expiry_date).maybeSingle();
-            if (existingLot) {
-              lotId = existingLot.id;
-            } else {
-              const { data: newLot, error: lotErr } = await supabase
-                .from("lots").insert({ variant_id: variantId, expiry_date: item.expiry_date })
-                .select("id").single();
-              if (lotErr) { stockErrors.push("LOT 생성 실패: " + lotErr.message); continue; }
-              lotId = newLot.id;
-            }
-          }
-
-          const endTime = (formData.b_end_time ?? "00:00").slice(0, 5);
-          const happenedDate = formData.log_date ?? rangeFrom;
-          const inNote = "작업지시서 생산완료 - " + (woData as any).work_order_no;
-          const { data: existingInMov } = await supabase.from("movements")
-            .select("id").eq("lot_id", lotId).eq("type", "IN").eq("note", inNote).limit(1);
-          if (existingInMov && existingInMov.length > 0) {
-            const { error: movErr } = await supabase.from("movements")
-              .update({ qty: totalProducedQty, happened_at: `${happenedDate}T${endTime}:00+09:00` })
-              .eq("id", existingInMov[0].id);
-            if (movErr) stockErrors.push("입고 기록 갱신 실패: " + movErr.message);
-          } else {
-            const { error: movErr } = await supabase.from("movements").insert({
-              lot_id: lotId,
-              type: "IN",
-              qty: totalProducedQty,
-              happened_at: `${happenedDate}T${endTime}:00+09:00`,
-              note: inNote,
-              created_by: userId,
-            });
-            if (movErr) stockErrors.push("입고 기록 실패: " + movErr.message);
-          }
-
-          // 불량 수량 → 동일 LOT에 폐기(DISCARD) 기록
-          if (defect_qty > 0) {
-            const discardNote = "작업지시서 생산완료(불량) - " + (woData as any).work_order_no;
-            const { data: existingDiscardMov } = await supabase.from("movements")
-              .select("id").eq("lot_id", lotId).eq("type", "DISCARD").eq("note", discardNote).limit(1);
-            if (existingDiscardMov && existingDiscardMov.length > 0) {
-              const { error: discardErr } = await supabase.from("movements")
-                .update({ qty: defect_qty, happened_at: `${happenedDate}T${endTime}:00+09:00` })
-                .eq("id", existingDiscardMov[0].id);
-              if (discardErr) stockErrors.push("불량 폐기 기록 갱신 실패: " + discardErr.message);
-            } else {
-              const { error: discardErr } = await supabase.from("movements").insert({
-                lot_id: lotId,
-                type: "DISCARD",
-                qty: defect_qty,
-                happened_at: `${happenedDate}T${endTime}:00+09:00`,
-                note: discardNote,
-                created_by: userId,
-              });
-              if (discardErr) stockErrors.push("불량 폐기 기록 실패: " + discardErr.message);
-            }
-          }
-
-// 업체 주문제작 → ship_date가 오늘 이전인 경우만 즉시 OUT 기록 (오늘 날짜는 크론 15:00에 처리)
-const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
-if (linkedOrderId && shipDateYMD && shipDateYMD < todayKSTDate) {
-            // OUT이 IN(happenedDate)보다 앞서지 않도록 보정 — 생산완료가 ship_date보다 늦게(소급) 처리된 경우 대비
-            const outHappenedDate = shipDateYMD < happenedDate ? happenedDate : shipDateYMD;
-            const itemName = (item.sub_items ?? [])[0]?.name ?? "";
-            const outNote = `거래내역 OUT - ${(woData as any).work_order_no} - ${itemName}`;
-            const { data: existingOutMov } = await supabase.from("movements")
-              .select("id").eq("lot_id", lotId).eq("type", "OUT").eq("note", outNote).limit(1);
-            if (existingOutMov && existingOutMov.length > 0) {
-              const { error: outErr } = await supabase.from("movements")
-                .update({ qty: actual_qty, happened_at: `${outHappenedDate}T00:00:00+09:00` })
-                .eq("id", existingOutMov[0].id);
-              if (outErr) stockErrors.push("출고 기록 갱신 실패: " + outErr.message);
-            } else {
-              const { error: outErr } = await supabase.from("movements").insert({
-                lot_id: lotId,
-                type: "OUT",
-                qty: actual_qty,
-                happened_at: `${outHappenedDate}T00:00:00+09:00`,
-                note: outNote,
-                created_by: userId,
-              });
-              if (outErr) stockErrors.push("출고 기록 실패: " + outErr.message);
-            }
-          }
-        }
-
-        // work_orders: assignee_input = 담당자, status_input = true, status = "완료"
-        const workerName = formData.worker_name ?? null;
-        const { error: updateErr } = await supabase.from("work_orders").update({
-          assignee_input: workerName,
-          status_input: true,
-          status: "완료",
-          input_done_at: new Date().toISOString(),
-        }).eq("id", selectedWoId);
-
-        if (updateErr) {
-          showToast("⚠️ CCP-1P 저장됐으나 완료 처리 실패: " + updateErr.message, "error");
+        if (statusUpdateError) {
+          showToast("⚠️ CCP-1P 저장됐으나 완료 처리 실패: " + statusUpdateError, "error");
         } else if (stockErrors.length > 0) {
           showToast("⚠️ CCP-1P 저장됐으나 재고 연동 오류: " + stockErrors.join(" / "), "error");
         } else {
           showToast("✅ CCP-1P 기록 완료! 작업지시서가 완료 처리됐습니다.");
           // PDF 드라이브 업로드 트리거
           try {
-            const woNo = (woData as any).work_order_no ?? "";
+            const woNo = woData?.work_order_no ?? "";
             const woDateMatch = woNo.match(/WO-(\d{8})-/);
-            const dateStr = woDateMatch ? woDateMatch[1] : (formData.log_date ?? rangeFrom).replace(/-/g, "");
-
+            const dateStr = woDateMatch ? woDateMatch[1] : happenedDate.replace(/-/g, "");
 
             const sanitize = (s: string) => (s ?? "").replace(/[*×]/g, "x").replace(/[\\/:?"<>|]/g, "").replace(/\s+/g, "_");
             const fileName = [
               dateStr,
-              sanitize((woData as any).client_name ?? ""),
-              sanitize((woData as any).product_name ?? ""),
-              sanitize((woData as any).food_type ?? ""),
-              sanitize((woData as any).logo_spec ?? ""),
+              sanitize(woData?.client_name ?? ""),
+              sanitize(woData?.product_name ?? ""),
+              sanitize(woData?.food_type ?? ""),
+              sanitize(woData?.logo_spec ?? ""),
               "작업지시서",
             ].filter(Boolean).join("-");
             await fetch("/api/trigger-work-order-pdf", {
