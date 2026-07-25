@@ -361,6 +361,7 @@ function ProductionLogTab({ role, userId, showToast }: {
   const [taskChecks, setTaskChecks] = useState<Record<string, boolean>>({});
   const [guarLoggedToday, setGuarLoggedToday] = useState(false); // 오늘 구아검 배합 기록 존재 여부 (체크박스와 별개)
   const [pigmentLoggedToday, setPigmentLoggedToday] = useState(false); // 오늘 색소 배합 기록 존재 여부 (체크박스와 별개, recipe_name 무관)
+  const [qcSampleLoggedToday, setQcSampleLoggedToday] = useState(false); // 오늘 자가품질검사 샘플준비 기록 존재 여부 (체크박스와 별개)
   const [extraNote, setExtraNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -523,6 +524,13 @@ function ProductionLogTab({ role, userId, showToast }: {
         pigmentHasLog = !!pigmentBlendLog;
       }
       setPigmentLoggedToday(pigmentHasLog);
+
+      // 오늘 자가품질검사 샘플준비 기록이 실제로 있는지 확인 (QcSampleForm 자체 조회 조건과 동일)
+      const { data: qcSampleLog, error: qcSampleLogErr } = await supabase.from("material_usage_logs")
+        .select("id").eq("used_date", date).eq("work_type", "qc_sample")
+        .eq("note", `자가품질검사 샘플준비 — ${empName}`).limit(1).maybeSingle();
+      if (qcSampleLogErr) console.error("자가품질검사 샘플준비 기록 확인 오류(loadTodayData):", qcSampleLogErr.message);
+      setQcSampleLoggedToday(!!qcSampleLog);
 
     // WO 번호 → 업체명/제품명 맵 구성
     const allNos = (logRes.data as DailyWorkLog | null)?.work_order_nos ?? [];
@@ -1448,6 +1456,8 @@ function ProductionLogTab({ role, userId, showToast }: {
             const pigmentHasRecordBadge = isPigment && pigmentLoggedToday && !checked;
             const isRaizeCut = t.id === "ab0142bd-5f95-48cc-9786-1100186b0502";
             const raizeCutHasRecordBadge = isRaizeCut && !!todayRaizeCut && !checked;
+            const isQcSample = t.id === QC_SAMPLE_TASK_ID;
+            const qcSampleHasRecordBadge = isQcSample && qcSampleLoggedToday && !checked;
             return (
               <button key={t.id}
                 disabled={isDisabled}
@@ -1458,16 +1468,16 @@ function ProductionLogTab({ role, userId, showToast }: {
                       : "border-green-400 bg-green-50 text-green-700"
                       : pestWarning
                       ? "border-amber-400 bg-amber-50 text-amber-700"
-                      : (guarHasRecordBadge || pigmentHasRecordBadge || raizeCutHasRecordBadge)
+                      : (guarHasRecordBadge || pigmentHasRecordBadge || raizeCutHasRecordBadge || qcSampleHasRecordBadge)
                         ? "border-blue-400 bg-blue-50 text-blue-700"
                         : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}
                   ${isDisabled ? "opacity-60 cursor-not-allowed" : "active:scale-95"}`}
                   onClick={() => !isDisabled && handleTaskCheck(t.id, taskChecks[t.id] === true)}>
-                <span className="mr-1.5">{checked ? "✅" : pestWarning ? "⚠" : (guarHasRecordBadge || pigmentHasRecordBadge || raizeCutHasRecordBadge) ? "✅" : "☐"}</span>
+                <span className="mr-1.5">{checked ? "✅" : pestWarning ? "⚠" : (guarHasRecordBadge || pigmentHasRecordBadge || raizeCutHasRecordBadge || qcSampleHasRecordBadge) ? "✅" : "☐"}</span>
                 {t.name}
                 {pestWarning && <span className="ml-1 text-[10px] font-semibold">이번 주 미완료</span>}
                 {isPest && pestDoneThisWeek && !checked && <span className="ml-1 text-[10px] text-green-600 font-semibold">이번 주 완료</span>}
-                {(guarHasRecordBadge || pigmentHasRecordBadge || raizeCutHasRecordBadge) && (
+                {(guarHasRecordBadge || pigmentHasRecordBadge || raizeCutHasRecordBadge || qcSampleHasRecordBadge) && (
                   <span className="ml-1 text-[10px] text-blue-600 font-semibold">📝 오늘 입력 있음 · 눌러서 확인</span>
                 )}
               </button>
