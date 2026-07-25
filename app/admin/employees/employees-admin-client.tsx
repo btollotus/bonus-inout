@@ -137,6 +137,14 @@ export default function EmployeesAdminClient() {
       return;
     }
 
+    if (au) {
+      const dup = rows.find((r) => r.auth_user_id === au && r.id !== editingId);
+      if (dup) {
+        setMsg(`이 auth_user_id는 이미 "${dup.name}"(사번: ${dup.employee_code ?? "-"}) 직원에게 매핑되어 있습니다. 중복 매핑은 허용되지 않습니다.`);
+        return;
+      }
+    }
+
     const payload: any = {
       name: nm,
       employee_code: code,
