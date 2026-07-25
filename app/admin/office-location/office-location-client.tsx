@@ -52,10 +52,12 @@ export default function OfficeLocationClient() {
         const { latitude, longitude } = pos.coords;
         try {
           // 기존 레코드 있으면 update, 없으면 insert
-          const { data: existing } = await supabase
+          const { data: existing, error: existingError } = await supabase
             .from("office_location")
             .select("id")
-            .single();
+            .limit(1)
+            .maybeSingle();
+          if (existingError) console.error("office_location 조회 오류:", existingError.message);
 
           let error;
           if (existing?.id) {
