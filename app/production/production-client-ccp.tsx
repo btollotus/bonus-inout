@@ -1405,11 +1405,12 @@ export function WoCcpCard({
 
     if (!existingEvents || existingEvents.length === 0) return;
 
-    // 이미 이 작업지시서에 오늘 기록이 있으면 소급 안 함 (슬롯 무관)
+    // 이미 이 작업지시서가 "이 슬롯"에서 오늘 기록이 있으면 소급 안 함 (슬롯별로 판단)
     const { data: myEvents } = await supabaseClient
       .from("ccp_wo_events")
       .select("id")
       .eq("work_order_no", selectedWo.work_order_no)
+      .eq("slot_id", s.id)
       .gte("measured_at", `${todayStr}T00:00:00+09:00`)
       .lte("measured_at", `${todayStr}T23:59:59+09:00`);
 
