@@ -3380,8 +3380,9 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
   useEffect(() => { loadSavedLog(); }, []);
 
   async function loadSavedLog() {
-    const { data: guarRecipe } = await supabase.from("blend_recipes")
+    const { data: guarRecipe, error: guarRecipeErr } = await supabase.from("blend_recipes")
       .select("id").eq("name", "레이즈 분사").single();
+    if (guarRecipeErr) console.error("구아검 레시피 조회 오류(loadSavedLog):", guarRecipeErr.message);
     if (!guarRecipe) return;
     const { data } = await supabase.from("blend_logs")
       .select("multiplier").eq("log_date", today).eq("employee_name", employeeName)
@@ -3391,8 +3392,9 @@ function GuarBlendForm({ employeeName, userId, showToast }: {
 
   async function handleSave() {
     setSaving(true);
-    const { data: guarRecipe } = await supabase.from("blend_recipes")
+    const { data: guarRecipe, error: guarRecipeErr } = await supabase.from("blend_recipes")
       .select("id").eq("name", "레이즈 분사").single();
+    if (guarRecipeErr) console.error("구아검 레시피 조회 오류(handleSave):", guarRecipeErr.message);
     if (!guarRecipe) { setSaving(false); return showToast("구아검 레시피를 찾을 수 없습니다.", "error"); }
 
     const { data: blendLog, error: blendErr } = await supabase.from("blend_logs")
