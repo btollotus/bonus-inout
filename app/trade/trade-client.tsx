@@ -678,6 +678,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [memoBody, setMemoBody] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState<UnifiedRow | null>(null);
+  const [eSaving, setESaving] = useState(false);
   const [partnerEditOpen, setPartnerEditOpen] = useState(false);
   const [showPartnerForm, setShowPartnerForm] = useState(false);
   const [shipHistOpen, setShipHistOpen] = useState(false);
@@ -2398,6 +2399,17 @@ if (woSubNameVal) {
     if (stockWarningMsg) setMsg(stockWarningMsg);
   }
 
+  // ── 저장 버튼 중복클릭 방지: saveEdit() 내부 로직은 그대로 두고 바깥에서만 감싼다 ──
+  async function handleSaveEditClick() {
+    if (eSaving) return;
+    setESaving(true);
+    try {
+      await saveEdit();
+    } finally {
+      setESaving(false);
+    }
+  }
+
   function handleDeleteClick(r: UnifiedRow) {
     if (!window.confirm("정말 삭제하시겠습니까?\n삭제하면 복구할 수 없습니다.")) return;
     setDeletePinTargetRow(r);
@@ -2934,7 +2946,7 @@ if (woSubNameVal) {
                   <div className="text-base font-semibold">거래내역 수정 · {editRow.kind === "ORDER" ? "주문/출고" : "금전출납"} · {editRow.partnerName}</div>
                   <div className="mt-1 text-xs text-slate-500">저장하면 즉시 DB에 반영됩니다.</div>
                 </div>
-                <div className="flex gap-2"><button className={btn} onClick={() => setEditOpen(false)}>취소</button><button className={btnOn} onClick={saveEdit}>저장</button></div>
+                <div className="flex gap-2"><button className={btn} onClick={() => setEditOpen(false)}>취소</button><button className={btnOn} onClick={handleSaveEditClick} disabled={eSaving}>{eSaving ? "저장 중..." : "저장"}</button></div>
               </div>
               <div className="px-5 py-4 overflow-y-auto">
                 {editRow.kind === "ORDER" ? (
