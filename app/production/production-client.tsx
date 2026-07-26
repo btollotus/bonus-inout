@@ -3828,8 +3828,9 @@ const totalOrder = items
                                 const lotId = lotData?.id ?? null;
                                 if (lotId) {
                                   const newActualQty = pi.actual_qty ? toInt(pi.actual_qty) : 0;
-                                  const inNote = `작업지시서 생산완료 - ${selectedWo.work_order_no}`;
-                                  const discardNote = `작업지시서 생산완료(불량) - ${selectedWo.work_order_no}`;
+                                  const itemNameForSync = (item.sub_items ?? [])[0]?.name ?? "";
+                                  const inNote = `작업지시서 생산완료 - ${selectedWo.work_order_no} - ${itemNameForSync}`;
+                                  const discardNote = `작업지시서 생산완료(불량) - ${selectedWo.work_order_no} - ${itemNameForSync}`;
                                   const { data: inMovs } = await supabase.from("movements").select("id").eq("lot_id", lotId).eq("note", inNote).eq("type", "IN");
                                   if (inMovs && inMovs.length === 1) {
                                     await supabase.from("movements").update({ qty: newActualQty + newDefectQty }).eq("id", inMovs[0].id);
