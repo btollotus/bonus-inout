@@ -414,6 +414,7 @@ export default function ManualClient() {
   const [editBody,   setEditBody]   = useState("");
   const [editImages, setEditImages] = useState<string[]>([]);
   const [uploading,  setUploading]  = useState(false);
+  const [contentSaving, setContentSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ── lightbox ──
@@ -648,15 +649,21 @@ export default function ManualClient() {
   // ── 저장 (updated_by 포함) ──
   const saveContent=async()=>{
     if(!selectedItem) return;
-    const payload={title:editTitle,body:editBody,image_urls:editImages,updated_at:new Date().toISOString(),updated_by:adminName||"관리자"};
-    if(currentContent){
-      const{error}=await supabase.from("manual_contents").update(payload).eq("menu_item_id",selectedItem);
-      if(error){alert("저장 실패: "+error.message);return;}
-    }else{
-      const{error}=await supabase.from("manual_contents").insert({menu_item_id:selectedItem,...payload});
-      if(error){alert("저장 실패: "+error.message);return;}
+    if(contentSaving) return;
+    setContentSaving(true);
+    try{
+      const payload={title:editTitle,body:editBody,image_urls:editImages,updated_at:new Date().toISOString(),updated_by:adminName||"관리자"};
+      if(currentContent){
+        const{error}=await supabase.from("manual_contents").update(payload).eq("menu_item_id",selectedItem);
+        if(error){alert("저장 실패: "+error.message);return;}
+      }else{
+        const{error}=await supabase.from("manual_contents").insert({menu_item_id:selectedItem,...payload});
+        if(error){alert("저장 실패: "+error.message);return;}
+      }
+      await loadAll(); setEditing(false);
+    }finally{
+      setContentSaving(false);
     }
-    await loadAll(); setEditing(false);
   };
 
   // ── CRUD ──
@@ -1266,7 +1273,7 @@ export default function ManualClient() {
                     </div>
                   </div>
                   <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-                    <button onClick={saveContent} style={{padding:"8px 20px",background:blue,color:white,border:"none",borderRadius:6,cursor:"pointer",fontWeight:600,fontSize:14}}>저장</button>
+                  <button onClick={saveContent} disabled={contentSaving} style={{padding:"8px 20px",background:blue,color:white,border:"none",borderRadius:6,cursor:contentSaving?"default":"pointer",fontWeight:600,fontSize:14,opacity:contentSaving?0.6:1}}>{contentSaving?"저장 중...":"저장"}</button>
                     <button onClick={()=>setEditing(false)} style={{padding:"8px 16px",background:"#f0f0f0",border:"none",borderRadius:6,cursor:"pointer",fontSize:14}}>취소</button>
                   </div>
                 </div>

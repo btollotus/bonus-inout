@@ -260,6 +260,7 @@ export default function QuoteClient() {
   const [sheetInputMode, setSheetInputMode] = useState<"auto" | "manual">("auto");
   const [sheetSearch, setSheetSearch] = useState("");
   const [sheetStatusFilter, setSheetStatusFilter] = useState<string>("전체");
+  const [sheetSaving, setSheetSaving] = useState(false);
 
 
   // ─── 제작문의 (사인판) ───
@@ -533,6 +534,17 @@ async function loadSignageList() {
     setMsg("✅ 전사지 견적이 저장됐어요!");
     setLastQuoteRequestId(req.id);
     loadSheetList();
+  }
+
+  // ─── 중복 클릭 방지 래퍼 (handleSheetSave 자체는 변경하지 않음) ───
+  async function handleSheetSaveClick() {
+    if (sheetSaving) return;
+    setSheetSaving(true);
+    try {
+      await handleSheetSave();
+    } finally {
+      setSheetSaving(false);
+    }
   }
 
   // ─── 전사지 견적 불러오기 ───
@@ -1778,11 +1790,11 @@ async function loadSignageList() {
 
   {/* 저장/출력 버튼 */}
   <div className="flex gap-2">
-      <button
-        className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-white ${sheetInputMode === "manual" ? "border border-orange-300 bg-orange-500 hover:bg-orange-600" : btnOn}`}
-        disabled={!sheetItems.some(x => x.calcResult)}
-        onClick={async () => { await handleSheetSave(); setPrintOpen(true); }}>
-        🖨️ 견적서 출력
+  <button
+        className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-white ${sheetInputMode === "manual" ? "border border-orange-300 bg-orange-500 hover:bg-orange-600" : btnOn} disabled:opacity-60`}
+        disabled={!sheetItems.some(x => x.calcResult) || sheetSaving}
+        onClick={async () => { await handleSheetSaveClick(); setPrintOpen(true); }}>
+        {sheetSaving ? "저장 중..." : "🖨️ 견적서 출력"}
       </button>
       <button className={btn} onClick={resetForm}>
         초기화
