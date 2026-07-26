@@ -670,7 +670,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [deletePinTargetRow, setDeletePinTargetRow] = useState<UnifiedRow | null>(null);
 
  
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsgRaw] = useState<string | null>(null);
   const [showTopBtn, setShowTopBtn] = useState(false);
   const [mode, setMode] = useState<Mode>(isSubAdmin ? "ORDERS" : "UNIFIED");
   const [memoOpen, setMemoOpen] = useState(false);
@@ -696,7 +696,13 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertText, setAlertText] = useState("");
 
-  useEffect(() => { if (!msg) return; setAlertText(msg); setAlertOpen(true); setMsg(null); }, [msg]);
+  // setMsg 자체가 즉시 알림(alertOpen)을 띄우도록 변경 — 기존 useEffect([msg]) 방식은
+  // loadTrades() 등 다른 경로의 setMsg(null) 호출이 커밋 전에 값을 덮어써 알림이 안 뜨는
+  // 레이스 컨디션이 있어 제거함. 기존 setMsg(...) 호출부는 전혀 수정하지 않음.
+  const setMsg = (v: string | null) => {
+    setMsgRaw(v);
+    if (v) { setAlertText(v); setAlertOpen(true); }
+  };
 
   const [partnerView, setPartnerView] = useState<PartnerView>(isSubAdmin ? "PINNED" : "ALL");
   const [partnerFilter, setPartnerFilter] = useState("");
