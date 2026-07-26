@@ -324,6 +324,7 @@ useEffect(() => {
   const [leaveYear, setLeaveYear] = useState(new Date().getFullYear())
   const [editingBalance, setEditingBalance] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<{ total_days: number; override_reason: string }>({ total_days: 0, override_reason: '' })
+  const [overrideSaving, setOverrideSaving] = useState(false)
 
   const [adminModalOpen, setAdminModalOpen] = useState(false)
   const [adminEmpId, setAdminEmpId] = useState('')
@@ -525,26 +526,32 @@ useEffect(() => {
     setAllBalances(result)
   }
   async function saveManualOverride(targetEmpId: string) {
-    const emp = allBalances.find(b => b.employee_id === targetEmpId)
-    if (!emp) return
-    const total = editDraft.total_days
-    const used = emp.used_days
-    const { data: existing } = await supabase.from('leave_balance')
-      .select('id').eq('employee_id', targetEmpId).eq('year', leaveYear).maybeSingle()
-    const payload = {
-      total_granted: total, used_days: used,
-      remaining_days: Math.max(0, total - used),
-      manual_override: true, override_reason: editDraft.override_reason || null,
+    if (overrideSaving) return
+    setOverrideSaving(true)
+    try {
+      const emp = allBalances.find(b => b.employee_id === targetEmpId)
+      if (!emp) return
+      const total = editDraft.total_days
+      const used = emp.used_days
+      const { data: existing } = await supabase.from('leave_balance')
+        .select('id').eq('employee_id', targetEmpId).eq('year', leaveYear).maybeSingle()
+      const payload = {
+        total_granted: total, used_days: used,
+        remaining_days: Math.max(0, total - used),
+        manual_override: true, override_reason: editDraft.override_reason || null,
+      }
+      if (existing) {
+        const { error: e } = await supabase.from('leave_balance').update(payload).eq('id', existing.id)
+        if (e) { alert('저장 오류: ' + e.message); return }
+      } else {
+        const { error: e } = await supabase.from('leave_balance').insert({ employee_id: targetEmpId, year: leaveYear, ...payload })
+        if (e) { alert('저장 오류: ' + e.message); return }
+      }
+      setEditingBalance(null)
+      await fetchAllBalances()
+    } finally {
+      setOverrideSaving(false)
     }
-    if (existing) {
-      const { error: e } = await supabase.from('leave_balance').update(payload).eq('id', existing.id)
-      if (e) { alert('저장 오류: ' + e.message); return }
-    } else {
-      const { error: e } = await supabase.from('leave_balance').insert({ employee_id: targetEmpId, year: leaveYear, ...payload })
-      if (e) { alert('저장 오류: ' + e.message); return }
-    }
-    setEditingBalance(null)
-    await fetchAllBalances()
   }
 
   // =====================================================================
@@ -996,8 +1003,9 @@ const holidayName = holidays[dateStr] || ''
                                     onChange={e => setEditDraft(d => ({...d, override_reason: e.target.value}))}
                                     className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-300" />
                                   <div className="flex gap-1">
-                                    <button onClick={() => saveManualOverride(b.employee_id)}
-                                      className="text-[10px] bg-blue-600 text-white px-2.5 py-1 rounded-lg hover:bg-blue-700 font-medium">저장</button>
+                                  <button onClick={() => saveManualOverride(b.employee_id)}
+                                      disabled={overrideSaving}
+                                      className="text-[10px] bg-blue-600 text-white px-2.5 py-1 rounded-lg hover:bg-blue-700 font-medium disabled:opacity-60">{overrideSaving ? '저장 중...' : '저장'}</button>
                                     <button onClick={() => setEditingBalance(null)}
                                       className="text-[10px] bg-gray-100 text-gray-600 px-2.5 py-1 rounded-lg hover:bg-gray-200">취소</button>
                                   </div>
