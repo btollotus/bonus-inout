@@ -230,28 +230,41 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     });
     setBlendLogs((blendRes.data ?? []) as any);
 
-    // 원료별 합계 집계 + 작업지시서별 매핑
+    // 원료별 합계 집계 (그날 실제 소모 총량 — used_date 기준 유지)
     const usageMap: Record<string, { total_qty: number; unit: string }> = {};
-    const woUsageMap: Record<string, { name: string; quantity: number; unit: string }[]> = {};
     (usageRes.data ?? []).forEach((u: any) => {
       const name = u.material?.name;
       if (!name) return;
-      // 전체 합계
       if (!usageMap[name]) usageMap[name] = { total_qty: 0, unit: u.unit ?? "g" };
       usageMap[name].total_qty += Number(u.quantity);
-      // 작업지시서별 매핑 — note에서 WO 번호 추출
-      const match = (u.note ?? "").match(/WO-[\w-]+/);
-      if (match) {
-        const woNo = match[0];
-        if (!woUsageMap[woNo]) woUsageMap[woNo] = [];
-        woUsageMap[woNo].push({ name, quantity: Number(u.quantity), unit: u.unit ?? "g" });
-      }
     });
     setMaterialUsages(
       Object.entries(usageMap)
         .map(([material_name, v]) => ({ material_name, ...v }))
         .sort((a, b) => a.material_name.localeCompare(b.material_name))
     );
+    // 작업지시서별 원료 사용량 표시는 used_date가 아니라 WO번호로 직접 조회한다.
+    // (재수정으로 used_date는 실제 생산일에 고정돼 있어도, 그 WO의 최종 사용량을 해당 WO 행에는 보여주기 위함)
+    const woNosForUsage = (woRes.data ?? []).map((w: any) => w.work_order_no);
+    const woUsageMap: Record<string, { name: string; quantity: number; unit: string }[]> = {};
+    if (woNosForUsage.length > 0) {
+      const orFilterUsage = woNosForUsage.map((no: string) => `note.ilike.%${no}%`).join(",");
+      const { data: usageByWoData } = await supabase
+        .from("material_usage_logs")
+        .select("quantity, unit, note, material:materials(name)")
+        .eq("work_type", "product")
+        .or(orFilterUsage);
+      (usageByWoData ?? []).forEach((u: any) => {
+        const name = u.material?.name;
+        if (!name) return;
+        const match = (u.note ?? "").match(/WO-[\w-]+/);
+        if (match) {
+          const woNo = match[0];
+          if (!woUsageMap[woNo]) woUsageMap[woNo] = [];
+          woUsageMap[woNo].push({ name, quantity: Number(u.quantity), unit: u.unit ?? "g" });
+        }
+      });
+    }
    // 작업지시서에 원료 사용량 + items + 시간 주입
    setWorkOrders((woRes.data ?? []).map((wo: any) => ({
     ...wo,
@@ -354,19 +367,32 @@ setLoading(false);
         }
       });
       const usageMap: Record<string, { total_qty: number; unit: string }> = {};
-      const woUsageMapR: Record<string, { name: string; quantity: number; unit: string }[]> = {};
       (usageRes.data ?? []).forEach((u: any) => {
         const name = u.material?.name;
         if (!name) return;
         if (!usageMap[name]) usageMap[name] = { total_qty: 0, unit: u.unit ?? "g" };
         usageMap[name].total_qty += Number(u.quantity);
-        const match = (u.note ?? "").match(/WO-[\w-]+/);
-        if (match) {
-          const woNo = match[0];
-          if (!woUsageMapR[woNo]) woUsageMapR[woNo] = [];
-          woUsageMapR[woNo].push({ name, quantity: Number(u.quantity), unit: u.unit ?? "g" });
-        }
       });
+      const woUsageMapR: Record<string, { name: string; quantity: number; unit: string }[]> = {};
+      const woNosForUsageR = (woRes.data ?? []).map((w: any) => w.work_order_no);
+      if (woNosForUsageR.length > 0) {
+        const orFilterUsageR = woNosForUsageR.map((no: string) => `note.ilike.%${no}%`).join(",");
+        const { data: usageByWoDataR } = await supabase
+          .from("material_usage_logs")
+          .select("quantity, unit, note, material:materials(name)")
+          .eq("work_type", "product")
+          .or(orFilterUsageR);
+        (usageByWoDataR ?? []).forEach((u: any) => {
+          const name = u.material?.name;
+          if (!name) return;
+          const match = (u.note ?? "").match(/WO-[\w-]+/);
+          if (match) {
+            const woNo = match[0];
+            if (!woUsageMapR[woNo]) woUsageMapR[woNo] = [];
+            woUsageMapR[woNo].push({ name, quantity: Number(u.quantity), unit: u.unit ?? "g" });
+          }
+        });
+      }
       const materialUsages = Object.entries(usageMap)
         .map(([material_name, v]) => ({ material_name, ...v }))
         .sort((a, b) => a.material_name.localeCompare(b.material_name));
