@@ -3754,8 +3754,9 @@ const totalOrder = items
                 ) : (
                   <>
                     <button className="flex-1 rounded-lg border border-blue-500 bg-blue-600 py-2 text-sm font-bold text-white hover:bg-blue-700"
-                      onClick={async () => {
+                      onClick={() => {
                         if (!selectedWo) return;
+                        setPinProgressPending(() => async (name: string) => {
                         try {
                           if (isAdminOrSubadmin) {
                             const { error } = await supabase.from("work_orders").update({ sub_name: eSubName.trim() || null, product_name: eProductName.trim(), food_type: eFoodType.trim() || null, logo_spec: eLogoSpec.trim() || null, thickness: eThickness || null, delivery_method: eDeliveryMethod || null, packaging_type: ePackagingType === "트레이" ? `트레이-${eTraySlot}` : ePackagingType || null, tray_slot: null, package_unit: ePackageUnit === "기타" ? (ePackageUnitCustom.trim() ? ePackageUnitCustom.trim() + "ea" : null) : ePackageUnit || null, mold_per_sheet: (toInt(eMoldCols) * toInt(eMoldRows)) > 0 ? toInt(eMoldCols) * toInt(eMoldRows) : null, mold_cols: toInt(eMoldCols) > 0 ? toInt(eMoldCols) : null, mold_rows: toInt(eMoldRows) > 0 ? toInt(eMoldRows) : null, mold_count: toInt(eMoldCount) > 0 ? toInt(eMoldCount) : null, note: eNote.trim() || null, reference_note: eReferenceNote.trim() || null, updated_at: new Date().toISOString() }).eq("id", selectedWo.id);
@@ -4088,19 +4089,19 @@ const totalOrder = items
               }
             }
           }
-                          // 수정 기록 저장
-                          if (isPinValid() && pinSession) {
-                            await supabase.from("work_order_edit_logs").insert({
-                              work_order_id: selectedWo.id,
-                              work_order_no: selectedWo.work_order_no,
-                              edited_by_name: pinSession.employeeName,
-                              edit_note: `수정 저장 — ${new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
-                            });
-                          }
+                          // 수정 기록 저장 (PIN 재인증으로 얻은 name으로 항상 기록)
+                          await supabase.from("work_order_edit_logs").insert({
+                            work_order_id: selectedWo.id,
+                            work_order_no: selectedWo.work_order_no,
+                            edited_by_name: name,
+                            edit_note: `수정 저장 — ${new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
+                          });
                           showToast("수정 완료!"); setIsEditMode(false);
                           if (selectedWo.status === "완료") await triggerPdfUpload(selectedWo, eProductName ?? "품목미상", eFoodType ?? "", eLogoSpec ?? "");
                           await loadWoList();
                         } catch (e: any) { showToast("수정 오류: " + (e?.message ?? e), "error"); }
+                        });
+                        setShowPinModalForProgress(true);
                       }}>수정 저장</button>
                     <button className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50" onClick={() => { setIsEditMode(false); applySelection(selectedWo); }}>취소</button>
                   </>
