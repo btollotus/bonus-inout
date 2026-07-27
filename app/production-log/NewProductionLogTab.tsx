@@ -167,7 +167,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [woRes, blendRes, usageRes, ccpEvRes, metalRes] = await Promise.all([
+    const [woRes, blendRes, usageRes, metalRes] = await Promise.all([
       supabase
         .from("work_orders")
         .select("id,work_order_no,client_name,product_name,food_type,note,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight,defect_qty)")
@@ -186,17 +186,22 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         .select("quantity, unit, note, material:materials(name)")
         .eq("used_date", selectedDate)
         .eq("work_type", "product"),
-        supabase
-        .from("ccp_wo_events")
-        .select("work_order_no, event_type, measured_at")
-        .gte("measured_at", `${selectedDate}T00:00:00+09:00`)
-        .lt("measured_at",  `${selectedDate}T23:59:59+09:00`)
-        .order("measured_at", { ascending: true }),
       supabase
         .from("ccp_metal_logs")
         .select("work_order_id, start_time, b_end_time")
         .eq("log_date", selectedDate),
     ]);
+    // 생산시간(ccp_wo_events)은 조회 날짜 범위가 아니라 화면에 표시되는 WO번호로 직접 조회한다.
+    // (완료 후 재수정으로 production_done_at이 실제 생산일과 달라져도, 실제 기록된 생산시간을 그대로 보여주기 위함)
+    const woNosForCcp = (woRes.data ?? []).map((w: any) => w.work_order_no);
+    const { data: ccpEvData } = woNosForCcp.length > 0
+      ? await supabase
+          .from("ccp_wo_events")
+          .select("work_order_no, event_type, measured_at")
+          .in("work_order_no", woNosForCcp)
+          .order("measured_at", { ascending: true })
+      : { data: [] as any[] };
+    const ccpEvRes = { data: ccpEvData };
 
     // work_order_no별 생산시간 맵
     const prodStartMap: Record<string, string> = {};
@@ -294,7 +299,7 @@ setLoading(false);
     }
 
     const results = await Promise.all(dates.map(async (date) => {
-      const [woRes, blendRes, usageRes, ccpEvRes2, metalRes2] = await Promise.all([
+      const [woRes, blendRes, usageRes, metalRes2] = await Promise.all([
         supabase
           .from("work_orders")
           .select("id,work_order_no,client_name,product_name,food_type,note,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight,defect_qty)")
@@ -313,17 +318,21 @@ setLoading(false);
           .select("quantity, unit, note, material:materials(name)")
           .eq("used_date", date)
           .eq("work_type", "product"),
-          supabase
-          .from("ccp_wo_events")
-          .select("work_order_no, event_type, measured_at")
-          .gte("measured_at", `${date}T00:00:00+09:00`)
-          .lt("measured_at",  `${date}T23:59:59+09:00`)
-          .order("measured_at", { ascending: true }),
         supabase
           .from("ccp_metal_logs")
           .select("work_order_id, start_time, b_end_time")
           .eq("log_date", date),
       ]);
+      // 생산시간(ccp_wo_events)은 날짜범위가 아니라 화면에 표시되는 WO번호로 직접 조회 (단일 날짜 조회와 동일한 이유)
+      const woNosForCcpR = (woRes.data ?? []).map((w: any) => w.work_order_no);
+      const { data: ccpEvData2 } = woNosForCcpR.length > 0
+        ? await supabase
+            .from("ccp_wo_events")
+            .select("work_order_no, event_type, measured_at")
+            .in("work_order_no", woNosForCcpR)
+            .order("measured_at", { ascending: true })
+        : { data: [] as any[] };
+      const ccpEvRes2 = { data: ccpEvData2 };
       const prodStartMapR: Record<string, string> = {};
       const prodEndMapR: Record<string, string> = {};
       (ccpEvRes2.data ?? []).forEach((ev: any) => {
