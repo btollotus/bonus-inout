@@ -4003,19 +4003,31 @@ const totalOrder = items
                                 const dupNote = `작업지시서 생산완료 - ${selectedWo.work_order_no}`;
                                 const { data: existingLog } = await supabase
                                   .from("material_usage_logs")
-                                  .select("id")
+                                  .select("id, quantity")
                                   .eq("note", dupNote)
                                   .eq("work_type", "product")
                                   .limit(1);
                                 if (existingLog && existingLog.length > 0) {
                                   const { data: matDataEdit } = await supabase.from("materials")
                                     .select("id").eq("name", compoundNameEdit).maybeSingle();
+                                  const todayKSTDate2 = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+                                  const oldCompoundQty = Number(existingLog[0].quantity);
+                                  const isRealEdit = ft.includes("리얼");
                                   await supabase.from("material_usage_logs")
                                     .update({
                                       quantity: totalCompoundGEdit,
+                                      used_date: todayKSTDate2,
                                       ...(matDataEdit?.id ? { material_id: matDataEdit.id } : {}),
                                     })
                                     .eq("id", existingLog[0].id);
+                                  // 리얼 식품유형은 아래 이산화티타늄 재계산 블록에서 10/11로 다시 정정되므로,
+                                  // 여기서는 최종값이 아닌 중간값이라 비고 기록을 남기지 않는다.
+                                  if (!isRealEdit && oldCompoundQty !== totalCompoundGEdit) {
+                                    const autoLine = `[자동] ${compoundNameEdit} ${oldCompoundQty.toLocaleString()}g → ${totalCompoundGEdit.toLocaleString()}g (${todayKSTDate2} 수정)`;
+                                    const baseNote = (eNote ?? selectedWo.note ?? "").trim();
+                                    const newNoteVal = baseNote ? `${baseNote}\n${autoLine}` : autoLine;
+                                    await supabase.from("work_orders").update({ note: newNoteVal }).eq("id", selectedWo.id);
+                                  }
                                 }
                               }
                             }
@@ -4040,23 +4052,40 @@ const totalOrder = items
               if (aqty > 0 && uw > 0) totalCompoundGEdit2 += aqty * uw;
             }
             if (totalCompoundGEdit2 > 0) {
+              const todayKSTDate3 = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+              const noteLinesEdit2: string[] = [];
               // 컴파운드 재계산 (10/11)
               const dupNoteEdit2 = `작업지시서 생산완료 - ${selectedWo.work_order_no}`;
               const { data: compExisting2 } = await supabase.from("material_usage_logs")
-                .select("id").eq("note", dupNoteEdit2).eq("work_type", "product").limit(1);
+                .select("id, quantity").eq("note", dupNoteEdit2).eq("work_type", "product").limit(1);
               if (compExisting2 && compExisting2.length > 0) {
+                const newCompoundQty2 = Math.round(totalCompoundGEdit2 * 10 / 11);
+                const oldCompoundQty2 = Number(compExisting2[0].quantity);
                 await supabase.from("material_usage_logs")
-                  .update({ quantity: Math.round(totalCompoundGEdit2 * 10 / 11) })
+                  .update({ quantity: newCompoundQty2, used_date: todayKSTDate3 })
                   .eq("id", compExisting2[0].id);
+                if (oldCompoundQty2 !== newCompoundQty2) {
+                  noteLinesEdit2.push(`[자동] ${compoundNameEdit2} ${oldCompoundQty2.toLocaleString()}g → ${newCompoundQty2.toLocaleString()}g (${todayKSTDate3} 수정)`);
+                }
               }
               // 이산화티타늄 재계산 (1/11)
               const tiNote = `이산화티타늄 차감 - ${selectedWo.work_order_no}`;
               const { data: tiExisting } = await supabase.from("material_usage_logs")
-                .select("id").eq("note", tiNote).limit(1);
+                .select("id, quantity").eq("note", tiNote).limit(1);
               if (tiExisting && tiExisting.length > 0) {
+                const newTiQty2 = Math.round(totalCompoundGEdit2 * 1 / 11);
+                const oldTiQty2 = Number(tiExisting[0].quantity);
                 await supabase.from("material_usage_logs")
-                  .update({ quantity: Math.round(totalCompoundGEdit2 * 1 / 11) })
+                  .update({ quantity: newTiQty2, used_date: todayKSTDate3 })
                   .eq("id", tiExisting[0].id);
+                if (oldTiQty2 !== newTiQty2) {
+                  noteLinesEdit2.push(`[자동] 이산화티타늄 ${oldTiQty2.toLocaleString()}g → ${newTiQty2.toLocaleString()}g (${todayKSTDate3} 수정)`);
+                }
+              }
+              if (noteLinesEdit2.length > 0) {
+                const baseNoteEdit2 = (eNote ?? selectedWo.note ?? "").trim();
+                const newNoteVal2 = baseNoteEdit2 ? `${baseNoteEdit2}\n${noteLinesEdit2.join("\n")}` : noteLinesEdit2.join("\n");
+                await supabase.from("work_orders").update({ note: newNoteVal2 }).eq("id", selectedWo.id);
               }
             }
           }
