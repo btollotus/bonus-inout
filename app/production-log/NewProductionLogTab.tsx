@@ -19,6 +19,7 @@ type WorkOrder = {
   client_name: string;
   product_name: string;
   food_type: string | null;
+  note?: string | null;
   assignee_production: string | null;
   assignee_transfer: string | null;
   assignee_input: string | null;
@@ -169,7 +170,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     const [woRes, blendRes, usageRes, ccpEvRes, metalRes] = await Promise.all([
       supabase
         .from("work_orders")
-        .select("id,work_order_no,client_name,product_name,food_type,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight,defect_qty)")
+        .select("id,work_order_no,client_name,product_name,food_type,note,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight,defect_qty)")
         .gte("production_done_at", `${selectedDate}T00:00:00+09:00`)
         .lt("production_done_at",  `${selectedDate}T23:59:59+09:00`)
         .eq("status_production", true)
@@ -296,7 +297,7 @@ setLoading(false);
       const [woRes, blendRes, usageRes, ccpEvRes2, metalRes2] = await Promise.all([
         supabase
           .from("work_orders")
-          .select("id,work_order_no,client_name,product_name,food_type,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight,defect_qty)")
+          .select("id,work_order_no,client_name,product_name,food_type,note,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight,defect_qty)")
           .gte("production_done_at", `${date}T00:00:00+09:00`)
           .lt("production_done_at",  `${date}T23:59:59+09:00`)
           .eq("status_production", true)
@@ -430,7 +431,8 @@ setLoading(false);
                 <td style="${tdC}">${item.actual_qty > 0 ? item.actual_qty.toLocaleString() : "—"}</td>
                 ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}</td>` : ""}
                 ${showUsage ? `<td style="${td}" rowspan="${rows.length}">${usageStr}</td>` : ""}
-              </tr>
+                ${idx === 0 ? `<td style="${td};font-size:7pt;color:#555;" rowspan="${rows.length}">${wo.note ? wo.note : "—"}</td>` : ""}
+              </tr> 
             `;
           });
         });
@@ -439,15 +441,15 @@ setLoading(false);
       const woTable = wos.length > 0 ? `
          <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
          <colgroup>
-            <col style="width:48px"><col style="width:80px"><col><col style="width:38px">
-            <col style="width:75px"><col style="width:110px">
+           <col style="width:48px"><col style="width:80px"><col><col style="width:38px">
+            <col style="width:75px"><col style="width:110px"><col style="width:90px">
           </colgroup>
           <thead>
             <tr>
               <th style="${th}">작업자</th><th style="${th}">업체명</th><th style="${th}">제품명</th><th style="${th}">수량</th>
-              <th style="${th}">생산시간</th><th style="${th}">원료 사용량</th>
+              <th style="${th}">생산시간</th><th style="${th}">원료 사용량</th><th style="${th}">비고</th>
             </tr>
-          </thead>
+          </thead> 
           <tbody>${woRows}</tbody>
         </table>
       ` : "";
