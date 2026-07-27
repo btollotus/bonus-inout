@@ -65,6 +65,10 @@ function toKstTime(utcStr: string) {
   });
 }
 
+function toKstDateOnly(utcStr: string) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date(utcStr)); // "YYYY-MM-DD"
+}
+
 // ─── 컴파운드/이산화티타늄 분리 표시용 (production-client.tsx와 동일 기준 — 그쪽 변경 시 같이 수정 필요) ───
 const DARK_FOOD_TYPES = ["다크화이트","다크옐로우","데코초콜릿","롤리팝다크화이트","다크핑크","다크연두","롤리팝다크핑크"];
 
@@ -431,6 +435,11 @@ setLoading(false);
           // 비고: work_orders.note 전체가 아니라 [자동]/[정정]으로 시작하는 정정 이력 줄만 인쇄에 노출 (전사지 계산용 내부 메모 등 그 외 내용은 비노출)
           const remarkLines = (wo.note ?? "").split("\n").map(l => l.trim()).filter(l => l.startsWith("[자동]") || l.startsWith("[정정]"));
           const remarkStr = remarkLines.length > 0 ? remarkLines.join("<br/>") : "—";
+          // 생산시간의 실제 기록 날짜가 인쇄 페이지 날짜(production_done_at 기준)와 다르면 혼동 방지를 위해 날짜를 함께 표시
+          const prodStartDateKst = wo.prod_start ? toKstDateOnly(wo.prod_start) : null;
+          const timeDatePrefix = (prodStartDateKst && prodStartDateKst !== date)
+            ? `${Number(prodStartDateKst.slice(5, 7))}/${Number(prodStartDateKst.slice(8, 10))} `
+            : "";
           return rows.map((item, idx) => {
             const showWorker = !workerRendered && idx === 0;
             if (showWorker) workerRendered = true;
@@ -441,7 +450,7 @@ setLoading(false);
                <td style="${td}">${wo.client_name}</td>
                 <td style="${td}">${item.name}</td>
                 <td style="${tdC}">${item.actual_qty > 0 ? item.actual_qty.toLocaleString() : "—"}</td>
-                ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}</td>` : ""}
+                ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${timeDatePrefix}${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}</td>` : ""}
                 ${showUsage ? `<td style="${td}" rowspan="${rows.length}">${usageStr}</td>` : ""}
                 ${idx === 0 ? `<td style="${td};font-size:7pt;color:#555;" rowspan="${rows.length}">${remarkStr}</td>` : ""}
               </tr> 
