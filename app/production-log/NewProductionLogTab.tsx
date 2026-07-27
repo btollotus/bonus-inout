@@ -419,6 +419,9 @@ setLoading(false);
           const rows = getPrintRows(wo);
           if (rows.length === 0) return [];
           const usageStr = (wo.usages ?? []).map(u => `${u.name} ${u.quantity.toLocaleString()}${u.unit}`).join(", ") || "—";
+          // 비고: work_orders.note 전체가 아니라 [자동]/[정정]으로 시작하는 정정 이력 줄만 인쇄에 노출 (전사지 계산용 내부 메모 등 그 외 내용은 비노출)
+          const remarkLines = (wo.note ?? "").split("\n").map(l => l.trim()).filter(l => l.startsWith("[자동]") || l.startsWith("[정정]"));
+          const remarkStr = remarkLines.length > 0 ? remarkLines.join("<br/>") : "—";
           return rows.map((item, idx) => {
             const showWorker = !workerRendered && idx === 0;
             if (showWorker) workerRendered = true;
@@ -431,7 +434,7 @@ setLoading(false);
                 <td style="${tdC}">${item.actual_qty > 0 ? item.actual_qty.toLocaleString() : "—"}</td>
                 ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}</td>` : ""}
                 ${showUsage ? `<td style="${td}" rowspan="${rows.length}">${usageStr}</td>` : ""}
-                ${idx === 0 ? `<td style="${td};font-size:7pt;color:#555;" rowspan="${rows.length}">${wo.note ? wo.note : "—"}</td>` : ""}
+                ${idx === 0 ? `<td style="${td};font-size:7pt;color:#555;" rowspan="${rows.length}">${remarkStr}</td>` : ""}
               </tr> 
             `;
           });
