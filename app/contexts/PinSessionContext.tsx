@@ -34,7 +34,7 @@ export function PinSessionProvider({ children }: { children: React.ReactNode }) 
     setSession({
       employeeId,
       employeeName,
-      expiresAt: Date.now() + 10 * 60 * 1000, // 10분간 세션 유지
+      expiresAt: Date.now(), // 즉시 만료 — PIN은 매번 새로 인증
     });
   }, []);
 
