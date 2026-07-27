@@ -4016,7 +4016,6 @@ const totalOrder = items
                                   await supabase.from("material_usage_logs")
                                     .update({
                                       quantity: totalCompoundGEdit,
-                                      used_date: todayKSTDate2,
                                       ...(matDataEdit?.id ? { material_id: matDataEdit.id } : {}),
                                     })
                                     .eq("id", existingLog[0].id);
@@ -4062,7 +4061,7 @@ const totalOrder = items
                 const newCompoundQty2 = Math.round(totalCompoundGEdit2 * 10 / 11);
                 const oldCompoundQty2 = Number(compExisting2[0].quantity);
                 await supabase.from("material_usage_logs")
-                  .update({ quantity: newCompoundQty2, used_date: todayKSTDate3 })
+                  .update({ quantity: newCompoundQty2 })
                   .eq("id", compExisting2[0].id);
                 if (oldCompoundQty2 !== newCompoundQty2) {
                   noteLinesEdit2.push(`[자동] ${compoundNameEdit2} ${oldCompoundQty2.toLocaleString()}g → ${newCompoundQty2.toLocaleString()}g (${todayKSTDate3} 수정)`);
@@ -4076,7 +4075,7 @@ const totalOrder = items
                 const newTiQty2 = Math.round(totalCompoundGEdit2 * 1 / 11);
                 const oldTiQty2 = Number(tiExisting[0].quantity);
                 await supabase.from("material_usage_logs")
-                  .update({ quantity: newTiQty2, used_date: todayKSTDate3 })
+                  .update({ quantity: newTiQty2 })
                   .eq("id", tiExisting[0].id);
                 if (oldTiQty2 !== newTiQty2) {
                   noteLinesEdit2.push(`[자동] 이산화티타늄 ${oldTiQty2.toLocaleString()}g → ${newTiQty2.toLocaleString()}g (${todayKSTDate3} 수정)`);
