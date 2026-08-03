@@ -600,15 +600,14 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
           return (
             <div style={{ fontFamily:"'Malgun Gothic','맑은 고딕',sans-serif", fontSize:"7pt", color:"#000" }}>
 
-              {/* 상단: 회사명 + 기간 */}
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:3 }}>
+              {/* 상단: 회사명 */}
+              <div style={{ marginBottom:3 }}>
                 <div style={{ fontSize:"8pt", color:"#555" }}>BONUSMATE</div>
-                <div style={{ fontSize:"8pt", color:"#555" }}>{y}년 {m}월</div>
               </div>
 
               {/* 제목 */}
               <div style={{ fontSize:"15pt", fontWeight:"bold", textAlign:"center", letterSpacing:"2px", marginBottom:2 }}>
-                온장고 세척소독 관리일지
+                온장고 세척소독 관리일지 — {y}년 {m}월
               </div>
               <div style={{ fontSize:"8.5pt", textAlign:"center", color:"#333", marginBottom:6 }}>
                 (1회/일)
