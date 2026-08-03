@@ -776,7 +776,7 @@ export function PestTab({ role, userId, showToast }: {
             <thead>
               <tr style={{ background: "#f0f0f0" }}>
                 <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 44, fontSize: "8pt" }}>날짜</th>
-                <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>트랩</th>
+                <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 130, fontSize: "8pt", whiteSpace: "nowrap" }}>트랩</th>
                 {["그리마","거미","노래기","모기","집게벌래","기타"].map(h => (
                   <th key={h} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "7.5pt" }}>{h}</th>
                 ))}
@@ -799,7 +799,7 @@ export function PestTab({ role, userId, showToast }: {
                             {fmtDate(date)}
                           </td>
                         )}
-                        <td style={{ border: "1px solid #000", padding: "3px", fontSize: "7.5pt" }}>{TRAP_LABELS[trap]}</td>
+                        <td style={{ border: "1px solid #000", padding: "3px", fontSize: "7.5pt", whiteSpace: "nowrap" }}>{TRAP_LABELS[trap]}</td>
                         <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.grima || ""}</td>
                         <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.spider || ""}</td>
                         <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center" }}>{r?.centipede || ""}</td>
