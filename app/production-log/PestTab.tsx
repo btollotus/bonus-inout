@@ -258,6 +258,31 @@ export function PestTab({ role, userId, showToast }: {
     acc[trap] = viewWalking.filter(r => r.trap_no === trap).reduce((s, r) => s + r.total, 0);
     return acc;
   }, {} as Record<string, number>);
+  const FLYING_CATS: { key: keyof FlyingRecord; label: string }[] = [
+    { key: "fly", label: "파리" },
+    { key: "mosquito", label: "모기" },
+    { key: "midges", label: "깔다구" },
+    { key: "fruit_fly", label: "초파리" },
+    { key: "moth", label: "나방" },
+    { key: "housefly", label: "날파리" },
+    { key: "other", label: "기타" },
+  ];
+  const WALKING_CATS: { key: keyof WalkingRecord; label: string }[] = [
+    { key: "grima", label: "그리마" },
+    { key: "spider", label: "거미" },
+    { key: "centipede", label: "노래기" },
+    { key: "mosquito", label: "모기" },
+    { key: "earwig", label: "집게벌레" },
+    { key: "other", label: "기타" },
+  ];
+  const flyingCatTotal = FLYING_CATS.reduce((acc, c) => {
+    acc[c.key as string] = viewFlying.reduce((s, r) => s + ((r[c.key] as number) || 0), 0);
+    return acc;
+  }, {} as Record<string, number>);
+  const walkingCatTotal = WALKING_CATS.reduce((acc, c) => {
+    acc[c.key as string] = viewWalking.reduce((s, r) => s + ((r[c.key] as number) || 0), 0);
+    return acc;
+  }, {} as Record<string, number>);
 
   const viewSeason = getSeason(`${viewYear}-${String(viewMonth).padStart(2,"0")}-01`);
   const criteriaLabels = CRITERIA_LABELS[viewSeason];
@@ -446,7 +471,11 @@ export function PestTab({ role, userId, showToast }: {
                       ))}
                       <tr className="bg-slate-50 font-semibold">
                         <td colSpan={2} className="border border-slate-200 py-2 px-2 text-center text-xs">월 합계</td>
-                        <td colSpan={7} className="border border-slate-200 py-2 px-2 text-center text-xs text-slate-400">—</td>
+                        {FLYING_CATS.map(c => (
+                          <td key={c.key as string} className="border border-slate-200 py-2 px-1 text-center text-xs">
+                            {flyingCatTotal[c.key as string] || ""}
+                          </td>
+                        ))}
                         <td className="border border-slate-200 py-2 px-2 text-center text-xs bg-blue-50 text-blue-700">
                           {Object.values(flyingMonthTotal).reduce((a,b)=>a+b,0) || ""}
                         </td>
@@ -524,7 +553,11 @@ export function PestTab({ role, userId, showToast }: {
                       ))}
                       <tr className="bg-slate-50 font-semibold">
                         <td colSpan={2} className="border border-slate-200 py-2 px-2 text-center text-xs">월 합계</td>
-                        <td colSpan={6} className="border border-slate-200 py-2 px-2 text-center text-xs text-slate-400">—</td>
+                        {WALKING_CATS.map(c => (
+                          <td key={c.key as string} className="border border-slate-200 py-2 px-1 text-center text-xs">
+                            {walkingCatTotal[c.key as string] || ""}
+                          </td>
+                        ))}
                         <td className="border border-slate-200 py-2 px-2 text-center text-xs bg-blue-50 text-blue-700">
                           {Object.values(walkingMonthTotal).reduce((a,b)=>a+b,0) || ""}
                         </td>
@@ -668,7 +701,11 @@ export function PestTab({ role, userId, showToast }: {
               {/* 월 합계 행 */}
               <tr style={{ background: "#f5f5f5", fontWeight: "bold" }}>
                 <td colSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>계</td>
-                <td colSpan={7} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", color: "#999" }}>—</td>
+                {FLYING_CATS.map(c => (
+                  <td key={c.key as string} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>
+                    {flyingCatTotal[c.key as string] || ""}
+                  </td>
+                ))}
                 <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>
                   {Object.values(flyingMonthTotal).reduce((a,b)=>a+b,0) || ""}
                 </td>
@@ -785,7 +822,11 @@ export function PestTab({ role, userId, showToast }: {
               {/* 월 합계 행 */}
               <tr style={{ background: "#f5f5f5", fontWeight: "bold" }}>
                 <td colSpan={2} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>계</td>
-                <td colSpan={6} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt", color: "#999" }}>—</td>
+                {WALKING_CATS.map(c => (
+                  <td key={c.key as string} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>
+                    {walkingCatTotal[c.key as string] || ""}
+                  </td>
+                ))}
                 <td style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "8pt" }}>
                   {Object.values(walkingMonthTotal).reduce((a,b)=>a+b,0) || ""}
                 </td>
