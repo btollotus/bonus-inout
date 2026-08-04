@@ -3909,10 +3909,10 @@ function RaizeCutForm({ employeeName, userId, showToast, onHasRecordChange }: {
         <div className="text-xs font-semibold text-purple-700">🍫 완제품(컬러프린트용트랜스퍼시트) 생산정보 *</div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <div className="mb-1 text-xs text-slate-500">완제품 생산수량 *</div>
+          <div className="mb-1 text-xs text-slate-500">완제품 생산수량 BOX</div>
             <input
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-right tabular-nums focus:border-purple-400 focus:outline-none"
-              inputMode="numeric" placeholder="EA"
+              inputMode="numeric" placeholder="BOX"
               value={finishedQty}
               onChange={(e) => setFinishedQty(e.target.value.replace(/[^\d]/g, ""))} />
           </div>
