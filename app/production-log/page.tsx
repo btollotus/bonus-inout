@@ -3974,7 +3974,7 @@ function RaizeCutForm({ employeeName, userId, showToast, onHasRecordChange }: {
 
       <button
         className="w-full rounded-xl bg-purple-600 py-2.5 text-sm font-bold text-white hover:bg-purple-700 disabled:opacity-60"
-        disabled={saving || selected.length === 0 || !finishedQty || !finishedExpiry}
+        disabled={saving || selected.length === 0}
         onClick={handleSave}>
         {saving ? "저장 중..." : `💾 레이즈재단 기록 저장${totalSelected > 0 ? ` (${totalSelected.toLocaleString()} EA)` : ""}`}
       </button>
