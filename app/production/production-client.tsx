@@ -620,6 +620,7 @@ export default function ProductionClient() {
     const q = kiseongSearch.trim().toLowerCase();
     const base = kiseongVariants.filter((v) => {
       if (v.variant_name.includes("성형틀") || v.variant_name.includes("인쇄제판")) return false;
+      if (v.variant_name === "컬러프린트용트랜스퍼시트(초콜릿중간재)") return false; // 레이즈재단 기록 전용 — 재고생산 등록 대상 제외
       if (kiseongCategory) return (v.category ?? "") === kiseongCategory;
       return true;
     });
