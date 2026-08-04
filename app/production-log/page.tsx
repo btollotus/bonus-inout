@@ -3732,6 +3732,10 @@ function RaizeCutForm({ employeeName, userId, showToast, onHasRecordChange }: {
   const [lotOptions, setLotOptions] = useState<SprayLot[]>([]);
   const [selected, setSelected] = useState<{ lot_id: string; qty: string }[]>([]);
 
+  // 완제품(컬러프린트용트랜스퍼시트(초콜릿중간재)) 생산수량/소비기한 — 레이즈재단과 별도 입력
+  const [finishedQty, setFinishedQty] = useState("");
+  const [finishedExpiry, setFinishedExpiry] = useState("");
+
   useEffect(() => { loadLots(); loadSavedLogs(); }, []);
 
   useEffect(() => {
@@ -3795,6 +3799,10 @@ function RaizeCutForm({ employeeName, userId, showToast, onHasRecordChange }: {
   async function handleSave() {
     if (selected.length === 0) return showToast("재단할 lot을 선택하세요.", "error");
     if (selected.some((s) => !s.qty || Number(s.qty) <= 0)) return showToast("선택한 lot의 수량을 모두 입력하세요.", "error");
+    if (!finishedQty || Number(finishedQty) <= 0) return showToast("완제품 생산수량을 입력하세요.", "error");
+    if (!finishedExpiry) return showToast("완제품 소비기한을 입력하세요.", "error");
+
+    // 잔량 초과 검사
 
     // 잔량 초과 검사
     for (const s of selected) {
@@ -3831,8 +3839,37 @@ function RaizeCutForm({ employeeName, userId, showToast, onHasRecordChange }: {
       });
       if (petErr) { showToast("수불 기록 실패: " + petErr.message, "error"); setSaving(false); return; }
 
-      showToast(`✅ 레이즈재단 ${totalQty.toLocaleString()} EA 기록 완료!`);
+      // 3. 완제품(컬러프린트용트랜스퍼시트(초콜릿중간재)) 재고 입고
+      const { data: finishedVariant, error: fvErr } = await supabase.from("product_variants")
+        .select("id").eq("variant_name", "컬러프린트용트랜스퍼시트(초콜릿중간재)").maybeSingle();
+      if (fvErr || !finishedVariant) { showToast("완제품 품목 조회 실패: " + (fvErr?.message ?? "품목 없음"), "error"); setSaving(false); return; }
+
+      let finishedLotId: string | null = null;
+      const { data: existingFinishedLot, error: flErr } = await supabase.from("lots")
+        .select("id").eq("variant_id", finishedVariant.id).eq("expiry_date", finishedExpiry).maybeSingle();
+      if (flErr) { showToast("완제품 LOT 조회 실패: " + flErr.message, "error"); setSaving(false); return; }
+      if (existingFinishedLot) {
+        finishedLotId = existingFinishedLot.id;
+      } else {
+        const { data: newFinishedLot, error: newFlErr } = await supabase.from("lots")
+          .insert({ variant_id: finishedVariant.id, expiry_date: finishedExpiry }).select("id").single();
+        if (newFlErr) { showToast("완제품 LOT 생성 실패: " + newFlErr.message, "error"); setSaving(false); return; }
+        finishedLotId = newFinishedLot.id;
+      }
+      const { error: finishedMovErr } = await supabase.from("movements").insert({
+        lot_id: finishedLotId,
+        type: "IN",
+        qty: Number(finishedQty),
+        happened_at: `${cutDate}T00:00:00+09:00`,
+        note: `레이즈재단 생산 - ${employeeName}`,
+        created_by: userId,
+      });
+      if (finishedMovErr) { showToast("완제품 재고 입고 실패: " + finishedMovErr.message, "error"); setSaving(false); return; }
+
+      showToast(`✅ 레이즈재단 ${totalQty.toLocaleString()} EA · 완제품 ${Number(finishedQty).toLocaleString()} EA 입고 기록 완료!`);
       setSelected([]);
+      setFinishedQty("");
+      setFinishedExpiry("");
       await loadLots();
       await loadSavedLogs();
     } finally {
@@ -3861,11 +3898,31 @@ function RaizeCutForm({ employeeName, userId, showToast, onHasRecordChange }: {
         </div>
       )}
 
-      <div>
+<div>
         <div className="mb-1 text-xs text-slate-500">재단일 *</div>
         <input type="date"
           className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-400 focus:outline-none"
           value={cutDate} onChange={(e) => setCutDate(e.target.value)} />
+      </div>
+
+      <div className="rounded-xl border border-purple-200 bg-white p-3 space-y-2">
+        <div className="text-xs font-semibold text-purple-700">🍫 완제품(컬러프린트용트랜스퍼시트) 생산정보 *</div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <div className="mb-1 text-xs text-slate-500">완제품 생산수량 *</div>
+            <input
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-right tabular-nums focus:border-purple-400 focus:outline-none"
+              inputMode="numeric" placeholder="EA"
+              value={finishedQty}
+              onChange={(e) => setFinishedQty(e.target.value.replace(/[^\d]/g, ""))} />
+          </div>
+          <div>
+            <div className="mb-1 text-xs text-slate-500">완제품 소비기한 *</div>
+            <input type="date"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-400 focus:outline-none"
+              value={finishedExpiry} onChange={(e) => setFinishedExpiry(e.target.value)} />
+          </div>
+        </div>
       </div>
 
       <div>
@@ -3917,7 +3974,7 @@ function RaizeCutForm({ employeeName, userId, showToast, onHasRecordChange }: {
 
       <button
         className="w-full rounded-xl bg-purple-600 py-2.5 text-sm font-bold text-white hover:bg-purple-700 disabled:opacity-60"
-        disabled={saving || selected.length === 0}
+        disabled={saving || selected.length === 0 || !finishedQty || !finishedExpiry}
         onClick={handleSave}>
         {saving ? "저장 중..." : `💾 레이즈재단 기록 저장${totalSelected > 0 ? ` (${totalSelected.toLocaleString()} EA)` : ""}`}
       </button>
