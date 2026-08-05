@@ -1325,7 +1325,9 @@ export default function ProductionClient() {
         const isDecoDonomItem = !isEunbakItem && (wo.food_type ?? "") === "데코초콜릿" && name.includes("도눔");
         const donomBarcodes = isEunbakItem ? ["BO202604020001"] : isDecoDonomItem ? ["BO202604220021"] : null;
         const itemClientKeyword = (isEunbakItem || isDecoDonomItem) ? "도눔" : clientKeyword;
-        const keywords = (itemClientKeyword && !isMarketplace)
+        const keywords = (isEunbakItem || isDecoDonomItem)
+          ? [itemClientKeyword]
+          : (itemClientKeyword && !isMarketplace)
           ? [itemClientKeyword]
           : itemKeyword ? [itemKeyword] : [];
           searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check, donomBarcodes);
