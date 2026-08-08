@@ -2377,6 +2377,10 @@ if (woSubNameVal) {
             const shortageNoteKey = `재고부족 임시출고 - ${editRow.rawId} - ${cl.name}`;
             const { data: existingShortageMov } = await supabase.from("movements").select("id").eq("note", shortageNoteKey).limit(1).maybeSingle();
             if (!existingShortageMov && eWoId) continue;
+            // 2026-08-08 추가: eWoId가 없어도(=생성 당시 WO 없이 수동 lot으로 정상출고된 주문), 이미 실제 재고에서 정상 차감된 기록("거래내역 OUT")이 있으면 재고부족이 아니므로 건너뜀(중복 임시출고+유령WO 생성 방지)
+            const realOutNoteKey = `거래내역 OUT - ${editRow.rawId} - ${cl.name}`;
+            const { data: existingRealOut } = await supabase.from("movements").select("id").eq("note", realOutNoteKey).limit(1).maybeSingle();
+            if (!existingShortageMov && existingRealOut) continue;
             const shortageResult = await createTempLotForShortage(supabase, variantId, cl.actual_ea, cl.name, eShipDate, selectedPartner.name, stockUserId, editRow.rawId);
             if (shortageResult.error) stockErrors.push(shortageResult.error);
           }

@@ -1,0 +1,61 @@
+﻿diff --git a/app/production/production-client.tsx b/app/production/production-client.tsx
+index 570446e..b4c5fac 100644
+--- a/app/production/production-client.tsx
++++ b/app/production/production-client.tsx
+@@ -395,6 +395,15 @@ export default function ProductionClient() {
+   const [neoColorSpraySaved, setNeoColorSpraySaved] = useState(false);
+   const [neoColorSprayEditMode, setNeoColorSprayEditMode] = useState(false);
+   const [neoColorSpraySaving, setNeoColorSpraySaving] = useState(false);
++  // realtime 핸들러(useEffect 클로저)에서 최신 저장/편집/입력 상태를 참조하기 위한 ref — 본인이 입력 중인(저장 전 포함) 값을 실시간 이벤트가 덮어쓰지 않도록 방지
++  const neoColorSpraySavingRef = useRef(false);
++  const neoColorSprayEditModeRef = useRef(false);
++  const neoColorSpraySavedRef = useRef(false);
++  const neoColorSprayLotsRef = useRef<{ lot_id: string; qty: string }[]>([]);
++  useEffect(() => { neoColorSpraySavingRef.current = neoColorSpraySaving; }, [neoColorSpraySaving]);
++  useEffect(() => { neoColorSprayEditModeRef.current = neoColorSprayEditMode; }, [neoColorSprayEditMode]);
++  useEffect(() => { neoColorSpraySavedRef.current = neoColorSpraySaved; }, [neoColorSpraySaved]);
++  useEffect(() => { neoColorSprayLotsRef.current = neoColorSprayLots; }, [neoColorSprayLots]);
+ 
+   const [eSubName, setESubName] = useState("");
+   const [eProductName, setEProductName] = useState("");
+@@ -666,6 +675,17 @@ export default function ProductionClient() {
+           setECcpSlotId((d.ccp_slot_id as string) ?? "");
+           setSelectedWo((prev) => prev ? { ...prev, ccp_slot_id: (d.ccp_slot_id as string) ?? null } : prev);
+         }
++        // 분사-레이즈 사용량: 다른 기기/세션에서 저장한 값을 실시간 반영
++        // 단, 본인이 저장 중이거나(neoColorSpraySavingRef) / 수정모드로 직접 편집 중이거나(neoColorSprayEditModeRef)
++        // / 아직 저장 전인데 로컬에 입력해 둔 값이 있는 경우(neoColorSpraySavedRef=false && neoColorSprayLotsRef에 값 있음)에는
++        // 사용자가 입력 중인 값을 realtime 이벤트가 지우지 않도록 동기화를 건너뜀
++        const hasUnsavedLocalInput = !neoColorSpraySavedRef.current && neoColorSprayLotsRef.current.length > 0;
++        if (d.neo_color_spray_lots !== undefined && !neoColorSpraySavingRef.current && !neoColorSprayEditModeRef.current && !hasUnsavedLocalInput) {
++          const incomingSprayLots = (d.neo_color_spray_lots as { lot_id: string; qty: string }[] | null) ?? [];
++          setNeoColorSprayLots(incomingSprayLots);
++          setNeoColorSpraySaved(incomingSprayLots.length > 0);
++          setSelectedWo((prev) => prev ? { ...prev, neo_color_spray_lots: incomingSprayLots } : prev);
++        }
+         const now = new Date();
+         setLastUpdatedAt(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`);
+         const changed = PROGRESS_STEPS.find((s) => d[s.assigneeKey] !== undefined || d[s.statusKey] !== undefined);
+@@ -3104,7 +3124,21 @@ const totalOrder = items
+                                     updated_at: new Date().toISOString(),
+                                   }).eq("id", selectedWo.id);
+                                   if (error) { setNeoColorSpraySaving(false); showToast("저장 실패: " + error.message, "error"); return; }
+-                                  // 2. movements OUT + pet_stock_logs 즉시 기록
++                                  // 2. 기존 movements/pet_stock_logs 중복 방지 — 동일 note로 이미 저장된 게 있으면 먼저 삭제
++                                  const neoNoteFresh = `네오컬러 인쇄투입 - ${selectedWo.work_order_no}`;
++                                  const { data: existingMovs, error: existingMovsErr } = await supabase.from("movements").select("id").eq("note", neoNoteFresh);
++                                  if (existingMovsErr) { setNeoColorSpraySaving(false); showToast("기존 기록 조회 실패: " + existingMovsErr.message, "error"); return; }
++                                  if (existingMovs && existingMovs.length > 0) {
++                                    const { error: delExistingMovErr } = await supabase.from("movements").delete().in("id", existingMovs.map((m) => m.id));
++                                    if (delExistingMovErr) { setNeoColorSpraySaving(false); showToast("기존 재고 기록 삭제 실패: " + delExistingMovErr.message, "error"); return; }
++                                  }
++                                  const { data: existingPets, error: existingPetsErr } = await supabase.from("pet_stock_logs").select("id").eq("note", neoNoteFresh);
++                                  if (existingPetsErr) { setNeoColorSpraySaving(false); showToast("기존 PET 기록 조회 실패: " + existingPetsErr.message, "error"); return; }
++                                  if (existingPets && existingPets.length > 0) {
++                                    const { error: delExistingPetErr } = await supabase.from("pet_stock_logs").delete().in("id", existingPets.map((p) => p.id));
++                                    if (delExistingPetErr) { setNeoColorSpraySaving(false); showToast("기존 PET 기록 삭제 실패: " + delExistingPetErr.message, "error"); return; }
++                                  }
++                                  // 3. movements OUT + pet_stock_logs 즉시 기록
+                                   const { data: { user } } = await supabase.auth.getUser();
+                                   const userId = user?.id ?? null;
+                                   const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
