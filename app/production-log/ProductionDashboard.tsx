@@ -413,32 +413,34 @@ export function ProductionDashboard({
       thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30);
       const limitStr = thirtyDaysLater.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 
-      const { data } = await supabase.from("material_receipts")
-        .select("material_id, expiry_date, material:materials(name, is_active)")
+      const { data } = await supabase.from("material_lot_stock")
+        .select("material_id, material_name, expiry_date, remaining_qty")
         .not("expiry_date", "is", null)
         .lte("expiry_date", limitStr)
         .gte("expiry_date", today)
+        .gt("remaining_qty", 0)
         .order("expiry_date");
 
-      // 만료된 항목
-      const { data: expiredData } = await supabase.from("material_receipts")
-        .select("material_id, expiry_date, material:materials(name, is_active)")
+      // 만료된 항목 (잔여수량 있는 것만)
+      const { data: expiredData } = await supabase.from("material_lot_stock")
+        .select("material_id, material_name, expiry_date, remaining_qty")
         .not("expiry_date", "is", null)
-        .lt("expiry_date", today);
+        .lt("expiry_date", today)
+        .gt("remaining_qty", 0);
 
-      // is_active=true인 원료만 필터, 중복 제거
-      const activeIminent = (data ?? []).filter((r: any) => r.material?.is_active === true);
-      const activeExpired = (expiredData ?? []).filter((r: any) => r.material?.is_active === true);
+      // material_lot_stock 뷰가 이미 is_active=true만 반환하므로 별도 필터 불필요
+      const activeIminent = data ?? [];
+      const activeExpired = expiredData ?? [];
 
       // 원료별로 가장 가까운 expiry_date만 표시
       const iminentMap = new Map<string, { name: string; expiry: string }>();
       activeIminent.forEach((r: any) => {
-        const name = r.material?.name ?? r.material_id;
+        const name = r.material_name ?? r.material_id;
         if (!iminentMap.has(name)) iminentMap.set(name, { name, expiry: r.expiry_date });
       });
       const expiredMap = new Map<string, { name: string; expiry: string }>();
       activeExpired.forEach((r: any) => {
-        const name = r.material?.name ?? r.material_id;
+        const name = r.material_name ?? r.material_id;
         if (!expiredMap.has(name)) expiredMap.set(name, { name, expiry: r.expiry_date });
       });
 
