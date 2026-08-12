@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/browser'
+import { todayKST } from '@/lib/utils/date'
 
 import { useRef } from 'react'
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -285,7 +286,7 @@ export default function LeavePage() {
   const isSubAdmin = role === 'SUBADMIN' // ✅ 추가
   const supabase = createClient()
   const year = new Date().getFullYear()
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayKST()
 
   const [balance, setBalance] = useState<LeaveBalance | null>(null)
   const [myRequests, setMyRequests] = useState<LeaveRequest[]>([])
