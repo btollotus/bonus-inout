@@ -1342,7 +1342,7 @@ export default function ProductionClient() {
         const MARKETPLACE_CLIENTS = ["네이버-판매", "카카오플러스-판매", "쿠팡-판매"];
         const isMarketplace = MARKETPLACE_CLIENTS.includes(wo.client_name ?? "");
         const isEunbakItem = name === "도눔(은박)";
-        const isDecoDonomItem = !isEunbakItem && (wo.food_type ?? "") === "데코초콜릿" && name.includes("도눔");
+        const isDecoDonomItem = !isEunbakItem && (wo.food_type ?? "") === "데코초콜릿" && name.includes("도눔") && wo.order_type !== "재고";
         const donomBarcodes = isEunbakItem ? ["BO202604020001"] : isDecoDonomItem ? ["BO202604220021"] : null;
         const itemClientKeyword = (isEunbakItem || isDecoDonomItem) ? "도눔" : clientKeyword;
         const keywords = (isEunbakItem || isDecoDonomItem)
