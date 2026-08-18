@@ -134,18 +134,18 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
           vat: Math.round(sheetSupply * 0.1),
           total: sheetSupply + Math.round(sheetSupply * 0.1),
         });
-      if (item.plateCost > 0) {
-        lineItems.push({
-          name: "인쇄판비 (최초 1회)",
-          qty: "1",
-          unit: item.plateCost,
-          supply: item.plateCost,
-          vat: Math.round(item.plateCost * 0.1),
-          total: item.plateCost + Math.round(item.plateCost * 0.1),
-        });
+        if (item.plateCost > 0) {
+          lineItems.push({
+            name: "인쇄제판 (최초 1회)",
+            qty: "1",
+            unit: item.plateCost,
+            supply: item.plateCost,
+            vat: Math.round(item.plateCost * 0.1),
+            total: item.plateCost + Math.round(item.plateCost * 0.1),
+          });
+        }
+        continue;
       }
-      continue;
-    }
 
     const isDoneum = item.productType.includes("도눔");
     const knownPrefixes = ["전사", "레이즈", "도눔", "롤리팝", "입체초콜릿"];
