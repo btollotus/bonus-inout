@@ -2356,11 +2356,13 @@ if (woSubNameVal) {
         }
         const stockErrors = await applyStockOutLots(supabase, cleanLines, editRow.rawId, stockWorkOrderNo, eShipDate, stockUserId);
 
-        // 출고일이 변경된 경우, 이 작업지시서의 CCP-1P 생산완료/거래내역 OUT 기록(happened_at)을 새 출고일로 동기화
-        if (stockWorkOrderNo && eShipDate !== editRow.date) {
+        // 출고일이 변경된 경우, 거래내역 OUT 기록(happened_at)을 새 출고일로 동기화
+        // WO 연결 건은 WO번호로, WO 없이 lot 직접선택 출고한 건은 주문ID로 매칭
+        if (eShipDate !== editRow.date) {
+          const outSyncRef = stockWorkOrderNo || editRow.rawId;
           const { error: outSyncErr } = await supabase.from("movements")
             .update({ happened_at: `${eShipDate}T00:00:00+09:00` })
-            .ilike("note", `거래내역 OUT - ${stockWorkOrderNo} - %`);
+            .ilike("note", `거래내역 OUT - ${outSyncRef} - %`);
           if (outSyncErr) stockErrors.push("출고일 동기화 실패: " + outSyncErr.message);
         }
 
