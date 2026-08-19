@@ -1633,7 +1633,21 @@ async function loadSignageList() {
                   onClick={() => calcSheetItem(item)}>
                   🔢 계산
                 </button>
-
+                {item.calcResult && (
+                  <div className="flex gap-2 text-xs text-slate-600 flex-wrap">
+                    {item.calcResult.plateCost > 0 && (
+                      <span className="rounded-lg border border-slate-200 bg-white px-2 py-1">
+                        인쇄제판 {fmt(item.calcResult.plateCost)}원
+                      </span>
+                    )}
+                    <span className="rounded-lg border border-slate-200 bg-white px-2 py-1">
+                      전사지 {fmt(item.calcResult.sheetCost)}원
+                    </span>
+                    <span className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 font-semibold text-blue-700">
+                      소계 {fmt(item.calcResult.total)}원
+                    </span>
+                  </div>
+                )}
               </>
             ) : (
               <>
