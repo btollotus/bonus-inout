@@ -6,7 +6,7 @@ import QuotePrintModal from "./QuotePrintModal";
 import { PRODUCTS } from "@/lib/quoteCalculator";
 
 // ─────────────────────── Types ───────────────────────
-type Tab = "input" | "list" | "sheet" | "signage";
+type Tab = "input" | "list" | "sheet" | "signage" | "bdp";
 
 type PresetProductRow = {
   id: string;
@@ -271,6 +271,13 @@ const [signageSearch, setSignageSearch] = useState("");
 const [sigPage, setSigPage] = useState(1);
 const SIG_PAGE_SIZE = 10;
 
+  // ─── 홈페이지(bdp2026) 문의 ───
+const [bdpList, setBdpList] = useState<any[]>([]);
+const [bdpLoading, setBdpLoading] = useState(false);
+const [bdpSearch, setBdpSearch] = useState("");
+const [bdpPage, setBdpPage] = useState(1);
+const BDP_PAGE_SIZE = 10;
+
   // 스타일
   const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
   const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300";
@@ -331,6 +338,25 @@ async function loadSignageList() {
     }
   }
 
+  // ─── 홈페이지(bdp2026) 문의 로드 ───
+async function loadBdpInquiries() {
+    setBdpLoading(true);
+    try {
+      const res = await fetch("/api/bdp-inquiries");
+      const json = await res.json();
+      if (!res.ok) {
+        setMsg(json.error ?? "홈페이지 문의 데이터를 불러오지 못했습니다.");
+        setBdpList([]);
+        return;
+      }
+      setBdpList(json.data ?? []);
+    } catch {
+      setMsg("홈페이지 문의 데이터를 불러오지 못했습니다.");
+    } finally {
+      setBdpLoading(false);
+    }
+  }
+
   const [presetProducts, setPresetProducts] = useState<PresetProductRow[]>([]);
 
   useEffect(() => {
@@ -356,6 +382,10 @@ async function loadSignageList() {
 
   useEffect(() => {
     if (tab === "signage") loadSignageList();
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab === "bdp") loadBdpInquiries();
   }, [tab]);
 
   // ─── 계산 (API 호출) — 품목별로 inline 처리 ───
@@ -737,6 +767,7 @@ async function loadSignageList() {
             { key: "list",  label: "📑 견적 목록" },
             { key: "sheet", label: "📄 전사지 견적" },
             { key: "signage", label: "🪧 제작문의" },
+            { key: "bdp", label: "🌐 홈페이지 문의" },
           ] as { key: Tab; label: string }[]).map(t => (
             <button key={t.key} className={tab === t.key ? btnOn : btn} onClick={() => {
               setTab(t.key);
@@ -2045,6 +2076,122 @@ async function loadSignageList() {
               </button>
               <span className="ml-2 text-xs text-slate-400">
                 {(sigPage - 1) * SIG_PAGE_SIZE + 1}–{Math.min(sigPage * SIG_PAGE_SIZE, filtered.length)} / {filtered.length}건
+              </span>
+            </div>
+          )}
+        </>
+      );
+    })()}
+  </div>
+)}
+
+{/* ───────────── 탭 5: 홈페이지(bdp2026) 문의 ───────────── */}
+{tab === "bdp" && (
+  <div className={`${card} p-4`}>
+    <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="text-lg font-semibold">🌐 홈페이지 제작문의 (bdp2026)</div>
+      <div className="relative">
+        <input
+          className={`${inp} max-w-[240px] pr-7`}
+          placeholder="업체명, 담당자 검색..."
+          value={bdpSearch}
+          onChange={e => { setBdpSearch(e.target.value); setBdpPage(1); }}
+        />
+        {bdpSearch && (
+          <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+            onClick={() => { setBdpSearch(""); setBdpPage(1); }}>✕</button>
+        )}
+      </div>
+      <button className={btn} onClick={loadBdpInquiries}>🔄 새로고침</button>
+      <span className="text-xs text-slate-400 ml-auto">총 {bdpList.length}건</span>
+    </div>
+
+    {bdpLoading ? (
+      <div className="py-8 text-center text-sm text-slate-400">불러오는 중...</div>
+    ) : (() => {
+      const formTypeLabel: Record<string, string> = {
+        SIGNBOARD: "사인판 장식물",
+        TRANSFER_SHEET: "전사지",
+        OTHER: "기타 문의",
+      };
+      const filtered = bdpList.filter((r: any) => {
+        const q = bdpSearch.toLowerCase();
+        return !q
+          || (r.company_name ?? '').toLowerCase().includes(q)
+          || (r.contact_name ?? '').toLowerCase().includes(q);
+      });
+      const totalPages = Math.max(1, Math.ceil(filtered.length / BDP_PAGE_SIZE));
+      const paginated = filtered.slice((bdpPage - 1) * BDP_PAGE_SIZE, bdpPage * BDP_PAGE_SIZE);
+
+      return (
+        <>
+        <div className="space-y-3">
+            {paginated.map((r: any) => (
+              <div key={r.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-slate-400 tabular-nums">
+                    {r.created_at ? utcToKSTDate(r.created_at) : "—"}
+                  </span>
+                  <span className="font-bold text-slate-900">{r.company_name ?? "—"}</span>
+                  {r.contact_name && <span className="text-sm text-slate-600">{r.contact_name}</span>}
+                  {r.phone && <span className="ml-auto text-xs text-slate-500 tabular-nums">{r.phone}</span>}
+                </div>
+                <div className="mb-3">
+                  <span className={pill}>{formTypeLabel[r.form_type] ?? r.form_type ?? "—"}</span>
+                </div>
+                <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-4">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">모양</div>
+                    <div className="font-medium text-slate-800">{r.shape ?? "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">크기</div>
+                    <div className="font-medium text-slate-800">{r.size_text ?? "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">종류</div>
+                    <div className="font-medium text-slate-800">{r.color_type ?? r.sheet_color ?? "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">수량</div>
+                    <div className="font-medium text-slate-800">{r.quantity ?? r.sheet_count ?? "—"}</div>
+                  </div>
+                </div>
+                {r.memo && (
+                  <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700 leading-relaxed">
+                    {r.memo}
+                  </div>
+                )}
+              </div>
+            ))}
+            {paginated.length === 0 && (
+              <div className="py-8 text-center text-sm text-slate-400">검색 결과가 없습니다.</div>
+            )}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-center gap-1">
+              <button
+                className={`${btn} px-3 py-1.5 text-xs`}
+                disabled={bdpPage === 1}
+                onClick={() => setBdpPage(p => Math.max(1, p - 1))}>
+                ← 이전
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                <button key={p}
+                  className={`rounded-xl border px-3 py-1.5 text-xs font-semibold ${bdpPage === p ? "border-blue-300 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  onClick={() => setBdpPage(p)}>
+                  {p}
+                </button>
+              ))}
+              <button
+                className={`${btn} px-3 py-1.5 text-xs`}
+                disabled={bdpPage === totalPages}
+                onClick={() => setBdpPage(p => Math.min(totalPages, p + 1))}>
+                다음 →
+              </button>
+              <span className="ml-2 text-xs text-slate-400">
+                {(bdpPage - 1) * BDP_PAGE_SIZE + 1}–{Math.min(bdpPage * BDP_PAGE_SIZE, filtered.length)} / {filtered.length}건
               </span>
             </div>
           )}
