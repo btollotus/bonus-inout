@@ -39,9 +39,30 @@ export async function GET() {
     .order("created_at", { ascending: false })
     .limit(200);
 
-  if (bdpError) {
-    return NextResponse.json({ error: bdpError.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ data: data ?? [] });
-}
+    if (bdpError) {
+        return NextResponse.json({ error: bdpError.message }, { status: 500 });
+      }
+    
+      // 4) 첨부파일 signed URL 생성 (public-inquiry-attachments는 비공개 버킷)
+      const rows = data ?? [];
+      const withAttachmentUrls = await Promise.all(
+        rows.map(async (row: any) => {
+          const paths: string[] = row.attachment_paths ?? [];
+          if (!paths.length) {
+            return { ...row, attachment_urls: [] };
+          }
+          const signed = await Promise.all(
+            paths.map(async (p: string) => {
+              const { data: signedData, error: signError } = await bdpAdmin.storage
+                .from("public-inquiry-attachments")
+                .createSignedUrl(p, 3600); // 1시간 유효
+              if (signError || !signedData) return null;
+              return { path: p, url: signedData.signedUrl, name: p.split("/").pop() ?? p };
+            })
+          );
+          return { ...row, attachment_urls: signed.filter(Boolean) };
+        })
+      );
+    
+      return NextResponse.json({ data: withAttachmentUrls });
+    }

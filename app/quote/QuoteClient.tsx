@@ -2162,6 +2162,24 @@ async function loadBdpInquiries() {
                     {r.memo}
                   </div>
                 )}
+                {r.attachment_urls && r.attachment_urls.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {r.attachment_urls.map((a: any, i: number) => {
+                      const isImage = /\.(png|jpe?g|gif|webp)$/i.test(a.name ?? "");
+                      return (
+                        <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50">
+                          {isImage ? (
+                            <img src={a.url} alt={a.name} className="h-8 w-8 rounded object-cover" />
+                          ) : (
+                            <span>📎</span>
+                          )}
+                          <span className="max-w-[140px] truncate">{a.name}</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ))}
             {paginated.length === 0 && (
