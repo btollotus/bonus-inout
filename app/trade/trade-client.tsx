@@ -2343,6 +2343,7 @@ if (woSubNameVal) {
             logo_spec: matchedELine?.logo_spec || null,
             sub_items: [{ name: syncedName, qty: syncedQty }],
             order_qty: syncedQty,
+            unit_weight: matchedELine?.weight_g && Number(matchedELine.weight_g) > 0 ? Number(matchedELine.weight_g) : null,
           }).eq("id", itemId);
         }
       }
