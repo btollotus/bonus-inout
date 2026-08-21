@@ -102,8 +102,14 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
 
   // ── 식품유형 (첫 품목 기준) ──
   const firstItem = items[0];
+  // 색상 인쇄 품목만 대상 — 운임/기성품/전사지 등 비색상 부가품목(color_type=null → "dark" 기본값 오염)은 식품유형 계산에서 제외
+  const colorPrintPrefixes = ["전사", "레이즈", "도눔", "롤리팝", "입체초콜릿"];
+  const colorPrintItems = items.filter(item =>
+    item.productType !== "전사지" &&
+    (item.isRaise || colorPrintPrefixes.some(k => item.productType.includes(k)))
+  );
   const foodTypes = [...new Map(
-    items.map(item => [
+    colorPrintItems.map(item => [
       item.colorType === "dark" && !item.isRaise ? "준초콜릿" : "당류가공품",
       item.isRaise ? "컬러인쇄" : item.colorType === "dark" ? "다크" : "화이트",
     ])
