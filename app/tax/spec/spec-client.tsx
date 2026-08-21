@@ -214,7 +214,6 @@ useEffect(() => {
   const [loading, setLoading] = useState(false);
       // ── (신규, 읽기전용) 주문라인별 실제 LOT(소비기한) 출고이력 — 표시전용, 금액/수량 계산에는 사용되지 않음 ──
       const [lotMemoMap, setLotMemoMap] = useState<Record<string, { expiry_date: string; qty: number }[]>>({});
-      const lotMemoLoadingRef = useRef(false); // state가 아닌 ref: 재렌더링/effect 재실행을 유발하지 않고 "현재 로딩중 여부"만 즉시 조회 가능 
 
   // ✅ 여러 주문 중 선택 출력
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
@@ -303,55 +302,48 @@ useEffect(() => {
     setLines(out);
   }
 
-  // ── (신규, 읽기전용) 화면에 표시된 라인들의 LOT별 출고이력 조회 ──
+   // ── (신규, 읽기전용) 화면에 표시될 라인들의 LOT별 출고이력 조회 ──
   // movements.note 형식("거래내역 OUT - {주문ID 또는 작업지시서번호} - {품목명}")을 이용해 정확히 매칭.
   // 금액/수량/세금계산서 관련 로직은 전혀 건드리지 않음 — lotMemoMap이라는 별도 표시전용 state만 채움.
-  useEffect(() => {
-    if (!lines.length) { setLotMemoMap({}); lotMemoLoadingRef.current = false; return; }
-    let cancelled = false;
-    lotMemoLoadingRef.current = true;
-    (async () => {
-      const targets = lines.filter((l) => l.orderId && l.itemName.trim()).map((l) => ({ orderId: l.orderId as string, itemName: l.itemName.trim() }));
-      if (targets.length === 0) { if (!cancelled) { setLotMemoMap({}); lotMemoLoadingRef.current = false; } return; }
-      const orderIdsUniq = Array.from(new Set(targets.map((t) => t.orderId)));
-      const { data: linkedWos } = await supabase.from("work_orders").select("linked_order_id, work_order_no").in("linked_order_id", orderIdsUniq);
-      const woNoByOrderId = new Map<string, string>();
-      (linkedWos ?? []).forEach((w: any) => { if (w.linked_order_id && w.work_order_no) woNoByOrderId.set(w.linked_order_id, w.work_order_no); });
-      const noteToKey = new Map<string, string>();
-      const allNotes: string[] = [];
-      for (const t of targets) {
-        const key = `${t.orderId}||${t.itemName}`;
-        const refs = [t.orderId];
-        const woNo = woNoByOrderId.get(t.orderId);
-        if (woNo) refs.push(woNo);
-        for (const ref of refs) {
-          const note = `거래내역 OUT - ${ref} - ${t.itemName}`;
-          noteToKey.set(note, key);
-          allNotes.push(note);
-        }
+  // ✅ loadSpec() 파이프라인 안에서 await로 호출됨(독립 useEffect 아님) → loading 플래그 하나로 로딩상태가 통합관리되어
+  //    autoprint가 기존 로직(if (loading) return;) 그대로 LOT 조회 완료까지 자연스럽게 기다리게 됨. 별도 폴링/ref 불필요.
+  async function fetchLotMemo(targets: { orderId: string; itemName: string }[]): Promise<Record<string, { expiry_date: string; qty: number }[]>> {
+    if (targets.length === 0) return {};
+    const orderIdsUniq = Array.from(new Set(targets.map((t) => t.orderId)));
+    const { data: linkedWos } = await supabase.from("work_orders").select("linked_order_id, work_order_no").in("linked_order_id", orderIdsUniq);
+    const woNoByOrderId = new Map<string, string>();
+    (linkedWos ?? []).forEach((w: any) => { if (w.linked_order_id && w.work_order_no) woNoByOrderId.set(w.linked_order_id, w.work_order_no); });
+    const noteToKey = new Map<string, string>();
+    const allNotes: string[] = [];
+    for (const t of targets) {
+      const key = `${t.orderId}||${t.itemName}`;
+      const refs = [t.orderId];
+      const woNo = woNoByOrderId.get(t.orderId);
+      if (woNo) refs.push(woNo);
+      for (const ref of refs) {
+        const note = `거래내역 OUT - ${ref} - ${t.itemName}`;
+        noteToKey.set(note, key);
+        allNotes.push(note);
       }
-      if (allNotes.length === 0) { if (!cancelled) { setLotMemoMap({}); lotMemoLoadingRef.current = false; } return; }
-      const { data: movs, error } = await supabase.from("movements").select("qty, note, lots(expiry_date)").in("note", allNotes).eq("type", "OUT");
-      if (cancelled) return;
-      if (error || !movs) { setLotMemoMap({}); lotMemoLoadingRef.current = false; return; }
-      const grouped = new Map<string, Map<string, number>>();
-      for (const m of movs as any[]) {
-        const key = noteToKey.get(m.note);
-        if (!key) continue;
-        const exp = m.lots?.expiry_date ?? "미상";
-        if (!grouped.has(key)) grouped.set(key, new Map());
-        const inner = grouped.get(key)!;
-        inner.set(exp, (inner.get(exp) ?? 0) + Number(m.qty ?? 0));
-      }
-      const result: Record<string, { expiry_date: string; qty: number }[]> = {};
-      grouped.forEach((inner, key) => {
-        result[key] = Array.from(inner.entries()).map(([expiry_date, qty]) => ({ expiry_date, qty })).sort((a, b) => a.expiry_date.localeCompare(b.expiry_date));
-      });
-      setLotMemoMap(result);
-      lotMemoLoadingRef.current = false;
-    })();
-    return () => { cancelled = true; };
-  }, [lines, supabase]);
+    }
+    if (allNotes.length === 0) return {};
+    const { data: movs, error } = await supabase.from("movements").select("qty, note, lots(expiry_date)").in("note", allNotes).eq("type", "OUT");
+    if (error || !movs) return {};
+    const grouped = new Map<string, Map<string, number>>();
+    for (const m of movs as any[]) {
+      const key = noteToKey.get(m.note);
+      if (!key) continue;
+      const exp = m.lots?.expiry_date ?? "미상";
+      if (!grouped.has(key)) grouped.set(key, new Map());
+      const inner = grouped.get(key)!;
+      inner.set(exp, (inner.get(exp) ?? 0) + Number(m.qty ?? 0));
+    }
+    const result: Record<string, { expiry_date: string; qty: number }[]> = {};
+    grouped.forEach((inner, key) => {
+      result[key] = Array.from(inner.entries()).map(([expiry_date, qty]) => ({ expiry_date, qty })).sort((a, b) => a.expiry_date.localeCompare(b.expiry_date));
+    });
+    return result;
+  }
 
   async function loadSpec(pId: string, date: string) {
     setMsg(null);
@@ -363,6 +355,7 @@ useEffect(() => {
         setRawLines([]);
         setLines([]);
         setSelectedOrderIds([]);
+        setLotMemoMap({});
         setMsg("partnerId 또는 date가 없습니다. (상단에서 거래처/일자 선택 후 조회)");
         return;
       }
@@ -385,6 +378,7 @@ useEffect(() => {
         setRawLines([]);
         setLines([]);
         setSelectedOrderIds([]);
+        setLotMemoMap({});
         return;
       }
 
@@ -418,12 +412,18 @@ useEffect(() => {
 
     setRawLines(sortedRaw);
     rebuildLines(orderIds, sortedRaw);
+
+    // ✅ LOT 이력도 이 시점에 await로 완전히 끝내고 나서야 loading=false가 됨 → autoprint가 기존 로직 그대로 자연스럽게 기다림
+    const lotTargets = sortedRaw.filter((l) => l.orderId && String(l.itemName ?? "").trim() !== "").map((l) => ({ orderId: l.orderId, itemName: String(l.itemName).trim() }));
+    const lotResult = await fetchLotMemo(lotTargets);
+    setLotMemoMap(lotResult);
     } catch (e: any) {
       setMsg(e?.message ?? String(e));
       setOrders([]);
       setRawLines([]);
       setLines([]);
       setSelectedOrderIds([]);
+      setLotMemoMap({});
     } finally {
       setLoading(false);
     }
@@ -570,30 +570,23 @@ useEffect(() => {
     }
   }
 
-  // ✅ autoprint=1 이면 로드 완료 후 인쇄창(CTRL+P) 자동 실행 (1회)
-  const didAutoPrintRef = useRef(false);
-  useEffect(() => {
-    const auto = String(qpAutoPrint ?? "").trim() === "1";
-    if (!auto) return;
-    if (didAutoPrintRef.current) return;
-    if (loading) return;
-
-    // 데이터 로드가 끝났다면(0건이어도) 인쇄창을 띄움
-    didAutoPrintRef.current = true;
-    let cancelled = false;
-    let attempts = 0;
-    // ✅ (신규) LOT 이력(비동기, 별도 useEffect) 조회가 아직 끝나지 않았으면 짧은 간격으로 재확인 후 인쇄 —
-    // ref를 폴링하는 방식이라 이 effect의 재실행/취소를 유발하지 않음(레이스컨디션 없음)
-    // 안전장치: 최대 약 3초(20회)까지만 대기 — 그 이후엔 LOT메모 없이라도 인쇄 자체는 진행(무한대기 방지)
-    const attemptPrint = () => {
-      if (cancelled) return;
-      attempts += 1;
-      if (lotMemoLoadingRef.current && attempts < 20) { window.setTimeout(attemptPrint, 150); return; }
-      try { doPrint(); } catch {}
-    };
-    const t = window.setTimeout(attemptPrint, 350);
-
-    return () => { cancelled = true; window.clearTimeout(t); };
+   // ✅ autoprint=1 이면 로드 완료 후 인쇄창(CTRL+P) 자동 실행 (1회)
+   const didAutoPrintRef = useRef(false);
+   useEffect(() => {
+     const auto = String(qpAutoPrint ?? "").trim() === "1";
+     if (!auto) return;
+     if (didAutoPrintRef.current) return;
+     if (loading) return;
+ 
+     // 데이터 로드가 끝났다면(0건이어도) 인쇄창을 띄움 — LOT 이력도 이제 loadSpec() 안에서 loading이 꺼지기 전에 완료되므로 별도 처리 불필요
+     didAutoPrintRef.current = true;
+     const t = window.setTimeout(() => {
+       try {
+         doPrint();
+       } catch {}
+     }, 350);
+ 
+     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qpAutoPrint, loading, orders.length, lines.length]);
 
