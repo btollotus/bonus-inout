@@ -3027,7 +3027,7 @@ if (woSubNameVal) {
                     <div className="mt-2 space-y-1">
                     {eLines.map((l, i) => (
                         <div key={i}>
-                                                    <LineRow l={l} i={i} onUpdate={updateEditLine} onRemove={removeEditLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} supabaseClient={supabase} orderId={editRow.rawId} /></parameter>
+                                                  <LineRow l={l} i={i} onUpdate={updateEditLine} onRemove={removeEditLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} supabaseClient={supabase} orderId={editRow.rawId} />
                           {eWoId && l.name && !["택배비"].includes(l.name) ? (
                             <div className="ml-1 mb-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                               <div className="mb-1 text-xs text-slate-500">🖼 {l.name} 인쇄 디자인 이미지</div>
