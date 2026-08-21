@@ -67,6 +67,7 @@ type SpecLine = {
   total: number;
   giftQty?: number;
   packEa?: number;
+  orderId?: string;
 };
 
 function formatMoney(n: number | null | undefined) {
@@ -211,6 +212,8 @@ useEffect(() => {
   const [rawLines, setRawLines] = useState<RawLineWithOrder[]>([]);
   const [lines, setLines] = useState<SpecLine[]>([]);
   const [loading, setLoading] = useState(false);
+  // ── (신규, 읽기전용) 주문라인별 실제 LOT(소비기한) 출고이력 — 표시전용, 금액/수량 계산에는 사용되지 않음 ──
+  const [lotMemoMap, setLotMemoMap] = useState<Record<string, { expiry_date: string; qty: number }[]>>({});
 
   // ✅ 여러 주문 중 선택 출력
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
@@ -284,6 +287,7 @@ useEffect(() => {
           total: r.total,
           giftQty: r.giftQty ?? 0,
           packEa: r.packEa,
+          orderId: r.orderId,
         });
       } else {
         prev.qty += r.qty;
@@ -297,6 +301,54 @@ useEffect(() => {
     const out = Array.from(agg.values()).filter((x) => x.itemName.trim() !== "");
     setLines(out);
   }
+
+  // ── (신규, 읽기전용) 화면에 표시된 라인들의 LOT별 출고이력 조회 ──
+  // movements.note 형식("거래내역 OUT - {주문ID 또는 작업지시서번호} - {품목명}")을 이용해 정확히 매칭.
+  // 금액/수량/세금계산서 관련 로직은 전혀 건드리지 않음 — lotMemoMap이라는 별도 표시전용 state만 채움.
+  useEffect(() => {
+    if (!lines.length) { setLotMemoMap({}); return; }
+    let cancelled = false;
+    (async () => {
+      const targets = lines.filter((l) => l.orderId && l.itemName.trim()).map((l) => ({ orderId: l.orderId as string, itemName: l.itemName.trim() }));
+      if (targets.length === 0) { setLotMemoMap({}); return; }
+      const orderIdsUniq = Array.from(new Set(targets.map((t) => t.orderId)));
+      const { data: linkedWos } = await supabase.from("work_orders").select("linked_order_id, work_order_no").in("linked_order_id", orderIdsUniq);
+      const woNoByOrderId = new Map<string, string>();
+      (linkedWos ?? []).forEach((w: any) => { if (w.linked_order_id && w.work_order_no) woNoByOrderId.set(w.linked_order_id, w.work_order_no); });
+      const noteToKey = new Map<string, string>();
+      const allNotes: string[] = [];
+      for (const t of targets) {
+        const key = `${t.orderId}||${t.itemName}`;
+        const refs = [t.orderId];
+        const woNo = woNoByOrderId.get(t.orderId);
+        if (woNo) refs.push(woNo);
+        for (const ref of refs) {
+          const note = `거래내역 OUT - ${ref} - ${t.itemName}`;
+          noteToKey.set(note, key);
+          allNotes.push(note);
+        }
+      }
+      if (allNotes.length === 0) { setLotMemoMap({}); return; }
+      const { data: movs, error } = await supabase.from("movements").select("qty, note, lots(expiry_date)").in("note", allNotes).eq("type", "OUT");
+      if (cancelled) return;
+      if (error || !movs) { setLotMemoMap({}); return; }
+      const grouped = new Map<string, Map<string, number>>();
+      for (const m of movs as any[]) {
+        const key = noteToKey.get(m.note);
+        if (!key) continue;
+        const exp = m.lots?.expiry_date ?? "미상";
+        if (!grouped.has(key)) grouped.set(key, new Map());
+        const inner = grouped.get(key)!;
+        inner.set(exp, (inner.get(exp) ?? 0) + Number(m.qty ?? 0));
+      }
+      const result: Record<string, { expiry_date: string; qty: number }[]> = {};
+      grouped.forEach((inner, key) => {
+        result[key] = Array.from(inner.entries()).map(([expiry_date, qty]) => ({ expiry_date, qty })).sort((a, b) => a.expiry_date.localeCompare(b.expiry_date));
+      });
+      setLotMemoMap(result);
+    })();
+    return () => { cancelled = true; };
+  }, [lines, supabase]);
 
   async function loadSpec(pId: string, date: string) {
     setMsg(null);
@@ -604,7 +656,7 @@ useEffect(() => {
     for (const r of picked) {
       const key = `${r.itemName}||${r.unitPrice}`;
       const prev = agg.get(key);
-      if (!prev) agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total, giftQty: r.giftQty ?? 0, packEa: r.packEa });
+      if (!prev) agg.set(key, { itemName: r.itemName, qty: r.qty, unitPrice: r.unitPrice, supply: r.supply, vat: r.vat, total: r.total, giftQty: r.giftQty ?? 0, packEa: r.packEa, orderId });
       else {
         prev.qty += r.qty;
         prev.supply += r.supply;
@@ -998,6 +1050,11 @@ useEffect(() => {
                             {(r.giftQty ?? 0) > 0 && (
                               <div className="mt-0.5 text-xs text-violet-600 font-semibold">
                                 주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""} +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
+                              </div>
+                            )}
+                            {(lotMemoMap[`${r.orderId}||${r.itemName}`] ?? []).length > 0 && (
+                              <div className="mt-0.5 text-xs text-amber-700">
+                                LOT: {(lotMemoMap[`${r.orderId}||${r.itemName}`] ?? []).map((h) => `${h.expiry_date} ${h.qty.toLocaleString()}EA`).join(" / ")}
                               </div>
                             )}
                           </td>
