@@ -1196,6 +1196,11 @@ useEffect(() => {
                                       주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""} +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
                                     </div>
                                   )}
+                                  {(lotMemoMap[`${r.orderId}||${r.itemName}`] ?? []).length > 0 && (
+                                    <div className="mt-0.5 text-xs text-amber-700">
+                                      LOT: {(lotMemoMap[`${r.orderId}||${r.itemName}`] ?? []).map((h) => `${h.expiry_date} ${h.qty.toLocaleString()}EA`).join(" / ")}
+                                    </div>
+                                  )}
                                 </td>
                                 <td className="px-3 py-2 text-right">{formatMoney(r.qty)}</td>
                                 <td className="px-3 py-2 text-right">{formatMoney(r.unitPrice)}</td>
@@ -1318,6 +1323,11 @@ useEffect(() => {
                             {(r.giftQty ?? 0) > 0 && (
                               <div className="mt-0.5 text-xs text-violet-600 font-semibold">
                                 주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""} +증정 {formatMoney(r.giftQty)}개 = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
+                              </div>
+                            )}
+                          {(lotMemoMap[`${r.orderId}||${r.itemName}`] ?? []).length > 0 && (
+                              <div className="mt-0.5 text-xs text-amber-700">
+                                LOT: {(lotMemoMap[`${r.orderId}||${r.itemName}`] ?? []).map((h) => `${h.expiry_date} ${h.qty.toLocaleString()}EA`).join(" / ")}
                               </div>
                             )}
                           </td>
