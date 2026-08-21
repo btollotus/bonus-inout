@@ -212,8 +212,9 @@ useEffect(() => {
   const [rawLines, setRawLines] = useState<RawLineWithOrder[]>([]);
   const [lines, setLines] = useState<SpecLine[]>([]);
   const [loading, setLoading] = useState(false);
-  // ── (신규, 읽기전용) 주문라인별 실제 LOT(소비기한) 출고이력 — 표시전용, 금액/수량 계산에는 사용되지 않음 ──
-  const [lotMemoMap, setLotMemoMap] = useState<Record<string, { expiry_date: string; qty: number }[]>>({});
+    // ── (신규, 읽기전용) 주문라인별 실제 LOT(소비기한) 출고이력 — 표시전용, 금액/수량 계산에는 사용되지 않음 ──
+    const [lotMemoMap, setLotMemoMap] = useState<Record<string, { expiry_date: string; qty: number }[]>>({});
+    const [lotMemoLoading, setLotMemoLoading] = useState(false);
 
   // ✅ 여러 주문 중 선택 출력
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
@@ -306,11 +307,12 @@ useEffect(() => {
   // movements.note 형식("거래내역 OUT - {주문ID 또는 작업지시서번호} - {품목명}")을 이용해 정확히 매칭.
   // 금액/수량/세금계산서 관련 로직은 전혀 건드리지 않음 — lotMemoMap이라는 별도 표시전용 state만 채움.
   useEffect(() => {
-    if (!lines.length) { setLotMemoMap({}); return; }
+    if (!lines.length) { setLotMemoMap({}); setLotMemoLoading(false); return; }
     let cancelled = false;
+    setLotMemoLoading(true);
     (async () => {
       const targets = lines.filter((l) => l.orderId && l.itemName.trim()).map((l) => ({ orderId: l.orderId as string, itemName: l.itemName.trim() }));
-      if (targets.length === 0) { setLotMemoMap({}); return; }
+      if (targets.length === 0) { if (!cancelled) { setLotMemoMap({}); setLotMemoLoading(false); } return; }
       const orderIdsUniq = Array.from(new Set(targets.map((t) => t.orderId)));
       const { data: linkedWos } = await supabase.from("work_orders").select("linked_order_id, work_order_no").in("linked_order_id", orderIdsUniq);
       const woNoByOrderId = new Map<string, string>();
@@ -328,10 +330,10 @@ useEffect(() => {
           allNotes.push(note);
         }
       }
-      if (allNotes.length === 0) { setLotMemoMap({}); return; }
+      if (allNotes.length === 0) { if (!cancelled) { setLotMemoMap({}); setLotMemoLoading(false); } return; }
       const { data: movs, error } = await supabase.from("movements").select("qty, note, lots(expiry_date)").in("note", allNotes).eq("type", "OUT");
       if (cancelled) return;
-      if (error || !movs) { setLotMemoMap({}); return; }
+      if (error || !movs) { setLotMemoMap({}); setLotMemoLoading(false); return; }
       const grouped = new Map<string, Map<string, number>>();
       for (const m of movs as any[]) {
         const key = noteToKey.get(m.note);
@@ -346,6 +348,7 @@ useEffect(() => {
         result[key] = Array.from(inner.entries()).map(([expiry_date, qty]) => ({ expiry_date, qty })).sort((a, b) => a.expiry_date.localeCompare(b.expiry_date));
       });
       setLotMemoMap(result);
+      setLotMemoLoading(false);
     })();
     return () => { cancelled = true; };
   }, [lines, supabase]);
@@ -574,6 +577,7 @@ useEffect(() => {
     if (!auto) return;
     if (didAutoPrintRef.current) return;
     if (loading) return;
+    if (lotMemoLoading) return; // ✅ (신규) LOT 이력 조회가 끝날 때까지 자동인쇄 대기 — 안 그러면 인쇄본에 LOT메모가 누락됨
 
     // 데이터 로드가 끝났다면(0건이어도) 인쇄창을 띄움
     didAutoPrintRef.current = true;
@@ -585,7 +589,7 @@ useEffect(() => {
 
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qpAutoPrint, loading, orders.length, lines.length]);
+  }, [qpAutoPrint, loading, orders.length, lines.length, lotMemoLoading]);
 
   // --- 합계(선택된 주문 "통합" 기준) ---
   const sumSupply = useMemo(() => lines.reduce((a, r) => a + (r.supply ?? 0), 0), [lines]);
