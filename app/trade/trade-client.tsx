@@ -490,13 +490,15 @@ function ShipmentForm({ label, value, onChange, cls, namePrefix }: {
 }
 
 type StockLotInfo = { lot_id: string; expiry_date: string; pack_unit: number | null; stock_qty: number };
+type LotHistoryEntry = { expiry_date: string; qty: number };
 type LineRowProps = {
   l: Line; i: number; onUpdate: (i: number, p: Partial<Line>) => void; onRemove: (i: number) => void;
   presetByName: Map<string, PresetProductRow>; masterByName: Map<string, MasterProductRow>;
   inputCls: string; inputRightCls: string; btnCls: string; gridCols: string; qtyBadgeCls: string;
   supabaseClient?: ReturnType<typeof createClient>;
+  orderId?: string; // 수정화면에서만 전달됨(신규작성 화면은 미전달 → 아래 조회 자체가 실행 안 됨, 기존 동작 그대로)
 };
-function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCls, inputRightCls, btnCls, gridCols, qtyBadgeCls, supabaseClient }: LineRowProps) {
+function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCls, inputRightCls, btnCls, gridCols, qtyBadgeCls, supabaseClient, orderId }: LineRowProps) {
   const r = calcLineAmounts(l.qty, l.unit, l.total_incl_vat);
   const pack = inferPackEaFromName(l.name);
   const [stockLots, setStockLots] = useState<StockLotInfo[]>([]);
@@ -515,6 +517,32 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
       });
     return () => { cancelled = true; };
   }, [variantId, supabaseClient]);
+  // ── (신규, 읽기전용) 이 주문라인이 실제로 어느 LOT(소비기한)에서 얼마씩 출고됐는지 이력 조회 ──
+  // stock_out_lots(저장/차감용 필드)와는 완전히 분리된 표시 전용 상태값. cleanLines/applyStockOutLots에는 절대 사용되지 않음.
+  const [lotHistory, setLotHistory] = useState<LotHistoryEntry[]>([]);
+  useEffect(() => {
+    if (!orderId || !l.name.trim() || !supabaseClient) { setLotHistory([]); return; }
+    let cancelled = false;
+    (async () => {
+      const itemName = l.name.trim();
+      const candidateRefs = [orderId];
+      const { data: linkedWo } = await supabaseClient.from("work_orders").select("work_order_no").eq("linked_order_id", orderId).limit(1).maybeSingle();
+      const woNo = (linkedWo as any)?.work_order_no as string | undefined;
+      if (woNo) candidateRefs.push(woNo);
+      const noteList = candidateRefs.map((ref) => `거래내역 OUT - ${ref} - ${itemName}`);
+      const { data: movs, error } = await supabaseClient.from("movements").select("qty, lots(expiry_date)").in("note", noteList).eq("type", "OUT");
+      if (cancelled) return;
+      if (error || !movs) { setLotHistory([]); return; }
+      const grouped = new Map<string, number>();
+      for (const m of movs as any[]) {
+        const exp = m.lots?.expiry_date ?? "미상";
+        grouped.set(exp, (grouped.get(exp) ?? 0) + Number(m.qty ?? 0));
+      }
+      const rows = Array.from(grouped.entries()).map(([expiry_date, qty]) => ({ expiry_date, qty })).sort((a, b) => a.expiry_date.localeCompare(b.expiry_date));
+      setLotHistory(rows);
+    })();
+    return () => { cancelled = true; };
+  }, [orderId, l.name, supabaseClient]);
   return (
     <div className={`grid ${gridCols} gap-2`}>
 <input className={inputCls} lang="ko" list="food-types-list" value={l.food_type} onChange={(e) => onUpdate(i, { food_type: e.target.value })} />
@@ -567,6 +595,16 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
           <input className="w-32 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-blue-300 focus:outline-none"
             placeholder="예: 35*50mm" value={l.logo_spec ?? ""}
             onChange={(e) => onUpdate(i, { logo_spec: e.target.value })} />
+        </div>
+      ) : null}
+      {orderId && lotHistory.length > 0 ? (
+        <div className="col-span-full -mt-1 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] text-slate-500 shrink-0">LOT별 출고이력(참고용, 수정불가)</span>
+          {lotHistory.map((h, hIdx) => (
+            <span key={hIdx} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+              {h.expiry_date} · {h.qty.toLocaleString()}EA
+            </span>
+          ))}
         </div>
       ) : null}
       {variantId ? (
@@ -2989,7 +3027,7 @@ if (woSubNameVal) {
                     <div className="mt-2 space-y-1">
                     {eLines.map((l, i) => (
                         <div key={i}>
-                          <LineRow l={l} i={i} onUpdate={updateEditLine} onRemove={removeEditLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} supabaseClient={supabase} />
+                                                    <LineRow l={l} i={i} onUpdate={updateEditLine} onRemove={removeEditLine} presetByName={presetByName} masterByName={masterByName} inputCls={inp} inputRightCls={inpR} btnCls={btn} gridCols={lineGridCols} qtyBadgeCls={qtyBadge} supabaseClient={supabase} orderId={editRow.rawId} /></parameter>
                           {eWoId && l.name && !["택배비"].includes(l.name) ? (
                             <div className="ml-1 mb-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                               <div className="mb-1 text-xs text-slate-500">🖼 {l.name} 인쇄 디자인 이미지</div>
