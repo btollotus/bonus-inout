@@ -933,6 +933,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [eItemImagePreviewUrls, setEItemImagePreviewUrls] = useState<Record<number, string[]>>({});
   const [eItemExistingImageUrls, setEItemExistingImageUrls] = useState<Record<number, string[]>>({});
   const [eWoItemIds, setEWoItemIds] = useState<string[]>([]); // work_order_items.id 순서 보존
+  const [eWoItemActualQtyById, setEWoItemActualQtyById] = useState<Record<string, number | null>>({}); // 품목 삭제 시 생산완료 여부 판단용
 
   const [eEntryDate, setEEntryDate] = useState(todayYMD());
   const [ePayMethod, setEPayMethod] = useState<"BANK" | "CASH" | "CARD" | "ETC">("BANK");
@@ -2151,7 +2152,7 @@ if (editPartnerId) {
       setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("");
       setEWoMoldPerSheet(""); setEWoNote(""); setEWoImageFiles([]); setEWoImagePreviewUrls([]);
       setEWoExistingImages([]); setEWoExistingSignedLoading(false); setEWoExistingSignedUrls([]);
-      const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no,logo_spec)").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
+      const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no,logo_spec,actual_qty)").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
       // 품목별 이미지 초기화
       setEItemImageFiles({}); setEItemImagePreviewUrls({}); setEItemExistingImageUrls({}); setEWoItemIds([]);
       if (wo) {
@@ -2211,6 +2212,10 @@ if (woSubNameVal) {
         setEWoItemIds(orderedItemIds);
         // ── 인덱스가 아닌 실제 품목 id를 각 줄에 직접 부착 (편집 중 줄 삭제/재정렬에도 안전) ──
         setELines((prev) => prev.map((l, i) => ({ ...l, _woItemId: orderedItemIds[i] || undefined })));
+        // ── 품목별 actual_qty 스냅샷 (삭제된 품목이 이미 생산완료됐는지 저장 시점에 판단하기 위함) ──
+        const actualQtyById: Record<string, number | null> = {};
+        woItems.forEach((wi: any) => { actualQtyById[wi.id] = wi.actual_qty ?? null; });
+        setEWoItemActualQtyById(actualQtyById);
 
         const eLogoSpecByIndex: Record<number, string> = {};
         eLineNames.forEach((lineName: string, idx: number) => {
@@ -2304,6 +2309,7 @@ if (woSubNameVal) {
 
       
         // 품목별 이미지 저장 (eLines 전체 기준 — 기존 품목은 update, 신규 추가 품목은 work_order_items부터 생성)
+        const originalItemIds = [...eWoItemIds]; // 루프 중 eWoItemIds가 변경돼도 영향받지 않는 원본 스냅샷
         for (let idx = 0; idx < eLines.length; idx++) {
           const eLine = eLines[idx];
           if (!eLine?.name?.trim()) continue;
@@ -2387,6 +2393,27 @@ if (woSubNameVal) {
             order_qty: syncedQty,
             unit_weight: matchedELine?.weight_g && Number(matchedELine.weight_g) > 0 ? Number(matchedELine.weight_g) : null,
           }).eq("id", itemId);
+        }
+
+        // ── 주문에서 삭제된 품목의 work_order_items 고아 행 정리 ──
+        // (원본에는 있었지만 현재 eLines 어디에도 매칭되지 않는 id = 사용자가 편집 중 삭제한 품목)
+        const currentItemIds = new Set(eLines.map((l) => l._woItemId).filter(Boolean) as string[]);
+        const removedItemIds = originalItemIds.filter((id) => id && !currentItemIds.has(id));
+        for (const rid of removedItemIds) {
+          if (eWoItemActualQtyById[rid] == null) {
+            // 생산 미완료 품목: 안전하게 자동 삭제
+            const { error: delItemErr } = await supabase.from("work_order_items").delete().eq("id", rid);
+            if (delItemErr) {
+              stockWarningMsg = stockWarningMsg
+                ? `${stockWarningMsg} / ⚠️ 삭제된 품목 정리 실패(id: ${rid}): ${delItemErr.message}`
+                : `⚠️ 삭제된 품목 정리 실패(id: ${rid}): ${delItemErr.message}`;
+            }
+          } else {
+            // 이미 생산완료된 품목: 자동삭제하지 않고 경고만 표시 (수동 확인 필요)
+            stockWarningMsg = stockWarningMsg
+              ? `${stockWarningMsg} / ⚠️ 이미 생산완료된 품목이 주문에서 삭제되어 작업지시서에 남아있습니다(수동 확인 필요, id: ${rid})`
+              : `⚠️ 이미 생산완료된 품목이 주문에서 삭제되어 작업지시서에 남아있습니다(수동 확인 필요, id: ${rid})`;
+          }
         }
       }
       {
