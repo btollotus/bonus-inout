@@ -77,7 +77,7 @@ type PartnerView = "PINNED" | "RECENT" | "ALL";
 type FoodTypeRow = { id: string; name: string };
 type PresetProductRow = { id: string; product_name: string; food_type: string | null; weight_g: number | string | null; barcode: string | null };
 type MasterProductRow = { product_name: string; food_type: string | null; report_no: string | null; weight_g: number | null; unit_type: "EA" | "BOX" | string | null; pack_ea: number | null; barcode: string | null; variant_id?: string | null; category?: string | null };
-type Line = { food_type: string; name: string; weight_g: number | string; qty: number; unit: number | string; total_incl_vat: number | string; is_sample?: boolean; stock_out_lots?: { lot_id: string; qty: string }[]; logo_spec?: string };
+type Line = { food_type: string; name: string; weight_g: number | string; qty: number; unit: number | string; total_incl_vat: number | string; is_sample?: boolean; stock_out_lots?: { lot_id: string; qty: string }[]; logo_spec?: string; _woItemId?: string };
 type ShipmentSnap = { seq: number; ship_to_name: string; ship_to_address1: string; ship_to_address2?: string | null; ship_to_mobile?: string | null; ship_to_phone?: string | null; ship_zipcode?: string | null; delivery_message?: string | null };
 type UnifiedRow = {
   kind: "ORDER" | "LEDGER"; date: string; tsKey: string; partnerName: string;
@@ -2209,6 +2209,8 @@ if (woSubNameVal) {
           return matched?.id ?? "";
         });
         setEWoItemIds(orderedItemIds);
+        // ── 인덱스가 아닌 실제 품목 id를 각 줄에 직접 부착 (편집 중 줄 삭제/재정렬에도 안전) ──
+        setELines((prev) => prev.map((l, i) => ({ ...l, _woItemId: orderedItemIds[i] || undefined })));
 
         const eLogoSpecByIndex: Record<number, string> = {};
         eLineNames.forEach((lineName: string, idx: number) => {
@@ -2305,7 +2307,7 @@ if (woSubNameVal) {
         for (let idx = 0; idx < eLines.length; idx++) {
           const eLine = eLines[idx];
           if (!eLine?.name?.trim()) continue;
-          let itemId = eWoItemIds[idx];
+          let itemId = eLine._woItemId;
 
           if (!itemId) {
             // ── 신규 추가된 품목: work_order_items 생성 + product/variant 생성 (createOrder()와 동일 패턴) ──
