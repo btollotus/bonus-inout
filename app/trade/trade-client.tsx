@@ -2154,7 +2154,7 @@ if (editPartnerId) {
       setEWoExistingImages([]); setEWoExistingSignedLoading(false); setEWoExistingSignedUrls([]);
       const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no,logo_spec,actual_qty)").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
       // 품목별 이미지 초기화
-      setEItemImageFiles({}); setEItemImagePreviewUrls({}); setEItemExistingImageUrls({}); setEWoItemIds([]);
+      setEItemImageFiles({}); setEItemImagePreviewUrls({}); setEItemExistingImageUrls({}); setEWoItemIds([]); setEWoItemActualQtyById({});
       if (wo) {
         setEWoId((wo as any).id); setEWoSubName((wo as any).sub_name ?? "");
 // 서브네임 있으면 서브네임만, 없으면 품목명 자동 생성
@@ -2309,7 +2309,7 @@ if (woSubNameVal) {
 
       
         // 품목별 이미지 저장 (eLines 전체 기준 — 기존 품목은 update, 신규 추가 품목은 work_order_items부터 생성)
-        const originalItemIds = [...eWoItemIds]; // 루프 중 eWoItemIds가 변경돼도 영향받지 않는 원본 스냅샷
+        const originalItemIds = Object.keys(eWoItemActualQtyById); // 이름매칭(eWoItemIds)이 아닌, woItems 전체를 무조건 순회해 만든 목록 — 이름매칭 실패와 무관하게 정확함
         for (let idx = 0; idx < eLines.length; idx++) {
           const eLine = eLines[idx];
           if (!eLine?.name?.trim()) continue;
