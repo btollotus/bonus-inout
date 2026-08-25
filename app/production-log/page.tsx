@@ -2582,8 +2582,12 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                 if (!lot) return null;
                 const qty = parseFloat(dispQty);
                 if (isNaN(qty)) return null;
+                const matStock = stocks.find((s) => s.material_id === lot.material_id);
                 if (qty > lot.remaining_qty) return (
                   <div className="mt-1 text-xs text-red-600 font-semibold">⚠️ 잔여수량({lot.remaining_qty.toLocaleString()}{lot.unit}) 초과</div>
+                );
+                if (matStock && qty > matStock.current_stock) return (
+                  <div className="mt-1 text-xs text-red-600 font-semibold">⚠️ 원료별 현재고({matStock.current_stock.toLocaleString()}{lot.unit}) 초과 — 재고 조정 이력 확인 필요</div>
                 );
                 return (
                   <div className="mt-1 text-xs text-slate-500">폐기 후 잔여: {(lot.remaining_qty - qty).toLocaleString()}{lot.unit}</div>
@@ -2619,6 +2623,8 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                 const qty = parseFloat(dispQty);
                 if (isNaN(qty) || qty <= 0) return showToast("수량을 확인하세요.", "error");
                 if (qty > lot.remaining_qty) return showToast(`잔여수량(${lot.remaining_qty.toLocaleString()}${lot.unit}) 초과입니다.`, "error");
+                const matStock = stocks.find((s) => s.material_id === lot.material_id);
+                if (matStock && qty > matStock.current_stock) return showToast(`원료별 현재고(${matStock.current_stock.toLocaleString()}${lot.unit}) 초과입니다. 재고 조정 이력을 먼저 확인하세요.`, "error");
                 setDispSaving(true);
                 const { error } = await supabase.from("material_disposal_logs").insert({
                   material_id: lot.material_id,
