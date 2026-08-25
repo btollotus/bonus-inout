@@ -1751,10 +1751,18 @@ function MaterialLedgerTab({ role, userId, showToast }: {
 
   // ── PIN 인증 ──
   const [employees, setEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
-  const [pinTarget, setPinTarget] = useState<"receipt" | "adjust" | "disposal" | null>(null);
+  const [pinTarget, setPinTarget] = useState<"receipt" | "adjust" | "disposal" | "close_lot" | null>(null);
   const [pinEmp, setPinEmp] = useState<{ id: string; name: string; pin: string | null } | null>(null);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState("");
+
+  // ── 로트 종료 처리 ──
+  const [closingLotId, setClosingLotId] = useState<string | null>(null); // 종료 처리 중인 receipt_id
+  const [closedByEmp, setClosedByEmp] = useState<{ id: string; name: string } | null>(null); // PIN 인증된 작업자
+  const [showCloseForm, setShowCloseForm] = useState(false);
+  const [closeReason, setCloseReason] = useState("");
+  const [closeNote, setCloseNote] = useState("");
+  const [closeSaving, setCloseSaving] = useState(false);
 
   const [stocks, setStocks] = useState<MaterialStock[]>([]);
   const [receipts, setReceipts] = useState<MaterialReceipt[]>([]);
@@ -2367,8 +2375,8 @@ function MaterialLedgerTab({ role, userId, showToast }: {
           <div className="w-full max-w-sm mx-4 rounded-2xl bg-white shadow-2xl p-6">
             {!pinEmp ? (
               <>
-                <div className="mb-4 font-bold text-base text-slate-700 text-center">
-                  {pinTarget === "receipt" ? "✚ 입고 등록" : pinTarget === "adjust" ? "⚖️ 재고 조정" : "🗑️ 폐기 등록"} — 작업자 선택
+                               <div className="mb-4 font-bold text-base text-slate-700 text-center">
+                  {pinTarget === "receipt" ? "✚ 입고 등록" : pinTarget === "adjust" ? "⚖️ 재고 조정" : pinTarget === "disposal" ? "🗑️ 폐기 등록" : "🗄️ 로트 종료 처리"} — 작업자 선택
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {employees.map((emp) => (
@@ -2421,15 +2429,20 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                               setPinError("PIN이 올바르지 않습니다.");
                               setPinInput(""); return;
                             }
-                            // 인증 성공 — target을 로컬 변수에 먼저 저장 후 상태 초기화
-                            const target = pinTarget;
-                            setPinTarget(null);
-                            setPinEmp(null);
-                            setPinInput("");
-                            setPinError("");
-                            if (target === "receipt")  { setShowReceiptForm(true);  setRDate(filterDate); }
-                            if (target === "adjust")   { setShowAdjustForm(true);   setAdjDate(filterDate); }
-                            if (target === "disposal") { setShowDisposalForm(true); setDispDate(filterDate); }
+                                                        // 인증 성공 — target/emp를 로컬 변수에 먼저 저장 후 상태 초기화
+                                                        const target = pinTarget;
+                                                        const authedEmp = pinEmp;
+                                                        setPinTarget(null);
+                                                        setPinEmp(null);
+                                                        setPinInput("");
+                                                        setPinError("");
+                                                        if (target === "receipt")  { setShowReceiptForm(true);  setRDate(filterDate); }
+                                                        if (target === "adjust")   { setShowAdjustForm(true);   setAdjDate(filterDate); }
+                                                        if (target === "disposal") { setShowDisposalForm(true); setDispDate(filterDate); }
+                                                        if (target === "close_lot") {
+                                                          setClosedByEmp({ id: authedEmp.id, name: authedEmp.name });
+                                                          setShowCloseForm(true);
+                                                        }
                           }, 100);
                         }
                       }}>
@@ -2929,6 +2942,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
             <th className="text-right py-2 px-3 text-xs text-slate-500 font-semibold">폐기수량</th>
             <th className="text-right py-2 px-3 text-xs text-slate-500 font-semibold">잔여수량</th>
             <th className="text-center py-2 px-3 text-xs text-slate-500 font-semibold">상태</th>
+            <th className="text-center py-2 px-3 text-xs text-slate-500 font-semibold">관리</th>
           </tr>
         </thead>
         <tbody>
@@ -2955,10 +2969,82 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                   <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">정상</span>
                 )}
               </td>
+              <td className="py-2 px-3 text-center">
+                {isAdminOrSubadmin && (
+                  <button
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-500 hover:bg-slate-100"
+                    onClick={() => {
+                      setClosingLotId(lot.receipt_id);
+                      setCloseReason(""); setCloseNote("");
+                      setPinTarget("close_lot"); setPinEmp(null); setPinInput(""); setPinError("");
+                    }}>
+                    종료
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+    <div className="mt-2 text-[11px] text-slate-400">
+      ※ 이 표는 창고에 관리해야 할 로트가 있는지 알려주는 현황판입니다. 정확한 재고 수량은 위쪽 "원료별 현재고"를 기준으로 하세요. 소비기한이 지났거나 전량 사용해서 더 이상 관리할 필요가 없는 로트는 "종료" 버튼으로 목록에서 내릴 수 있습니다.
+    </div>
+  </div>
+)}
+
+{/* ── 로트 종료 처리 사유 입력 모달 ── */}
+{showCloseForm && closingLotId && (
+  <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40">
+    <div className="w-full max-w-sm mx-4 rounded-2xl bg-white shadow-2xl p-6">
+      <div className="mb-1 font-bold text-base text-slate-700 text-center">🗄️ 로트 종료 처리</div>
+      <div className="mb-4 text-xs text-slate-500 text-center">
+        {(() => {
+          const lot = lotStocks.find((l) => l.receipt_id === closingLotId);
+          return lot ? `${lot.material_name} · 입고 ${lot.received_date}${lot.expiry_date ? ` · 소비기한 ${lot.expiry_date}` : ""}` : "";
+        })()}
+      </div>
+      <div className="mb-3">
+        <div className="mb-1 text-xs text-slate-500">종료 사유 *</div>
+        <select className={inp} value={closeReason} onChange={(e) => setCloseReason(e.target.value)}>
+          <option value="">— 선택 —</option>
+          <option value="전량사용">전량사용</option>
+          <option value="소비기한만료">소비기한만료</option>
+          <option value="변질/오염">변질/오염</option>
+          <option value="기타">기타</option>
+        </select>
+      </div>
+      <div className="mb-4">
+        <div className="mb-1 text-xs text-slate-500">비고</div>
+        <input className={inp} value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="선택 입력" />
+      </div>
+      <div className="flex gap-2">
+        <button
+          className="flex-1 rounded-xl bg-slate-700 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60"
+          disabled={closeSaving || !closeReason}
+          onClick={async () => {
+            if (!closingLotId || !closedByEmp) return;
+            const lot = lotStocks.find((l) => l.receipt_id === closingLotId);
+            if (!lot) return;
+            setCloseSaving(true);
+            const { error } = await supabase.from("material_lot_closures").insert({
+              receipt_id: closingLotId,
+              material_id: lot.material_id,
+              reason: closeReason,
+              note: closeNote.trim() || null,
+              closed_by: closedByEmp.id,
+              closed_by_name: closedByEmp.name,
+            });
+            setCloseSaving(false);
+            if (error) return showToast("종료 처리 실패: " + error.message, "error");
+            showToast(`✅ ${lot.material_name} 로트(${lot.received_date}) 종료 처리 완료`);
+            setShowCloseForm(false); setClosingLotId(null); setClosedByEmp(null); setCloseReason(""); setCloseNote("");
+            loadData();
+          }}>
+          {closeSaving ? "처리 중..." : "🗄️ 종료 처리"}
+        </button>
+        <button className={btn} onClick={() => { setShowCloseForm(false); setClosingLotId(null); setClosedByEmp(null); setCloseReason(""); setCloseNote(""); }}>취소</button>
+      </div>
     </div>
   </div>
 )}
