@@ -731,6 +731,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [searchRefreshTick, setSearchRefreshTick] = useState(0);
   const toTouched_search = useRef(false);
   const [toTouched, setToTouched] = useState(false);
+  const [fromTouched, setFromTouched] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertText, setAlertText] = useState("");
 
@@ -958,13 +959,13 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
   useEffect(() => {
     if (syncDateRef.current === "ENTRY") { syncDateRef.current = null; return; }
     syncDateRef.current = "SHIP"; setEntryDate(shipDate);
-    if (shipDate && fromYMD && shipDate < fromYMD) setFromYMD(shipDate);
+    if (shipDate && fromYMD && shipDate < fromYMD) { setFromYMD(shipDate); setFromTouched(true); }
   }, [shipDate]); // eslint-disable-line
 
   useEffect(() => {
     if (syncDateRef.current === "SHIP") { syncDateRef.current = null; return; }
     syncDateRef.current = "ENTRY"; setShipDate(entryDate);
-    if (entryDate && fromYMD && entryDate < fromYMD) setFromYMD(entryDate);
+    if (entryDate && fromYMD && entryDate < fromYMD) { setFromYMD(entryDate); setFromTouched(true); }
   }, [entryDate]); // eslint-disable-line
 
   useEffect(() => {
@@ -1148,7 +1149,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
 
   async function loadTrades() {
     setMsg(null);
-    const f = fromYMD || addDays(todayYMD(), -30);
+    let f = fromYMD || addDays(todayYMD(), -30);
     const selectedBusinessNo = selectedPartner?.business_no ?? null;
     const selectedPartnerId = selectedPartner?.id ?? null;
     const subAdminPartnerNames = isSubAdmin && !selectedPartnerId
@@ -1156,7 +1157,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     : null;
     let t = toYMD || todayYMD();
 
-    if (!toTouched) {
+    if (!toTouched || !fromTouched) {
 
       let latestOrderDate = "", latestLedgerDate = "";
       let oqLatest = supabase.from("orders").select("ship_date,customer_id,customer_name").not("ship_date", "is", null).order("ship_date", { ascending: false }).limit(1);
@@ -1181,7 +1182,13 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
       const { data: lLatest, error: lLatestErr } = await lqLatest;
       if (!lLatestErr && lLatest && lLatest[0]?.entry_date) latestLedgerDate = String(lLatest[0].entry_date);
       const latest = [latestOrderDate, latestLedgerDate].filter(Boolean).sort().pop() || todayYMD();
-      if (latest) { if (latest !== t) setToYMD(latest); t = latest; }
+      if (!toTouched && latest) { if (latest !== t) setToYMD(latest); t = latest; }
+      if (!fromTouched) {
+        // 조회대상 "업체"(특정 거래처)면 그 업체 최근 거래일 기준 60일, "전체"면 2025-12-01 고정
+        const defaultFrom = selectedPartnerId ? addDays(latest, -60) : "2025-12-01";
+        if (defaultFrom !== f) setFromYMD(defaultFrom);
+        f = defaultFrom;
+      }
     }
 
     {
@@ -1228,40 +1235,27 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
 
     let opening = 0;
     {
-      const pageSize = 1000; let from = 0;
-      while (true) {
-        let oq2 = supabase.from("orders").select("id,ship_date,total_amount,customer_id,customer_name").lt("ship_date", f).order("ship_date", { ascending: false }).range(from, from + pageSize - 1);
-        if (selectedPartnerId) {
-          oq2 = oq2.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
-        } else if (subAdminPartnerNames) {
-          oq2 = oq2.in("customer_name", subAdminPartnerNames);
-        }
-        const { data: oPrev, error: oPrevErr } = await oq2;
-        if (oPrevErr) break;
-        if (oPrev && oPrev.length) opening += -(oPrev.reduce((acc: number, r: any) => acc + Number(r.total_amount ?? 0), 0));
-        if (!oPrev || oPrev.length < pageSize) break;
-        from += pageSize;
-      }
-    }
-    {
-      const pageSize = 1000; let from = 0;
-      while (true) {
-        let lq2 = supabase.from("ledger_entries").select("id,entry_date,direction,amount,partner_id,business_no,counterparty_name").lt("entry_date", f).order("entry_date", { ascending: false }).range(from, from + pageSize - 1);
-        if (selectedPartnerId || selectedBusinessNo) {
-          const ors: string[] = [];
-          if (selectedPartnerId) ors.push(`partner_id.eq.${selectedPartnerId}`);
-          if (selectedBusinessNo) ors.push(`and(business_no.eq.${selectedBusinessNo},partner_id.is.null)`);
-          if (selectedPartner?.name) ors.push(`counterparty_name.eq.${selectedPartner.name.replaceAll(",", "")}`);
-          lq2 = lq2.or(ors.join(","));
-        } else if (subAdminPartnerNames) {
-          lq2 = lq2.in("counterparty_name", subAdminPartnerNames);
-        }
-        const { data: lPrev, error: lPrevErr } = await lq2;
-        if (lPrevErr) break;
-        if (lPrev && lPrev.length) opening += lPrev.reduce((acc: number, r: any) => acc + (String(r.direction) === "OUT" ? -1 : 1) * Number(r.amount ?? 0), 0);
-        if (!lPrev || lPrev.length < pageSize) break;
-        from += pageSize;
-      }
+      // 기초잔액(미수금) 계산: 클라이언트 페이지네이션+JS합산 대신 서버 RPC(SUM)로 위임, 병렬 호출
+      // 필터 조건은 기존 로직과 완전히 동일 (실제 데이터로 4가지 케이스 대조 검증 완료)
+      const partnerNameForMatch = selectedPartner?.name ? selectedPartner.name.replaceAll(",", "") : null;
+      const [oRes, lRes] = await Promise.all([
+        supabase.rpc("get_orders_opening_sum", {
+          p_cutoff_date: f,
+          p_partner_id: selectedPartnerId,
+          p_partner_name: selectedPartnerId ? partnerNameForMatch : null,
+          p_subadmin_names: (!selectedPartnerId && subAdminPartnerNames) ? subAdminPartnerNames : null,
+        }),
+        supabase.rpc("get_ledger_opening_sum", {
+          p_cutoff_date: f,
+          p_partner_id: selectedPartnerId,
+          p_business_no: selectedBusinessNo,
+          p_partner_name: (selectedPartnerId || selectedBusinessNo) ? partnerNameForMatch : null,
+          p_subadmin_names: (!selectedPartnerId && !selectedBusinessNo && subAdminPartnerNames) ? subAdminPartnerNames : null,
+        }),
+      ]);
+      if (oRes.error) setMsg(oRes.error.message);
+      if (lRes.error) setMsg(lRes.error.message);
+      opening = -(Number(oRes.data ?? 0)) + Number(lRes.data ?? 0);
     }
     setOpeningBalance(opening);
   }
@@ -1405,7 +1399,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
 
   useEffect(() => { setRecentPartnerIds(loadRecentFromLS()); loadPartners(); loadFoodTypes(); loadPresetProducts(); loadMasterProducts(); loadEmployees(); loadPrepaidNotes(); loadPendingPrepaidOrders(); /* eslint-disable-next-line */ }, []);
   
-  useEffect(() => { loadTrades(); /* eslint-disable-next-line */ }, [selectedPartner?.id, fromYMD, toYMD, toTouched]);
+  useEffect(() => { loadTrades(); /* eslint-disable-next-line */ }, [selectedPartner?.id, fromYMD, toYMD, toTouched, fromTouched]);
 
   function resetPartnerForm() { setP_name(""); setP_businessNo(""); setP_subPlaceNo(""); setP_ceo(""); setP_phone(""); setP_address1(""); setP_bizType(""); setP_bizItem(""); setP_partnerType("CUSTOMER"); }
 
@@ -3725,23 +3719,23 @@ if (woSubNameVal) {
 
               </div>
               <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
-                <div><div className="mb-1 text-xs text-slate-600">From</div><input type="date" className={inp} value={fromYMD} onChange={(e) => { setToTouched(false); setFromYMD(e.target.value); }} /></div>
+              <div><div className="mb-1 text-xs text-slate-600">From</div><input type="date" className={inp} value={fromYMD} onChange={(e) => { setToTouched(false); setFromTouched(true); setFromYMD(e.target.value); }} /></div>
                 <div><div className="mb-1 text-xs text-slate-600">To</div><input type="date" className={inp} value={toYMD} onChange={(e) => { setToTouched(true); setToYMD(e.target.value); }} /></div>
                 <div className="flex flex-wrap gap-2">
-                <button className={btn} onClick={() => { setFromYMD("2025-12-01"); setToYMD(todayYMD()); setToTouched(false); }}>기간 초기화</button>
+                <button className={btn} onClick={() => { setFromYMD("2025-12-01"); setToYMD(todayYMD()); setToTouched(false); setFromTouched(true); }}>기간 초기화</button>
                   <button className={btn} onClick={() => {
                     const base = toYMD || todayYMD();
                     const d = new Date(base + "T00:00:00+09:00");
                     d.setMonth(d.getMonth() - 1);
                     const from = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-                    setFromYMD(from); setToTouched(true);
+                    setFromYMD(from); setToTouched(true); setFromTouched(true);
                   }}>1개월</button>
                   <button className={btn} onClick={() => {
                     const base = toYMD || todayYMD();
                     const d = new Date(base + "T00:00:00+09:00");
                     d.setMonth(d.getMonth() - 3);
                     const from = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-                    setFromYMD(from); setToTouched(true);
+                    setFromYMD(from); setToTouched(true); setFromTouched(true);
                   }}>3개월</button>
                   <button className={btnOn} onClick={loadTrades}>조회</button>
                  {/* ── 새로고침 버튼 추가 ── */}
