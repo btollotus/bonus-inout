@@ -1083,8 +1083,7 @@ useEffect(() => {
                   <col style={{ width: "78px" }} />
                   <col style={{ width: "78px" }} />
                   <col style={{ width: "78px" }} />
-                  <col style={{ width: "120px" }} />
-                </colgroup>
+                  </colgroup>
 
                 <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                   <tr>
@@ -1098,22 +1097,21 @@ useEffect(() => {
                     <th className="px-2 py-2 text-right">거래금액</th>
                     <th className="px-2 py-2 text-right">결제</th>
                     <th className="px-2 py-2 text-right">잔액</th>
-                    <th className="px-2 py-2 text-left">비고</th>
-                  </tr>
+                    </tr>
                 </thead>
 
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-4 text-sm text-slate-500">
+                                            <td colSpan={10} className="px-4 py-4 text-sm text-slate-500">
                         불러오는 중...
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-4 text-sm text-slate-500">
+                                           <td colSpan={10} className="px-4 py-4 text-sm text-slate-500">
                         표시할 내역이 없습니다. (거래처/기간/데이터 확인)
-                      </td>
+                      </td> 
                     </tr>
                   ) : (
                     rows.map((r, idx) => {
@@ -1166,10 +1164,7 @@ useEffect(() => {
                           <td className="px-2 py-2 text-right tabular-nums font-semibold">
                             {showBalance ? formatMoney(balVal) : ""}
                           </td>
-                          <td className="px-2 py-2">
-                            <div className="truncate">{r.remark ? r.remark : ""}</div>
-                          </td>
-                        </tr>
+                          </tr>
                       );
                     })
                   )}
