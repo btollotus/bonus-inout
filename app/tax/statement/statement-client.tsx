@@ -1028,8 +1028,8 @@ useEffect(() => {
                     {selectedPartner.address1 ? <div>주소: {selectedPartner.address1}</div> : null}
                     {selectedPartner.biz_type || selectedPartner.biz_item ? (
                       <div>
-                        종목: {selectedPartner.biz_type ?? ""}{" "}
-                        {selectedPartner.biz_item ? `/ 업태: ${selectedPartner.biz_item}` : ""}
+                        업태: {selectedPartner.biz_type ?? ""}{" "}
+                        {selectedPartner.biz_item ? `/ 종목: ${selectedPartner.biz_item}` : ""}
                       </div>
                     ) : null}
                   </div>
