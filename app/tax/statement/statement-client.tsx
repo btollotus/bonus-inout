@@ -252,8 +252,8 @@ useEffect(() => {
     name: "주식회사 보누스메이트",
     business_no: "343-88-03009",
     ceo: "조대성",
-    address1: "경기도 파주시 광탄면 장지산로 250-90 1층",
-    biz: "제조업 / 업태: 식품제조가공업",
+    address1: "경기도 파주시 광탄면 장지산로 250-90. 1동",
+    biz: "업태:제조업 / 종목:식품제조가공업",
   };
 
   const pageBg = "bg-slate-50 text-slate-900";
@@ -1028,7 +1028,7 @@ useEffect(() => {
                     {selectedPartner.address1 ? <div>주소: {selectedPartner.address1}</div> : null}
                     {selectedPartner.biz_type || selectedPartner.biz_item ? (
                       <div>
-                        업종: {selectedPartner.biz_type ?? ""}{" "}
+                        종목: {selectedPartner.biz_type ?? ""}{" "}
                         {selectedPartner.biz_item ? `/ 업태: ${selectedPartner.biz_item}` : ""}
                       </div>
                     ) : null}

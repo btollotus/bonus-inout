@@ -289,8 +289,8 @@ useEffect(() => {
     name: "주식회사 보누스메이트",
     business_no: "343-88-03009",
     ceo: "조대성",
-    address1: "경기도 파주시 광탄면 장지산로 250-90 1층",
-    biz: "제조업 / 업태: 식품제조가공업",
+    address1: "경기도 파주시 광탄면 장지산로 250-90. 1동",
+    biz: "업태:제조업 / 종목: 식품제조가공업",
   };
 
   const range = useMemo(() => {
@@ -831,7 +831,7 @@ useEffect(() => {
                 <div>{p.businessNo}</div>
                 <div>대표: {p.ceoName}</div>
                 <div>주소: {p.address1}</div>
-                <div>업종: {p.bizType} / 업태: {p.bizItem}</div>
+                <div>업태: {p.bizType} / 종목: {p.bizItem}</div>
               </div>
               <div style={{ fontSize: "13px", lineHeight: "1.8", textAlign: "right" }}>
   <div style={{ fontWeight: "bold" }}>{OUR.name}</div>
