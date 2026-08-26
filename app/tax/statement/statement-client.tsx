@@ -1082,18 +1082,18 @@ useEffect(() => {
             {/* ✅ 세로 스크롤 */}
             <div className="table-wrap max-h-[520px] overflow-y-auto rounded-2xl border border-slate-200">
               <table className="w-full table-fixed text-sm">
-                <colgroup>
-                  <col style={{ width: "76px" }} />
-                  <col style={{ width: "52px" }} />
-                  <col style={{ width: "180px" }} />
-                  <col style={{ width: "52px" }} />
-                  <col style={{ width: "64px" }} />
-                  <col style={{ width: "72px" }} />
-                  <col style={{ width: "60px" }} />
-                  <col style={{ width: "78px" }} />
-                  <col style={{ width: "78px" }} />
-                  <col style={{ width: "78px" }} />
-                  </colgroup>
+              <colgroup>
+                  <col style={{ width: "9.6%" }} />
+                  <col style={{ width: "6.6%" }} />
+                  <col style={{ width: "22.8%" }} />
+                  <col style={{ width: "6.6%" }} />
+                  <col style={{ width: "8.1%" }} />
+                  <col style={{ width: "9.1%" }} />
+                  <col style={{ width: "7.6%" }} />
+                  <col style={{ width: "9.9%" }} />
+                  <col style={{ width: "9.9%" }} />
+                  <col style={{ width: "9.8%" }} />
+                </colgroup>
 
                 <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                   <tr>
