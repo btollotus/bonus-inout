@@ -973,7 +973,7 @@ useEffect(() => {
                       <div>대표: {selectedPartner.ceo_name ?? ""}</div>
                       <div>주소: {selectedPartner.address1 ?? ""}</div>
                       <div>
-                        종목: {selectedPartner.biz_type ?? ""} / 업태: {selectedPartner.biz_item ?? ""}
+                        업태: {selectedPartner.biz_type ?? ""} / 종목: {selectedPartner.biz_item ?? ""}
                       </div>
                     </div>
                   ) : (
@@ -1122,7 +1122,7 @@ useEffect(() => {
                             <div>대표: {selectedPartner.ceo_name ?? ""}</div>
                             <div>주소: {selectedPartner.address1 ?? ""}</div>
                             <div>
-                              종목: {selectedPartner.biz_type ?? ""} / 업태: {selectedPartner.biz_item ?? ""}
+                              업태: {selectedPartner.biz_type ?? ""} / 종목: {selectedPartner.biz_item ?? ""}
                             </div>
                           </div>
                         ) : (
@@ -1249,7 +1249,7 @@ useEffect(() => {
                         <div>대표: {selectedPartner.ceo_name ?? ""}</div>
                         <div>주소: {selectedPartner.address1 ?? ""}</div>
                         <div>
-                          종목: {selectedPartner.biz_type ?? ""} / 업태: {selectedPartner.biz_item ?? ""}
+                          업태: {selectedPartner.biz_type ?? ""} / 종목: {selectedPartner.biz_item ?? ""}
                         </div>
                       </div>
                     ) : (

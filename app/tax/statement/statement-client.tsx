@@ -1053,7 +1053,7 @@ useEffect(() => {
                     />
                   </div>
                   <div>주소: {OUR.address1}</div>
-                  <div>업종: {OUR.biz}</div>
+                  <div>{OUR.biz}</div>
                 </div>
               </div>
             </div>
