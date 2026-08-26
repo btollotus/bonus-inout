@@ -731,7 +731,6 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
   const [searchRefreshTick, setSearchRefreshTick] = useState(0);
   const toTouched_search = useRef(false);
   const [toTouched, setToTouched] = useState(false);
-  const [fromTouched, setFromTouched] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertText, setAlertText] = useState("");
 
@@ -959,13 +958,13 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
   useEffect(() => {
     if (syncDateRef.current === "ENTRY") { syncDateRef.current = null; return; }
     syncDateRef.current = "SHIP"; setEntryDate(shipDate);
-    if (shipDate && fromYMD && shipDate < fromYMD) { setFromYMD(shipDate); setFromTouched(true); }
+    if (shipDate && fromYMD && shipDate < fromYMD) setFromYMD(shipDate);
   }, [shipDate]); // eslint-disable-line
 
   useEffect(() => {
     if (syncDateRef.current === "SHIP") { syncDateRef.current = null; return; }
     syncDateRef.current = "ENTRY"; setShipDate(entryDate);
-    if (entryDate && fromYMD && entryDate < fromYMD) { setFromYMD(entryDate); setFromTouched(true); }
+    if (entryDate && fromYMD && entryDate < fromYMD) setFromYMD(entryDate);
   }, [entryDate]); // eslint-disable-line
 
   useEffect(() => {
@@ -1149,7 +1148,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
 
   async function loadTrades() {
     setMsg(null);
-    let f = fromYMD || addDays(todayYMD(), -30);
+    const f = fromYMD || addDays(todayYMD(), -30);
     const selectedBusinessNo = selectedPartner?.business_no ?? null;
     const selectedPartnerId = selectedPartner?.id ?? null;
     const subAdminPartnerNames = isSubAdmin && !selectedPartnerId
@@ -1157,7 +1156,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     : null;
     let t = toYMD || todayYMD();
 
-    if (!toTouched || !fromTouched) {
+    if (!toTouched) {
 
       let latestOrderDate = "", latestLedgerDate = "";
       let oqLatest = supabase.from("orders").select("ship_date,customer_id,customer_name").not("ship_date", "is", null).order("ship_date", { ascending: false }).limit(1);
@@ -1182,13 +1181,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
       const { data: lLatest, error: lLatestErr } = await lqLatest;
       if (!lLatestErr && lLatest && lLatest[0]?.entry_date) latestLedgerDate = String(lLatest[0].entry_date);
       const latest = [latestOrderDate, latestLedgerDate].filter(Boolean).sort().pop() || todayYMD();
-      if (!toTouched && latest) { if (latest !== t) setToYMD(latest); t = latest; }
-      if (!fromTouched) {
-        // 조회대상 "업체"(특정 거래처)면 그 업체 최근 거래일 기준 60일, "전체"면 2025-12-01 고정
-        const defaultFrom = selectedPartnerId ? addDays(latest, -60) : "2025-12-01";
-        if (defaultFrom !== f) setFromYMD(defaultFrom);
-        f = defaultFrom;
-      }
+      if (latest) { if (latest !== t) setToYMD(latest); t = latest; }
     }
 
     {
@@ -1399,7 +1392,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
 
   useEffect(() => { setRecentPartnerIds(loadRecentFromLS()); loadPartners(); loadFoodTypes(); loadPresetProducts(); loadMasterProducts(); loadEmployees(); loadPrepaidNotes(); loadPendingPrepaidOrders(); /* eslint-disable-next-line */ }, []);
   
-  useEffect(() => { loadTrades(); /* eslint-disable-next-line */ }, [selectedPartner?.id, fromYMD, toYMD, toTouched, fromTouched]);
+  useEffect(() => { loadTrades(); /* eslint-disable-next-line */ }, [selectedPartner?.id, fromYMD, toYMD, toTouched]);
 
   function resetPartnerForm() { setP_name(""); setP_businessNo(""); setP_subPlaceNo(""); setP_ceo(""); setP_phone(""); setP_address1(""); setP_bizType(""); setP_bizItem(""); setP_partnerType("CUSTOMER"); }
 
@@ -3719,23 +3712,23 @@ if (woSubNameVal) {
 
               </div>
               <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
-              <div><div className="mb-1 text-xs text-slate-600">From</div><input type="date" className={inp} value={fromYMD} onChange={(e) => { setToTouched(false); setFromTouched(true); setFromYMD(e.target.value); }} /></div>
+              <div><div className="mb-1 text-xs text-slate-600">From</div><input type="date" className={inp} value={fromYMD} onChange={(e) => { setToTouched(false); setFromYMD(e.target.value); }} /></div>
                 <div><div className="mb-1 text-xs text-slate-600">To</div><input type="date" className={inp} value={toYMD} onChange={(e) => { setToTouched(true); setToYMD(e.target.value); }} /></div>
                 <div className="flex flex-wrap gap-2">
-                <button className={btn} onClick={() => { setFromYMD("2025-12-01"); setToYMD(todayYMD()); setToTouched(false); setFromTouched(true); }}>기간 초기화</button>
+                <button className={btn} onClick={() => { setFromYMD("2025-12-01"); setToYMD(todayYMD()); setToTouched(false); }}>기간 초기화</button>
                   <button className={btn} onClick={() => {
                     const base = toYMD || todayYMD();
                     const d = new Date(base + "T00:00:00+09:00");
                     d.setMonth(d.getMonth() - 1);
                     const from = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-                    setFromYMD(from); setToTouched(true); setFromTouched(true);
+                    setFromYMD(from); setToTouched(true);
                   }}>1개월</button>
                   <button className={btn} onClick={() => {
                     const base = toYMD || todayYMD();
                     const d = new Date(base + "T00:00:00+09:00");
                     d.setMonth(d.getMonth() - 3);
                     const from = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-                    setFromYMD(from); setToTouched(true); setFromTouched(true);
+                    setFromYMD(from); setToTouched(true);
                   }}>3개월</button>
                   <button className={btnOn} onClick={loadTrades}>조회</button>
                  {/* ── 새로고침 버튼 추가 ── */}
