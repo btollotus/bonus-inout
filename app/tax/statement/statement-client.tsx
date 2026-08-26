@@ -1038,9 +1038,8 @@ useEffect(() => {
                 )}
               </div>
 
-              {/* RIGHT */}
-              <div className="text-right">
-                <div className="mb-2 text-sm font-semibold opacity-0 select-none">.</div>
+                            {/* RIGHT */}
+                            <div className="text-right">
                 <div className="space-y-1 text-sm">
                   <div className="font-semibold">{OUR.name}</div>
                   <div className="text-slate-700">{OUR.business_no}</div>
