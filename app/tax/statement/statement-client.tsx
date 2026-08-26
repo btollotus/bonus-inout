@@ -703,10 +703,17 @@ useEffect(() => {
     URL.revokeObjectURL(url);
   }
 
-  // ✅ 탭(브라우저 타이틀) 변경
+   // ✅ 탭(브라우저 타이틀) / PDF 저장 파일명 형식: 거래원장-기간-업체명
+   const buildStatementTitle = () => {
+    const safePartnerName = (selectedPartner?.name ?? "").replace(/[\\/:*?"<>|]/g, "-");
+    return safePartnerName
+      ? `거래원장-${fromYMD}~${toYMD}-${safePartnerName}`
+      : `거래원장-${fromYMD}~${toYMD}`;
+  };
+
   useEffect(() => {
-    document.title = "거래원장 | BONUSMATE ERP";
-  }, []);
+    document.title = buildStatementTitle();
+  }, [selectedPartner, fromYMD, toYMD]);
 
   // ✅ 입력 검색 필터
   const filteredPartners = useMemo(() => {
@@ -912,7 +919,10 @@ useEffect(() => {
               </button>
               <button
                 className={btn}
-                onClick={() => window.print()}
+                onClick={() => {
+                  document.title = buildStatementTitle();
+                  window.print();
+                }}
                 disabled={!canPrint}
                 title={!canPrint ? "거래처를 먼저 선택하세요" : ""}
               >
