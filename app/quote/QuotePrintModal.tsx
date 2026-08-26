@@ -412,7 +412,7 @@ table { border-collapse: collapse; width: 100%; }
                         </tr>
                         {/* 카카오/이메일 */}
                         <tr>
-                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "3px 4px", fontSize: 10 }}>카카오</td>
+                          <td style={{ border: "1px solid #999", background: "#f5f5f5", textAlign: "center", padding: "3px 4px", fontSize: 10 }}>카카오톡 ID</td>
                           <td style={{ border: "1px solid #999", padding: "3px 5px", fontSize: 10 }} colSpan={2}>
                             {OUR.kakao} &nbsp;|&nbsp; {OUR.email}
                           </td>

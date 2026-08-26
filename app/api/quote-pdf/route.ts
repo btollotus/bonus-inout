@@ -214,7 +214,7 @@ table { border-collapse: collapse; width: 100%; }
               <td style="border:1px solid #999;padding:3px 5px;" colspan="2">${OUR.phone}</td>
             </tr>
             <tr>
-              <td style="border:1px solid #999;background:#f5f5f5;text-align:center;padding:3px 4px;">카카오</td>
+              <td style="border:1px solid #999;background:#f5f5f5;text-align:center;padding:3px 4px;">카카오톡 ID</td>
               <td style="border:1px solid #999;padding:3px 5px;font-size:10pt;" colspan="2">${OUR.kakao} | ${OUR.email}</td>
             </tr>
             <tr>
