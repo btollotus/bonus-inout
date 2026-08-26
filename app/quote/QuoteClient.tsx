@@ -137,6 +137,12 @@ const utcToKSTDate = (utcStr: string) => {
   const d = new Date(new Date(utcStr).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 };
+// N일 전 KST 날짜 (YYYY-MM-DD) — 견적 목록 기본 표시 범위(최근 15일) 계산용
+const kstDateNDaysAgo = (days: number) => {
+  const d = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }));
+  d.setDate(d.getDate() - days);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+};
 
 // ─────────────────────── Main Component ───────────────────────
 export default function QuoteClient() {
@@ -718,7 +724,10 @@ async function loadBdpInquiries() {
   }
 
   const filteredList = quoteList.filter(r => {
-    if (!listSearch.trim()) return true;
+    if (!listSearch.trim()) {
+      // 검색어 없을 때: 기본값 = 최근 15일(오늘 포함 KST 기준)만 표시
+      return utcToKSTDate(r.created_at) >= kstDateNDaysAgo(14);
+    }
     const q = listSearch.toLowerCase();
     return r.customer_name.toLowerCase().includes(q) ||
       (r.product_type ?? "").toLowerCase().includes(q) ||
@@ -1405,6 +1414,12 @@ async function loadBdpInquiries() {
               </div>
               <button className={btn} onClick={loadQuoteList}>🔄 새로고침</button>
             </div>
+
+            {!listSearch.trim() && (
+              <div className="mb-2 text-xs text-slate-400">
+                최근 15일 내역만 표시 중입니다. 이전 내역은 업체명/제품/메모로 검색하세요.
+              </div>
+            )}
 
             {listLoading ? (
               <div className="py-8 text-center text-sm text-slate-500">불러오는 중...</div>

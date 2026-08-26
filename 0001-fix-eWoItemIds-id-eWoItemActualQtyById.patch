@@ -1,0 +1,55 @@
+From 41abad7f8d5a507fcbeb76b8a70d19245d670915 Mon Sep 17 00:00:00 2001
+From: cadboom <cadboom@bonusmate.local>
+Date: Mon, 24 Aug 2026 11:41:49 +0000
+Subject: [PATCH] =?UTF-8?q?fix:=20=EC=82=AD=EC=A0=9C=ED=92=88=EB=AA=A9=20?=
+ =?UTF-8?q?=EA=B0=90=EC=A7=80=20=EA=B8=B0=EC=A4=80=EC=9D=84=20=EC=9D=B4?=
+ =?UTF-8?q?=EB=A6=84=EB=A7=A4=EC=B9=AD(eWoItemIds)=20=EB=8C=80=EC=8B=A0=20?=
+ =?UTF-8?q?=EC=A0=84=EC=B2=B4=ED=92=88=EB=AA=A9id(eWoItemActualQtyById=20?=
+ =?UTF-8?q?=ED=82=A4)=EB=A1=9C=20=EB=B3=80=EA=B2=BD?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+실사용 테스트(WO-20260824-0014)에서 성형틀(최초1회) 품목을
+X버튼으로 명확히 삭제했음에도 work_order_items 고아 행이
+자동정리되지 않는 문제 확인.
+
+원인: 삭제 감지에 쓰던 eWoItemIds는 이름매칭(.find로 이름 비교)을
+거쳐 만들어지는데, 이 매칭이 실패하면 해당 품목이 원본 목록에서
+누락됨 (정확한 실패 원인은 로그 없이 단정 불가).
+
+이름매칭과 무관하게 woItems 전체를 무조건 순회해 만드는
+eWoItemActualQtyById의 키를 원본 품목id 목록으로 사용하도록 변경 —
+이름매칭 성공 여부와 관계없이 항상 정확한 원본 목록 확보.
+
+부수 수정: eWoItemActualQtyById도 eWoItemIds와 동일하게 매번 초기화
+(작업지시서 없는 주문 편집 시 이전 세션 값 잔존 방지).
+---
+ app/trade/trade-client.tsx | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/app/trade/trade-client.tsx b/app/trade/trade-client.tsx
+index 22e7adc..0fad2ee 100644
+--- a/app/trade/trade-client.tsx
++++ b/app/trade/trade-client.tsx
+@@ -2154,7 +2154,7 @@ if (editPartnerId) {
+       setEWoExistingImages([]); setEWoExistingSignedLoading(false); setEWoExistingSignedUrls([]);
+       const { data: wo } = await supabase.from("work_orders").select("id,sub_name,product_name,food_type,logo_spec,thickness,delivery_method,packaging_type,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,images,work_order_items(id,sub_items,images,delivery_date,order_qty,barcode_no,logo_spec,actual_qty)").eq("linked_order_id", r.rawId).limit(1).maybeSingle();
+       // 품목별 이미지 초기화
+-      setEItemImageFiles({}); setEItemImagePreviewUrls({}); setEItemExistingImageUrls({}); setEWoItemIds([]);
++      setEItemImageFiles({}); setEItemImagePreviewUrls({}); setEItemExistingImageUrls({}); setEWoItemIds([]); setEWoItemActualQtyById({});
+       if (wo) {
+         setEWoId((wo as any).id); setEWoSubName((wo as any).sub_name ?? "");
+ // 서브네임 있으면 서브네임만, 없으면 품목명 자동 생성
+@@ -2309,7 +2309,7 @@ if (woSubNameVal) {
+ 
+       
+         // 품목별 이미지 저장 (eLines 전체 기준 — 기존 품목은 update, 신규 추가 품목은 work_order_items부터 생성)
+-        const originalItemIds = [...eWoItemIds]; // 루프 중 eWoItemIds가 변경돼도 영향받지 않는 원본 스냅샷
++        const originalItemIds = Object.keys(eWoItemActualQtyById); // 이름매칭(eWoItemIds)이 아닌, woItems 전체를 무조건 순회해 만든 목록 — 이름매칭 실패와 무관하게 정확함
+         for (let idx = 0; idx < eLines.length; idx++) {
+           const eLine = eLines[idx];
+           if (!eLine?.name?.trim()) continue;
+-- 
+2.43.0
+
