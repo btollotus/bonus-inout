@@ -307,9 +307,19 @@ const BDP_PAGE_SIZE = 10;
       let q = supabase.from("quote_requests")
       .select("*,quotes(*),quote_items(*)")
       .eq("request_type", "product")
-        .order("created_at", { ascending: false })
-        .limit(200);
+        .order("created_at", { ascending: false });
       if (statusFilter !== "전체") q = q.eq("status", statusFilter);
+
+      const term = listSearch.trim();
+      if (term) {
+        // 검색어 있을 때: 기간 제한 없이 전체 데이터 대상 검색
+        const esc = term.replace(/[%,]/g, "");
+        q = q.or(`customer_name.ilike.%${esc}%,product_type.ilike.%${esc}%,memo.ilike.%${esc}%`).limit(500);
+      } else {
+        // 검색어 없을 때: 기본값 = 최근 15일(오늘 포함 KST 기준)만
+        q = q.gte("created_at", `${kstDateNDaysAgo(14)}T00:00:00+09:00`).limit(300);
+      }
+
       const { data, error } = await q;
       if (error) return setMsg(error.message);
       setQuoteList((data ?? []) as QuoteRequestRow[]);
@@ -383,7 +393,7 @@ async function loadBdpInquiries() {
  
 
   useEffect(() => { loadPartners(); }, [partnerFilter]);
-  useEffect(() => { if (tab === "list") loadQuoteList(); }, [tab, statusFilter]);
+  useEffect(() => { if (tab === "list") loadQuoteList(); }, [tab, statusFilter, listSearch]);
   useEffect(() => { if (tab === "sheet") loadSheetList(); }, [tab]);
 
   useEffect(() => {
@@ -723,16 +733,8 @@ async function loadBdpInquiries() {
     setSheetItems([newSheetItem()]);
   }
 
-  const filteredList = quoteList.filter(r => {
-    if (!listSearch.trim()) {
-      // 검색어 없을 때: 기본값 = 최근 15일(오늘 포함 KST 기준)만 표시
-      return utcToKSTDate(r.created_at) >= kstDateNDaysAgo(14);
-    }
-    const q = listSearch.toLowerCase();
-    return r.customer_name.toLowerCase().includes(q) ||
-      (r.product_type ?? "").toLowerCase().includes(q) ||
-      (r.memo ?? "").toLowerCase().includes(q);
-  });
+    // 날짜/검색 필터는 loadQuoteList()에서 서버 쿼리로 이미 처리됨 (중복 필터링 방지)
+    const filteredList = quoteList;
 
   // 첫 번째 품목 기준 (레거시 호환)
   const firstItem = items[0];
