@@ -4073,8 +4073,8 @@ const totalOrder = items
           if (selectedWo.status === "완료" && (eFoodType || selectedWo.food_type || "").includes("리얼")) {
             const ft = eFoodType || selectedWo.food_type || "";
             const compoundNameEdit2 = ft.includes("딸기") ? "딸기컴파운드"
-              : ft.includes("다크") ? "다크컴파운드"
-              : "화이트컴파운드";
+            : getFoodCategory(ft) === "다크" ? "다크컴파운드"
+            : "화이트컴파운드";
             // 총중량 재계산
             const editItems2 = (selectedWo.work_order_items ?? []).filter((item) => {
               const n = (item.sub_items ?? [])[0]?.name ?? "";
