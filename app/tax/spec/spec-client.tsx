@@ -1071,12 +1071,16 @@ useEffect(() => {
                   </table>
                 </div>
 
-                <div className="mt-2 flex justify-end avoid-break">
+                                <div className="mt-2 flex justify-end avoid-break">
                   <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 text-sm">
                     <div className="flex items-center justify-between py-1">
                       <div className="text-slate-700">공급가</div>
                       <div className="font-semibold">{formatMoney(sumSupply)}</div>
                     </div>
+                  <div className="flex items-center justify-between py-1">
+                    <div className="text-slate-700">부가세</div>
+                    <div className="font-semibold">{formatMoney(sumVat)}</div>
+                  </div>
                   <div className="flex items-center justify-between py-1">
                     <div className="text-slate-900">합계</div>
                     <div className="text-base font-bold">{formatMoney(sumTotal)}</div>
