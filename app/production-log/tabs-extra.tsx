@@ -257,8 +257,7 @@ setSlotWoMap(slotMap);
         }
       }
 
-        // 담당자 맵 — CCP-1B 온도를 실제로 측정/기록한 사람(action_by)을 사용.
-    // WO의 전사/생산 담당자로 대체(폴백)하지 않음 — 그 사람이 실제로 이 온도를 측정했다는 보장이 없기 때문.
+           // 담당자 맵 — CCP-1B 온도를 실제로 측정/기록한 사람(action_by)을 최우선 사용.
     // 우선순위: 해당 WO의 '종료' 기록에 담당자가 있으면 그것을, 없으면 가장 최근 기록의 담당자를 사용.
     const assigneeMap: Record<string, string> = {};
     const eventsByWo: Record<string, any[]> = {};
@@ -273,6 +272,18 @@ setSlotWoMap(slotMap);
       const latestWithSigner = [...sorted].reverse().find((e: any) => e.action_by);
       const signer = endEv?.action_by ?? latestWithSigner?.action_by ?? null;
       if (signer) assigneeMap[woNo] = signer;
+    }
+    // action_by가 없는 과거 기록(수정 전 입력분)은 기존 방식(WO의 생산/전사 담당자)으로 계속 표시
+    const woNosMissingActionBy = Object.keys(eventsByWo).filter((woNo) => !assigneeMap[woNo]);
+    if (woNosMissingActionBy.length > 0) {
+      const { data: woDataFallback } = await supabase
+        .from("work_orders")
+        .select("work_order_no, assignee_production, assignee_transfer")
+        .in("work_order_no", woNosMissingActionBy);
+      for (const wo of woDataFallback ?? []) {
+        const assignee = wo.assignee_production ?? wo.assignee_transfer;
+        if (assignee) assigneeMap[wo.work_order_no] = assignee;
+      }
     }
 
     if (sEvents.length > 0 || wEvents.length > 0) {
