@@ -108,6 +108,7 @@ export function useCcpState(
     return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
   });
   const [slotActionSaving, setSlotActionSaving] = useState(false);
+  const slotActionSavingRef = useRef(false);
 
   const [slotStatus, setSlotStatus] = useState<Record<string, { date: string; daysAgo: number; materialType: string | null } | null>>({});
 
@@ -522,6 +523,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
 
   // after
   async function saveSlotMaterialIn(slotId: string, workOrderNo?: string, materialType?: string, actionBy?: string) {
+    if (slotActionSavingRef.current) return;
     if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
     if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
       return showToast("올바른 시각을 입력하세요.", "error");
@@ -552,6 +554,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
 
     if (!confirm(`[${slotName}] 원료투입을 기록합니다. 맞습니까?`)) return;
 
+    slotActionSavingRef.current = true;
     setSlotActionSaving(true);
     try {
       const { error } = await supabase.from("ccp_slot_events").insert({
@@ -573,6 +576,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
     } catch (e: any) {
       showToast("오류: " + (e?.message ?? e), "error");
     } finally {
+      slotActionSavingRef.current = false;
       setSlotActionSaving(false);
     }
   }
@@ -580,6 +584,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
 // after
 // after
 async function saveSlotMaterialOut(slotId: string, actionBy?: string) {
+  if (slotActionSavingRef.current) return;
   if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
   if (parseInt(slotActionTime.slice(0,2)) > 23 || parseInt(slotActionTime.slice(2,4)) > 59)
     return showToast("올바른 시각을 입력하세요.", "error");
@@ -640,6 +645,7 @@ async function saveSlotMaterialOut(slotId: string, actionBy?: string) {
   // 2: confirm으로 실수 방지
   if (!confirm(`[${slotName}] 원료소진을 기록합니다.\n소진 후에는 원료가 없는 상태로 변경됩니다. 맞습니까?`)) return;
 
+  slotActionSavingRef.current = true;
   setSlotActionSaving(true);
   try {
     const { error } = await supabase.from("ccp_slot_events").insert({
@@ -661,11 +667,13 @@ created_by:    currentUserIdRef.current,
   } catch (e: any) {
     showToast("오류: " + (e?.message ?? e), "error");
   } finally {
+    slotActionSavingRef.current = false;
     setSlotActionSaving(false);
   }
 }
 
 async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: string, actionBy?: string) {
+  if (slotActionSavingRef.current) return;
   if (!slotActionTime || slotActionTime.length < 4) return showToast("시각을 입력하세요. (예: 1430)", "error");
 
   const fromSlotName = warmerSlots.find((s) => s.id === fromSlotId)?.slot_name ?? fromSlotId;
@@ -794,10 +802,11 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
       : fromSlot?.purpose === "다크컴파운드" ? "다크"
       : null);
 
-  setSlotActionSaving(true);
-  try {
-    // ── 검증 6 (트랜잭션 대체): fromSlot insert 먼저, 실패 시 중단 ──
-    const { error: fromErr } = await supabase.from("ccp_slot_events").insert({
+      slotActionSavingRef.current = true;
+      setSlotActionSaving(true);
+      try {
+        // ── 검증 6 (트랜잭션 대체): fromSlot insert 먼저, 실패 시 중단 ──
+        const { error: fromErr } = await supabase.from("ccp_slot_events").insert({
       slot_id:       fromSlotId,
       event_date:    slotActionDate,
       event_type:    "material_out",
@@ -849,6 +858,7 @@ async function saveSlotMove(fromSlotId: string, toSlotId: string, workOrderNo?: 
   } catch (e: any) {
     showToast("오류: " + (e?.message ?? e), "error");
   } finally {
+    slotActionSavingRef.current = false;
     setSlotActionSaving(false);
   }
 }
