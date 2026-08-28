@@ -257,21 +257,22 @@ setSlotWoMap(slotMap);
         }
       }
 
-    // 담당자 맵 조회 — work_orders.assignee_production 직접 사용
-    const allWoNosForAssignee = [...new Set([
-      ...sEvents.map((e: any) => e.work_order_no).filter(Boolean),
-      ...wEvents.map((e: any) => e.work_order_no).filter(Boolean),
-    ])] as string[];
+        // 담당자 맵 — CCP-1B 온도를 실제로 측정/기록한 사람(action_by)을 사용.
+    // WO의 전사/생산 담당자로 대체(폴백)하지 않음 — 그 사람이 실제로 이 온도를 측정했다는 보장이 없기 때문.
+    // 우선순위: 해당 WO의 '종료' 기록에 담당자가 있으면 그것을, 없으면 가장 최근 기록의 담당자를 사용.
     const assigneeMap: Record<string, string> = {};
-    if (allWoNosForAssignee.length > 0) {
-      const { data: woData } = await supabase
-        .from("work_orders")
-        .select("work_order_no, assignee_production, assignee_transfer")
-        .in("work_order_no", allWoNosForAssignee);
-      for (const wo of woData ?? []) {
-        const assignee = wo.assignee_production ?? wo.assignee_transfer;
-        if (assignee) assigneeMap[wo.work_order_no] = assignee;
-      }
+    const eventsByWo: Record<string, any[]> = {};
+    for (const e of sEvents) {
+      if (!e.work_order_no) continue;
+      if (!eventsByWo[e.work_order_no]) eventsByWo[e.work_order_no] = [];
+      eventsByWo[e.work_order_no].push(e);
+    }
+    for (const [woNo, evs] of Object.entries(eventsByWo)) {
+      const sorted = [...evs].sort((a, b) => String(a.measured_at).localeCompare(String(b.measured_at)));
+      const endEv = [...sorted].reverse().find((e: any) => e.event_type === "end" && e.action_by);
+      const latestWithSigner = [...sorted].reverse().find((e: any) => e.action_by);
+      const signer = endEv?.action_by ?? latestWithSigner?.action_by ?? null;
+      if (signer) assigneeMap[woNo] = signer;
     }
 
     if (sEvents.length > 0 || wEvents.length > 0) {

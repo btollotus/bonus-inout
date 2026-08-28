@@ -310,6 +310,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
   async function saveWoEvent(
     selectedWo: { work_order_no: string; ccp_slot_id: string | null; client_name: string; product_name: string },
     eCcpSlotId: string,
+    actionBy?: string,
   ) {
     const slotId = eCcpSlotId || selectedWo.ccp_slot_id;
     if (!slotId) return showToast("슬롯을 먼저 지정해주세요.", "error");
@@ -437,10 +438,11 @@ if (!lastEvent || lastEvent.event_type === "end") {
       temperature:   temp,
       is_ok:         ccpWoIsOk,
       action_note:   ccpWoEventType === "end"
-        ? `${selectedWo.client_name} · ${selectedWo.product_name}`
-        : ccpWoActionNote.trim() || null,
-      created_by:    currentUserIdRef.current,
-    });
+      ? `${selectedWo.client_name} · ${selectedWo.product_name}`
+      : ccpWoActionNote.trim() || null,
+    action_by:     actionBy ?? null,
+    created_by:    currentUserIdRef.current,
+  });
 
       // start/mid_check만 같은 슬롯 다른 WO에 복사. end는 WO별 별도 기록
       if (ccpWoEventType !== "end") {
@@ -1689,9 +1691,9 @@ export function WoCcpCard({
                   value={ccpWoActionNote} onChange={(e) => setCcpWoActionNote(e.target.value)} placeholder="온도 이탈 조치 내용" />
               </div>
             )}
-            <button className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+                        <button className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
               disabled={ccpWoSaving}
-              onClick={() => saveWoEvent(selectedWo, eCcpSlotId)}>
+              onClick={() => requireSlotAssignPin((actionBy) => saveWoEvent(selectedWo, eCcpSlotId, actionBy))}>
               {ccpWoSaving ? "저장 중..." : "💾 기록"}
             </button>
           </div>
