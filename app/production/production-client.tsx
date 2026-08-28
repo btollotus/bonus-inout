@@ -3181,6 +3181,7 @@ const totalOrder = items
                                   setNeoColorSpraySaved(true);
                                   setNeoColorSprayEditMode(false);
                                   setWoList((prev) => prev.map((w) => w.id === selectedWo.id ? { ...w, neo_color_spray_lots: lotsForDb } : w));
+                                  setSelectedWo((prev) => prev ? { ...prev, neo_color_spray_lots: lotsForDb } : prev);
                                   // 저장 후 잔량 즉시 갱신
                                   const updatedLotIds = neoColorSprayLots.map((l) => l.lot_id).filter(Boolean);
                                   if (updatedLotIds.length > 0) {
@@ -3295,6 +3296,7 @@ const totalOrder = items
                                   setNeoColorSpraySaved(true);
                                   setNeoColorSprayEditMode(false);
                                   setWoList((prev) => prev.map((w) => w.id === selectedWo.id ? { ...w, neo_color_spray_lots: lotsForDb } : w));
+                                  setSelectedWo((prev) => prev ? { ...prev, neo_color_spray_lots: lotsForDb } : prev);
                                   // 수정 저장 후 잔량 즉시 갱신
                                   const updatedLotIds2 = neoColorSprayLots.map((l) => l.lot_id).filter(Boolean);
                                   if (updatedLotIds2.length > 0) {
