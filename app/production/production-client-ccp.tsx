@@ -96,6 +96,7 @@ export function useCcpState(
   const [ccpWoIsOk, setCcpWoIsOk] = useState(true);
   const [ccpWoActionNote, setCcpWoActionNote] = useState("");
   const [ccpWoSaving, setCcpWoSaving] = useState(false);
+  const ccpWoSavingRef = useRef(false);
 
   const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
   const [slotMoveTargetId, setSlotMoveTargetId] = useState<string | null>(null);
@@ -313,6 +314,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
     eCcpSlotId: string,
     actionBy?: string,
   ) {
+    if (ccpWoSavingRef.current) return;
     const slotId = eCcpSlotId || selectedWo.ccp_slot_id;
     if (!slotId) return showToast("슬롯을 먼저 지정해주세요.", "error");
     if (!ccpWoTime || ccpWoTime.length < 4) return showToast("측정시각을 입력하세요. (예: 1430)", "error");
@@ -414,6 +416,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
       }
     }
 
+    ccpWoSavingRef.current = true;
     setCcpWoSaving(true);
     const measuredAt = `${today}T${ccpWoTime.slice(0,2)}:${ccpWoTime.slice(2,4)}:00+09:00`;
 
@@ -427,6 +430,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
       action_note:   ccpWoActionNote.trim() || null,
       created_by:    currentUserIdRef.current,
     });
+    ccpWoSavingRef.current = false;
     setCcpWoSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
 
