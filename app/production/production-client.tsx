@@ -475,6 +475,8 @@ export default function ProductionClient() {
   const [transferCcpIsOk, setTransferCcpIsOk] = useState(true);
   const [transferCcpActionNote, setTransferCcpActionNote] = useState("");
   const [transferCcpSaving, setTransferCcpSaving] = useState(false);
+  const transferCcpSavingRef = useRef(false);
+  const transferSheetSizeSavingRef = useRef(false);
   const [transferCcpEditingId, setTransferCcpEditingId] = useState<string | null>(null);
   const [transferCcpEditTime, setTransferCcpEditTime] = useState("");
   const [transferCcpEditTemp, setTransferCcpEditTemp] = useState("");
@@ -843,6 +845,7 @@ export default function ProductionClient() {
   }
 
   async function saveTransferCcpEvent(wo: WorkOrderRow) {
+    if (transferCcpSavingRef.current) return;
     const slotId = transferCcpSlotId;
     if (!slotId) return showToast("전사 슬롯(8번)을 찾을 수 없습니다.", "error");
     if (!transferCcpTime || transferCcpTime.length < 4) return showToast("측정시각을 입력하세요. (예: 1430)", "error");
@@ -880,6 +883,7 @@ export default function ProductionClient() {
       }
     }
 
+    transferCcpSavingRef.current = true;
     setTransferCcpSaving(true);
     const measuredAt = `${today}T${transferCcpTime.slice(0,2)}:${transferCcpTime.slice(2,4)}:00+09:00`;
 
@@ -893,7 +897,7 @@ export default function ProductionClient() {
       action_note: transferCcpActionNote.trim() || null,
       created_by: currentUserIdRef.current,
     });
-    if (error) { setTransferCcpSaving(false); showToast("저장 실패: " + error.message, "error"); return; }
+    if (error) { transferCcpSavingRef.current = false; setTransferCcpSaving(false); showToast("저장 실패: " + error.message, "error"); return; }
 
     await supabase.from("ccp_slot_events").insert({
       slot_id: slotId,
@@ -907,6 +911,7 @@ export default function ProductionClient() {
       created_by: currentUserIdRef.current,
     });
 
+    transferCcpSavingRef.current = false;
     setTransferCcpSaving(false);
     showToast("✅ 전사지인쇄 CCP-1B 온도 기록 완료!");
     setTransferCcpTemp(""); setTransferCcpActionNote(""); setTransferCcpIsOk(true); setTransferCcpTime("");
@@ -964,14 +969,20 @@ export default function ProductionClient() {
   // ─── 전사지 크기 선택 (트랜스퍼시트류 중간재 전용) ───
   async function saveTransferSheetSize(size: string) {
     if (!selectedWo) return;
-    const { error } = await supabase.from("work_orders").update({
-      transfer_sheet_size: size,
-      updated_at: new Date().toISOString(),
-    }).eq("id", selectedWo.id);
-    if (error) { showToast("전사지 크기 저장 실패: " + error.message, "error"); return; }
-    setSelectedWo((prev) => prev ? { ...prev, transfer_sheet_size: size } : prev);
-    setWoList((prev) => prev.map((w) => w.id === selectedWo.id ? { ...w, transfer_sheet_size: size } : w));
-    showToast("전사지 크기 저장됨: " + (size === "300x400" ? "300×400mm" : "320×450mm"));
+    if (transferSheetSizeSavingRef.current) return;
+    transferSheetSizeSavingRef.current = true;
+    try {
+      const { error } = await supabase.from("work_orders").update({
+        transfer_sheet_size: size,
+        updated_at: new Date().toISOString(),
+      }).eq("id", selectedWo.id);
+      if (error) { showToast("전사지 크기 저장 실패: " + error.message, "error"); return; }
+      setSelectedWo((prev) => prev ? { ...prev, transfer_sheet_size: size } : prev);
+      setWoList((prev) => prev.map((w) => w.id === selectedWo.id ? { ...w, transfer_sheet_size: size } : w));
+      showToast("전사지 크기 저장됨: " + (size === "300x400" ? "300×400mm" : "320×450mm"));
+    } finally {
+      transferSheetSizeSavingRef.current = false;
+    }
   }
 
   const loadWoList = useCallback(async (offset = 0) => {
