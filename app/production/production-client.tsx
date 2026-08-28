@@ -3053,6 +3053,11 @@ const totalOrder = items
                               const lotInfo = neoColorSprayLotOptions.find((l) => l.lot_id === tl.lot_id);
                               const usedByOthers = neoColorSprayLots.filter((_, i) => i !== tlIdx).reduce((s, l) => l.lot_id === tl.lot_id ? s + toInt(l.qty) : s, 0);
                               const effectiveRemaining = (lotInfo?.remaining_qty ?? 0) - usedByOthers;
+                              // 이미 저장된(neoColorSpraySaved) 이 WO 자신의 사용량은 잔량에서 이미 빠져있으므로,
+                              // 수정 시 "차감 후" 미리보기 계산에서만 되돌려 더해줘야 정확함 (신규 미저장 입력 시엔 0)
+                              const alreadySavedForThisLot = neoColorSpraySaved
+                                ? (selectedWo?.neo_color_spray_lots ?? []).filter((sl) => sl.lot_id === tl.lot_id).reduce((s, sl) => s + toInt(sl.qty), 0)
+                                : 0;
                               return (
                                 <div key={tlIdx} className="rounded-lg border border-violet-200 bg-white px-2.5 py-1.5">
                                   <div className="flex items-center gap-2">
@@ -3075,8 +3080,8 @@ const totalOrder = items
                                         next[tlIdx] = { ...next[tlIdx], qty: e.target.value.replace(/[^\d]/g, "") };
                                         return next;
                                       })} />
-                                    {lotInfo && tl.qty && (
-                                      <div className="text-[11px] text-slate-500 shrink-0">차감 후: <b className={effectiveRemaining - toInt(tl.qty) < 0 ? "text-red-600" : "text-violet-700"}>{(effectiveRemaining - toInt(tl.qty)).toLocaleString()} EA</b></div>
+                                                                        {lotInfo && tl.qty && (
+                                      <div className="text-[11px] text-slate-500 shrink-0">차감 후: <b className={effectiveRemaining + alreadySavedForThisLot - toInt(tl.qty) < 0 ? "text-red-600" : "text-violet-700"}>{(effectiveRemaining + alreadySavedForThisLot - toInt(tl.qty)).toLocaleString()} EA</b></div>
                                     )}
                                   </div>
                                 </div>
