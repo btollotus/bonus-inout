@@ -321,6 +321,9 @@ const [adminLoaded, setAdminLoaded] = useState(false);
 
   const [editSaving, setEditSaving] = useState(false);
   const [expirySaving, setExpirySaving] = useState(false);
+  const editSavingRef = useRef(false);
+  const discardSavingRef = useRef(false);
+  const expirySavingRef = useRef(false);
   // ── 드릴다운 (출고/입고) ──
   const [drillOpen, setDrillOpen] = useState<{ barcode: string; expiry: string; colType: "in" | "out" } | null>(null);
   const [drillMovements, setDrillMovements] = useState<{ type: string; qty: number; happened_at: string; note: string | null; clientName?: string | null; woId?: string }[]>([]);
@@ -558,8 +561,10 @@ const [adminLoaded, setAdminLoaded] = useState(false);
 
   // ── 수정 저장 (제품명·식품유형·재고수량만) ──
   async function saveEdit() {
+    if (editSavingRef.current) return;
     const { row } = editModal;
     if (!row) return;
+    editSavingRef.current = true;
     setEditSaving(true);
     setMsg(null);
     try {
@@ -605,6 +610,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     } catch (e: any) {
       setMsg("수정 오류: " + (e?.message ?? e));
     } finally {
+      editSavingRef.current = false;
       setEditSaving(false);
     }
   }
@@ -671,6 +677,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
 
   // ── 폐기 저장 ──
   async function saveDiscard() {
+    if (discardSavingRef.current) return;
     const { row, qty } = discardModal;
     if (!row || !row.lot_id) {
       setMsg("lot 정보가 없어 폐기할 수 없습니다.");
@@ -682,6 +689,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
       setMsg(`폐기 수량(${qtyNum})이 현재 재고(${intMin(row.end_stock_ea, 0)})를 초과합니다.`);
       return;
     }
+    discardSavingRef.current = true;
     setDiscardModal((prev) => ({ ...prev, saving: true }));
     setMsg(null);
     try {
@@ -701,11 +709,14 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     } catch (e: any) {
       setMsg("폐기 오류: " + (e?.message ?? e));
       setDiscardModal((prev) => ({ ...prev, saving: false }));
+    } finally {
+      discardSavingRef.current = false;
     }
   }
 
   // ── 소비기한 저장 (LOT 병합 처리 포함) ──
   async function saveExpiry() {
+    if (expirySavingRef.current) return;
     const { row, newExpiry } = expiryModal;
     if (!row || !row.lot_id || !row.variant_id) {
       setMsg("lot 정보가 없어 소비기한을 수정할 수 없습니다.");
@@ -714,6 +725,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     if (!newExpiry) { setMsg("소비기한을 입력해주세요."); return; }
     if (newExpiry === row.expiry_date) { setMsg("변경사항이 없습니다."); return; }
 
+    expirySavingRef.current = true;
     setExpirySaving(true);
     setMsg(null);
     try {
@@ -756,6 +768,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     } catch (e: any) {
       setMsg("오류: " + (e?.message ?? e));
     } finally {
+      expirySavingRef.current = false;
       setExpirySaving(false);
     }
   }
