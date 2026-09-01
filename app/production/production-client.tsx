@@ -1475,42 +1475,46 @@ export default function ProductionClient() {
           expiry_date: pi.expiry_date || null,
         }).eq("id", item.id);
       }
-     // 도눔(은박) 재고 차감
-     const stockErrors: string[] = [];
-     for (const item of items) {
-       const pi = prodInputs[item.id];
-       const transferLots = pi?.transfer_lots ?? [];
-       if (transferLots.length === 0) continue;
-       const today = `${new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10)}T00:00:00+09:00`;
-       for (const tl of transferLots) {
-         const transferQty = toInt(tl.qty);
-         if (!tl.lot_id || transferQty <= 0) continue;
-         const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", tl.lot_id);
-         const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
-         if (transferQty > remaining) {
-           setMsg(`도눔(은박) 차감 실패: 차감 수량(${transferQty})이 잔량(${remaining})을 초과합니다.`);
-           setIsCompleting(false);
-           return;
-         }
-         const { error: transferErr } = await supabase.from("movements").insert({
-           lot_id: tl.lot_id, type: "OUT", qty: transferQty,
-           happened_at: today,
-           note: `도눔 포장완료 - ${selectedWo.work_order_no}`,
-           created_by: userId,
-         });
-         if (transferErr) {
-          stockErrors.push("차감 실패: " + transferErr.message);
-          await logStockError({ workOrderId: selectedWo.id, workOrderNo: selectedWo.work_order_no, itemId: item.id, errorType: "OUT", errorMessage: transferErr.message });
-        }
-       }
-       const lotsForDb = transferLots.map((l) => ({ lot_id: l.lot_id, qty: toInt(l.qty) }));
-       const totalQty = lotsForDb.reduce((s, l) => s + l.qty, 0);
-       await supabase.from("work_order_items").update({
-         transfer_lot_id: lotsForDb[0]?.lot_id ?? null,
-         transfer_qty: totalQty > 0 ? totalQty : null,
-         transfer_lots: lotsForDb,
-       }).eq("id", item.id);
-     }
+          // 도눔(은박) 재고 차감
+          const stockErrors: string[] = [];
+          for (const item of items) {
+            const pi = prodInputs[item.id];
+            const transferLots = pi?.transfer_lots ?? [];
+            if (transferLots.length === 0) continue;
+            const today = `${new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10)}T00:00:00+09:00`;
+            const itemName = (item.sub_items ?? [])[0]?.name ?? item.id;
+            const succeededLots: { lot_id: string; qty: number }[] = [];
+            for (const tl of transferLots) {
+              const transferQty = toInt(tl.qty);
+              if (!tl.lot_id || transferQty <= 0) continue;
+              const { data: movData } = await supabase.from("movements").select("type, qty").eq("lot_id", tl.lot_id);
+              const remaining = (movData ?? []).reduce((sum, m) => m.type === "IN" ? sum + m.qty : sum - m.qty, 0);
+              if (transferQty > remaining) {
+                const errMsg = `잔량 부족: 요청 ${transferQty} / 잔량 ${remaining} (lot ${tl.lot_id})`;
+                stockErrors.push(`도눔(은박) 차감 실패 (${itemName}): 차감 수량(${transferQty})이 잔량(${remaining})을 초과합니다.`);
+                await logStockError({ workOrderId: selectedWo.id, workOrderNo: selectedWo.work_order_no, itemId: item.id, errorType: "OUT", errorMessage: errMsg });
+                continue;
+              }
+              const { error: transferErr } = await supabase.from("movements").insert({
+                lot_id: tl.lot_id, type: "OUT", qty: transferQty,
+                happened_at: today,
+                note: `도눔 포장완료 - ${selectedWo.work_order_no}`,
+                created_by: userId,
+              });
+              if (transferErr) {
+               stockErrors.push(`도눔(은박) 차감 실패 (${itemName}): ` + transferErr.message);
+               await logStockError({ workOrderId: selectedWo.id, workOrderNo: selectedWo.work_order_no, itemId: item.id, errorType: "OUT", errorMessage: transferErr.message });
+               continue;
+             }
+             succeededLots.push({ lot_id: tl.lot_id, qty: transferQty });
+            }
+            const totalQty = succeededLots.reduce((s, l) => s + l.qty, 0);
+            await supabase.from("work_order_items").update({
+              transfer_lot_id: succeededLots[0]?.lot_id ?? null,
+              transfer_qty: totalQty > 0 ? totalQty : null,
+              transfer_lots: succeededLots,
+            }).eq("id", item.id);
+          }
      // 도눔(은박) 완성품 입고 (포장완료 수량만큼 IN, 화면 입력 소비기한 사용)
      const todayKSTDatePkg = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
      for (const item of items) {
