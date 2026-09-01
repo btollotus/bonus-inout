@@ -2009,53 +2009,63 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     const prevEnd = new Date(y, m - 1, 0);
     const prevEndStr = `${prevEnd.getFullYear()}-${String(prevEnd.getMonth() + 1).padStart(2, "0")}-${String(prevEnd.getDate()).padStart(2, "0")}`;
 
-    // 해당 월 변동 원료 ID 수집
-    const [recRes, useRes, adjRes] = await Promise.all([
-      supabase.from("material_receipts").select("material_id,received_date,quantity").gte("received_date", monthStart).lte("received_date", monthEnd),
-      supabase.from("material_usage_logs").select("material_id,used_date,quantity").gte("used_date", monthStart).lte("used_date", monthEnd),
-      supabase.from("material_adjustments").select("material_id,adjust_date,adjust_qty,reason").gte("adjust_date", monthStart).lte("adjust_date", monthEnd),
-    ]);
-    const changedIds = [...new Set([
-      ...(recRes.data ?? []).map((r: any) => r.material_id),
-      ...(useRes.data ?? []).map((u: any) => u.material_id),
-      ...(adjRes.data ?? []).map((a: any) => a.material_id),
-    ])].filter((id) => id !== "00000000-0007-0000-0000-000000000001");
+        // 해당 월 변동 원료 ID 수집
+        const [recRes, useRes, adjRes, dispRes] = await Promise.all([
+          supabase.from("material_receipts").select("material_id,received_date,quantity").gte("received_date", monthStart).lte("received_date", monthEnd),
+          supabase.from("material_usage_logs").select("material_id,used_date,quantity").gte("used_date", monthStart).lte("used_date", monthEnd),
+          supabase.from("material_adjustments").select("material_id,adjust_date,adjust_qty,reason").gte("adjust_date", monthStart).lte("adjust_date", monthEnd),
+          supabase.from("material_disposal_logs").select("material_id,disposal_date,quantity,reason").gte("disposal_date", monthStart).lte("disposal_date", monthEnd),
+        ]);
+        const changedIds = [...new Set([
+          ...(recRes.data ?? []).map((r: any) => r.material_id),
+          ...(useRes.data ?? []).map((u: any) => u.material_id),
+          ...(adjRes.data ?? []).map((a: any) => a.material_id),
+          ...(dispRes.data ?? []).map((d: any) => d.material_id),
+        ])].filter((id) => id !== "00000000-0007-0000-0000-000000000001");
     if (changedIds.length === 0) { setPrintLoading(false); return alert("해당 월에 변동 내역이 없습니다."); }
 
     // 원료 정보
     const { data: matsData } = await supabase.from("materials").select("id,name,category,unit").in("id", changedIds).order("category").order("name");
     const mats = matsData ?? [];
 
-    // 전월이월 재고 계산 (각 원료별)
-    const [prevRecRes, prevUseRes, prevAdjRes] = await Promise.all([
-      supabase.from("material_receipts").select("material_id,quantity").lte("received_date", prevEndStr),
-      supabase.from("material_usage_logs").select("material_id,quantity").lte("used_date", prevEndStr),
-      supabase.from("material_adjustments").select("material_id,adjust_qty").lte("adjust_date", prevEndStr),
-    ]);
-    const prevStockMap: Record<string, number> = {};
-    (prevRecRes.data ?? []).forEach((r: any) => { prevStockMap[r.material_id] = (prevStockMap[r.material_id] ?? 0) + r.quantity; });
-    (prevUseRes.data ?? []).forEach((u: any) => { prevStockMap[u.material_id] = (prevStockMap[u.material_id] ?? 0) - u.quantity; });
-    (prevAdjRes.data ?? []).forEach((a: any) => { prevStockMap[a.material_id] = (prevStockMap[a.material_id] ?? 0) + a.adjust_qty; });
+        // 전월이월 재고 계산 (각 원료별)
+        const [prevRecRes, prevUseRes, prevAdjRes, prevDispRes] = await Promise.all([
+          supabase.from("material_receipts").select("material_id,quantity").lte("received_date", prevEndStr),
+          supabase.from("material_usage_logs").select("material_id,quantity").lte("used_date", prevEndStr),
+          supabase.from("material_adjustments").select("material_id,adjust_qty").lte("adjust_date", prevEndStr),
+          supabase.from("material_disposal_logs").select("material_id,quantity").lte("disposal_date", prevEndStr),
+        ]);
+        const prevStockMap: Record<string, number> = {};
+        (prevRecRes.data ?? []).forEach((r: any) => { prevStockMap[r.material_id] = (prevStockMap[r.material_id] ?? 0) + r.quantity; });
+        (prevUseRes.data ?? []).forEach((u: any) => { prevStockMap[u.material_id] = (prevStockMap[u.material_id] ?? 0) - u.quantity; });
+        (prevAdjRes.data ?? []).forEach((a: any) => { prevStockMap[a.material_id] = (prevStockMap[a.material_id] ?? 0) + a.adjust_qty; });
+        (prevDispRes.data ?? []).forEach((d: any) => { prevStockMap[d.material_id] = (prevStockMap[d.material_id] ?? 0) - d.quantity; });
 
-    // 날짜별 집계 맵 구성
-    type DayEntry = { in: number; use: number; adj: number; adjNote: string };
-    const dayMap: Record<string, Record<string, DayEntry>> = {};
-    (recRes.data ?? []).forEach((r: any) => {
-      if (!dayMap[r.material_id]) dayMap[r.material_id] = {};
-      if (!dayMap[r.material_id][r.received_date]) dayMap[r.material_id][r.received_date] = { in: 0, use: 0, adj: 0, adjNote: "" };
-      dayMap[r.material_id][r.received_date].in += r.quantity;
-    });
-    (useRes.data ?? []).forEach((u: any) => {
-      if (!dayMap[u.material_id]) dayMap[u.material_id] = {};
-      if (!dayMap[u.material_id][u.used_date]) dayMap[u.material_id][u.used_date] = { in: 0, use: 0, adj: 0, adjNote: "" };
-      dayMap[u.material_id][u.used_date].use += u.quantity;
-    });
-    (adjRes.data ?? []).forEach((a: any) => {
-      if (!dayMap[a.material_id]) dayMap[a.material_id] = {};
-      if (!dayMap[a.material_id][a.adjust_date]) dayMap[a.material_id][a.adjust_date] = { in: 0, use: 0, adj: 0, adjNote: "" };
-      dayMap[a.material_id][a.adjust_date].adj += a.adjust_qty;
-      if (a.reason) dayMap[a.material_id][a.adjust_date].adjNote = a.reason;
-    });
+        // 날짜별 집계 맵 구성
+        type DayEntry = { in: number; use: number; disposal: number; adj: number; adjNote: string; dispNote: string };
+        const dayMap: Record<string, Record<string, DayEntry>> = {};
+        (recRes.data ?? []).forEach((r: any) => {
+          if (!dayMap[r.material_id]) dayMap[r.material_id] = {};
+          if (!dayMap[r.material_id][r.received_date]) dayMap[r.material_id][r.received_date] = { in: 0, use: 0, disposal: 0, adj: 0, adjNote: "", dispNote: "" };
+          dayMap[r.material_id][r.received_date].in += r.quantity;
+        });
+        (useRes.data ?? []).forEach((u: any) => {
+          if (!dayMap[u.material_id]) dayMap[u.material_id] = {};
+          if (!dayMap[u.material_id][u.used_date]) dayMap[u.material_id][u.used_date] = { in: 0, use: 0, disposal: 0, adj: 0, adjNote: "", dispNote: "" };
+          dayMap[u.material_id][u.used_date].use += u.quantity;
+        });
+        (adjRes.data ?? []).forEach((a: any) => {
+          if (!dayMap[a.material_id]) dayMap[a.material_id] = {};
+          if (!dayMap[a.material_id][a.adjust_date]) dayMap[a.material_id][a.adjust_date] = { in: 0, use: 0, disposal: 0, adj: 0, adjNote: "", dispNote: "" };
+          dayMap[a.material_id][a.adjust_date].adj += a.adjust_qty;
+          if (a.reason) dayMap[a.material_id][a.adjust_date].adjNote = a.reason;
+        });
+        (dispRes.data ?? []).forEach((d: any) => {
+          if (!dayMap[d.material_id]) dayMap[d.material_id] = {};
+          if (!dayMap[d.material_id][d.disposal_date]) dayMap[d.material_id][d.disposal_date] = { in: 0, use: 0, disposal: 0, adj: 0, adjNote: "", dispNote: "" };
+          dayMap[d.material_id][d.disposal_date].disposal += d.quantity;
+          if (d.reason) dayMap[d.material_id][d.disposal_date].dispNote = d.reason;
+        });
 
     // HTML 생성
     const days = ["일","월","화","수","목","금","토"];
@@ -2112,9 +2122,12 @@ function MaterialLedgerTab({ role, userId, showToast }: {
         const d = new Date(date + "T00:00:00+09:00");
         const dayLabel = `${d.getMonth() + 1}/${d.getDate()}(${days[d.getDay()]})`;
         const entry = matDays[date];
-        runningStock = runningStock + entry.in - entry.use + entry.adj;
+        runningStock = runningStock + entry.in - entry.use - entry.disposal + entry.adj;
         const adjCell = entry.adj !== 0 ? `${entry.adj > 0 ? "+" : ""}${entry.adj.toLocaleString()}` : "-";
-        const noteCell = entry.adjNote || "";
+        const noteParts: string[] = [];
+        if (entry.disposal !== 0) noteParts.push(`폐기 ${entry.disposal.toLocaleString()}${entry.dispNote ? ` (${entry.dispNote})` : ""}`);
+        if (entry.adjNote) noteParts.push(entry.adjNote);
+        const noteCell = noteParts.join(" / ");
         rows += `
           <tr>
             <td class="center">${rowNo++}</td>
