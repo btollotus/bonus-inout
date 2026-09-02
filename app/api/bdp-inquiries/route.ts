@@ -7,9 +7,15 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 // 두 프로젝트는 완전히 별개 Supabase 프로젝트이므로 service_role 키로
 // 우회 조회한다 (bdp2026 쪽 RLS는 authenticated만 SELECT 허용).
 export async function GET() {
+  // [진단용] 구간별 소요시간 측정 시작 - 응답 데이터/로직에는 영향 없음
+  const t0 = Date.now();
+
   // 1) bonus-inout 로그인 여부 확인
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  // [진단용] 인증 확인 소요시간
+  const authMs = Date.now() - t0;
 
   if (authError || !user) {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
@@ -35,17 +41,25 @@ export async function GET() {
   //  목록 화면이 signed URL 생성을 기다리지 않고 먼저 표시되도록 하기 위함.
   //  attachment_paths는 그대로 내려주므로 클라이언트가 이후 별도 요청으로
   //  signed URL을 채워 넣을 수 있다.)
-  const { data, error: bdpError } = await bdpAdmin
-    .from("public_inquiries")
-    .select(
-      "id,form_type,company_name,contact_name,phone,shape,color_type,size_text,sheet_count,sheet_color,quantity,memo,attachment_paths,created_at"
-    )
-    .order("created_at", { ascending: false })
-    .limit(200);
+    // [진단용] DB 쿼리 구간 소요시간 측정 시작
+    const t1 = Date.now();
 
-  if (bdpError) {
-    return NextResponse.json({ error: bdpError.message }, { status: 500 });
+    const { data, error: bdpError } = await bdpAdmin
+      .from("public_inquiries")
+      .select(
+        "id,form_type,company_name,contact_name,phone,shape,color_type,size_text,sheet_count,sheet_color,quantity,memo,attachment_paths,created_at"
+      )
+      .order("created_at", { ascending: false })
+      .limit(200);
+  
+    // [진단용] 쿼리 소요시간 + 콘솔 로그(Vercel 함수 로그에서 확인 가능) + Server-Timing 헤더(Network 탭 Timing에서 확인 가능)
+    const queryMs = Date.now() - t1;
+    console.log(`[bdp-inquiries] auth=${authMs}ms query=${queryMs}ms total=${authMs + queryMs}ms`);
+    const serverTiming = `auth;dur=${authMs};desc="getUser", query;dur=${queryMs};desc="public_inquiries select"`;
+  
+    if (bdpError) {
+      return NextResponse.json({ error: bdpError.message }, { status: 500, headers: { "Server-Timing": serverTiming } });
+    }
+  
+    return NextResponse.json({ data: data ?? [] }, { headers: { "Server-Timing": serverTiming } });
   }
-
-  return NextResponse.json({ data: data ?? [] });
-}
