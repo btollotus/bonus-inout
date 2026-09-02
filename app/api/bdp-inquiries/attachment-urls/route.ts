@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
-// [성능] 이 라우트가 호출하는 bdp2026 프로젝트 storage API가 서울(ap-northeast-2)
-// 리전이라 함수 실행 리전도 서울(icn1)로 지정해 네트워크 왕복 지연을 줄인다.
-export const preferredRegion = "icn1";
+// [성능] 함수 실행 리전은 vercel.json의 functions."app/api/bdp-inquiries/**".regions
+// 설정으로 서울(icn1)을 지정한다. (Node.js 런타임에서는 route segment의
+// preferredRegion export가 적용되지 않아 vercel.json 방식으로 대체함)
 
 // /api/bdp-inquiries 목록 응답에서 분리된 signed URL 생성 전용 엔드포인트.
 // 목록 화면을 먼저 렌더링한 뒤, 클라이언트가 백그라운드로 이 엔드포인트를 호출해

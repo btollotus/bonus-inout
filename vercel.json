@@ -1,9 +1,14 @@
 {
-    "$schema": "https://openapi.vercel.sh/vercel.json",
-    "crons": [
-      {
-        "path": "/api/cron/auto-stock-out",
-        "schedule": "0 6 * * *"
-      }
-    ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/auto-stock-out",
+      "schedule": "0 6 * * *"
+    }
+  ],
+  "functions": {
+    "app/api/bdp-inquiries/**": {
+      "regions": ["icn1"]
+    }
   }
+}

@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
-// [성능] 이 라우트가 조회하는 bdp2026 프로젝트가 서울(ap-northeast-2) 리전이라
-// 함수 실행 리전도 서울(icn1)로 지정해 네트워크 왕복 지연을 줄인다.
-// (bonus-inout 자체는 뭄바이(ap-south-1) 리전이라 auth 호출 지연은 남아있음)
-export const preferredRegion = "icn1";
+// [성능] 함수 실행 리전은 vercel.json의 functions."app/api/bdp-inquiries/**".regions
+// 설정으로 서울(icn1)을 지정한다. (Node.js 런타임에서는 route segment의
+// preferredRegion export가 적용되지 않아 vercel.json 방식으로 대체함)
 
 // bdp2026(bonusmate-bdp2026) 프로젝트의 public_inquiries 테이블을
 // bonus-inout 로그인 사용자에게만 서버사이드에서 조회해주는 라우트.
