@@ -354,24 +354,51 @@ async function loadSignageList() {
     }
   }
 
-  // ─── 홈페이지(bdp2026) 문의 로드 ───
+    // ─── 홈페이지(bdp2026) 문의 로드 ───
+// 목록은 signed URL 생성을 기다리지 않고 먼저 화면에 표시하고,
+// 첨부파일 signed URL은 백그라운드로 별도 요청해 도착하는 대로 병합한다.
+// (최종 표시 결과는 기존과 동일 - 텍스트가 먼저, 첨부파일이 뒤이어 채워지는 순서만 다름)
 async function loadBdpInquiries() {
-    setBdpLoading(true);
-    try {
-      const res = await fetch("/api/bdp-inquiries");
-      const json = await res.json();
-      if (!res.ok) {
-        setMsg(json.error ?? "홈페이지 문의 데이터를 불러오지 못했습니다.");
-        setBdpList([]);
-        return;
-      }
-      setBdpList(json.data ?? []);
-    } catch {
-      setMsg("홈페이지 문의 데이터를 불러오지 못했습니다.");
-    } finally {
-      setBdpLoading(false);
+  setBdpLoading(true);
+  try {
+    const res = await fetch("/api/bdp-inquiries");
+    const json = await res.json();
+    if (!res.ok) {
+      setMsg(json.error ?? "홈페이지 문의 데이터를 불러오지 못했습니다.");
+      setBdpList([]);
+      return;
     }
+    const rows = json.data ?? [];
+    setBdpList(rows);
+    setBdpLoading(false);
+
+    const items = rows
+      .filter((r: any) => (r.attachment_paths ?? []).length > 0)
+      .map((r: any) => ({ id: r.id, paths: r.attachment_paths }));
+
+    if (items.length > 0) {
+      fetch("/api/bdp-inquiries/attachment-urls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      })
+        .then(r => r.json())
+        .then(({ data: urlResults }) => {
+          if (!urlResults) return;
+          const urlMap = new Map(urlResults.map((u: any) => [u.id, u.attachment_urls]));
+          setBdpList(prev => prev.map((r: any) =>
+            urlMap.has(r.id) ? { ...r, attachment_urls: urlMap.get(r.id) } : r
+          ));
+        })
+        .catch(() => {
+          // 첨부파일 URL 생성 실패는 목록 표시 자체를 막지 않는다 (조용히 무시)
+        });
+    }
+  } catch {
+    setMsg("홈페이지 문의 데이터를 불러오지 못했습니다.");
+    setBdpLoading(false);
   }
+}
 
   const [presetProducts, setPresetProducts] = useState<PresetProductRow[]>([]);
 
