@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
+// [성능] 이 라우트가 조회하는 bdp2026 프로젝트가 서울(ap-northeast-2) 리전이라
+// 함수 실행 리전도 서울(icn1)로 지정해 네트워크 왕복 지연을 줄인다.
+// (bonus-inout 자체는 뭄바이(ap-south-1) 리전이라 auth 호출 지연은 남아있음)
+export const preferredRegion = "icn1";
+
 // bdp2026(bonusmate-bdp2026) 프로젝트의 public_inquiries 테이블을
 // bonus-inout 로그인 사용자에게만 서버사이드에서 조회해주는 라우트.
 // 두 프로젝트는 완전히 별개 Supabase 프로젝트이므로 service_role 키로
