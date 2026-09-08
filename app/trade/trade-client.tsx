@@ -549,9 +549,9 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
 <input className={inputCls} lang="ko" list="preset-products-list" value={l.name}    
         onChange={(e) => {
           const v = e.target.value; onUpdate(i, { name: v });
-          const hitPreset = presetByName.get(v);
+          const hitPreset = presetByName.get(v) ?? Array.from(presetByName.values()).find((p) => p.product_name.endsWith(`-${v}`));
           if (hitPreset) onUpdate(i, { food_type: hitPreset.food_type ?? "", weight_g: toNum(hitPreset.weight_g) });
-          else { const hitMaster = masterByName.get(v); if (hitMaster) onUpdate(i, { food_type: hitMaster.food_type ?? "", weight_g: Number(hitMaster.weight_g ?? 0) }); }
+          else { const hitMaster = masterByName.get(v) ?? Array.from(masterByName.values()).find((p) => p.product_name.endsWith(`-${v}`)); if (hitMaster) onUpdate(i, { food_type: hitMaster.food_type ?? "", weight_g: Number(hitMaster.weight_g ?? 0) }); }
         }}
       />
       <input className={inputRightCls} inputMode="decimal"
@@ -2771,8 +2771,8 @@ if (woSubNameVal) {
         })()}
       </datalist>
       <datalist id="preset-products-list">
-        {presetProducts.map((p) => <option key={`p_${p.id}`} value={p.product_name} />)}
-        {masterProducts.map((p) => <option key={`m_${p.product_name}`} value={p.product_name} />)}
+        {presetProducts.map((p) => <option key={`p_${p.id}`} value={selectedPartner?.name && p.product_name.startsWith(`${selectedPartner.name}-`) ? p.product_name.slice(selectedPartner.name.length + 1) : p.product_name} />)}
+        {masterProducts.map((p) => <option key={`m_${p.product_name}`} value={selectedPartner?.name && p.product_name.startsWith(`${selectedPartner.name}-`) ? p.product_name.slice(selectedPartner.name.length + 1) : p.product_name} />)}
       </datalist>
       <datalist id="master-product-list">{masterProducts.map((p) => <option key={p.product_name} value={p.product_name} />)}</datalist>
     </>
