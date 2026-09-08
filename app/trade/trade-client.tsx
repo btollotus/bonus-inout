@@ -1524,7 +1524,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
       const name = l.name.trim(), qty = toInt(l.qty), unit = toIntSigned(l.unit), weight_g = toNum(l.weight_g), food_type = (l.food_type || "").trim();
       const pack_ea = inferPackEaFromName(name), unit_type = pack_ea > 1 ? "BOX" : "EA", actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
       const r = calcLineAmounts(qty, unit, l.total_incl_vat);
-      return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total, is_sample: !!l.is_sample, stock_out_lots: l.stock_out_lots, logo_spec: (l.logo_spec || "").trim() };
+      return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total, is_sample: !!l.is_sample, stock_out_lots: l.stock_out_lots, logo_spec: (l.logo_spec || "").trim(), school_name: (l.school_name || "").trim() || null, gift_qty: toInt(l.gift_qty) || null };
     }).filter((l) => l.name && l.qty > 0 && (l.is_sample || (l.total_amount ?? 0) !== 0));
     const zeroQtyLine = lines.find((l) => l.name.trim() && toInt(l.qty) <= 0);
     if (zeroQtyLine) return setMsg(`"${zeroQtyLine.name.trim()}" 품목의 수량을 입력하세요. (0 또는 빈칸 불가)`);
@@ -1545,7 +1545,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     if (!orderId) return setMsg("주문 생성 후 ID를 가져오지 못했습니다.");
 
     const { error: lErr } = await supabase.from("order_lines").insert(
-      cleanLines.map((l, idx) => ({ order_id: orderId, line_no: idx + 1, food_type: l.food_type || null, name: l.name, weight_g: l.weight_g || null, qty: l.qty, unit: l.unit, unit_type: l.unit_type, pack_ea: l.pack_ea, actual_ea: l.actual_ea, supply_amount: l.supply_amount, vat_amount: l.vat_amount, total_amount: l.total_amount, is_sample: l.is_sample || null }))
+      cleanLines.map((l, idx) => ({ order_id: orderId, line_no: idx + 1, food_type: l.food_type || null, name: l.name, weight_g: l.weight_g || null, qty: l.qty, unit: l.unit, unit_type: l.unit_type, pack_ea: l.pack_ea, actual_ea: l.actual_ea, supply_amount: l.supply_amount, vat_amount: l.vat_amount, total_amount: l.total_amount, is_sample: l.is_sample || null, school_name: l.school_name || null, gift_qty: l.gift_qty || null }))
     );
     if (lErr) return setMsg(lErr.message);
 
@@ -2274,13 +2274,13 @@ if (woSubNameVal) {
         const name = (l.name || "").trim(), qty = toInt(l.qty), unit = toIntSigned(l.unit), weight_g = toNum(l.weight_g), food_type = (l.food_type || "").trim();
         const pack_ea = inferPackEaFromName(name), unit_type = pack_ea > 1 ? "BOX" : "EA", actual_ea = unit_type === "BOX" ? qty * pack_ea : qty;
         const r = calcLineAmounts(qty, unit, l.total_incl_vat);
-        return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total, is_sample: !!l.is_sample, stock_out_lots: l.stock_out_lots, logo_spec: (l.logo_spec || "").trim() };
+        return { food_type, name, weight_g, qty, unit, unit_type, pack_ea, actual_ea, supply_amount: r.supply, vat_amount: r.vat, total_amount: r.total, is_sample: !!l.is_sample, stock_out_lots: l.stock_out_lots, logo_spec: (l.logo_spec || "").trim(), school_name: (l.school_name || "").trim() || null, gift_qty: toInt(l.gift_qty) || null };
       }).filter((l) => l.name && l.qty > 0 && (l.is_sample || (l.total_amount ?? 0) !== 0));
       if (cleanLines.length === 0) return setMsg("제품명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
       const { error } = await supabase.from("orders").update({ ship_date: eShipDate, ship_method: eShipMethod, memo: JSON.stringify({ title: eOrderTitle.trim() || null, orderer_name: eOrdererName.trim() || null }), supply_amount: editOrderTotals.supply, vat_amount: editOrderTotals.vat, total_amount: editOrderTotals.total }).eq("id", editRow.rawId);
       if (error) return setMsg(error.message);
       await supabase.from("order_lines").delete().eq("order_id", editRow.rawId);
-      const { error: iErr } = await supabase.from("order_lines").insert(cleanLines.map((l, idx) => ({ order_id: editRow.rawId, line_no: idx + 1, food_type: l.food_type || null, name: l.name, weight_g: l.weight_g || null, qty: l.qty, unit: l.unit, unit_type: l.unit_type, pack_ea: l.pack_ea, actual_ea: l.actual_ea, supply_amount: l.supply_amount, vat_amount: l.vat_amount, total_amount: l.total_amount, is_sample: l.is_sample || null })));
+      const { error: iErr } = await supabase.from("order_lines").insert(cleanLines.map((l, idx) => ({ order_id: editRow.rawId, line_no: idx + 1, food_type: l.food_type || null, name: l.name, weight_g: l.weight_g || null, qty: l.qty, unit: l.unit, unit_type: l.unit_type, pack_ea: l.pack_ea, actual_ea: l.actual_ea, supply_amount: l.supply_amount, vat_amount: l.vat_amount, total_amount: l.total_amount, is_sample: l.is_sample || null, school_name: l.school_name || null, gift_qty: l.gift_qty || null })));
       if (iErr) return setMsg(iErr.message);
       await supabase.from("order_shipments").delete().eq("order_id", editRow.rawId);
       const { error: siErr } = await supabase.from("order_shipments").insert(buildShipPayloads(editRow.rawId, eShip1, eShip2, eTwoShip));
