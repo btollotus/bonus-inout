@@ -1199,7 +1199,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     {
       const pageSize = 500; let from = 0; const all: any[] = [];
       while (true) {
-        let oq = supabase.from("orders").select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,tax_invoice_issued,tax_invoice_prepaid,tax_invoice_prepaid_confirmed_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,is_sample,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)").gte("ship_date", f).lte("ship_date", t).order("ship_date", { ascending: false }).order("line_no", { referencedTable: "order_lines", ascending: true }).range(from, from + pageSize - 1);
+        let oq = supabase.from("orders").select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,tax_invoice_issued,tax_invoice_prepaid,tax_invoice_prepaid_confirmed_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,is_sample,created_at,school_name,gift_qty),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)").gte("ship_date", f).lte("ship_date", t).order("ship_date", { ascending: false }).order("line_no", { referencedTable: "order_lines", ascending: true }).range(from, from + pageSize - 1);
         if (selectedPartnerId) {
           oq = oq.or(`customer_id.eq.${selectedPartnerId},customer_name.eq.${(selectedPartner?.name ?? "").replaceAll(",", "")}`);
         } else if (subAdminPartnerNames) {
@@ -1287,7 +1287,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
 
         // orders 검색
         let oq = supabase.from("orders")
-        .select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,tax_invoice_issued,tax_invoice_prepaid,tax_invoice_prepaid_confirmed_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,is_sample,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)")
+        .select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,tax_invoice_issued,tax_invoice_prepaid,tax_invoice_prepaid_confirmed_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,is_sample,created_at,school_name,gift_qty),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)")
         .or(`customer_name.ilike.${likeQ},memo.ilike.${likeQ},ship_method.ilike.${likeQ}`)
         .order("ship_date", { ascending: false })
         .order("line_no", { referencedTable: "order_lines", ascending: true })
@@ -1303,7 +1303,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         let oDataByLine: any[] = [];
         if (lineOrderIds.length > 0) {
           let oqLine = supabase.from("orders")
-          .select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,tax_invoice_issued,tax_invoice_prepaid,tax_invoice_prepaid_confirmed_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,is_sample,created_at),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)")
+          .select("id,customer_id,customer_name,ship_date,ship_method,status,memo,supply_amount,vat_amount,total_amount,created_at,tax_invoice_issued,tax_invoice_prepaid,tax_invoice_prepaid_confirmed_at,order_lines(id,order_id,line_no,food_type,name,weight_g,qty,unit,unit_type,pack_ea,actual_ea,supply_amount,vat_amount,total_amount,is_sample,created_at,school_name,gift_qty),order_shipments(id,order_id,seq,ship_to_name,ship_to_address1,ship_to_address2,ship_to_mobile,ship_to_phone,ship_zipcode,delivery_message,created_at,updated_at)")
           .in("id", lineOrderIds)
           .order("ship_date", { ascending: false })
           .order("line_no", { referencedTable: "order_lines", ascending: true })
@@ -2145,7 +2145,7 @@ if (editPartnerId) {
     if (r.kind === "ORDER") {
       setEShipDate(r.date || todayYMD()); setEOrdererName(r.orderer_name ?? r.ordererName ?? "");
       setEShipMethod(r.ship_method ?? r.method ?? "택배"); setEOrderTitle(r.order_title ?? "");
-      setELines(r.order_lines?.length ? r.order_lines.map((l) => ({ food_type: String(l.food_type ?? ""), name: String(l.name ?? ""), weight_g: Number(l.weight_g ?? 0), qty: toInt(l.qty ?? 0), unit: Number(l.unit ?? 0), total_incl_vat: Number(l.total_amount ?? 0), is_sample: !!l.is_sample })) : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
+      setELines(r.order_lines?.length ? r.order_lines.map((l) => ({ food_type: String(l.food_type ?? ""), name: String(l.name ?? ""), weight_g: Number(l.weight_g ?? 0), qty: toInt(l.qty ?? 0), unit: Number(l.unit ?? 0), total_incl_vat: Number(l.total_amount ?? 0), is_sample: !!l.is_sample, school_name: (l as any).school_name ?? "", gift_qty: (l as any).gift_qty ?? "" })) : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
       applyShipmentsToForm(r.order_shipments ?? [], setEShip1, setEShip2, setETwoShip);
       setEWoId(null); setEWoSubName(""); setEWoProductName(""); setEWoFoodType(""); setEWoLogoSpec("");
       setEWoThickness("2mm"); setEWoDeliveryMethod("택배"); setEWoPackagingType("");
