@@ -600,7 +600,7 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
       {l.name && !["택배비"].includes(l.name) ? (
         <div className="col-span-full -mt-1 flex items-center gap-2">
           <span className="text-[11px] text-slate-500 shrink-0">학교명(선택)</span>
-          <input className="w-32 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-blue-300 focus:outline-none"
+          <input className="w-32 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm focus:border-blue-300 focus:outline-none"
             placeholder="예: 운천초" value={l.school_name ?? ""}
             onChange={(e) => onUpdate(i, { school_name: e.target.value })} />
           <span className="text-[11px] text-slate-500 shrink-0">증정수량(선택)</span>
