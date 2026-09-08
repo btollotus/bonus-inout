@@ -68,6 +68,7 @@ type SpecLine = {
   giftQty?: number;
   packEa?: number;
   orderId?: string;
+  schoolName?: string;
 };
 
 function formatMoney(n: number | null | undefined) {
@@ -162,7 +163,8 @@ function mapLineToSpec(line: LineLoose): SpecLine {
 
   const giftQty = pickNumber(line, ["gift_qty"], 0);
   const packEa = pickNumber(line, ["pack_ea"], 1);
-  return { itemName, qty, unitPrice, supply, vat, total, giftQty: giftQty > 0 ? giftQty : undefined, packEa: packEa > 1 ? packEa : undefined };
+  const schoolName = pickString(line, ["school_name"], "");
+  return { itemName, qty, unitPrice, supply, vat, total, giftQty: giftQty > 0 ? giftQty : undefined, packEa: packEa > 1 ? packEa : undefined, schoolName: schoolName || undefined };
 }
 
 type RawLineWithOrder = SpecLine & { orderId: string };
@@ -271,11 +273,11 @@ useEffect(() => {
     const picked = raw.filter((x) => sel.has(x.orderId));
 
     // ✅ 같은 품목명이라도 "서로 다른 주문"이면 합산 금지
-    // - 주문 내에서는 (품목+단가)로 집계
-    // - 주문이 다르면 orderId가 달라져서 별도 줄로 유지
+    // - 주문 내에서는 (품목+단가+학교명)로 집계
+    // - 주문이 다르거나 학교명이 다르면 별도 줄로 유지
     const agg = new Map<string, SpecLine>();
     for (const r of picked) {
-      const key = `${r.orderId}||${r.itemName}||${r.unitPrice}`;
+      const key = `${r.orderId}||${r.itemName}||${r.unitPrice}||${r.schoolName ?? ""}`;
       const prev = agg.get(key);
       if (!prev) {
         agg.set(key, {
@@ -288,6 +290,7 @@ useEffect(() => {
           giftQty: r.giftQty ?? 0,
           packEa: r.packEa,
           orderId: r.orderId,
+          schoolName: r.schoolName,
         });
       } else {
         prev.qty += r.qty;
@@ -1049,7 +1052,7 @@ useEffect(() => {
                       lines.map((r, idx) => (
                         <tr key={idx} className="border-t border-slate-100">
                           <td className="px-3 py-2">
-                            <div className="truncate">{stripPartnerPrefix(r.itemName, selectedPartner?.name)}</div>
+                          <div className="truncate">{stripPartnerPrefix(r.itemName, selectedPartner?.name)}{r.schoolName ? <span className="ml-1.5 rounded-full bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">{r.schoolName}</span> : null}</div>
                             <div className="mt-0.5 text-xs text-violet-600 font-semibold">
                               주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""}{(r.giftQty ?? 0) > 0 ? ` +증정 ${formatMoney(r.giftQty)}개` : ""} = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
                             </div>
@@ -1319,7 +1322,7 @@ useEffect(() => {
                       lines.map((r, idx) => (
                         <tr key={idx} className="border-t border-slate-100">
                           <td className="px-3 py-2">
-                            <div className="truncate">{stripPartnerPrefix(r.itemName, selectedPartner?.name)}</div>
+                          <div className="truncate">{stripPartnerPrefix(r.itemName, selectedPartner?.name)}{r.schoolName ? <span className="ml-1.5 rounded-full bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">{r.schoolName}</span> : null}</div>
                             <div className="mt-0.5 text-xs text-violet-600 font-semibold">
                               주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""}{(r.giftQty ?? 0) > 0 ? ` +증정 ${formatMoney(r.giftQty)}개` : ""} = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
                             </div>
