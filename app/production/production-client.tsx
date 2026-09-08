@@ -3545,7 +3545,7 @@ const totalOrder = items
                 <div className="mb-2 flex items-center justify-between"><div className="font-semibold text-sm">납기일별 생산 입력</div><div className="text-xs text-slate-400">{isEditMode ? "수정 모드" : ""}</div></div>
                 {(selectedWo.work_order_items ?? []).length === 0 ? <div className="py-3 text-center text-xs text-slate-400">납기일별 항목이 없습니다.</div> : (
                   <div className="space-y-2.5">
-                    {(selectedWo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date)).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비"); }).map((item) => {
+                    {(selectedWo.work_order_items ?? []).slice().sort((a, b) => a.delivery_date.localeCompare(b.delivery_date)).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비"); }).map((item, idx, arr) => {
                       const pi = prodInputs[item.id] ?? { actual_qty: "", extra_qty: "", unit_weight: "", expiry_date: "" };
                       const actualQty = toInt(pi.actual_qty); const defectQty = toInt(pi.defect_qty); const unitWeight = toNum(pi.unit_weight);
                       const totalWeight = (actualQty + defectQty) > 0 && unitWeight > 0 ? (actualQty + defectQty) * unitWeight : null;
@@ -3602,7 +3602,7 @@ const totalOrder = items
                               <input type="date" className={inp} value={pi.expiry_date} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, expiry_date: e.target.value } }))} />
                             </div>
                           </div>
-                          {(item.images ?? []).length > 0 ? <ItemImages images={item.images ?? []} logoSpec={selectedWo.logo_spec} /> : null}
+                          {(item.images ?? []).length > 0 && (idx === 0 || JSON.stringify(item.images ?? []) !== JSON.stringify(arr[0]?.images ?? [])) ? <ItemImages images={item.images ?? []} logoSpec={selectedWo.logo_spec} /> : null}
 
 {/* 분사 작업지시서 전용 — 코팅-레이즈 차감 + 생산용/판매용 수량 */}
 {getWoSubType(selectedWo.product_name) === "분사" && (
