@@ -688,7 +688,7 @@ export function WoPrintContent({
                     >
                       {itemName}
                       {itemSchoolName ? (
-                        <div style={{ marginTop: "2px", fontSize: "8pt", fontWeight: "normal", color: "#b45309" }}>
+                        <div style={{ marginTop: "2px" }}>
                           {itemSchoolName}
                         </div>
                       ) : null}
@@ -798,6 +798,14 @@ export function WoPrintContent({
               {(() => {
                 const itemSignedUrls = signedItemImagesMap?.[item.id] ?? [];
                 if (itemSignedUrls.length === 0) return null;
+                // ── 학교별 분할처럼 같은 제품이라 이미지 파일 자체가 완전히 동일한 경우, 첫 품목에만 표시 ──
+                if (idx > 0) {
+                  const firstVisible = arr.find((it) => !isSpecialItem((it.sub_items ?? [])[0]?.name || ""));
+                  if (firstVisible && firstVisible.id !== item.id) {
+                    const sameAsFirst = JSON.stringify(item.images ?? []) === JSON.stringify(firstVisible.images ?? []);
+                    if (sameAsFirst) return null;
+                  }
+                }
                 const effectiveLogoSpec = item.logo_spec || wo.logo_spec;
                 const logoSize = parseLogoSize(effectiveLogoSpec);
                 return (

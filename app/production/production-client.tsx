@@ -2802,10 +2802,11 @@ const totalOrder = items
                       ).map(([label, value]) => value ? <div key={label}><div className="text-slate-400">{label}</div><div className="font-medium text-slate-800">{value}</div></div> : null)}
                     </div>
                   )}
-                  {(() => {
-                    const allItemImages = (selectedWo.work_order_items ?? [])
+                 {(() => {
+                    const allItemImagesRaw = (selectedWo.work_order_items ?? [])
                       .filter(item => { const n = (item.sub_items ?? [])[0]?.name ?? ""; return !n.startsWith("성형틀") && !n.startsWith("인쇄제판"); })
                       .flatMap(item => (item as any).images ?? []) as string[];
+                    const allItemImages = Array.from(new Set(allItemImagesRaw));
                     if (allItemImages.length === 0) return null;
                     return <ItemImageThumbnails images={allItemImages} logoSpec={selectedWo.logo_spec} />;
                   })()}
