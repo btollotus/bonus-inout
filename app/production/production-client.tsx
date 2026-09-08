@@ -1357,10 +1357,10 @@ export default function ProductionClient() {
         const donomBarcodes = isEunbakItem ? ["BO202604020001"] : isDecoDonomItem ? ["BO202604220021"] : null;
         const itemClientKeyword = (isEunbakItem || isDecoDonomItem) ? "도눔" : clientKeyword;
         const keywords = (isEunbakItem || isDecoDonomItem)
-          ? [itemClientKeyword]
-          : (itemClientKeyword && !isMarketplace)
-          ? [itemClientKeyword]
-          : itemKeyword ? [itemKeyword] : [];
+        ? [itemClientKeyword]
+        : (itemClientKeyword && !isMarketplace)
+        ? [itemClientKeyword, itemKeyword]
+        : itemKeyword ? [itemKeyword] : [];
           searchTransferLotsMulti(item.id, keywords, !!wo.skip_production_check, donomBarcodes);
       }
     }
