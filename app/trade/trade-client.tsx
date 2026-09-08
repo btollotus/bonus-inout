@@ -2202,10 +2202,21 @@ if (woSubNameVal) {
         const eLineNames = r.order_lines?.length
           ? r.order_lines.map((l: any) => String(l.name ?? ""))
           : [];
-        const orderedItemIds: string[] = eLineNames.map((lineName: string) => {
-          const matched = woItems.find((wi: any) =>
-            (wi.sub_items?.[0]?.name ?? "") === lineName
+        // ── 품목명이 같은 라인이 여러 개(예: 학교별 분할 주문)여도 서로 다른 품목으로 정확히 매칭되도록,
+        //    이름+수량(order_qty)으로 매칭하고 매칭된 품목은 후보 목록에서 제거(consume)하여 중복 매칭을 방지 ──
+        const woItemsPool: any[] = [...woItems];
+        const orderedItemIds: string[] = (r.order_lines ?? []).map((l: any) => {
+          const lineName = String(l.name ?? "");
+          const expectedQty = Number(l.actual_ea ?? 0);
+          let poolIdx = woItemsPool.findIndex((wi: any) =>
+            (wi.sub_items?.[0]?.name ?? "") === lineName && Number(wi.order_qty ?? 0) === expectedQty
           );
+          if (poolIdx === -1) {
+            poolIdx = woItemsPool.findIndex((wi: any) => (wi.sub_items?.[0]?.name ?? "") === lineName);
+          }
+          if (poolIdx === -1) return "";
+          const matched = woItemsPool[poolIdx];
+          woItemsPool.splice(poolIdx, 1);
           return matched?.id ?? "";
         });
         setEWoItemIds(orderedItemIds);
@@ -2216,11 +2227,10 @@ if (woSubNameVal) {
         woItems.forEach((wi: any) => { actualQtyById[wi.id] = wi.actual_qty ?? null; });
         setEWoItemActualQtyById(actualQtyById);
 
+        // ── logo_spec/이미지도 이름 재검색이 아닌, 위에서 이미 정확히 매칭된 orderedItemIds를 그대로 사용 ──
         const eLogoSpecByIndex: Record<number, string> = {};
-        eLineNames.forEach((lineName: string, idx: number) => {
-          const matched = woItems.find((wi: any) =>
-            (wi.sub_items?.[0]?.name ?? "") === lineName
-          );
+        orderedItemIds.forEach((itemId: string, idx: number) => {
+          const matched = woItems.find((wi: any) => wi.id === itemId);
           if (matched?.logo_spec) eLogoSpecByIndex[idx] = String(matched.logo_spec);
         });
         if (Object.keys(eLogoSpecByIndex).length > 0) {
@@ -2228,10 +2238,7 @@ if (woSubNameVal) {
         }
         const newExistingMap: Record<number, string[]> = {};
         for (let idx = 0; idx < eLineNames.length; idx++) {
-          const lineName = eLineNames[idx];
-          const matchedItem = woItems.find((wi: any) =>
-            (wi.sub_items?.[0]?.name ?? "") === lineName
-          );
+          const matchedItem = woItems.find((wi: any) => wi.id === orderedItemIds[idx]);
 
           const rawItemImages: string[] = matchedItem?.images ?? [];
           if (rawItemImages.length === 0) continue;
