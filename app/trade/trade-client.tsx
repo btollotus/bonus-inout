@@ -1046,7 +1046,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
         tax_invoice_issued: o.tax_invoice_issued ?? false,
         tax_invoice_prepaid: o.tax_invoice_prepaid ?? false,
         tax_invoice_prepaid_confirmed_at: o.tax_invoice_prepaid_confirmed_at ?? null,
-        order_lines: (o.order_lines ?? []).map((l) => ({ food_type: l.food_type ?? "", name: l.name ?? "", weight_g: Number(l.weight_g ?? 0), qty: Number(l.qty ?? 0), unit: Number(l.unit ?? 0), total_amount: Number(l.total_amount ?? 0), unit_type: (l.unit_type ?? "EA") as any, pack_ea: Number(l.pack_ea ?? 1), actual_ea: Number(l.actual_ea ?? 0), is_sample: !!(l.is_sample) })),
+        order_lines: (o.order_lines ?? []).map((l) => ({ food_type: l.food_type ?? "", name: l.name ?? "", weight_g: Number(l.weight_g ?? 0), qty: Number(l.qty ?? 0), unit: Number(l.unit ?? 0), total_amount: Number(l.total_amount ?? 0), unit_type: (l.unit_type ?? "EA") as any, pack_ea: Number(l.pack_ea ?? 1), actual_ea: Number(l.actual_ea ?? 0), is_sample: !!(l.is_sample), school_name: (l as any).school_name ?? null, gift_qty: (l as any).gift_qty ?? null })),
         order_shipments: (o.order_shipments ?? []).map((s) => ({ seq: Number(s.seq ?? 1), ship_to_name: String(s.ship_to_name ?? ""), ship_to_address1: String(s.ship_to_address1 ?? ""), ship_to_address2: s.ship_to_address2 ?? null, ship_to_mobile: s.ship_to_mobile ?? null, ship_to_phone: s.ship_to_phone ?? null, ship_zipcode: s.ship_zipcode ?? null, delivery_message: s.delivery_message ?? null, tax_invoice_issued: o.tax_invoice_issued ?? false, })),
       });
     }
@@ -1363,7 +1363,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
             tax_invoice_issued: o.tax_invoice_issued ?? false,
             tax_invoice_prepaid: o.tax_invoice_prepaid ?? false,
             tax_invoice_prepaid_confirmed_at: o.tax_invoice_prepaid_confirmed_at ?? null,
-            order_lines: (o.order_lines ?? []).map((l) => ({ food_type: l.food_type ?? "", name: l.name ?? "", weight_g: Number(l.weight_g ?? 0), qty: Number(l.qty ?? 0), unit: Number(l.unit ?? 0), total_amount: Number(l.total_amount ?? 0), unit_type: (l.unit_type ?? "EA") as any, pack_ea: Number(l.pack_ea ?? 1), actual_ea: Number(l.actual_ea ?? 0), is_sample: !!(l.is_sample) })),
+            order_lines: (o.order_lines ?? []).map((l) => ({ food_type: l.food_type ?? "", name: l.name ?? "", weight_g: Number(l.weight_g ?? 0), qty: Number(l.qty ?? 0), unit: Number(l.unit ?? 0), total_amount: Number(l.total_amount ?? 0), unit_type: (l.unit_type ?? "EA") as any, pack_ea: Number(l.pack_ea ?? 1), actual_ea: Number(l.actual_ea ?? 0), is_sample: !!(l.is_sample), school_name: (l as any).school_name ?? null, gift_qty: (l as any).gift_qty ?? null })),
             order_shipments: (o.order_shipments ?? []).map((s) => ({ seq: Number(s.seq ?? 1), ship_to_name: String(s.ship_to_name ?? ""), ship_to_address1: String(s.ship_to_address1 ?? ""), ship_to_address2: s.ship_to_address2 ?? null, ship_to_mobile: s.ship_to_mobile ?? null, ship_to_phone: s.ship_to_phone ?? null, ship_zipcode: s.ship_zipcode ?? null, delivery_message: s.delivery_message ?? null, tax_invoice_issued: o.tax_invoice_issued ?? false })),
           });
         }
