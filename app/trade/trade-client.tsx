@@ -1613,7 +1613,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
             itemBarcodeNo = itemBarcode as string;
           }
           const woItemQty = l.unit_type === "BOX" ? l.qty * l.pack_ea : l.qty;
-          woItemsPayload.push({ work_order_id: woId, delivery_date: shipDate, sub_items: [{ name: l.name, qty: woItemQty }], order_qty: woItemQty, barcode_no: itemBarcodeNo, unit_weight: l.weight_g && Number(l.weight_g) > 0 ? Number(l.weight_g) : null, logo_spec: l.logo_spec || null });
+          woItemsPayload.push({ work_order_id: woId, delivery_date: shipDate, sub_items: [{ name: l.name, qty: woItemQty }], order_qty: woItemQty, barcode_no: itemBarcodeNo, unit_weight: l.weight_g && Number(l.weight_g) > 0 ? Number(l.weight_g) : null, logo_spec: l.logo_spec || null, school_name: l.school_name || null });
         }
         const { data: createdWoItems, error: wiErr } = await supabase.from("work_order_items").insert(woItemsPayload).select("id,barcode_no,sub_items");
         if (wiErr) throw new Error("작업지시서 항목 생성 실패: " + wiErr.message);
@@ -2340,6 +2340,7 @@ if (woSubNameVal) {
               barcode_no: newBarcodeNo,
               unit_weight: eLine.weight_g && Number(eLine.weight_g) > 0 ? Number(eLine.weight_g) : null,
               logo_spec: eLine.logo_spec || null,
+              school_name: eLine.school_name || null,
             }).select("id").single();
             if (ciErr || !createdItem) { stockWarningMsg = `"${newItemName}" 작업지시서 항목 생성 실패: ${ciErr?.message ?? ""}`; continue; }
             itemId = (createdItem as any).id as string;
@@ -2403,6 +2404,7 @@ if (woSubNameVal) {
             sub_items: [{ name: syncedName, qty: syncedQty }],
             order_qty: syncedQty,
             unit_weight: matchedELine?.weight_g && Number(matchedELine.weight_g) > 0 ? Number(matchedELine.weight_g) : null,
+            school_name: matchedELine?.school_name || null,
           }).eq("id", itemId);
         }
 
