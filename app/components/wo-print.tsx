@@ -18,6 +18,7 @@ export type WoPrintItem = {
   note?: string | null;
   images?: string[] | null;
   logo_spec?: string | null;
+  school_name?: string | null;
 };
 
 // WoPrintModal/WoPrintContent이 필요로 하는 WorkOrder 최소 타입
@@ -661,6 +662,7 @@ export function WoPrintContent({
           const exp = item.expiry_date ?? "",
             itemName = (item.sub_items ?? [])[0]?.name || "—";
           const itemBarcode = item.barcode_no ?? null;
+          const itemSchoolName = item.school_name ?? null;
           const noteVal = itemNotes[item.id] ?? (item.note ?? "");
           return (
             <div
@@ -685,6 +687,11 @@ export function WoPrintContent({
                       }}
                     >
                       {itemName}
+                      {itemSchoolName ? (
+                        <div style={{ marginTop: "2px", fontSize: "8pt", fontWeight: "normal", color: "#b45309" }}>
+                          {itemSchoolName}
+                        </div>
+                      ) : null}
                     </td>
                     <td
                       style={{
