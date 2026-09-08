@@ -597,6 +597,18 @@ function LineRow({ l, i, onUpdate, onRemove, presetByName, masterByName, inputCl
             onChange={(e) => onUpdate(i, { logo_spec: e.target.value })} />
         </div>
       ) : null}
+      {l.name && !["택배비"].includes(l.name) ? (
+        <div className="col-span-full -mt-1 flex items-center gap-2">
+          <span className="text-[11px] text-slate-500 shrink-0">학교명(선택)</span>
+          <input className="w-32 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-blue-300 focus:outline-none"
+            placeholder="예: 운천초" value={l.school_name ?? ""}
+            onChange={(e) => onUpdate(i, { school_name: e.target.value })} />
+          <span className="text-[11px] text-slate-500 shrink-0">증정수량(선택)</span>
+          <input className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-right focus:border-blue-300 focus:outline-none"
+            placeholder="0" value={l.gift_qty ?? ""}
+            onChange={(e) => onUpdate(i, { gift_qty: e.target.value.replace(/[^\d]/g, "") })} />
+        </div>
+      ) : null}
       {orderId && lotHistory.length > 0 ? (
         <div className="col-span-full -mt-1 flex flex-wrap items-center gap-1.5">
           <span className="text-[11px] text-slate-500 shrink-0">LOT별 출고이력(참고용, 수정불가)</span>
