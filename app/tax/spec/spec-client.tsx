@@ -1052,7 +1052,7 @@ useEffect(() => {
                       lines.map((r, idx) => (
                         <tr key={idx} className="border-t border-slate-100">
                           <td className="px-3 py-2">
-                          <div className="truncate">{stripPartnerPrefix(r.itemName, selectedPartner?.name)}{r.schoolName ? <span className="ml-1.5 rounded-full bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">{r.schoolName}</span> : null}</div>
+                          <div className="truncate">{stripPartnerPrefix(r.itemName, selectedPartner?.name)}{r.schoolName ? ` ${r.schoolName}` : ""}</div>
                             <div className="mt-0.5 text-xs text-violet-600 font-semibold">
                               주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""}{(r.giftQty ?? 0) > 0 ? ` +증정 ${formatMoney(r.giftQty)}개` : ""} = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
                             </div>
@@ -1322,7 +1322,7 @@ useEffect(() => {
                       lines.map((r, idx) => (
                         <tr key={idx} className="border-t border-slate-100">
                           <td className="px-3 py-2">
-                          <div className="truncate">{stripPartnerPrefix(r.itemName, selectedPartner?.name)}{r.schoolName ? <span className="ml-1.5 rounded-full bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">{r.schoolName}</span> : null}</div>
+                          <div className="truncate">{stripPartnerPrefix(r.itemName, selectedPartner?.name)}{r.schoolName ? ` ${r.schoolName}` : ""}</div>
                             <div className="mt-0.5 text-xs text-violet-600 font-semibold">
                               주문 {formatMoney(r.qty)}개{(r.packEa ?? 1) > 1 ? `×${formatMoney(r.packEa)}ea` : ""}{(r.giftQty ?? 0) > 0 ? ` +증정 ${formatMoney(r.giftQty)}개` : ""} = 실출고 {formatMoney(r.qty * (r.packEa ?? 1) + (r.giftQty ?? 0))}개
                             </div>
