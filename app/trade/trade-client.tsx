@@ -1644,37 +1644,42 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
            continue;
          }
 
-         // ── 신규 제품: 기존 로직 그대로 ──
-         const itemBarcodeNo = createdItem.barcode_no as string;
-         const itemNamePrefix = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-`;
-         const itemVariantName = itemName.startsWith(itemNamePrefix) ? itemName : `${itemNamePrefix}${itemName}`;
-
-         // ── 바코드 재사용 시: 이미 이 바코드를 가진 variant가 있으면 그대로 사용 ──
-         // (거래처명 변경 등으로 itemVariantName이 과거와 달라져도 barcode_uq 충돌 방지)
-         const { data: existByBarcode } = await supabase.from("product_variants").select("id").eq("barcode", itemBarcodeNo).limit(1).maybeSingle();
-         if (existByBarcode?.id) {
-           const reusedVariantId = existByBarcode.id;
-           if (itemWeightG != null) {
-             await supabase.from("product_variants").update({ weight_g: itemWeightG }).eq("id", reusedVariantId);
-           }
-           if (!firstVariantId) firstVariantId = reusedVariantId;
-           continue;
-         }
-
-         // 품목별 products 조회/생성 (라인마다 product_id가 다를 수 있으므로 라인별로 처리)
-         const { data: existItemProduct } = await supabase.from("products").select("id").eq("name", itemVariantName).limit(1).maybeSingle();
-         let itemProductId: string;
-         if (existItemProduct?.id) {
-           itemProductId = existItemProduct.id;
-         } else {
-           const { data: newItemProduct, error: ipErr } = await supabase.from("products").insert({ name: itemVariantName, category: "업체", food_type: itemFoodType || "기타", default_weight_g: 0 }).select("id").single();
-           if (ipErr) throw new Error("제품 등록 실패: " + ipErr.message);
-           itemProductId = (newItemProduct as any).id;
-         }
-
-         const { data: existItemVariant } = await supabase
-           .from("product_variants").select("id, barcode").eq("product_id", itemProductId).eq("variant_name", itemVariantName).limit(1).maybeSingle();
-         let itemVariantId: string;
+                  // ── 신규 제품: 기존 로직 그대로 ──
+                  const itemBarcodeNo = createdItem.barcode_no as string;
+                  const isSpecial = isSpecialItem(itemName);
+                  const itemNamePrefix = `${selectedPartner.name}${orderWoSubName.trim() ? "-" + orderWoSubName.trim() : ""}-`;
+                  const itemVariantName = isSpecial
+                    ? itemName
+                    : (itemName.startsWith(itemNamePrefix) ? itemName : `${itemNamePrefix}${itemName}`);
+         
+                  // ── 바코드 재사용 시: 이미 이 바코드를 가진 variant가 있으면 그대로 사용 ──
+                  // (거래처명 변경 등으로 itemVariantName이 과거와 달라져도 barcode_uq 충돌 방지)
+                  const { data: existByBarcode } = await supabase.from("product_variants").select("id").eq("barcode", itemBarcodeNo).limit(1).maybeSingle();
+                  if (existByBarcode?.id) {
+                    const reusedVariantId = existByBarcode.id;
+                    if (itemWeightG != null) {
+                      await supabase.from("product_variants").update({ weight_g: itemWeightG }).eq("id", reusedVariantId);
+                    }
+                    if (!firstVariantId) firstVariantId = reusedVariantId;
+                    continue;
+                  }
+         
+                  // 품목별 products 조회/생성 (라인마다 product_id가 다를 수 있으므로 라인별로 처리)
+                  const { data: existItemProduct } = await supabase.from("products").select("id").eq("name", itemVariantName).limit(1).maybeSingle();
+                  let itemProductId: string;
+                  if (existItemProduct?.id) {
+                    itemProductId = existItemProduct.id;
+                  } else {
+                    const { data: newItemProduct, error: ipErr } = await supabase.from("products").insert({ name: itemVariantName, category: "업체", food_type: itemFoodType || "기타", default_weight_g: 0 }).select("id").single();
+                    if (ipErr) throw new Error("제품 등록 실패: " + ipErr.message);
+                    itemProductId = (newItemProduct as any).id;
+                  }
+         
+                  // ── 특수품목(성형틀/인쇄제판/아이스박스/택배비 등)은 product당 variant가 항상 1개뿐이므로 이름 매칭 대신 그대로 재사용 ──
+                  const { data: existItemVariant } = isSpecial
+                    ? await supabase.from("product_variants").select("id, barcode").eq("product_id", itemProductId).limit(1).maybeSingle()
+                    : await supabase.from("product_variants").select("id, barcode").eq("product_id", itemProductId).eq("variant_name", itemVariantName).limit(1).maybeSingle();
+                  let itemVariantId: string;
          if (existItemVariant?.id) {
            // ── 기존 variant 재사용: 새 바코드 폐기, 기존 바코드 유지 ──
            itemVariantId = existItemVariant.id;
