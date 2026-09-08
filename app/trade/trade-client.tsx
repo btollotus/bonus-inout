@@ -2021,13 +2021,13 @@ if (copyPartnerId) {
       setOrderIsReorder(false); setMode("ORDERS"); setShipDate(todayYMD());
       setOrdererName(r.orderer_name ?? r.ordererName ?? ""); setShipMethod(r.ship_method ?? "택배");
       setOrderTitle(r.order_title ?? "");
-      setLines(r.order_lines?.length ? r.order_lines.map((l) => ({ food_type: String(l.food_type ?? ""), name: String(l.name ?? ""), weight_g: Number(l.weight_g ?? 0), qty: toInt(l.qty ?? 0), unit: Number(l.unit ?? 0), total_incl_vat: Number(l.total_amount ?? 0), is_sample: !!l.is_sample })) : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
+      setLines(r.order_lines?.length ? r.order_lines.map((l) => ({ food_type: String(l.food_type ?? ""), name: String(l.name ?? ""), weight_g: Number(l.weight_g ?? 0), qty: toInt(l.qty ?? 0), unit: Number(l.unit ?? 0), total_incl_vat: Number(l.total_amount ?? 0), is_sample: !!l.is_sample, school_name: (l as any).school_name ?? "", gift_qty: (l as any).gift_qty ?? "" })) : [{ food_type: "", name: "", weight_g: 0, qty: 0, unit: "", total_incl_vat: "" }]);
       applyShipmentsToForm(r.order_shipments ?? [], setShip1, setShip2, setTwoShip);
       // ── 기존 작업지시서 + work_order_items 이미지 복사 ──
       try {
         const { data: wo } = await supabase
           .from("work_orders")
-          .select("id,sub_name,logo_spec,thickness,packaging_type,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,work_order_items(id,delivery_date,sub_items,images,barcode_no,unit_weight,logo_spec)")
+          .select("id,sub_name,logo_spec,thickness,packaging_type,package_unit,mold_per_sheet,mold_cols,mold_rows,mold_count,note,reference_note,work_order_items(id,delivery_date,sub_items,images,barcode_no,unit_weight,logo_spec,order_qty)")
           .eq("linked_order_id", r.rawId)
           .limit(1)
           .maybeSingle();
@@ -2051,7 +2051,7 @@ if (copyPartnerId) {
             setWo_packageUnitCustom(_pu.replace(/ea$/i, ""));
           }
 
-          // 품목별 기존 바코드 저장 (재주문 시 재사용) - 품목명을 key로 사용
+          // 품목별 기존 바코드 저장 (재주문 시 재사용) - 품목명을 key로 사용 (같은 이름끼리는 어차피 같은 바코드이므로 안전)
           const woItemsAll: any[] = (wo as any).work_order_items ?? [];
           const barcodeMap: Record<string, string> = {};
           woItemsAll.forEach((wi: any) => {
@@ -2060,9 +2060,21 @@ if (copyPartnerId) {
           });
           setWo_itemExistingBarcodes(barcodeMap);
 
-          // lines(화면에 보이는 전체 줄)와 woItemsAll을 품목명 기준으로 매칭 — 인덱스 어긋남 방지
-          setLines((prev) => prev.map((l) => {
-            const matched = woItemsAll.find((wi: any) => (wi.sub_items?.[0]?.name ?? "") === l.name.trim());
+          // ── 이름이 같은 라인이 여러 개(예: 학교별 분할 주문)여도 정확히 매칭되도록 이름+수량으로 매칭하고,
+          //    매칭된 품목은 후보에서 제거(consume)하여 중복 매칭 방지 ──
+          const copyItemsPool: any[] = [...woItemsAll];
+          const copiedOrderedItemIds: string[] = (r.order_lines ?? []).map((l: any) => {
+            const lineName = String(l.name ?? "");
+            const expectedQty = Number(l.actual_ea ?? 0);
+            let poolIdx = copyItemsPool.findIndex((wi: any) => (wi.sub_items?.[0]?.name ?? "") === lineName && Number(wi.order_qty ?? 0) === expectedQty);
+            if (poolIdx === -1) poolIdx = copyItemsPool.findIndex((wi: any) => (wi.sub_items?.[0]?.name ?? "") === lineName);
+            if (poolIdx === -1) return "";
+            const matched = copyItemsPool[poolIdx];
+            copyItemsPool.splice(poolIdx, 1);
+            return matched?.id ?? "";
+          });
+          setLines((prev) => prev.map((l, i) => {
+            const matched = woItemsAll.find((wi: any) => wi.id === copiedOrderedItemIds[i]);
             if (!matched) return l;
             return {
               ...l,
@@ -2071,16 +2083,10 @@ if (copyPartnerId) {
             };
           }));
 
-          // 품목별 이미지 복사 (lines 이름 기준 매핑)
-          const woItems: any[] = (wo as any).work_order_items ?? [];
-       // 수정
-const copiedLines = r.order_lines?.length
-? r.order_lines.map((l: any) => String(l.name ?? ""))
-: [];
-const newExistingMap: Record<number, string[]> = {};
-for (let lineIdx = 0; lineIdx < copiedLines.length; lineIdx++) {
-const lineName = copiedLines[lineIdx];
-const matchedItem = woItems.find((wi: any) => (wi.sub_items?.[0]?.name ?? "") === lineName);
+          // 품목별 이미지 복사 (위에서 이미 정확히 매칭된 copiedOrderedItemIds 그대로 사용)
+          const newExistingMap: Record<number, string[]> = {};
+          for (let lineIdx = 0; lineIdx < copiedOrderedItemIds.length; lineIdx++) {
+            const matchedItem = woItemsAll.find((wi: any) => wi.id === copiedOrderedItemIds[lineIdx]);
             const rawImages: string[] = matchedItem?.images ?? [];
             if (rawImages.length === 0) continue;
             const paths = rawImages.map((v: string) => {
@@ -2100,9 +2106,8 @@ const matchedItem = woItems.find((wi: any) => (wi.sub_items?.[0]?.name ?? "") ==
             setWo_itemExistingImageUrls(newExistingMap);
             // raw 경로 별도 저장 (저장 시 URL 역변환 없이 직접 사용)
             const newPathsMap: Record<number, string[]> = {};
-            for (let lineIdx = 0; lineIdx < copiedLines.length; lineIdx++) {
-              const lineName = copiedLines[lineIdx];
-              const matchedItem = woItems.find((wi: any) => (wi.sub_items?.[0]?.name ?? "") === lineName);
+            for (let lineIdx = 0; lineIdx < copiedOrderedItemIds.length; lineIdx++) {
+              const matchedItem = woItemsAll.find((wi: any) => wi.id === copiedOrderedItemIds[lineIdx]);
               const rawImages: string[] = matchedItem?.images ?? [];
               if (rawImages.length > 0) newPathsMap[lineIdx] = rawImages;
             }
