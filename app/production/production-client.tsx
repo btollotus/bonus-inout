@@ -1942,6 +1942,11 @@ if (dupCheck && dupCheck.length > 0) {
     const items = (selectedWo.work_order_items ?? []).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비"); });
     const missingQtyOrExpiry = items.filter((item) => { const pi = prodInputs[item.id]; if (pi?.skip) return false; return !pi || !pi.actual_qty || !pi.unit_weight || !pi.expiry_date; });
     if (missingQtyOrExpiry.length > 0) { alert("출고수량, 개당중량, 소비기한은 필수 입력 항목입니다.\n\n입력 후 다시 시도해주세요."); setIsCompleting(false); return; }
+    const zeroWeightNotSkipped = items.filter((item) => { const pi = prodInputs[item.id]; if (pi?.skip) return false; return toNum(pi?.unit_weight) === 0; });
+    if (zeroWeightNotSkipped.length > 0) {
+      const names = zeroWeightNotSkipped.map((item) => (item.sub_items ?? [])[0]?.name ?? item.barcode_no ?? item.id).join(", ");
+      if (!confirm(`⚠️ 개당중량이 0으로 입력된 항목이 있습니다: ${names}\n\n재고 입고가 필요 없는 품목이라면 '생략'을 체크해주세요.\n\n그래도 이대로 생산완료 처리하시겠습니까?`)) { setIsCompleting(false); return; }
+    }
     if (isChuganJae || isTransferPaperWo) {
       if (!confirm("생산완료 처리하시겠습니까?")) { setIsCompleting(false); return; }
     } else {
