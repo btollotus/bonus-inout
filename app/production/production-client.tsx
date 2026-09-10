@@ -3882,8 +3882,43 @@ const totalOrder = items
                               }
                             }
 
-                            // ── 불량(defect_qty) 변경 시 — 기존 LOT의 IN/DISCARD movements 동기화 ──
-                            if (isGeneralCompletedWo && newDefectQty !== oldDefectQty && item.expiry_date) {
+                                                        // ── 소비기한(expiry_date) 변경 시 — 기존 LOT에서 신규 LOT으로 재고 이관 ──
+                                                        if (isGeneralCompletedWo && pi.expiry_date && item.expiry_date && pi.expiry_date !== item.expiry_date) {
+                                                          let expVariantId: string | null = null;
+                                                          if (item.barcode_no) {
+                                                            const { data: pbData } = await supabase.from("product_barcodes").select("variant_id").eq("barcode", item.barcode_no).maybeSingle();
+                                                            expVariantId = pbData?.variant_id ?? null;
+                                                          }
+                                                          if (!expVariantId) expVariantId = selectedWo.variant_id;
+                                                          if (expVariantId) {
+                                                            const { data: oldLot } = await supabase.from("lots").select("id").eq("variant_id", expVariantId).eq("expiry_date", item.expiry_date).maybeSingle();
+                                                            if (oldLot?.id) {
+                                                              const { data: oldMovs } = await supabase.from("movements").select("type, qty").eq("lot_id", oldLot.id);
+                                                              const oldRemaining = (oldMovs ?? []).reduce((sum: number, m: any) => sum + (m.type === "IN" ? m.qty : -m.qty), 0);
+                                                              const moveQty = Math.min(oldRemaining, toInt(pi.actual_qty || "0"));
+                                                              if (moveQty > 0) {
+                                                                const itemNameForExp = (item.sub_items ?? [])[0]?.name ?? "";
+                                                                const todayKSTForExp = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+                                                                let newLotId: string | null = null;
+                                                                const { data: existingNewLot } = await supabase.from("lots").select("id").eq("variant_id", expVariantId).eq("expiry_date", pi.expiry_date).maybeSingle();
+                                                                if (existingNewLot?.id) { newLotId = existingNewLot.id; } else {
+                                                                  const { data: createdNewLot, error: newLotErr } = await supabase.from("lots").insert({ variant_id: expVariantId, expiry_date: pi.expiry_date }).select("id").single();
+                                                                  if (newLotErr) { showToast("소비기한 정정용 LOT 생성 실패: " + newLotErr.message, "error"); return; }
+                                                                  newLotId = createdNewLot.id;
+                                                                }
+                                                                const { error: expOutErr } = await supabase.from("movements").insert({ lot_id: oldLot.id, type: "OUT", qty: moveQty, happened_at: `${todayKSTForExp}T00:00:00+09:00`, note: `소비기한 정정 OUT - ${selectedWo.work_order_no} - ${itemNameForExp}` });
+                                                                if (expOutErr) { showToast("소비기한 정정 OUT 실패: " + expOutErr.message, "error"); return; }
+                                                                const { error: expInErr } = await supabase.from("movements").insert({ lot_id: newLotId, type: "IN", qty: moveQty, happened_at: `${todayKSTForExp}T00:00:00+09:00`, note: `소비기한 정정 IN - ${selectedWo.work_order_no} - ${itemNameForExp}` });
+                                                                if (expInErr) { showToast("소비기한 정정 IN 실패: " + expInErr.message, "error"); return; }
+                                                              } else if (oldRemaining <= 0) {
+                                                                showToast("소비기한 정정 보류: 기존 LOT 재고가 이미 0이라 자동 이관할 수 없습니다. 재고대장을 직접 확인해주세요.", "error");
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                            
+                                                        // ── 불량(defect_qty) 변경 시 — 기존 LOT의 IN/DISCARD movements 동기화 ──
+                                                        if (isGeneralCompletedWo && newDefectQty !== oldDefectQty && item.expiry_date) {
                               let syncVariantId: string | null = null;
                               if (item.barcode_no) {
                                 const { data: pbData } = await supabase.from("product_barcodes").select("variant_id").eq("barcode", item.barcode_no).maybeSingle();
