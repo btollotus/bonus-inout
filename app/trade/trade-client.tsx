@@ -323,6 +323,9 @@ async function createTempLotForShortage(
   // 4. 작업지시서 번호/바코드 생성
   const { data: barcodeData, error: barcodeErr } = await supabaseClient.rpc("generate_work_order_barcode");
   if (barcodeErr) return { workOrderNo: null, error: `"${lineName}" 바코드 생성 실패: ${barcodeErr.message}` };
+  // ── 이미 등록된 제품(variant)이면 기존 바코드를 재사용 — 새 바코드는 미등록 상태로 남아 품목 조회가 끊기므로 ──
+  const { data: variantBarcodeRow } = await supabaseClient.from("product_variants").select("barcode").eq("id", variantId).maybeSingle();
+  const itemBarcodeNo = variantBarcodeRow?.barcode || barcodeData;
   const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; })();
   const { data: newWoNo, error: woNoErr } = await supabaseClient.rpc("generate_work_order_no", { date_str: todayStr });
   if (woNoErr || !newWoNo) return { workOrderNo: null, error: `"${lineName}" 작업지시서 번호 생성 실패: ${woNoErr?.message ?? ""}` };
@@ -351,12 +354,12 @@ async function createTempLotForShortage(
   }).select("id").single();
   if (woErr || !createdWo) return { workOrderNo: null, error: `"${lineName}" 임시 작업지시서 생성 실패: ${woErr?.message ?? ""}` };
 
-  // 6. 부족분 수량으로 작업지시서 항목 생성
-  const { error: itemErr } = await supabaseClient.from("work_order_items").insert({
-    work_order_id: createdWo.id, delivery_date: shipDateYMD,
-    sub_items: [{ name: lineName, qty }], order_qty: qty,
-    barcode_no: barcodeData,
-  });
+    // 6. 부족분 수량으로 작업지시서 항목 생성
+    const { error: itemErr } = await supabaseClient.from("work_order_items").insert({
+      work_order_id: createdWo.id, delivery_date: shipDateYMD,
+      sub_items: [{ name: lineName, qty }], order_qty: qty,
+      barcode_no: itemBarcodeNo,
+    });
   if (itemErr) return { workOrderNo: newWoNo, error: `"${lineName}" 작업지시서 항목 생성 실패: ${itemErr.message}` };
 
   // 7. 임시 lot ↔ 작업지시서 연결
