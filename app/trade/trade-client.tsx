@@ -2372,6 +2372,9 @@ if (woSubNameVal) {
                   if (existingBc) {
                     const { data: existPb } = await supabase.from("product_barcodes").select("id").eq("barcode", existingBc).maybeSingle();
                     if (!existPb) await supabase.from("product_barcodes").insert({ variant_id: newVariantId, barcode: existingBc, is_primary: true, is_active: true });
+                    if (existingBc !== newBarcodeNo) {
+                      await supabase.from("work_order_items").update({ barcode_no: existingBc }).eq("id", itemId);
+                    }
                   }
                 } else {
                   const { data: createdVariant, error: cvErr } = await supabase.from("product_variants").insert({ product_id: newProductId, variant_name: newVariantName, barcode: newBarcodeNo, pack_unit: 1, unit_type: "EA", weight_g: eLine.weight_g && Number(eLine.weight_g) > 0 ? Number(eLine.weight_g) : null }).select("id").single();
