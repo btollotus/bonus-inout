@@ -3834,6 +3834,7 @@ const totalOrder = items
                           }
                           const items = (selectedWo.work_order_items ?? []).filter((item) => { const name = (item.sub_items ?? [])[0]?.name ?? ""; return !name.startsWith("성형틀") && !name.startsWith("인쇄제판") && !name.startsWith("아이스박스") && !name.startsWith("택배비"); });
                           const isGeneralCompletedWo = selectedWo.status === "완료" && getFoodCategory(eFoodType || selectedWo.food_type) !== "중간재" && !getWoSubType(selectedWo.product_name) && !selectedWo.skip_production_check;
+                          const canSyncExpiryLot = selectedWo.status === "완료" && !getWoSubType(selectedWo.product_name) && !selectedWo.skip_production_check;
                           for (const item of items) {
                             const pi = prodInputs[item.id];
                             if (!pi || (!pi.actual_qty && !pi.unit_weight && !pi.expiry_date)) continue;
@@ -3883,7 +3884,7 @@ const totalOrder = items
                             }
 
                                                         // ── 소비기한(expiry_date) 변경 시 — 기존 LOT에서 신규 LOT으로 재고 이관 ──
-                                                        if (isGeneralCompletedWo && pi.expiry_date && item.expiry_date && pi.expiry_date !== item.expiry_date) {
+                                                        if (canSyncExpiryLot && pi.expiry_date && item.expiry_date && pi.expiry_date !== item.expiry_date) {
                                                           let expVariantId: string | null = null;
                                                           if (item.barcode_no) {
                                                             const { data: pbData } = await supabase.from("product_barcodes").select("variant_id").eq("barcode", item.barcode_no).maybeSingle();
