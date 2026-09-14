@@ -3490,7 +3490,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       else if (log.log_type === "discard")          cumSprayProd -= log.quantity;
 
       // 보정 행은 인쇄에서 제외
-      if (log.log_type === "adjustment" || log.log_type === "discard" || (log.note ?? "").includes("초기재고 보정")) continue;
+      if (log.log_type === "adjustment" || (log.note ?? "").includes("초기재고 보정")) continue;
 
       const d = new Date(log.log_date + "T00:00:00+09:00");
       const dateLabel = `${d.getMonth()+1}/${d.getDate()}(${days[d.getDay()]})`;
@@ -3506,6 +3506,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
      <td style="${tdR}">${(log.log_type === "spray_done_prod" || log.log_type === "spray_done_sale") ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${log.log_type === "sale_cut"        ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${(log.log_type === "print_used_prod" || log.log_type === "print_used_sale") ? fmt(log.quantity) : ""}</td>
+          <td style="${tdR}">${log.log_type === "discard" ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${cumRaw.toLocaleString()}</td>
           <td style="${tdR}">${cumCoating.toLocaleString()}</td>
           <td style="${tdR}">${(cumSprayProd + cumSpraySale).toLocaleString()}</td>
@@ -3552,7 +3553,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
           <tr>
             <th style="${thS}" rowspan="2">No</th>
             <th style="${thS}" rowspan="2">일자</th>
-         <th style="${thS}" colspan="6">사용량</th>
+         <th style="${thS}" colspan="7">사용량</th>
             <th style="${thS}" colspan="3">당일재고량</th>
           </tr>
           <tr>
@@ -3562,6 +3563,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
           <th style="${thS}">분사</th>
             <th style="${thS}">재단</th>
             <th style="${thS}">인쇄</th>
+            <th style="${thS}">폐기</th>
            <th style="${thS}">PET</th>
             <th style="${thS}">코팅완료</th>
             <th style="${thS}">분사완료</th>
@@ -3841,11 +3843,11 @@ export function PetLedgerTab({ role, userId, showToast }: {
                 <thead>
                   <tr className="bg-slate-50">
                     <th rowSpan={2} className="border border-slate-200 px-2 py-2 text-center text-[11px] font-semibold text-slate-500 align-middle whitespace-nowrap">일자</th>
-                    <th colSpan={6} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500">사용량</th>
+                    <th colSpan={7} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500">사용량</th>
                     <th colSpan={3} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500">당일재고량</th>
                   </tr>
                   <tr className="bg-slate-50">
-                  {["입고","전사","코팅","분사","재단","인쇄"].map(h => (
+                  {["입고","전사","코팅","분사","재단","인쇄","폐기"].map(h => (
                       <th key={h} className="border border-slate-200 px-2 py-1 text-center text-[11px] font-semibold text-slate-500 whitespace-nowrap">{h}</th>
                     ))}
                     {["PET","코팅완료","분사완료"].map(h => (
@@ -3856,7 +3858,6 @@ export function PetLedgerTab({ role, userId, showToast }: {
                 <tbody>
                 {logRows.filter(({ log }) =>
                     log.log_type !== "adjustment" &&
-                    log.log_type !== "discard" &&
                     !(log.note ?? "").includes("초기재고 보정")
                   ).map(({ log, cumRaw, cumCoating, cumSprayProd, cumSpraySale }, idx) => {
                     const d = new Date(log.log_date + "T00:00:00+09:00");
@@ -3963,6 +3964,10 @@ export function PetLedgerTab({ role, userId, showToast }: {
                             {log.quantity.toLocaleString()}
                           </button>
                         ) : ""}
+                      </td>
+                     {/* 폐기 셀 */}
+                     <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-orange-600">
+                        {log.log_type === "discard" ? log.quantity.toLocaleString() : ""}
                       </td>
                        {/* PET 열 — 클릭 시 수량 조정 */}
                        {adjustingPet?.logId === log.id ? (
