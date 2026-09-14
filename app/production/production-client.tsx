@@ -1866,10 +1866,21 @@ if (dupCheck && dupCheck.length > 0) {
         setIsCompleting(false);
         return;
       }
-      if (subType === "분사" && (!sprayProdQty || toInt(sprayProdQty) <= 0)) {
-        alert("분사완료 수량을 입력 후 생산완료 처리해주세요.");
-        setIsCompleting(false);
-        return;
+      if (subType === "분사") {
+        if (!sprayProdQty || toInt(sprayProdQty) <= 0) {
+          alert("분사완료 수량을 입력 후 생산완료 처리해주세요.");
+          setIsCompleting(false);
+          return;
+        }
+        const hasCoatingRaiseLotSelected = (selectedWo.work_order_items ?? []).some((item) => {
+          const pi = prodInputs[item.id];
+          return (pi?.transfer_lots ?? []).some((l) => l.lot_id && toInt(l.qty) > 0);
+        });
+        if (!hasCoatingRaiseLotSelected) {
+          alert("코팅-레이즈 차감 수량을 입력 후 생산완료 처리해주세요.");
+          setIsCompleting(false);
+          return;
+        }
       }
       setPinProgressPending(() => async (name: string) => {
         await doCompleteSprayCoating(name, subType);
