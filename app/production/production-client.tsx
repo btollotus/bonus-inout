@@ -3854,6 +3854,50 @@ const totalOrder = items
                             const { error } = await supabase.from("work_order_items").update({ actual_qty: pi.actual_qty ? toInt(pi.actual_qty) : null, gift_qty: pi.gift_qty ? toInt(pi.gift_qty) : 0, defect_qty: pi.defect_qty ? toInt(pi.defect_qty) : null, unit_weight: pi.unit_weight ? toNum(pi.unit_weight) : null, expiry_date: pi.expiry_date || null, transfer_lot_id: pi.transfer_lot_id || null, transfer_qty: pi.transfer_qty ? toInt(pi.transfer_qty) : null }).eq("id", item.id);
                             if (error) { showToast("수정 실패: " + error.message, "error"); return; }
 
+                            // ── 중간재(코팅-레이즈/분사-레이즈) 완료 후 출고수량 수정 — 재고 로트/PET수불부/원료수불부 동기화 ──
+                            const woSubTypeForSync = getWoSubType(selectedWo.product_name);
+                            if (selectedWo.status === "완료" && woSubTypeForSync && !selectedWo.skip_production_check && pi.actual_qty && item.expiry_date) {
+                              const newActualQtyForSync = toInt(pi.actual_qty);
+                              const oldActualQtyForSync = item.actual_qty ?? 0;
+                              if (newActualQtyForSync !== oldActualQtyForSync) {
+                                let syncMidVariantId: string | null = null;
+                                if (item.barcode_no) {
+                                  const { data: pbData } = await supabase.from("product_barcodes").select("variant_id").eq("barcode", item.barcode_no).maybeSingle();
+                                  syncMidVariantId = pbData?.variant_id ?? null;
+                                }
+                                if (!syncMidVariantId) syncMidVariantId = selectedWo.variant_id;
+                                if (syncMidVariantId) {
+                                  const { data: midLotData } = await supabase.from("lots").select("id").eq("variant_id", syncMidVariantId).eq("expiry_date", item.expiry_date).maybeSingle();
+                                  const midLotId = midLotData?.id ?? null;
+                                  if (midLotId) {
+                                    const midInNote = "작업지시서 생산완료 - " + selectedWo.work_order_no;
+                                    const { data: midInMovs } = await supabase.from("movements").select("id").eq("lot_id", midLotId).eq("note", midInNote).eq("type", "IN");
+                                    if (midInMovs && midInMovs.length === 1) {
+                                      await supabase.from("movements").update({ qty: newActualQtyForSync }).eq("id", midInMovs[0].id);
+                                    } else if (midInMovs && midInMovs.length > 1) {
+                                      showToast("재고 동기화 보류: IN 기록이 여러 건이라 자동 동기화할 수 없습니다. 재고대장을 직접 확인해주세요.", "error");
+                                    }
+                                  }
+                                }
+                                const midPetNote = `${selectedWo.product_name} 생산완료 - ${selectedWo.work_order_no}`;
+                                const midPetLogType = woSubTypeForSync === "코팅" ? "coating_done" : "spray_done_prod";
+                                const { data: midPetLogs } = await supabase.from("pet_stock_logs").select("id").eq("note", midPetNote).eq("log_type", midPetLogType);
+                                if (midPetLogs && midPetLogs.length === 1) {
+                                  await supabase.from("pet_stock_logs").update({ quantity: newActualQtyForSync }).eq("id", midPetLogs[0].id);
+                                } else if (midPetLogs && midPetLogs.length > 1) {
+                                  showToast("PET수불부 동기화 보류: 기록이 여러 건이라 자동 동기화할 수 없습니다. 직접 확인해주세요.", "error");
+                                }
+                                if (woSubTypeForSync === "코팅") {
+                                  const { data: midMatLogs } = await supabase.from("material_usage_logs").select("id").eq("note", midPetNote).eq("work_type", "coating");
+                                  if (midMatLogs && midMatLogs.length === 1) {
+                                    await supabase.from("material_usage_logs").update({ quantity: newActualQtyForSync }).eq("id", midMatLogs[0].id);
+                                  } else if (midMatLogs && midMatLogs.length > 1) {
+                                    showToast("원료수불부 동기화 보류: 기록이 여러 건이라 자동 동기화할 수 없습니다. 직접 확인해주세요.", "error");
+                                  }
+                                }
+                              }
+                            }
+
                             // ── 도늠 포장(skip_production_check) WO: 완제품 입고(IN) 누락분 보정 — 최초 포장완료 처리 시 수량/소비기한이 비어있어 입고가 스킵된 경우, 수정 저장 시점에 값이 채워지면 여기서 생성 ──
                             if (selectedWo.status === "완료" && selectedWo.skip_production_check && pi.actual_qty && pi.expiry_date) {
                               const actualQtyForIn = toInt(pi.actual_qty);
