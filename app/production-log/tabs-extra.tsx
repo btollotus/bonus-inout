@@ -69,7 +69,7 @@ const PET_LOG_TYPE_LABELS: Record<string, string> = {
   incoming: "입고", coating_done: "코팅완료", spray_done_prod: "분사완료(생산용)",
   spray_done_sale: "분사완료(판매용)", print_used: "인쇄사용",
   print_used_prod: "인쇄사용(생산용)", print_used_sale: "인쇄사용(판매용)",
-  sale_cut: "재단판매", adjustment: "재고조정(PET)", discard: "폐기(분사)", coating_adjustment: "코팅조정",
+  sale_cut: "재단판매", adjustment: "재고조정(PET)", discard: "폐기(분사)", coating_adjustment: "코팅조정", spray_adjustment: "분사조정",
 };
 const CCP_EVENT_LABELS: Record<string, string> = {
   start: "시작", mid_check: "중간점검", end: "종료",
@@ -3466,6 +3466,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       else if (log.log_type === "adjustment")       cumRaw       += log.quantity;
       else if (log.log_type === "discard")          cumSprayProd -= log.quantity;
       else if (log.log_type === "coating_adjustment") cumCoating += log.quantity;
+      else if (log.log_type === "spray_adjustment") cumSprayProd += log.quantity;
     }
 
     const days = ["일","월","화","수","목","금","토"];
@@ -3490,6 +3491,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       else if (log.log_type === "adjustment")       cumRaw       += log.quantity;
       else if (log.log_type === "discard")          cumSprayProd -= log.quantity;
       else if (log.log_type === "coating_adjustment") cumCoating += log.quantity;
+      else if (log.log_type === "spray_adjustment") cumSprayProd += log.quantity;
 
       // 보정 행은 인쇄에서 제외
       if (log.log_type === "adjustment" || (log.note ?? "").includes("초기재고 보정")) continue;
@@ -3505,7 +3507,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
           <td style="${tdR}">${log.log_type === "incoming"        ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${log.log_type === "transfer_used"   ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${(log.log_type === "coating_done" || log.log_type === "coating_adjustment") ? fmt(log.quantity) : ""}</td>
-     <td style="${tdR}">${(log.log_type === "spray_done_prod" || log.log_type === "spray_done_sale") ? fmt(log.quantity) : ""}</td>
+     <td style="${tdR}">${(log.log_type === "spray_done_prod" || log.log_type === "spray_done_sale" || log.log_type === "spray_adjustment") ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${log.log_type === "sale_cut"        ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${(log.log_type === "print_used_prod" || log.log_type === "print_used_sale") ? fmt(log.quantity) : ""}</td>
           <td style="${tdR}">${log.log_type === "discard" ? fmt(log.quantity) : ""}</td>
@@ -3713,6 +3715,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       else if (log.log_type === "adjustment")    cumRaw += log.quantity;
       else if (log.log_type === "discard")       cumSprayProd -= log.quantity;
       else if (log.log_type === "coating_adjustment") cumCoating += log.quantity;
+      else if (log.log_type === "spray_adjustment") cumSprayProd += log.quantity;
     }
     // 해당 월 로그 각 건별로 누적 계산
     const monthLogs = allLogs.filter(l => l.log_date >= monthFrom && l.log_date <= (dateRange?.to ?? "9999-99-99"));
@@ -3728,6 +3731,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       else if (log.log_type === "adjustment")    cumRaw += log.quantity;
       else if (log.log_type === "discard")       cumSprayProd -= log.quantity;
       else if (log.log_type === "coating_adjustment") cumCoating += log.quantity;
+      else if (log.log_type === "spray_adjustment") cumSprayProd += log.quantity;
       return {
         log,
         cumRaw, cumCoating, cumSprayProd, cumSpraySale,
@@ -3917,8 +3921,9 @@ export function PetLedgerTab({ role, userId, showToast }: {
                           {log.log_type === "coating_done" ? <span className="text-red-600">{log.quantity.toLocaleString()}</span> : ""}
                           {log.log_type === "coating_adjustment" ? <span className="text-orange-600">+{log.quantity.toLocaleString()}</span> : ""}
                         </td>
-                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums text-red-600">
-                          {(log.log_type === "spray_done_prod" || log.log_type === "spray_done_sale") ? log.quantity.toLocaleString() : ""}
+                        <td className="border border-slate-200 px-2 py-1.5 text-right tabular-nums">
+                          {(log.log_type === "spray_done_prod" || log.log_type === "spray_done_sale") ? <span className="text-red-600">{log.quantity.toLocaleString()}</span> : ""}
+                          {log.log_type === "spray_adjustment" ? <span className="text-orange-600">+{log.quantity.toLocaleString()}</span> : ""}
                         </td>
                         {/* 재단 셀 */}
                         {isSaleCut && isEditing && editingSaleCut ? (
