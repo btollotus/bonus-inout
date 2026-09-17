@@ -161,7 +161,9 @@ function pickNumber(row: LineLoose, keys: string[], fallback = 0) {
  * 2) 없으면 qty*unitPrice로 공급가 만들고, 부가세=0 (세율/면세 판단 불가)
  */
 function mapLineToAmounts(line: LineLoose) {
-  const itemName = pickString(line, ["item_name", "product_name", "variant_name", "name", "title", "product_title"], "");
+  const baseName = pickString(line, ["item_name", "product_name", "variant_name", "name", "title", "product_title"], "");
+  const schoolName = pickString(line, ["school_name"], "");
+  const itemName = schoolName ? `${baseName} ${schoolName}` : baseName;
   const qty = pickNumber(line, ["qty", "quantity", "ea", "count"], 0);
   let unitPrice = pickNumber(line, ["unit_price", "price", "unitPrice"], 0);
 
