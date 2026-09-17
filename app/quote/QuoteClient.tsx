@@ -1404,6 +1404,27 @@ async function loadBdpInquiries() {
                               delivery_cost: totalDeliveryPrice,
                             });
                             if (quoteErr) setMsg("⚠️ 견적 상세 저장 오류: " + quoteErr.message);
+                            // ▼ 신규 추가: 수동입력 품목이 2개 이상이면 나머지 품목도 quote_items에 저장
+                            if (manualItems.length > 1) {
+                              const itemRows = manualItems.map((mi, idx) => ({
+                                request_id: req.id,
+                                product_type: mi.productType,
+                                nickname: mi.nickname.trim() || null,
+                                color_type: mi.colorType,
+                                width_mm: parseFloat(mi.widthMm) || null,
+                                height_mm: parseFloat(mi.heightMm) || null,
+                                quantity: parseInt(mi.quantity) || null,
+                                is_new: mi.isNew,
+                                design_changed: mi.designChanged,
+                                use_stock_mold: mi.useStockMold,
+                                reuse_existing_mold: mi.reuseExistingMold,
+                                final_price: parseInt(mi.manualV) || 0,
+                                sort_order: idx,
+                              }));
+                              const { error: itemErr } = await supabase.from("quote_items").insert(itemRows);
+                              if (itemErr) setMsg("⚠️ 품목 저장 오류: " + itemErr.message);
+                            }
+                            // ▲ 신규 추가 끝
                             setLastQuoteRequestId(req.id);
                             loadQuoteList();
                           }
