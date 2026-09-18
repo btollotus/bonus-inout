@@ -43,6 +43,7 @@ type BlendLog = {
   recipe_name: string;
   multiplier: number;
   note: string | null;
+  end_at?: string | null;
   items: { material_name: string; quantity_g: number }[];
 };
 
@@ -243,8 +244,6 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         };
       }
     });
-    setBlendLogs((blendRes.data ?? []) as any);
-
     // 원료별 합계 집계 (그날 실제 소모 총량 — used_date 기준 유지)
     const usageMap: Record<string, { total_qty: number; unit: string }> = {};
     (usageRes.data ?? []).forEach((u: any) => {
@@ -281,7 +280,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
       });
     }
    // 작업지시서에 원료 사용량 + items + 시간 주입
-   setWorkOrders((woRes.data ?? []).map((wo: any) => ({
+   const enrichedWorkOrders = (woRes.data ?? []).map((wo: any) => ({
     ...wo,
     usages: woUsageMap[wo.work_order_no] ?? [],
     prod_start: prodStartMap[wo.work_order_no] ?? compStartMap[wo.id] ?? null,
@@ -300,7 +299,17 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         const n = it.name;
         return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판") && !n.startsWith("퀵운임") && !n.startsWith("퀵");
       }),
-})) as WorkOrder[]);
+})) as WorkOrder[];
+setWorkOrders(enrichedWorkOrders);
+
+// 배합기록(분사/코팅) 종료 시각 — 새로 계산하지 않고 연결된 WO의 생산시간(prod_end)을 그대로 재사용
+const woNoToProdEnd: Record<string, string | null> = {};
+enrichedWorkOrders.forEach((wo) => { woNoToProdEnd[wo.work_order_no] = wo.prod_end ?? null; });
+setBlendLogs((blendRes.data ?? []).map((bl: any) => {
+  const match = (bl.note ?? "").match(/WO-[\w-]+/);
+  const woNo = match ? match[0] : null;
+  return { ...bl, end_at: woNo ? (woNoToProdEnd[woNo] ?? null) : null };
+}) as any);
 
 setLoading(false);
 }, [selectedDate]);
@@ -425,29 +434,38 @@ setLoading(false);
       const materialUsages = Object.entries(usageMap)
         .map(([material_name, v]) => ({ material_name, ...v }))
         .sort((a, b) => a.material_name.localeCompare(b.material_name));
+        const enrichedWorkOrdersR = (woRes.data ?? []).map((wo: any) => ({
+          ...wo,
+          usages: woUsageMapR[wo.work_order_no] ?? [],
+          prod_start: prodStartMapR[wo.work_order_no] ?? compStartMapR[wo.id] ?? null,
+          prod_end: prodEndMapR[wo.work_order_no] ?? compEndMapR[wo.id] ?? null,
+          metal_start: metalMapR[wo.id]?.start ?? null,
+          metal_end: metalMapR[wo.id]?.end ?? null,
+          items: (wo.work_order_items ?? [])
+          .map((woi: any) => ({
+            name: (woi.sub_items?.[0]?.name ?? ""),
+            order_qty: woi.sub_items?.[0]?.qty ?? woi.order_qty ?? 0,
+            actual_qty: woi.actual_qty ?? 0,
+            unit_weight: woi.unit_weight ?? 0,
+            defect_qty: woi.defect_qty ?? 0,
+          }))
+          .filter((it: any) => {
+            const n = it.name;
+            return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판") && !n.startsWith("퀵운임") && !n.startsWith("퀵");
+          }),
+        })) as WorkOrder[];
+        // 배합기록 종료 시각 — 단일 날짜 조회와 동일하게 WO의 생산시간(prod_end)을 그대로 재사용
+        const woNoToProdEndR: Record<string, string | null> = {};
+        enrichedWorkOrdersR.forEach((wo) => { woNoToProdEndR[wo.work_order_no] = wo.prod_end ?? null; });
+        const blendLogsWithEndR = (blendRes.data ?? []).map((bl: any) => {
+          const match = (bl.note ?? "").match(/WO-[\w-]+/);
+          const woNo = match ? match[0] : null;
+          return { ...bl, end_at: woNo ? (woNoToProdEndR[woNo] ?? null) : null };
+        });
         return {
           date,
-          workOrders: (woRes.data ?? []).map((wo: any) => ({
-            ...wo,
-            usages: woUsageMapR[wo.work_order_no] ?? [],
-            prod_start: prodStartMapR[wo.work_order_no] ?? compStartMapR[wo.id] ?? null,
-            prod_end: prodEndMapR[wo.work_order_no] ?? compEndMapR[wo.id] ?? null,
-            metal_start: metalMapR[wo.id]?.start ?? null,
-            metal_end: metalMapR[wo.id]?.end ?? null,
-            items: (wo.work_order_items ?? [])
-            .map((woi: any) => ({
-              name: (woi.sub_items?.[0]?.name ?? ""),
-              order_qty: woi.sub_items?.[0]?.qty ?? woi.order_qty ?? 0,
-              actual_qty: woi.actual_qty ?? 0,
-              unit_weight: woi.unit_weight ?? 0,
-              defect_qty: woi.defect_qty ?? 0,
-            }))
-            .filter((it: any) => {
-              const n = it.name;
-              return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판") && !n.startsWith("퀵운임") && !n.startsWith("퀵");
-            }),
-          })) as WorkOrder[],
-          blendLogs: (blendRes.data ?? []) as any,
+          workOrders: enrichedWorkOrdersR,
+          blendLogs: blendLogsWithEndR as any,
           materialUsages,
         };
     }));
@@ -534,7 +552,7 @@ setLoading(false);
 
       const blendRows = bls.map(bl => `
         <tr>
-          <td style="${tdC}">${toKstTime(bl.happened_at)}</td>
+          <td style="${tdC}">${toKstTime(bl.happened_at)}${bl.end_at ? `~${toKstTime(bl.end_at)}` : ""}</td>
           <td style="${td}">${bl.recipe_name}</td>
           <td style="${tdC}">${bl.multiplier}배합</td>
           <td style="${td}">${bl.employee_name}</td>
@@ -848,7 +866,7 @@ setLoading(false);
                       </span>
                       <span className="text-xs text-slate-500">{bl.employee_name}</span>
                       <span className="ml-auto text-xs text-slate-400 tabular-nums">
-                        {toKstTime(bl.happened_at)}
+                        {toKstTime(bl.happened_at)}{bl.end_at ? `~${toKstTime(bl.end_at)}` : ""}
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
