@@ -381,13 +381,16 @@ export default function ProductionClient() {
  const [blendCount, setBlendCount] = useState(1);
  // 분사 수량
  const [sprayProdQty, setSprayProdQty] = useState<string>("");
- // 압축공기 작업 기록
- const [compWorkHours, setCompWorkHours] = useState<string>("");
- const [compDamageOk, setCompDamageOk] = useState(true);
- const [compNote, setCompNote] = useState<string>("");
- const [compSaved, setCompSaved] = useState(false);
- const [compSaving, setCompSaving] = useState(false);
- const [compLogId, setCompLogId] = useState<string | null>(null);
+  // 압축공기 작업 기록
+  const [compWorkHours, setCompWorkHours] = useState<string>("");
+  const [compStartTime, setCompStartTime] = useState<string>("");
+  const [compEndTime, setCompEndTime] = useState<string>("");
+  const [compLogDate, setCompLogDate] = useState<string>("");
+  const [compDamageOk, setCompDamageOk] = useState(true);
+  const [compNote, setCompNote] = useState<string>("");
+  const [compSaved, setCompSaved] = useState(false);
+  const [compSaving, setCompSaving] = useState(false);
+  const [compLogId, setCompLogId] = useState<string | null>(null);
 // 네오컬러 분사-레이즈 사용 lot
  const [neoColorSprayLots, setNeoColorSprayLots] = useState<{ lot_id: string; qty: string }[]>([]);
   const [neoColorSprayLotOptions, setNeoColorSprayLotOptions] = useState<{ lot_id: string; expiry_date: string; remaining_qty: number; variant_name: string }[]>([]);
@@ -1112,7 +1115,7 @@ export default function ProductionClient() {
     setIsKiseongForm(false); setIsEditMode(false);
     setBlendCount(1); // 배합 횟수 초기화
     setSprayProdQty(""); // 분사 수량 초기화
-    setCompWorkHours(""); setCompDamageOk(true); setCompNote(""); setCompSaved(false); setCompSaving(false); setCompLogId(null);
+    setCompWorkHours(""); setCompStartTime(""); setCompEndTime(""); setCompLogDate(""); setCompDamageOk(true); setCompNote(""); setCompSaved(false); setCompSaving(false); setCompLogId(null);
     setNeoColorSprayLots([]); // 네오컬러 분사-레이즈 lot 초기화
     setNeoColorSprayLotOptions([]); // 네오컬러 분사-레이즈 lot 옵션 초기화
     neoColorSprayLotOptionsRef.current = []; // ref도 초기화
@@ -1245,11 +1248,14 @@ export default function ProductionClient() {
       (async () => {
         const { data: compData } = await supabase
           .from("compressor_logs")
-          .select("id, work_hours, is_damaged, note")
+          .select("id, log_date, work_hours, start_time, end_time, is_damaged, note")
           .eq("work_order_id", wo.id)
           .maybeSingle();
         if (compData) {
           setCompWorkHours(String(compData.work_hours ?? ""));
+          setCompStartTime(compData.start_time ? kstTimeOnly(compData.start_time) : "");
+          setCompEndTime(compData.end_time ? kstTimeOnly(compData.end_time) : "");
+          setCompLogDate(compData.log_date ?? "");
           setCompDamageOk(!compData.is_damaged);
           setCompNote(compData.note ?? "");
           setCompSaved(true);
@@ -1578,18 +1584,27 @@ export default function ProductionClient() {
  // ─── 압축공기 기록 저장/수정 ───
  async function saveCompressorLog(workerName: string) {
   if (!selectedWo) return;
-  if (!compWorkHours || isNaN(Number(compWorkHours))) {
-    return showToast("작업시간을 입력하세요.", "error");
+  if (!compStartTime || !compEndTime) {
+    return showToast("시작/종료 시각을 입력하세요.", "error");
+  }
+  if (compEndTime <= compStartTime) {
+    return showToast("⚠ 종료 시각은 시작 시각보다 뒤여야 합니다.", "error");
   }
   setCompSaving(true);
   const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+  const logDate = compLogDate || today;
+  const startIso = `${logDate}T${compStartTime}:00+09:00`;
+  const endIso = `${logDate}T${compEndTime}:00+09:00`;
+  const hours = Math.round(((new Date(endIso).getTime() - new Date(startIso).getTime()) / 3600000) * 10) / 10;
   const subType = getWoSubType(selectedWo.product_name) ?? "분사";
   const { data: { user } } = await supabase.auth.getUser();
   const createdBy = user?.id ?? null;
   if (compLogId) {
     // 수정 — 누계는 변경하지 않음
     const { error } = await supabase.from("compressor_logs").update({
-      work_hours: Number(compWorkHours),
+      work_hours: hours,
+      start_time: startIso,
+      end_time: endIso,
       is_damaged: !compDamageOk,
       note: compNote.trim() || null,
       worker_name: workerName,
@@ -1606,12 +1621,14 @@ export default function ProductionClient() {
       .limit(1)
       .maybeSingle();
     const lastCum = Number(lastLog?.cumulative_hours ?? 0);
-    const newCum = Math.round((lastCum + Number(compWorkHours)) * 10) / 10;
+    const newCum = Math.round((lastCum + hours) * 10) / 10;
     const { data: newLog, error } = await supabase.from("compressor_logs").insert({
-      log_date: today,
-      worked_at: `${today}T00:00:00+09:00`,
+      log_date: logDate,
+      worked_at: startIso,
       work_type: subType,
-      work_hours: Number(compWorkHours),
+      work_hours: hours,
+      start_time: startIso,
+      end_time: endIso,
       cumulative_hours: newCum,
       is_damaged: !compDamageOk,
       worker_name: workerName,
@@ -1622,7 +1639,9 @@ export default function ProductionClient() {
     setCompSaving(false);
     if (error) return showToast("압축공기 저장 실패: " + error.message, "error");
     setCompLogId(newLog.id);
+    setCompLogDate(logDate);
   }
+  setCompWorkHours(String(hours));
   setCompSaved(true);
   showToast("✅ 압축공기 기록 저장!");
 }
@@ -3432,17 +3451,31 @@ const totalOrder = items
                     <span className="rounded-full border border-green-200 bg-green-100 px-2.5 py-0.5 text-[11px] font-semibold text-green-700">✅ 저장됨</span>
                   )}
                 </div>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3 mb-3">
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-4 mb-3">
                   <div>
-                    <div className="mb-1 text-xs text-slate-500">작업시간 (h) *</div>
+                    <div className="mb-1 text-xs text-slate-500">시작 시각 *</div>
                     <input
-                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-right tabular-nums focus:border-blue-400 focus:outline-none"
-                      inputMode="decimal"
-                      placeholder="예: 6"
-                      value={compWorkHours}
+                      type="time"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm tabular-nums focus:border-blue-400 focus:outline-none"
+                      value={compStartTime}
                       disabled={selectedWo.status === "완료" && !isEditMode}
-                      onChange={(e) => setCompWorkHours(e.target.value.replace(/[^\d.]/g, ""))}
+                      onChange={(e) => setCompStartTime(e.target.value)}
                     />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-500">종료 시각 *</div>
+                    <input
+                      type="time"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm tabular-nums focus:border-blue-400 focus:outline-none"
+                      value={compEndTime}
+                      disabled={selectedWo.status === "완료" && !isEditMode}
+                      onChange={(e) => setCompEndTime(e.target.value)}
+                    />
+                    {compStartTime && compEndTime && compEndTime > compStartTime && (
+                      <div className="mt-1 text-[11px] text-slate-400">
+                        작업시간 {(Math.round(((new Date(`2000-01-01T${compEndTime}:00`).getTime() - new Date(`2000-01-01T${compStartTime}:00`).getTime()) / 3600000) * 10) / 10).toFixed(1)}h
+                      </div>
+                    )}
                   </div>
                   <div>
                   <div className="mb-1 text-xs text-slate-500">여과필터파손여부</div>
@@ -3471,7 +3504,7 @@ const totalOrder = items
                   type="button"
                   className="w-full rounded-lg border py-2 text-xs font-bold text-white disabled:opacity-60"
                   style={{ borderColor: "#0284c7", background: compSaving ? "#94a3b8" : "#0284c7" }}
-                  disabled={compSaving || !compWorkHours || (selectedWo.status === "완료" && !isEditMode)}
+                  disabled={compSaving || !compStartTime || !compEndTime || (selectedWo.status === "완료" && !isEditMode)}
                   onClick={() => {
                     if (isPinValid() && pinSession) {
                       saveCompressorLog(pinSession.employeeName);

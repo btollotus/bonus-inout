@@ -218,6 +218,21 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         prodEndMap[ev.work_order_no] = ev.measured_at;
       }
     });
+
+    // 분사/코팅 WO 생산시간(compressor_logs)도 같은 방식(WO ID 직접 조회)으로 보강 — ccp_wo_events가 없는 WO의 fallback
+    const woIdsForComp = (woRes.data ?? []).map((w: any) => w.id);
+    const { data: compTimeData } = woIdsForComp.length > 0
+      ? await supabase
+          .from("compressor_logs")
+          .select("work_order_id, start_time, end_time")
+          .in("work_order_id", woIdsForComp)
+      : { data: [] as any[] };
+    const compStartMap: Record<string, string> = {};
+    const compEndMap: Record<string, string> = {};
+    (compTimeData ?? []).forEach((c: any) => {
+      if (c.work_order_id && c.start_time) compStartMap[c.work_order_id] = c.start_time;
+      if (c.work_order_id && c.end_time) compEndMap[c.work_order_id] = c.end_time;
+    });
     // work_order_id별 금속검출 시간 맵
     const metalMap: Record<string, { start: string; end: string }> = {};
     (metalRes.data ?? []).forEach((ml: any) => {
@@ -269,8 +284,8 @@ export function NewProductionLogTab({ role, userId, showToast }: {
    setWorkOrders((woRes.data ?? []).map((wo: any) => ({
     ...wo,
     usages: woUsageMap[wo.work_order_no] ?? [],
-    prod_start: prodStartMap[wo.work_order_no] ?? null,
-    prod_end: prodEndMap[wo.work_order_no] ?? null,
+    prod_start: prodStartMap[wo.work_order_no] ?? compStartMap[wo.id] ?? null,
+    prod_end: prodEndMap[wo.work_order_no] ?? compEndMap[wo.id] ?? null,
     metal_start: metalMap[wo.id]?.start ?? null,
     metal_end: metalMap[wo.id]?.end ?? null,
     items: (wo.work_order_items ?? [])
@@ -360,6 +375,20 @@ setLoading(false);
           prodEndMapR[ev.work_order_no] = ev.measured_at;
         }
       });
+      // 분사/코팅 WO 생산시간(compressor_logs) fallback — 단일 날짜 조회와 동일한 로직
+      const woIdsForCompR = (woRes.data ?? []).map((w: any) => w.id);
+      const { data: compTimeDataR } = woIdsForCompR.length > 0
+        ? await supabase
+            .from("compressor_logs")
+            .select("work_order_id, start_time, end_time")
+            .in("work_order_id", woIdsForCompR)
+        : { data: [] as any[] };
+      const compStartMapR: Record<string, string> = {};
+      const compEndMapR: Record<string, string> = {};
+      (compTimeDataR ?? []).forEach((c: any) => {
+        if (c.work_order_id && c.start_time) compStartMapR[c.work_order_id] = c.start_time;
+        if (c.work_order_id && c.end_time) compEndMapR[c.work_order_id] = c.end_time;
+      });
       const metalMapR: Record<string, { start: string; end: string }> = {};
       (metalRes2.data ?? []).forEach((ml: any) => {
         if (ml.work_order_id) {
@@ -401,8 +430,8 @@ setLoading(false);
           workOrders: (woRes.data ?? []).map((wo: any) => ({
             ...wo,
             usages: woUsageMapR[wo.work_order_no] ?? [],
-            prod_start: prodStartMapR[wo.work_order_no] ?? null,
-            prod_end: prodEndMapR[wo.work_order_no] ?? null,
+            prod_start: prodStartMapR[wo.work_order_no] ?? compStartMapR[wo.id] ?? null,
+            prod_end: prodEndMapR[wo.work_order_no] ?? compEndMapR[wo.id] ?? null,
             metal_start: metalMapR[wo.id]?.start ?? null,
             metal_end: metalMapR[wo.id]?.end ?? null,
             items: (wo.work_order_items ?? [])

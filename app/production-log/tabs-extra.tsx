@@ -3152,6 +3152,7 @@ export function CompressorTab({ role, userId, showToast }: {
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center w-8">no</th>
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-left">일시</th>
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-right">작업시간</th>
+                  <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center">시작~종료</th>
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-right">누계</th>
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center">파손여부</th>
                   <th className="py-2 px-3 text-xs text-slate-500 font-semibold text-center">담당</th>
@@ -3167,6 +3168,9 @@ export function CompressorTab({ role, userId, showToast }: {
                     <td className="py-2 px-3 text-center text-xs text-slate-400">{idx + 1}</td>
                     <td className="py-2 px-3 tabular-nums text-slate-700">{log.log_date}{(log as any).is_hidden && <span className="ml-1 text-[9px] text-slate-400">(숨김)</span>}</td>
                     <td className="py-2 px-3 text-right tabular-nums font-medium">{Number(log.work_hours).toFixed(1)} h</td>
+                    <td className="py-2 px-3 text-center tabular-nums text-xs text-slate-500">
+                      {log.start_time && log.end_time ? `${toKSTTime(log.start_time)}~${toKSTTime(log.end_time)}` : "—"}
+                    </td>
                     <td className="py-2 px-3 text-right tabular-nums">
                       {editingCumId === log.id ? (
                         <div className="flex items-center gap-1 justify-end">
@@ -3216,6 +3220,7 @@ export function CompressorTab({ role, userId, showToast }: {
                   <td className="py-2 px-3 text-right tabular-nums text-sm font-bold text-slate-700">
                     {visibleLogs.reduce((s, l) => s + Number(l.work_hours), 0).toFixed(1)} h
                   </td>
+                  <td className="py-2 px-3" />
                   <td className="py-2 px-3 text-right tabular-nums text-sm font-bold text-blue-700">
                     {visibleLogs.length > 0 ? Number(visibleLogs[visibleLogs.length - 1].cumulative_hours).toFixed(1) + " h" : "—"}
                   </td>
