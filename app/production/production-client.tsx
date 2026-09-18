@@ -377,10 +377,8 @@ export default function ProductionClient() {
   const [filterDateTo, setFilterDateTo] = useState("");
   const [selectedWo, setSelectedWo] = useState<WorkOrderRow | null>(null);
 
- // 분사/코팅 배합 횟수
- const [blendCount, setBlendCount] = useState(1);
- // 분사 수량
- const [sprayProdQty, setSprayProdQty] = useState<string>("");
+  // 분사/코팅 배합 횟수
+  const [blendCount, setBlendCount] = useState(1);
   // 압축공기 작업 기록
   const [compWorkHours, setCompWorkHours] = useState<string>("");
   const [compStartTime, setCompStartTime] = useState<string>("");
@@ -1114,7 +1112,6 @@ export default function ProductionClient() {
   async function applySelection(wo: WorkOrderRow, resetEdit = true) {
     setIsKiseongForm(false); setIsEditMode(false);
     setBlendCount(1); // 배합 횟수 초기화
-    setSprayProdQty(""); // 분사 수량 초기화
     setCompWorkHours(""); setCompStartTime(""); setCompEndTime(""); setCompLogDate(""); setCompDamageOk(true); setCompNote(""); setCompSaved(false); setCompSaving(false); setCompLogId(null);
     setNeoColorSprayLots([]); // 네오컬러 분사-레이즈 lot 초기화
     setNeoColorSprayLotOptions([]); // 네오컬러 분사-레이즈 lot 옵션 초기화
@@ -1772,8 +1769,8 @@ if (dupCheck && dupCheck.length > 0) {
             }).eq("id", item.id);
           }
         }
-        // 분사: pet_stock_logs — 단일 insert
-        const sprayProdQtyNum = toInt(sprayProdQty);
+        // 분사: pet_stock_logs — 단일 insert (분사완료 수량 = 출고수량과 항상 동일)
+        const sprayProdQtyNum = items.reduce((sum, item) => sum + toInt(prodInputs[item.id]?.actual_qty), 0);
         if (sprayProdQtyNum > 0) {
           const { error: petProdErr } = await supabase.from("pet_stock_logs").insert({
             log_date: today, log_type: "spray_done_prod",
@@ -1886,8 +1883,9 @@ if (dupCheck && dupCheck.length > 0) {
         return;
       }
       if (subType === "분사") {
-        if (!sprayProdQty || toInt(sprayProdQty) <= 0) {
-          alert("분사완료 수량을 입력 후 생산완료 처리해주세요.");
+        const totalActualQty = (selectedWo.work_order_items ?? []).reduce((sum, item) => sum + toInt(prodInputs[item.id]?.actual_qty), 0);
+        if (totalActualQty <= 0) {
+          alert("출고수량을 입력 후 생산완료 처리해주세요.");
           setIsCompleting(false);
           return;
         }
@@ -3619,7 +3617,16 @@ const totalOrder = items
                           <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
                             <div>
                               <div className="mb-1 text-xs text-slate-500">출고수량</div>
-                              <input className={inpR} inputMode="numeric" value={pi.actual_qty} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, actual_qty: e.target.value.replace(/[^\d]/g, "") } }))} />
+                              <input className={inpR} inputMode="numeric" value={pi.actual_qty} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => {
+                                const val = e.target.value.replace(/[^\d]/g, "");
+                                const isSpray = getWoSubType(selectedWo.product_name) === "분사";
+                                setProdInputs((prev) => {
+                                  const cur = prev[item.id] ?? pi;
+                                  const lots = cur.transfer_lots ?? [];
+                                  const nextLots = isSpray && lots.length === 1 ? [{ ...lots[0], qty: String(toInt(val) + toInt(cur.defect_qty)) }] : lots;
+                                  return { ...prev, [item.id]: { ...cur, actual_qty: val, transfer_lots: nextLots } };
+                                });
+                              }} />
                               <div className="mt-0.5 text-[11px] text-slate-400">주문 {fmt(item.order_qty)}개</div>
                             </div>
                             <div>
@@ -3641,7 +3648,13 @@ const totalOrder = items
                                 disabled={selectedWo?.status === "완료" && !isEditMode}
                                 onChange={(e) => {
                                   const defect = e.target.value.replace(/[^\d]/g, "");
-                                  setProdInputs((prev) => ({ ...prev, [item.id]: { ...prev[item.id], defect_qty: defect } }));
+                                  const isSpray = getWoSubType(selectedWo.product_name) === "분사";
+                                  setProdInputs((prev) => {
+                                    const cur = prev[item.id] ?? pi;
+                                    const lots = cur.transfer_lots ?? [];
+                                    const nextLots = isSpray && lots.length === 1 ? [{ ...lots[0], qty: String(toInt(cur.actual_qty) + toInt(defect)) }] : lots;
+                                    return { ...prev, [item.id]: { ...cur, defect_qty: defect, transfer_lots: nextLots } };
+                                  });
                                 }} />
                             </div>
                             <div><div className="mb-1 text-xs text-slate-500">개당 중량 (g)</div><input className={inpR} inputMode="decimal" value={pi.unit_weight} disabled={selectedWo?.status === "완료" && !isEditMode} onChange={(e) => setProdInputs((prev) => ({ ...prev, [item.id]: { ...pi, unit_weight: e.target.value.replace(/[^\d.]/g, "") } }))} /></div>
@@ -3656,25 +3669,26 @@ const totalOrder = items
 {/* 분사 작업지시서 전용 — 코팅-레이즈 차감 + 생산용/판매용 수량 */}
 {getWoSubType(selectedWo.product_name) === "분사" && (
    <div className="mt-2 space-y-2">
-     {/* 생산용/판매용 수량 입력 */}
+     {/* 생산용/판매용 수량 — 출고수량과 항상 동일하게 자동 반영 */}
      <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-2.5">
-       <div className="mb-1.5 text-xs font-semibold text-emerald-700">분사완료 수량 입력</div>
+       <div className="mb-1.5 text-xs font-semibold text-emerald-700">분사완료 수량 (출고수량과 동일)</div>
        <div>
          <div className="mb-1 text-xs text-slate-500">분사완료 (ea)</div>
-         <input className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-right tabular-nums focus:border-emerald-400 focus:outline-none"
-           inputMode="numeric" placeholder="0"
-           value={sprayProdQty}
-           disabled={selectedWo?.status === "완료" && !isEditMode}
-           onChange={(e) => setSprayProdQty(e.target.value.replace(/[^\d]/g, ""))} />
+         <div className="w-full rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1.5 text-xs text-right tabular-nums text-slate-600">
+           {fmt(toInt(pi.actual_qty))}
+         </div>
        </div>
      </div>
      {/* 코팅-레이즈 lot 차감 */}
      <div className="rounded-lg border border-blue-100 bg-blue-50 p-2.5">
-       <div className="mb-1.5 flex items-center justify-between">
+     <div className="mb-1.5 flex items-center justify-between">
          <span className="text-xs font-semibold text-blue-700">코팅-레이즈 차감</span>
-         {(prodInputs[item.id]?.transfer_lots ?? []).length > 0 && (
-           <span className="text-[11px] text-blue-500">총 차감: <b>{(prodInputs[item.id]?.transfer_lots ?? []).reduce((s, l) => s + toInt(l.qty), 0).toLocaleString()} EA</b></span>
-         )}
+         <span className="text-[11px] text-blue-500">
+           목표(출고+불량) {(toInt(pi.actual_qty) + toInt(pi.defect_qty)).toLocaleString()} EA
+           {(prodInputs[item.id]?.transfer_lots ?? []).length > 0 && (
+             <> · 선택 <b>{(prodInputs[item.id]?.transfer_lots ?? []).reduce((s, l) => s + toInt(l.qty), 0).toLocaleString()}</b> EA</>
+           )}
+         </span>
        </div>
        {/* 선택된 lot 목록 */}
        {(prodInputs[item.id]?.transfer_lots ?? []).length > 0 && (
@@ -3727,10 +3741,14 @@ const totalOrder = items
                <div className="rounded-lg border border-slate-200 bg-white overflow-hidden max-h-44 overflow-y-auto">
                  {availableLots.map((lot) => (
                    <button key={lot.lot_id} type="button" className="w-full text-left px-2.5 py-2 text-xs border-b border-slate-100 last:border-0 hover:bg-blue-50"
-                     onClick={() => setProdInputs((prev) => ({
+                   onClick={() => setProdInputs((prev) => {
+                     const curLots = prev[item.id]?.transfer_lots ?? [];
+                     const autoQty = curLots.length === 0 ? String(toInt(prev[item.id]?.actual_qty ?? pi.actual_qty) + toInt(prev[item.id]?.defect_qty ?? pi.defect_qty)) : "";
+                     return {
                        ...prev,
-                       [item.id]: { ...prev[item.id], transfer_lots: [...(prev[item.id]?.transfer_lots ?? []), { lot_id: lot.lot_id, qty: "" }] }
-                     }))}>
+                       [item.id]: { ...prev[item.id], transfer_lots: [...curLots, { lot_id: lot.lot_id, qty: autoQty }] }
+                     };
+                   })}>
                      <div className="font-medium text-slate-800">+ {lot.variant_name}</div>
                      <div className="flex gap-2 mt-0.5 text-[11px] text-slate-500"><span>소비기한: {lot.expiry_date}</span><span>·</span><span>잔량: <b className="text-blue-700">{lot.remaining_qty.toLocaleString()} EA</b></span></div>
                    </button>
