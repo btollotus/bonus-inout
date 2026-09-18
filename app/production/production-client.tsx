@@ -3854,25 +3854,29 @@ const totalOrder = items
                 )}
               </div>
 
-              {/* 하단 버튼 */}
-              <div className={`${card} p-3 flex gap-2`}>
-                {selectedWo.status !== "완료" && !isEditMode ? (
+             {/* 하단 버튼 */}
+             <div className={`${card} p-3 flex gap-2`}>
+                {selectedWo.status !== "완료" && !isEditMode ? (() => {
+                  const ft = selectedWo.food_type ?? "";
+                  const awaitsCcp1p = !!(woChecks?.status_production && !woChecks?.status_input) && !(getFoodCategory(ft) === "중간재" || ft === "생산용전사지" || ft === "전사지");
+                  return (
                   <button
                     className={`flex-1 rounded-lg border py-2 text-sm font-bold text-white disabled:opacity-60 disabled:cursor-not-allowed ${
-                      woChecks?.status_production && !woChecks?.status_input
+                      awaitsCcp1p
                         ? "border-amber-500 bg-amber-500 hover:bg-amber-600 active:bg-amber-700"
                         : "border-green-500 bg-green-600 hover:bg-green-700 active:bg-green-800"
                     }`}
                     onClick={
-                      woChecks?.status_production && !woChecks?.status_input
+                      awaitsCcp1p
                         ? () => router.push(`/production-log?tab=ccp1p&wo=${selectedWo.id}`)
                         : markProductionComplete
                     }
                     disabled={isCompleting}
                   >
-                    {isCompleting ? "처리 중..." : selectedWo.skip_production_check ? "포장완료 처리" : woChecks?.status_production && !woChecks?.status_input ? "✅ 생산완료 · CCP-1P 대기 중" : "생산완료 처리"}
+                    {isCompleting ? "처리 중..." : selectedWo.skip_production_check ? "포장완료 처리" : awaitsCcp1p ? "✅ 생산완료 · CCP-1P 대기 중" : "생산완료 처리"}
                   </button>
-                ) : selectedWo.status === "완료" && !isEditMode ? (
+                  );
+                })() : selectedWo.status === "완료" && !isEditMode ? (
                   <button className="rounded-lg border border-blue-400 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100" onClick={() => {
                     setPinProgressPending(() => (_name: string) => {
                       setIsEditMode(true);
