@@ -3453,30 +3453,27 @@ const totalOrder = items
                 </div>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-4 mb-3">
                   <div>
-                    <div className="mb-1 text-xs text-slate-500">시작 시각 (HHmm) *</div>
+                    <div className="mb-1 text-xs text-slate-500">시작 시각 (HH:mm) *</div>
                     <input
-                      inputMode="numeric" placeholder="예: 1430" maxLength={4}
+                      inputMode="numeric" placeholder="예: 14:30" maxLength={5}
                       className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm tabular-nums focus:border-blue-400 focus:outline-none"
-                      value={compStartTime}
+                      value={compStartTime.length > 2 ? `${compStartTime.slice(0,2)}:${compStartTime.slice(2,4)}` : compStartTime}
                       disabled={selectedWo.status === "완료" && !isEditMode}
                       onChange={(e) => setCompStartTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
                     />
-                    {compStartTime.length === 4 && (
-                      <div className="mt-0.5 text-[11px] text-slate-400 text-right">{compStartTime.slice(0,2)}:{compStartTime.slice(2,4)}</div>
-                    )}
                   </div>
                   <div>
-                    <div className="mb-1 text-xs text-slate-500">종료 시각 (HHmm) *</div>
+                    <div className="mb-1 text-xs text-slate-500">종료 시각 (HH:mm) *</div>
                     <input
-                      inputMode="numeric" placeholder="예: 1430" maxLength={4}
+                      inputMode="numeric" placeholder="예: 14:30" maxLength={5}
                       className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm tabular-nums focus:border-blue-400 focus:outline-none"
-                      value={compEndTime}
+                      value={compEndTime.length > 2 ? `${compEndTime.slice(0,2)}:${compEndTime.slice(2,4)}` : compEndTime}
                       disabled={selectedWo.status === "완료" && !isEditMode}
                       onChange={(e) => setCompEndTime(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
                     />
                     {compEndTime.length === 4 && compStartTime.length === 4 && compEndTime > compStartTime && (
                       <div className="mt-0.5 text-[11px] text-slate-400 text-right">
-                        {compEndTime.slice(0,2)}:{compEndTime.slice(2,4)} · 작업시간 {(Math.round(((new Date(`2000-01-01T${compEndTime.slice(0,2)}:${compEndTime.slice(2,4)}:00`).getTime() - new Date(`2000-01-01T${compStartTime.slice(0,2)}:${compStartTime.slice(2,4)}:00`).getTime()) / 3600000) * 10) / 10).toFixed(1)}h
+                        작업시간 {(Math.round(((new Date(`2000-01-01T${compEndTime.slice(0,2)}:${compEndTime.slice(2,4)}:00`).getTime() - new Date(`2000-01-01T${compStartTime.slice(0,2)}:${compStartTime.slice(2,4)}:00`).getTime()) / 3600000) * 10) / 10).toFixed(1)}h
                       </div>
                     )}
                   </div>
