@@ -1687,7 +1687,7 @@ if (dupCheck && dupCheck.length > 0) {
 
       if (recipeId) {
         const { data: blendLog, error: blendErr } = await supabase.from("blend_logs").insert({
-          happened_at:   `${today}T00:00:00+09:00`,
+          happened_at:   `${today}T${compStartTime.slice(0,2)}:${compStartTime.slice(2,4)}:00+09:00`,
           log_date:      today,
           employee_name: productionAssignee,
           recipe_id:     recipeId,
