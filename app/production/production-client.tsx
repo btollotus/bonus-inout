@@ -1840,6 +1840,7 @@ if (dupCheck && dupCheck.length > 0) {
 
       if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
 
+      setSelectedWo((prev) => prev ? { ...prev, status: "완료", status_production: true, production_done_at: new Date().toISOString() } : prev);
       showToast(`${subType} 생산완료! 원료 차감됨`);
       setIsEditMode(false);
       await loadWoList();
