@@ -73,11 +73,16 @@ const SIGN_MAP: Record<string, string> = {
 // 제외 품목 접두어 (성형틀/인쇄제판/아이스박스/퀵/택배비)
 const EXCLUDE_ITEM_PREFIXES = ["성형틀", "인쇄제판", "아이스박스", "퀵", "택배비"];
 
-// work_order_items(sub_items) 배열 → 제외 품목 필터링 후 줄바꿈으로 합친 전체 품목명 문자열
-function buildFullItemNames(items: { sub_items?: any }[] | null | undefined): string {
+// work_order_items(sub_items) 배열 → 제외 품목 필터링 후 줄바꿈으로 합친 전체 품목명 문자열 (학교명 병기)
+function buildFullItemNames(items: { sub_items?: any; school_name?: string | null }[] | null | undefined): string {
   const names = (items ?? [])
-    .map((item: any) => ((item.sub_items ?? [])[0]?.name ?? "").trim())
-    .filter((n: string) => n && !EXCLUDE_ITEM_PREFIXES.some((p) => n.startsWith(p)));
+    .map((item: any) => {
+      const raw = ((item.sub_items ?? [])[0]?.name ?? "").trim();
+      if (!raw || EXCLUDE_ITEM_PREFIXES.some((p) => raw.startsWith(p))) return "";
+      const school = (item.school_name ?? "").trim();
+      return school ? `${raw} (${school})` : raw;
+    })
+    .filter((n: string) => n);
   return names.join("\n");
 }
 
@@ -86,10 +91,10 @@ async function fetchWoFullNames(workOrderIds: string[]): Promise<Record<string, 
   const uniqueIds = Array.from(new Set(workOrderIds.filter(Boolean)));
   if (uniqueIds.length === 0) return {};
   const { data } = await supabase
-    .from("work_order_items")
-    .select("work_order_id, sub_items")
-    .in("work_order_id", uniqueIds);
-  const grouped: Record<string, { sub_items?: any }[]> = {};
+  .from("work_order_items")
+  .select("work_order_id, sub_items, school_name")
+  .in("work_order_id", uniqueIds);
+const grouped: Record<string, { sub_items?: any; school_name?: string | null }[]> = {};
   for (const row of data ?? []) {
     const woId = (row as any).work_order_id;
     if (!woId) continue;
