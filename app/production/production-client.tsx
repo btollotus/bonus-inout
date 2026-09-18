@@ -1883,6 +1883,16 @@ if (dupCheck && dupCheck.length > 0) {
         setIsCompleting(false);
         return;
       }
+      const midMissingExpiry = (selectedWo.work_order_items ?? []).filter((item) => {
+        const pi = prodInputs[item.id];
+        if (pi?.skip) return false;
+        return !pi || !pi.actual_qty || !pi.expiry_date;
+      });
+      if (midMissingExpiry.length > 0) {
+        alert("출고수량, 소비기한은 필수 입력 항목입니다.\n\n입력 후 다시 시도해주세요.");
+        setIsCompleting(false);
+        return;
+      }
       if (subType === "분사") {
         const totalActualQty = (selectedWo.work_order_items ?? []).reduce((sum, item) => sum + toInt(prodInputs[item.id]?.actual_qty), 0);
         if (totalActualQty <= 0) {
