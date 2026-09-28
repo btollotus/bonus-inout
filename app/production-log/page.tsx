@@ -72,6 +72,7 @@ type MaterialStock = {
   current_stock: number;
   is_below_safety_stock: boolean;
   daily_used: number;
+  supplier: string | null;
 };
 
 type MaterialReceipt = {
@@ -1919,7 +1920,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     // filterDate까지 누적 입고량 (현재고 계산용)
     const { data: cumulativeReceiptData } = await supabase
       .from("material_receipts")
-      .select("material_id, quantity")
+      .select("material_id, quantity, supplier, received_date, created_at")
       .lte("received_date", filterDate);
     const cumulativeReceiptMap: Record<string, number> = {};
     (cumulativeReceiptData ?? []).forEach((r: any) => {
@@ -1927,7 +1928,17 @@ function MaterialLedgerTab({ role, userId, showToast }: {
       cumulativeReceiptMap[r.material_id] += r.quantity;
     });
 
-    // 당일 입고량 (화면 표시용)
+        // filterDate까지 가장 최근 입고의 공급업체 (화면 표시용)
+        const latestSupplierMap: Record<string, { supplier: string; key: string }> = {};
+        (cumulativeReceiptData ?? []).forEach((r: any) => {
+          const sup = (r.supplier ?? "").trim();
+          if (!sup) return;
+          const key = `${r.received_date ?? ""}|${r.created_at ?? ""}`;
+          const prev = latestSupplierMap[r.material_id];
+          if (!prev || key > prev.key) latestSupplierMap[r.material_id] = { supplier: sup, key };
+        });
+    
+        // 당일 입고량 (화면 표시용)
     const dailyReceiptMap: Record<string, number> = {};
     (receiptRes.data ?? []).forEach((r: any) => {
       if (!dailyReceiptMap[r.material_id]) dailyReceiptMap[r.material_id] = 0;
@@ -1959,6 +1970,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
         current_stock: currentStock,
         is_below_safety_stock: s.safety_stock != null && currentStock < s.safety_stock,
         daily_used: dailyUsageMap[s.id] ?? 0,
+        supplier: latestSupplierMap[s.id]?.supplier ?? null,
       };
     });
     setStocks(stocksWithDaily as MaterialStock[]);
@@ -2785,6 +2797,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                 <tr className="border-b border-slate-200">
                   <th className="text-left py-2 px-3 text-xs text-slate-500 font-semibold">분류</th>
                   <th className="text-left py-2 px-3 text-xs text-slate-500 font-semibold">원료명</th>
+                  <th className="text-left py-2 px-3 text-xs text-slate-500 font-semibold">공급업체</th>
                   <th className="text-right py-2 px-3 text-xs text-slate-500 font-semibold">입고</th>
                   <th className="text-right py-2 px-3 text-xs text-slate-500 font-semibold">사용</th>
                   <th className="text-right py-2 px-3 text-xs text-slate-500 font-semibold">폐기</th>
@@ -2805,7 +2818,8 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                       {hasAdj && (
                         <span className="ml-1.5 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-600">조정있음</span>
                       )}
-                    </td>
+                                        </td>
+                    <td className="py-2 px-3 text-xs text-slate-600">{s.supplier ?? "-"}</td>
                     <td className="py-2 px-3 text-right tabular-nums text-green-700">{s.total_received.toLocaleString()}{s.unit}</td>
                     <td className="py-2 px-3 text-right tabular-nums">
                       {s.daily_used > 0 ? (
@@ -2832,7 +2846,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                   </tr>
                   {isExpanded && (
                     <tr className="bg-blue-50">
-                      <td colSpan={7} className="py-2 px-6">
+                          <td colSpan={8} className="py-2 px-6">
                         {drillLoading ? (
                           <div className="text-xs text-slate-400 py-1">불러오는 중...</div>
                         ) : drillRows.length === 0 ? (
