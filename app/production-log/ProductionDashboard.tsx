@@ -570,12 +570,36 @@ export function ProductionDashboard({
       if (isQcMonth) alarmDetail.push(`📋 ${currentMonth}월은 자가품질검사 실시 월입니다`);
       if (isValidityMonth) alarmDetail.push(`🧫 ${currentMonth}월은 유효성평가실험 실시 월입니다`);
       if (isQcMonth || isValidityMonth) {
+        // 이번 달(KST) 샘플준비 기록 존재 여부 — material_usage_logs.used_date 기준 (today = selectedDate, KST YYYY-MM-DD)
+        const ym = today.slice(0, 7);
+        const [yy, mm] = ym.split("-").map(Number);
+        const qcMonthStart = `${ym}-01`;
+        const qcMonthEnd = `${ym}-${String(new Date(yy, mm, 0).getDate()).padStart(2, "0")}`;
+        const [{ data: qcRows, error: qcErr }, { data: validityRows, error: validityErr }] = await Promise.all([
+          supabase.from("material_usage_logs").select("id")
+            .eq("work_type", "qc_sample")
+            .gte("used_date", qcMonthStart).lte("used_date", qcMonthEnd)
+            .limit(1),
+          supabase.from("material_usage_logs").select("id")
+            .eq("work_type", "validity_sample")
+            .gte("used_date", qcMonthStart).lte("used_date", qcMonthEnd)
+            .limit(1),
+        ]);
+        if (qcErr) console.error("자가품질검사 기록 조회 오류(dashboard):", qcErr.message);
+        if (validityErr) console.error("유효성평가 기록 조회 오류(dashboard):", validityErr.message);
+        const qcDone = !isQcMonth || (qcRows?.length ?? 0) > 0;
+        const validityDone = !isValidityMonth || (validityRows?.length ?? 0) > 0;
+        if (isQcMonth && qcDone) alarmDetail.push("✅ 자가품질검사 샘플준비 완료");
+        if (isValidityMonth && validityDone) alarmDetail.push("✅ 유효성평가 샘플준비 완료");
+        const allDone = qcDone && validityDone;
         newCards.push({
           key: "qc_alarm",
           label: "품질검사 알람",
           icon: "🔬",
-          status: "warn",
-          message: isValidityMonth ? "자가품질검사 + 유효성평가 월" : "자가품질검사 월",
+          status: allDone ? "ok" : "warn",
+          message: allDone
+            ? "이번 달 샘플준비 완료"
+            : isValidityMonth ? "자가품질검사 + 유효성평가 월" : "자가품질검사 월",
           detail: alarmDetail,
         });
       }
