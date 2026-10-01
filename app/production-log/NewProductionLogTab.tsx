@@ -31,6 +31,8 @@ type WorkOrder = {
   items?: { name: string; order_qty: number; actual_qty: number; unit_weight: number; defect_qty?: number }[];
   prod_start?: string | null;   // ccp_wo_events start measured_at
   prod_end?: string | null;     // ccp_wo_events end measured_at
+  transfer_start?: string | null; // ccp_wo_events 8번 슬롯(전사지인쇄) start — 생산 슬롯 기록이 함께 있을 때만
+  transfer_end?: string | null;   // ccp_wo_events 8번 슬롯(전사지인쇄) end — 생산 슬롯 기록이 함께 있을 때만
   metal_start?: string | null;  // ccp_metal_logs start_time
   metal_end?: string | null;    // ccp_metal_logs b_end_time
 };
@@ -68,6 +70,36 @@ function toKstTime(utcStr: string) {
 
 function toKstDateOnly(utcStr: string) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date(utcStr)); // "YYYY-MM-DD"
+}
+
+// ─── 생산시간 계산 (단일 날짜 조회 / 기간 조회 공통) ───
+// 전사지인쇄 CCP(8번 슬롯)와 생산 CCP(그 외 슬롯)를 분리한다.
+// - 생산 슬롯 기록이 있으면: 생산시간 = 생산 슬롯 시간, 전사시간 = 8번 슬롯 시간
+// - 생산 슬롯 기록이 없으면(전사지 전용 WO): 생산시간 = 8번 슬롯 시간 (기존과 동일), 전사시간 없음
+// events는 measured_at 오름차순이어야 한다.
+type CcpTimes = { prod_start: string | null; prod_end: string | null; transfer_start: string | null; transfer_end: string | null };
+function buildCcpTimesMap(events: any[]): Record<string, CcpTimes> {
+  const prod: Record<string, { s: string | null; e: string | null }> = {};
+  const tr: Record<string, { s: string | null; e: string | null }> = {};
+  for (const ev of events) {
+    const no = ev.work_order_no;
+    if (!no) continue;
+    const bucket = ev.warmer_slots?.slot_name === "8" ? tr : prod;
+    if (!bucket[no]) bucket[no] = { s: null, e: null };
+    if (ev.event_type === "start" && !bucket[no].s) bucket[no].s = ev.measured_at;
+    if (ev.event_type === "end") bucket[no].e = ev.measured_at;
+  }
+  const result: Record<string, CcpTimes> = {};
+  const nos = new Set([...Object.keys(prod), ...Object.keys(tr)]);
+  nos.forEach((no) => {
+    const p = prod[no];
+    const t = tr[no];
+    const hasProd = !!(p && (p.s || p.e));
+    result[no] = hasProd
+      ? { prod_start: p.s, prod_end: p.e, transfer_start: t?.s ?? null, transfer_end: t?.e ?? null }
+      : { prod_start: t?.s ?? null, prod_end: t?.e ?? null, transfer_start: null, transfer_end: null };
+  });
+  return result;
 }
 
 // ─── 컴파운드/이산화티타늄 분리 표시용 (production-client.tsx와 동일 기준 — 그쪽 변경 시 같이 수정 필요) ───
@@ -202,23 +234,14 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     const { data: ccpEvData } = woNosForCcp.length > 0
       ? await supabase
           .from("ccp_wo_events")
-          .select("work_order_no, event_type, measured_at")
+          .select("work_order_no, event_type, measured_at, warmer_slots(slot_name)")
           .in("work_order_no", woNosForCcp)
           .order("measured_at", { ascending: true })
       : { data: [] as any[] };
     const ccpEvRes = { data: ccpEvData };
 
-    // work_order_no별 생산시간 맵
-    const prodStartMap: Record<string, string> = {};
-    const prodEndMap: Record<string, string> = {};
-    (ccpEvRes.data ?? []).forEach((ev: any) => {
-      if (ev.event_type === "start" && !prodStartMap[ev.work_order_no]) {
-        prodStartMap[ev.work_order_no] = ev.measured_at;
-      }
-      if (ev.event_type === "end") {
-        prodEndMap[ev.work_order_no] = ev.measured_at;
-      }
-    });
+        // work_order_no별 생산시간/전사시간 맵 (8번 슬롯 분리 — buildCcpTimesMap 참고)
+        const ccpTimesMap = buildCcpTimesMap(ccpEvRes.data ?? []);
 
     // 분사/코팅 WO 생산시간(compressor_logs)도 같은 방식(WO ID 직접 조회)으로 보강 — ccp_wo_events가 없는 WO의 fallback
     const woIdsForComp = (woRes.data ?? []).map((w: any) => w.id);
@@ -283,8 +306,10 @@ export function NewProductionLogTab({ role, userId, showToast }: {
    const enrichedWorkOrders = (woRes.data ?? []).map((wo: any) => ({
     ...wo,
     usages: woUsageMap[wo.work_order_no] ?? [],
-    prod_start: prodStartMap[wo.work_order_no] ?? compStartMap[wo.id] ?? null,
-    prod_end: prodEndMap[wo.work_order_no] ?? compEndMap[wo.id] ?? null,
+    prod_start: ccpTimesMap[wo.work_order_no]?.prod_start ?? compStartMap[wo.id] ?? null,
+    prod_end: ccpTimesMap[wo.work_order_no]?.prod_end ?? compEndMap[wo.id] ?? null,
+    transfer_start: ccpTimesMap[wo.work_order_no]?.transfer_start ?? null,
+    transfer_end: ccpTimesMap[wo.work_order_no]?.transfer_end ?? null,
     metal_start: metalMap[wo.id]?.start ?? null,
     metal_end: metalMap[wo.id]?.end ?? null,
     items: (wo.work_order_items ?? [])
@@ -369,21 +394,12 @@ setLoading(false);
       const { data: ccpEvData2 } = woNosForCcpR.length > 0
         ? await supabase
             .from("ccp_wo_events")
-            .select("work_order_no, event_type, measured_at")
+            .select("work_order_no, event_type, measured_at, warmer_slots(slot_name)")
             .in("work_order_no", woNosForCcpR)
             .order("measured_at", { ascending: true })
         : { data: [] as any[] };
       const ccpEvRes2 = { data: ccpEvData2 };
-      const prodStartMapR: Record<string, string> = {};
-      const prodEndMapR: Record<string, string> = {};
-      (ccpEvRes2.data ?? []).forEach((ev: any) => {
-        if (ev.event_type === "start" && !prodStartMapR[ev.work_order_no]) {
-          prodStartMapR[ev.work_order_no] = ev.measured_at;
-        }
-        if (ev.event_type === "end") {
-          prodEndMapR[ev.work_order_no] = ev.measured_at;
-        }
-      });
+      const ccpTimesMapR = buildCcpTimesMap(ccpEvRes2.data ?? []);
       // 분사/코팅 WO 생산시간(compressor_logs) fallback — 단일 날짜 조회와 동일한 로직
       const woIdsForCompR = (woRes.data ?? []).map((w: any) => w.id);
       const { data: compTimeDataR } = woIdsForCompR.length > 0
@@ -437,8 +453,10 @@ setLoading(false);
         const enrichedWorkOrdersR = (woRes.data ?? []).map((wo: any) => ({
           ...wo,
           usages: woUsageMapR[wo.work_order_no] ?? [],
-          prod_start: prodStartMapR[wo.work_order_no] ?? compStartMapR[wo.id] ?? null,
-          prod_end: prodEndMapR[wo.work_order_no] ?? compEndMapR[wo.id] ?? null,
+          prod_start: ccpTimesMapR[wo.work_order_no]?.prod_start ?? compStartMapR[wo.id] ?? null,
+          prod_end: ccpTimesMapR[wo.work_order_no]?.prod_end ?? compEndMapR[wo.id] ?? null,
+          transfer_start: ccpTimesMapR[wo.work_order_no]?.transfer_start ?? null,
+          transfer_end: ccpTimesMapR[wo.work_order_no]?.transfer_end ?? null,
           metal_start: metalMapR[wo.id]?.start ?? null,
           metal_end: metalMapR[wo.id]?.end ?? null,
           items: (wo.work_order_items ?? [])
@@ -511,9 +529,17 @@ setLoading(false);
           // 생산시간의 실제 기록 날짜가 인쇄 페이지 날짜(production_done_at 기준)와 다르면 혼동 방지를 위해 날짜를 함께 표시
           const prodStartDateKst = wo.prod_start ? toKstDateOnly(wo.prod_start) : null;
           const timeDatePrefix = (prodStartDateKst && prodStartDateKst !== date)
-            ? `${Number(prodStartDateKst.slice(5, 7))}/${Number(prodStartDateKst.slice(8, 10))} `
-            : "";
-          return rows.map((item, idx) => {
+          ? `${Number(prodStartDateKst.slice(5, 7))}/${Number(prodStartDateKst.slice(8, 10))} `
+          : "";
+        // 전사지인쇄(8번 슬롯) 시간 — 생산 슬롯 기록과 함께 있는 WO만 생산시간 아래에 별도 표시 (날짜가 페이지 날짜와 다르면 날짜 함께 표시)
+        const trDateKst = wo.transfer_start ? toKstDateOnly(wo.transfer_start) : (wo.transfer_end ? toKstDateOnly(wo.transfer_end) : null);
+        const trDatePrefix = (trDateKst && trDateKst !== date)
+          ? `${Number(trDateKst.slice(5, 7))}/${Number(trDateKst.slice(8, 10))} `
+          : "";
+        const transferTimeHtml = (wo.transfer_start || wo.transfer_end)
+          ? `<br/><span style="font-size:6.5pt;color:#555;">(전사 ${trDatePrefix}${wo.transfer_start ? toKstTime(wo.transfer_start) : "—"}~${wo.transfer_end ? toKstTime(wo.transfer_end) : "—"})</span>`
+          : "";
+        return rows.map((item, idx) => {  
             const showWorker = !workerRendered && idx === 0;
             if (showWorker) workerRendered = true;
             const showUsage = idx === 0;
@@ -523,7 +549,7 @@ setLoading(false);
                <td style="${td}">${wo.client_name}</td>
                 <td style="${td}">${item.name}</td>
                 <td style="${tdC}">${item.actual_qty > 0 ? item.actual_qty.toLocaleString() : "—"}</td>
-                ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${timeDatePrefix}${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}</td>` : ""}
+                ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${timeDatePrefix}${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}${transferTimeHtml}</td>` : ""}
                 ${showUsage ? `<td style="${td}" rowspan="${rows.length}">${usageStr}</td>` : ""}
                 ${idx === 0 ? `<td style="${td};font-size:7pt;color:#555;" rowspan="${rows.length}">${remarkStr}</td>` : ""}
               </tr> 
@@ -763,7 +789,12 @@ setLoading(false);
                               <div className="ml-auto flex flex-col items-end gap-0.5">
                                 {(wo.prod_start || wo.prod_end) && (
                                   <span className="text-[11px] text-slate-400 tabular-nums">
-                                    생산 {wo.prod_start ? toKstTime(wo.prod_start) : "—"} ~ {wo.prod_end ? toKstTime(wo.prod_end) : "—"}
+                                                                        생산 {wo.prod_start ? toKstTime(wo.prod_start) : "—"} ~ {wo.prod_end ? toKstTime(wo.prod_end) : "—"}
+                                  </span>
+                                )}
+                                {(wo.transfer_start || wo.transfer_end) && (
+                                  <span className="text-[11px] text-slate-400 tabular-nums">
+                                    전사 {(() => { const d = wo.transfer_start ? toKstDateOnly(wo.transfer_start) : (wo.transfer_end ? toKstDateOnly(wo.transfer_end) : null); return d && d !== selectedDate ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))} ` : ""; })()}{wo.transfer_start ? toKstTime(wo.transfer_start) : "—"} ~ {wo.transfer_end ? toKstTime(wo.transfer_end) : "—"}
                                   </span>
                                 )}
                                 {(wo.metal_start || wo.metal_end) && (
