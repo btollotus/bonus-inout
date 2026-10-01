@@ -3635,7 +3635,10 @@ const totalOrder = items
                                   const cur = prev[item.id] ?? pi;
                                   const lots = cur.transfer_lots ?? [];
                                   const nextLots = isSpray && lots.length === 1 ? [{ ...lots[0], qty: String(toInt(val) + toInt(cur.defect_qty)) }] : lots;
-                                  return { ...prev, [item.id]: { ...cur, actual_qty: val, transfer_lots: nextLots } };
+                                  const oq = toInt(item.order_qty);
+                                  const av = toInt(val);
+                                  const nextGift = val && av > oq ? String(av - oq) : "";
+                                  return { ...prev, [item.id]: { ...cur, actual_qty: val, gift_qty: nextGift, transfer_lots: nextLots } };
                                 });
                               }} />
                               <div className="mt-0.5 text-[11px] text-slate-400">주문 {fmt(item.order_qty)}개</div>
