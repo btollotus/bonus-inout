@@ -510,8 +510,7 @@ export default function ProductionClient() {
   const ccp = useCcpState(warmerSlots, currentUserIdRef, showToast);
   const slotStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [stockAlerts, setStockAlerts] = useState<{ id: string; item_name: string; status: string; expiry_date: string | null; action: string | null; log_date: string }[]>([]);
-  const [showAlertPanel, setShowAlertPanel] = useState(false);
+  
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [flashKey, setFlashKey] = useState<string | null>(null);
@@ -1089,10 +1088,7 @@ export default function ProductionClient() {
 
   useEffect(() => { supabase.from("employees").select("id,name,pin,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => { if (data) setEmployees(data); }); }, []);
   useEffect(() => { supabase.from("warmer_slots").select("id,slot_name,purpose").eq("is_active", true).order("slot_no").then(({ data }) => { if (data) setWarmerSlots(data); }); }, []);
-  useEffect(() => {
-    const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
-    supabase.from("expiry_mgmt_logs").select("id,item_name,status,expiry_date,action,log_date").eq("log_date", today).in("status", ["D-30 경보", "만료", "안전재고 미달"]).order("status").then(({ data }) => { if (data) setStockAlerts(data); });
-  }, []);
+  
 
   const filteredList = useMemo(() => {
     const q = filterSearch.trim();
@@ -2487,28 +2483,7 @@ if (dupCheck && dupCheck.length > 0) {
           </div>
         </div>
 
-        {stockAlerts.length > 0 && (
-          <div>
-            <button className={`w-full flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-all ${stockAlerts.some((a) => a.status === "만료") ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100" : stockAlerts.some((a) => a.status === "안전재고 미달") ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100" : "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"}`} onClick={() => setShowAlertPanel((v) => !v)}>
-              <span>{stockAlerts.some((a) => a.status === "만료") ? "⚠" : "⚠"}</span>
-              <span>{stockAlerts.filter((a) => a.status === "만료").length > 0 && `소비기한 만료 ${stockAlerts.filter((a) => a.status === "만료").length}건 `}{stockAlerts.filter((a) => a.status === "D-30 경보").length > 0 && `D-30 경보 ${stockAlerts.filter((a) => a.status === "D-30 경보").length}건 `}{stockAlerts.filter((a) => a.status === "안전재고 미달").length > 0 && `안전재고 미달 ${stockAlerts.filter((a) => a.status === "안전재고 미달").length}건`}</span>
-              <span className="ml-auto text-xs opacity-60">{showAlertPanel ? "▲" : "▼"}</span>
-            </button>
-            {showAlertPanel && (
-              <div className="mt-1 rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500">오늘 기준 알림</div>
-                <div className="divide-y divide-slate-100 max-h-40 overflow-y-auto">
-                  {stockAlerts.map((alert) => (
-                    <div key={alert.id} className="flex items-center gap-2 px-3 py-2">
-                      <div className="flex-1 min-w-0"><div className="text-xs font-medium text-slate-800 truncate">{alert.item_name}</div>{alert.expiry_date && <div className="text-[11px] text-slate-500">소비기한: {alert.expiry_date}</div>}</div>
-                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${alert.status === "만료" ? "bg-red-100 border-red-200 text-red-700" : alert.status === "D-30 경보" ? "bg-orange-100 border-orange-200 text-orange-700" : "bg-amber-100 border-amber-200 text-amber-700"}`}>{alert.status}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        
 
         {msg && <div className={`rounded-lg border px-3 py-2 text-xs font-medium ${msg.startsWith("저장") && msg.includes("완료") ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}>{msg}<button className="ml-2 text-xs opacity-60 hover:opacity-100" onClick={() => setMsg(null)}>✕</button></div>}
         {toast && <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] rounded-xl border px-4 py-2.5 text-xs font-semibold shadow-xl ${toast.type === "success" ? "border-green-300 bg-green-600 text-white" : "border-red-300 bg-red-600 text-white"}`}>{toast.msg}</div>}
