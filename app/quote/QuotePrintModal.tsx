@@ -97,6 +97,9 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   const printRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = React.useState(false);
   const [saveMsg, setSaveMsg] = React.useState<string | null>(null);
+  const [sharing, setSharing] = React.useState(false);
+  const sharingRef = useRef(false);
+  const shareFileRef = useRef<File | null>(null);
 
   const { customerName, quoteDate, inputMode, items, memo, iceboxPrice, iceboxQty, deliveryPrice, deliveryQty, iceboxItems, deliveryItems, quoteRequestId } = quoteData;
 
@@ -313,7 +316,173 @@ table { border-collapse: collapse; width: 100%; }
     }, 400);
   }
 
-  const cellBase: React.CSSProperties = { border: "1px solid #999", padding: "3px 5px", fontSize: 12.8 };
+    // ── 카톡 공유용 이미지 생성 (doPrint와 동일하게 printRef.innerHTML 사용) ──
+  async function buildShareImage(fileName: string): Promise<File> {
+    const content = printRef.current;
+    if (!content) throw new Error("견적서 내용 없음");
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;box-sizing:border-box;padding:57px 57px 45px;background:#fff;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#111;";
+    wrap.innerHTML = content.innerHTML;
+    document.body.appendChild(wrap);
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(wrap, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+      const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, "image/png"));
+      if (!blob) throw new Error("이미지 변환 실패");
+      return new File([blob], `${fileName}.png`, { type: "image/png" });
+    } finally {
+      document.body.removeChild(wrap);
+    }
+  }
+
+  // ── 카톡 공유 + 드라이브 저장 (기존 handlePrintAndSave와 별도) ──
+  async function handleKakaoShare() {
+    if (sharingRef.current) return;
+    sharingRef.current = true;
+    setSharing(true);
+    const fileName = makeFileName();
+    let shared = false;
+    try {
+      // 1회차 클릭에서 공유 권한 만료로 실패한 경우, 만들어둔 이미지를 재사용
+      const file = shareFileRef.current ?? await buildShareImage(fileName);
+      shareFileRef.current = file;
+
+      if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: fileName });
+          shared = true;
+          shareFileRef.current = null;
+        } catch (e) {
+          const name = (e as Error)?.name;
+          if (name === "AbortError") {
+            setSaveMsg("⚠️ 공유 취소됨 (드라이브 저장 안 함)");
+          } else if (name === "NotAllowedError") {
+            setSaveMsg("⚠️ 이미지 준비 완료 — 카톡 공유 버튼을 한 번 더 눌러주세요");
+          } else {
+            setSaveMsg("⚠️ 공유 오류 (드라이브 저장 안 함)");
+          }
+        }
+      } else {
+        // 공유 미지원 브라우저: 이미지 다운로드로 대체 (드라이브 저장은 하지 않음)
+        const url = URL.createObjectURL(file);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = file.name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        shareFileRef.current = null;
+        setSaveMsg("⚠️ 이 브라우저는 공유 미지원 — 이미지로 다운로드됨");
+      }
+    } catch {
+      shareFileRef.current = null;
+      setSaveMsg("⚠️ 이미지 생성 오류");
+    }
+
+    // 공유 성공 시에만 드라이브 PDF 저장 (handlePrintAndSave와 동일한 API/파일명)
+    if (shared && quoteRequestId) {
+      setSaveMsg("📤 구글 드라이브 저장 중...");
+      try {
+        const res = await fetch("/api/trigger-quote-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quoteRequestId, fileName }),
+        });
+        setSaveMsg(res.ok ? "✅ 카톡 공유 + 드라이브 저장 요청 완료 (1~2분 소요)" : "⚠️ 드라이브 저장 실패 (카톡 공유는 완료)");
+      } catch {
+        setSaveMsg("⚠️ 드라이브 저장 오류 (카톡 공유는 완료)");
+      }
+    } else if (shared) {
+      setSaveMsg("✅ 카톡 공유 완료");
+    }
+
+    sharingRef.current = false;
+    setSharing(false);
+  }
+
+    // ── 카톡 공유용 이미지 생성 (doPrint와 동일하게 printRef.innerHTML 사용) ──
+    async function buildShareImage(fileName: string): Promise<File> {
+      const content = printRef.current;
+      if (!content) throw new Error("견적서 내용 없음");
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;box-sizing:border-box;padding:57px 57px 45px;background:#fff;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#111;";
+      wrap.innerHTML = content.innerHTML;
+      document.body.appendChild(wrap);
+      try {
+        const { default: html2canvas } = await import("html2canvas");
+        const canvas = await html2canvas(wrap, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+        const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, "image/png"));
+        if (!blob) throw new Error("이미지 변환 실패");
+        return new File([blob], `${fileName}.png`, { type: "image/png" });
+      } finally {
+        document.body.removeChild(wrap);
+      }
+    }
+  
+    // ── 카톡 공유 + 드라이브 저장 (기존 handlePrintAndSave와 별도) ──
+    async function handleKakaoShare() {
+      if (sharingRef.current) return;
+      sharingRef.current = true;
+      setSharing(true);
+      const fileName = makeFileName();
+      let shared = false;
+      try {
+        // 1회차 클릭에서 공유 권한 만료로 실패한 경우, 만들어둔 이미지를 재사용
+        const file = shareFileRef.current ?? await buildShareImage(fileName);
+        shareFileRef.current = file;
+  
+        if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({ files: [file], title: fileName });
+            shared = true;
+            shareFileRef.current = null;
+          } catch (e) {
+            const name = (e as Error)?.name;
+            if (name === "AbortError") {
+              setSaveMsg("⚠️ 공유 취소됨 (드라이브 저장 안 함)");
+            } else if (name === "NotAllowedError") {
+              setSaveMsg("⚠️ 이미지 준비 완료 — 카톡 공유 버튼을 한 번 더 눌러주세요");
+            } else {
+              setSaveMsg("⚠️ 공유 오류 (드라이브 저장 안 함)");
+            }
+          }
+        } else {
+          // 공유 미지원 브라우저: 이미지 다운로드로 대체 (드라이브 저장은 하지 않음)
+          const url = URL.createObjectURL(file);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = file.name;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          shareFileRef.current = null;
+          setSaveMsg("⚠️ 이 브라우저는 공유 미지원 — 이미지로 다운로드됨");
+        }
+      } catch {
+        shareFileRef.current = null;
+        setSaveMsg("⚠️ 이미지 생성 오류");
+      }
+  
+      // 공유 성공 시에만 드라이브 PDF 저장 (handlePrintAndSave와 동일한 API/파일명)
+      if (shared && quoteRequestId) {
+        setSaveMsg("📤 구글 드라이브 저장 중...");
+        try {
+          const res = await fetch("/api/trigger-quote-pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ quoteRequestId, fileName }),
+          });
+          setSaveMsg(res.ok ? "✅ 카톡 공유 + 드라이브 저장 요청 완료 (1~2분 소요)" : "⚠️ 드라이브 저장 실패 (카톡 공유는 완료)");
+        } catch {
+          setSaveMsg("⚠️ 드라이브 저장 오류 (카톡 공유는 완료)");
+        }
+      } else if (shared) {
+        setSaveMsg("✅ 카톡 공유 완료");
+      }
+  
+      sharingRef.current = false;
+      setSharing(false);
+    }
+  
+    const cellBase: React.CSSProperties = { border: "1px solid #999", padding: "3px 5px", fontSize: 12.8 };
   const cellHead: React.CSSProperties = { ...cellBase, background: "#f0f0f0", textAlign: "center", fontWeight: "bold" };
 
   return (
@@ -331,7 +500,11 @@ table { border-collapse: collapse; width: 100%; }
         <div className="flex gap-2">
           <button onClick={handlePrintAndSave} disabled={saving}
             className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold hover:bg-blue-700 disabled:opacity-60">
-            🖨️ 인쇄 / PDF 저장
+                        🖨️ 인쇄 / PDF 저장
+          </button>
+          <button onClick={handleKakaoShare} disabled={saving || sharing}
+            className="rounded-xl bg-yellow-400 px-5 py-2 text-sm font-bold text-slate-900 hover:bg-yellow-500 disabled:opacity-60">
+            {sharing ? "이미지 생성 중..." : "💬 카톡 공유"}
           </button>
           <button onClick={onClose}
             className="rounded-xl bg-slate-600 px-4 py-2 text-sm hover:bg-slate-500">
