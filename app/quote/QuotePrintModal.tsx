@@ -421,7 +421,7 @@ table { border-collapse: collapse; width: 100%; }
           </button>
           <button onClick={handleKakaoShare} disabled={saving || sharing}
             className="rounded-xl bg-yellow-400 px-5 py-2 text-sm font-bold text-slate-900 hover:bg-yellow-500 disabled:opacity-60">
-            {sharing ? "이미지 생성 중..." : "💬 카톡 공유"}
+            {sharing ? "이미지 생성 중..." : "💬 카톡 공유 (모바일용)"}
           </button>
           <button onClick={onClose}
             className="rounded-xl bg-slate-600 px-4 py-2 text-sm hover:bg-slate-500">
