@@ -2145,14 +2145,32 @@ if (dupCheck && dupCheck.length > 0) {
           }
         }
 
-        const { error: statusErr } = await supabase.from("work_orders").update({
-          status: "완료",
-          status_production: true,
-          ccp_slot_id: null,
-          production_done_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          ...(isTransferPaperWo ? { status_input: true, input_done_at: new Date().toISOString() } : {}),
-        }).eq("id", selectedWo.id);
+                // ── order_lines.gift_qty 업데이트 (linked_order_id 경로) — 중간재/전사지 완료 경로에도 일반 경로(else 분기)와 동일하게 반영 ──
+                if (selectedWo.linked_order_id) {
+                  for (const item of items) {
+                    const pi = prodInputs[item.id];
+                    const giftQty = pi?.gift_qty ? toInt(pi.gift_qty) : 0;
+                    if (giftQty <= 0) continue;
+                    const itemName = (item.sub_items ?? [])[0]?.name ?? "";
+                    if (!itemName) continue;
+                    const orderQty = item.order_qty ?? 0;
+                    const { error: giftErr } = await supabase.from("order_lines")
+                      .update({ gift_qty: giftQty })
+                      .eq("order_id", selectedWo.linked_order_id)
+                      .eq("name", itemName)
+                      .eq("actual_ea", orderQty);
+                    if (giftErr) stockErrors.push(`주문 증정 반영 실패: ${giftErr.message}`);
+                  }
+                }
+        
+                const { error: statusErr } = await supabase.from("work_orders").update({
+                  status: "완료",
+                  status_production: true,
+                  ccp_slot_id: null,
+                  production_done_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                  ...(isTransferPaperWo ? { status_input: true, input_done_at: new Date().toISOString() } : {}),
+                }).eq("id", selectedWo.id);
         if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
         if (stockErrors.length > 0) showToast("저장됐으나 재고 연동 오류: " + stockErrors.join(" / "), "error");
         else showToast("생산완료 처리 완료!");
