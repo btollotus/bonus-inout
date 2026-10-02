@@ -2425,7 +2425,10 @@ if (woSubNameVal) {
         const removedItemIds = originalItemIds.filter((id) => id && !currentItemIds.has(id));
         for (const rid of removedItemIds) {
           if (eWoItemActualQtyById[rid] == null) {
-            // 생산 미완료 품목: 안전하게 자동 삭제
+                        // 생산 미완료 품목: 안전하게 자동 삭제
+            // orders.work_order_item_id FK 참조 해제 후 삭제 (deleteWo와 동일 패턴)
+            const { error: clearRefErr } = await supabase.from("orders").update({ work_order_item_id: null }).eq("work_order_item_id", rid);
+            if (clearRefErr) console.error(`[saveEdit] orders.work_order_item_id 해제 오류 (${rid}):`, clearRefErr.message);
             const { error: delItemErr } = await supabase.from("work_order_items").delete().eq("id", rid);
             if (delItemErr) {
               stockWarningMsg = stockWarningMsg
