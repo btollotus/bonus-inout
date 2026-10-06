@@ -2329,12 +2329,18 @@ if (woSubNameVal) {
       
         // 품목별 이미지 저장 (eLines 전체 기준 — 기존 품목은 update, 신규 추가 품목은 work_order_items부터 생성)
         const originalItemIds = Object.keys(eWoItemActualQtyById); // 이름매칭(eWoItemIds)이 아닌, woItems 전체를 무조건 순회해 만든 목록 — 이름매칭 실패와 무관하게 정확함
+        // ── 2026-10-06 추가: 재고부족 임시 WO(createTempLotForShortage 생성, client_id = null) 여부 판별 ──
+        //    임시 WO는 재고부족 품목만 담고 있으므로, WO에 없는 주문 라인(정상출고 품목/아이스박스/택배비)을 신규 품목으로 자동생성하지 않음
+        const { data: woTypeRow, error: woTypeErr } = await supabase.from("work_orders").select("client_id").eq("id", eWoId).maybeSingle();
+        if (woTypeErr) console.error("[saveEdit] 작업지시서 유형 조회 오류:", woTypeErr.message);
+        const isShortageTempWo = !!woTypeRow && (woTypeRow as any).client_id == null;
         for (let idx = 0; idx < eLines.length; idx++) {
           const eLine = eLines[idx];
           if (!eLine?.name?.trim()) continue;
           let itemId = eLine._woItemId;
 
           if (!itemId) {
+            if (isShortageTempWo) continue; // 임시 WO: 신규 품목 자동생성 건너뜀 (2026-10-06)
             // ── 신규 추가된 품목: work_order_items 생성 + product/variant 생성 (createOrder()와 동일 패턴) ──
             const newItemName = eLine.name.trim();
             const newItemPackEa = inferPackEaFromName(newItemName);
