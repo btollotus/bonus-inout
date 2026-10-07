@@ -250,6 +250,30 @@ async function applyStockOutLots(
   return errors;
 }
 
+// 마켓 주문 재고부족 임시WO 덮어쓰기 방지 — createTempLotForShortage의 멱등성 키(주문ID+품목명)에 라인 구분이 없어
+// 임시WO 대상(특수품목·재고lot선택·variant없음 제외)인 같은 품목명 라인이 2개 이상이면 뒤 라인이 앞 라인 수량을 덮어씀(2026-08-31 눈알 1,000+400 → 400)
+// 해당 품목이 있으면 저장 차단용 안내 문구를 반환, 없으면 null
+function findDupShortageLinesMsg(
+  cleanLines: Array<{ name: string; qty: number; stock_out_lots?: { lot_id: string; qty: string }[] }>,
+  hasVariant: (name: string) => boolean
+): string | null {
+  const groups = new Map<string, number[]>();
+  for (const cl of cleanLines) {
+    if (isSpecialItem(cl.name)) continue;
+    if ((cl.stock_out_lots ?? []).length > 0) continue;
+    if (!hasVariant(cl.name)) continue;
+    groups.set(cl.name, [...(groups.get(cl.name) ?? []), cl.qty]);
+  }
+  const dups = Array.from(groups).filter(([, qtys]) => qtys.length > 1);
+  if (dups.length === 0) return null;
+  const body = dups.map(([name, qtys]) => {
+    const parts = qtys.map((q) => q.toLocaleString("ko-KR")).join(" + ");
+    const sum = qtys.reduce((a, b) => a + b, 0).toLocaleString("ko-KR");
+    return `"${name}" 품목이 ${qtys.length}줄(${parts})이고, 모두 재고 lot이 선택되지 않았습니다.\n재고가 없으면 이 품목을 한 줄(${sum})로 합쳐서 입력해 주세요.`;
+  }).join("\n\n");
+  return `⚠️ 저장되지 않았습니다.\n\n${body}`;
+}
+
 // ── Step4: 재고부족(마켓플레이스) 시 임시 lot + 임시 작업지시서 생성 (멱등성 처리 포함) ──
 async function createTempLotForShortage(
   supabaseClient: ReturnType<typeof createClient>,
@@ -1567,7 +1591,13 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     
     if (cleanLines.length === 0) return setMsg("제품명/수량과 (단가 또는 총액)을 올바르게 입력하세요.");
 
-    const { data: createdOrder, error: oErr } = await supabase.from("orders").insert({
+    // 마켓 주문 + 작업지시서 미생성(=재고부족 시 임시WO 경로): 같은 품목명 재고부족 라인 2개 이상이면 저장 차단
+    if (SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name) && !orderWoEnabled) {
+      const dupMsg = findDupShortageLinesMsg(cleanLines, (n) => !!masterByName.get(n)?.variant_id);
+      if (dupMsg) return setMsg(dupMsg);
+    }
+
+    const { data: createdOrder, error: oErr }= await supabase.from("orders").insert({
       customer_id: selectedPartner.id, customer_name: selectedPartner.name, title: null,
       ship_date: shipDate, ship_method: shipMethod, status: "DRAFT",
       memo: JSON.stringify({ title: orderTitle.trim() || null, orderer_name: ordererName.trim() || null }),
