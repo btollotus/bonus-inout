@@ -336,7 +336,7 @@ async function createTempLotForShortage(
   // 비고: 이전 WO note를 복사하되 "전사지:" 계산 줄은 현재 수량(qty)으로 재계산(주문등록 useEffect와 동일 규칙),
   //        [자동]/[정정] 줄은 이전 WO 자신의 정정 이력이므로 제외, 그 외 메모(리얼 메모·수동 메모)는 그대로 유지
   const copiedWoNote = (() => {
-    const prevNote = prevWo?.note ?? null;
+    const prevNote: string | null = prevWo?.note ?? null;
     if (!prevNote) return null;
     const cols = moldCols ?? 0, rows = moldRows ?? 0;
     let recalcLine: string | null = null;
