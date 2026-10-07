@@ -1,0 +1,119 @@
+name: Supabase Storage Backup to Google Drive
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 매일 04:00 KST = 전날 19:00 UTC (DB 백업 03:00 이후)
+    - cron: "0 19 * * *"
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install rclone
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rclone
+          rclone version
+
+      - name: Write service account json
+        env:
+          GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          mkdir -p ~/.config/rclone
+          python3 - <<'PY'
+          import os
+          p = "/home/runner/.config/rclone/sa.json"
+          s = os.environ.get("GDRIVE_SA_JSON", "")
+          if not s.strip():
+            raise SystemExit("ERROR: secrets.GDRIVE_SERVICE_ACCOUNT_JSON is empty")
+          with open(p, "w", encoding="utf-8") as f:
+            f.write(s)
+          print("sa.json written, bytes=", len(s.encode("utf-8")))
+          PY
+
+      - name: Setup rclone (Shared Drive + Supabase S3)
+        env:
+          S3_ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
+          S3_REGION: ${{ secrets.SUPABASE_S3_REGION }}
+          S3_KEY_ID: ${{ secrets.SUPABASE_S3_ACCESS_KEY_ID }}
+          S3_SECRET: ${{ secrets.SUPABASE_S3_SECRET_ACCESS_KEY }}
+        run: |
+          cat > ~/.config/rclone/rclone.conf << 'EOF'
+          [gdrive]
+          type = drive
+          scope = drive
+          service_account_file = /home/runner/.config/rclone/sa.json
+          EOF
+          python3 - <<'PY'
+          import json, os, subprocess
+          for k in ["S3_ENDPOINT", "S3_REGION", "S3_KEY_ID", "S3_SECRET"]:
+            if not os.environ.get(k, "").strip():
+              raise SystemExit(f"ERROR: secret for {k} is empty")
+
+          target_name = "Supabase-Backup"
+          out = subprocess.check_output(["rclone", "backend", "drives", "gdrive:", "--json"], text=True)
+          drives = json.loads(out)
+          did = ""
+          for d in drives:
+            if str(d.get("name", "")) == target_name:
+              did = str(d.get("id", ""))
+              break
+          if not did:
+            print("AVAILABLE DRIVES:")
+            for d in drives:
+              print("-", d.get("name"), d.get("id"))
+            raise SystemExit(f"ERROR: Could not find Shared Drive named '{target_name}'")
+          print("shared_drive_id =", did)
+
+          lines = [
+            "[gdrive]",
+            "type = drive",
+            "scope = drive",
+            "service_account_file = /home/runner/.config/rclone/sa.json",
+            f"team_drive = {did}",
+            "",
+            "[supa]",
+            "type = s3",
+            "provider = Other",
+            f"endpoint = {os.environ['S3_ENDPOINT'].strip()}",
+            f"region = {os.environ['S3_REGION'].strip()}",
+            f"access_key_id = {os.environ['S3_KEY_ID'].strip()}",
+            f"secret_access_key = {os.environ['S3_SECRET'].strip()}",
+            "",
+          ]
+          open("/home/runner/.config/rclone/rclone.conf", "w", encoding="utf-8").write("\n".join(lines))
+          print("rclone.conf written (secrets not printed)")
+          PY
+
+      - name: List buckets
+        run: |
+          rclone lsd supa:
+
+      - name: Copy each bucket to Google Drive
+        run: |
+          DEST_ROOT="gdrive:bonus-inout/storage-backup"
+          rclone mkdir "$DEST_ROOT" || true
+          for b in $(rclone lsf supa: --dirs-only); do
+            b="${b%/}"
+            echo "=== copy bucket: $b"
+            rclone copy "supa:$b" "$DEST_ROOT/$b" --transfers 4 --checkers 8 --stats-one-line -v
+          done
+
+      - name: Verify (source vs backup)
+        run: |
+          DEST_ROOT="gdrive:bonus-inout/storage-backup"
+          FAIL=0
+          for b in $(rclone lsf supa: --dirs-only); do
+            b="${b%/}"
+            SRC=$(rclone size "supa:$b" --json)
+            DST=$(rclone size "$DEST_ROOT/$b" --json)
+            SRC_N=$(echo "$SRC" | python3 -c "import json,sys;print(json.load(sys.stdin)['count'])")
+            DST_N=$(echo "$DST" | python3 -c "import json,sys;print(json.load(sys.stdin)['count'])")
+            echo "$b : source=$SRC_N files / backup=$DST_N files"
+            if [ "$DST_N" -lt "$SRC_N" ]; then
+              echo "❌ $b 백업 파일 수 부족"
+              FAIL=1
+            fi
+          done
+          exit $FAIL
