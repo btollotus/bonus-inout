@@ -333,6 +333,36 @@ async function createTempLotForShortage(
   // 5. 임시 작업지시서 생성 (이전 설정 복사, 없으면 빈 값)
   const moldCols = prevWo?.mold_cols ?? null;
   const moldRows = prevWo?.mold_rows ?? null;
+  // 비고: 이전 WO note를 복사하되 "전사지:" 계산 줄은 현재 수량(qty)으로 재계산(주문등록 useEffect와 동일 규칙),
+  //        [자동]/[정정] 줄은 이전 WO 자신의 정정 이력이므로 제외, 그 외 메모(리얼 메모·수동 메모)는 그대로 유지
+  const copiedWoNote = (() => {
+    const prevNote = prevWo?.note ?? null;
+    if (!prevNote) return null;
+    const cols = moldCols ?? 0, rows = moldRows ?? 0;
+    let recalcLine: string | null = null;
+    if (qty > 0 && cols > 0 && rows > 0) {
+      const mold = cols * rows;
+      const fullSheets = Math.floor(qty / mold);
+      const remainder = qty % mold;
+      let extraRows = remainder > 0 ? Math.ceil(remainder / cols) : 0;
+      let totalSheets = fullSheets + Math.floor(extraRows / rows);
+      extraRows = extraRows % rows;
+      let total = totalSheets * mold + extraRows * cols;
+      while (total - qty < 16) {
+        extraRows += 1;
+        if (extraRows >= rows) { extraRows = 0; totalSheets += 1; }
+        total = totalSheets * mold + extraRows * cols;
+      }
+      recalcLine = extraRows > 0
+        ? `전사지: ${totalSheets}장 ${extraRows}줄 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`
+        : `전사지: ${totalSheets}장 참고: ${total.toLocaleString("ko-KR")}개 #${cols}개=가로1줄`;
+    }
+    const kept = prevNote.split("\n")
+      .filter((l) => { const t = l.trim(); return !t.startsWith("[자동]") && !t.startsWith("[정정]"); })
+      .map((l) => (recalcLine && /^전사지[：:]/.test(l.trim()) ? recalcLine : l))
+      .join("\n");
+    return kept.trim() ? kept : null;
+  })();
   const { data: createdWo, error: woErr } = await supabaseClient.from("work_orders").insert({
     work_order_no: newWoNo, barcode_no: barcodeData,
     client_id: null, client_name: partnerName,
@@ -348,7 +378,7 @@ async function createTempLotForShortage(
     mold_cols: moldCols, mold_rows: moldRows,
     mold_per_sheet: (moldCols && moldRows) ? moldCols * moldRows : null,
     mold_count: prevWo?.mold_count ?? null,
-    note: prevWo?.note ?? null,
+    note: copiedWoNote,
     status: "생산중", variant_id: variantId, images: [],
     linked_order_id: orderId,
   }).select("id").single();
