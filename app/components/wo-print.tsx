@@ -341,25 +341,7 @@ export function WoPrintModal({
           작업지시서 인쇄 미리보기
         </div>
         <div style={{ display: "flex", gap: "8px" }}>
-          {wo.food_type && labelItems.length === 1 ? (
-            <button
-              onClick={() => copyLabelFileName(labelItems[0])}
-              title={buildLabelFileName(labelItems[0])}
-              style={{
-                padding: "8px 14px",
-                background: copiedLabelItemId === labelItems[0].id ? "#16a34a" : "#fff",
-                color: copiedLabelItemId === labelItems[0].id ? "#fff" : "#1e3a5f",
-                border: "none",
-                borderRadius: "6px",
-                fontSize: "10pt",
-                fontWeight: "bold",
-                cursor: "pointer",
-              }}
-            >
-              {copiedLabelItemId === labelItems[0].id ? "복사됨 ✓" : "📋 라벨 파일명"}
-            </button>
-          ) : null}
-          {wo.food_type && labelItems.length > 1 ? (
+        {wo.food_type && labelItems.length > 0 ? (
             <div style={{ position: "relative" }}>
               <button
                 onClick={() => setLabelListOpen((v) => !v)}
