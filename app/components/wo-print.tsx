@@ -157,6 +157,8 @@ export function WoPrintModal({
   });
 
   const [saving, setSaving] = useState(false);
+  const [copiedLabelItemId, setCopiedLabelItemId] = useState<string | null>(null);
+  const [labelListOpen, setLabelListOpen] = useState(false);
   const [signedImages, setSignedImages] = useState<string[]>([]);
   const [imagesLoading, setImagesLoading] = useState(true);
   const [signedItemImagesMap, setSignedItemImagesMap] = useState<
@@ -278,6 +280,41 @@ export function WoPrintModal({
     }, 1500);
   }
 
+  // GoLabel(.ezpx) 저장용 파일명: {거래처}-{품목}[-{학교}]-유형-{식품유형}-{바코드} (확장자는 GoLabel이 붙임)
+  const labelItems = items.filter((i) => !!i.barcode_no);
+  function buildLabelFileName(item: WoPrintItem) {
+    const clean = (s: string) =>
+      (s ?? "").replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, " ").trim();
+    return [
+      clean(wo.client_name),
+      clean((item.sub_items ?? [])[0]?.name ?? ""),
+      clean(item.school_name ?? ""),
+      "유형",
+      clean(wo.food_type ?? ""),
+      item.barcode_no ?? "",
+    ]
+      .filter(Boolean)
+      .join("-");
+  }
+  async function copyLabelFileName(item: WoPrintItem) {
+    const text = buildLabelFileName(item);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    setCopiedLabelItemId(item.id);
+    setTimeout(
+      () => setCopiedLabelItemId((cur) => (cur === item.id ? null : cur)),
+      1500
+    );
+  }
+
   return (
     <div
       style={{
@@ -304,6 +341,108 @@ export function WoPrintModal({
           작업지시서 인쇄 미리보기
         </div>
         <div style={{ display: "flex", gap: "8px" }}>
+          {wo.food_type && labelItems.length === 1 ? (
+            <button
+              onClick={() => copyLabelFileName(labelItems[0])}
+              title={buildLabelFileName(labelItems[0])}
+              style={{
+                padding: "8px 14px",
+                background: copiedLabelItemId === labelItems[0].id ? "#16a34a" : "#fff",
+                color: copiedLabelItemId === labelItems[0].id ? "#fff" : "#1e3a5f",
+                border: "none",
+                borderRadius: "6px",
+                fontSize: "10pt",
+                fontWeight: "bold",
+                cursor: "pointer",
+              }}
+            >
+              {copiedLabelItemId === labelItems[0].id ? "복사됨 ✓" : "📋 라벨 파일명"}
+            </button>
+          ) : null}
+          {wo.food_type && labelItems.length > 1 ? (
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setLabelListOpen((v) => !v)}
+                style={{
+                  padding: "8px 14px",
+                  background: "#fff",
+                  color: "#1e3a5f",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "10pt",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                {`📋 라벨 파일명 (${labelItems.length}) ${labelListOpen ? "▴" : "▾"}`}
+              </button>
+              {labelListOpen ? (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 6px)",
+                    right: 0,
+                    zIndex: 10,
+                    width: "340px",
+                    maxHeight: "60vh",
+                    overflowY: "auto",
+                    background: "#fff",
+                    color: "#111",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "8px",
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+                    padding: "4px",
+                  }}
+                >
+                  {labelItems.map((item) => {
+                    const copied = copiedLabelItemId === item.id;
+                    return (
+                      <div
+                        key={item.id}
+                        title={buildLabelFileName(item)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "8px",
+                          padding: "6px 8px",
+                          borderBottom: "1px solid #f1f5f9",
+                          fontSize: "10pt",
+                        }}
+                      >
+                        <span
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {(item.sub_items ?? [])[0]?.name ?? ""}
+                          {item.school_name ? ` ${item.school_name}` : ""}
+                        </span>
+                        <button
+                          onClick={() => copyLabelFileName(item)}
+                          style={{
+                            flexShrink: 0,
+                            padding: "4px 10px",
+                            background: copied ? "#16a34a" : "#2563eb",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: "4px",
+                            fontSize: "9pt",
+                            fontWeight: "bold",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {copied ? "복사됨 ✓" : "복사"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <button
             onClick={saveAndPrint}
             disabled={saving}
