@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
-import { utcToKSTDate } from "@/lib/utils/date";
+import { todayKST, utcToKSTDate } from "@/lib/utils/date";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useCcpState, SlotStatusPanel, WoCcpCard } from "./production-client-ccp";
 import { usePinSession, PinModal } from "@/app/contexts/PinSessionContext";
@@ -857,7 +857,7 @@ export default function ProductionClient() {
 
     const sorted = [...transferCcpEvents].sort((a, b) => a.measured_at.localeCompare(b.measured_at));
     const lastEv = sorted[sorted.length - 1];
-    const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+    const today = todayKST(); // KST 기준 오늘 (기존 toISOString().slice는 KST 09시 전 입력 시 전날로 저장됨)
     const newTimeStr = `${transferCcpTime.slice(0,2)}:${transferCcpTime.slice(2,4)}`;
 
     if (lastEv) {
