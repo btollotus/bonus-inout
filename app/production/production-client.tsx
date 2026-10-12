@@ -970,7 +970,7 @@ export default function ProductionClient() {
     if (!confirm("이 기록을 삭제하시겠습니까?")) return;
     const { data: evData } = await supabase
       .from("ccp_wo_events")
-      .select("slot_id, event_type, measured_at")
+      .select("slot_id, event_type, measured_at, work_order_no")
       .eq("id", eventId)
       .maybeSingle();
     const { error } = await supabase.from("ccp_wo_events").delete().eq("id", eventId);
@@ -980,7 +980,8 @@ export default function ProductionClient() {
         .delete()
         .eq("slot_id", evData.slot_id)
         .eq("measured_at", evData.measured_at)
-        .eq("event_type", evData.event_type);
+        .eq("event_type", evData.event_type)
+        .eq("work_order_no", evData.work_order_no); // WO번호까지 맞춰야 같은 슬롯·시각의 다른 WO CCP-1B 기록을 지우지 않음
     }
     showToast("🗑️ 삭제 완료!");
     await loadTransferCcpEvents(workOrderNo);
