@@ -2737,7 +2737,7 @@ const totalOrder = items
                         const dates = Array.from(new Set((selectedWo.work_order_items ?? []).map((it) => it.delivery_date).filter(Boolean)));
                         return dates.length > 0 ? (<><span>·</span><span>납기일 {dates.join(", ")}</span></>) : null;
                       })()}
-                      {selectedWo.production_done_at && (<><span>·</span><span>생산완료일 {new Date(new Date(selectedWo.production_done_at).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10)}</span></>)}
+                      {selectedWo.production_done_at && (<><span>·</span><span>생산완료일 {utcToKSTDate(selectedWo.production_done_at)}</span></>)}
                       {selectedWo.assignee_production && (<><span>·</span><span>생산담당 {selectedWo.assignee_production}</span></>)}
                     </div>
                   </div>
@@ -4223,7 +4223,7 @@ const totalOrder = items
                                 if (existingLog && existingLog.length > 0) {
                                   const { data: matDataEdit } = await supabase.from("materials")
                                     .select("id").eq("name", compoundNameEdit).maybeSingle();
-                                  const todayKSTDate2 = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+                                  const todayKSTDate2 = todayKST();
                                   const oldCompoundQty = Number(existingLog[0].quantity);
                                   const isRealEdit = ft.includes("리얼");
                                   await supabase.from("material_usage_logs")
@@ -4264,7 +4264,7 @@ const totalOrder = items
               if (aqty > 0 && uw > 0) totalCompoundGEdit2 += aqty * uw;
             }
             if (totalCompoundGEdit2 > 0) {
-              const todayKSTDate3 = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+              const todayKSTDate3 = todayKST();
               const noteLinesEdit2: string[] = [];
               // 컴파운드 재계산 (10/11)
               const dupNoteEdit2 = `작업지시서 생산완료 - ${selectedWo.work_order_no}`;
