@@ -8,6 +8,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import { utcToKSTDate } from "@/lib/utils/date";
 import { usePinSession, PinModal } from "@/app/contexts/PinSessionContext";
 
 const supabase = createClient();
@@ -491,7 +492,7 @@ if (!lastEvent || lastEvent.event_type === "end") {
     const temp = Number(ccpWoEditTemp);
     if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
     setCcpWoEditSaving(true);
-    const dateStr = ev.measured_at.slice(0, 10);
+    const dateStr = utcToKSTDate(ev.measured_at); // KST 기준 날짜 (UTC slice 시 KST 00~09시 기록이 전날로 저장되던 문제 수정)
     const { error } = await supabase.from("ccp_wo_events").update({
       measured_at: `${dateStr}T${ccpWoEditTime.slice(0,2)}:${ccpWoEditTime.slice(2,4)}:00+09:00`,
       temperature: temp,

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
+import { utcToKSTDate } from "@/lib/utils/date";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useCcpState, SlotStatusPanel, WoCcpCard } from "./production-client-ccp";
 import { usePinSession, PinModal } from "@/app/contexts/PinSessionContext";
@@ -933,7 +934,7 @@ export default function ProductionClient() {
     const temp = Number(transferCcpEditTemp);
     if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
     setTransferCcpEditSaving(true);
-    const dateStr = ev.measured_at.slice(0, 10);
+    const dateStr = utcToKSTDate(ev.measured_at); // KST 기준 날짜 (UTC slice 시 KST 00~09시 기록이 전날로 저장되던 문제 수정)
     const { error } = await supabase.from("ccp_wo_events").update({
       measured_at: `${dateStr}T${transferCcpEditTime.slice(0,2)}:${transferCcpEditTime.slice(2,4)}:00+09:00`,
       temperature: temp,
