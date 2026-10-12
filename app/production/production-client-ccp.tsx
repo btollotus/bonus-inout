@@ -1371,6 +1371,23 @@ export function WoCcpCard({
   const [slotAssignPinPendingAction, setSlotAssignPinPendingAction] = useState<((name: string) => void) | null>(null);
   const [pinRequiredFoodTypes, setPinRequiredFoodTypes] = useState<Set<string>>(new Set());
   const [slotAssignEmployees, setSlotAssignEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
+  // 슬롯 지정 시 이어받을 시작 시각 선택창 (null = 닫힘)
+  const [inheritPick, setInheritPick] = useState<{ slotName: string; starts: string[] } | null>(null);
+  const [inheritChoice, setInheritChoice] = useState<string>("");
+  const inheritResolveRef = useRef<((picked: string | null) => void) | null>(null);
+  function askInheritStart(slotName: string, starts: string[]): Promise<string | null> {
+    return new Promise((resolve) => {
+      inheritResolveRef.current = resolve;
+      setInheritChoice(""); // 기본값: 이어받지 않음
+      setInheritPick({ slotName, starts });
+    });
+  }
+  function closeInheritPick(picked: string | null) {
+    setInheritPick(null);
+    const resolve = inheritResolveRef.current;
+    inheritResolveRef.current = null;
+    resolve?.(picked);
+  }
 
   useEffect(() => {
     supabase.from("food_types").select("name").eq("requires_pin", true)
@@ -1452,21 +1469,32 @@ export function WoCcpCard({
 
     if (myEvents && myEvents.length > 0) return;
 
-    // 소급 복사 전 사용자 확인
-    const slotName = warmerSlots.find((w: any) => w.id === s.id)?.slot_name ?? s.id;
-    const eventSummary = existingEvents
-      .filter((ev: any) => ev.event_type !== "end")
-      .map((ev: any) => `${toKSTTime(ev.measured_at)} ${CCP_WO_EVENT_LABELS[ev.event_type] ?? ev.event_type}`)
-      .join(", ");
-    const shouldCopy = confirm(
-      `[${slotName}] 슬롯에 오늘 진행 중인 온도 기록이 있습니다.\n\n${eventSummary}\n\n이 기록을 이어받겠습니까?\n(같은 슬롯에서 동시 생산 중인 경우 [확인], 아닌 경우 [취소])`
-    );
-    if (!shouldCopy) return;
-
-    // 기존 기록 중 중복 없는 것만 복사. end는 WO별 별도 기록이므로 제외
-    const toInsert = existingEvents
-      .filter((ev: any) => ev.event_type !== "end")
-      .map((ev: any) => ({
+        // 소급 복사: 이어받을 시작 시각을 작업자가 직접 선택 (자동으로는 어느 회차인지 알 수 없음)
+        const slotName = warmerSlots.find((w: any) => w.id === s.id)?.slot_name ?? s.id;
+        const nonEndEvents = existingEvents.filter((ev: any) => ev.event_type !== "end");
+        const startTimes = Array.from(new Set<string>(
+          nonEndEvents.filter((ev: any) => ev.event_type === "start").map((ev: any) => ev.measured_at as string)
+        )).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+        if (startTimes.length === 0) return;
+        const picked = await askInheritStart(slotName, startTimes);
+        if (!picked) return;
+    
+        // 고른 시작 1건 + 그 시작과 다음 시작 사이의 중간점검만 복사. 같은 기록(유형+시각)은 1번만. end는 WO별 별도 기록이므로 제외
+        const pickedMs = new Date(picked).getTime();
+        const nextStartMs = startTimes.map((t) => new Date(t).getTime()).filter((ms) => ms > pickedMs)[0] ?? Infinity;
+        const copiedKeys = new Set<string>();
+        const toInsert = nonEndEvents
+          .filter((ev: any) => {
+            const ms = new Date(ev.measured_at).getTime();
+            return ev.event_type === "start" ? ms === pickedMs : (ms > pickedMs && ms < nextStartMs);
+          })
+          .filter((ev: any) => {
+            const key = `${ev.event_type}|${new Date(ev.measured_at).getTime()}`;
+            if (copiedKeys.has(key)) return false;
+            copiedKeys.add(key);
+            return true;
+          })
+          .map((ev: any) => ({
         work_order_no: selectedWo.work_order_no,
         slot_id:       ev.slot_id,
         event_type:    ev.event_type,
@@ -1477,8 +1505,12 @@ export function WoCcpCard({
         created_by:    ev.created_by,
       }));
 
-    await supabaseClient.from("ccp_wo_events").insert(toInsert);
-  }
+      const { error: copyErr } = await supabaseClient.from("ccp_wo_events").insert(toInsert);
+      if (copyErr) {
+        console.error("CCP 기록 이어받기 오류:", copyErr.message);
+        alert("온도 기록 이어받기에 실패했습니다: " + copyErr.message);
+      }
+    }
 
   // 유동 슬롯 2열 3행 렌더 (CCP 슬롯 지정용, 라벨 없음)
   const renderWoFluidGrid = () => {
@@ -1559,6 +1591,32 @@ export function WoCcpCard({
           }}
           onCancel={() => { setShowSlotAssignPinModal(false); setSlotAssignPinPendingAction(null); }}
         />
+      )}
+
+            {/* 슬롯 지정 시 이어받을 시작 시각 선택 */}
+            {inheritPick && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <div className="mb-1 text-sm font-bold text-slate-800">[{inheritPick.slotName}] 슬롯 온도 기록 이어받기</div>
+            <div className="mb-3 text-xs text-slate-500">같은 회차로 함께 생산한 경우에만 해당 시작 시각을 고르세요.</div>
+            <div className="space-y-1.5">
+              {inheritPick.starts.map((t) => (
+                <label key={t} className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50">
+                  <input type="radio" name="inherit-start" checked={inheritChoice === t} onChange={() => setInheritChoice(t)} />
+                  <span className="tabular-nums">{toKSTTime(t)} 시작</span>
+                </label>
+              ))}
+              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50">
+                <input type="radio" name="inherit-start" checked={inheritChoice === ""} onChange={() => setInheritChoice("")} />
+                <span>이어받지 않음 (직접 시작 기록 입력)</span>
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-50" onClick={() => closeInheritPick(null)}>취소</button>
+              <button className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700" onClick={() => closeInheritPick(inheritChoice || null)}>확인</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 슬롯 지정 */}
