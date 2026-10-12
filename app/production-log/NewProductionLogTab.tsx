@@ -35,6 +35,7 @@ type WorkOrder = {
   transfer_end?: string | null;   // ccp_wo_events 8번 슬롯(전사지인쇄) end — 생산 슬롯 기록이 함께 있을 때만
   metal_start?: string | null;  // ccp_metal_logs start_time
   metal_end?: string | null;    // ccp_metal_logs b_end_time
+  log_label?: string | null;    // 여러 날 생산: 이 날짜에 완료되지 않은 WO 표시 문구 ("생산중" / "생산중 (완료 M/D)")
 };
 
 type BlendLog = {
@@ -102,7 +103,120 @@ function buildCcpTimesMap(events: any[]): Record<string, CcpTimes> {
   return result;
 }
 
-// ─── 컴파운드/이산화티타늄 분리 표시용 (production-client.tsx와 동일 기준 — 그쪽 변경 시 같이 수정 필요) ───
+// ─── 여러 날에 걸친 생산 WO 지원 (A안 · 기준1) ───
+// - 생산 CCP 기록 = 8번 외 슬롯. 단 전사지/중간재 WO는 8번 슬롯도 생산으로 본다.
+// - 생산일지 날짜에 생산 CCP 기록이 있으면, 완료일이 다르거나 미완료여도 그 날짜 일지에 표시한다.
+function isTransferTypeWo(foodType: string | null | undefined) {
+  const ft = foodType ?? "";
+  return ft.includes("중간재") || ft.includes("전사");
+}
+
+// 그 날짜에 생산 CCP 기록이 있지만 production_done_at 기준 조회(existingNos)에는 없는 WO를 가져온다.
+// 반환되는 WO에는 log_label("생산중" / "생산중 (완료 M/D)")이 붙는다.
+async function fetchExtraProdWos(date: string, existingNos: string[]): Promise<any[]> {
+  const { data: dayEv, error: dayEvErr } = await supabase
+    .from("ccp_wo_events")
+    .select("work_order_no, warmer_slots(slot_name)")
+    .gte("measured_at", `${date}T00:00:00+09:00`)
+    .lte("measured_at", `${date}T23:59:59.999+09:00`);
+  if (dayEvErr) { console.error("생산일지 CCP 조회 오류:", dayEvErr.message); return []; }
+  const existing = new Set(existingNos);
+  const slotsByNo: Record<string, Set<string>> = {};
+  (dayEv ?? []).forEach((ev: any) => {
+    const no = ev.work_order_no;
+    if (!no || existing.has(no)) return;
+    if (!slotsByNo[no]) slotsByNo[no] = new Set();
+    slotsByNo[no].add(ev.warmer_slots?.slot_name ?? "");
+  });
+  const candNos = Object.keys(slotsByNo);
+  if (candNos.length === 0) return [];
+  const { data: wos, error: wosErr } = await supabase
+    .from("work_orders")
+    .select("id,work_order_no,client_name,product_name,food_type,note,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,status_production,work_order_items(sub_items,actual_qty,unit_weight,defect_qty)")
+    .in("work_order_no", candNos);
+    if (wosErr) { console.error("생산일지 WO 조회 오류:", wosErr.message); return []; }
+  const filtered = (wos ?? []).filter((wo: any) => {
+    const slots = Array.from(slotsByNo[wo.work_order_no] ?? []);
+    return slots.some((s) => s !== "8") || (slots.includes("8") && isTransferTypeWo(wo.food_type));
+  });
+  // [나안] 미완료 + 작업자 미지정 WO만: 그 날짜 첫 생산 CCP 기록자(ccp_slot_events.action_by = PIN 확인 이름)를 작업자로 표시
+  // 완료된 WO는 기존처럼 assignee_production을 그대로 쓴다.
+  const needRecorderNos = filtered
+    .filter((wo: any) => !wo.status_production && !wo.assignee_production)
+    .map((wo: any) => wo.work_order_no);
+  const recorderByNo: Record<string, string> = {};
+  if (needRecorderNos.length > 0) {
+    const { data: recEv, error: recErr } = await supabase
+      .from("ccp_slot_events")
+      .select("work_order_no, action_by, measured_at, warmer_slots(slot_name)")
+      .in("work_order_no", needRecorderNos)
+      .in("event_type", ["start", "mid_check", "end"])
+      .not("action_by", "is", null)
+      .gte("measured_at", `${date}T00:00:00+09:00`)
+      .lte("measured_at", `${date}T23:59:59.999+09:00`)
+      .order("measured_at", { ascending: true });
+    if (recErr) console.error("생산일지 CCP 기록자 조회 오류:", recErr.message);
+    (recEv ?? []).forEach((ev: any) => {
+      const no = ev.work_order_no;
+      if (!no || recorderByNo[no] || ev.warmer_slots?.slot_name === "8") return;
+      recorderByNo[no] = ev.action_by;
+    });
+  }
+  return filtered.map((wo: any) => {
+    const doneDate = wo.status_production && wo.production_done_at ? toKstDateOnly(wo.production_done_at) : null;
+    const log_label = doneDate
+      ? `생산중 (완료 ${Number(doneDate.slice(5, 7))}/${Number(doneDate.slice(8, 10))})`
+      : "생산중";
+    const assignee_production = wo.assignee_production ?? recorderByNo[wo.work_order_no] ?? null;
+    return { ...wo, assignee_production, log_label };
+  });
+}
+
+// 날짜별 생산시간/전사시간 맵
+// - 그 날짜에 생산 CCP 기록이 있는 WO: 그 날짜의 생산 기록만으로 시간 계산
+// - 그 날짜에 생산 CCP 기록이 없는 WO(생산은 전날, 완료처리만 이 날짜): 기존 buildCcpTimesMap 결과 그대로
+// - 전사시간(8번): 전사한 날짜의 행에 표시. 전사한 날짜에 생산 기록이 없으면 완료일 행에 표시(기존과 동일)
+function buildCcpTimesMapForDate(
+  events: any[],
+  date: string,
+  wos: any[]
+): Record<string, CcpTimes> {
+  const foodTypeByNo: Record<string, string | null> = {};
+  const doneDateByNo: Record<string, string | null> = {};
+  wos.forEach((wo: any) => {
+    foodTypeByNo[wo.work_order_no] = wo.food_type ?? null;
+    doneDateByNo[wo.work_order_no] = wo.production_done_at ? toKstDateOnly(wo.production_done_at) : null;
+  });
+  const allMap = buildCcpTimesMap(events);
+  const dayMap = buildCcpTimesMap(events.filter((ev: any) => ev.measured_at && toKstDateOnly(ev.measured_at) === date));
+  const prodDays: Record<string, Set<string>> = {};
+  for (const ev of events) {
+    const no = ev.work_order_no;
+    if (!no || !ev.measured_at) continue;
+    if (ev.warmer_slots?.slot_name === "8" && !isTransferTypeWo(foodTypeByNo[no])) continue;
+    if (!prodDays[no]) prodDays[no] = new Set();
+    prodDays[no].add(toKstDateOnly(ev.measured_at));
+  }
+  const result: Record<string, CcpTimes> = {};
+  Object.keys(allMap).forEach((no) => {
+    const all = allMap[no];
+    const days = prodDays[no] ?? new Set<string>();
+    if (!days.has(date)) { result[no] = all; return; }
+    const day = dayMap[no];
+    const trAt = all.transfer_start ?? all.transfer_end;
+    const trDate = trAt ? toKstDateOnly(trAt) : null;
+    const showTransfer = !!trDate && (trDate === date || (doneDateByNo[no] === date && !days.has(trDate)));
+    result[no] = {
+      prod_start: day?.prod_start ?? null,
+      prod_end: day?.prod_end ?? null,
+      transfer_start: showTransfer ? all.transfer_start : null,
+      transfer_end: showTransfer ? all.transfer_end : null,
+    };
+  });
+  return result;
+}
+
+// ─── 컴파운드/이산화티타늄 분리 표시용(production-client.tsx와 동일 기준 — 그쪽 변경 시 같이 수정 필요) ───
 const DARK_FOOD_TYPES = ["다크화이트","다크옐로우","데코초콜릿","롤리팝다크화이트","다크핑크","다크연두","롤리팝다크핑크"];
 
 function getFoodCategoryForWeight(foodType: string | null | undefined): "다크" | "화이트" | "중간재" | null {
@@ -230,7 +344,10 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     ]);
     // 생산시간(ccp_wo_events)은 조회 날짜 범위가 아니라 화면에 표시되는 WO번호로 직접 조회한다.
     // (완료 후 재수정으로 production_done_at이 실제 생산일과 달라져도, 실제 기록된 생산시간을 그대로 보여주기 위함)
-    const woNosForCcp = (woRes.data ?? []).map((w: any) => w.work_order_no);
+        // [여러 날 생산] 이 날짜에 생산 CCP 기록이 있지만 완료일이 다르거나 미완료인 WO도 일지 대상에 추가
+        const extraWos = await fetchExtraProdWos(selectedDate, (woRes.data ?? []).map((w: any) => w.work_order_no));
+        const baseWos: any[] = [...(woRes.data ?? []), ...extraWos];
+        const woNosForCcp = baseWos.map((w: any) => w.work_order_no);
     const { data: ccpEvData } = woNosForCcp.length > 0
       ? await supabase
           .from("ccp_wo_events")
@@ -241,10 +358,10 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     const ccpEvRes = { data: ccpEvData };
 
         // work_order_no별 생산시간/전사시간 맵 (8번 슬롯 분리 — buildCcpTimesMap 참고)
-        const ccpTimesMap = buildCcpTimesMap(ccpEvRes.data ?? []);
+        const ccpTimesMap = buildCcpTimesMapForDate(ccpEvRes.data ?? [], selectedDate, baseWos);
 
     // 분사/코팅 WO 생산시간(compressor_logs)도 같은 방식(WO ID 직접 조회)으로 보강 — ccp_wo_events가 없는 WO의 fallback
-    const woIdsForComp = (woRes.data ?? []).map((w: any) => w.id);
+    const woIdsForComp = baseWos.map((w: any) => w.id);
     const { data: compTimeData } = woIdsForComp.length > 0
       ? await supabase
           .from("compressor_logs")
@@ -303,7 +420,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
       });
     }
    // 작업지시서에 원료 사용량 + items + 시간 주입
-   const enrichedWorkOrders = (woRes.data ?? []).map((wo: any) => ({
+   const enrichedWorkOrders = baseWos.map((wo: any) => ({
     ...wo,
     usages: woUsageMap[wo.work_order_no] ?? [],
     prod_start: ccpTimesMap[wo.work_order_no]?.prod_start ?? compStartMap[wo.id] ?? null,
@@ -390,7 +507,10 @@ setLoading(false);
           .eq("log_date", date),
       ]);
       // 생산시간(ccp_wo_events)은 날짜범위가 아니라 화면에 표시되는 WO번호로 직접 조회 (단일 날짜 조회와 동일한 이유)
-      const woNosForCcpR = (woRes.data ?? []).map((w: any) => w.work_order_no);
+            // [여러 날 생산] 단일 날짜 조회와 동일 — 이 날짜에 생산 CCP 기록이 있는 미완료/다른 날 완료 WO 추가
+            const extraWosR = await fetchExtraProdWos(date, (woRes.data ?? []).map((w: any) => w.work_order_no));
+            const baseWosR: any[] = [...(woRes.data ?? []), ...extraWosR];
+            const woNosForCcpR = baseWosR.map((w: any) => w.work_order_no);
       const { data: ccpEvData2 } = woNosForCcpR.length > 0
         ? await supabase
             .from("ccp_wo_events")
@@ -399,9 +519,9 @@ setLoading(false);
             .order("measured_at", { ascending: true })
         : { data: [] as any[] };
       const ccpEvRes2 = { data: ccpEvData2 };
-      const ccpTimesMapR = buildCcpTimesMap(ccpEvRes2.data ?? []);
+      const ccpTimesMapR = buildCcpTimesMapForDate(ccpEvRes2.data ?? [], date, baseWosR);
       // 분사/코팅 WO 생산시간(compressor_logs) fallback — 단일 날짜 조회와 동일한 로직
-      const woIdsForCompR = (woRes.data ?? []).map((w: any) => w.id);
+      const woIdsForCompR = baseWosR.map((w: any) => w.id);
       const { data: compTimeDataR } = woIdsForCompR.length > 0
         ? await supabase
             .from("compressor_logs")
@@ -450,7 +570,7 @@ setLoading(false);
       const materialUsages = Object.entries(usageMap)
         .map(([material_name, v]) => ({ material_name, ...v }))
         .sort((a, b) => a.material_name.localeCompare(b.material_name));
-        const enrichedWorkOrdersR = (woRes.data ?? []).map((wo: any) => ({
+        const enrichedWorkOrdersR = baseWosR.map((wo: any) => ({
           ...wo,
           usages: woUsageMapR[wo.work_order_no] ?? [],
           prod_start: ccpTimesMapR[wo.work_order_no]?.prod_start ?? compStartMapR[wo.id] ?? null,
@@ -548,7 +668,7 @@ setLoading(false);
                 ${showWorker ? `<td style="${td}text-align:center;" rowspan="${workerTotalRows}">${worker}</td>` : ""}
                <td style="${td}">${wo.client_name}</td>
                 <td style="${td}">${item.name}</td>
-                <td style="${tdC}">${item.actual_qty > 0 ? item.actual_qty.toLocaleString() : "—"}</td>
+                                <td style="${tdC}">${wo.log_label ? `<span style="font-size:6.5pt;">${wo.log_label.replace(" ", "<br/>")}</span>` : (item.actual_qty > 0 ? item.actual_qty.toLocaleString() : "—")}</td>
                 ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${timeDatePrefix}${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}${transferTimeHtml}</td>` : ""}
                 ${showUsage ? `<td style="${td}" rowspan="${rows.length}">${usageStr}</td>` : ""}
                 ${idx === 0 ? `<td style="${td};font-size:7pt;color:#555;" rowspan="${rows.length}">${remarkStr}</td>` : ""}
@@ -803,7 +923,9 @@ setLoading(false);
                                   </span>
                                 )}
                               </div>
-                              {(wo.skip_production_check || (wo.food_type ?? "").includes("전사")) ? (
+                              {wo.log_label ? (
+                                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">{wo.log_label}</span>
+                              ) : (wo.skip_production_check || (wo.food_type ?? "").includes("전사")) ? (
                                 <span className="rounded-full border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">생산완료</span>
                               ) : (
                                 <span className="rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">금속검출완료</span>
@@ -824,7 +946,7 @@ setLoading(false);
                                     </div>
                                   )}
                                 </div>
-                                {item.actual_qty > 0 && (
+                                {item.actual_qty > 0 && !wo.log_label && (
                                   <span className="text-xs text-slate-400 tabular-nums break-words">
                                     {renderQtyWeightText(item.order_qty ?? 0, item.actual_qty, item.defect_qty ?? 0, item.unit_weight ?? 0, wo.food_type)}
                                   </span>
