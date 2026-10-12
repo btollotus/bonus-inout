@@ -935,15 +935,33 @@ export default function ProductionClient() {
     if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
     setTransferCcpEditSaving(true);
     const dateStr = utcToKSTDate(ev.measured_at); // KST 기준 날짜 (UTC slice 시 KST 00~09시 기록이 전날로 저장되던 문제 수정)
+    const newMeasuredAt = `${dateStr}T${transferCcpEditTime.slice(0,2)}:${transferCcpEditTime.slice(2,4)}:00+09:00`;
     const { error } = await supabase.from("ccp_wo_events").update({
-      measured_at: `${dateStr}T${transferCcpEditTime.slice(0,2)}:${transferCcpEditTime.slice(2,4)}:00+09:00`,
+      measured_at: newMeasuredAt,
       temperature: temp,
       is_ok: transferCcpEditIsOk,
       action_note: transferCcpEditActionNote.trim() || null,
     }).eq("id", ev.id);
+    if (error) { setTransferCcpEditSaving(false); return showToast("수정 실패: " + error.message, "error"); }
+    // CCP-1B 일지(ccp_slot_events)의 짝 기록도 같은 값으로 수정 — 슬롯+기존 시각+유형+WO번호로 찾아 다른 WO 기록은 건드리지 않음
+    // end 기록의 action_note는 "업체 · 제품" 표시용이라 수정하지 않음 (저장 로직과 동일 기준)
+    const { error: slotErr } = await supabase.from("ccp_slot_events").update({
+      measured_at: newMeasuredAt,
+      temperature: temp,
+      is_ok: transferCcpEditIsOk,
+      ...(ev.event_type !== "end" ? { action_note: transferCcpEditActionNote.trim() || null } : {}),
+    })
+      .eq("slot_id", ev.slot_id)
+      .eq("measured_at", ev.measured_at)
+      .eq("event_type", ev.event_type)
+      .eq("work_order_no", ev.work_order_no);
     setTransferCcpEditSaving(false);
-    if (error) return showToast("수정 실패: " + error.message, "error");
-    showToast("✅ 수정 완료!");
+    if (slotErr) {
+      console.error("CCP-1B 일지(ccp_slot_events) 수정 오류:", slotErr.message);
+      showToast("수정은 저장됐지만 CCP-1B 일지 반영에 실패했습니다: " + slotErr.message, "error");
+    } else {
+      showToast("✅ 수정 완료!");
+    }
     setTransferCcpEditingId(null);
     await loadTransferCcpEvents(workOrderNo);
   }
