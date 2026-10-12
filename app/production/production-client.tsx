@@ -1482,7 +1482,7 @@ export default function ProductionClient() {
             const pi = prodInputs[item.id];
             const transferLots = pi?.transfer_lots ?? [];
             if (transferLots.length === 0) continue;
-            const today = `${new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10)}T00:00:00+09:00`;
+            const today = `${todayKST()}T00:00:00+09:00`;
             const itemName = (item.sub_items ?? [])[0]?.name ?? item.id;
             const succeededLots: { lot_id: string; qty: number }[] = [];
             for (const tl of transferLots) {
@@ -1517,7 +1517,7 @@ export default function ProductionClient() {
             }).eq("id", item.id);
           }
      // 도눔(은박) 완성품 입고 (포장완료 수량만큼 IN, 화면 입력 소비기한 사용)
-     const todayKSTDatePkg = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+     const todayKSTDatePkg = todayKST();
      for (const item of items) {
        const pi = prodInputs[item.id];
        if (!pi || !pi.actual_qty || !pi.expiry_date) continue;
@@ -1585,7 +1585,7 @@ export default function ProductionClient() {
     return showToast("⚠ 종료 시각은 시작 시각보다 뒤여야 합니다.", "error");
   }
   setCompSaving(true);
-  const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+  const today = todayKST();
   const logDate = compLogDate || today;
   const startIso = `${logDate}T${compStartTime.slice(0,2)}:${compStartTime.slice(2,4)}:00+09:00`;
   const endIso = `${logDate}T${compEndTime.slice(0,2)}:${compEndTime.slice(2,4)}:00+09:00`;
@@ -1648,7 +1648,7 @@ async function doCompleteSprayCoating(productionAssignee: string, subType: "분�
   try {
     const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id ?? null;
-    const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+    const today = todayKST();
 
 // ── 중복 실행 방어: 이미 blend_logs가 존재하면 중단 ──
 const dupRecipeName = subType === "분사" ? "레이즈 분사" : "레이즈 코팅";
@@ -2048,7 +2048,7 @@ if (dupCheck && dupCheck.length > 0) {
             if (lotErr) { stockErrors.push("LOT 생성 실패: " + lotErr.message); continue; }
             lotId = newLot.id;
           }
-          const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+          const todayKSTDate = todayKST();
           const inNoteChuganJae = "작업지시서 생산완료 - " + selectedWo.work_order_no;
           const { data: existingChuganJaeInMov } = await supabase.from("movements")
             .select("id").eq("lot_id", lotId).eq("type", "IN").eq("note", inNoteChuganJae).limit(1);
@@ -2089,11 +2089,9 @@ if (dupCheck && dupCheck.length > 0) {
               if (!jsDupCheck || jsDupCheck.length === 0) {
                 const jeonsakName30 = selectedWo.transfer_sheet_size === "320x450" ? "전사지 32*45" : "전사지 30*40";
                 const { data: jsMatData } = await supabase.from("materials")
-                  .select("id").eq("name", jeonsakName30).maybeSingle();
+                .select("id").eq("name", jeonsakName30).maybeSingle();
                 if (jsMatData?.id) {
-                  const todayKSTDate = new Date(
-                    new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
-                  ).toISOString().slice(0, 10);
+                  const todayKSTDate = todayKST();
                   const { error: jsErr } = await supabase.from("material_usage_logs").insert({
                     material_id: jsMatData.id,
                     used_date: todayKSTDate,
@@ -2123,11 +2121,9 @@ if (dupCheck && dupCheck.length > 0) {
                 .select("id").eq("note", jeonsakNote).limit(1);
               if (!jsDupCheck || jsDupCheck.length === 0) {
                 const { data: jsMatData } = await supabase.from("materials")
-                  .select("id").eq("name", sheetMaterialName).maybeSingle();
+                .select("id").eq("name", sheetMaterialName).maybeSingle();
                 if (jsMatData?.id) {
-                  const todayKSTDate = new Date(
-                    new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
-                  ).toISOString().slice(0, 10);
+                  const todayKSTDate = todayKST();
                   const { error: jsErr } = await supabase.from("material_usage_logs").insert({
                     material_id: jsMatData.id,
                     used_date: todayKSTDate,
@@ -2224,10 +2220,8 @@ if (dupCheck && dupCheck.length > 0) {
               const { data: matData } = await supabase.from("materials")
                 .select("id").eq("name", compoundName).maybeSingle();
   
-              const todayKSTDate = new Date(
-                new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
-              ).toISOString().slice(0, 10);
-              const ft = eFoodType || selectedWo.food_type || "";
+                const todayKSTDate = todayKST();
+                const ft = eFoodType || selectedWo.food_type || "";
               const isReal = ft.includes("리얼");
   
               // 리얼 식품유형: 화이트컴파운드(10/11) + 이산화티타늄(1/11) 별도 차감
@@ -2326,9 +2320,7 @@ if (dupCheck && dupCheck.length > 0) {
                       const { data: jsMatData } = await supabase.from("materials")
                         .select("id").eq("name", jeonsakName32).maybeSingle();
                       if (jsMatData?.id) {
-                        const todayKSTDate = new Date(
-                          new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })
-                        ).toISOString().slice(0, 10);
+                        const todayKSTDate = todayKST();
                         const { error: jsErr } = await supabase.from("material_usage_logs").insert({
                           material_id: jsMatData.id,
                           used_date: todayKSTDate,
@@ -3201,7 +3193,7 @@ const totalOrder = items
                                   // 3. movements OUT + pet_stock_logs 즉시 기록
                                   const { data: { user } } = await supabase.auth.getUser();
                                   const userId = user?.id ?? null;
-                                  const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+                                  const todayKSTDate = todayKST();                                     
                                   let totalSprayQty = 0;
                                   for (const tl of neoColorSprayLots) {
                                     const sprayQty = toInt(tl.qty);
@@ -3317,7 +3309,7 @@ const totalOrder = items
                                   // 재삽입
                                   const { data: { user } } = await supabase.auth.getUser();
                                   const userId = user?.id ?? null;
-                                  const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+                                  const todayKSTDate = todayKST();
                                   let totalSprayQty = 0;
                                   for (const tl of neoColorSprayLots) {
                                     const sprayQty = toInt(tl.qty);
@@ -3986,7 +3978,7 @@ const totalOrder = items
                                   const { data: existingPackagingIn } = await supabase.from("movements").select("id").eq("lot_id", inLotId).eq("type", "IN").eq("note", packagingInNote).limit(1);
                                   if (!existingPackagingIn || existingPackagingIn.length === 0) {
                                     const { data: { user: inUser } } = await supabase.auth.getUser();
-                                    const todayKSTForIn = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+                                    const todayKSTForIn = todayKST();
                                     const { error: packagingInErr } = await supabase.from("movements").insert({
                                       lot_id: inLotId, type: "IN", qty: actualQtyForIn,
                                       happened_at: `${todayKSTForIn}T00:00:00+09:00`,
@@ -4017,7 +4009,7 @@ const totalOrder = items
                                                               const moveQty = Math.min(oldRemaining, toInt(pi.actual_qty || "0"));
                                                               if (moveQty > 0) {
                                                                 const itemNameForExp = (item.sub_items ?? [])[0]?.name ?? "";
-                                                                const todayKSTForExp = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+                                                                const todayKSTForExp = todayKST();
                                                                 let newLotId: string | null = null;
                                                                 const { data: existingNewLot } = await supabase.from("lots").select("id").eq("variant_id", expVariantId).eq("expiry_date", pi.expiry_date).maybeSingle();
                                                                 if (existingNewLot?.id) { newLotId = existingNewLot.id; } else {
@@ -4066,7 +4058,7 @@ const totalOrder = items
                                       await supabase.from("movements").delete().eq("id", discardMovs[0].id);
                                     }
                                   } else if (discardMovs && discardMovs.length === 0 && newDefectQty > 0) {
-                                    const todayKSTDate = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" })).toISOString().slice(0, 10);
+                                    const todayKSTDate = todayKST();
                                     await supabase.from("movements").insert({
                                       lot_id: lotId, type: "DISCARD", qty: newDefectQty,
                                       happened_at: `${todayKSTDate}T00:00:00+09:00`,
