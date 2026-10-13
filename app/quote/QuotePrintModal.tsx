@@ -133,12 +133,14 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
   for (const item of items) {
       // ── 전사지 단독 품목 처리 ──
       if (item.productType === "전사지") {
-        const sheetSupply = item.quantity * 3000;
-        const sheetName = (item.nickname ? `[${item.nickname}] ` : "") + `전사지 (${item.quantity}장 × 3,000원)`;
-        lineItems.push({
-          name: sheetName,
-          qty: String(item.quantity),
-          unit: 3000,
+                // 수동 단가 반영: 계산/저장된 전사지 비용(sheetCost) 기준, 값이 없으면 기존 장당 3,000원
+                const sheetSupply = item.sheetCost > 0 ? item.sheetCost : item.quantity * 3000;
+                const sheetUnit = item.quantity > 0 ? Math.round(sheetSupply / item.quantity) : 3000;
+                const sheetName = (item.nickname ? `[${item.nickname}] ` : "") + `전사지 (${item.quantity}장 × ${fmt(sheetUnit)}원)`;
+                lineItems.push({
+                  name: sheetName,
+                  qty: String(item.quantity),
+                  unit: sheetUnit,
           supply: sheetSupply,
           vat: Math.round(sheetSupply * 0.1),
           total: sheetSupply + Math.round(sheetSupply * 0.1),
