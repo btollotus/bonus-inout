@@ -114,7 +114,9 @@ const PRODUCT_TYPES = [
   { key: "롤리팝2도55",    label: "롤리팝 2도 55mm" },
   { key: "롤리팝레이즈-별도", label: "롤리팝레이즈-별도" },
   { key: "입체초콜릿",     label: "입체초콜릿 (수동)" },
+  { key: "전사없음2mm",  label: "전사없음(2mm)" },
   { key: "전사없음3mm",  label: "전사없음(3mm)" },
+  { key: "전사없음5mm",  label: "전사없음(5mm)" },
 ];
 
 const SHAPES = ["정사각형", "직사각형", "원형", "타원형", "기타"];
