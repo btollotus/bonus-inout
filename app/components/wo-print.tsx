@@ -108,10 +108,17 @@ export function WoPrintModal({
   wo: WoPrintWorkOrder;
   onClose: () => void;
 }) {
-  const items = (wo.work_order_items ?? [])
-    .slice()
-    .sort((a, b) => (a.barcode_no ?? "").localeCompare(b.barcode_no ?? ""))
-    .filter((i) => !isSpecialItem((i.sub_items ?? [])[0]?.name || ""));
+    // 같은 바코드 품목(학교별 분할 등)은 거래내역 입력 순서(order_lines.line_no)로 정렬 — 아래 useEffect에서 채움
+    const [lineRankMap, setLineRankMap] = useState<Record<string, number>>({});
+    const items = (wo.work_order_items ?? [])
+      .slice()
+      .sort(
+        (a, b) =>
+          (a.barcode_no ?? "").localeCompare(b.barcode_no ?? "") ||
+          (lineRankMap[a.id] ?? Number.MAX_SAFE_INTEGER) -
+            (lineRankMap[b.id] ?? Number.MAX_SAFE_INTEGER)
+      )
+      .filter((i) => !isSpecialItem((i.sub_items ?? [])[0]?.name || ""));
   const totalOrder = items.reduce((s, i) => s + (i.order_qty ?? 0), 0);
 
   const [itemNotes, setItemNotes] = useState<Record<string, string>>(() => {
@@ -199,6 +206,52 @@ export function WoPrintModal({
     }
     resolveImages();
   }, [wo.images]); // eslint-disable-line
+
+  // 품목 ↔ 주문라인 매칭: 1차 제품명+학교명+수량, 2차 제품명+학교명 (매칭 안 된 품목은 기존 순서 유지)
+  useEffect(() => {
+    const linkedOrderId = wo.linked_order_id as string | null | undefined;
+    if (!linkedOrderId) return;
+    let cancelled = false;
+    async function loadLineOrder() {
+      const sb = createClient();
+      const { data, error } = await sb
+        .from("order_lines")
+        .select("name,qty,school_name,line_no")
+        .eq("order_id", linkedOrderId)
+        .order("line_no", { ascending: true });
+      if (error) {
+        console.warn("[작업지시서 품목 순서] order_lines 조회 실패", error.message);
+        return;
+      }
+      if (cancelled || !data) return;
+      const norm = (v: unknown) => String(v ?? "").trim();
+      const woItems = wo.work_order_items ?? [];
+      const rankMap: Record<string, number> = {};
+      const usedItemIds = new Set<string>();
+      const matchedLines = new Set<number>();
+      for (const exactQty of [true, false]) {
+        data.forEach((line: any, lineIdx: number) => {
+          if (matchedLines.has(lineIdx)) return;
+          const hit = woItems.find(
+            (it) =>
+              !usedItemIds.has(it.id) &&
+              norm((it.sub_items ?? [])[0]?.name) === norm(line.name) &&
+              norm(it.school_name) === norm(line.school_name) &&
+              (!exactQty || Number(it.order_qty ?? 0) === Number(line.qty ?? 0))
+          );
+          if (!hit) return;
+          usedItemIds.add(hit.id);
+          matchedLines.add(lineIdx);
+          rankMap[hit.id] = lineIdx;
+        });
+      }
+      setLineRankMap(rankMap);
+    }
+    loadLineOrder();
+    return () => {
+      cancelled = true;
+    };
+  }, [wo.id]); // eslint-disable-line 
 
   const woWithSigned = {
     ...wo,
