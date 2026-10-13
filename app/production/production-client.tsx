@@ -1169,7 +1169,7 @@ export default function ProductionClient() {
         const sprayVariantMap: Record<string, any> = {};
         for (const v of sprayVariants ?? []) sprayVariantMap[(v as any).id] = v;
         const sprayResult = (sprayLots ?? [])
-          .filter((l: any) => (sprayRemainingMap[l.id] ?? 0) > 0)
+          .filter((l: any) => (sprayRemainingMap[l.id] ?? 0) > 0 || (wo.neo_color_spray_lots ?? []).some((sl) => sl.lot_id === l.id))
           .map((l: any) => ({
             lot_id: l.id,
             expiry_date: l.expiry_date,
