@@ -2475,6 +2475,36 @@ if (woSubNameVal) {
           const syncedName = (matchedELine?.name ?? "").trim();
           const syncedPackEa = inferPackEaFromName(syncedName);
           const syncedQty = syncedPackEa > 1 ? toInt(matchedELine?.qty ?? 0) * syncedPackEa : toInt(matchedELine?.qty ?? 0);
+          // ── 2026-10-14 추가: 수량이 바뀐 품목은 품목 비고의 "전사지:" 줄 재계산 (wo-print.tsx 인쇄 미리보기와 동일 계산식) ──
+          //    인쇄 시 저장된 비고가 이전 수량 기준으로 남는 문제 방지. 수량 동일/전사지 줄 없음/성형틀 미입력이면 note 변경 안 함
+          let recalcItemNote: string | undefined = undefined;
+          {
+            const { data: prevItem, error: prevItemErr } = await supabase.from("work_order_items").select("note, order_qty").eq("id", itemId).maybeSingle();
+            if (prevItemErr) console.error(`[saveEdit] 품목 비고 조회 오류 (${itemId}):`, prevItemErr.message);
+            const pNote: string = (prevItem as any)?.note ?? "";
+            const pQty = Number((prevItem as any)?.order_qty ?? 0);
+            const rCols = toInt(eWoMoldCols);
+            const rRows = toInt(eWoMoldRows);
+            const rMold = rCols * rRows;
+            if (prevItem && pQty !== syncedQty && rMold > 0 && syncedQty > 0 && pNote.split("\n").some((l) => /^전사지[：:]/.test(l.trim()))) {
+              const fullSheets = Math.floor(syncedQty / rMold);
+              const remainder = syncedQty % rMold;
+              let extraRows = remainder > 0 ? Math.ceil(remainder / rCols) : 0;
+              let totalSheets = fullSheets + Math.floor(extraRows / rRows);
+              extraRows = extraRows % rRows;
+              let total = totalSheets * rMold + extraRows * rCols;
+              while (total - syncedQty < 16) {
+                extraRows += 1;
+                if (extraRows >= rRows) { extraRows = 0; totalSheets += 1; }
+                total = totalSheets * rMold + extraRows * rCols;
+              }
+              let line = extraRows > 0
+                ? `전사지: ${totalSheets}장 ${extraRows}줄 참고: ${total.toLocaleString("ko-KR")}개 #${rCols}개=가로1줄`
+                : `전사지: ${totalSheets}장 참고: ${total.toLocaleString("ko-KR")}개 #${rCols}개=가로1줄`;
+              if ((eWoPackagingType ?? "").includes("벌크")) line += `  라벨: ${Math.ceil((syncedQty + 20) / (6 * rMold))}장`;
+              recalcItemNote = pNote.split("\n").map((l) => (/^전사지[：:]/.test(l.trim()) ? line : l)).join("\n");
+            }
+          }
           await supabase.from("work_order_items").update({
             images: finalPaths,
             logo_spec: matchedELine?.logo_spec || null,
@@ -2482,6 +2512,7 @@ if (woSubNameVal) {
             order_qty: syncedQty,
             unit_weight: matchedELine?.weight_g && Number(matchedELine.weight_g) > 0 ? Number(matchedELine.weight_g) : null,
             school_name: matchedELine?.school_name || null,
+            ...(recalcItemNote !== undefined ? { note: recalcItemNote } : {}),
           }).eq("id", itemId);
         }
 
