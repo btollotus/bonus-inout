@@ -454,12 +454,22 @@ if (!lastEvent || lastEvent.event_type === "end") {
       if (ccpWoEventType !== "end") {
         const { data: sameSlotWos } = await supabase
           .from("work_orders")
-          .select("work_order_no")
+          .select("work_order_no, production_done_at")
           .eq("ccp_slot_id", slotId)
           .eq("status", "생산중")
           .neq("work_order_no", selectedWo.work_order_no);
   
         for (const wo of sameSlotWos ?? []) {
+          // 생산완료(production_done_at) 처리됐고 이 측정시각 직전 기록이 "종료"인 WO는 생산이 끝난 것이므로 복사하지 않음
+          // (금속검출 전이라 status가 "생산중"으로 남아 있어도 제외)
+          if (wo.production_done_at) {
+            const measuredMs = new Date(measuredAt).getTime();
+            const prevEv = slotAllEvents
+              .filter((e) => e.work_order_no === wo.work_order_no && new Date(e.measured_at).getTime() <= measuredMs)
+              .sort((a, b) => new Date(a.measured_at).getTime() - new Date(b.measured_at).getTime())
+              .slice(-1)[0];
+            if (prevEv?.event_type === "end") continue;
+          }
           await supabase.from("ccp_wo_events").insert({
             work_order_no: wo.work_order_no,
             slot_id: slotId,
