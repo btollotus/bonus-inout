@@ -8,15 +8,15 @@ function decryptRRN(encrypted: string): string | null {
     const key = process.env.RRN_ENCRYPTION_KEY;
     if (!key) return null;
 
-    const keyBuffer = Buffer.from(key, "hex");
-    const data = Buffer.from(encrypted, "base64");
-    const iv = data.slice(0, 16);
-    const encryptedData = data.slice(16);
-
-    const decipher = crypto.createDecipheriv("aes-256-cbc", keyBuffer, iv);
-    let decrypted = decipher.update(encryptedData);
-    decrypted = Buffer.concat([decrypted, decipher.final()]);
-    return decrypted.toString("utf8");
+        // encrypt-rrn 저장 형식(aes-256-gcm, "iv:authTag:암호문" hex)과 동일하게 복호화
+        const [ivHex, authTagHex, encryptedHex] = encrypted.split(":");
+        if (!ivHex || !authTagHex || !encryptedHex) return null;
+    
+        const decipher = crypto.createDecipheriv("aes-256-gcm", Buffer.from(key, "hex"), Buffer.from(ivHex, "hex"));
+        decipher.setAuthTag(Buffer.from(authTagHex, "hex"));
+        let decrypted = decipher.update(encryptedHex, "hex", "utf8");
+        decrypted += decipher.final("utf8");
+        return decrypted;
   } catch {
     return null;
   }
