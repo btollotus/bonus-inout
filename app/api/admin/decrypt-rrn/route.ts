@@ -21,10 +21,10 @@ export async function POST(req: NextRequest) {
     if (!empId) return NextResponse.json({ error: 'empId 없음' }, { status: 400 })
 
     const { data, error } = await supabaseAdmin
-      .from('employees')
-      .select('encrypted_rrn')
-      .eq('id', empId)
-      .single()
+    .from('employee_private')
+    .select('encrypted_rrn')
+    .eq('employee_id', empId)
+    .single()
 
     if (error || !data?.encrypted_rrn) return NextResponse.json({ error: '주민번호 없음' }, { status: 404 })
 
