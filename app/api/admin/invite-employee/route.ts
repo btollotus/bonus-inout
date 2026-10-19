@@ -1,6 +1,7 @@
 // app/api/admin/invite-employee/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/auth/require-admin'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -91,6 +92,9 @@ async function sendInviteEmail(email: string, name: string, inviteLink: string) 
 // ── 메인 핸들러 ────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAdmin()
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
+
     const { email, name } = await req.json()
     if (!email) return NextResponse.json({ error: '이메일이 필요합니다.' }, { status: 400 })
 
