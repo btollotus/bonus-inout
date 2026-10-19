@@ -417,11 +417,42 @@ export default function PayrollPage() {
     // → 2월에 포함 조건: resign_date > "2026-02-01" (즉 2월2일 이후 퇴사일)
     const monthStart = `${selectedYear}-${String(selectedMonth).padStart(2,'0')}-01`
     const { data } = await supabase
-      .from('employees')
-      .select('id, name, position, employee_code, hire_date, resign_date, email, bank_name, bank_account, car_type, fuel_type, commute_distance, fuel_efficiency, auth_user_id')
-      .or(`resign_date.is.null,resign_date.gt.${monthStart}`)
-      .order('name')
-    const emps = data || []
+    .from('employees')
+    .select('id, name, position, employee_code, hire_date, resign_date, email, auth_user_id')
+    .or(`resign_date.is.null,resign_date.gt.${monthStart}`)
+    .order('name')
+  const baseEmps = data || []
+
+  // 계좌·통근 정보는 employee_private에서 조회해 합침 (ADMIN만 조회 가능)
+  const privById: Record<string, Partial<Employee>> = {}
+  if (baseEmps.length > 0) {
+    const { data: privRows, error: privError } = await supabase
+      .from('employee_private')
+      .select('employee_id, bank_name, bank_account, car_type, fuel_type, commute_distance, fuel_efficiency')
+      .in('employee_id', baseEmps.map((e: { id: string }) => e.id))
+    if (privError) console.error('employee_private 조회 오류:', privError.message)
+    ;(privRows || []).forEach((p: { employee_id: string } & Partial<Employee>) => {
+      privById[p.employee_id] = {
+        bank_name: p.bank_name ?? null,
+        bank_account: p.bank_account ?? null,
+        car_type: p.car_type ?? null,
+        fuel_type: p.fuel_type ?? null,
+        commute_distance: p.commute_distance ?? null,
+        fuel_efficiency: p.fuel_efficiency ?? null,
+      }
+    })
+  }
+
+  const emps: Employee[] = baseEmps.map((e: Omit<Employee, 'bank_name' | 'bank_account' | 'car_type' | 'fuel_type' | 'commute_distance' | 'fuel_efficiency'>) => ({
+    ...e,
+    bank_name: null,
+    bank_account: null,
+    car_type: null,
+    fuel_type: null,
+    commute_distance: null,
+    fuel_efficiency: null,
+    ...privById[e.id],
+  }))
     setEmployees(emps)
     const map: Record<string, Employee> = {}
     const effMap: Record<string, number> = {}
