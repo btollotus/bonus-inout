@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/auth/require-admin'
 
 const ALGORITHM = 'aes-256-gcm'
 const SECRET_KEY = process.env.RRN_ENCRYPTION_KEY!
@@ -13,6 +14,9 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAdmin()
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
+
     const { empId } = await req.json()
     if (!empId) return NextResponse.json({ error: 'empId 없음' }, { status: 400 })
 
