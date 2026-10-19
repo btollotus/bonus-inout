@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     // 이름으로 1차 조회
     const { data: employees, error } = await adminClient
       .from("employees")
-      .select("id, name, email, mobile, encrypted_rrn")
+      .select("id, name, email")
       .eq("name", name.trim())
       .not("email", "is", null);
 
@@ -68,9 +68,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 휴대폰 번호로 필터링
-    const mobileMatch = employees.filter((emp) => {
-      const empMobile = (emp.mobile || "").replace(/[^0-9]/g, "");
+        // 개인정보(휴대폰·주민번호 암호화본)는 employee_private에서 조회
+        const { data: privRows, error: privError } = await adminClient
+        .from("employee_private")
+        .select("employee_id, mobile, encrypted_rrn")
+        .in("employee_id", employees.map((emp) => emp.id));
+  
+      if (privError) {
+        console.error("employee_private 조회 오류:", privError);
+        return NextResponse.json({ error: "조회 중 오류가 발생했습니다." }, { status: 500 });
+      }
+  
+      const privMap = new Map((privRows ?? []).map((p) => [p.employee_id, p]));
+  
+      // 휴대폰 번호로 필터링
+      const mobileMatch = employees.filter((emp) => {
+        const empMobile = (privMap.get(emp.id)?.mobile || "").replace(/[^0-9]/g, "");
       return empMobile === mobileClean;
     });
 
@@ -85,14 +98,15 @@ export async function POST(req: NextRequest) {
     let foundEmail = "";
 
     for (const emp of mobileMatch) {
-      if (!emp.encrypted_rrn) {
+      const encryptedRrn = privMap.get(emp.id)?.encrypted_rrn;
+      if (!encryptedRrn) {
         // 주민번호 미등록 → 이름+휴대폰만으로 통과
         foundEmail = emp.email;
         break;
       }
 
       // 직접 복호화
-      const rrn = decryptRRN(emp.encrypted_rrn);
+      const rrn = decryptRRN(encryptedRrn);
       if (!rrn) {
         // 복호화 실패 → 이름+휴대폰만으로 통과
         foundEmail = emp.email;
