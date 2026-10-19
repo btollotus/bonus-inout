@@ -614,12 +614,15 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
                 if (pErr) { console.error('employee_private 저장 오류:', pErr.message); return pErr.message }
                 return null
               }
+              // employees 테이블에는 개인정보 컬럼을 저장하지 않음 (employee_private에만 저장)
+              const stripPrivate = (payload: Record<string, unknown>): Record<string, unknown> =>
+                Object.fromEntries(Object.entries(payload).filter(([k]) => !PRIVATE_KEYS.includes(k)))
         
               if (editingId) {
-                let { error } = await supabase.from('employees').update(fullPayload).eq('id', editingId)
+                let { error } = await supabase.from('employees').update(stripPrivate(fullPayload)).eq('id', editingId)
                 let savedPayload: Record<string, unknown> = fullPayload
                 if (error?.message?.includes('schema cache')) {
-                  const retry = await supabase.from('employees').update(basePayload).eq('id', editingId)
+                  const retry = await supabase.from('employees').update(stripPrivate(basePayload)).eq('id', editingId)
                   error = retry.error
                   savedPayload = basePayload
                   if (!error) setError('⚠️ 일부 항목은 DB 마이그레이션 후 저장됩니다. (나머지는 저장됨)')
@@ -651,10 +654,10 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
           )
           if (privateErr) setError('⚠️ 직원 정보는 저장되었으나 개인정보 테이블 저장에 실패했습니다: ' + privateErr)
         } else {
-          let { data: inserted, error } = await supabase.from('employees').insert([fullPayload]).select('id').single()
+          let { data: inserted, error } = await supabase.from('employees').insert([stripPrivate(fullPayload)]).select('id').single()
           let savedPayload: Record<string, unknown> = fullPayload
           if (error?.message?.includes('schema cache')) {
-            const retry = await supabase.from('employees').insert([basePayload]).select('id').single()
+            const retry = await supabase.from('employees').insert([stripPrivate(basePayload)]).select('id').single()
             error = retry.error
             inserted = retry.data
             savedPayload = basePayload
