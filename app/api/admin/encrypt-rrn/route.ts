@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
+import { requireAdmin } from '@/lib/auth/require-admin'
 
 const ALGORITHM = 'aes-256-gcm'
 const SECRET_KEY = process.env.RRN_ENCRYPTION_KEY!
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAdmin()
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
+
     const { rrn } = await req.json()
     if (!rrn) return NextResponse.json({ error: '주민번호가 없습니다.' }, { status: 400 })
     if (!SECRET_KEY) return NextResponse.json({ error: 'RRN_ENCRYPTION_KEY 환경변수 없음' }, { status: 500 })
