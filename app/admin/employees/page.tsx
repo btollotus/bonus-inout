@@ -584,18 +584,31 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
         birthday: form.birthday || null,
         birthday_type: form.birthday ? form.birthday_type : null,
         shoe_size: form.shoe_size || null,
-top_size: form.top_size || null,
-bottom_size: form.bottom_size || null,
-      }
-
-      if (editingId) {
-        let { error } = await supabase.from('employees').update(fullPayload).eq('id', editingId)
-        if (error?.message?.includes('schema cache')) {
-          const retry = await supabase.from('employees').update(basePayload).eq('id', editingId)
-          error = retry.error
-          if (!error) setError('⚠️ 일부 항목은 DB 마이그레이션 후 저장됩니다. (나머지는 저장됨)')
-        }
-        if (error) throw new Error(translateError(error.message))
+        top_size: form.top_size || null,
+        bottom_size: form.bottom_size || null,
+              }
+        
+              // ▼ employee_private 이중 저장: employees 저장 성공 후, 실제 저장된 payload의 개인정보 컬럼만 복사
+              const PRIVATE_KEYS = ['mobile', 'address', 'emergency_contact', 'bank_name', 'bank_account', 'encrypted_rrn', 'birthday', 'birthday_type', 'signature_url', 'shoe_size', 'top_size', 'bottom_size', 'car_type', 'fuel_type', 'commute_distance', 'fuel_efficiency']
+              const savePrivate = async (employeeId: string, saved: Record<string, unknown>): Promise<string | null> => {
+                const row: Record<string, unknown> = { employee_id: employeeId }
+                for (const k of PRIVATE_KEYS) if (k in saved) row[k] = saved[k]
+                const { error: pErr } = await supabase.from('employee_private').upsert([row], { onConflict: 'employee_id' })
+                if (pErr) { console.error('employee_private 저장 오류:', pErr.message); return pErr.message }
+                return null
+              }
+        
+              if (editingId) {
+                let { error } = await supabase.from('employees').update(fullPayload).eq('id', editingId)
+                let savedPayload: Record<string, unknown> = fullPayload
+                if (error?.message?.includes('schema cache')) {
+                  const retry = await supabase.from('employees').update(basePayload).eq('id', editingId)
+                  error = retry.error
+                  savedPayload = basePayload
+                  if (!error) setError('⚠️ 일부 항목은 DB 마이그레이션 후 저장됩니다. (나머지는 저장됨)')
+                }
+                if (error) throw new Error(translateError(error.message))
+                const privateErr = await savePrivate(editingId, savedPayload)
 
         if (editingEmployee) {
           const changes = detectChanges(editingEmployee, form)
@@ -618,17 +631,25 @@ bottom_size: form.bottom_size || null,
           form.resign_date
             ? `직원 정보가 수정되었습니다. ${authUserId ? '(퇴사 처리: 로그인 차단됨)' : ''}`
             : '직원 정보가 수정되었습니다.'
-        )
-      } else {
-        let { error } = await supabase.from('employees').insert([fullPayload])
-        if (error?.message?.includes('schema cache')) {
-          const retry = await supabase.from('employees').insert([basePayload])
-          error = retry.error
-          if (!error) setError('⚠️ 일부 항목은 DB 마이그레이션 후 저장됩니다. (나머지는 저장됨)')
+          )
+          if (privateErr) setError('⚠️ 직원 정보는 저장되었으나 개인정보 테이블 저장에 실패했습니다: ' + privateErr)
+        } else {
+          let { data: inserted, error } = await supabase.from('employees').insert([fullPayload]).select('id').single()
+          let savedPayload: Record<string, unknown> = fullPayload
+          if (error?.message?.includes('schema cache')) {
+            const retry = await supabase.from('employees').insert([basePayload]).select('id').single()
+            error = retry.error
+            inserted = retry.data
+            savedPayload = basePayload
+            if (!error) setError('⚠️ 일부 항목은 DB 마이그레이션 후 저장됩니다. (나머지는 저장됨)')
+          }
+          if (error) throw new Error(translateError(error.message))
+          setSuccess(`등록 완료. ${form.email}으로 초대 메일이 발송되었습니다.`)
+          if (inserted?.id) {
+            const privateErr = await savePrivate(inserted.id, savedPayload)
+            if (privateErr) setError('⚠️ 직원 정보는 저장되었으나 개인정보 테이블 저장에 실패했습니다: ' + privateErr)
+          }
         }
-        if (error) throw new Error(translateError(error.message))
-        setSuccess(`등록 완료. ${form.email}으로 초대 메일이 발송되었습니다.`)
-      }
 
       handleCancel()
       fetchEmployees()
