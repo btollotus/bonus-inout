@@ -288,13 +288,30 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
   async function fetchEmployees() {
     setFetchLoading(true)
     const { data, error } = await supabase
-      .from('employees')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (error) setError(translateError(error.message))
-    else setEmployees(data || [])
-    setFetchLoading(false)
+    .from('employees')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) { setError(translateError(error.message)); setFetchLoading(false); return }
+
+  // 개인정보 컬럼은 employee_private에서 조회해 덮어씀 (ADMIN만 조회 가능)
+  const PRIVATE_COLS = ['mobile', 'address', 'emergency_contact', 'bank_name', 'bank_account', 'base_salary', 'meal_allowance', 'has_forklift', 'forklift_pay', 'encrypted_rrn', 'rrn', 'rrn_sent', 'birthday', 'birthday_type', 'signature_url', 'shoe_size', 'top_size', 'bottom_size', 'car_type', 'fuel_type', 'commute_distance', 'fuel_efficiency']
+  const baseEmps = data || []
+  const privById: Record<string, Record<string, unknown>> = {}
+  if (baseEmps.length > 0) {
+    const { data: privRows, error: privError } = await supabase
+      .from('employee_private')
+      .select(['employee_id', ...PRIVATE_COLS].join(', '))
+      .in('employee_id', baseEmps.map((e: { id: string }) => e.id))
+    if (privError) console.error('employee_private 조회 오류:', privError.message)
+    for (const row of (privRows || []) as unknown as Record<string, unknown>[]) {
+      const picked: Record<string, unknown> = {}
+      for (const k of PRIVATE_COLS) picked[k] = row[k]
+      privById[row.employee_id as string] = picked
+    }
   }
+  setEmployees(baseEmps.map((e: Employee) => (privById[e.id] ? { ...e, ...privById[e.id] } : e)) as Employee[])
+  setFetchLoading(false)
+}
 
   async function fetchHealthRecords(empId: string) {
     const { data } = await supabase
