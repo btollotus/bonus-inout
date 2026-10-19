@@ -108,9 +108,9 @@ export async function POST(req: NextRequest) {
       // 직접 복호화
       const rrn = decryptRRN(encryptedRrn);
       if (!rrn) {
-        // 복호화 실패 → 이름+휴대폰만으로 통과
-        foundEmail = emp.email;
-        break;
+        // 복호화 실패 → 생년월일을 확인할 수 없으므로 통과시키지 않음
+        console.error("find-email 주민번호 복호화 실패: employee_id=", emp.id);
+        continue;
       }
 
       const rrnFirst6 = rrn.replace(/-/g, "").slice(0, 6);
