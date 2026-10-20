@@ -207,7 +207,7 @@ export function WarmerCleaningTab({ role, userId, showToast }: {
   const isCurrentMonth = yearMonth === currentYM;
 
   React.useEffect(() => {
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
   }, []);
 
@@ -816,7 +816,7 @@ export function ForeignMatterTab({ role, userId, showToast }: {
 
   // ── 데이터 로드 ──
   React.useEffect(() => {
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
   }, []);
 
@@ -1472,7 +1472,7 @@ export function HygieneCheckTab({ role, userId, showToast }: {
 
   // ── 데이터 로드 ──
   React.useEffect(() => {
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
   }, []);
 
@@ -2268,7 +2268,7 @@ export function TempHumidityTab({ role, userId, showToast }: {
   const currentInspector = period === "AM" ? amInspector : pmInspector;
 
   useEffect(() => {
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }) => { if (data) setEmployees(data as any[]); });
   }, []);
 
