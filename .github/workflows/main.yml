@@ -74,6 +74,19 @@ jobs:
       - name: Upload to Google Drive (Folder ID root mode)
         run: |
           rclone copy . gdrive:"" \
-            --include "supabase_*.dump.gz.gpg" \
+                        --include "supabase_*.dump.gz.gpg" \
             --drive-root-folder-id="${GDRIVE_DB_BACKUP_FOLDER_ID}" \
             -P
+
+      # 업로드가 성공한 경우에만 실행됨 (앞 단계 실패 시 이 단계는 건너뜀)
+      - name: Delete backups older than 30 days
+        run: |
+          rclone delete gdrive:"" \
+            --drive-root-folder-id="${GDRIVE_DB_BACKUP_FOLDER_ID}" \
+            --include "supabase_*.dump.gz" \
+            --include "supabase_*.dump.gz.gpg" \
+            --min-age 30d \
+            --max-depth 1 \
+            --drive-use-trash=false \
+            --dry-run \
+            -v
