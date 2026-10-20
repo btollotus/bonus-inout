@@ -3015,7 +3015,7 @@ export function CompressorTab({ role, userId, showToast }: {
   const [filterTo, setFilterTo] = useState(today);
 
   useEffect(() => {
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
   }, []);
 
@@ -3419,7 +3419,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
   const [pinPendingAction, setPinPendingAction] = useState<((name: string) => void) | null>(null);
 
   useEffect(() => {
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
   }, []);
 
