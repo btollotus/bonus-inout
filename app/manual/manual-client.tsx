@@ -389,11 +389,11 @@ export default function ManualClient() {
   const [showManage, setShowManage] = useState(false);
   const [adminName,       setAdminName]       = useState("");
   const [pinSelectedName, setPinSelectedName] = useState("");
-  const [employees,       setEmployees]       = useState<{name:string;pin:string|null}[]>([]);
+  const [employees,       setEmployees]       = useState<{id:string;name:string;pin:string|null}[]>([]);
 
   // 직원 목록 로드 + SUBADMIN이면 열람 잠금
   useEffect(()=>{
-    supabase.from("employees").select("name,pin").is("resign_date",null).order("name").limit(100)
+    supabase.from("employees").select("id,name,pin").is("resign_date",null).order("name").limit(100)
       .then(({data,error})=>{ 
         if(data) setEmployees(data); 
         if(error) console.error("직원 목록 로드 실패:", error.message);
@@ -555,10 +555,23 @@ export default function ManualClient() {
   const totalSubItems=(subId:number)=>menuItems.filter(m=>m.subcategory_id===subId).length;
 
   // ── PIN 검증 (이름 선택 후 PIN 매칭) ──
-  const handlePin=useCallback((digits: string[])=>{
+  const pinVerifyingRef=useRef(false);
+  const handlePin=useCallback(async (digits: string[])=>{
     const pin=digits.join("");
     if(pin.length<4){setPinError("PIN 4자리를 입력하세요.");return;}
-    const found=employees.find(e=>e.name===pinSelectedName&&e.pin===pin);
+    if(pinVerifyingRef.current) return;
+    pinVerifyingRef.current=true;
+    // PIN 비교는 DB 함수(verify_employee_pin)에서 수행 — 같은 이름의 직원 중 하나라도 OK면 통과 (기존 이름+PIN 매칭과 동일)
+    let found=false;
+    try {
+      for (const e of employees.filter(e=>e.name===pinSelectedName)) {
+        const { data: result, error } = await supabase.rpc("verify_employee_pin", { p_employee_id: e.id, p_pin: pin });
+        if (error) { console.error("verify_employee_pin 오류:", error.message); continue; }
+        if (result === "OK") { found = true; break; }
+      }
+    } finally {
+      pinVerifyingRef.current=false;
+    }
     if(!found){setPinError("PIN이 올바르지 않습니다.");setPinDigits([]);return;}
     setViewLocked(false);
     setViewerName(pinSelectedName);
@@ -570,7 +583,7 @@ export default function ManualClient() {
     setPinDigits([]);
     setPinError("");
     setPinSelectedName("");
-  },[employees,pinSelectedName,viewLocked]);
+  },[employees,pinSelectedName,viewLocked,supabase]);
 
   useEffect(()=>{
     if(pinDigits.length===4) handlePin(pinDigits);
