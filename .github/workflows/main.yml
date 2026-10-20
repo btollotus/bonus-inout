@@ -88,4 +88,5 @@ jobs:
             --min-age 30d \
             --max-depth 1 \
             --drive-use-trash=false \
+            --dry-run \
             -v
