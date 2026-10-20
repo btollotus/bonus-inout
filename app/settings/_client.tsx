@@ -218,7 +218,7 @@ function PinSettingSection({
     (async () => {
       const { data } = await supabase
         .from("employees")
-        .select("pin")
+        .select("pin:has_pin")
         .eq("email", userEmail)
         .maybeSingle();
       setCurrentPin(data?.pin ?? null);
