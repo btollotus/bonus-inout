@@ -289,7 +289,7 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
     setFetchLoading(true)
     const { data, error } = await supabase
     .from('employees')
-    .select('*')
+    .select('id,name,created_at,employee_code,auth_user_id,rrn,mobile,address,hire_date,resign_date,updated_at,department,position_title,employment_type,base_salary,meal_allowance,has_forklift,forklift_pay,bank_name,bank_account,rrn_sent,is_active,email,encrypted_rrn,position,car_type,fuel_type,commute_distance,emergency_contact,birthday,birthday_type,fuel_efficiency,signature_url,shoe_size,top_size,bottom_size,webauthn_credential,skip_attendance_check,pin:has_pin')
     .order('created_at', { ascending: false })
   if (error) { setError(translateError(error.message)); setFetchLoading(false); return }
 
