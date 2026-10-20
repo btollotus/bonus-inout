@@ -27,7 +27,7 @@ export default function AttendanceClient() {
   useEffect(() => {
     async function init() {
       const [{ data: emps }, { data: office }] = await Promise.all([
-        supabase.from("employees").select("id,name,pin,webauthn_credential").is("resign_date", null).order("name"),  
+        supabase.from("employees").select("id,name,pin:has_pin,webauthn_credential").is("resign_date", null).order("name"),
         supabase.from("office_location").select("latitude,longitude,radius_m").single(),
       ]);
       setEmployees((emps ?? []) as Employee[]);
