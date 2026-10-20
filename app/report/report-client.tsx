@@ -356,7 +356,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
     if (!adminLoaded) return;
     supabase
       .from("employees")
-      .select("id,name,pin")
+      .select("id,name,pin:has_pin")
       .is("resign_date", null)
       .order("name")
       .then(({ data }) => {
