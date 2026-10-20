@@ -961,7 +961,7 @@ const [pinPendingAction, setPinPendingAction] = useState<((name: string) => void
 const [employees, setEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
 
 useEffect(() => {
-  supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+  supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
     .then(({ data }) => setEmployees((data ?? []) as any));
 }, []);
 
@@ -1402,7 +1402,7 @@ export function WoCcpCard({
   useEffect(() => {
     supabase.from("food_types").select("name").eq("requires_pin", true)
       .then(({ data }) => setPinRequiredFoodTypes(new Set((data ?? []).map((r: any) => String(r.name ?? "").trim()))));
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+      supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }) => setSlotAssignEmployees((data ?? []) as any));
   }, []);
 
