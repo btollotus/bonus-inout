@@ -393,7 +393,7 @@ export default function ManualClient() {
 
   // 직원 목록 로드 + SUBADMIN이면 열람 잠금
   useEffect(()=>{
-    supabase.from("employees").select("id,name,pin").is("resign_date",null).order("name").limit(100)
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date",null).order("name").limit(100)
       .then(({data,error})=>{ 
         if(data) setEmployees(data); 
         if(error) console.error("직원 목록 로드 실패:", error.message);
