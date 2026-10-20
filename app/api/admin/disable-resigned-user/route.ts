@@ -4,6 +4,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { todayKST } from "@/lib/utils/date";
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "auth_user_id 필요" }, { status: 400 });
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = todayKST();
     const isResigned = resign_date && resign_date <= today;
 
     if (isResigned) {
