@@ -1114,10 +1114,13 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
     setSigningPin(next);
     if (next.length === 4) {
       setTimeout(async () => {
-        if (!emp.pin) { setSigningError("PIN 미설정"); setSigningPin(""); return; }
-        if (emp.pin !== next) { setSigningError("PIN 오류"); setSigningPin(""); return; }
-        if (!signingLogId) { setSigningEmpId(null); setSigningPin(""); setSigningError(""); return; }
-        const { error } = await supabase.from("monitoring_training_attendees")
+                // PIN 비교는 DB 함수(verify_employee_pin)에서 수행
+                const { data: pinResult, error: pinErr } = await supabase.rpc("verify_employee_pin", { p_employee_id: emp.id, p_pin: next });
+                if (pinErr) { console.error("verify_employee_pin 오류:", pinErr.message); setSigningError("PIN 확인 오류"); setSigningPin(""); return; }
+                if (pinResult === "NOT_SET") { setSigningError("PIN 미설정"); setSigningPin(""); return; }
+                if (pinResult !== "OK") { setSigningError("PIN 오류"); setSigningPin(""); return; }
+                if (!signingLogId) { setSigningEmpId(null); setSigningPin(""); setSigningError(""); return; }
+                const { error } = await supabase.from("monitoring_training_attendees")
           .update({ signed_at: new Date().toISOString() })
           .eq("log_id", signingLogId)
           .eq("employee_id", emp.id);
