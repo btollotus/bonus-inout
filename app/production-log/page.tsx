@@ -2453,12 +2453,19 @@ function MaterialLedgerTab({ role, userId, showToast }: {
                         const next = pinInput + d;
                         setPinInput(next);
                         if (next.length === 4) {
-                          setTimeout(() => {
-                            if (!pinEmp.pin) {
+                          setTimeout(async () => {
+                            // PIN 비교는 DB 함수(verify_employee_pin)에서 수행
+                            const { data: pinResult, error: pinErr } = await supabase.rpc("verify_employee_pin", { p_employee_id: pinEmp.id, p_pin: next });
+                            if (pinErr) {
+                              console.error("verify_employee_pin 오류:", pinErr.message);
+                              setPinError("PIN 확인 중 오류가 발생했습니다. 다시 시도해주세요.");
+                              setPinInput(""); return;
+                            }
+                            if (pinResult === "NOT_SET") {
                               setPinError("PIN이 설정되지 않았습니다.");
                               setPinInput(""); return;
                             }
-                            if (pinEmp.pin !== next) {
+                            if (pinResult !== "OK") {
                               setPinError("PIN이 올바르지 않습니다.");
                               setPinInput(""); return;
                             }
