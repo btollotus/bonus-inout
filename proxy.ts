@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
+import { todayKST } from "@/lib/utils/date";
 
 // ADMIN만 접근 가능
 const ADMIN_ONLY_PATHS = [
@@ -82,7 +83,7 @@ export async function proxy(req: NextRequest) {
 
     // ✅ 퇴사 여부 확인 — ADMIN/SUBADMIN은 제외
     if (role === "USER") {
-      const today = new Date().toISOString().split("T")[0];
+      const today = todayKST();
       const { data: empData } = await admin
         .from("employees")
         .select("resign_date")
