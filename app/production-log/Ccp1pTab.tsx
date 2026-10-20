@@ -344,7 +344,7 @@ export function Ccp1pTab({ role, userId, showToast, initialWoId }: {
   const [employees, setEmployees] = useState<{ id: string; name: string | null }[]>([]);
 
   useEffect(() => {
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }: { data: any[] | null }) => setEmployees(data ?? []));
   }, []);
 
