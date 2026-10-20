@@ -3161,7 +3161,7 @@ if (woSubNameVal) {
                       <div><div className="mb-1 text-xs text-slate-600">출고일(주문일)</div><input type="date" className={inp} value={eShipDate} onChange={(e) => setEShipDate(e.target.value)} /></div>
                       <div><div className="mb-1 text-xs text-slate-600">주문자</div><input className={inp} value={eOrdererName} onChange={(e) => setEOrdererName(e.target.value)} /></div>
                       <div><div className="mb-1 text-xs text-slate-600">출고방법</div>
-                        <select className={inp} value={eShipMethod} onChange={(e) => setEShipMethod(e.target.value)}>
+                      <select className={inp} value={eShipMethod} onChange={(e) => { setEShipMethod(e.target.value); setEWoDeliveryMethod(e.target.value); }}>
                           {["택배", "퀵-신용", "퀵-착불", "방문", "기타"].map((v) => <option key={v} value={v}>{v}</option>)}
                         </select>
                       </div>
