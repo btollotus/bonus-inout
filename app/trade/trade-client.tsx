@@ -1197,7 +1197,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     if (!error && data) setMasterProducts(data as MasterProductRow[]);
   }
   async function loadEmployees() {
-    const { data, error } = await supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name", { ascending: true }).limit(500);
+    const { data, error } = await supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name", { ascending: true }).limit(500);
     if (!error) setEmployees((data ?? []) as EmployeeRow[]);
   }
 
