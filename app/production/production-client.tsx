@@ -1106,7 +1106,7 @@ export default function ProductionClient() {
     return () => { supabase.removeChannel(channel); };
   }, []); // eslint-disable-line
 
-  useEffect(() => { supabase.from("employees").select("id,name,pin,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => { if (data) setEmployees(data); }); }, []);
+  useEffect(() => { supabase.from("employees").select("id,name,pin:has_pin,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => { if (data) setEmployees(data); }); }, []);
   useEffect(() => { supabase.from("warmer_slots").select("id,slot_name,purpose").eq("is_active", true).order("slot_no").then(({ data }) => { if (data) setWarmerSlots(data); }); }, []);
   
 
