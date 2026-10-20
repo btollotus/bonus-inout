@@ -189,7 +189,7 @@ export default function FridgeMonitoringClient() {
 
   // 직원 목록
   useEffect(() => {
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }) => { if (data) setEmployees(data as Employee[]); });
   }, []);
 
