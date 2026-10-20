@@ -708,15 +708,23 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
     if (next.length === 4) { setTimeout(() => verifyPin(next), 100); }
   }
 
-  function verifyPin(pin: string) {
+  async function verifyPin(pin: string) {
     const emp = employees.find((e) => e.id === selectedEmployee?.id);
     if (!emp) return;
-    if (!emp.pin) {
+    // PIN 비교는 DB 함수(verify_employee_pin)에서 수행
+    const { data: result, error } = await supabase.rpc("verify_employee_pin", { p_employee_id: emp.id, p_pin: pin });
+    if (error) {
+      console.error("verify_employee_pin 오류:", error.message);
+      setPinError("PIN 확인 중 오류가 발생했습니다. 다시 시도해주세요.");
+      setPinInput("");
+      return;
+    }
+    if (result === "NOT_SET") {
       setPinError("PIN이 설정되지 않았습니다. 설정 페이지에서 먼저 PIN을 등록해주세요.");
       setPinInput("");
       return;
     }
-    if (emp.pin !== pin) {
+    if (result !== "OK") {
       setPinError("PIN이 올바르지 않습니다.");
       setPinInput("");
       return;
