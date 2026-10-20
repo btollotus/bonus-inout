@@ -76,7 +76,7 @@ export default function DiscardClient() {
       setRole(rd?.role ?? "USER");
     });
     // employees 로드
-    supabase.from("employees").select("id,name,pin")
+    supabase.from("employees").select("id,name,pin:has_pin")
       .is("resign_date", null).order("name")
       .then(({ data }) => {
         const sorted = (data ?? [])
