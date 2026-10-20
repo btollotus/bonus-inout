@@ -138,7 +138,7 @@ export function HygieneTrainingTab({ role, userId, showToast }: {
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   useEffect(() => {
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
   }, []);
 
@@ -1051,7 +1051,7 @@ export function MonitoringTrainingTab({ role, userId, showToast }: {
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   useEffect(() => {
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
   }, []);
 
