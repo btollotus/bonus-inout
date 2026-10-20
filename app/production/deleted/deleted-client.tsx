@@ -57,7 +57,7 @@ export default function DeletedClient({ role }: Props) {
     supabase.auth.getUser().then(({ data: { user } }) => {
       currentUserIdRef.current = user?.id ?? null;
     });
-    supabase.from("employees").select("id,name,pin,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => {
+    supabase.from("employees").select("id,name,pin:has_pin,resign_date").is("resign_date", null).order("name").limit(500).then(({ data }) => {
         if (data) setEmployees(data.filter((e): e is { id: string; name: string; pin: string | null; resign_date: null } => e.name !== null));
     });
   }, []);
