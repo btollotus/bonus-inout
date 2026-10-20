@@ -42,6 +42,20 @@ jobs:
           mv supabase.dump.gz "supabase_${TS}.dump.gz"
           ls -al
 
+      - name: Encrypt backup (gpg AES256)
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "ERROR: secrets.BACKUP_PASSPHRASE is empty — 평문 백업 업로드를 막기 위해 중단합니다."
+            exit 1
+          fi
+          for f in supabase_*.dump.gz; do
+            printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --symmetric --cipher-algo AES256 -o "${f}.gpg" "$f"
+            rm -f "$f"
+          done
+          ls -al
+
       - name: Configure rclone for Google Drive (Service Account)
         run: |
           mkdir -p ~/.config/rclone
@@ -60,6 +74,6 @@ jobs:
       - name: Upload to Google Drive (Folder ID root mode)
         run: |
           rclone copy . gdrive:"" \
-            --include "supabase_*.dump.gz" \
+            --include "supabase_*.dump.gz.gpg" \
             --drive-root-folder-id="${GDRIVE_DB_BACKUP_FOLDER_ID}" \
             -P
