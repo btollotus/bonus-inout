@@ -439,7 +439,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
   }, [hasUnsavedChanges]);
 
   useEffect(() => {
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }) => {
         const filtered = (data ?? []).filter((a: any) => a.name !== "강미라");
         const sorted = filtered
@@ -2008,7 +2008,7 @@ function MaterialLedgerTab({ role, userId, showToast }: {
   useEffect(() => {
     supabase.from("materials").select("id,name,category").eq("is_active", true).neq("id", "00000000-0007-0000-0000-000000000001").order("order_no", { nullsFirst: false })
       .then(({ data }) => setMaterials(data ?? []));
-    supabase.from("employees").select("id,name,pin").is("resign_date", null).order("name")
+      supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
       .then(({ data }) => setEmployees((data ?? []) as any));
   }, []);
 
