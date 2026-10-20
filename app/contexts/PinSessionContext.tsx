@@ -85,14 +85,25 @@ export function PinModal({ employees, onSuccess, onCancel, title = "본인 확�
     }
   }
 
-  function verifyPin(pin: string) {
+  async function verifyPin(pin: string) {
     if (!selectedEmployee) return;
-    if (!selectedEmployee.pin) {
+    // PIN 비교는 DB 함수(verify_employee_pin)에서 수행 — 브라우저에서 PIN 값을 비교하지 않음
+    const { data: result, error } = await supabase.rpc("verify_employee_pin", {
+      p_employee_id: selectedEmployee.id,
+      p_pin: pin,
+    });
+    if (error) {
+      console.error("verify_employee_pin 오류:", error.message);
+      setPinError("PIN 확인 중 오류가 발생했습니다. 다시 시도해주세요.");
+      setPinInput("");
+      return;
+    }
+    if (result === "NOT_SET") {
       setPinError("PIN이 설정되지 않았습니다.");
       setPinInput("");
       return;
     }
-    if (selectedEmployee.pin !== pin) {
+    if (result !== "OK") {
       setPinError("PIN이 올바르지 않습니다.");
       setPinInput("");
       return;
