@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireLogin } from "@/lib/auth/require-login";
 
 export async function POST(req: NextRequest) {
+  // ✅ 로그인한 사용자만 허용 (회사 텔레그램 방으로 전송)
+  const auth = await requireLogin();
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   try {
     const formData = await req.formData();
     const file = formData.get("photo") as File | null;
