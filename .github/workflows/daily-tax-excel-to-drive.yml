@@ -107,6 +107,13 @@ jobs:
           echo "rclone.conf:"
           cat ~/.config/rclone/rclone.conf
 
+      - name: Debug token length (temporary)
+        env:
+          T: ${{ secrets.TAX_EXCEL_TOKEN }}
+        run: |
+          echo "github token length = ${#T}"
+          case "$T" in *[[:space:]]*) echo "github token has whitespace";; *) echo "github token no whitespace";; esac
+
       - name: Download tax excel
         run: |
           FROM="${{ steps.dates.outputs.from }}"
