@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireLogin } from "@/lib/auth/require-login";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,6 +16,9 @@ function toProxyDate(date: Date): string {
 }
 
 export async function GET() {
+  // ✅ 로그인한 사용자만 허용 (구매자 이름 포함 주문 목록)
+  const auth = await requireLogin();
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   try {
     const { data: stateRow } = await supabase
       .from("coupang_poll_state")
@@ -40,7 +44,7 @@ export async function GET() {
     }
 
     const rawBody = await pollRes.json();
-    console.log("[poll] proxy raw:", JSON.stringify(rawBody));
+    
     const { newOrders } = rawBody;
 
     await supabase
