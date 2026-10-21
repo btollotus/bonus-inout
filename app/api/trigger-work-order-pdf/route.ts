@@ -2,8 +2,12 @@
 // 생산완료 시 GitHub Actions workflow_dispatch 트리거
 
 import { NextRequest, NextResponse } from "next/server";
+import { requireLogin } from "@/lib/auth/require-login";
 
 export async function POST(req: NextRequest) {
+  // ✅ 로그인한 사용자만 허용 (GitHub Actions 실행)
+  const auth = await requireLogin();
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   try {
     const body = await req.json();
     const { workOrderId, fileName } = body;
