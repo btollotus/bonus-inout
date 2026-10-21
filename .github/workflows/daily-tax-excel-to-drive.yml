@@ -124,6 +124,44 @@ jobs:
             "$URL"
           ls -al
 
+      # ✅ 엑셀 열기 암호 적용 (암호가 없거나 실패하면 업로드하지 않고 중단)
+      - name: Encrypt tax excel (open password)
+        env:
+          XLSX_PASSWORD: ${{ secrets.TAX_EXCEL_PASSWORD }}
+        run: |
+          if [ -z "$XLSX_PASSWORD" ]; then
+            echo "ERROR: secrets.TAX_EXCEL_PASSWORD is empty — 평문 엑셀 업로드를 막기 위해 중단합니다."
+            exit 1
+          fi
+          python3 -m pip install --quiet --break-system-packages msoffcrypto-tool==6.0.0
+
+          FILENAME="세무사_통합_${{ steps.dates.outputs.from }}_${{ steps.dates.outputs.to }}_생성일_${{ steps.dates.outputs.today }}.xlsx"
+
+          python3 - "$FILENAME" <<'PY'
+          import io, os, sys
+          import msoffcrypto
+          from msoffcrypto.format.ooxml import OOXMLFile
+
+          src = sys.argv[1]
+          pw = os.environ["XLSX_PASSWORD"]
+          tmp = src + ".enc"
+
+          with open(src, "rb") as fi, open(tmp, "wb") as fo:
+              OOXMLFile(fi).encrypt(pw, fo)
+
+          # 검증: 암호 파일인지, 같은 암호로 열리는지
+          with open(tmp, "rb") as f:
+              of = msoffcrypto.OfficeFile(f)
+              if not of.is_encrypted():
+                  raise SystemExit("ERROR: 암호화되지 않음")
+              of.load_key(password=pw, verify_password=True)
+              of.decrypt(io.BytesIO())
+
+          os.replace(tmp, src)
+          print("encrypted:", src, os.path.getsize(src), "bytes")
+          PY
+          ls -al
+
       - name: Upload to Google Drive (Shared Drive folder)
         run: |
           FROM="${{ steps.dates.outputs.from }}"
