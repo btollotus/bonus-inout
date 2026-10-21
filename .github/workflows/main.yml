@@ -87,6 +87,5 @@ jobs:
             --include "supabase_*.dump.gz.gpg" \
             --min-age 30d \
             --max-depth 1 \
-            --drive-use-trash=false \
-            --dry-run \
+            --drive-use-trash=true \
             -v
