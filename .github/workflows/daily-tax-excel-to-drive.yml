@@ -180,3 +180,13 @@ jobs:
           rclone copy "$FILENAME" "$DEST" -P
 
           echo "Uploaded: $DEST/$FILENAME"
+
+      # ✅ 30일 지난 엑셀은 휴지통으로 이동 (업로드가 성공한 경우에만 실행됨)
+      - name: Delete tax excel older than 30 days
+        run: |
+          rclone delete "gdrive:bonus-inout/excel-tax" \
+            --include "세무사_통합_*.xlsx" \
+            --min-age 30d \
+            --max-depth 1 \
+            --drive-use-trash=true \
+            -v
