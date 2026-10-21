@@ -1,6 +1,7 @@
 // app/api/shipments/excel/route.ts
 import ExcelJS from "exceljs";
 import { createClient } from "@supabase/supabase-js";
+import { requireLogin } from "@/lib/auth/require-login";
 
 export const runtime = "nodejs";
 
@@ -120,6 +121,10 @@ const COLUMNS = [
 ];
 
 export async function GET(req: Request) {
+  // ✅ 로그인한 사용자만 허용 (수화주 이름·주소·전화 포함 엑셀)
+  const auth = await requireLogin();
+  if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
+
   try {
     const url = new URL(req.url);
     const date = safeStr(url.searchParams.get("date")) || ymdToday();
