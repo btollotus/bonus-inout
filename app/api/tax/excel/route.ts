@@ -9,15 +9,6 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 function hasValidCronToken(req: Request): boolean {
   const expected = process.env.TAX_EXCEL_TOKEN;
   const got = req.headers.get("x-tax-excel-token");
-  // TEMP 진단: 값은 남기지 않고 길이·공백 여부만 기록
-  if (got) {
-    console.log("[tax-excel] token check", {
-      expectedLen: expected?.length ?? 0,
-      gotLen: got.length,
-      expectedHasWs: /\s/.test(expected ?? ""),
-      gotHasWs: /\s/.test(got),
-    });
-  }
   if (!expected || !got) return false;
   const a = Buffer.from(got);
   const b = Buffer.from(expected);
