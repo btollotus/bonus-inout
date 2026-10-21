@@ -10,8 +10,12 @@
 //   또는 fetch 기반으로 직접 호출 (아래 구현)
 
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/auth/require-admin'
 
 export async function POST(req: NextRequest) {
+  // ✅ ADMIN만 허용 (회사 이름으로 메일 발송)
+  const auth = await requireAdmin()
+  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status })
   try {
     const body = await req.json()
     const { to, employeeName, payMonth, pdfBase64, filename } = body
