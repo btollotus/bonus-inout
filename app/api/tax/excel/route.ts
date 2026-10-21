@@ -2,6 +2,18 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { timingSafeEqual } from "crypto";
+import { requireAdmin } from "@/lib/auth/require-admin";
+
+// GitHub Actions(daily-tax-excel-to-drive.yml) 전용 토큰 확인
+function hasValidCronToken(req: Request): boolean {
+  const expected = process.env.TAX_EXCEL_TOKEN;
+  const got = req.headers.get("x-tax-excel-token");
+  if (!expected || !got) return false;
+  const a = Buffer.from(got);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 function toYmd(d: string) {
   return (d || "").slice(0, 10);
@@ -86,6 +98,12 @@ type ShipRow = {
 };
 
 export async function GET(req: Request) {
+  // ✅ 인증: 워크플로 토큰 또는 ADMIN 로그인만 허용
+  if (!hasValidCronToken(req)) {
+    const auth = await requireAdmin();
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const supabase = (() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

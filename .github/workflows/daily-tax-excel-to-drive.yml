@@ -119,6 +119,7 @@ jobs:
           echo "Downloading: $URL"
           curl -L --fail \
             -H "x-vercel-protection-bypass: ${{ secrets.VERCEL_BYPASS_SECRET }}" \
+            -H "x-tax-excel-token: ${{ secrets.TAX_EXCEL_TOKEN }}" \
             -o "$FILENAME" \
             "$URL"
           ls -al
