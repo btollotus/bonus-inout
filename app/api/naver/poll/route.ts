@@ -31,7 +31,9 @@ export async function GET() {
 
     // 2. 프록시 서버에서 주문 조회
     const params = new URLSearchParams({ lastChangedFrom, lastChangedTo: now });
-    const pollRes = await fetch(`${PROXY}/poll?${params}`);
+    const pollRes = await fetch(`${PROXY}/poll?${params}`, {
+      headers: { "x-proxy-token": process.env.PROXY_TOKEN_BONUS ?? "" },
+    });
 
     if (!pollRes.ok) {
       const text = await pollRes.text();

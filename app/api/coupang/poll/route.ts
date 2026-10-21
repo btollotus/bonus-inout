@@ -30,7 +30,9 @@ export async function GET() {
     const createdAtTo = toProxyDate(new Date());
 
     const params = new URLSearchParams({ createdAtFrom, createdAtTo });
-    const pollRes = await fetch(`${PROXY}/coupang-poll?${params}`);
+    const pollRes = await fetch(`${PROXY}/coupang-poll?${params}`, {
+      headers: { "x-proxy-token": process.env.PROXY_TOKEN_BONUS ?? "" },
+    });
 
     if (!pollRes.ok) {
       const text = await pollRes.text();
