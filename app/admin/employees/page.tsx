@@ -25,6 +25,7 @@ type Employee = {
   encrypted_rrn: string | null
   birthday: string | null
   birthday_type: 'solar' | 'lunar' | null
+  birth_date: string | null
   signature_url: string | null
   created_at: string
   shoe_size: string | null
@@ -56,7 +57,7 @@ const EMPTY_FORM = {
   position: '', car_type: '', fuel_type: '', commute_distance: '',
   fuel_efficiency: '',
   emergency_contact: '', bank_name: '', bank_account: '', rrn: '',
-  birthday: '', birthday_type: 'solar' as 'solar' | 'lunar',
+  birthday: '', birthday_type: 'solar' as 'solar' | 'lunar', birth_date: '',
   shoe_size: '', top_size: '', bottom_size: '',
 }
 
@@ -294,7 +295,7 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
   if (error) { setError(translateError(error.message)); setFetchLoading(false); return }
 
   // 개인정보 컬럼은 employee_private에서 조회해 덮어씀 (ADMIN만 조회 가능)
-  const PRIVATE_COLS = ['mobile', 'address', 'emergency_contact', 'bank_name', 'bank_account', 'base_salary', 'meal_allowance', 'has_forklift', 'forklift_pay', 'encrypted_rrn', 'rrn', 'rrn_sent', 'birthday', 'birthday_type', 'signature_url', 'shoe_size', 'top_size', 'bottom_size', 'car_type', 'fuel_type', 'commute_distance', 'fuel_efficiency']
+  const PRIVATE_COLS = ['mobile', 'address', 'emergency_contact', 'bank_name', 'bank_account', 'base_salary', 'meal_allowance', 'has_forklift', 'forklift_pay', 'encrypted_rrn', 'rrn', 'rrn_sent', 'birthday', 'birthday_type', 'birth_date', 'signature_url', 'shoe_size', 'top_size', 'bottom_size', 'car_type', 'fuel_type', 'commute_distance', 'fuel_efficiency']
   const baseEmps = data || []
   const privById: Record<string, Record<string, unknown>> = {}
   if (baseEmps.length > 0) {
@@ -464,6 +465,7 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
       bank_account: emp.bank_account || '',
       rrn: '',
       birthday: emp.birthday || '',
+      birth_date: emp.birth_date || '',
       birthday_type: emp.birthday_type || 'solar',
       shoe_size: emp.shoe_size || '',
       top_size: emp.top_size || '',
@@ -600,13 +602,14 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
         ...basePayload,
         birthday: form.birthday || null,
         birthday_type: form.birthday ? form.birthday_type : null,
+        birth_date: form.birth_date || null,
         shoe_size: form.shoe_size || null,
         top_size: form.top_size || null,
         bottom_size: form.bottom_size || null,
               }
         
               // ▼ employee_private 이중 저장: employees 저장 성공 후, 실제 저장된 payload의 개인정보 컬럼만 복사
-              const PRIVATE_KEYS = ['mobile', 'address', 'emergency_contact', 'bank_name', 'bank_account', 'encrypted_rrn', 'birthday', 'birthday_type', 'signature_url', 'shoe_size', 'top_size', 'bottom_size', 'car_type', 'fuel_type', 'commute_distance', 'fuel_efficiency']
+              const PRIVATE_KEYS = ['mobile', 'address', 'emergency_contact', 'bank_name', 'bank_account', 'encrypted_rrn', 'birthday', 'birthday_type', 'birth_date', 'signature_url', 'shoe_size', 'top_size', 'bottom_size', 'car_type', 'fuel_type', 'commute_distance', 'fuel_efficiency']
               const savePrivate = async (employeeId: string, saved: Record<string, unknown>): Promise<string | null> => {
                 const row: Record<string, unknown> = { employee_id: employeeId }
                 for (const k of PRIVATE_KEYS) if (k in saved) row[k] = saved[k]
@@ -844,12 +847,12 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      주민번호
-                      <span className="text-xs text-gray-400 ml-1">{editingId ? '재입력시만 변경' : ''} · AES-256 암호화</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                      생년월일
+                      <span className="text-xs text-gray-400 ml-1">양력 · 이메일 찾기 본인확인용</span>
                     </label>
-                    <input name="rrn" value={form.rrn} onChange={handleChange} placeholder="XXXXXX-XXXXXXX" maxLength={14}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono tracking-wider" />
+                    <input type="date" name="birth_date" value={form.birth_date} onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">주소</label>
