@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
         // 개인정보(휴대폰·주민번호 암호화본)는 employee_private에서 조회
         const { data: privRows, error: privError } = await adminClient
         .from("employee_private")
-        .select("employee_id, mobile, encrypted_rrn")
+        .select("employee_id, mobile, birth_date")
         .in("employee_id", employees.map((emp) => emp.id));
   
       if (privError) {
@@ -94,27 +94,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 주민번호 앞 6자리 검증 (직접 복호화)
+        // 생년월일(양력, employee_private.birth_date) 검증
+    // birth_date가 비어 있으면 통과시키지 않음 (이름+휴대폰만으로는 찾을 수 없음)
     let foundEmail = "";
 
     for (const emp of mobileMatch) {
-      const encryptedRrn = privMap.get(emp.id)?.encrypted_rrn;
-      if (!encryptedRrn) {
-        // 주민번호 미등록 → 이름+휴대폰만으로 통과
-        foundEmail = emp.email;
-        break;
-      }
+      const birthDate = privMap.get(emp.id)?.birth_date as string | null | undefined;
+      if (!birthDate) continue;
 
-      // 직접 복호화
-      const rrn = decryptRRN(encryptedRrn);
-      if (!rrn) {
-        // 복호화 실패 → 생년월일을 확인할 수 없으므로 통과시키지 않음
-        console.error("find-email 주민번호 복호화 실패: employee_id=", emp.id);
-        continue;
-      }
-
-      const rrnFirst6 = rrn.replace(/-/g, "").slice(0, 6);
-      if (rrnFirst6 === birthdateClean) {
+      // date 타입은 'YYYY-MM-DD' 문자열 → 'YYMMDD'로 변환해 비교
+      const yymmdd = birthDate.replace(/-/g, "").slice(2, 8);
+      if (yymmdd === birthdateClean) {
         foundEmail = emp.email;
         break;
       }
