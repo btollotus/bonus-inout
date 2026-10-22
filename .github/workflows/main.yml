@@ -8,7 +8,7 @@ on:
 
 jobs:
   backup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     env:
       PGHOST: ${{ secrets.SUPABASE_DB_HOST }}
