@@ -25,7 +25,7 @@ type Employee = {
   encrypted_rrn: string | null
   birthday: string | null
   birthday_type: 'solar' | 'lunar' | null
-  birth_date: string | null
+  birth_date?: string | null
   signature_url: string | null
   created_at: string
   shoe_size: string | null
