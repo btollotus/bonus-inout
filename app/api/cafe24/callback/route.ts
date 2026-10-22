@@ -29,8 +29,10 @@ export async function GET(req: NextRequest) {
   });
 
   const data = await res.json();
-  console.log("[cafe24/callback] token response:", JSON.stringify(data));
-  if (!res.ok) return NextResponse.json({ error: data }, { status: 500 });
+  if (!res.ok) {
+    console.error("[cafe24/callback] token 발급 실패:", res.status, data?.error ?? "");
+    return NextResponse.json({ error: "cafe24 token 발급 실패" }, { status: 500 });
+  }
 
   const expiresAt = new Date(data.expires_at + "+09:00").toISOString();
 
