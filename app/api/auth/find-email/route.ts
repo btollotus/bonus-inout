@@ -1,26 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
-
-// RRN 복호화 (decrypt-rrn API와 동일한 로직 직접 구현)
-function decryptRRN(encrypted: string): string | null {
-  try {
-    const key = process.env.RRN_ENCRYPTION_KEY;
-    if (!key) return null;
-
-        // encrypt-rrn 저장 형식(aes-256-gcm, "iv:authTag:암호문" hex)과 동일하게 복호화
-        const [ivHex, authTagHex, encryptedHex] = encrypted.split(":");
-        if (!ivHex || !authTagHex || !encryptedHex) return null;
-    
-        const decipher = crypto.createDecipheriv("aes-256-gcm", Buffer.from(key, "hex"), Buffer.from(ivHex, "hex"));
-        decipher.setAuthTag(Buffer.from(authTagHex, "hex"));
-        let decrypted = decipher.update(encryptedHex, "hex", "utf8");
-        decrypted += decipher.final("utf8");
-        return decrypted;
-  } catch {
-    return null;
-  }
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -68,7 +47,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-        // 개인정보(휴대폰·주민번호 암호화본)는 employee_private에서 조회
+        // 개인정보(휴대폰·생년월일)는 employee_private에서 조회
         const { data: privRows, error: privError } = await adminClient
         .from("employee_private")
         .select("employee_id, mobile, birth_date")

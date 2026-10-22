@@ -22,7 +22,6 @@ type Employee = {
   emergency_contact: string | null
   bank_name: string | null
   bank_account: string | null
-  encrypted_rrn: string | null
   birthday: string | null
   birthday_type: 'solar' | 'lunar' | null
   birth_date?: string | null
@@ -56,7 +55,7 @@ const EMPTY_FORM = {
   address: '', hire_date: '', resign_date: '',
   position: '', car_type: '', fuel_type: '', commute_distance: '',
   fuel_efficiency: '',
-  emergency_contact: '', bank_name: '', bank_account: '', rrn: '',
+  emergency_contact: '', bank_name: '', bank_account: '',
   birthday: '', birthday_type: 'solar' as 'solar' | 'lunar', birth_date: '',
   shoe_size: '', top_size: '', bottom_size: '',
 }
@@ -81,10 +80,6 @@ function translateError(msg: string): string {
 }
 
 // ── 유틸 ────────────────────────────────────────────────
-function formatRRN(v: string) {
-  const c = v.replace(/[^0-9]/g, '').slice(0, 13)
-  return c.length > 6 ? c.slice(0, 6) + '-' + c.slice(6) : c
-}
 function formatPhone(v: string) {
   const c = v.replace(/[^0-9]/g, '').slice(0, 11)
   if (c.length <= 3) return c
@@ -147,8 +142,6 @@ export default function EmployeesPage() {
   const [showForm, setShowForm] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
-  const [showRRN, setShowRRN] = useState<Record<string, boolean>>({})
-  const [decryptedRRN, setDecryptedRRN] = useState<Record<string, string>>({})
 
   const [resendingId, setResendingId] = useState<string | null>(null)
 
@@ -290,12 +283,12 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
     setFetchLoading(true)
     const { data, error } = await supabase
     .from('employees')
-    .select('id,name,created_at,employee_code,auth_user_id,rrn,mobile,address,hire_date,resign_date,updated_at,department,position_title,employment_type,base_salary,meal_allowance,has_forklift,forklift_pay,bank_name,bank_account,rrn_sent,is_active,email,encrypted_rrn,position,car_type,fuel_type,commute_distance,emergency_contact,birthday,birthday_type,fuel_efficiency,signature_url,shoe_size,top_size,bottom_size,webauthn_credential,skip_attendance_check,pin:has_pin')
+    .select('id,name,created_at,employee_code,auth_user_id,mobile,address,hire_date,resign_date,updated_at,department,position_title,employment_type,base_salary,meal_allowance,has_forklift,forklift_pay,bank_name,bank_account,is_active,email,position,car_type,fuel_type,commute_distance,emergency_contact,birthday,birthday_type,fuel_efficiency,signature_url,shoe_size,top_size,bottom_size,webauthn_credential,skip_attendance_check,pin:has_pin')
     .order('created_at', { ascending: false })
   if (error) { setError(translateError(error.message)); setFetchLoading(false); return }
 
   // 개인정보 컬럼은 employee_private에서 조회해 덮어씀 (ADMIN만 조회 가능)
-  const PRIVATE_COLS = ['mobile', 'address', 'emergency_contact', 'bank_name', 'bank_account', 'base_salary', 'meal_allowance', 'has_forklift', 'forklift_pay', 'encrypted_rrn', 'rrn', 'rrn_sent', 'birthday', 'birthday_type', 'birth_date', 'signature_url', 'shoe_size', 'top_size', 'bottom_size', 'car_type', 'fuel_type', 'commute_distance', 'fuel_efficiency']
+  const PRIVATE_COLS = ['mobile', 'address', 'emergency_contact', 'bank_name', 'bank_account', 'base_salary', 'meal_allowance', 'has_forklift', 'forklift_pay', 'birthday', 'birthday_type', 'birth_date', 'signature_url', 'shoe_size', 'top_size', 'bottom_size', 'car_type', 'fuel_type', 'commute_distance', 'fuel_efficiency']
   const baseEmps = data || []
   const privById: Record<string, Record<string, unknown>> = {}
   if (baseEmps.length > 0) {
@@ -359,25 +352,6 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
     setHealthFormEmpId(null)
   }
 
-  async function handleRevealRRN(empId: string) {
-    if (showRRN[empId]) {
-      setShowRRN((p) => ({ ...p, [empId]: false }))
-      return
-    }
-    const res = await fetch('/api/admin/decrypt-rrn', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ empId }),
-    })
-    const json = await res.json()
-    if (res.ok) {
-      setDecryptedRRN((p) => ({ ...p, [empId]: json.rrn }))
-      setShowRRN((p) => ({ ...p, [empId]: true }))
-      setTimeout(() => setShowRRN((p) => ({ ...p, [empId]: false })), 30000)
-    } else {
-      setError(json.error || '복호화 실패')
-    }
-  }
 
   async function fetchAuthUsers() {
     try {
@@ -416,7 +390,6 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target
-    if (name === 'rrn') { setForm({ ...form, rrn: formatRRN(value) }); return }
     if (name === 'mobile') { setForm({ ...form, mobile: formatPhone(value) }); return }
     setForm({ ...form, [name]: value })
   }
@@ -463,7 +436,6 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
       emergency_contact: emp.emergency_contact || '',
       bank_name: emp.bank_name || '',
       bank_account: emp.bank_account || '',
-      rrn: '',
       birthday: emp.birthday || '',
       birth_date: emp.birth_date || '',
       birthday_type: emp.birthday_type || 'solar',
@@ -565,18 +537,6 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
         signatureUrl = path
       }
 
-      let encryptedRrn: string | null = null
-      if (form.rrn.trim()) {
-        const rrnRes = await fetch('/api/admin/encrypt-rrn', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rrn: form.rrn.replace(/-/g, '') }),
-        })
-        const rrnJson = await rrnRes.json()
-        if (!rrnRes.ok) { setError(rrnJson.error || '주민번호 암호화 실패'); setLoading(false); return }
-        encryptedRrn = rrnJson.encrypted
-      }
-
       const basePayload: Record<string, unknown> = {
         auth_user_id: authUserId || null,
         employee_code: form.employee_code,
@@ -596,7 +556,6 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
         bank_account: form.bank_account || null,
         signature_url: signatureUrl,
       }
-      if (encryptedRrn) basePayload.encrypted_rrn = encryptedRrn
 
       const fullPayload: Record<string, unknown> = {
         ...basePayload,
@@ -609,7 +568,7 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
               }
         
               // ▼ employee_private 이중 저장: employees 저장 성공 후, 실제 저장된 payload의 개인정보 컬럼만 복사
-              const PRIVATE_KEYS = ['mobile', 'address', 'emergency_contact', 'bank_name', 'bank_account', 'encrypted_rrn', 'birthday', 'birthday_type', 'birth_date', 'signature_url', 'shoe_size', 'top_size', 'bottom_size', 'car_type', 'fuel_type', 'commute_distance', 'fuel_efficiency']
+              const PRIVATE_KEYS = ['mobile', 'address', 'emergency_contact', 'bank_name', 'bank_account', 'birthday', 'birthday_type', 'birth_date', 'signature_url', 'shoe_size', 'top_size', 'bottom_size', 'car_type', 'fuel_type', 'commute_distance', 'fuel_efficiency']
               const savePrivate = async (employeeId: string, saved: Record<string, unknown>): Promise<string | null> => {
                 const row: Record<string, unknown> = { employee_id: employeeId }
                 for (const k of PRIVATE_KEYS) if (k in saved) row[k] = saved[k]
@@ -741,7 +700,7 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
           <div>
             <h1 className="text-xl font-bold text-gray-900">직원 관리 (관리자)</h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              이메일 입력 시 로그인 계정 자동 생성 + 초대 메일 발송 · 주민번호 AES-256 암호화 저장
+              이메일 입력 시 로그인 계정 자동 생성 + 초대 메일 발송 · 주민번호는 보관하지 않음
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -1280,20 +1239,6 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
                             {emp.fuel_efficiency ? ` / 연비 ${emp.fuel_efficiency}km/L` : ''}
                           </span>
                         </div>
-                        <div className="flex gap-1.5 items-center">
-                          <span className="text-gray-400 shrink-0">주민번호</span>
-                          {emp.encrypted_rrn ? (
-                            <span className="flex items-center gap-1">
-                              <span className="font-mono text-gray-700">
-                                {showRRN[emp.id] && decryptedRRN[emp.id] ? decryptedRRN[emp.id] : '●●●●●●-●●●●●●●'}
-                              </span>
-                              <button onClick={() => handleRevealRRN(emp.id)}
-                                className="text-blue-500 hover:text-blue-700 underline ml-0.5">
-                                {showRRN[emp.id] ? '숨김' : '확인'}
-                              </button>
-                            </span>
-                          ) : <span className="text-gray-300">미입력</span>}
-                        </div>
                       </div>
                     </div>
 
@@ -1497,7 +1442,7 @@ const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
             </div>
           )}
           <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-400">
-            ※ 주민번호 AES-256 암호화 · 확인 후 30초 자동 숨김 · RLS 관리자 전용
+            ※ 개인정보는 employee_private에 저장 · RLS 관리자 전용 · 주민번호 미보관
           </div>
         </div>
       </div>
