@@ -1764,7 +1764,7 @@ export function OtherHeatingTab({ role, userId, showToast }: {
     if (allWoNos.length > 0) {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("work_order_no,client_name,sub_name,product_name")
+        .select("work_order_no,client_name,sub_name,product_name,work_order_items(school_name)")
         .in("work_order_no", allWoNos);
       const map: Record<string, string> = {};
       for (const wo of woData ?? []) {
@@ -1773,9 +1773,9 @@ export function OtherHeatingTab({ role, userId, showToast }: {
           ? rawSecond.slice(wo.client_name.length).replace(/^[-_\s·]+/, "")
           : rawSecond
         ).replace(/\s*외\s*\d+건\s*$/, "");
-        map[wo.work_order_no] = secondPart
+        map[wo.work_order_no] = (secondPart
           ? `${wo.client_name} · ${secondPart}`
-          : wo.client_name;
+          : wo.client_name) + woSchoolSuffix((wo as any).work_order_items);
       }
       setWoLabelMap(map);
     }
@@ -1977,8 +1977,8 @@ export function OtherHeatingTab({ role, userId, showToast }: {
       const woLabelMap: Record<string, string> = {};
       if (allWoNos.length > 0) {
         const { data: woNameData } = await supabase
-          .from("work_orders")
-          .select("work_order_no,client_name,sub_name,product_name")
+        .from("work_orders")
+        .select("work_order_no,client_name,sub_name,product_name,work_order_items(school_name)")
           .in("work_order_no", allWoNos);
         for (const wo of woNameData ?? []) {
           const rawSecond = wo.sub_name ?? wo.product_name ?? "";
@@ -1986,9 +1986,9 @@ export function OtherHeatingTab({ role, userId, showToast }: {
             ? rawSecond.slice(wo.client_name.length).replace(/^[-_\s·]+/, "")
             : rawSecond
           ).replace(/\s*외\s*\d+건\s*$/, "");
-          woLabelMap[wo.work_order_no] = secondPart
+          woLabelMap[wo.work_order_no] = (secondPart
             ? `${wo.client_name} · ${secondPart}`
-            : wo.client_name;
+            : wo.client_name) + woSchoolSuffix((wo as any).work_order_items);
         }
       }
 
@@ -3022,7 +3022,7 @@ export function CompressorTab({ role, userId, showToast }: {
   const loadLogs = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from("compressor_logs")
-    .select("*, work_order:work_orders(client_name, product_name)")
+    .select("*, work_order:work_orders(client_name, product_name, work_order_items(school_name))")
     .gte("log_date", filterFrom)
     .lte("log_date", filterTo)
     .order("worked_at", { ascending: true });
@@ -3198,7 +3198,7 @@ export function CompressorTab({ role, userId, showToast }: {
                     <td className="py-2 px-3 text-center text-xs font-medium text-slate-700">{log.work_type ?? "—"}</td>
                     <td className="py-2 px-3 text-xs text-slate-500">
                       {(log as any).work_order
-                        ? `${(log as any).work_order.client_name} — ${(log as any).work_order.product_name}`
+                                                ? `${(log as any).work_order.client_name} — ${(log as any).work_order.product_name}${woSchoolSuffix((log as any).work_order.work_order_items)}`
                         : "—"}
                     </td>
                     <td className="py-2 px-3 text-xs text-slate-500">{log.note ?? "—"}</td>

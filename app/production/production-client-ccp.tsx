@@ -51,6 +51,12 @@ const CCP_WO_EVENT_LABELS: Record<string, string> = {
   end:       "종료",
 };
 
+// 작업지시서 품목(work_order_items)의 학교명을 중복 없이 모아 " (가주초, 동패고)" 형태로 반환 — 없으면 ""
+function woSchoolSuffix(items: { school_name?: string | null }[] | null | undefined): string {
+  const names = [...new Set((items ?? []).map((i) => (i.school_name ?? "").trim()).filter(Boolean))];
+  return names.length > 0 ? ` (${names.join(", ")})` : "";
+}
+
 function ccpWoEventBadgeCls(type: string) {
   if (type === "start")     return "bg-blue-100 border-blue-200 text-blue-700";
   if (type === "end")       return "bg-purple-100 border-purple-200 text-purple-700";
@@ -1425,7 +1431,7 @@ export function WoCcpCard({
 
     const { data: sameSlotWos } = await supabaseClient
       .from("work_orders")
-      .select("work_order_no, client_name, product_name")
+      .select("work_order_no, client_name, product_name, work_order_items(school_name)")
       .eq("ccp_slot_id", s.id)
       .eq("status", "생산중")
       .neq("id", selectedWo.id);
@@ -1444,7 +1450,7 @@ export function WoCcpCard({
 
       if (notEnded.length > 0) {
         const list = notEnded.map((w: any) =>
-          `• ${w.work_order_no}\n  ${w.client_name} · ${w.product_name}`
+          `• ${w.work_order_no}\n  ${w.client_name} · ${w.product_name}${woSchoolSuffix(w.work_order_items)}`
         ).join("\n\n");
         alert(`[${s.slot_name}] 슬롯에 종료되지 않은 작업이 있습니다.\n\n${list}\n\n해당 작업의 온도 기록을 종료한 후 이 슬롯을 선택해주세요.`);
         return;

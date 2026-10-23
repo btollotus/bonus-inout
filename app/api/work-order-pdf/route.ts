@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   const { data: order, error } = await supabase
     .from("work_orders")
-    .select(`*, work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images)`)
+    .select(`*, work_order_items(id,work_order_id,delivery_date,sub_items,order_qty,barcode_no,actual_qty,unit_weight,total_weight,expiry_date,order_id,note,images,school_name)`)
     .eq("id", id)
     .single();
 
@@ -165,7 +165,7 @@ function generateWorkOrderHTML(wo: any): string {
       <table style="width:100%;border-collapse:collapse;">
         <tbody>
           <tr>
-            <td style="border:1px solid #94a3b8;border-bottom:none;padding:5px 10px;width:30%;background:#f1f5f9;color:#111;font-weight:bold;font-size:9pt;vertical-align:middle;white-space:nowrap;">${itemName}</td>
+            <td style="border:1px solid #94a3b8;border-bottom:none;padding:5px 10px;width:30%;background:#f1f5f9;color:#111;font-weight:bold;font-size:9pt;vertical-align:middle;white-space:nowrap;">${itemName}${item.school_name ? ` (${item.school_name})` : ""}</td>
             <td style="border:1px solid #94a3b8;border-bottom:none;border-left:none;padding:5px 10px;background:#f8fafc;vertical-align:middle;">
               ${itemBarcode
                 ? `<span style="font-family:monospace;font-size:8pt;color:#444;white-space:nowrap;">${itemBarcode}</span>`

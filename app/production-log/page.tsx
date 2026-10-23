@@ -486,28 +486,28 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
         .select("*").eq("log_date", date).eq("employee_id", empId).maybeSingle(),
         Promise.all([
           supabase.from("work_orders")
-          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
+          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input,work_order_items(school_name)")
           .eq("assignee_production", empName)
           .eq("status_production", true)
           .gte("production_done_at", `${date}T00:00:00+09:00`)
           .lte("production_done_at", `${date}T23:59:59+09:00`)
           .order("production_done_at", { ascending: false }),
         supabase.from("work_orders")
-          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
+        .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input,work_order_items(school_name)")
           .eq("assignee_transfer", empName)
           .eq("status_transfer", true)
           .gte("transfer_done_at", `${date}T00:00:00+09:00`)
           .lte("transfer_done_at", `${date}T23:59:59+09:00`)
           .order("transfer_done_at", { ascending: false }),
         supabase.from("work_orders")
-          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
+        .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input,work_order_items(school_name)")
           .eq("assignee_print_check", empName)
           .eq("status_print_check", true)
           .gte("print_check_done_at", `${date}T00:00:00+09:00`)
           .lte("print_check_done_at", `${date}T23:59:59+09:00`)
           .order("print_check_done_at", { ascending: false }),
         supabase.from("work_orders")
-          .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input")
+        .select("id,work_order_no,client_name,product_name,assignee_production,assignee_transfer,assignee_print_check,assignee_input,work_order_items(school_name)")
           .eq("assignee_input", empName)
           .eq("status_input", true)
           .gte("input_done_at", `${date}T00:00:00+09:00`)
@@ -528,7 +528,7 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
             if (map.has(w.id)) { map.get(w.id)!.tags.push("금속검출"); }
             else { map.set(w.id, { ...w, tags: ["금속검출"] }); }
           });
-          return { data: Array.from(map.values()) };
+          return { data: Array.from(map.values()).map((w: any) => ({ ...w, product_name: `${w.product_name}${woSchoolSuffix(w.work_order_items)}` })) };
         }),
     ]);
     const log = logRes.data as DailyWorkLog | null;
@@ -2252,10 +2252,10 @@ function MaterialLedgerTab({ role, userId, showToast }: {
     if (woNos.length > 0) {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("id, work_order_no, client_name, product_name, assignee_production")
+        .select("id, work_order_no, client_name, product_name, assignee_production, work_order_items(school_name)")
         .in("work_order_no", woNos);
       (woData ?? []).forEach((w: any) => {
-        woMap[w.work_order_no] = { id: w.id, client_name: w.client_name, product_name: w.product_name, assignee_production: w.assignee_production };
+        woMap[w.work_order_no] = { id: w.id, client_name: w.client_name, product_name: `${w.product_name}${woSchoolSuffix(w.work_order_items)}`, assignee_production: w.assignee_production }; 
       });
     }
 
@@ -3242,7 +3242,7 @@ function WorkLogTab({ role, userId, showToast }: {
           .eq("log_date", date)
           .order("worker_name"),
         supabase.from("work_orders")
-          .select("client_name, product_name, assignee_production, assignee_transfer")
+        .select("client_name, product_name, assignee_production, assignee_transfer, work_order_items(school_name)") 
           .eq("status_production", true)
           .gte("updated_at", `${date}T00:00:00+09:00`)
           .lt("updated_at", `${date}T23:59:59+09:00`),
@@ -3273,7 +3273,7 @@ function WorkLogTab({ role, userId, showToast }: {
         w.assignee_production === empName || w.assignee_transfer === empName
       );
       const woHtml = dayWos.length > 0
-        ? dayWos.map((w: any) => `<div style="font-size:7.5pt;padding:2px 0;border-bottom:0.5px solid #f0f0f0;">${w.client_name} — ${w.product_name}</div>`).join("")
+        ? dayWos.map((w: any) => `<div style="font-size:7.5pt;padding:2px 0;border-bottom:0.5px solid #f0f0f0;">${w.client_name} — ${w.product_name}${woSchoolSuffix(w.work_order_items)}</div>`).join("")
         : "";
       return `<div style="flex:1;border:1px solid #ccc;border-radius:6px;padding:10px 12px;min-height:160px;display:flex;flex-direction:column;gap:4px;">
         <div style="font-size:8.5pt;font-weight:bold;margin-bottom:5px;border-bottom:0.5px solid #ddd;padding-bottom:5px;display:flex;justify-content:space-between;align-items:center;"><span>${dateLabel}</span>${(log.clock_in || log.clock_out) ? `<span style="font-size:7.5pt;font-weight:normal;color:#555;">${log.clock_in ? `출근 ${log.clock_in}` : ""}${log.clock_in && log.clock_out ? " · " : ""}${log.clock_out ? `퇴근 ${log.clock_out}` : ""}</span>` : ""}</div>

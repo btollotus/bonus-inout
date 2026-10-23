@@ -266,7 +266,7 @@ useEffect(() => {
   const [bulkPrinting, setBulkPrinting] = useState(false);
 
   // ✅ 인쇄용 명세서 데이터
-  type SpecLine = { itemName: string; qty: number; unitPrice: number; supply: number; vat: number; total: number };
+  type SpecLine = { itemName: string; qty: number; unitPrice: number; supply: number; vat: number; total: number; schoolName?: string };
   type BulkSpecPartner = {
     partnerId: string;
     partnerName: string;
@@ -567,14 +567,15 @@ useEffect(() => {
 
         const arr = partnerLines.get(pid) ?? [];
         // 같은 품목+단가 합산
-        const existing = arr.find(l => l.itemName === name && l.unitPrice === unitPrice);
+        const schoolName = String(row.school_name ?? "").trim();
+        const existing = arr.find(l => l.itemName === name && l.unitPrice === unitPrice && (l.schoolName ?? "") === schoolName);
         if (existing) {
           existing.qty += qty;
           existing.supply += supply;
           existing.vat += vat;
           existing.total += total;
         } else {
-          arr.push({ itemName: name, qty, unitPrice, supply, vat, total });
+          arr.push({ itemName: name, qty, unitPrice, supply, vat, total, schoolName: schoolName || undefined });
         }
         partnerLines.set(pid, arr);
       }
@@ -870,7 +871,7 @@ useEffect(() => {
                 <tbody>
                   {p.lines.map((l, idx) => (
                     <tr key={idx} style={{ borderTop: "1px solid #f1f5f9" }}>
-                      <td style={{ padding: "8px 12px" }}>{l.itemName}</td>
+                      <td style={{ padding: "8px 12px" }}>{l.itemName}{l.schoolName ? ` ${l.schoolName}` : ""}</td>
                       <td style={{ padding: "8px 12px", textAlign: "right" }}>{fmtMoney(l.qty)}</td>
                       <td style={{ padding: "8px 12px", textAlign: "right" }}>{fmtMoney(l.unitPrice)}</td>
                       <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: "600" }}>{fmtMoney(l.supply)}</td>

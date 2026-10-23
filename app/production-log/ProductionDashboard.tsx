@@ -8,6 +8,12 @@ const supabase = createClient();
 
 type UserRole = "ADMIN" | "SUBADMIN" | "USER" | null;
 
+// 작업지시서 품목(work_order_items)의 학교명을 중복 없이 모아 " (가주초, 동패고)" 형태로 반환 — 없으면 ""
+function woSchoolSuffix(items: { school_name?: string | null }[] | null | undefined): string {
+  const names = [...new Set((items ?? []).map((i) => (i.school_name ?? "").trim()).filter(Boolean))];
+  return names.length > 0 ? ` (${names.join(", ")})` : "";
+}
+
 // ── 카드 상태 ──
 type Status = "ok" | "warn" | "error" | "loading";
 
@@ -166,7 +172,7 @@ export function ProductionDashboard({
     try {
       const [{ data: woData }, { data: ccpData }] = await Promise.all([
         supabase.from("work_orders")
-        .select("id, client_name, product_name, input_done_at")
+        .select("id, client_name, product_name, input_done_at, work_order_items(school_name)")
         .eq("status_production", true)
           .in("status", ["생산중", "완료"])
           .gte("updated_at", `${today}T00:00:00+09:00`)
@@ -197,7 +203,7 @@ export function ProductionDashboard({
         tab: "ccp1p",
         status: missing.length > 0 ? "error" : "ok",
         message: missing.length > 0 ? `${missing.length}건 미기록` : filteredWo.length === 0 ? `해당 작업 없음` : `전체 기록 완료`,
-        detail: missing.map((w: any) => `${w.client_name} — ${w.product_name}`),
+        detail: missing.map((w: any) => `${w.client_name} — ${w.product_name}${woSchoolSuffix(w.work_order_items)}`),
       });
     } catch {
       newCards.push({ key: "ccp1p", label: "CCP-1P 금속검출", icon: "🔍", tab: "ccp1p", status: "warn", message: "조회 오류" });
