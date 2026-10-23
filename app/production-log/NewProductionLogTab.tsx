@@ -28,7 +28,7 @@ type WorkOrder = {
   input_done_at: string | null;
   status_input: boolean;
   usages?: { name: string; quantity: number; unit: string }[];
-  items?: { name: string; order_qty: number; actual_qty: number; unit_weight: number; defect_qty?: number }[];
+  items?: { name: string; order_qty: number; actual_qty: number; unit_weight: number; defect_qty?: number; school_name?: string | null }[];
   prod_start?: string | null;   // ccp_wo_events start measured_at
   prod_end?: string | null;     // ccp_wo_events end measured_at
   transfer_start?: string | null; // ccp_wo_events 8번 슬롯(전사지인쇄) start — 생산 슬롯 기록이 함께 있을 때만
@@ -132,7 +132,7 @@ async function fetchExtraProdWos(date: string, existingNos: string[]): Promise<a
   if (candNos.length === 0) return [];
   const { data: wos, error: wosErr } = await supabase
     .from("work_orders")
-    .select("id,work_order_no,client_name,product_name,food_type,note,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,status_production,work_order_items(sub_items,actual_qty,unit_weight,defect_qty)")
+    .select("id,work_order_no,client_name,product_name,food_type,note,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,status_production,work_order_items(sub_items,actual_qty,unit_weight,defect_qty,school_name)")
     .in("work_order_no", candNos);
     if (wosErr) { console.error("생산일지 WO 조회 오류:", wosErr.message); return []; }
   const filtered = (wos ?? []).filter((wo: any) => {
@@ -321,7 +321,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
     const [woRes, blendRes, usageRes, metalRes] = await Promise.all([
       supabase
         .from("work_orders")
-        .select("id,work_order_no,client_name,product_name,food_type,note,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight,defect_qty)")
+        .select("id,work_order_no,client_name,product_name,food_type,note,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight,defect_qty,school_name)")
         .gte("production_done_at", `${selectedDate}T00:00:00+09:00`)
         .lt("production_done_at",  `${selectedDate}T23:59:59+09:00`)
         .eq("status_production", true)
@@ -436,6 +436,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
         actual_qty: woi.actual_qty ?? 0,
         unit_weight: woi.unit_weight ?? 0,
         defect_qty: woi.defect_qty ?? 0,
+        school_name: woi.school_name ?? null,
       }))
       .filter((it: any) => {
         const n = it.name;
@@ -485,7 +486,7 @@ setLoading(false);
       const [woRes, blendRes, usageRes, metalRes2] = await Promise.all([
         supabase
           .from("work_orders")
-          .select("id,work_order_no,client_name,product_name,food_type,note,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight,defect_qty)")
+          .select("id,work_order_no,client_name,product_name,food_type,note,assignee_production,assignee_transfer,assignee_input,skip_production_check,production_done_at,input_done_at,status_input,work_order_items(sub_items,actual_qty,unit_weight,defect_qty,school_name)")
           .gte("production_done_at", `${date}T00:00:00+09:00`)
           .lt("production_done_at",  `${date}T23:59:59+09:00`)
           .eq("status_production", true)
@@ -586,6 +587,7 @@ setLoading(false);
             actual_qty: woi.actual_qty ?? 0,
             unit_weight: woi.unit_weight ?? 0,
             defect_qty: woi.defect_qty ?? 0,
+            school_name: woi.school_name ?? null,
           }))
           .filter((it: any) => {
             const n = it.name;
@@ -667,7 +669,7 @@ setLoading(false);
               <tr>
                 ${showWorker ? `<td style="${td}text-align:center;" rowspan="${workerTotalRows}">${worker}</td>` : ""}
                <td style="${td}">${wo.client_name}</td>
-                <td style="${td}">${item.name}</td>
+                                <td style="${td}">${item.name}${item.school_name ? ` <span style="font-size:7pt;border:1px solid #999;border-radius:6px;padding:0 4px;margin-left:4px;">${item.school_name}</span>` : ""}</td>
                                 <td style="${tdC}">${wo.log_label ? `<span style="font-size:6.5pt;">${wo.log_label.replace(" ", "<br/>")}</span>` : (item.actual_qty > 0 ? item.actual_qty.toLocaleString() : "—")}</td>
                 ${idx === 0 ? `<td style="${tdC};font-size:7pt;" rowspan="${rows.length}">${timeDatePrefix}${wo.prod_start ? toKstTime(wo.prod_start) : "—"}~${wo.prod_end ? toKstTime(wo.prod_end) : "—"}${transferTimeHtml}</td>` : ""}
                 ${showUsage ? `<td style="${td}" rowspan="${rows.length}">${usageStr}</td>` : ""}
@@ -935,7 +937,7 @@ setLoading(false);
                            {rows.map((item, idx) => (
                               <div key={idx} className="flex flex-col gap-1 px-3 py-2 border-b border-slate-100 last:border-b-0">
                                 <div className="flex items-center gap-3">
-                                  <span className="flex-1 min-w-0 truncate text-sm text-slate-700">{item.name}</span>
+                                <span className="flex-1 min-w-0 truncate text-sm text-slate-700">{item.name}{item.school_name ? <span className="ml-1.5 rounded-full bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">{item.school_name}</span> : null}</span>
                                   {(wo.usages ?? []).length > 0 && idx === 0 && (
                                     <div className="flex flex-wrap gap-1 shrink-0">
                                       {(wo.usages ?? []).map((u, ui) => (

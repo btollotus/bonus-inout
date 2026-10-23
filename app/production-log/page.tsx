@@ -340,6 +340,12 @@ type WorkOrderRef = {
 
 type WoInfoMap = Record<string, { client_name: string; product_name: string }>;
 
+// 작업지시서 품목(work_order_items)의 학교명을 중복 없이 모아 " (가주초, 동패고)" 형태로 반환 — 없으면 ""
+function woSchoolSuffix(items: { school_name?: string | null }[] | null | undefined): string {
+  const names = [...new Set((items ?? []).map((i) => (i.school_name ?? "").trim()).filter(Boolean))];
+  return names.length > 0 ? ` (${names.join(", ")})` : "";
+}
+
 function formatCheckPeriods(periods: string[] | undefined): string {
   const list = periods ?? [];
   const has = (p: string) => list.includes(p);
@@ -588,11 +594,11 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
     if (mergedNos.length > 0) {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("work_order_no, client_name, product_name")
+        .select("work_order_no, client_name, product_name, work_order_items(school_name)")
         .in("work_order_no", mergedNos);
       const map: WoInfoMap = {};
       (woData ?? []).forEach((w: any) => {
-        map[w.work_order_no] = { client_name: w.client_name, product_name: w.product_name };
+        map[w.work_order_no] = { client_name: w.client_name, product_name: `${w.product_name}${woSchoolSuffix(w.work_order_items)}` };
       });
       setWoInfoMap(map);
     } else {
@@ -935,12 +941,12 @@ function ProductionLogTab({ role, userId, showToast, onUnsavedChange }: {
     if (allNos.length > 0) {
       const { data: woData } = await supabase
         .from("work_orders")
-        .select("work_order_no, client_name, product_name, assignee_production, assignee_transfer, assignee_print_check, assignee_input")
+        .select("work_order_no, client_name, product_name, assignee_production, assignee_transfer, assignee_print_check, assignee_input, work_order_items(school_name)")
         .in("work_order_no", allNos);
       const map: WoInfoMap = {};
       const tagMap: Record<string, Record<string, string[]>> = {};
       (woData ?? []).forEach((w: any) => {
-        map[w.work_order_no] = { client_name: w.client_name, product_name: w.product_name };
+        map[w.work_order_no] = { client_name: w.client_name, product_name: `${w.product_name}${woSchoolSuffix(w.work_order_items)}` };
         tagMap[w.work_order_no] = {};
         if (w.assignee_production) {
           if (!tagMap[w.work_order_no][w.assignee_production]) tagMap[w.work_order_no][w.assignee_production] = [];

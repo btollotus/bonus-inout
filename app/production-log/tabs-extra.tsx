@@ -76,6 +76,12 @@ const CCP_EVENT_LABELS: Record<string, string> = {
   material_in: "원료투입", material_out: "원료소진", vat_refill: "밧트교체", move: "슬롯이동",
 };
 
+// 작업지시서 품목(work_order_items)의 학교명을 중복 없이 모아 " (가주초, 동패고)" 형태로 반환 — 없으면 ""
+function woSchoolSuffix(items: { school_name?: string | null }[] | null | undefined): string {
+  const names = [...new Set((items ?? []).map((i) => (i.school_name ?? "").trim()).filter(Boolean))];
+  return names.length > 0 ? ` (${names.join(", ")})` : "";
+}
+
 function eventBadgeCls(type: string) {
   if (type === "start") return "bg-blue-100 border-blue-200 text-blue-700";
   if (type === "end") return "bg-purple-100 border-purple-200 text-purple-700";
@@ -172,7 +178,7 @@ const allWoNos = [...new Set([
 if (allWoNos.length > 0) {
   const { data: woData } = await supabase
     .from("work_orders")
-    .select("work_order_no, client_name, sub_name, product_name")
+    .select("work_order_no, client_name, sub_name, product_name, work_order_items(school_name)")
     .in("work_order_no", allWoNos);
   const map: Record<string, string> = {};
   for (const wo of woData ?? []) {
@@ -186,7 +192,7 @@ if (allWoNos.length > 0) {
       : wo.client_name;
 
 
-    map[wo.work_order_no] = label;
+      map[wo.work_order_no] = label + woSchoolSuffix((wo as any).work_order_items);
   }
   setWoLabelMap(map);
 }  // ← if (allWoNos.length > 0) 닫는 괄호
@@ -243,7 +249,7 @@ setSlotWoMap(slotMap);
       if (allWoNos.length > 0) {
         const { data: woData } = await supabase
           .from("work_orders")
-          .select("work_order_no,client_name,sub_name,product_name")
+          .select("work_order_no,client_name,sub_name,product_name,work_order_items(school_name)")
           .in("work_order_no", allWoNos);
         for (const wo of woData ?? []) {
           const rawSecond = wo.sub_name ?? wo.product_name ?? "";
@@ -251,9 +257,9 @@ setSlotWoMap(slotMap);
             ? rawSecond.slice(wo.client_name.length).replace(/^[-_\s·]+/, "")
             : rawSecond
           ).replace(/\s*외\s*\d+건\s*$/, "");
-          labelMap[wo.work_order_no] = secondPart
+          labelMap[wo.work_order_no] = (secondPart
             ? `${wo.client_name} · ${secondPart}`
-            : wo.client_name;
+            : wo.client_name) + woSchoolSuffix((wo as any).work_order_items);
         }
       }
 
@@ -3395,11 +3401,11 @@ export function PetLedgerTab({ role, userId, showToast }: {
     if (!match) { setPrintUsedPopup({ note, woInfo: null, loading: false }); return; }
     const woNo = match[0];
     const { data } = await supabase.from("work_orders")
-      .select("work_order_no, client_name, product_name, food_type, work_order_items(sub_items)")
+    .select("work_order_no, client_name, product_name, food_type, work_order_items(sub_items,school_name)")
       .eq("work_order_no", woNo)
       .maybeSingle();
     if (data) {
-      const items = ((data as any).work_order_items ?? []) as { sub_items: { name: string; qty: number }[] }[];
+      const items = ((data as any).work_order_items ?? []) as { sub_items: { name: string; qty: number }[]; school_name?: string | null }[];
       const filtered = items.filter((item) => {
         const n = (item.sub_items?.[0]?.name ?? "").trim();
         return n && !n.startsWith("성형틀") && !n.startsWith("인쇄제판")
@@ -3407,7 +3413,7 @@ export function PetLedgerTab({ role, userId, showToast }: {
       });
       const firstName = filtered[0]?.sub_items?.[0]?.name ?? (data as any).product_name ?? "";
       const rest = Math.max(0, filtered.length - 1);
-      const displayName = firstName && rest > 0 ? `${firstName} 외 ${rest}건` : firstName;
+      const displayName = (firstName && rest > 0 ? `${firstName} 외 ${rest}건` : firstName) + woSchoolSuffix(filtered);
       setPrintUsedPopup({ note, woInfo: { ...(data as any), product_name: displayName }, loading: false });
     } else {
       setPrintUsedPopup({ note, woInfo: null, loading: false });
