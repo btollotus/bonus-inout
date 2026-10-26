@@ -121,21 +121,8 @@ const COLUMNS = [
   { header: "배송메세지", key: "delivery_message", width: 30 },
 ];
 
-export async function GET(req: Request) {
-  // ✅ 로그인한 사용자만 허용 (수화주 이름·주소·전화 포함 엑셀)
-  const auth = await requireLogin();
-  if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
-
-  const url = new URL(req.url);
-  const date = safeStr(url.searchParams.get("date")) || ymdToday();
-
-  const customerIdsParam = url.searchParams.get("customer_ids");
-  const customerIds = customerIdsParam
-    ? customerIdsParam.split(",").map((s) => s.trim()).filter(Boolean)
-    : null;
-
-  return buildShipExcel(date, customerIds, null);
-}
+// ✅ GET(암호 없는 다운로드) 제거 — 수화주 개인정보 포함 파일은 POST(비밀번호 암호화)로만 제공
+//    GET 요청은 Next.js가 자동으로 405 Method Not Allowed 반환
 
 // ✅ 비밀번호 암호화 엑셀 (비밀번호는 URL이 아닌 POST 본문으로만 받음)
 export async function POST(req: Request) {
