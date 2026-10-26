@@ -1,5 +1,6 @@
 // app/api/shipments/excel/route.ts
 import ExcelJS from "exceljs";
+import officeCrypto from "officecrypto-tool";
 import { createClient } from "@supabase/supabase-js";
 import { requireLogin } from "@/lib/auth/require-login";
 
@@ -125,15 +126,42 @@ export async function GET(req: Request) {
   const auth = await requireLogin();
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
 
+  const url = new URL(req.url);
+  const date = safeStr(url.searchParams.get("date")) || ymdToday();
+
+  const customerIdsParam = url.searchParams.get("customer_ids");
+  const customerIds = customerIdsParam
+    ? customerIdsParam.split(",").map((s) => s.trim()).filter(Boolean)
+    : null;
+
+  return buildShipExcel(date, customerIds, null);
+}
+
+// ✅ 비밀번호 암호화 엑셀 (비밀번호는 URL이 아닌 POST 본문으로만 받음)
+export async function POST(req: Request) {
+  const auth = await requireLogin();
+  if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
+
+  let body: any = null;
+  try { body = await req.json(); } catch {
+    return new Response("잘못된 요청입니다.", { status: 400 });
+  }
+
+  const date = safeStr(body?.date) || ymdToday();
+  const customerIds = Array.isArray(body?.customer_ids)
+    ? body.customer_ids.map((s: any) => safeStr(s)).filter(Boolean)
+    : null;
+  const password = String(body?.password ?? "");
+
+  if (!/^\S{4,16}$/.test(password)) {
+    return new Response("비밀번호는 공백 없이 4~16자로 입력해주세요.", { status: 400 });
+  }
+
+  return buildShipExcel(date, customerIds && customerIds.length > 0 ? customerIds : null, password);
+}
+
+async function buildShipExcel(date: string, customerIds: string[] | null, password: string | null): Promise<Response> {
   try {
-    const url = new URL(req.url);
-    const date = safeStr(url.searchParams.get("date")) || ymdToday();
-
-    const customerIdsParam = url.searchParams.get("customer_ids");
-    const customerIds = customerIdsParam
-      ? customerIdsParam.split(",").map((s) => s.trim()).filter(Boolean)
-      : null;
-
     const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL");
     const serviceKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
 
@@ -172,7 +200,7 @@ export async function GET(req: Request) {
       ws.columns = COLUMNS;
       ws.getRow(1).font = { bold: true };
       const buf = await wb.xlsx.writeBuffer();
-      return makeResponse(buf, date);
+      return await makeResponse(buf, date, password);
     }
 
     const { data: shipData, error: sErr } = await supabase
@@ -289,7 +317,7 @@ export async function GET(req: Request) {
     });
 
     const buf = await wb.xlsx.writeBuffer();
-    return makeResponse(buf, date);
+    return await makeResponse(buf, date, password);
 
   } catch (e: any) {
     const msg = String(e?.message ?? e ?? "unknown error");
@@ -297,8 +325,11 @@ export async function GET(req: Request) {
   }
 }
 
-function makeResponse(buf: ExcelJS.Buffer, date: string) {
-  return new Response(buf, {
+async function makeResponse(buf: ExcelJS.Buffer, date: string, password: string | null) {
+  const body: BodyInit = password
+    ? new Uint8Array(await officeCrypto.encrypt(Buffer.from(buf as ArrayBuffer), { password }))
+    : (buf as any);
+  return new Response(body, {
     status: 200,
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -260,6 +260,11 @@ useEffect(() => {
 
   const [downloadingExcel, setDownloadingExcel] = useState(false);
   const [downloadingExcelDate, setDownloadingExcelDate] = useState<string | null>(null);
+    // ✅ 송장엑셀 비밀번호 입력 모달
+    const [pwTarget, setPwTarget] = useState<{ date: string; customerIds?: string[] } | null>(null);
+    const [pw1, setPw1] = useState("");
+    const [pw2, setPw2] = useState("");
+    const [pwErr, setPwErr] = useState<string | null>(null);
 
   // ✅ 일괄출력 관련 상태
   const [bulkPrintSelected, setBulkPrintSelected] = useState<Set<string>>(new Set());
@@ -652,19 +657,44 @@ useEffect(() => {
   );
 
   // ✅ 수정: customerIds 파라미터 추가 (없으면 전체 다운로드, 있으면 선택 거래처만)
-  async function downloadShipExcel(date: string, customerIds?: string[]) {
-    if (!date) return;
-    setDownloadingExcel(true);
+    // ✅ 버튼 클릭 → 비밀번호 입력 모달 열기 (호출부는 그대로)
+    function downloadShipExcel(date: string, customerIds?: string[]) {
+      if (!date) return;
+      setPw1("");
+      setPw2("");
+      setPwErr(null);
+      setPwTarget({ date, customerIds });
+    }
+  
+    // ✅ 모달에서 확인 → 검증 후 다운로드
+    function confirmShipExcelPassword() {
+      if (!pwTarget) return;
+      if (!/^\S{4,16}$/.test(pw1)) { setPwErr("공백 없이 4~16자로 입력해주세요."); return; }
+      if (pw1 !== pw2) { setPwErr("비밀번호가 일치하지 않습니다."); return; }
+      const { date, customerIds } = pwTarget;
+      const password = pw1;
+      setPwTarget(null);
+      setPw1("");
+      setPw2("");
+      setPwErr(null);
+      runShipExcelDownload(date, customerIds, password);
+    }
+  
+    async function runShipExcelDownload(date: string, customerIds: string[] | undefined, password: string) {
+      setDownloadingExcel(true);
     setDownloadingExcelDate(date);
     setMsg(null);
 
     try {
-      const params = new URLSearchParams({ date });
-      if (customerIds && customerIds.length > 0) {
-        params.set("customer_ids", customerIds.join(","));
-      }
-
-      const res = await fetch(`/api/shipments/excel?${params.toString()}`, { method: "GET" });
+      const res = await fetch(`/api/shipments/excel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date,
+          customer_ids: customerIds && customerIds.length > 0 ? customerIds : null,
+          password,
+        }),
+      });
 
       if (!res.ok) {
         let errText = `엑셀 다운로드 실패 (HTTP ${res.status})`;
@@ -1243,9 +1273,48 @@ useEffect(() => {
               </div>
             </div>
           </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-//실사용 페이지
+                ) : null}
+
+                {/* ✅ 모달: 송장엑셀 비밀번호 설정 */}
+                {pwTarget ? (
+                  <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClick={() => setPwTarget(null)}>
+                    <div className="w-full max-w-[420px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+                      <div className="border-b border-slate-200 px-5 py-4">
+                        <div className="text-base font-semibold">송장엑셀 다운로드 · {pwTarget.date}</div>
+                        <div className="mt-1 text-xs text-red-600">개인정보(수화주 이름·주소·연락처)가 포함된 파일입니다. 업무 목적 달성 후 반드시 삭제해주세요.</div>
+                      </div>
+                      <div className="space-y-3 px-5 py-4">
+                        <div className="text-sm text-slate-700">엑셀 파일을 열 때 사용할 비밀번호를 입력해주세요. (공백 불가, 4~16자)</div>
+                        <input
+                          type="password"
+                          className={input}
+                          placeholder="비밀번호"
+                          value={pw1}
+                          autoFocus
+                          autoComplete="new-password"
+                          onChange={(e) => { setPw1(e.target.value); setPwErr(null); }}
+                        />
+                        <input
+                          type="password"
+                          className={input}
+                          placeholder="비밀번호 확인"
+                          value={pw2}
+                          autoComplete="new-password"
+                          onChange={(e) => { setPw2(e.target.value); setPwErr(null); }}
+                          onKeyDown={(e) => { if (e.key === "Enter") confirmShipExcelPassword(); }}
+                        />
+                        {pwErr ? <div className="text-xs text-red-600">{pwErr}</div> : null}
+                        <div className="text-xs text-slate-500">※ 비밀번호를 잊으면 파일을 열 수 없습니다. 다시 다운로드해주세요. (Excel 2010 이상 필요)</div>
+                      </div>
+                      <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+                        <button className={btn} onClick={() => setPwTarget(null)}>취소</button>
+                        <button className={btnOn} onClick={confirmShipExcelPassword}>다운로드</button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          );
+        }
+        //실사용 페이지
