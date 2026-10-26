@@ -106,8 +106,8 @@ jobs:
           FAIL=0
           for b in $(rclone lsf supa: --dirs-only); do
             b="${b%/}"
-            SRC=$(rclone size "supa:$b" --json)
-            DST=$(rclone size "$DEST_ROOT/$b" --json)
+            SRC=$(rclone size "supa:$b" --json || echo '{"count":0}')
+            DST=$(rclone size "$DEST_ROOT/$b" --json || echo '{"count":0}')
             SRC_N=$(echo "$SRC" | python3 -c "import json,sys;print(json.load(sys.stdin)['count'])")
             DST_N=$(echo "$DST" | python3 -c "import json,sys;print(json.load(sys.stdin)['count'])")
             echo "$b : source=$SRC_N files / backup=$DST_N files"
