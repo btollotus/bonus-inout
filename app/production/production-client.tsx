@@ -4059,27 +4059,47 @@ const totalOrder = items
                                 const { data: lotData } = await supabase.from("lots").select("id").eq("variant_id", syncVariantId).eq("expiry_date", item.expiry_date).maybeSingle();
                                 const lotId = lotData?.id ?? null;
                                 if (lotId) {
-                                  const newActualQty = pi.actual_qty ? toInt(pi.actual_qty) : 0;
                                   const itemNameForSync = (item.sub_items ?? [])[0]?.name ?? "";
                                   const inNote = `작업지시서 생산완료 - ${selectedWo.work_order_no} - ${itemNameForSync}`;
                                   const discardNote = `작업지시서 생산완료(불량) - ${selectedWo.work_order_no} - ${itemNameForSync}`;
+                                  // 같은 lot(variant+소비기한)·같은 품목명 줄(학교별 분할 등)은 합산 — RPC/Cron과 동일 기준
+                                  const siblingItems = items.filter((s) => ((s.sub_items ?? [])[0]?.name ?? "") === itemNameForSync && s.expiry_date === item.expiry_date);
+                                  const siblingBarcodes = Array.from(new Set(siblingItems.map((s) => s.barcode_no).filter(Boolean))) as string[];
+                                  const siblingVariantMap = new Map<string, string>();
+                                  if (siblingBarcodes.length > 0) {
+                                    const { data: sPbRows } = await supabase.from("product_barcodes").select("barcode, variant_id").in("barcode", siblingBarcodes);
+                                    for (const r of sPbRows ?? []) { if (r.variant_id) siblingVariantMap.set(r.barcode, r.variant_id); }
+                                  }
+                                  let groupActualQty = 0;
+                                  let groupDefectQty = 0;
+                                  for (const s of siblingItems) {
+                                    const sVariantId = (s.barcode_no ? siblingVariantMap.get(s.barcode_no) : undefined) ?? selectedWo.variant_id;
+                                    if (sVariantId !== syncVariantId) continue;
+                                    const spi = prodInputs[s.id];
+                                    const sHasInput = !!spi && !!(spi.actual_qty || spi.unit_weight || spi.expiry_date);
+                                    const sActual = sHasInput ? (spi.actual_qty ? toInt(spi.actual_qty) : 0) : (s.actual_qty ?? 0);
+                                    const sDefect = sHasInput ? (spi.defect_qty ? toInt(spi.defect_qty) : 0) : (s.defect_qty ?? 0);
+                                    if (sActual <= 0) continue;
+                                    groupActualQty += sActual;
+                                    groupDefectQty += sDefect;
+                                  }
                                   const { data: inMovs } = await supabase.from("movements").select("id").eq("lot_id", lotId).eq("note", inNote).eq("type", "IN");
                                   if (inMovs && inMovs.length === 1) {
-                                    await supabase.from("movements").update({ qty: newActualQty + newDefectQty }).eq("id", inMovs[0].id);
+                                    await supabase.from("movements").update({ qty: groupActualQty + groupDefectQty }).eq("id", inMovs[0].id);
                                   } else if (inMovs && inMovs.length > 1) {
                                     showToast("불량 동기화 보류: IN 기록이 여러 건이라 자동 동기화할 수 없습니다. 재고대장을 직접 확인해주세요.", "error");
                                   }
                                   const { data: discardMovs } = await supabase.from("movements").select("id").eq("lot_id", lotId).eq("note", discardNote).eq("type", "DISCARD");
                                   if (discardMovs && discardMovs.length === 1) {
-                                    if (newDefectQty > 0) {
-                                      await supabase.from("movements").update({ qty: newDefectQty }).eq("id", discardMovs[0].id);
+                                    if (groupDefectQty > 0) {
+                                      await supabase.from("movements").update({ qty: groupDefectQty }).eq("id", discardMovs[0].id);
                                     } else {
                                       await supabase.from("movements").delete().eq("id", discardMovs[0].id);
                                     }
-                                  } else if (discardMovs && discardMovs.length === 0 && newDefectQty > 0) {
+                                  } else if (discardMovs && discardMovs.length === 0 && groupDefectQty > 0) {
                                     const todayKSTDate = todayKST();
                                     await supabase.from("movements").insert({
-                                      lot_id: lotId, type: "DISCARD", qty: newDefectQty,
+                                      lot_id: lotId, type: "DISCARD", qty: groupDefectQty,
                                       happened_at: `${todayKSTDate}T00:00:00+09:00`,
                                       note: discardNote, created_by: currentUserIdRef.current,
                                     });
