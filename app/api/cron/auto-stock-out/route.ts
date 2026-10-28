@@ -62,7 +62,29 @@ export async function GET(request: NextRequest) {
         if (itemsErr) { errors.push(`items 조회 실패 (wo ${wo.work_order_no}): ${itemsErr.message}`); continue; }
         if (!items || items.length === 0) { skipped++; continue; }
 
-        for (const item of items) {
+        // 3-1. 같은 lot(variant+소비기한)·같은 품목명 줄은 actual_qty 합산 — OUT 메모가 같아 첫 줄만 출고되던 문제 방지
+        const barcodeList = Array.from(new Set(items.map((i: any) => i.barcode_no).filter(Boolean)));
+        const barcodeVariantMap = new Map<string, string>();
+        if (barcodeList.length > 0) {
+          const { data: pbRows } = await supabase
+            .from("product_barcodes")
+            .select("barcode, variant_id")
+            .in("barcode", barcodeList);
+          for (const r of pbRows ?? []) { if (r.variant_id) barcodeVariantMap.set(r.barcode, r.variant_id); }
+        }
+        const { data: woVariantRow } = await supabase.from("work_orders").select("variant_id").eq("id", wo.id).single();
+        const woVariantId: string | null = woVariantRow?.variant_id ?? null;
+        const groupMap = new Map<string, any>();
+        for (const it of items) {
+          const nm: string = (it.sub_items ?? [])[0]?.name ?? "";
+          const vId = (it.barcode_no ? barcodeVariantMap.get(it.barcode_no) : undefined) ?? woVariantId ?? "";
+          const key = `${vId}|${it.expiry_date}|${nm}`;
+          const g = groupMap.get(key);
+          if (g) { g.actual_qty += it.actual_qty; } else { groupMap.set(key, { ...it }); }
+        }
+        const groupedItems = Array.from(groupMap.values());
+
+        for (const item of groupedItems) {
           // 성형틀, 인쇄제판 제외
           const itemName: string = (item.sub_items ?? [])[0]?.name ?? "";
           if (itemName.startsWith("성형틀") || itemName.startsWith("인쇄제판")) { skipped++; continue; }
