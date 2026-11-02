@@ -258,6 +258,13 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
       const qty = first.quantity ? `${first.quantity}장` : "";
       return [today, safe(customerName), "전사지", qty, "견적서"].filter(Boolean).join("-");
     }
+    // 도눔 박스(4구/5구/9구) 전용 파일명 — 예) 20261102-업체-도눔5구-주문제작+인쇄-50박스-견적서
+    const firstBox = first.productType.match(/^도눔\s?([459])구\s?(기성|주문)/);
+    if (firstBox) {
+      const boxKind = firstBox[2] === "기성" ? "기성" : first.productType.includes("인쇄") ? "주문제작+인쇄" : "주문제작";
+      const boxQty = first.quantity ? `${first.quantity}박스` : "";
+      return [today, safe(customerName), `도눔${firstBox[1]}구`, boxKind, boxQty, "견적서"].filter(Boolean).join("-");
+    }
     const isDoneumFirst = first.productType.includes("도눔");
     const colorLabel = (isDoneumFirst ? "도눔-" : "") + (first.isRaise ? "컬러인쇄" : first.colorType === "dark" ? "다크" : "화이트");
     const sizeStr = first.widthMm && first.heightMm ? `${first.widthMm}x${first.heightMm}mm` : "";
