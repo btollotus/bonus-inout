@@ -1019,7 +1019,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
         const tds = cols.map((c) => {
           const isRight = ["prev_stock", "in", "out", "discard", "stock"].includes(c.key);
           const noWrap = isRight || c.key === "expiry";
-          const cellHtml = c.key === "name" ? `<div class="nm">${cellMap[c.key] ?? ""}</div>` : (cellMap[c.key] ?? "");
+          const cellHtml = (c.key === "name" || c.key === "food_type") ? `<div class="nm">${cellMap[c.key] ?? ""}</div>` : (cellMap[c.key] ?? "");
           return `<td style="padding:3px 6px;border:1px solid #d1d5db;font-size:9pt;text-align:${isRight ? "right" : "left"};${noWrap ? "white-space:nowrap;" : ""}">${cellHtml}</td>`;
         }).join("");
         return `<tr>${tds}</tr>`;
@@ -1065,7 +1065,7 @@ win.document.write(html);
 win.document.close();
 win.focus();
 setTimeout(() => {
-  // 제품명이 칸보다 길면 글자 크기를 0.5pt씩 줄여 1줄로 맞춤 (최소 6pt, 그래도 넘치면 기존처럼 줄바꿈)
+    // 제품명·식품유형이 칸보다 길면 글자 크기를 0.5pt씩 줄여 1줄로 맞춤 (최소 6pt, 그래도 넘치면 기존처럼 줄바꿈)
   try {
     const nmEls = Array.from(win.document.querySelectorAll<HTMLElement>("div.nm"));
     const nmWidths = nmEls.map((el) => el.clientWidth);
