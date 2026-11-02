@@ -1556,6 +1556,8 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
   };
   function insertShippingFee(totalInclVat: number) { setLines((prev) => [...prev, { food_type: "", name: "택배비", weight_g: 0, qty: 1, unit: "", total_incl_vat: String(totalInclVat) }]); }
   function insertEditShippingFee(totalInclVat: number) { setELines((prev) => [...prev, { food_type: "", name: "택배비", weight_g: 0, qty: 1, unit: "", total_incl_vat: String(totalInclVat) }]); }
+  function insertIceboxFee(totalInclVat: number) { setLines((prev) => [...prev, { food_type: "기타", name: "아이스박스", weight_g: 0, qty: 1, unit: "", total_incl_vat: String(totalInclVat) }]); }
+  function insertEditIceboxFee(totalInclVat: number) { setELines((prev) => [...prev, { food_type: "기타", name: "아이스박스", weight_g: 0, qty: 1, unit: "", total_incl_vat: String(totalInclVat) }]); }
 
   function applyShipmentsToForm(shipments: ShipmentSnap[], setS1: (v: ShipFormState) => void, setS2: (v: ShipFormState) => void, setTwo: (v: boolean) => void) {
     const sorted = [...shipments].sort((a, b) => (a.seq ?? 1) - (b.seq ?? 1));
@@ -3171,6 +3173,9 @@ if (woSubNameVal) {
                     <div className="mt-4 flex items-center justify-between">
                       <div className="text-sm font-semibold">제품</div>
                       <div className="flex items-center gap-2">
+                      <button className={btn} onClick={() => insertEditIceboxFee(4620)}>+ 아이스박스 소 4,620</button>
+                        <button className={btn} onClick={() => insertEditIceboxFee(6930)}>+ 아이스박스 중 6,930</button>
+                        <button className={btn} onClick={() => insertEditIceboxFee(9230)}>+ 아이스박스 대 9,230</button>
                         <button className={btn} onClick={() => insertEditShippingFee(3300)}>+ 택배비 3,300</button>
                         <button className={btn} onClick={() => insertEditShippingFee(4000)}>+ 택배비 4,000</button>
                         <button className={btn} onClick={addEditLine}>+ 제품 추가</button>
@@ -3522,6 +3527,9 @@ if (woSubNameVal) {
                 <div className="mt-4 flex items-center justify-between">
                   <div className="text-sm font-semibold">제품명(식품유형 자동완성 포함)</div>
                   <div className="flex items-center gap-2">
+                  <button className={btn} onClick={() => insertIceboxFee(4620)}>+ 아이스박스 소 4,620</button>
+                    <button className={btn} onClick={() => insertIceboxFee(6930)}>+ 아이스박스 중 6,930</button>
+                    <button className={btn} onClick={() => insertIceboxFee(9230)}>+ 아이스박스 대 9,230</button>
                     <button className={btn} onClick={() => insertShippingFee(3300)}>+ 택배비 3,300</button>
                     <button className={btn} onClick={() => insertShippingFee(4000)}>+ 택배비 4,000</button>
                     <button className={btn} onClick={addLine}>+ 제품 추가</button>
