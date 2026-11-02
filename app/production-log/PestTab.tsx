@@ -572,7 +572,7 @@ export function PestTab({ role, userId, showToast }: {
           )}
        {/* ══ 비래해충 인쇄 전용 ══ */}
        <div id="pest-flying-print-inner" style={{ display: "none" }}>
-        <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
+       <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000", paddingLeft: "20mm" }}>
          {/* 제목 + 결재란 */}
          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
             <tbody>
@@ -600,7 +600,7 @@ export function PestTab({ role, userId, showToast }: {
          {/* 비래해충 데이터 */}
          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
             <colgroup>
-              <col style={{ width: "44px" }} />
+              <col style={{ width: "30px" }} />
               <col style={{ width: "60px" }} />
               <col style={{ width: "5.5%" }} />
               <col style={{ width: "5.5%" }} />
@@ -775,7 +775,7 @@ export function PestTab({ role, userId, showToast }: {
           <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
             <thead>
               <tr style={{ background: "#f0f0f0" }}>
-                <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 44, fontSize: "8pt" }}>날짜</th>
+              <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 40, fontSize: "8pt" }}>날짜</th>
                 <th style={{ border: "1px solid #000", padding: "3px", textAlign: "center", width: 130, fontSize: "8pt", whiteSpace: "nowrap" }}>트랩</th>
                 {["그리마","거미","노래기","모기","집게벌래","기타"].map(h => (
                   <th key={h} style={{ border: "1px solid #000", padding: "3px", textAlign: "center", fontSize: "7.5pt" }}>{h}</th>
