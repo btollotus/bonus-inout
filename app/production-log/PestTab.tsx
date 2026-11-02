@@ -747,7 +747,7 @@ export function PestTab({ role, userId, showToast }: {
 
       {/* ══ 보행해충 인쇄 전용 ══ */}
       <div id="pest-walking-print-inner" style={{ display: "none" }}>
-        <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000" }}>
+      <div style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: "9pt", color: "#000", paddingLeft: "20mm" }}>
          {/* 제목 + 결재란 */}
          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 6 }}>
             <tbody>
