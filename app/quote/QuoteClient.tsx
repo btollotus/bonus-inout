@@ -110,6 +110,15 @@ const PRODUCT_TYPES = [
   { key: "도눔별도1000미만",      label: "도눔 별도 1천개↓" },
   { key: "도눔별도1000이상인쇄",  label: "도눔 별도 1천개↑+인쇄" },
   { key: "도눔별도1000미만인쇄",  label: "도눔 별도 1천개↓+인쇄" },
+  { key: "도눔4구기성",     label: "도눔 4구 기성" },
+  { key: "도눔4구주문",     label: "도눔 4구 주문제작" },
+  { key: "도눔4구주문인쇄", label: "도눔 4구 주문제작+인쇄" },
+  { key: "도눔5구기성",     label: "도눔 5구 기성" },
+  { key: "도눔5구주문",     label: "도눔 5구 주문제작" },
+  { key: "도눔5구주문인쇄", label: "도눔 5구 주문제작+인쇄" },
+  { key: "도눔9구기성",     label: "도눔 9구 기성" },
+  { key: "도눔9구주문",     label: "도눔 9구 주문제작" },
+  { key: "도눔9구주문인쇄", label: "도눔 9구 주문제작+인쇄" },
   { key: "롤리팝1도55",    label: "롤리팝 1도 55mm" },
   { key: "롤리팝2도55",    label: "롤리팝 2도 55mm" },
   { key: "롤리팝레이즈-별도", label: "롤리팝레이즈-별도" },
@@ -1180,7 +1189,7 @@ async function loadBdpInquiries() {
                           <button className={`mt-2 w-full rounded-xl border px-3 py-1.5 text-xs font-semibold ${item.calcLoading ? "bg-slate-100 text-slate-400" : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"}`}
                             disabled={item.calcLoading}
                             onClick={async () => {
-                              if (!item.widthMm || !item.heightMm) return setMsg("가로/세로를 입력하세요.");
+                              if (!(PRODUCTS as any)[item.productType]?.box && (!item.widthMm || !item.heightMm)) return setMsg("가로/세로를 입력하세요.");
                               if (!item.quantity) return setMsg("수량을 입력하세요.");
                               updateItem(item.id, { calcLoading: true, calcResult: null });
                               try {

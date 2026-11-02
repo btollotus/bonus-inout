@@ -169,7 +169,12 @@ export default function QuotePrintModal({ onClose, quoteData }: QuotePrintProps)
         ? `${item.widthMm}×${item.heightMm}mm${item.thickness ? `, 두께 ${item.thickness}` : ""}`
         : item.thickness ? `두께 ${item.thickness}` : ""
     );
-    const productName = (item.nickname ? `[${item.nickname}] ` : "") + (sizeStr ? `${colorLabel}(${sizeStr})` : colorLabel);
+        // 도눔 박스(4구/5구/9구): key("도눔4구주문인쇄") / label("도눔 4구 주문제작+인쇄") 모두 매칭
+        const doneumBox = item.productType.match(/^도눔\s?([459])구\s?(기성|주문)/);
+        const doneumBoxKind = doneumBox ? (doneumBox[2] === "기성" ? "기성" : item.productType.includes("인쇄") ? "주문제작+인쇄" : "주문제작") : "";
+        const productName = (item.nickname ? `[${item.nickname}] ` : "") + (doneumBox
+          ? `도눔 ${doneumBox[1]}구 박스(${doneumBoxKind}, ${item.colorType === "dark" ? "다크" : "화이트"})`
+          : (sizeStr ? `${colorLabel}(${sizeStr})` : colorLabel));
    // 롤리팝레이즈-별도: 인쇄제판 단가에 합산 (plateCost / quantity, 10원 단위 올림)
    const isRollipopRaize = item.productType === "롤리팝레이즈-별도";
    const platePerUnit = (isRollipopRaize && item.plateCost > 0 && item.quantity > 0)
