@@ -1019,7 +1019,8 @@ const [adminLoaded, setAdminLoaded] = useState(false);
         const tds = cols.map((c) => {
           const isRight = ["prev_stock", "in", "out", "discard", "stock"].includes(c.key);
           const noWrap = isRight || c.key === "expiry";
-          return `<td style="padding:3px 6px;border:1px solid #d1d5db;font-size:9pt;text-align:${isRight ? "right" : "left"};${noWrap ? "white-space:nowrap;" : ""}">${cellMap[c.key] ?? ""}</td>`;
+          const cellHtml = c.key === "name" ? `<div class="nm">${cellMap[c.key] ?? ""}</div>` : (cellMap[c.key] ?? "");
+          return `<td style="padding:3px 6px;border:1px solid #d1d5db;font-size:9pt;text-align:${isRight ? "right" : "left"};${noWrap ? "white-space:nowrap;" : ""}">${cellHtml}</td>`;
         }).join("");
         return `<tr>${tds}</tr>`;
       }).join("");
@@ -1039,7 +1040,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
 <title>재고대장_${cat}_${todayKST}</title>
 <style>
 @page{size:A4 landscape;margin:10mm 12mm;}
-body{margin:0;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:9pt;color:#111;}
+body{margin:0;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:9pt;color:#111;width:273mm;}
 *{box-sizing:border-box;}
 table{border-collapse:collapse;width:100%;}
 thead{display:table-header-group;}
@@ -1063,7 +1064,20 @@ if (!win) return;
 win.document.write(html);
 win.document.close();
 win.focus();
-setTimeout(() => { win.print(); }, 500);
+setTimeout(() => {
+  // 제품명이 칸보다 길면 글자 크기를 0.5pt씩 줄여 1줄로 맞춤 (최소 6pt, 그래도 넘치면 기존처럼 줄바꿈)
+  try {
+    const nmEls = Array.from(win.document.querySelectorAll<HTMLElement>("div.nm"));
+    const nmWidths = nmEls.map((el) => el.clientWidth);
+    nmEls.forEach((el, i) => { el.style.width = `${nmWidths[i] - 4}px`; el.style.whiteSpace = "nowrap"; el.style.overflow = "hidden"; });
+    nmEls.forEach((el) => {
+      let fs = 9;
+      while (el.scrollWidth > el.clientWidth && fs > 6) { fs -= 0.5; el.style.fontSize = `${fs}pt`; }
+      if (el.scrollWidth > el.clientWidth) { el.style.whiteSpace = "normal"; el.style.overflow = "visible"; el.style.fontSize = ""; }
+    });
+  } catch (e) { console.error("제품명 글자크기 맞춤 실패:", e); }
+  win.print();
+}, 500);
 }
 
     const previewRows = catRows(activeTab);
