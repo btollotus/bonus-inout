@@ -880,6 +880,7 @@ export default function TradeClient({ role = "ADMIN" }: { role?: string }) {
     setOrderWoNote(auto);
   }, [orderWoMoldCols, orderWoMoldRows, lines]); // eslint-disable-line
   const [orderWoEnabled, setOrderWoEnabled] = useState(!isSubAdmin);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [orderIsReorder, setOrderIsReorder] = useState(false);
   const [orderSkipProductionCheck, setOrderSkipProductionCheck] = useState(false);
   const orderWoFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -2903,9 +2904,18 @@ if (woSubNameVal) {
 
   return (
     <div className="bg-slate-50 text-slate-900 min-h-screen">
-      <div className="mx-auto w-full max-w-[1600px] overflow-x-hidden px-4 py-6">
+            <div className="mx-auto w-full max-w-[1600px] overflow-x-hidden px-4 py-6">
 
-      {alertOpen ? (
+{lightboxUrl && (
+  <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 p-4" onClick={() => setLightboxUrl(null)}>
+    <div className="relative max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
+      <img src={lightboxUrl} alt="디자인 이미지" className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl" />
+      <button className="absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700 shadow-lg hover:bg-slate-100 text-sm font-bold" onClick={() => setLightboxUrl(null)}>✕</button>
+    </div>
+  </div>
+)}
+
+{alertOpen ? (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4" onClick={() => setAlertOpen(false)}>
             <div className="w-full max-w-[520px] rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
@@ -3193,7 +3203,7 @@ if (woSubNameVal) {
                                 {/* 기존 이미지 */}
                                 {(eItemExistingImageUrls[i] ?? []).map((url, j) => (
                                   <div key={`exist-${j}`} className="group relative">
-                                    <img src={url} alt={`기존${j+1}`} className="h-14 w-14 rounded-lg border border-slate-200 object-cover opacity-80" />
+                                   <img src={url} alt={`기존${j+1}`} className="h-14 w-14 cursor-zoom-in rounded-lg border border-slate-200 object-cover opacity-80" onClick={() => setLightboxUrl(url)} title="클릭하면 크게 보기" /> 
                                     <button className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
                                       onClick={() => setEItemExistingImageUrls((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }))}>✕</button>
                                   </div>
@@ -3201,7 +3211,7 @@ if (woSubNameVal) {
                                 {/* 새로 선택한 이미지 */}
                                 {(eItemImagePreviewUrls[i] ?? []).map((url, j) => (
                                   <div key={`new-${j}`} className="group relative">
-                                    <img src={url} alt={`새이미지${j+1}`} className="h-14 w-14 rounded-lg border border-blue-200 object-cover" />
+                                    <img src={url} alt={`새이미지${j+1}`} className="h-14 w-14 cursor-zoom-in rounded-lg border border-blue-200 object-cover" onClick={() => setLightboxUrl(url)} title="클릭하면 크게 보기" />
                                     <button className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
                                       onClick={() => {
                                         setEItemImageFiles((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }));
@@ -3547,7 +3557,7 @@ if (woSubNameVal) {
                             {/* 기존 이미지 (복사 시) */}
                             {(wo_itemExistingImageUrls[i] ?? []).map((url, j) => (
                               <div key={`exist-${j}`} className="group relative">
-                                <img src={url} alt={`기존이미지${j+1}`} className="h-14 w-14 rounded-lg border border-slate-200 object-cover opacity-80" />
+                                <img src={url} alt={`기존이미지${j+1}`} className="h-14 w-14 cursor-zoom-in rounded-lg border border-slate-200 object-cover opacity-80" onClick={() => setLightboxUrl(url)} title="클릭하면 크게 보기" />
                                 <button className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
                                   onClick={() => {
                                     setWo_itemExistingImageUrls((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }));
@@ -3558,7 +3568,7 @@ if (woSubNameVal) {
                             {/* 새로 선택한 이미지 */}
                             {(wo_itemImagePreviewUrls[i] ?? []).map((url, j) => (
                               <div key={`new-${j}`} className="group relative">
-                                <img src={url} alt={`이미지${j+1}`} className="h-14 w-14 rounded-lg border border-blue-200 object-cover" />
+                                <img src={url} alt={`이미지${j+1}`} className="h-14 w-14 cursor-zoom-in rounded-lg border border-blue-200 object-cover" onClick={() => setLightboxUrl(url)} title="클릭하면 크게 보기" />
                                 <button className="absolute -right-1 -top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
                                   onClick={() => {
                                     setWo_itemImageFiles((prev) => ({ ...prev, [i]: (prev[i] ?? []).filter((_, k) => k !== j) }));
