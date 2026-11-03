@@ -1028,7 +1028,7 @@ const [adminLoaded, setAdminLoaded] = useState(false);
       const ths = cols.map((c) => {
         const isRight = ["prev_stock", "in", "out", "discard", "stock"].includes(c.key);
         const noWrap = isRight || c.key === "expiry";
-        return `<th style="padding:4px 6px;border:1px solid #d1d5db;background:#f3f4f6;font-size:9pt;text-align:${isRight ? "right" : "left"};${noWrap ? "white-space:nowrap;" : ""}">${c.label}</th>`;
+        return `<th style="padding:4px 6px;${c.key === "food_type" ? "width:43mm;" : ""}border:1px solid #d1d5db;background:#f3f4f6;font-size:9pt;text-align:${isRight ? "right" : "left"};${noWrap ? "white-space:nowrap;" : ""}">${c.label}</th>`;
       }).join("");
 
       const todayKST = (() => {
