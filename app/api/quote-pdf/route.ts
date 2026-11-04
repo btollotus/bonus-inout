@@ -200,7 +200,7 @@ table { border-collapse: collapse; width: 100%; }
               <td style="border:1px solid #999;background:#f5f5f5;text-align:center;padding:3px 4px;width:52px;">상호</td>
               <td style="border:1px solid #999;padding:3px 5px;">${OUR.nameShort}</td>
               <td style="border:1px solid #999;padding:3px 5px;white-space:nowrap;width:90px;">
-                <span style="padding-right:3px;border-right:1px solid #bbb;margin-right:3px;">성명</span>${OUR.ceo}
+                                <span style="padding-right:3px;border-right:1px solid #bbb;margin-right:3px;">성명</span><span style="position:relative;">${OUR.ceo}<img src="https://bonus-inout.vercel.app/stamp.png" alt="" style="position:absolute;left:100%;top:-4px;margin-left:-6px;height:24px;opacity:0.9;" /></span>
               </td>
             </tr>
             <tr>
