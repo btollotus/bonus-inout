@@ -123,7 +123,9 @@ export async function GET(req: NextRequest) {
     ? ["본 제품은 인쇄면에 물이 묻으면 번지거나 지워질 수 있으니 주의하셔야되고, 특히 냉동,냉장 보관시 결로에 의해 번질 수 있으니 주의하셔야됩니다.", "27도 이하 건조한 곳에 보관하세요."]
     : ["27도 이하 건조한 곳에 보관하세요."];
 
-  const quoteDate = (qr.created_at ?? "").slice(0, 10);
+    const quoteDate = qr.created_at
+    ? new Date(qr.created_at).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })
+    : "";
 
   const cb = "border:1px solid #999;padding:4px 6px;font-size:11pt;";
   const ch = cb + "background:#f0f0f0;text-align:center;font-weight:bold;";
