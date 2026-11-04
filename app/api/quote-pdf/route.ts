@@ -93,9 +93,9 @@ export async function GET(req: NextRequest) {
     // 도눔 박스(4구/5구/9구): key 예) "도눔4구주문인쇄"
     const doneumBox = pt.match(/^도눔\s?([459])구\s?(기성|주문)/);
     const doneumBoxKind = doneumBox ? (doneumBox[2] === "기성" ? "기성" : pt.includes("인쇄") ? "주문제작+인쇄" : "주문제작") : "";
-    const productName = doneumBox
+    const productName = (qr.nickname ? `[${qr.nickname}] ` : "") + (doneumBox
       ? `도눔 ${doneumBox[1]}구 박스(${doneumBoxKind}, ${colorType === "dark" ? "다크" : "화이트"})`
-      : (sizeStr ? `${colorLabel}(${sizeStr})` : colorLabel);
+      : (sizeStr ? `${colorLabel}(${sizeStr})` : colorLabel));
 
   const V = q?.final_price ?? 0;
   const qty = qr.quantity ?? 0;
