@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
   const sumTotal  = lineItems.reduce((a, r) => a + r.total, 0);
   const emptyRows = Math.max(0, 8 - lineItems.length);
 
-  const foodType = (colorType === "dark" && !isRaise) ? "준초콜릿" : "당류가공품";
+  const foodType = `${isRaise ? "컬러인쇄" : colorType === "dark" ? "다크" : "화이트"}(${(colorType === "dark" && !isRaise) ? "준초콜릿" : "당류가공품"})`;
   const cautions = isRaise
     ? ["본 제품은 인쇄면에 물이 묻으면 번지거나 지워질 수 있으니 주의하셔야되고, 특히 냉동,냉장 보관시 결로에 의해 번질 수 있으니 주의하셔야됩니다.", "27도 이하 건조한 곳에 보관하세요."]
     : ["27도 이하 건조한 곳에 보관하세요."];
