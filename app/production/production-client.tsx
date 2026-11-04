@@ -634,6 +634,7 @@ export default function ProductionClient() {
     const base = kiseongVariants.filter((v) => {
       if (v.variant_name.includes("성형틀") || v.variant_name.includes("인쇄제판")) return false;
       if (v.variant_name === "컬러프린트용트랜스퍼시트(초콜릿중간재)") return false; // 레이즈재단 기록 전용 — 재고생산 등록 대상 제외
+      if (kiseongCategory === "전사지" && (v.food_type ?? "") === "생산용전사지") return false; // 전사지 탭에서 생산용전사지 식품유형 제외 (category 오등록 BO202604240002 대응)
       if (kiseongCategory) return (v.category ?? "") === kiseongCategory;
       return true;
     });
