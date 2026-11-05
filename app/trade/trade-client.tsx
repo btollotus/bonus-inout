@@ -1649,7 +1649,7 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
           mold_count: toInt(orderWoMoldCount) > 0 ? toInt(orderWoMoldCount) : null,
           note: (() => {
             const realMemo = "화이트초콜릿(이산화티타늄첨가)\n이산화티타늄 혼합. 흰색으로 만들것.\n배합비 10kg + 1kg";
-            const hasReal = (foodType ?? "").includes("리얼");
+            const hasReal = /리얼|모어/.test(foodType ?? "");
             const base = orderWoNote.trim();
             if (hasReal && base) return `${realMemo}\n\n${base}`;
             if (hasReal) return realMemo;
@@ -2380,7 +2380,7 @@ if (woSubNameVal) {
         }
         await supabase.from("work_orders").update({ sub_name: eWoSubName.trim() || null, product_name: eWoProductName.trim() || null, food_type: eWoFoodType.trim() || null, logo_spec: eWoLogoSpec.trim() || null, thickness: eWoThickness || null, delivery_method: eWoDeliveryMethod || null, packaging_type: eWoPackagingType || null, package_unit: eWoPackageUnit === "기타" ? (eWoPackageUnitCustom.trim() ? eWoPackageUnitCustom.trim() + "ea" : null) : eWoPackageUnit || null, mold_per_sheet: (toInt(eWoMoldCols) * toInt(eWoMoldRows)) > 0 ? toInt(eWoMoldCols) * toInt(eWoMoldRows) : null, mold_cols: toInt(eWoMoldCols) > 0 ? toInt(eWoMoldCols) : null, mold_rows: toInt(eWoMoldRows) > 0 ? toInt(eWoMoldRows) : null, mold_count: toInt(eWoMoldCount) > 0 ? toInt(eWoMoldCount) : null, note: (() => {
           const realMemo = "화이트초콜릿(이산화티타늄첨가)\n이산화티타늄 혼합. 흰색으로 만들것.\n배합비 10kg + 1kg";
-          const hasReal = (eWoFoodType ?? "").includes("리얼");
+          const hasReal = /리얼|모어/.test(eWoFoodType ?? "");
           const base = eWoNote.trim();
           if (hasReal && base.includes(realMemo)) return base;
           if (hasReal && base) return `${realMemo}\n\n${base}`;
@@ -3675,8 +3675,8 @@ if (woSubNameVal) {
                       <textarea className={`${inp} resize-none`} lang="ko" rows={2} placeholder="전달할 메모나 특이사항" value={orderWoNote} onChange={(e) => setOrderWoNote(e.target.value)} />
                         {(() => {
                           const firstFoodType = lines[0]?.food_type ?? "";
-                          if (!firstFoodType.includes("리얼")) return null;
-                          return <div className="mt-1 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-700">⚠️ 식품유형에 "리얼" 포함 → 이산화티타늄 메모 자동 삽입</div>;
+                          if (!/리얼|모어/.test(firstFoodType)) return null;
+                          return <div className="mt-1 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-700">⚠️ 식품유형에 "리얼"/"모어" 포함 → 이산화티타늄 메모 자동 삽입</div>;
                         })()}
                       </div>
                       <div className="md:col-span-3 text-xs text-slate-500">

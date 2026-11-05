@@ -449,7 +449,7 @@ export default function ProductionClient() {
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
   const [prodInputs, setProdInputs] = useState<Record<string, { actual_qty: string; gift_qty: string; defect_qty?: string; unit_weight: string; expiry_date: string; transfer_lot_id: string; transfer_qty: string; transfer_lots: { lot_id: string; qty: string }[]; skip?: boolean }>>({});
   const titaniumDioxideG = useMemo(() => {
-    if (!selectedWo || !(selectedWo.food_type ?? "").includes("리얼")) return "";
+    if (!selectedWo || !/리얼|모어/.test(selectedWo.food_type ?? "")) return "";
     const items = (selectedWo.work_order_items ?? []).filter((item) => {
       const name = (item.sub_items ?? [])[0]?.name ?? "";
       return !name.startsWith("성형틀") && !name.startsWith("인쇄제판")
@@ -1949,8 +1949,8 @@ if (dupCheck && dupCheck.length > 0) {
       return;
     }
 
-    // 이산화티타늄 사용량 필수 입력 검사 (식품유형에 "리얼" 포함 시)
-    if ((selectedWo.food_type ?? "").includes("리얼")) {
+        // 이산화티타늄 사용량 필수 입력 검사 (식품유형에 "리얼" 또는 "모어" 포함 시)
+        if (/리얼|모어/.test(selectedWo.food_type ?? "")) {
       if (!titaniumDioxideG || Number(titaniumDioxideG) <= 0) {
         alert("이산화티타늄 사용량(g)을 입력하세요.");
         setIsCompleting(false);
@@ -2245,7 +2245,7 @@ if (dupCheck && dupCheck.length > 0) {
   
                 const todayKSTDate = todayKST();
                 const ft = eFoodType || selectedWo.food_type || "";
-              const isReal = ft.includes("리얼");
+                const isReal = /리얼|모어/.test(ft);
   
               // 리얼 식품유형: 화이트컴파운드(10/11) + 이산화티타늄(1/11) 별도 차감
               // 그 외: 컴파운드 전체 차감
@@ -3586,8 +3586,8 @@ const totalOrder = items
 
            
 
-              {/* 이산화티타늄 사용량 입력 — 식품유형에 "리얼" 포함 시 */}
-              {(selectedWo.food_type ?? "").includes("리얼") && (
+                            {/* 이산화티타늄 사용량 입력 — 식품유형에 "리얼" 또는 "모어" 포함 시 */}
+                            {/리얼|모어/.test(selectedWo.food_type ?? "") && (
                 <div className={`${card} p-3 border-amber-300 bg-amber-50`}>
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-sm font-semibold text-amber-800">⚠️ 이산화티타늄 사용량</span>
@@ -4268,7 +4268,7 @@ const totalOrder = items
                                     .select("id").eq("name", compoundNameEdit).maybeSingle();
                                   const todayKSTDate2 = todayKST();
                                   const oldCompoundQty = Number(existingLog[0].quantity);
-                                  const isRealEdit = ft.includes("리얼");
+                                  const isRealEdit = /리얼|모어/.test(ft);
                                   await supabase.from("material_usage_logs")
                                     .update({
                                       quantity: totalCompoundGEdit,
@@ -4288,7 +4288,7 @@ const totalOrder = items
                             }
                           }
                           // ── 이산화티타늄 사용량 재계산 (완료 후 수정 시) ──
-          if (selectedWo.status === "완료" && (eFoodType || selectedWo.food_type || "").includes("리얼")) {
+                          if (selectedWo.status === "완료" && /리얼|모어/.test(eFoodType || selectedWo.food_type || "")) {
             const ft = eFoodType || selectedWo.food_type || "";
             const compoundNameEdit2 = ft.includes("딸기") ? "딸기컴파운드"
             : getFoodCategory(ft) === "다크" ? "다크컴파운드"

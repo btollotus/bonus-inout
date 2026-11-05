@@ -254,7 +254,7 @@ function renderQtyWeightText(
 
   const grandQty = actualQty + defectQty;
   const grandG = grandQty * unitWeight;
-  const isReal = (foodType ?? "").includes("리얼");
+  const isReal = /리얼|모어/.test(foodType ?? "");
 
   // production-client.tsx와 동일한 공식 — 전체 합계 1회만 반올림 (구간별 개별 반올림 금지)
   const grandCompoundG = isReal ? Math.round((grandG * 10) / 11) : Math.round(grandG);
