@@ -94,9 +94,9 @@ const LEAVE_TYPE_LABEL: Record<string, string> = {
 }
 const LEAVE_TYPE_SHORT: Record<string, string> = {
   ANNUAL: '연차', HALF_AM: '오전반차', HALF_PM: '오후반차',
-  SICK: '병가', FRIDAY_OFF: '금휴', SPECIAL: '경조사', REMOTE: '재택',
+  SICK: '병가', FRIDAY_OFF: '금휴', SPECIAL: '경조사', REMOTE: '종일재택',
   REMOTE_AM: '오전재택', REMOTE_PM: '오후재택',
-  EDU: '교육', EDU_AM: '오전교육', EDU_PM: '오후교육',
+  EDU: '종일교육', EDU_AM: '오전교육', EDU_PM: '오후교육',
 }
 const LEAVE_TYPE_DAYS: Record<string, number> = {
   ANNUAL: 1, HALF_AM: 0.5, HALF_PM: 0.5, SICK: 1, FRIDAY_OFF: 1, SPECIAL: 0, REMOTE: 0,
