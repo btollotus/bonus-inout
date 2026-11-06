@@ -1067,7 +1067,7 @@ export default function PayrollPage() {
                 )}
 
                 {rows.length>0&&(()=>{
-                  const monthEnd2 = new Date(selectedYear, selectedMonth, 0).toISOString().slice(0,10)
+                  const monthEnd2 = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(new Date(selectedYear, selectedMonth, 0).getDate()).padStart(2, '0')}`
                   const resignedCount = employees.filter(e=>e.resign_date && e.resign_date<=monthEnd2).length
                   return (
                     <div className="px-6 py-3 bg-blue-50 border-b border-blue-100 flex gap-6 text-sm flex-wrap">
@@ -1095,7 +1095,7 @@ export default function PayrollPage() {
 
                       const empInfo = empMap[row.employee_id]
                       // 퇴사자 판별: resign_date가 있고, 해당 월의 말일 이전인 경우
-                      const monthEnd = new Date(selectedYear, selectedMonth, 0).toISOString().slice(0,10)
+                      const monthEnd = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(new Date(selectedYear, selectedMonth, 0).getDate()).padStart(2, '0')}`
                       const isResigned = !!(empInfo?.resign_date && empInfo.resign_date <= monthEnd)
                       // 퇴사일 전날이 실제 마지막 근무일
                       const lastWorkDay = isResigned && empInfo?.resign_date
