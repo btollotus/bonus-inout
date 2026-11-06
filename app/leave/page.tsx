@@ -1337,7 +1337,7 @@ const holidayName = holidays[dateStr] || ''
               <button onClick={handleSubmit} disabled={loading}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm">
                 {loading ? (modalMode==='create' ? '신청 중...' : '수정 중...')
-                  : modalMode==='create' ? `${LEAVE_TYPE_DAYS[leaveType]}일 신청` : '수정 완료'}
+                                   : modalMode==='create' ? '신청' : '수정 완료'}
               </button>
             </div>
 
