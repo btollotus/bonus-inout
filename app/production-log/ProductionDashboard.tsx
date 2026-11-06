@@ -152,7 +152,7 @@ export function ProductionDashboard({
         const leaveLabels: Record<string, string> = {
           ANNUAL: "연차", HALF_AM: "오전반차", HALF_PM: "오후반차",
           SICK: "병가", FRIDAY_OFF: "금요휴무", SPECIAL: "특별휴가",
-          EDU: "교육", EDU_AM: "오전교육", EDU_PM: "오후교육",
+          EDU: "종일교육", EDU_AM: "오전교육", EDU_PM: "오후교육",
         };
         const leaveNames = (todayLeaveData ?? []).map((l: any) =>
           `${l.employee_name}(${leaveLabels[l.leave_type] ?? l.leave_type})`
