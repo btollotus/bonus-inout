@@ -116,6 +116,54 @@ const OTHER_STYLE: Record<string, string> = {
   EDU: 'bg-cyan-100 text-cyan-800', EDU_AM: 'bg-cyan-100 text-cyan-800', EDU_PM: 'bg-cyan-100 text-cyan-800',
 }
 
+// 휴가 유형 선택 UI — 같은 종류끼리 한 줄로 묶어 가로 배치 (신청/관리자 모달 공용)
+const LEAVE_TYPE_GROUPS: { title: string; items: { key: string; text: string; sub?: string }[] }[] = [
+  { title: '휴가', items: [
+    { key: 'ANNUAL', text: '연차', sub: '1일' },
+    { key: 'SICK', text: '병가', sub: '1일' },
+    { key: 'FRIDAY_OFF', text: '금요휴무', sub: '1일' },
+    { key: 'SPECIAL', text: '경조사', sub: '유급' },
+  ] },
+  { title: '반차', items: [
+    { key: 'HALF_AM', text: '오전', sub: '0.5일' },
+    { key: 'HALF_PM', text: '오후', sub: '0.5일' },
+  ] },
+  { title: '재택', items: [
+    { key: 'REMOTE', text: '종일' },
+    { key: 'REMOTE_AM', text: '오전' },
+    { key: 'REMOTE_PM', text: '오후' },
+  ] },
+  { title: '교육', items: [
+    { key: 'EDU', text: '종일' },
+    { key: 'EDU_AM', text: '오전' },
+    { key: 'EDU_PM', text: '오후' },
+  ] },
+]
+
+function LeaveTypePicker({ name, value, onChange }: { name: string; value: string; onChange: (key: string) => void }) {
+  return (
+    <div className="space-y-1.5">
+      {LEAVE_TYPE_GROUPS.map(g => (
+        <div key={g.title} className="flex items-stretch gap-1.5">
+          <span className="w-9 shrink-0 flex items-center text-xs font-semibold text-gray-500">{g.title}</span>
+          <div className="flex-1 grid grid-cols-4 gap-1.5">
+            {g.items.map(it => (
+              <label key={it.key} title={LEAVE_TYPE_LABEL[it.key]}
+                className={`flex flex-col items-center justify-center py-2 rounded-xl border cursor-pointer transition-colors text-center ${
+                  value===it.key ? 'border-blue-500 bg-blue-50 text-blue-700 font-semibold' : 'border-gray-200 text-gray-700 hover:border-gray-300'}`}>
+                <input type="radio" name={name} value={it.key} checked={value===it.key}
+                  onChange={() => onChange(it.key)} className="sr-only" />
+                <span className="text-xs leading-tight">{it.text}</span>
+                {it.sub && <span className="text-[10px] leading-tight text-gray-400 mt-0.5">{it.sub}</span>}
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // =====================================================================
 // 공휴일 (2024~2028) - 2026년 설날 정정
 // =====================================================================
@@ -1204,16 +1252,7 @@ const holidayName = holidays[dateStr] || ''
             </div>
             <div className="mb-3">
               <label className="block text-sm font-medium text-gray-700 mb-2">휴가 유형</label>
-              <div className="space-y-1.5">
-                {Object.entries(LEAVE_TYPE_LABEL).map(([key, label]) => (
-                  <label key={key} className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-colors ${
-                    adminLeaveType===key ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                    <input type="radio" name="adminLeaveType" value={key} checked={adminLeaveType===key}
-                      onChange={() => setAdminLeaveType(key)} className="text-blue-600" />
-                    <span className="text-sm">{label}</span>
-                  </label>
-                ))}
-              </div>
+              <LeaveTypePicker name="adminLeaveType" value={adminLeaveType} onChange={setAdminLeaveType} />
             </div>
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1267,16 +1306,7 @@ const holidayName = holidays[dateStr] || ''
             })()}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">휴가 유형</label>
-              <div className="space-y-1.5">
-                {Object.entries(LEAVE_TYPE_LABEL).map(([key, label]) => (
-                  <label key={key} className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-colors ${
-                    leaveType===key ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                    <input type="radio" name="leaveType" value={key} checked={leaveType===key}
-                      onChange={() => setLeaveType(key)} className="text-blue-600" />
-                    <span className="text-sm">{label}</span>
-                  </label>
-                ))}
-              </div>
+              <LeaveTypePicker name="leaveType" value={leaveType} onChange={setLeaveType} />
               {leaveType==='SPECIAL' && (
                 <p className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mt-2">⭐ 경조사 휴가는 연차 차감 없이 유급 처리됩니다.</p>
               )}
