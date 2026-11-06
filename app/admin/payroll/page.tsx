@@ -290,7 +290,7 @@ function buildSlipHTML(
       let rows = `
 <tr><td style="${labelStyle}">유종</td><td style="${valStyle}">전기차</td></tr>
 <tr><td style="${labelStyle}">① 1일 충전비용</td><td style="${valStyle}"><strong>${formatKRW(d.dailyCharge)}원/일</strong></td></tr>
-<tr><td style="${labelStyle}">② 기준 출근일수</td><td style="${valStyle}">${d.workDays}일${d.annualDaysOff>0?` − 연차·교육·재택 ${d.annualDaysOff}일 = <strong>${effectiveWorkDays}일</strong>`effectiveWorkDays}일</strong>`:''}</td></tr>
+<tr><td style="${labelStyle}">② 기준 출근일수</td><td style="${valStyle}">${d.workDays}일${d.annualDaysOff>0?` − 연차·교육·재택 ${d.annualDaysOff}일 = <strong>${effectiveWorkDays}일</strong>`:''}</td></tr>
 <tr><td style="${labelStyle}">③ 월 충전비 합계</td><td style="${valStyle}">${formatKRW(d.dailyCharge)}원 × ${effectiveWorkDays}일 = <strong>${formatKRW(d.rawTotal)}원</strong></td></tr>`
       if (d.rawTotal > 100000) rows += `<tr><td style="${labelStyle}">④ 한도 적용</td><td style="${valStyle}">월 최대 <strong>100,000원</strong> 한도 적용</td></tr>`
       if (d.isTrial) rows += `<tr><td style="${labelStyle}">⑤ 수습 50% 적용</td><td style="${valStyle}">${formatKRW(d.capped)}원 × 50% = <strong>${formatKRW(d.final)}원</strong></td></tr>`
@@ -314,7 +314,7 @@ function buildSlipHTML(
 <tr><td style="${labelStyle}">연비</td><td style="${valStyle}">${d.efficiency} km/L</td></tr>
 <tr><td style="${labelStyle}">유종별 ℓ당 단가</td><td style="${valStyle}">${formatKRW(d.pricePerL)}원/L</td></tr>
 <tr><td style="${labelStyle}">① 1일 유류비</td><td style="${valStyle}">왕복 ${d.distKm*2}km ÷ ${d.efficiency}km/L × ${formatKRW(d.pricePerL)}원 = ${formatKRW(Math.round(d.dailyFuel))}원 → <strong>10원 올림 = ${formatKRW(d.dailyFuelCeiled)}원</strong></td></tr>
-<tr><td style="${labelStyle}">② 기준 출근일수</td><td style="${valStyle}">${d.workDays}일${d.annualDaysOff>0?` − 연차·교육·재택 ${d.annualDaysOff}일 = <strong>${effectiveWorkDays}일</strong>`effectiveWorkDays}일</strong>`:''}</td></tr>
+<tr><td style="${labelStyle}">② 기준 출근일수</td><td style="${valStyle}">${d.workDays}일${d.annualDaysOff>0?` − 연차·교육·재택 ${d.annualDaysOff}일 = <strong>${effectiveWorkDays}일</strong>`:''}</td></tr>
 <tr><td style="${labelStyle}">③ 월 유류비 합계</td><td style="${valStyle}">${formatKRW(d.dailyFuelCeiled)}원 × ${effectiveWorkDays}일 = <strong>${formatKRW(d.rawTotal)}원</strong></td></tr>`
     if (d.rawTotal > 100000) {
       rows += `<tr><td style="${labelStyle}">④ 한도 적용</td><td style="${valStyle}">월 최대 <strong>100,000원</strong> 한도 적용</td></tr>`
