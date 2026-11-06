@@ -102,7 +102,11 @@ export function ProductionDashboard({
           supabase.from("leave_requests")
             .select("employee_id, user_id, leave_type")
             .eq("leave_date", today)
-            .in("leave_type", ["ANNUAL", "HALF_AM", "SICK", "FRIDAY_OFF", "SPECIAL", "REMOTE"]),
+            .in("leave_type", [
+              "ANNUAL", "HALF_AM", "SICK", "FRIDAY_OFF", "SPECIAL", "REMOTE", "EDU",
+              // 교육·재택 오전은 오후 출근 대상 — 단, 금요일은 오후 근무가 없으므로 제외
+              ...(new Date(today + "T00:00:00Z").getUTCDay() === 5 ? ["EDU_AM", "REMOTE_AM"] : []),
+            ]),
         ]);
   
         const allEmployees = (empData ?? []) as { id: string; name: string; auth_user_id?: string; skip_attendance_check?: boolean }[];
@@ -144,10 +148,11 @@ export function ProductionDashboard({
         const { data: todayLeaveData } = await supabase.from("leave_requests")
           .select("employee_name, leave_type")
           .eq("leave_date", today)
-          .not("leave_type", "eq", "REMOTE");
+          .not("leave_type", "in", "(REMOTE,REMOTE_AM,REMOTE_PM)");
         const leaveLabels: Record<string, string> = {
           ANNUAL: "연차", HALF_AM: "오전반차", HALF_PM: "오후반차",
           SICK: "병가", FRIDAY_OFF: "금요휴무", SPECIAL: "특별휴가",
+          EDU: "교육", EDU_AM: "오전교육", EDU_PM: "오후교육",
         };
         const leaveNames = (todayLeaveData ?? []).map((l: any) =>
           `${l.employee_name}(${leaveLabels[l.leave_type] ?? l.leave_type})`
@@ -485,7 +490,8 @@ export function ProductionDashboard({
         .eq("leave_date", today);
       const leaveTypeLabels: Record<string, string> = {
         ANNUAL: "연차 (1일)", HALF_AM: "반차 - 오전", HALF_PM: "반차 - 오후",
-        SICK: "병가", FRIDAY_OFF: "금요일 휴무", SPECIAL: "경조사 휴가", REMOTE: "재택근무",
+        SICK: "병가", FRIDAY_OFF: "금요일 휴무", SPECIAL: "경조사 휴가", REMOTE: "재택 (종일)",
+        REMOTE_AM: "재택 - 오전", REMOTE_PM: "재택 - 오후", EDU: "교육 (종일)", EDU_AM: "교육 - 오전", EDU_PM: "교육 - 오후",
       };
       const grouped: Record<string, string[]> = {};
       (leaveAllData ?? []).forEach((l: any) => {

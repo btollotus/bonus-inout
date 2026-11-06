@@ -77,7 +77,8 @@ const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 const LEAVE_TYPE_LABEL: Record<string, string> = {
   annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', sick: '병가', special: '경조사',
   ANNUAL: '연차', HALF_AM: '반차(오전)', HALF_PM: '반차(오후)', SICK: '병가', SPECIAL: '경조사',
-  FRIDAY_OFF: '금요일휴무', REMOTE: '재택근무',
+  FRIDAY_OFF: '금요일휴무', REMOTE: '재택(종일)',
+  REMOTE_AM: '재택(오전)', REMOTE_PM: '재택(오후)', EDU: '교육(종일)', EDU_AM: '교육(오전)', EDU_PM: '교육(오후)',
 }
 function leaveLabel(type: string) { return LEAVE_TYPE_LABEL[type] || LEAVE_TYPE_LABEL[type.toLowerCase()] || type }
 

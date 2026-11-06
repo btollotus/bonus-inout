@@ -39,7 +39,7 @@ type LeaveRequest = {
   id: string
   user_id: string
   employee_name: string
-  leave_type: 'ANNUAL' | 'HALF_AM' | 'HALF_PM' | 'SICK' | 'FRIDAY_OFF' | 'SPECIAL' | 'REMOTE'
+    leave_type: 'ANNUAL' | 'HALF_AM' | 'HALF_PM' | 'SICK' | 'FRIDAY_OFF' | 'SPECIAL' | 'REMOTE' | 'REMOTE_AM' | 'REMOTE_PM' | 'EDU' | 'EDU_AM' | 'EDU_PM'
   leave_date: string
   note: string | null
   created_at: string
@@ -85,25 +85,35 @@ const LEAVE_TYPE_LABEL: Record<string, string> = {
   SICK: '병가 (1일)',
   FRIDAY_OFF: '금요일 휴무 (1일)',
   SPECIAL: '경조사 휴가 (유급)',
-  REMOTE: '재택근무',
+  REMOTE: '재택 (종일)',
+  REMOTE_AM: '재택 - 오전',
+  REMOTE_PM: '재택 - 오후',
+  EDU: '교육 (종일)',
+  EDU_AM: '교육 - 오전',
+  EDU_PM: '교육 - 오후',
 }
 const LEAVE_TYPE_SHORT: Record<string, string> = {
   ANNUAL: '연차', HALF_AM: '오전반차', HALF_PM: '오후반차',
   SICK: '병가', FRIDAY_OFF: '금휴', SPECIAL: '경조사', REMOTE: '재택',
+  REMOTE_AM: '오전재택', REMOTE_PM: '오후재택',
+  EDU: '교육', EDU_AM: '오전교육', EDU_PM: '오후교육',
 }
 const LEAVE_TYPE_DAYS: Record<string, number> = {
   ANNUAL: 1, HALF_AM: 0.5, HALF_PM: 0.5, SICK: 1, FRIDAY_OFF: 1, SPECIAL: 0, REMOTE: 0,
+  REMOTE_AM: 0, REMOTE_PM: 0, EDU: 0, EDU_AM: 0, EDU_PM: 0,
 }
 const MY_BG: Record<string, string> = {
   ANNUAL: 'bg-blue-500', HALF_AM: 'bg-indigo-500', HALF_PM: 'bg-violet-500',
   SICK: 'bg-rose-500', FRIDAY_OFF: 'bg-orange-500', SPECIAL: 'bg-yellow-500',
-  REMOTE: 'bg-teal-500',
+  REMOTE: 'bg-teal-500', REMOTE_AM: 'bg-teal-500', REMOTE_PM: 'bg-teal-500',
+  EDU: 'bg-cyan-600', EDU_AM: 'bg-cyan-600', EDU_PM: 'bg-cyan-600',
 }
 const OTHER_STYLE: Record<string, string> = {
   ANNUAL: 'bg-blue-100 text-blue-800', HALF_AM: 'bg-indigo-100 text-indigo-800',
   HALF_PM: 'bg-violet-100 text-violet-800', SICK: 'bg-rose-100 text-rose-800',
   FRIDAY_OFF: 'bg-orange-100 text-orange-800', SPECIAL: 'bg-yellow-100 text-yellow-800',
-  REMOTE: 'bg-teal-100 text-teal-800',
+  REMOTE: 'bg-teal-100 text-teal-800', REMOTE_AM: 'bg-teal-100 text-teal-800', REMOTE_PM: 'bg-teal-100 text-teal-800',
+  EDU: 'bg-cyan-100 text-cyan-800', EDU_AM: 'bg-cyan-100 text-cyan-800', EDU_PM: 'bg-cyan-100 text-cyan-800',
 }
 
 // =====================================================================
@@ -1100,7 +1110,7 @@ const holidayName = holidays[dateStr] || ''
                   {color:'bg-blue-500',label:'연차'},{color:'bg-indigo-500',label:'오전반차'},
                   {color:'bg-violet-500',label:'오후반차'},{color:'bg-rose-500',label:'병가'},
                   {color:'bg-orange-500',label:'금휴'},{color:'bg-yellow-500',label:'경조사'},
-                  {color:'bg-teal-500',label:'재택'},
+                  {color:'bg-teal-500',label:'재택'},{color:'bg-cyan-600',label:'교육'},
                 ].map(({color,label}) => (
                   <span key={label} className="flex items-center gap-1">
                     <span className={`w-2.5 h-2.5 rounded-full inline-block ${color}`} />{label}
@@ -1212,8 +1222,11 @@ const holidayName = holidays[dateStr] || ''
               {adminLeaveType==='SPECIAL' && (
                 <p className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mb-2">⭐ 경조사 휴가는 연차 차감 없이 유급 처리됩니다.</p>
               )}
-              {adminLeaveType==='REMOTE' && (
+                            {adminLeaveType.startsWith('REMOTE') && (
                 <p className="text-xs text-teal-600 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 mb-2">🏠 재택근무는 연차 차감 없이 처리됩니다.</p>
+              )}
+              {adminLeaveType.startsWith('EDU') && (
+                <p className="text-xs text-cyan-700 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2 mb-2">📚 교육은 연차 차감 없이 처리됩니다.</p>
               )}
               <textarea value={adminNote} onChange={e => setAdminNote(e.target.value)} rows={2}
                 placeholder={adminLeaveType==='SPECIAL' ? '예: 본인결혼, 부모상, 자녀출산 등' : '관리자 입력'}
@@ -1267,8 +1280,11 @@ const holidayName = holidays[dateStr] || ''
               {leaveType==='SPECIAL' && (
                 <p className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mt-2">⭐ 경조사 휴가는 연차 차감 없이 유급 처리됩니다.</p>
               )}
-              {leaveType==='REMOTE' && (
+                            {leaveType.startsWith('REMOTE') && (
                 <p className="text-xs text-teal-600 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 mt-2">🏠 재택근무는 연차 차감 없이 처리됩니다.</p>
+              )}
+              {leaveType.startsWith('EDU') && (
+                <p className="text-xs text-cyan-700 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2 mt-2">📚 교육은 연차 차감 없이 처리됩니다.</p>
               )}
             </div>
             <div className="mb-5">
