@@ -1522,7 +1522,25 @@ async function loadBdpInquiries() {
                         {utcToKSTDate(r.created_at)}
                         </td>
                         <td className="px-3 py-2 font-semibold">{r.customer_name}</td>
-                        <td className="px-3 py-2 text-xs">{r.product_type ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs">
+                          <div>{r.product_type ?? "—"}</div>
+                          {(() => {
+                            const items = r.quote_items ?? [];
+                            const names = items.length > 0
+                              ? Array.from(new Set(items.map(qi => qi.nickname).filter(Boolean)))
+                              : (r.nickname ? [r.nickname] : []);
+                            return (
+                              <>
+                                {names.length > 0 && (
+                                  <div className="mt-0.5 break-all font-semibold text-slate-800">{names.join(", ")}</div>
+                                )}
+                                {items.length > 1 && (
+                                  <div className="mt-0.5 text-[10px] text-slate-400">총 {items.length}품목</div>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </td>
                         <td className="px-3 py-2 text-xs tabular-nums">
                           {r.width_mm && r.height_mm ? `${r.width_mm}×${r.height_mm}mm` : "—"}
                           {r.quantity ? ` / ${fmt(r.quantity)}개` : ""}
