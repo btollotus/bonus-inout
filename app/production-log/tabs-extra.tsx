@@ -351,6 +351,13 @@ setSlotWoMap(slotMap);
           });
       };
 
+      // 온도기록 행의 기록자 — ccp_wo_events에는 기록자가 없으므로, 같은 슬롯·같은 이벤트·같은 분(分)의 ccp_slot_events.action_by를 사용 (같은 WO 우선)
+      const signerOf = (ev: any): string | null => {
+        const m = Math.floor(new Date(ev.measured_at).getTime() / 60000);
+        const cands = dayData.slotEvents.filter((se: any) => se.slot_id === ev.slot_id && se.event_type === ev.event_type && se.action_by && Math.floor(new Date(se.measured_at).getTime() / 60000) === m);
+        return (cands.find((se: any) => se.work_order_no === ev.work_order_no) ?? cands[0])?.action_by ?? null;
+      };
+
       const chunks: WarmSlot[][] = [];
       for (let i = 0; i < slots.length; i += CHUNK_SIZE_R) chunks.push(slots.slice(i, i + CHUNK_SIZE_R));
       if (chunks.length === 0) chunks.push([]);
@@ -410,7 +417,7 @@ setSlotWoMap(slotMap);
             html += `<td style="${tdS}text-align:center;font-size:8pt;color:${isNG?"red":"#000"};height:22px;">`;
             if (ev) {
               const bg = ev.event_type === "start" ? "#dbeafe" : ev.event_type === "end" ? "#ede9fe" : "#f1f5f9";
-              html += `<span style="font-size:7pt;background:${bg};padding:0 3px;border-radius:2px;margin-right:2px;">${WO_LABEL[ev.event_type] ?? ev.event_type}</span>(${toKSTTimeStr(ev.measured_at)}) ${ev.temperature ?? ""}℃<br/><span style="font-size:6.5pt;color:#475569;">${dayData.woLabelMap?.[ev.work_order_no] ?? ""}</span>`;
+              html += `<span style="font-size:7pt;background:${bg};padding:0 3px;border-radius:2px;margin-right:2px;">${WO_LABEL[ev.event_type] ?? ev.event_type}</span>(${toKSTTimeStr(ev.measured_at)}) ${ev.temperature ?? ""}℃${signerOf(ev) ? ` · ${signerOf(ev)}` : ""}<br/><span style="font-size:6.5pt;color:#475569;">${dayData.woLabelMap?.[ev.work_order_no] ?? ""}</span>`;
             }
             html += `</td>`;
           }
@@ -1065,6 +1072,13 @@ async function handlePrint() {
         });
     };
 
+    // 온도기록 행의 기록자 — ccp_wo_events에는 기록자가 없으므로, 같은 슬롯·같은 이벤트·같은 분(分)의 ccp_slot_events.action_by를 사용 (같은 WO 우선)
+    const signerOf = (ev: any): string | null => {
+      const m = Math.floor(new Date(ev.measured_at).getTime() / 60000);
+      const cands = dayData.slotEvents.filter((se: any) => se.slot_id === ev.slot_id && se.event_type === ev.event_type && se.action_by && Math.floor(new Date(se.measured_at).getTime() / 60000) === m);
+      return (cands.find((se: any) => se.work_order_no === ev.work_order_no) ?? cands[0])?.action_by ?? null;
+    };
+
     const WO_LABEL: Record<string,string> = { start:"시작", mid_check:"중간점검", end:"종료" };
 
     const renderRangeSection = (slots: WarmSlot[], label: string) => {
@@ -1141,8 +1155,8 @@ async function handlePrint() {
                                 <span style={{ fontSize:"7pt", background: ev.event_type==="start"?"#dbeafe":ev.event_type==="end"?"#ede9fe":"#f1f5f9", padding:"0 3px", borderRadius:2, marginRight:2 }}>
                                   {WO_LABEL[ev.event_type] ?? ev.event_type}
                                 </span>
-                                {`(${toKSTTime(ev.measured_at)}) ${ev.temperature ?? ""}℃`}
-                              </>
+                                {`(${toKSTTime(ev.measured_at)}) ${ev.temperature ?? ""}℃${signerOf(ev) ? ` · ${signerOf(ev)}` : ""}`}
+                                </>
                             ) : ""}
                           </td>
                         );
