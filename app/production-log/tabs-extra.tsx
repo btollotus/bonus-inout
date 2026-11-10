@@ -438,10 +438,10 @@ setSlotWoMap(slotMap);
           const hasNG = evs.some((e: any) => e.is_ok === false);
           const woNos = [...new Set(dayData.slotEvents.filter((e: any) => e.slot_id === s.id).map((e: any) => e.work_order_no).filter(Boolean))] as string[];
           const assignees = [...new Set(woNos.map((no: string) => dayData.assigneeMap?.[no]).filter(Boolean))] as string[];
-          const assigneeName = assignees[0] ?? null;
           html += `<td style="${tdS}text-align:center;font-size:8pt;height:28px;">`;
           html += `<div style="margin-bottom:1px;"><span style="font-weight:bold;color:${hasNG?"red":"#000"};">판정: ${hasNG?"X":"O"}</span></div>`;
-          html += signImgHtml(assigneeName);
+          // 한 슬롯에 작업자가 여러 명이면 전원 서명을 나란히 표시 (기존: 첫 번째 작업자만 표시)
+          html += assignees.map((a) => `<div style="display:inline-block;margin:0 2px;vertical-align:top;">${signImgHtml(a)}</div>`).join("");
           html += `</td>`;
         }
         for (let i = 0; i < empty; i++) html += `<td style="${tdS}height:28px;"></td>`;
@@ -1176,16 +1176,22 @@ async function handlePrint() {
                       // 담당자 서명 — slotEvents에서 work_order_no 추출 후 assigneeMap에서 조회
                       const woNos = [...new Set(dayData.slotEvents.filter((e: any) => e.slot_id === s.id).map((e: any) => e.work_order_no).filter(Boolean))] as string[];
                       const assignees = [...new Set(woNos.map((no: string) => dayData.assigneeMap?.[no]).filter(Boolean))] as string[];
-                      const signSrc = assignees.length > 0 ? SIGN_MAP[assignees[0]] ?? null : null;
-                      const assigneeName = assignees[0] ?? null;
                       return (
                         <td key={i} style={{ ...tdS, textAlign:"center", fontSize:"8pt", height:28 }}>
                           <div style={{ marginBottom: 1 }}>
                             <span style={{ fontWeight:"bold", color: hasNG?"red":"#000" }}>판정: {hasNG?"X":"O"}</span>
                           </div>
-                          {signSrc && <img src={signSrc} style={{ height: 20, objectFit:"contain", display:"block", margin:"0 auto" }} alt={assigneeName ?? ""} />}
-                          {signSrc && <div style={{ fontSize:"6pt", color:"#000", marginTop: 1 }}>{assigneeName}</div>}
-                          {assigneeName && !signSrc && <div style={{ fontSize:"7pt", color:"#555" }}>{assigneeName}</div>}
+                          {/* 한 슬롯에 작업자가 여러 명이면 전원 서명을 나란히 표시 (기존: 첫 번째 작업자만 표시) */}
+                          {assignees.map((assigneeName) => {
+                            const signSrc = SIGN_MAP[assigneeName] ?? null;
+                            return (
+                              <div key={assigneeName} style={{ display:"inline-block", margin:"0 2px", verticalAlign:"top" }}>
+                                {signSrc && <img src={signSrc} style={{ height: 20, objectFit:"contain", display:"block", margin:"0 auto" }} alt={assigneeName} />}
+                                {signSrc && <div style={{ fontSize:"6pt", color:"#000", marginTop: 1 }}>{assigneeName}</div>}
+                                {!signSrc && <div style={{ fontSize:"7pt", color:"#555" }}>{assigneeName}</div>}
+                              </div>
+                            );
+                          })}
                         </td>
                       );
                     })}
