@@ -9,7 +9,7 @@ import StockErrorAlert from "@/components/StockErrorAlert";
 
 const nav = [
   { href: "/inventory",       label: "재고관리",      allowedRoles: ["ADMIN", "SUBADMIN", "USER"] },
-  { href: "/quote",           label: "견적서",         allowedRoles: ["ADMIN"]             },
+  { href: "/quote",           label: "견적서",         allowedRoles: ["ADMIN"], allowedEmails: ["cacaoplus@naver.com"] }, // ✅ 특정 유저 추가 허용
   { href: "/trade",           label: "거래내역(통합)", allowedRoles: ["ADMIN", "SUBADMIN"] }, // ✅ SUBADMIN 접근 허용
   { href: "/production",      label: "작업지시서",     allowedRoles: ["ADMIN", "SUBADMIN"] },
   { href: "/production-log",  label: "생산관리",       allowedRoles: ["ADMIN", "SUBADMIN"] },
@@ -22,8 +22,9 @@ const nav = [
   { href: "/admin/hr", label: "인사/급여", allowedRoles: ["ADMIN"] },
 ];
 
-function canSee(userRole: string, allowedRoles: string[]) {
-  return allowedRoles.includes(userRole);
+function canSee(userRole: string, allowedRoles: string[], userEmail?: string, allowedEmails?: string[]) {
+  if (allowedRoles.includes(userRole)) return true;
+  return !!userEmail && !!allowedEmails && allowedEmails.includes(userEmail.toLowerCase());
 }
 
 const HR_MENUS = ["/leave", "/admin/hr"];
@@ -103,7 +104,7 @@ export default function TopNav({ role, email, quoteBadge }: { role?: string; ema
             {(userRole === "ADMIN" || userRole === "SUBADMIN") && <StockErrorAlert role={userRole} />}
 
             {nav
-              .filter((x) => canSee(userRole, x.allowedRoles))
+              .filter((x) => canSee(userRole, x.allowedRoles, email, (x as { allowedEmails?: string[] }).allowedEmails))
               .map((x) => {
                 const active =
                   x.href === "/inventory"
