@@ -45,6 +45,7 @@ type QuoteRequestRow = {
   lost_reason: string | null;
   created_at: string;
   updated_at: string;
+  created_by_name?: string | null;
   quotes?: QuoteRow[];
   quote_items?: QuoteItemRow[];
 };
@@ -1568,6 +1569,7 @@ async function logQuoteActivity(row: {
                       <tr key={r.id} className="border-t border-slate-200 bg-white hover:bg-slate-50">
                         <td className="px-3 py-2 tabular-nums text-xs text-slate-500">
                         {utcToKSTDate(r.created_at)}
+                        {r.created_by_name && <div className="text-[10px] text-slate-400">✍️ {r.created_by_name}</div>}
                         </td>
                         <td className="px-3 py-2 font-semibold">{r.customer_name}</td>
                         <td className="px-3 py-2 text-xs">
@@ -2037,7 +2039,9 @@ async function logQuoteActivity(row: {
                           const sc = STATUS_COLOR[r.status] ?? STATUS_COLOR["견적완료"];
                           return (
                             <tr key={r.id} className="border-t border-slate-200 bg-white hover:bg-slate-50">
-                              <td className="px-3 py-2 tabular-nums text-xs text-slate-500">{utcToKSTDate(r.created_at)}                              </td>
+                              <td className="px-3 py-2 tabular-nums text-xs text-slate-500">{utcToKSTDate(r.created_at)}
+                                {r.created_by_name && <div className="text-[10px] text-slate-400">✍️ {r.created_by_name}</div>}
+                              </td>
                               <td className="px-3 py-2 font-semibold truncate">{r.customer_name}</td>
                               <td className="px-3 py-2 text-xs text-slate-600 truncate">
                                 {(r.quote_items ?? []).map(qi => qi.nickname).filter(Boolean).join(", ") || "—"}
