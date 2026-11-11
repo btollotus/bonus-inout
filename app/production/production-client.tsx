@@ -4169,6 +4169,25 @@ const totalOrder = items
                                 if (lotsUpdErr) { showToast("재고 차감 저장 실패: " + lotsUpdErr.message, "error"); return; }
 
                                 savedTransferLotsSnapshotRef.current[item.id] = currentLotsForItem;
+
+                                // 화면 잔량(remaining_qty) 갱신 — 스냅샷만 새 값으로 바뀌고 잔량이 저장 전 값 그대로면
+                                // "잔량/차감 후" 표시가 이번 변경량만큼 어긋남 (DB 재고는 정상)
+                                if (allLotIds.length > 0) {
+                                  const { data: refreshMovs, error: refreshErr } = await supabase.from("movements").select("lot_id, type, qty").in("lot_id", allLotIds);
+                                  if (refreshErr) {
+                                    console.error("재고 차감 잔량 재조회 오류:", refreshErr.message);
+                                  } else {
+                                    const refreshMap: Record<string, number> = {};
+                                    for (const m of refreshMovs ?? []) refreshMap[m.lot_id] = (refreshMap[m.lot_id] ?? 0) + (m.type === "IN" ? m.qty : -m.qty);
+                                    setTransferLotOptions((prev) => {
+                                      const next: Record<string, TransferLot[]> = {};
+                                      for (const [k, arr] of Object.entries(prev)) {
+                                        next[k] = arr.map((l) => refreshMap[l.lot_id] !== undefined ? { ...l, remaining_qty: refreshMap[l.lot_id] } : l);
+                                      }
+                                      return next;
+                                    });
+                                  }
+                                }
                               }
                             }
                           }
