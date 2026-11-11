@@ -701,12 +701,28 @@ async function logQuoteActivity(row: {
 
   // ─── 상태 변경 ───
   async function updateStatus(id: string, status: string, lostReason?: string) {
+    requirePin(`상태 변경(${status}) — 본인 확인`, async (pinEmpId, pinEmpName) => {
+    // 변경 전 상태 조회 (기록용)
+    const { data: cur, error: curErr } = await supabase.from("quote_requests")
+      .select("status,customer_name").eq("id", id).single();
+    if (curErr) console.error("quote_requests 상태 조회 오류:", curErr.message);
     const { error } = await supabase.from("quote_requests")
       .update({ status, lost_reason: lostReason ?? null })
       .eq("id", id);
     if (error) return setMsg(error.message);
+    await logQuoteActivity({
+      request_id: id,
+      action: "status",
+      employee_id: pinEmpId,
+      employee_name: pinEmpName,
+      customer_name: cur?.customer_name ?? null,
+      from_status: cur?.status ?? null,
+      to_status: status,
+      lost_reason: lostReason ?? null,
+    });
     loadQuoteList();
     loadSheetList();  // ← 추가
+    });
   }
 
   // ─── 견적 삭제 ───
