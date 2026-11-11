@@ -711,13 +711,32 @@ async function logQuoteActivity(row: {
 
   // ─── 견적 삭제 ───
   async function deleteQuote(id: string) {
-    if (!confirm("이 견적을 삭제하시겠습니까?")) return;
+    requirePin("견적 삭제 — 본인 확인", async (pinEmpId, pinEmpName) => {
+    // 삭제 전 견적 내용 백업 (quotes·quote_items 포함)
+    const { data: snap, error: snapErr } = await supabase.from("quote_requests")
+      .select("*,quotes(*),quote_items(*)").eq("id", id).single();
+    if (snapErr || !snap) return setMsg("⚠️ 삭제 대상 조회 오류: " + (snapErr?.message ?? "견적을 찾을 수 없어요."));
+    // 삭제 기록이 저장돼야만 삭제 진행
+    const { error: logErr } = await supabase.from("quote_activity_logs").insert({
+      request_id: id,
+      action: "delete",
+      employee_id: pinEmpId,
+      employee_name: pinEmpName,
+      customer_name: snap.customer_name ?? null,
+      from_status: snap.status ?? null,
+      snapshot: snap,
+    });
+    if (logErr) {
+      console.error("quote_activity_logs insert 오류:", logErr.message);
+      return setMsg("⚠️ 삭제 기록 저장에 실패해 삭제를 중단했어요: " + logErr.message);
+    }
     await supabase.from("quotes").delete().eq("request_id", id);
     const { error } = await supabase.from("quote_requests").delete().eq("id", id);
     if (error) return setMsg(error.message);
     setMsg("🗑️ 견적이 삭제됐어요.");
     loadQuoteList();
     loadSheetList();  // ← 추가
+    });
   }
 
   // ─── 기존 견적 불러오기 (견적 입력 탭으로 이동) ───
