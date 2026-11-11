@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import QuotePrintModal from "./QuotePrintModal";
+import { PinModal } from "@/app/contexts/PinSessionContext";
 import { PRODUCTS } from "@/lib/quoteCalculator";
 
 // ─────────────────────── Types ───────────────────────
@@ -412,7 +413,40 @@ async function loadBdpInquiries() {
   }
 }
 
-  const [presetProducts, setPresetProducts] = useState<PresetProductRow[]>([]);
+const [presetProducts, setPresetProducts] = useState<PresetProductRow[]>([]);
+
+// ─── PIN 본인 확인 (견적 작성·삭제·상태변경 기록용) ───
+const [pinEmployees, setPinEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
+const [pinPending, setPinPending] = useState<null | { title: string; run: (empId: string, empName: string) => Promise<void> }>(null);
+
+useEffect(() => {
+  supabase.from("employees").select("id,name,has_pin").is("resign_date", null).order("name", { ascending: true }).limit(500)
+    .then(({ data, error }) => {
+      if (error) { console.error("employees 조회 오류:", error.message); return; }
+      setPinEmployees((data ?? [])
+        .filter((e: any) => !!e.name)
+        .map((e: any) => ({ id: e.id, name: e.name, pin: e.has_pin ? "set" : null })));
+    });
+}, []); // eslint-disable-line
+
+function requirePin(title: string, run: (empId: string, empName: string) => Promise<void>) {
+  setPinPending({ title, run });
+}
+
+async function logQuoteActivity(row: {
+  request_id: string;
+  action: "create" | "delete" | "status";
+  employee_id: string | null;
+  employee_name: string;
+  customer_name?: string | null;
+  from_status?: string | null;
+  to_status?: string | null;
+  lost_reason?: string | null;
+  snapshot?: unknown;
+}) {
+  const { error } = await supabase.from("quote_activity_logs").insert(row);
+  if (error) console.error("quote_activity_logs insert 오류:", error.message);
+}
 
   useEffect(() => {
     supabase.from("v_tradeclient_products")
@@ -515,7 +549,7 @@ async function loadBdpInquiries() {
   }
 
   // ─── 전사지 견적 저장 ───
-  async function handleSheetSave() {
+  async function handleSheetSave(pinEmpId?: string, pinEmpName?: string) {
     if (!activeCustomerName) return setMsg("업체명을 입력하거나 거래처를 선택하세요.");
 
    // ── 수동 입력 모드 — calcResult 기반 (자동 모드와 동일 구조) ──
@@ -537,8 +571,11 @@ async function loadBdpInquiries() {
       memo:          memo || null,
       status:        "견적완료",
       updated_at:    new Date().toISOString(),
+      created_by_name:        pinEmpName ?? null,
+      created_by_employee_id: pinEmpId ?? null,
     }).select("id").single();
     if (reqErr) return setMsg(reqErr.message);
+    if (pinEmpName) await logQuoteActivity({ request_id: req.id, action: "create", employee_id: pinEmpId ?? null, employee_name: pinEmpName, customer_name: activeCustomerName, to_status: "견적완료" });
     const { error: quoteErr } = await supabase.from("quotes").insert({
       request_id:      req.id,
       plate_cost:      totalPlateCost,
@@ -588,8 +625,11 @@ async function loadBdpInquiries() {
       memo:          memo || null,
       status:        "견적완료",
       updated_at:    new Date().toISOString(),
+      created_by_name:        pinEmpName ?? null,
+      created_by_employee_id: pinEmpId ?? null,
     }).select("id").single();
     if (reqErr) return setMsg(reqErr.message);
+    if (pinEmpName) await logQuoteActivity({ request_id: req.id, action: "create", employee_id: pinEmpId ?? null, employee_name: pinEmpName, customer_name: activeCustomerName, to_status: "견적완료" });
   
     const { error: quoteErr } = await supabase.from("quotes").insert({
       request_id:      req.id,
@@ -622,11 +662,11 @@ async function loadBdpInquiries() {
   }
 
   // ─── 중복 클릭 방지 래퍼 (handleSheetSave 자체는 변경하지 않음) ───
-  async function handleSheetSaveClick() {
+  async function handleSheetSaveClick(pinEmpId?: string, pinEmpName?: string) {
     if (sheetSaving) return;
     setSheetSaving(true);
     try {
-      await handleSheetSave();
+      await handleSheetSave(pinEmpId, pinEmpName);
     } finally {
       setSheetSaving(false);
     }
@@ -1292,8 +1332,9 @@ async function loadBdpInquiries() {
                       (inputMode === "auto" && items.every(x => !x.calcResult && x.itemCategory !== "preset")) ||
                       (inputMode === "manual" && items.every(x => !x.manualV && x.itemCategory !== "preset"))
                     }
-                    onClick={async () => {
+                    onClick={() => {
                       if (!activeCustomerName) return setMsg("업체명을 입력하세요.");
+                      requirePin("견적서 출력 — 본인 확인", async (pinEmpId, pinEmpName) => {
                       setMsg(null);
                       // 자동 계산 모드: DB 저장 후 quoteRequestId 획득
                       if (inputMode === "auto") {
@@ -1326,9 +1367,12 @@ async function loadBdpInquiries() {
                           reuse_existing_mold: false,
                           mold_qty: 1, memo: memo || null, status: "견적완료",
                           updated_at: new Date().toISOString(),
+                          created_by_name: pinEmpName,
+                          created_by_employee_id: pinEmpId,
                         }).select("id").single();
                         if (reqErr) { setMsg("⚠️ 저장 오류: " + reqErr.message); }
                         else if (req?.id) {
+                         await logQuoteActivity({ request_id: req.id, action: "create", employee_id: pinEmpId, employee_name: pinEmpName, customer_name: activeCustomerName, to_status: "견적완료" });
                          // quotes 1건 (첫 품목 기준)
                          await supabase.from("quotes").insert({
                           request_id: req.id,
@@ -1405,10 +1449,13 @@ async function loadBdpInquiries() {
                             memo: memo || null,
                             status: "견적완료",
                             updated_at: new Date().toISOString(),
+                            created_by_name: pinEmpName,
+                            created_by_employee_id: pinEmpId,
                           }).select("id").single();
                           if (reqErr) {
                             setMsg("⚠️ 저장 오류: " + reqErr.message);
                           } else if (req?.id) {
+                            await logQuoteActivity({ request_id: req.id, action: "create", employee_id: pinEmpId, employee_name: pinEmpName, customer_name: activeCustomerName, to_status: "견적완료" });
                             const { error: quoteErr } = await supabase.from("quotes").insert({
                               request_id: req.id,
                               final_price: parseInt(firstManualItem.manualV) || 0,
@@ -1443,8 +1490,9 @@ async function loadBdpInquiries() {
                         }
                       }
                       setPrintOpen(true);
-                    }}>
-                    🖨️ 견적서 출력
+                    });
+                  }}>
+                  🖨️ 견적서 출력
                   </button>
                   <button className={btn} onClick={resetForm}>
                     초기화
@@ -1919,7 +1967,10 @@ async function loadBdpInquiries() {
   <button
         className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-white ${sheetInputMode === "manual" ? "border border-orange-300 bg-orange-500 hover:bg-orange-600" : btnOn} disabled:opacity-60`}
         disabled={!sheetItems.some(x => x.calcResult) || sheetSaving}
-        onClick={async () => { await handleSheetSaveClick(); setPrintOpen(true); }}>
+        onClick={() => {
+          if (!activeCustomerName) return setMsg("업체명을 입력하거나 거래처를 선택하세요.");
+          requirePin("견적서 출력 — 본인 확인", async (pinEmpId, pinEmpName) => { await handleSheetSaveClick(pinEmpId, pinEmpName); setPrintOpen(true); });
+        }}>
         {sheetSaving ? "저장 중..." : "🖨️ 견적서 출력"}
       </button>
       <button className={btn} onClick={resetForm}>
@@ -2430,6 +2481,20 @@ async function loadBdpInquiries() {
   );
 })()}
      
+
+            {/* PIN 본인 확인 모달 */}
+            {pinPending && (
+        <PinModal
+          employees={pinEmployees}
+          title={pinPending.title}
+          onSuccess={(empId, empName) => {
+            const run = pinPending.run;
+            setPinPending(null);
+            run(empId, empName);
+          }}
+          onCancel={() => setPinPending(null)}
+        />
+      )}
 
       {/* 견적서 인쇄 모달 — 견적입력 탭 */}
       {printOpen && !selectedQuoteRow && tab !== "sheet" && (
