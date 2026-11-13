@@ -626,10 +626,45 @@ setSlotWoMap(slotMap);
   }
 
   async function deleteSlotEvent(eventId: string) {
-    if (!confirm("이 슬롯 기록을 삭제하시겠습니까?")) return;
-    const { error } = await supabase.from("ccp_slot_events").delete().eq("id", eventId);
+    // 슬롯이동 기록이면 짝 기록(출발 슬롯 소진 "→ 도착" ↔ 도착 슬롯 투입 "출발 → 도착", 같은 measured_at)을 찾아 함께 삭제
+    const ev = slotEvents.find((e) => e.id === eventId);
+    const note = ev?.action_note ?? "";
+    const isMoveEv = !!ev && ((ev.event_type === "material_out" && note.startsWith("→")) || (ev.event_type === "material_in" && note.includes("→")));
+    let pairId: string | null = null;
+    let pairLabel = "";
+    if (ev && isMoveEv) {
+      const isOut = ev.event_type === "material_out";
+      const parts = note.split("→");
+      const toName = (parts[1] ?? "").trim();
+      const fromName = isOut ? (allSlots.find((s) => s.id === ev.slot_id)?.slot_name ?? "") : parts[0].trim();
+      const pairSlot = allSlots.find((s) => s.slot_name === (isOut ? toName : fromName));
+      if (pairSlot && fromName && toName) {
+        const { data: pairRows, error: pairErr } = await supabase
+          .from("ccp_slot_events")
+          .select("id")
+          .eq("slot_id", pairSlot.id)
+          .eq("event_type", isOut ? "material_in" : "material_out")
+          .eq("measured_at", ev.measured_at)
+          .eq("action_note", isOut ? `${fromName} → ${toName}` : `→ ${toName}`)
+          .limit(2);
+        if (pairErr) return showToast("짝 기록 조회 실패: " + pairErr.message, "error");
+        if ((pairRows ?? []).length === 1) {
+          pairId = pairRows![0].id;
+          pairLabel = `[${fromName}] 원료소진 + [${toName}] 원료투입`;
+        }
+      }
+    }
+    const confirmMsg = pairId
+      ? `슬롯이동 기록입니다.\n${pairLabel} 2건을 함께 삭제합니다. 계속하시겠습니까?`
+      : isMoveEv
+        ? "슬롯이동의 짝 기록을 찾지 못했습니다.\n이 슬롯 기록 1건만 삭제합니다. 계속하시겠습니까?"
+        : "이 슬롯 기록을 삭제하시겠습니까?";
+    if (!confirm(confirmMsg)) return;
+    const { error } = pairId
+      ? await supabase.from("ccp_slot_events").delete().in("id", [eventId, pairId])
+      : await supabase.from("ccp_slot_events").delete().eq("id", eventId);
     if (error) return showToast("삭제 실패: " + error.message, "error");
-    showToast("🗑️ 삭제 완료!");
+    showToast(pairId ? "🗑️ 슬롯이동 2건 삭제 완료!" : "🗑️ 삭제 완료!");
     await loadData();
   }
 
