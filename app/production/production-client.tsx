@@ -1193,7 +1193,7 @@ export default function ProductionClient() {
     setESubName(wo.sub_name ?? "");
     const woSubNameVal = wo.sub_name ?? "";
     if (woSubNameVal) { setEProductName(woSubNameVal); } else {
-      const visibleItems = (wo.work_order_items ?? []).filter((item) => { const n = (item.sub_items ?? [])[0]?.name ?? ""; return !n.startsWith("성형틀") && !n.startsWith("인쇄제판") && !n.startsWith("할인"); });
+      const visibleItems = (wo.work_order_items ?? []).filter((item) => { const n = (item.sub_items ?? [])[0]?.name ?? ""; return !n.startsWith("성형틀") && !n.startsWith("인쇄제판") && !n.startsWith("할인") && !n.startsWith("택배비") && !n.startsWith("퀵") && !n.startsWith("아이스박스"); });
       const firstName = visibleItems[0]?.sub_items?.[0]?.name ?? wo.product_name ?? "";
       const count = visibleItems.length;
       setEProductName(count > 1 ? `${firstName} 외 ${count - 1}건` : firstName);
