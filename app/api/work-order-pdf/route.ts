@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
 
 function isSpecialItem(itemName: string): boolean {
   const n = String(itemName ?? "").trim();
-  return n.startsWith("성형틀") || n.startsWith("인쇄제판");
+  return n.startsWith("성형틀") || n.startsWith("인쇄제판") || n.startsWith("할인");
 }
 
 function parseLogoSize(logoSpec: string | null): { width: string; height: string } | null {
