@@ -1589,6 +1589,7 @@ export default function ProductionClient() {
       if (statusErr) { setMsg("상태 변경 실패: " + statusErr.message); setIsCompleting(false); return; }
       if (stockErrors.length > 0) showToast("포장완료됐으나 차감 오류: " + stockErrors.join(" / "), "error");
       else showToast("포장완료 처리 완료!");
+      await triggerPdfUpload(selectedWo, eProductName ?? "품목미상", eFoodType ?? "", eLogoSpec ?? "");
       setIsEditMode(false);
       await loadWoList();
     } catch (e: any) {
