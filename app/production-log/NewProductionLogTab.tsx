@@ -440,7 +440,7 @@ export function NewProductionLogTab({ role, userId, showToast }: {
       }))
       .filter((it: any) => {
         const n = it.name;
-        return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판") && !n.startsWith("퀵운임") && !n.startsWith("퀵");
+        return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판") && !n.startsWith("퀵운임") && !n.startsWith("퀵") && !n.startsWith("할인");
       }),
 })) as WorkOrder[];
 setWorkOrders(enrichedWorkOrders);
@@ -591,7 +591,7 @@ setLoading(false);
           }))
           .filter((it: any) => {
             const n = it.name;
-            return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판") && !n.startsWith("퀵운임") && !n.startsWith("퀵");
+            return n && !n.startsWith("아이스박스") && !n.startsWith("택배비") && !n.startsWith("성형틀") && !n.startsWith("인쇄제판") && !n.startsWith("퀵운임") && !n.startsWith("퀵") && !n.startsWith("할인");
           }),
         })) as WorkOrder[];
         // 배합기록 종료 시각 — 단일 날짜 조회와 동일하게 WO의 생산시간(prod_end)을 그대로 재사용
