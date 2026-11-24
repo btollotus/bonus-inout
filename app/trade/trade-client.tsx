@@ -250,6 +250,10 @@ async function applyStockOutLots(
   return errors;
 }
 
+// 작업지시서 생성 제외 품목 — 주문 시 분사-레이즈 재고를 재단·포장해 출고하는 품목(생산 WO 불필요, 2026-11-24 결정)
+const NO_WO_ITEM_NAMES = ["컬러프린트용트랜스퍼시트(초콜릿중간재)"];
+const isNoWoItem = (name: string) => NO_WO_ITEM_NAMES.includes(String(name ?? "").trim());
+
 // 마켓 주문 재고부족 임시WO 덮어쓰기 방지 — createTempLotForShortage의 멱등성 키(주문ID+품목명)에 라인 구분이 없어
 // 임시WO 대상(특수품목·재고lot선택·variant없음 제외)인 같은 품목명 라인이 2개 이상이면 뒤 라인이 앞 라인 수량을 덮어씀(2026-08-31 눈알 1,000+400 → 400)
 // 해당 품목이 있으면 저장 차단용 안내 문구를 반환, 없으면 null
@@ -259,7 +263,7 @@ function findDupShortageLinesMsg(
 ): string | null {
   const groups = new Map<string, number[]>();
   for (const cl of cleanLines) {
-    if (isSpecialItem(cl.name)) continue;
+    if (isSpecialItem(cl.name) || isNoWoItem(cl.name)) continue;
     if ((cl.stock_out_lots ?? []).length > 0) continue;
     if (!hasVariant(cl.name)) continue;
     groups.set(cl.name, [...(groups.get(cl.name) ?? []), cl.qty]);
@@ -1618,7 +1622,12 @@ const [toYMD, setToYMD] = useState(addDays(todayYMD(), 15));
     const { error: sErr } = await supabase.from("order_shipments").insert(buildShipPayloads(orderId, ship1, ship2, twoShip));
     if (sErr) return setMsg(sErr.message);
 
-    const woTargetLines = cleanLines.filter((l) => (l.stock_out_lots ?? []).filter((t) => t.lot_id && toInt(t.qty) > 0).length === 0);
+    const woTargetLines = (() => {
+      const targets = cleanLines.filter((l) => !isNoWoItem(l.name) && (l.stock_out_lots ?? []).filter((t) => t.lot_id && toInt(t.qty) > 0).length === 0);
+      // 작업지시서 제외 품목이 빠진 뒤 남은 대상이 특수품목(택배비·아이스박스 등)뿐이면 작업지시서를 만들지 않음 (2026-11-24)
+      if (cleanLines.some((l) => isNoWoItem(l.name)) && targets.every((l) => isSpecialItem(l.name))) return [];
+      return targets;
+    })();
     if (orderWoEnabled && woTargetLines.length > 0) {
       try {
         const { data: barcodeData, error: barcodeErr } = await supabase.rpc("generate_work_order_barcode");
@@ -1812,7 +1821,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
         // ── Step4: 재고부족(마켓플레이스 거래처) 라인 → 임시 lot + 임시 작업지시서 자동생성 ──
         if (SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name)) {
           for (const cl of cleanLines) {
-            if (isSpecialItem(cl.name)) continue;
+            if (isSpecialItem(cl.name) || isNoWoItem(cl.name)) continue;
             if ((cl.stock_out_lots ?? []).length > 0) continue;
             const variantId = masterByName.get(cl.name)?.variant_id;
             if (!variantId) continue;
@@ -1849,7 +1858,7 @@ if (orderIsReorder && wo_itemExistingBarcodes[l.name]) {
       // orderWoEnabled이고 woTargetLines이 있는 경우 정상 WO가 이미 생성됐으므로 스킵
       if (SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name) && !(orderWoEnabled && woTargetLines.length > 0)) {
         for (const cl of cleanLines) {
-          if (isSpecialItem(cl.name)) continue;
+          if (isSpecialItem(cl.name) || isNoWoItem(cl.name)) continue;
           if ((cl.stock_out_lots ?? []).length > 0) continue;
           const variantId = masterByName.get(cl.name)?.variant_id;
           if (!variantId) continue;
@@ -2404,6 +2413,7 @@ if (woSubNameVal) {
 
           if (!itemId) {
             if (isShortageTempWo) continue; // 임시 WO: 신규 품목 자동생성 건너뜀 (2026-10-06)
+            if (isNoWoItem(eLine.name)) continue; // 작업지시서 생성 제외 품목 (2026-11-24)
             // ── 신규 추가된 품목: work_order_items 생성 + product/variant 생성 (createOrder()와 동일 패턴) ──
             const newItemName = eLine.name.trim();
             const newItemPackEa = inferPackEaFromName(newItemName);
@@ -2569,7 +2579,7 @@ if (woSubNameVal) {
         // 이미 임시출고 기록이 있는 라인(= 기존 임시WO 자신)은 그대로 동기화(수량 갱신)되도록 유지 — 기존 정상 기능 보존.
         if (selectedPartner && SUBADMIN_PINNED_TOP_NAMES.includes(selectedPartner.name)) {
           for (const cl of cleanLines) {
-            if (isSpecialItem(cl.name)) continue;
+            if (isSpecialItem(cl.name) || isNoWoItem(cl.name)) continue;
             if ((cl.stock_out_lots ?? []).length > 0) continue;
             const variantId = masterByName.get(cl.name)?.variant_id;
             if (!variantId) continue;
