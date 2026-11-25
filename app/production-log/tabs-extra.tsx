@@ -2039,18 +2039,60 @@ export function OtherHeatingTab({ role, userId, showToast }: {
     setEditActionNote(ev.action_note ?? "");
   }
 
-  async function saveEdit(ev: typeof woEvents[0]) {
+    // 온도기록 수정 — 본인 확인(PIN) 후 DB 함수(rpc_update_ccp_wo_event_group)로
+  // 같은 슬롯·시각·유형 묶음(작업지시서별 여러 행) + 슬롯기록을 함께 수정 (수정 이력에 PIN 확인된 이름 기록)
+  const [pinEditTarget, setPinEditTarget] = useState<{ eventId: string; measuredAt: string; temp: number; isOk: boolean; actionNote: string } | null>(null);
+  const [pinEditEmployees, setPinEditEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
+
+  useEffect(() => {
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
+      .then(({ data, error }) => {
+        if (error) console.error("가열공정 수정용 직원 목록 조회 오류:", error.message);
+        setPinEditEmployees((data ?? []) as any);
+      });
+  }, []);
+
+  function saveEdit(ev: typeof woEvents[0]) {
     if (!editTemp) return showToast("온도를 입력하세요.", "error");
     const temp = Number(editTemp);
     if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
+    if (!/^\d{4}$/.test(editTime) || parseInt(editTime.slice(0, 2)) > 23 || parseInt(editTime.slice(2, 4)) > 59)
+      return showToast("올바른 시각을 입력하세요. (예: 1430)", "error");
+    const measuredAt = `${filterDate}T${editTime.slice(0, 2)}:${editTime.slice(2, 4)}:00+09:00`;
+    setPinEditTarget({ eventId: ev.id, measuredAt, temp, isOk: editIsOk, actionNote: editActionNote });
+  }
+
+  async function saveEditWithPin(
+    target: { eventId: string; measuredAt: string; temp: number; isOk: boolean; actionNote: string },
+    employeeId: string, pin: string,
+  ) {
     setEditSaving(true);
-    const { error } = await supabase.from("ccp_wo_events").update({
-      measured_at: `${filterDate}T${editTime.slice(0, 2)}:${editTime.slice(2, 4)}:00+09:00`,
-      temperature: temp, is_ok: editIsOk,
-      action_note: editActionNote.trim() || null,
-    }).eq("id", ev.id);
+    const { data: result, error } = await supabase.rpc("rpc_update_ccp_wo_event_group", {
+      p_event_id: target.eventId,
+      p_employee_id: employeeId,
+      p_pin: pin,
+      p_measured_at: target.measuredAt,
+      p_temperature: target.temp,
+      p_is_ok: target.isOk,
+      p_action_note: target.actionNote,
+    });
     setEditSaving(false);
-    if (error) return showToast("수정 실패: " + error.message, "error");
+    if (error) {
+      console.error("rpc_update_ccp_wo_event_group 오류:", error.message);
+      return showToast("수정 실패: " + error.message, "error");
+    }
+    if (result !== "OK") {
+      const msgMap: Record<string, string> = {
+        FORBIDDEN: "수정 권한이 없습니다. (ADMIN/SUBADMIN만 가능)",
+        WRONG: "PIN이 올바르지 않습니다.",
+        NOT_SET: "PIN이 설정되지 않았습니다.",
+        NOT_FOUND: "직원 정보를 찾을 수 없습니다.",
+        EVENT_NOT_FOUND: "이미 삭제된 기록입니다.",
+        INVALID_TEMP: "온도는 40~50°C 범위여야 합니다.",
+        INVALID_TIME: "시각이 올바르지 않습니다.",
+      };
+      return showToast("수정 실패: " + (msgMap[String(result)] ?? String(result)), "error");
+    }
     showToast("✅ 수정 완료!");
     setEditingEventId(null);
     await loadData();
@@ -2562,7 +2604,21 @@ setTimeout(() => {
   return (
     <div className="space-y-4">
 
-      {/* ── 조회 기간 + 인쇄 통합 패널 (CCP-1B와 동일) ── */}
+    {/* ── 온도기록 수정 본인 확인(PIN) ── */}
+    {pinEditTarget && (
+      <PinModal
+        employees={pinEditEmployees}
+        title="가열공정 온도기록 수정 — 본인 확인"
+        onSuccess={(empId, _empName, pin) => {
+          const target = pinEditTarget;
+          setPinEditTarget(null);
+          if (target) saveEditWithPin(target, empId, pin);
+        }}
+        onCancel={() => setPinEditTarget(null)}
+      />
+    )}
+
+    {/* ── 조회 기간 + 인쇄 통합 패널 (CCP-1B와 동일) ── */}
       <div className={`${card} p-3 flex flex-wrap items-center gap-3`}>
         <span className="text-sm font-semibold text-slate-600">조회 기간</span>
         <input
