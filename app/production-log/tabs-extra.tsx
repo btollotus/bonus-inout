@@ -2098,18 +2098,36 @@ export function OtherHeatingTab({ role, userId, showToast }: {
     await loadData();
   }
 
-  async function deleteEvent(eventId: string) {
-    if (!confirm("이 기록을 삭제하시겠습니까?")) return;
-    const { data: evData } = await supabase
-      .from("ccp_wo_events").select("slot_id,event_type,measured_at").eq("id", eventId).maybeSingle();
-    const { error } = await supabase.from("ccp_wo_events").delete().eq("id", eventId);
-    if (error) return showToast("삭제 실패: " + error.message, "error");
-    if (evData?.slot_id && evData?.measured_at) {
-      await supabase.from("ccp_slot_events")
-        .delete()
-        .eq("slot_id", evData.slot_id)
-        .eq("measured_at", evData.measured_at)
-        .eq("event_type", evData.event_type);
+    // 온도기록 삭제 — 본인 확인(PIN) 후 DB 함수(rpc_delete_ccp_wo_event_group)로
+  // 같은 슬롯·시각·유형 묶음(작업지시서별 여러 행) + 슬롯기록을 함께 삭제 (백업에 PIN 확인된 이름 기록)
+  const [pinDeleteTargetId, setPinDeleteTargetId] = useState<string | null>(null);
+
+  function deleteEvent(eventId: string) {
+    if (!confirm("이 기록을 삭제하시겠습니까?\n삭제하려면 본인 확인(PIN)이 필요합니다.")) return;
+    setPinDeleteTargetId(eventId);
+  }
+
+  async function deleteEventWithPin(eventId: string, employeeId: string, pin: string) {
+    const { data: result, error } = await supabase.rpc("rpc_delete_ccp_wo_event_group", {
+      p_event_id: eventId,
+      p_employee_id: employeeId,
+      p_pin: pin,
+    });
+    if (error) {
+      console.error("rpc_delete_ccp_wo_event_group 오류:", error.message);
+      return showToast("삭제 실패: " + error.message, "error");
+    }
+    if (result !== "OK") {
+      const msgMap: Record<string, string> = {
+        FORBIDDEN: "삭제 권한이 없습니다. (ADMIN/SUBADMIN만 가능)",
+        WRONG: "PIN이 올바르지 않습니다.",
+        NOT_SET: "PIN이 설정되지 않았습니다.",
+        NOT_FOUND: "직원 정보를 찾을 수 없습니다.",
+        EVENT_NOT_FOUND: "이미 삭제된 기록입니다.",
+      };
+      showToast("삭제 실패: " + (msgMap[String(result)] ?? String(result)), "error");
+      await loadData();
+      return;
     }
     showToast("🗑️ 삭제 완료!");
     await loadData();
@@ -2615,6 +2633,19 @@ setTimeout(() => {
           if (target) saveEditWithPin(target, empId, pin);
         }}
         onCancel={() => setPinEditTarget(null)}
+      />
+    )}
+    {/* ── 온도기록 삭제 본인 확인(PIN) ── */}
+    {pinDeleteTargetId && (
+      <PinModal
+        employees={pinEditEmployees}
+        title="가열공정 온도기록 삭제 — 본인 확인"
+        onSuccess={(empId, _empName, pin) => {
+          const targetId = pinDeleteTargetId;
+          setPinDeleteTargetId(null);
+          if (targetId) deleteEventWithPin(targetId, empId, pin);
+        }}
+        onCancel={() => setPinDeleteTargetId(null)}
       />
     )}
 
