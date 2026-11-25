@@ -619,8 +619,28 @@ setSlotWoMap(slotMap);
 
   async function deleteWoEvent(eventId: string) {
     if (!confirm("이 기록을 삭제하시겠습니까?")) return;
+    // 삭제 전에 짝 기록(ccp_slot_events)을 찾기 위한 값 조회 — 작업지시서 화면 deleteWoEvent와 동일 기준
+    const { data: evData } = await supabase
+      .from("ccp_wo_events")
+      .select("slot_id, event_type, measured_at, work_order_no")
+      .eq("id", eventId)
+      .maybeSingle();
     const { error } = await supabase.from("ccp_wo_events").delete().eq("id", eventId);
     if (error) return showToast("삭제 실패: " + error.message, "error");
+    if (evData?.slot_id && evData?.measured_at && evData?.work_order_no) {
+      const { error: slotErr } = await supabase.from("ccp_slot_events")
+        .delete()
+        .eq("slot_id", evData.slot_id)
+        .eq("measured_at", evData.measured_at)
+        .eq("event_type", evData.event_type)
+        .eq("work_order_no", evData.work_order_no); // WO번호까지 맞춰야 같은 슬롯·시각의 다른 WO 기록을 지우지 않음
+      if (slotErr) {
+        console.error("CCP-1B 슬롯기록(ccp_slot_events) 짝 삭제 오류:", slotErr.message);
+        showToast("온도기록은 삭제됐지만 슬롯기록 삭제에 실패했습니다: " + slotErr.message, "error");
+        await loadData();
+        return;
+      }
+    }
     showToast("🗑️ 삭제 완료!");
     await loadData();
   }
