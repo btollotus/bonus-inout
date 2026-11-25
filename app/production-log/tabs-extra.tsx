@@ -617,29 +617,45 @@ setSlotWoMap(slotMap);
     await loadData();
   }
 
-  async function deleteWoEvent(eventId: string) {
-    if (!confirm("이 기록을 삭제하시겠습니까?")) return;
-    // 삭제 전에 짝 기록(ccp_slot_events)을 찾기 위한 값 조회 — 작업지시서 화면 deleteWoEvent와 동일 기준
-    const { data: evData } = await supabase
-      .from("ccp_wo_events")
-      .select("slot_id, event_type, measured_at, work_order_no")
-      .eq("id", eventId)
-      .maybeSingle();
-    const { error } = await supabase.from("ccp_wo_events").delete().eq("id", eventId);
-    if (error) return showToast("삭제 실패: " + error.message, "error");
-    if (evData?.slot_id && evData?.measured_at && evData?.work_order_no) {
-      const { error: slotErr } = await supabase.from("ccp_slot_events")
-        .delete()
-        .eq("slot_id", evData.slot_id)
-        .eq("measured_at", evData.measured_at)
-        .eq("event_type", evData.event_type)
-        .eq("work_order_no", evData.work_order_no); // WO번호까지 맞춰야 같은 슬롯·시각의 다른 WO 기록을 지우지 않음
-      if (slotErr) {
-        console.error("CCP-1B 슬롯기록(ccp_slot_events) 짝 삭제 오류:", slotErr.message);
-        showToast("온도기록은 삭제됐지만 슬롯기록 삭제에 실패했습니다: " + slotErr.message, "error");
-        await loadData();
-        return;
-      }
+    // 온도기록 삭제 — 본인 확인(PIN) 후 DB 함수(rpc_delete_ccp_wo_event)로 온도기록+짝 슬롯기록을 함께 삭제
+  // (공용 SUBADMIN 계정 사용자 구분: 백업 테이블 deleted_ccp_*에 PIN 확인된 이름이 기록됨)
+  const [pinDeleteTargetId, setPinDeleteTargetId] = useState<string | null>(null);
+  const [pinDeleteEmployees, setPinDeleteEmployees] = useState<{ id: string; name: string; pin: string | null }[]>([]);
+
+  useEffect(() => {
+    supabase.from("employees").select("id,name,pin:has_pin").is("resign_date", null).order("name")
+      .then(({ data, error }) => {
+        if (error) console.error("CCP-1B 삭제용 직원 목록 조회 오류:", error.message);
+        setPinDeleteEmployees((data ?? []) as any);
+      });
+  }, []);
+
+  function deleteWoEvent(eventId: string) {
+    if (!confirm("이 기록을 삭제하시겠습니까?\n삭제하려면 본인 확인(PIN)이 필요합니다.")) return;
+    setPinDeleteTargetId(eventId);
+  }
+
+  async function deleteWoEventWithPin(eventId: string, employeeId: string, pin: string) {
+    const { data: result, error } = await supabase.rpc("rpc_delete_ccp_wo_event", {
+      p_event_id: eventId,
+      p_employee_id: employeeId,
+      p_pin: pin,
+    });
+    if (error) {
+      console.error("rpc_delete_ccp_wo_event 오류:", error.message);
+      return showToast("삭제 실패: " + error.message, "error");
+    }
+    if (result !== "OK") {
+      const msgMap: Record<string, string> = {
+        FORBIDDEN: "삭제 권한이 없습니다. (ADMIN/SUBADMIN만 가능)",
+        WRONG: "PIN이 올바르지 않습니다.",
+        NOT_SET: "PIN이 설정되지 않았습니다.",
+        NOT_FOUND: "직원 정보를 찾을 수 없습니다.",
+        EVENT_NOT_FOUND: "이미 삭제된 기록입니다.",
+      };
+      showToast("삭제 실패: " + (msgMap[String(result)] ?? String(result)), "error");
+      await loadData();
+      return;
     }
     showToast("🗑️ 삭제 완료!");
     await loadData();
@@ -788,6 +804,19 @@ async function handlePrint() {
 
   return (
     <div className="space-y-4">
+    {/* ── 온도기록 삭제 본인 확인(PIN) ── */}
+    {pinDeleteTargetId && (
+      <PinModal
+        employees={pinDeleteEmployees}
+        title="온도기록 삭제 — 본인 확인"
+        onSuccess={(empId, _empName, pin) => {
+          const targetId = pinDeleteTargetId;
+          setPinDeleteTargetId(null);
+          if (targetId) deleteWoEventWithPin(targetId, empId, pin);
+        }}
+        onCancel={() => setPinDeleteTargetId(null)}
+      />
+    )}
     {/* ── 조회 기간 + 인쇄 통합 패널 ── */}
     <div className={`${card} p-3 print:hidden flex flex-wrap items-center gap-3`}>
         <span className="text-sm font-semibold text-slate-600">조회 기간</span>

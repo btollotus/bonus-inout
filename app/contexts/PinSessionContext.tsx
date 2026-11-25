@@ -58,7 +58,7 @@ export function usePinSession() {
 // ── PIN 입력 모달 컴포넌트 ──
 type PinModalProps = {
   employees: { id: string; name: string; pin: string | null }[];
-  onSuccess: (employeeId: string, employeeName: string) => void;
+  onSuccess: (employeeId: string, employeeName: string, pin: string) => void; // pin: 확인된 PIN (DB 함수에서 재검증이 필요한 경우에만 사용)
   onCancel: () => void;
   title?: string;
 };
@@ -108,7 +108,7 @@ export function PinModal({ employees, onSuccess, onCancel, title = "본인 확�
       setPinInput("");
       return;
     }
-    onSuccess(selectedEmployee.id, selectedEmployee.name);
+    onSuccess(selectedEmployee.id, selectedEmployee.name, pin);
   }
 
   return (
