@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
-import { todayKST } from "@/lib/utils/date";
+import { todayKST, utcToKSTDate } from "@/lib/utils/date";
 import { PinModal } from "@/app/contexts/PinSessionContext";
 
 const supabase = createClient();
@@ -594,28 +594,61 @@ setSlotWoMap(slotMap);
   function startEdit(ev: typeof woEvents[0]) {
     setEditingEventId(ev.id);
     setEditTemp(ev.temperature != null ? String(ev.temperature) : "");
-    setEditTime(ev.measured_at.slice(11, 16));
-    setEditIsOk(ev.is_ok ?? true);
-    setEditActionNote(ev.action_note ?? "");
-  }
-
-  async function saveEditEvent(ev: typeof woEvents[0]) {
-    if (!editTemp) return showToast("온도를 입력하세요.", "error");
-    const temp = Number(editTemp);
-    if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
-    setEditSaving(true);
-    const { error } = await supabase.from("ccp_wo_events").update({
-      measured_at: `${filterDate}T${editTime}:00`,
-      temperature: temp,
-      is_ok: editIsOk,
-      action_note: editActionNote.trim() || null,
-    }).eq("id", ev.id);
-    setEditSaving(false);
-    if (error) return showToast("수정 실패: " + error.message, "error");
-    showToast("✅ 수정 완료!");
-    setEditingEventId(null);
-    await loadData();
-  }
+        // measured_at은 UTC 문자열이므로 KST 시각으로 변환해 표시 (UTC slice 금지)
+        setEditTime(new Date(ev.measured_at).toLocaleTimeString("sv-SE", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" }));
+        setEditIsOk(ev.is_ok ?? true);
+        setEditActionNote(ev.action_note ?? "");
+      }
+    
+      // 온도기록 수정 — 본인 확인(PIN) 후 DB 함수(rpc_update_ccp_wo_event)로 온도기록+짝 슬롯기록을 함께 수정
+      // (수정 이력 edited_ccp_wo_events에 PIN 확인된 이름 기록)
+      const [pinEditTarget, setPinEditTarget] = useState<{ eventId: string; measuredAt: string; temp: number; isOk: boolean; actionNote: string } | null>(null);
+    
+      function saveEditEvent(ev: typeof woEvents[0]) {
+        if (!editTemp) return showToast("온도를 입력하세요.", "error");
+        const temp = Number(editTemp);
+        if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
+        if (!/^\d{2}:\d{2}$/.test(editTime)) return showToast("시각을 입력하세요.", "error");
+        // 원래 기록의 KST 날짜 + 입력한 KST 시각 (+09:00 명시)
+        const measuredAt = `${utcToKSTDate(ev.measured_at)}T${editTime}:00+09:00`;
+        setPinEditTarget({ eventId: ev.id, measuredAt, temp, isOk: editIsOk, actionNote: editActionNote });
+      }
+    
+      async function saveEditEventWithPin(
+        target: { eventId: string; measuredAt: string; temp: number; isOk: boolean; actionNote: string },
+        employeeId: string, pin: string,
+      ) {
+        setEditSaving(true);
+        const { data: result, error } = await supabase.rpc("rpc_update_ccp_wo_event", {
+          p_event_id: target.eventId,
+          p_employee_id: employeeId,
+          p_pin: pin,
+          p_measured_at: target.measuredAt,
+          p_temperature: target.temp,
+          p_is_ok: target.isOk,
+          p_action_note: target.actionNote,
+        });
+        setEditSaving(false);
+        if (error) {
+          console.error("rpc_update_ccp_wo_event 오류:", error.message);
+          return showToast("수정 실패: " + error.message, "error");
+        }
+        if (result !== "OK") {
+          const msgMap: Record<string, string> = {
+            FORBIDDEN: "수정 권한이 없습니다. (ADMIN/SUBADMIN만 가능)",
+            WRONG: "PIN이 올바르지 않습니다.",
+            NOT_SET: "PIN이 설정되지 않았습니다.",
+            NOT_FOUND: "직원 정보를 찾을 수 없습니다.",
+            EVENT_NOT_FOUND: "이미 삭제된 기록입니다.",
+            INVALID_TEMP: "온도는 40~50°C 범위여야 합니다.",
+            INVALID_TIME: "시각이 올바르지 않습니다.",
+          };
+          return showToast("수정 실패: " + (msgMap[String(result)] ?? String(result)), "error");
+        }
+        showToast("✅ 수정 완료!");
+        setEditingEventId(null);
+        await loadData();
+      }
 
     // 온도기록 삭제 — 본인 확인(PIN) 후 DB 함수(rpc_delete_ccp_wo_event)로 온도기록+짝 슬롯기록을 함께 삭제
   // (공용 SUBADMIN 계정 사용자 구분: 백업 테이블 deleted_ccp_*에 PIN 확인된 이름이 기록됨)
@@ -804,6 +837,19 @@ async function handlePrint() {
 
   return (
     <div className="space-y-4">
+        {/* ── 온도기록 수정 본인 확인(PIN) ── */}
+        {pinEditTarget && (
+      <PinModal
+        employees={pinDeleteEmployees}
+        title="온도기록 수정 — 본인 확인"
+        onSuccess={(empId, _empName, pin) => {
+          const target = pinEditTarget;
+          setPinEditTarget(null);
+          if (target) saveEditEventWithPin(target, empId, pin);
+        }}
+        onCancel={() => setPinEditTarget(null)}
+      />
+    )}
     {/* ── 온도기록 삭제 본인 확인(PIN) ── */}
     {pinDeleteTargetId && (
       <PinModal
