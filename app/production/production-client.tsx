@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import { todayKST, utcToKSTDate } from "@/lib/utils/date";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { useCcpState, SlotStatusPanel, WoCcpCard } from "./production-client-ccp";
+import { useCcpState, SlotStatusPanel, WoCcpCard, ccpRpcFailMessage } from "./production-client-ccp";
 import { usePinSession, PinModal } from "@/app/contexts/PinSessionContext";
 import { WoPrintModal, isSpecialItem } from "@/app/components/wo-print";
 
@@ -486,6 +486,8 @@ export default function ProductionClient() {
   const [transferCcpEditIsOk, setTransferCcpEditIsOk] = useState(true);
   const [transferCcpEditActionNote, setTransferCcpEditActionNote] = useState("");
   const [transferCcpEditSaving, setTransferCcpEditSaving] = useState(false);
+  // CCP 온도기록 수정/삭제 본인 확인(PIN) 대기 중인 작업 (wo: 작업지시서 CCP-1B 카드, tr: 전사지인쇄 CCP)
+  const [ccpPinAction, setCcpPinAction] = useState<{ kind: "wo-edit" | "wo-delete" | "tr-edit" | "tr-delete"; ev: any; workOrderNo: string } | null>(null);
   const transferCcpSlotId = useMemo(() => warmerSlots.find((s) => s.slot_name === "8")?.id ?? null, [warmerSlots]);
   const transferCcpEnded = useMemo(() => {
     if (transferCcpEvents.length === 0) return false;
@@ -936,63 +938,71 @@ export default function ProductionClient() {
     setTransferCcpEditActionNote(ev.action_note ?? "");
   }
 
-  async function saveTransferCcpEdit(ev: TransferCcpEvent, workOrderNo: string) {
-    if (!transferCcpEditTemp) return showToast("온도를 입력하세요.", "error");
-    const temp = Number(transferCcpEditTemp);
-    if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
-    setTransferCcpEditSaving(true);
-    const dateStr = utcToKSTDate(ev.measured_at); // KST 기준 날짜 (UTC slice 시 KST 00~09시 기록이 전날로 저장되던 문제 수정)
-    const newMeasuredAt = `${dateStr}T${transferCcpEditTime.slice(0,2)}:${transferCcpEditTime.slice(2,4)}:00+09:00`;
-    const { error } = await supabase.from("ccp_wo_events").update({
-      measured_at: newMeasuredAt,
-      temperature: temp,
-      is_ok: transferCcpEditIsOk,
-      action_note: transferCcpEditActionNote.trim() || null,
-    }).eq("id", ev.id);
-    if (error) { setTransferCcpEditSaving(false); return showToast("수정 실패: " + error.message, "error"); }
-    // CCP-1B 일지(ccp_slot_events)의 짝 기록도 같은 값으로 수정 — 슬롯+기존 시각+유형+WO번호로 찾아 다른 WO 기록은 건드리지 않음
-    // end 기록의 action_note는 "업체 · 제품" 표시용이라 수정하지 않음 (저장 로직과 동일 기준)
-    const { error: slotErr } = await supabase.from("ccp_slot_events").update({
-      measured_at: newMeasuredAt,
-      temperature: temp,
-      is_ok: transferCcpEditIsOk,
-      ...(ev.event_type !== "end" ? { action_note: transferCcpEditActionNote.trim() || null } : {}),
-    })
-      .eq("slot_id", ev.slot_id)
-      .eq("measured_at", ev.measured_at)
-      .eq("event_type", ev.event_type)
-      .eq("work_order_no", ev.work_order_no);
-    setTransferCcpEditSaving(false);
-    if (slotErr) {
-      console.error("CCP-1B 일지(ccp_slot_events) 수정 오류:", slotErr.message);
-      showToast("수정은 저장됐지만 CCP-1B 일지 반영에 실패했습니다: " + slotErr.message, "error");
-    } else {
+    // 수정 — 본인 확인(PIN) 후 DB 함수(rpc_update_ccp_wo_event)로 온도기록 + 짝 슬롯기록을 한 번에 수정 (수정 이력에 PIN 이름)
+    async function saveTransferCcpEdit(ev: TransferCcpEvent, workOrderNo: string, employeeId: string, pin: string) {
+      if (!transferCcpEditTemp) return showToast("온도를 입력하세요.", "error");
+      const temp = Number(transferCcpEditTemp);
+      if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
+      if (!/^\d{4}$/.test(transferCcpEditTime) || parseInt(transferCcpEditTime.slice(0,2)) > 23 || parseInt(transferCcpEditTime.slice(2,4)) > 59)
+        return showToast("올바른 시각을 입력하세요. (예: 1430)", "error");
+      setTransferCcpEditSaving(true);
+      const dateStr = utcToKSTDate(ev.measured_at); // KST 기준 날짜 (UTC slice 시 KST 00~09시 기록이 전날로 저장되던 문제 수정)
+      const newMeasuredAt = `${dateStr}T${transferCcpEditTime.slice(0,2)}:${transferCcpEditTime.slice(2,4)}:00+09:00`;
+      const { data: result, error } = await supabase.rpc("rpc_update_ccp_wo_event", {
+        p_event_id:    ev.id,
+        p_employee_id: employeeId,
+        p_pin:         pin,
+        p_measured_at: newMeasuredAt,
+        p_temperature: temp,
+        p_is_ok:       transferCcpEditIsOk,
+        p_action_note: transferCcpEditActionNote,
+      });
+      setTransferCcpEditSaving(false);
+      if (error) {
+        console.error("rpc_update_ccp_wo_event 오류:", error.message);
+        return showToast("수정 실패: " + error.message, "error");
+      }
+      if (result !== "OK") return showToast("수정 실패: " + ccpRpcFailMessage(result), "error");
       showToast("✅ 수정 완료!");
+      setTransferCcpEditingId(null);
+      await loadTransferCcpEvents(workOrderNo);
     }
-    setTransferCcpEditingId(null);
-    await loadTransferCcpEvents(workOrderNo);
-  }
-
-  async function deleteTransferCcpEvent(eventId: string, workOrderNo: string) {
-    if (!confirm("이 기록을 삭제하시겠습니까?")) return;
-    const { data: evData } = await supabase
-      .from("ccp_wo_events")
-      .select("slot_id, event_type, measured_at, work_order_no")
-      .eq("id", eventId)
-      .maybeSingle();
-    const { error } = await supabase.from("ccp_wo_events").delete().eq("id", eventId);
-    if (error) return showToast("삭제 실패: " + error.message, "error");
-    if (evData?.slot_id && evData?.measured_at) {
-      await supabase.from("ccp_slot_events")
-        .delete()
-        .eq("slot_id", evData.slot_id)
-        .eq("measured_at", evData.measured_at)
-        .eq("event_type", evData.event_type)
-        .eq("work_order_no", evData.work_order_no); // WO번호까지 맞춰야 같은 슬롯·시각의 다른 WO CCP-1B 기록을 지우지 않음
+  
+    // 삭제 — 본인 확인(PIN) 후 DB 함수(rpc_delete_ccp_wo_event)로 온도기록 + 짝 슬롯기록을 한 번에 삭제 (백업에 PIN 이름)
+    async function deleteTransferCcpEvent(eventId: string, workOrderNo: string, employeeId: string, pin: string) {
+      const { data: result, error } = await supabase.rpc("rpc_delete_ccp_wo_event", {
+        p_event_id:    eventId,
+        p_employee_id: employeeId,
+        p_pin:         pin,
+      });
+      if (error) {
+        console.error("rpc_delete_ccp_wo_event 오류:", error.message);
+        return showToast("삭제 실패: " + error.message, "error");
+      }
+      if (result !== "OK") {
+        showToast("삭제 실패: " + ccpRpcFailMessage(result), "error");
+        await loadTransferCcpEvents(workOrderNo);
+        return;
+      }
+      showToast("🗑️ 삭제 완료!");
+      await loadTransferCcpEvents(workOrderNo);
     }
-    showToast("🗑️ 삭제 완료!");
-    await loadTransferCcpEvents(workOrderNo);
-  }
+  
+    // CCP 온도기록 수정/삭제 요청 — 입력값 확인(수정) 또는 확인창(삭제) 후 본인 확인(PIN) 모달을 띄움
+    function requestCcpPinAction(kind: "wo-edit" | "wo-delete" | "tr-edit" | "tr-delete", ev: any, workOrderNo: string) {
+      if (kind === "wo-edit" || kind === "tr-edit") {
+        const tempStr = kind === "wo-edit" ? ccp.ccpWoEditTemp : transferCcpEditTemp;
+        const timeStr = kind === "wo-edit" ? ccp.ccpWoEditTime : transferCcpEditTime;
+        if (!tempStr) return showToast("온도를 입력하세요.", "error");
+        const temp = Number(tempStr);
+        if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
+        if (!/^\d{4}$/.test(timeStr) || parseInt(timeStr.slice(0,2)) > 23 || parseInt(timeStr.slice(2,4)) > 59)
+          return showToast("올바른 시각을 입력하세요. (예: 1430)", "error");
+      } else {
+        if (!confirm("이 기록을 삭제하시겠습니까?\n삭제하려면 본인 확인(PIN)이 필요합니다.")) return;
+      }
+      setCcpPinAction({ kind, ev, workOrderNo });
+    }
 
   // ─── 전사지 크기 선택 (트랜스퍼시트류 중간재 전용) ───
   async function saveTransferSheetSize(size: string) {
@@ -2468,6 +2478,23 @@ if (dupCheck && dupCheck.length > 0) {
           />
         )}
 
+{ccpPinAction && (
+          <PinModal
+            employees={employees.filter((e): e is { id: string; name: string; pin: string | null } => e.name !== null)}
+            title={ccpPinAction.kind.endsWith("delete") ? "온도기록 삭제 — 본인 확인" : "온도기록 수정 — 본인 확인"}
+            onSuccess={(empId, _empName, pin) => {
+              const act = ccpPinAction;
+              setCcpPinAction(null);
+              if (!act) return;
+              if (act.kind === "wo-edit")   ccp.saveWoEventEdit(act.ev, act.workOrderNo, empId, pin);
+              if (act.kind === "wo-delete") ccp.deleteWoEvent(act.ev.id, act.workOrderNo, empId, pin);
+              if (act.kind === "tr-edit")   saveTransferCcpEdit(act.ev, act.workOrderNo, empId, pin);
+              if (act.kind === "tr-delete") deleteTransferCcpEvent(act.ev.id, act.workOrderNo, empId, pin);
+            }}
+            onCancel={() => setCcpPinAction(null)}
+          />
+        )}
+
         {showDeletePinModal && (
           <PinModal
             employees={employees.filter((e): e is { id: string; name: string; pin: string | null } => e.name !== null)}
@@ -3019,7 +3046,7 @@ if (dupCheck && dupCheck.length > 0) {
                                       {isEditing
                                         ? <div className="flex gap-1">
                                             <button className="rounded-lg border border-blue-400 bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                                              disabled={transferCcpEditSaving} onClick={() => saveTransferCcpEdit(ev, selectedWo.work_order_no)}>
+                                              disabled={transferCcpEditSaving} onClick={() => requestCcpPinAction("tr-edit", ev, selectedWo.work_order_no)}>
                                               {transferCcpEditSaving ? "..." : "저장"}
                                             </button>
                                             <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50"
@@ -3029,7 +3056,7 @@ if (dupCheck && dupCheck.length > 0) {
                                             <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600"
                                               onClick={() => startTransferCcpEdit(ev)}>수정</button>
                                             <button className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500"
-                                              onClick={() => deleteTransferCcpEvent(ev.id, selectedWo.work_order_no)}>삭제</button>
+                                              onClick={() => requestCcpPinAction("tr-delete", ev, selectedWo.work_order_no)}>삭제</button>
                                           </div>}
                                     </td>
                                   </tr>
@@ -3574,8 +3601,8 @@ if (dupCheck && dupCheck.length > 0) {
                   isEditMode={isEditMode}
                   saveWoEvent={ccp.saveWoEvent}
                   startWoEventEdit={ccp.startWoEventEdit}
-                  saveWoEventEdit={ccp.saveWoEventEdit}
-                  deleteWoEvent={ccp.deleteWoEvent}
+                  saveWoEventEdit={(ev: any, woNo: string) => requestCcpPinAction("wo-edit", ev, woNo)}
+                  deleteWoEvent={(eventId: string, woNo: string) => requestCcpPinAction("wo-delete", { id: eventId }, woNo)}
                   supabaseClient={supabase}
                   currentUserIdRef={currentUserIdRef}
                   foodCategory={getFoodCategory(selectedWo.food_type)}

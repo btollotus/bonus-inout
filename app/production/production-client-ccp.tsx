@@ -89,6 +89,20 @@ const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
 
 // ─── CCP 훅 ──────────────────────────────────────────────────
 
+// CCP 온도기록 수정/삭제 DB 함수(rpc_update_ccp_wo_event / rpc_delete_ccp_wo_event) 결과 코드 → 안내 문구
+export function ccpRpcFailMessage(result: unknown): string {
+  const msgMap: Record<string, string> = {
+    FORBIDDEN: "권한이 없습니다. (ADMIN/SUBADMIN만 가능)",
+    WRONG: "PIN이 올바르지 않습니다.",
+    NOT_SET: "PIN이 설정되지 않았습니다.",
+    NOT_FOUND: "직원 정보를 찾을 수 없습니다.",
+    EVENT_NOT_FOUND: "이미 삭제된 기록입니다.",
+    INVALID_TEMP: "온도는 40~50°C 범위여야 합니다.",
+    INVALID_TIME: "시각이 올바르지 않습니다.",
+  };
+  return msgMap[String(result)] ?? String(result);
+}
+
 export function useCcpState(
   warmerSlots: { id: string; slot_name: string; purpose: string }[],
   currentUserIdRef: React.RefObject<string | null>,
@@ -503,59 +517,58 @@ if (!lastEvent || lastEvent.event_type === "end") {
     setCcpWoEditActionNote(ev.action_note ?? "");
   }
 
-  async function saveWoEventEdit(ev: WoEvent, workOrderNo: string) {
+    // 수정 — 본인 확인(PIN)은 화면(production-client.tsx)에서 받고, DB 함수(rpc_update_ccp_wo_event)가 PIN 재확인 후
+  // 온도기록 + 짝 슬롯기록(슬롯+기존 시각+유형+WO번호)을 한 번에 수정, 수정 이력에 PIN 확인된 이름 기록
+  async function saveWoEventEdit(ev: WoEvent, workOrderNo: string, employeeId: string, pin: string) {
     if (!ccpWoEditTemp) return showToast("온도를 입력하세요.", "error");
     const temp = Number(ccpWoEditTemp);
     if (temp < 40 || temp > 50) return showToast("온도는 40~50°C 범위여야 합니다.", "error");
+    if (!/^\d{4}$/.test(ccpWoEditTime) || parseInt(ccpWoEditTime.slice(0,2)) > 23 || parseInt(ccpWoEditTime.slice(2,4)) > 59)
+      return showToast("올바른 시각을 입력하세요. (예: 1430)", "error");
     setCcpWoEditSaving(true);
     const dateStr = utcToKSTDate(ev.measured_at); // KST 기준 날짜 (UTC slice 시 KST 00~09시 기록이 전날로 저장되던 문제 수정)
     const newMeasuredAt = `${dateStr}T${ccpWoEditTime.slice(0,2)}:${ccpWoEditTime.slice(2,4)}:00+09:00`;
-    const { error } = await supabase.from("ccp_wo_events").update({
-      measured_at: newMeasuredAt,
-      temperature: temp,
-      is_ok:       ccpWoEditIsOk,
-      action_note: ccpWoEditActionNote.trim() || null,
-    }).eq("id", ev.id);
-    if (error) { setCcpWoEditSaving(false); return showToast("수정 실패: " + error.message, "error"); }
-    // CCP-1B 일지(ccp_slot_events)의 짝 기록도 같은 값으로 수정 — 슬롯+기존 시각+유형+WO번호로 찾아 다른 WO 기록은 건드리지 않음
-    // end 기록의 action_note는 "업체 · 제품" 표시용이라 수정하지 않음 (저장 로직과 동일 기준)
-    const { error: slotErr } = await supabase.from("ccp_slot_events").update({
-      measured_at: newMeasuredAt,
-      temperature: temp,
-      is_ok:       ccpWoEditIsOk,
-      ...(ev.event_type !== "end" ? { action_note: ccpWoEditActionNote.trim() || null } : {}),
-    })
-      .eq("slot_id", ev.slot_id)
-      .eq("measured_at", ev.measured_at)
-      .eq("event_type", ev.event_type)
-      .eq("work_order_no", ev.work_order_no);
+    const { data: result, error } = await supabase.rpc("rpc_update_ccp_wo_event", {
+      p_event_id:    ev.id,
+      p_employee_id: employeeId,
+      p_pin:         pin,
+      p_measured_at: newMeasuredAt,
+      p_temperature: temp,
+      p_is_ok:       ccpWoEditIsOk,
+      p_action_note: ccpWoEditActionNote,
+    });
     setCcpWoEditSaving(false);
-    if (slotErr) {
-      console.error("CCP-1B 일지(ccp_slot_events) 수정 오류:", slotErr.message);
-      showToast("수정은 저장됐지만 CCP-1B 일지 반영에 실패했습니다: " + slotErr.message, "error");
-    } else {
-      showToast("✅ 수정 완료!");
+    if (error) {
+      console.error("rpc_update_ccp_wo_event 오류:", error.message);
+      return showToast("수정 실패: " + error.message, "error");
     }
+    if (result !== "OK") return showToast("수정 실패: " + ccpRpcFailMessage(result), "error");
+    showToast("✅ 수정 완료!");
     setCcpWoEditingId(null);
     await loadWoEvents(workOrderNo, ev.slot_id);
   }
 
-  async function deleteWoEvent(eventId: string, workOrderNo: string) {
-    if (!confirm("이 기록을 삭제하시겠습니까?")) return;
+  // 삭제 — 확인창·본인 확인(PIN)은 화면(production-client.tsx)에서 받고, DB 함수(rpc_delete_ccp_wo_event)가 PIN 재확인 후
+  // 온도기록 + 짝 슬롯기록을 한 번에 삭제, 백업(deleted_ccp_*)에 PIN 확인된 이름 기록
+  async function deleteWoEvent(eventId: string, workOrderNo: string, employeeId: string, pin: string) {
     const { data: evData } = await supabase
       .from("ccp_wo_events")
-      .select("slot_id, event_type, measured_at, work_order_no")
+      .select("slot_id")
       .eq("id", eventId)
       .maybeSingle();
-    const { error } = await supabase.from("ccp_wo_events").delete().eq("id", eventId);
-    if (error) return showToast("삭제 실패: " + error.message, "error");
-    if (evData?.slot_id && evData?.measured_at) {
-      await supabase.from("ccp_slot_events")
-        .delete()
-        .eq("slot_id", evData.slot_id)
-        .eq("measured_at", evData.measured_at)
-        .eq("event_type", evData.event_type)
-        .eq("work_order_no", evData.work_order_no); // WO번호까지 맞춰야 같은 슬롯·시각의 다른 WO CCP-1B 기록을 지우지 않음
+    const { data: result, error } = await supabase.rpc("rpc_delete_ccp_wo_event", {
+      p_event_id:    eventId,
+      p_employee_id: employeeId,
+      p_pin:         pin,
+    });
+    if (error) {
+      console.error("rpc_delete_ccp_wo_event 오류:", error.message);
+      return showToast("삭제 실패: " + error.message, "error");
+    }
+    if (result !== "OK") {
+      showToast("삭제 실패: " + ccpRpcFailMessage(result), "error");
+      await loadWoEvents(workOrderNo, evData?.slot_id ?? null);
+      return;
     }
     showToast("🗑️ 삭제 완료!");
     await loadWoEvents(workOrderNo, evData?.slot_id ?? null);
